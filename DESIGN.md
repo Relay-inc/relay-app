@@ -29,7 +29,7 @@ Default window 1280 x 820, minimum 900 x 600. Three panes, the way Mail does it.
 │ ...        │   └───────────────────────────┘  │              │
 │            │ ┌──────────────────────────────┐ │              │
 │            │ │ Vraag iets over Weemaes…     │ │              │
-│            │ └ ☐ Op de achtergrond      ↑ ──┘ │              │
+│            │ └                          ↑ ──┘ │              │
 └────────────┴──────────────────────────────────┴──────────────┘
    240px              flexible                     300px, hideable
 ```
@@ -40,8 +40,9 @@ Default window 1280 x 820, minimum 900 x 600. Three panes, the way Mail does it.
 - **Conversation** (flexible): the toolbar carries the project name and its state. Messages run
   top to bottom, Laurent's in a filled bubble on the right, Claude's as plain text on the left.
   Tool calls are one collapsed line each ("Weemaes.md gelezen"). A permission request is an inline
-  card with the exact command and two buttons. The composer sits at the bottom with the checkbox
-  "Op de achtergrond".
+  card with the exact command and two buttons. The composer sits at the bottom, one field and a
+  send button. There is no "background" switch: every conversation keeps running when Laurent
+  clicks to another project, and the sidebar reports back (decided 2026-09-29).
 - **Inspector** (300px, ⌘⌥I hides it): the project's Stand van zaken and its `## Open` as
   checkboxes, straight from the note. This is where "op de hoogte blijven" happens without asking.
 
