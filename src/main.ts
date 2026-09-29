@@ -522,6 +522,7 @@ $("nav").addEventListener("pointerdown", e => {
   const t = e.target as HTMLElement;
   if (e.button !== 0 || t.closest("button")) return;
   const g = t.closest<HTMLElement>(".grp"), pr = t.closest<HTMLElement>(".prow");
+  if (g || pr) e.preventDefault(); // no text selection starting from a row that can be dragged
   drag = pr ? { kind: "proj", id: pr.dataset.p!, ctx: pr.dataset.ctx, y: e.clientY, on: false } : g ? { kind: "sec", id: g.dataset.sec!, y: e.clientY, on: false } : null;
 });
 window.addEventListener("pointermove", e => {
