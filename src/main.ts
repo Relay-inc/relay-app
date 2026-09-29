@@ -280,6 +280,7 @@ function renderNav() {
 function renderChat() {
   const msgs = $("msgs"), log = $("log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  $("t").classList.remove("editable"); $("t").title = "";
   if (sel === REM || sel === SETTINGS) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("new").style.display = $("term").style.display = $("close").style.display = "none";
@@ -307,6 +308,7 @@ function renderChat() {
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
   $("t").textContent = pLabel(pn);
+  $("t").classList.add("editable"); $("t").title = "Project aanpassen: icoon, naam, of dit gesprek naar een ander project";
   const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
   $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
   const items = convo[sel] || [];
@@ -342,7 +344,7 @@ function settingsHtml(): string {
     <div class="setrow"><input class="field" id="vaultpath" value="${esc(settings.vault)}" spellcheck="false"><button class="btn" data-set="pick">Kies map…</button><button class="btn primary" data-set="save">Opslaan</button></div>
     ${settingsMsg ? `<div class="err">${esc(settingsMsg)}</div>` : ""}
     <h2>Aangepaste projecten</h2>
-    <div class="meta">Icoon en naam zet je per project door op de titel bovenaan een gesprek te klikken.</div>
+    <div class="meta">Icoon en naam zet je per project, en het project van een gesprek wijzig je, door bovenaan een gesprek op de projectnaam met het pijltje te klikken. Instellingen open je altijd met ⌘,</div>
     ${custom.length ? `<ul class="todo">${custom.map(([n, c]) => `<li class="setli"><span>${esc(c.icon || "")} ${esc(c.label || n)} <span class="count">${c.label ? esc(n) : ""}</span></span><button class="btn" data-set="clear" data-p="${esc(n)}">Herstellen</button></li>`).join("")}</ul>`
       : '<div class="meta">Nog geen.</div>'}
   </div>`;
@@ -528,6 +530,7 @@ $("term").addEventListener("click", () => {
 const setInsp = (hide: boolean) => { document.body.classList.toggle("noinsp", hide); store.set("noinsp", hide); };
 setInsp(store.get("noinsp", false));
 $("toggleinsp").addEventListener("click", () => setInsp(!document.body.classList.contains("noinsp")));
+window.addEventListener("keydown", e => { if (e.metaKey && !e.altKey && e.key === ",") { e.preventDefault(); select(SETTINGS); } });
 window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code === "KeyI") { e.preventDefault(); setInsp(!document.body.classList.contains("noinsp")); } });
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; renderInsp(); } });
 

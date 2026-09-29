@@ -187,8 +187,13 @@ section.chat{position:relative}
 .due-late{color:var(--late)!important;font-weight:600}
 .due-soon{color:var(--soon)!important;font-weight:600}
 .row.sel .due-late,.row.sel .due-soon{color:var(--on-accent)!important}
-body.noinsp{grid-template-columns:240px minmax(0,1fr)}
-body.noinsp aside.insp{display:none}
+/* the right panel slides away: the column animates to 0 while the content keeps its width and fades */
+body{transition:grid-template-columns 260ms cubic-bezier(.2,.8,.2,1)}
+body.noinsp{grid-template-columns:240px minmax(0,1fr) 0px}
+aside.insp{min-width:0;overflow:hidden;transition:opacity 200ms ease-out,border-color 200ms ease-out}
+aside.insp>.bar,aside.insp>.ibody{min-width:300px}
+body.noinsp aside.insp{opacity:0;border-left-color:transparent;pointer-events:none}
 .tb.ib{width:28px;padding:0;display:grid;place-items:center}
 .tb .g{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 body.noinsp #toggleinsp{color:var(--accent)}
+.bar h1.editable::after{content:"";display:inline-block;margin-left:6px;width:0;height:0;border-top:4px solid var(--secondary);border-left:3.5px solid transparent;border-right:3.5px solid transparent;vertical-align:middle}
