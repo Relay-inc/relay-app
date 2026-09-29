@@ -27,18 +27,21 @@ def projects():
         if m and context:
             name, state, last, summary = m.groups()
             out.append({"name": name, "context": context, "state": state, "last": last,
-                        "summary": summary, "open": open_count(name)})
+                        "summary": summary, **note_state(name)})
     return out
 
 
-def open_count(name):
+def note_state(name):
     hits = [p for p in glob.glob(os.path.join(VAULT, "Contexts/**", f"{name}.md"), recursive=True)
             if "/Documents/" not in os.path.relpath(p, VAULT)]
     if not hits:
-        return None
+        return {"open": None, "open_items": [], "stand": None}
     s = open(hits[0], encoding="utf-8").read()
-    m = re.search(r"^## Open\n(.*?)(?=^## |\Z)", s, re.S | re.M)
-    return len(re.findall(r"^\s*- \[ \]", m.group(1), re.M)) if m else None
+    op = re.search(r"^## Open\n(.*?)(?=^## |\Z)", s, re.S | re.M)
+    items = [unlink(i) for i in re.findall(r"^\s*- \[ \] (.+)$", op.group(1), re.M)] if op else []
+    st = re.search(r"^## Stand van zaken\n(.*?)(?=^## |\Z)", s, re.S | re.M)
+    stand = unlink(re.sub(r"^\*Stand van zaken[^\n]*\n", "", st.group(1).strip())).strip() if st else None
+    return {"open": len(items) if op else None, "open_items": items, "stand": stand}
 
 
 def reminders():

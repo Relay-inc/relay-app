@@ -3,3 +3,5 @@ design/mockup.html
 design/shot-*.png
 node_modules/
 src-tauri/target/
+design/mockup-v2.html
+design/v2-*.png
