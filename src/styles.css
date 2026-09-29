@@ -131,3 +131,12 @@ textarea{resize:none;max-height:40vh;overflow-y:auto}
 .movebar{max-width:720px;width:calc(100% - 56px);margin:0 auto;display:flex;align-items:center;gap:8px;padding:8px 12px;
   border:1px solid var(--separator);border-radius:var(--r);background:var(--fill);font-size:13px}
 .movebar .sp{flex:1}
+.subrow{padding-left:22px;height:26px;color:var(--secondary)}
+.subrow.sel{color:var(--on-accent)}
+.subrow.new{color:var(--label)}
+.prow .add{visibility:hidden;margin-left:4px}
+.prow:hover .add{visibility:visible}
+.row.sel .add{color:var(--on-accent)}
+.tb{white-space:nowrap}
+.bar h1,.bar .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar h1{flex:none;max-width:40%}

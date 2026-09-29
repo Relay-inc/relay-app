@@ -175,13 +175,13 @@ fn agents(state: State<App>) -> Value {
 /// Continue a project's conversation in iTerm. The app's own process for it stops first, so two
 /// processes never write the same session.
 #[tauri::command]
-fn open_terminal(state: State<App>, project: String, session: Option<String>) -> Result<(), String> {
+fn open_terminal(state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
     let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).cloned());
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
     let cmd = match sid {
         Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&vault())),
-        _ => format!("cd {} && claude -n {}", q(&vault()), q(&project)),
+        _ => format!("cd {} && claude -n {}", q(&vault()), q(name.as_deref().unwrap_or(&project))),
     };
     let script = format!(
         "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
