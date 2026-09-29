@@ -266,6 +266,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         }
     }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
+    app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     *state.settings.lock().unwrap() = s.clone();
     Ok(s)
 }
@@ -315,7 +316,14 @@ pub fn run() {
                 &P::separator(h)?, &P::close_window(h, Some("Sluit venster"))?])?;
             Menu::with_items(h, &[&app, &edit, &window])
         })
-        .on_menu_event(|app, event| { if event.id() == "settings" { app.emit("menu", "settings").ok(); } })
+        // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
+        .on_menu_event(|app, event| {
+            if event.id() != "settings" { return; }
+            if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
+            tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
+                .title("Instellingen").inner_size(600.0, 460.0).min_inner_size(520.0, 360.0)
+                .minimizable(false).maximizable(false).build().ok();
+        })
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let sids = fs::read_to_string(data_dir(app.handle()).join("sessions.json")).ok()

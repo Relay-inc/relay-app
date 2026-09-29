@@ -197,3 +197,14 @@ body.noinsp aside.insp{opacity:0;border-left-color:transparent;pointer-events:no
 .tb .g{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 body.noinsp #toggleinsp{color:var(--accent)}
 .bar h1.editable::after{content:"";display:inline-block;margin-left:6px;width:0;height:0;border-top:4px solid var(--secondary);border-left:3.5px solid transparent;border-right:3.5px solid transparent;vertical-align:middle}
+/* the settings window */
+body.prefs{display:block;min-width:0;overflow:auto;background:var(--inspector);padding:28px 32px}
+body.prefs .set h2:first-child{margin-top:0}
+.setrow.end{justify-content:flex-end}
+.okmsg{color:var(--secondary);font-size:13px}
+.errmsg{color:var(--late);font-size:13px}
+.ctx{position:fixed;z-index:20;min-width:180px;background:var(--bg);border:1px solid var(--separator);border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;display:grid}
+.ctx[hidden]{display:none}
+.ctx button{all:unset;padding:5px 10px;border-radius:calc(var(--r) - 3px);font-size:13px;color:var(--label)}
+.ctx button:hover{background:var(--accent);color:var(--on-accent)}
+.pop{left:auto;right:16px}

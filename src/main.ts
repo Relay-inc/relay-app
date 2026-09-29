@@ -38,8 +38,8 @@ let forked: string[] = store.get("forkedTerms", []); // terminal sessions contin
 let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
 let appSids: string[] = [];
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
-const WAIT = "__wait", REM = "__rem", SETTINGS = "__settings", NEW = "Nieuw gesprek";
-const VIEWS = [WAIT, REM, SETTINGS];
+const WAIT = "__wait", REM = "__rem", NEW = "Nieuw gesprek";
+const VIEWS = [WAIT, REM];
 type Settings = { vault: string; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null> };
 let settings: Settings = { vault: "", projects: {}, overrides: {} };
 let settingsMsg = "";
@@ -280,18 +280,17 @@ function renderChat() {
   const msgs = $("msgs"), log = $("log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   $("t").classList.remove("editable"); $("t").title = "";
-  if (sel === REM || sel === SETTINGS) {
+  if (sel === REM) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = $("close").style.display = "none";
+    $("new").style.display = $("term").style.display = $("close").style.display = $("assign").style.display = "none";
     $("ts").textContent = "";
-    if (sel === REM) { $("t").textContent = "Reminders"; msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel }); }
-    else { $("t").textContent = "Instellingen"; msgs.innerHTML = settingsHtml(); }
+    $("t").textContent = "Reminders"; msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel });
     return;
   }
   if (sel === WAIT) {
     $("t").textContent = "Wacht op jou"; $("ts").textContent = `${waitCount()}`;
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = $("close").style.display = "none";
+    $("new").style.display = $("term").style.display = $("close").style.display = $("assign").style.display = "none";
     const byK: Record<string, any[]> = {};
     for (const r of pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${esc(projOf(k))} · ` : ""}${esc(label(k))}`;
@@ -304,6 +303,7 @@ function renderChat() {
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
   $("composer").style.display = ""; $("new").style.display = ""; $("close").style.display = chats[sel]?.draft ? "none" : "";
+  $("assign").style.display = "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
   $("t").textContent = pLabel(pn);
@@ -335,29 +335,6 @@ function renderChat() {
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
-function settingsHtml(): string {
-  const custom = Object.entries(settings.projects).filter(([, c]) => c.icon || c.label);
-  return `<div class="set">
-    <h2>Vault</h2>
-    <div class="meta">De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.</div>
-    <div class="setrow"><input class="field" id="vaultpath" value="${esc(settings.vault)}" spellcheck="false"><button class="btn" data-set="pick">Kies map…</button><button class="btn primary" data-set="save">Opslaan</button></div>
-    ${settingsMsg ? `<div class="err">${esc(settingsMsg)}</div>` : ""}
-    <h2>Aangepaste projecten</h2>
-    <div class="meta">Icoon en naam zet je per project, en het project van een gesprek wijzig je, door bovenaan een gesprek op de projectnaam met het pijltje te klikken. Instellingen open je via Vault › Instellingen… in de menubalk, of met ⌘,</div>
-    ${custom.length ? `<ul class="todo">${custom.map(([n, c]) => `<li class="setli"><span>${esc(c.icon || "")} ${esc(c.label || n)} <span class="count">${c.label ? esc(n) : ""}</span></span><button class="btn" data-set="clear" data-p="${esc(n)}">Herstellen</button></li>`).join("")}</ul>`
-      : '<div class="meta">Nog geen.</div>'}
-  </div>`;
-}
-async function onSettings(e: MouseEvent) {
-  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-set]"); if (!b) return false;
-  const input = document.getElementById("vaultpath") as HTMLInputElement | null;
-  if (b.dataset.set === "pick") { const f = await invoke<string | null>("pick_folder"); if (f && input) input.value = f; }
-  if (b.dataset.set === "save" && input) { if (await saveSettings({ ...settings, vault: input.value.trim() })) { settingsMsg = "Opgeslagen."; await loadSnapshot(); } }
-  if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await saveSettings(next); }
-  renderChat(); renderNav();
-  return true;
-}
-
 // the title opens a small panel: which project this conversation belongs to, and the project's icon and name
 function openPop() {
   if (VIEWS.includes(sel)) return;
@@ -369,6 +346,7 @@ function openPop() {
       <div class="setrow"><input class="field ico" id="popicon" maxlength="4" placeholder="Icoon" value="${esc(c.icon || "")}"><input class="field" id="poplabel" placeholder="${esc(cur)}" value="${esc(c.label || "")}"></div></div>` : ""}
     <div class="acts"><button class="btn" data-pop="cancel">Annuleren</button><button class="btn primary" data-pop="save">Bewaren</button></div>`;
   $("pop").hidden = false;
+  ($("popproj") as HTMLSelectElement).focus();
 }
 async function onPop(e: MouseEvent) {
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-pop]"); if (!b) return;
@@ -389,7 +367,6 @@ function alertMsg(m: string) { const p = $("pop"); p.insertAdjacentHTML("afterbe
 
 function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
-  if (sel === SETTINGS) { box.innerHTML = ""; return; }
   document.querySelectorAll<HTMLElement>("#seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   if (!P) {
     const due = snap.reminders.filter((r: any) => r.days <= 0);
@@ -480,8 +457,25 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
-listen("menu", e => { if (e.payload === "settings") select(SETTINGS); });
+listen<Settings>("settings-changed", e => { settings = { ...settings, ...e.payload }; loadSnapshot(); });
 $("t").addEventListener("click", openPop);
+$("assign").addEventListener("click", openPop);
+// right-click on a conversation in the sidebar: the Mac context menu
+$("nav").addEventListener("contextmenu", e => {
+  const r = (e.target as HTMLElement).closest<HTMLElement>(".row[data-k]");
+  if (!r || VIEWS.includes(r.dataset.k!)) return;
+  e.preventDefault();
+  const m = $("ctx"); m.dataset.k = r.dataset.k!;
+  m.innerHTML = `<button data-ctx="assign">Wijzig project…</button><button data-ctx="close">Sluiten</button>`;
+  m.style.left = `${e.clientX}px`; m.style.top = `${e.clientY}px`; m.hidden = false;
+});
+$("ctx").addEventListener("click", async e => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ctx]"); const k = $("ctx").dataset.k!; $("ctx").hidden = true;
+  if (!b) return;
+  if (b.dataset.ctx === "close") closeChat(k);
+  else { await select(k); openPop(); }
+});
+window.addEventListener("click", e => { if (!(e.target as HTMLElement).closest("#ctx")) $("ctx").hidden = true; });
 $("pop").addEventListener("click", onPop);
 $("msgs").addEventListener("change", e => { onRemindersEvent(e, remAct); });
 async function remAct(action: "done" | "push", id: string, date?: string) {
@@ -490,7 +484,6 @@ async function remAct(action: "done" | "push", id: string, date?: string) {
 }
 $("msgs").addEventListener("click", e => {
   if (sel === REM && onRemindersEvent(e, remAct)) return;
-  if (sel === SETTINGS) { onSettings(e); return; }
   const g = (e.target as HTMLElement).closest<HTMLElement>("[data-bg]");
   if (g) {
     const id = g.dataset.id!, act = g.dataset.bg!;
