@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vault</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fragment+Mono&display=swap">
+<style>
+:root{
+  --paper:#FAF9F5; --paper-2:#F0EEE7; --ink:#15130F; --ink-muted:#6F6A60;
+  --paper-muted:rgba(250,249,245,.58);
+  --hairline:rgba(21,19,15,.12); --hairline-dark:rgba(250,249,245,.18);
+  --marine:#234173; --marine-deep:#182D52;
+  --k:7.6; --cut-l:18px; --cut-m:5.53px; --cut-s:4.47px; --cut-xs:3.03px; --cut:var(--cut-l);
+  --ease:cubic-bezier(0.22,1,0.36,1); --d-hover:180ms;
+  --sans-d:"neue-haas-grotesk-display","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --sans-t:"neue-haas-grotesk-text","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mono:"Fragment Mono",Menlo,monospace;
+  --t-13:13px; --t-14:14px; --t-16:16px; --t-20:20px; --t-28:28px; --t-96:96px;
+  --s1:8px; --s2:16px; --s3:24px; --s4:40px; --s5:64px;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--paper);color:var(--ink);font:400 var(--t-16)/1.45 var(--sans-t);
+  -webkit-font-smoothing:antialiased;min-width:960px;display:grid;grid-template-rows:auto minmax(0,1fr)}
+.cut{clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% calc(var(--cut)*var(--k)),100% 100%,0 100%)}
+.mono{font-family:var(--mono);font-size:var(--t-13);font-variant-numeric:tabular-nums;letter-spacing:0}
+.muted{color:var(--ink-muted)}
+
+/* top bar */
+.top{display:grid;grid-template-columns:minmax(0,1fr) minmax(480px,640px) minmax(0,1fr);
+  align-items:start;gap:var(--s3);padding:var(--s3) var(--s4) 0}
+.id{display:flex;align-items:center;gap:10px;height:42px;font:500 var(--t-16)/1 var(--sans-d)}
+.id svg{width:22px;height:22px}
+.date{justify-self:end;height:42px;display:flex;align-items:center;gap:var(--s2)}
+.ask{display:grid;grid-template-columns:1fr auto auto;gap:var(--s1)}
+.field{--cut:var(--cut-m);height:42px;background:var(--paper-2);border:1px solid var(--hairline);
+  display:flex;align-items:center;padding:0 var(--s2);transition:border-color var(--d-hover) var(--ease)}
+.field:hover{border-color:rgba(21,19,15,.3)}
+.field:focus-within{outline:2px solid var(--marine);outline-offset:2px}
+.field input{all:unset;flex:1;font:400 var(--t-16)/1 var(--sans-t);color:var(--ink)}
+.field input::placeholder{color:var(--ink-muted)}
+.btn{--cut:var(--cut-m);height:42px;padding:0 var(--s2);border:1px solid var(--hairline);background:var(--paper);
+  font:500 var(--t-16)/1 var(--sans-t);color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:8px;
+  transition:transform var(--d-hover) var(--ease),border-color var(--d-hover) var(--ease)}
+.btn:hover{transform:translateY(-2px);border-color:rgba(21,19,15,.3)}
+.btn:focus-visible{outline:2px solid var(--marine);outline-offset:2px}
+.btn:active{background:var(--marine);color:var(--paper);border-color:var(--marine)}
+.btn .mono{color:var(--ink-muted)}
+.hint{grid-column:1/-1;min-height:23px;display:flex;align-items:center;gap:var(--s1);font-size:var(--t-14);color:var(--ink-muted)}
+.chip{--cut:var(--cut-xs);height:23px;padding:0 10px 0 8px;display:inline-flex;align-items:center;gap:6px;
+  background:var(--paper);border:1px solid var(--hairline);color:var(--ink);font:500 var(--t-14)/1 var(--sans-t)}
+
+/* grid */
+main{display:grid;grid-template-columns:1.55fr 1fr;gap:var(--s4);padding:var(--s3) var(--s4) 0;min-height:0}
+.col{display:flex;flex-direction:column;gap:var(--s4);min-width:0;min-height:0;overflow-y:auto;padding-bottom:var(--s4);scrollbar-width:thin}
+.label{display:flex;align-items:baseline;gap:10px;font:500 var(--t-14)/1 var(--sans-t);margin-bottom:var(--s2)}
+.label::before{content:"";width:9px;height:9px;background:var(--marine);flex:none;transform:translateY(-1px)}
+.label .muted{font-weight:400}
+
+/* the one ink field */
+.wait{--cut:var(--cut-l);background:var(--ink);color:var(--paper);padding:var(--s3) var(--s3) var(--s3) var(--s3);
+  display:grid;grid-template-columns:auto 1fr;column-gap:var(--s4)}
+.wait .label{grid-column:1/-1;color:var(--paper)}
+.wait .label .muted{color:var(--paper-muted)}
+.count{font:500 var(--t-96)/.8 var(--sans-d);letter-spacing:-.02em;font-variant-numeric:tabular-nums;padding-top:6px}
+.wlist{list-style:none;padding:0;border-top:1px solid var(--hairline-dark)}
+.wlist li{display:grid;grid-template-columns:1fr auto auto;gap:var(--s2);align-items:center;
+  padding:14px 0;border-bottom:1px solid var(--hairline-dark)}
+.wlist .t{font:500 var(--t-20)/1.2 var(--sans-t)}
+.wlist .r{font-size:var(--t-14);color:var(--paper-muted);margin-top:4px}
+.wlist .mono{color:var(--paper-muted)}
+.wlist .act{--cut:var(--cut-s);height:34px;padding:0 14px;background:var(--paper);color:var(--ink);border:0;
+  font:500 var(--t-14)/1 var(--sans-t);cursor:pointer;transition:transform var(--d-hover) var(--ease)}
+.wlist .act:hover{transform:translateY(-2px)}
+.wlist .act:focus-visible{outline:2px solid var(--paper);outline-offset:2px}
+.empty{padding:14px 0;color:var(--paper-muted)}
+
+/* register */
+table{width:100%;border-collapse:collapse}
+th{font:500 var(--t-14)/1 var(--sans-t);color:var(--ink-muted);text-align:left;padding:0 12px 10px 0;border-bottom:1px solid var(--hairline)}
+th.n,td.n{text-align:right;padding-right:0}
+td{height:44px;padding:0 12px 0 0;border-bottom:1px solid var(--hairline);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:0}
+tbody tr{cursor:pointer;transition:background-color var(--d-hover) var(--ease)}
+tbody tr:hover{background:var(--paper-2)}
+tbody tr.sel{box-shadow:inset 2px 0 0 var(--marine)}
+.st{display:inline-flex;align-items:center;gap:8px;color:var(--ink-muted)}
+.st.work{color:var(--ink)}
+.st.work::before{content:"";width:9px;height:9px;background:var(--marine)}
+.st.blocked{color:var(--ink);font-weight:600}
+.generic{color:var(--ink-muted)}
+
+/* side panels */
+.panel{--cut:var(--cut-l);background:var(--paper-2);padding:var(--s3);min-height:0;overflow-y:auto;scrollbar-width:thin}
+.col.side{overflow:hidden;padding-bottom:var(--s4)}
+.col.side .panel:first-child{flex:1.35 1 0}
+.col.side .panel:last-child{flex:1 1 0}
+.group{font:500 var(--t-14)/1 var(--sans-t);color:var(--ink-muted);margin:var(--s3) 0 6px}
+.group:first-of-type{margin-top:0}
+.rows{list-style:none;padding:0;border-top:1px solid var(--hairline)}
+.rows li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:var(--s2);align-items:baseline;
+  padding:10px 0;border-bottom:1px solid var(--hairline)}
+.rows .ttl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rows .p{color:var(--ink-muted);font-size:var(--t-14)}
+.rows .over{font-weight:600}
+.rows .n{text-align:right}
+.more{margin-top:10px;font-size:var(--t-14);color:var(--ink-muted)}
+@media (prefers-reduced-motion:reduce){*{transition-duration:0s!important}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mk" viewBox="0 0 100 100"><path fill="currentColor" fill-rule="evenodd" d="M12 12H88V88H12Z M38 12H48L28 88H18Z M62 12H72L52 88H42Z"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="id"><svg viewBox="0 0 100 100"><use href="#mk"/></svg>Vault</div>
+  <form class="ask" onsubmit="return false">
+    <label class="field cut"><input id="q" placeholder="Waarover wil je verder?" autocomplete="off" value="waar staan we met weemaes"></label>
+    <button class="btn cut" type="button">Vraag <span class="mono">⏎</span></button>
+    <button class="btn cut" type="button">Opdracht <span class="mono">⌘⏎</span></button>
+    <div class="hint" id="hint"></div>
+  </form>
+  <div class="date"><span class="mono" id="today"></span></div>
+</header>
+
+<main>
+  <div class="col">
+    <section class="wait cut" aria-labelledby="w-l">
+      <div class="label" id="w-l">Wacht op jou <span class="muted" id="w-sub"></span></div>
+      <div class="count" id="w-count"></div>
+      <ul class="wlist" id="w-list"></ul>
+    </section>
+
+    <section aria-labelledby="g-l">
+      <div class="label" id="g-l">Gesprekken <span class="muted mono" id="g-count"></span></div>
+      <table>
+        <thead><tr><th style="width:44%">Naam</th><th style="width:18%">Project</th><th style="width:16%">Toestand</th><th class="n" style="width:22%">Sinds</th></tr></thead>
+        <tbody id="g-rows"></tbody>
+      </table>
+    </section>
+  </div>
+
+  <div class="col side">
+    <section class="panel cut" aria-labelledby="v-l">
+      <div class="label" id="v-l">Vandaag <span class="muted" id="v-sub"></span></div>
+      <div id="v-body"></div>
+    </section>
+    <section class="panel cut" aria-labelledby="p-l">
+      <div class="label" id="p-l">Projecten <span class="muted">open lussen</span></div>
+      <div id="p-body"></div>
+    </section>
+  </div>
+</main>
+
+<script id="data" type="application/json">__SNAPSHOT__</script>
+<script>
+const D = JSON.parse(document.getElementById('data').textContent);
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today = new Date(D.today + 'T12:00:00');
+const days = ['zo','ma','di','wo','do','vr','za'], months = ['jan','feb','mrt','apr','mei','jun','jul','aug','sep','okt','nov','dec'];
+$('today').textContent = `${days[today.getDay()]} ${today.getDate()} ${months[today.getMonth()]}`;
+
+const names = D.projects.map(p => p.name).sort((a, b) => b.length - a.length);
+const findProjects = text => names.filter(n => new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu').test(text));
+
+const sessions = D.sessions.items.map(s => {
+  const status = s.kind === 'background'
+    ? (s.state === 'blocked' ? 'wacht' : s.state === 'done' ? 'klaar' : s.status === 'busy' ? 'werkt' : 'open')
+    : (s.status === 'busy' ? 'werkt' : 'open');
+  const proj = findProjects(s.name || '')[0] || null;
+  const generic = /^obsidian-context-management-\w+$/.test(s.name || '');
+  return {...s, status, proj, generic};
+});
+const order = {wacht: 0, werkt: 1, open: 2, klaar: 3};
+sessions.sort((a, b) => order[a.status] - order[b.status] || b.startedAt - a.startedAt);
+
+function since(ms) {
+  const d = new Date(ms), diff = (Date.now() - ms) / 60000;
+  if (diff < 60) return `${Math.max(1, Math.round(diff))} min`;
+  if (diff < 60 * 24) return `${Math.round(diff / 60)} u`;
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+// the one ink field
+const waiting = sessions.filter(s => s.status === 'wacht');
+$('w-count').textContent = waiting.length;
+$('w-sub').textContent = waiting.length ? '' : '';
+$('w-list').innerHTML = waiting.length ? waiting.map(s => `
+  <li><div><div class="t">${esc(s.name)}</div><div class="r">Achtergrondopdracht, geblokkeerd${s.proj ? ` · ${esc(s.proj)}` : ''}</div></div>
+  <span class="mono">sinds ${since(s.startedAt)}</span><button class="act cut" type="button">Open</button></li>`).join('')
+  : '<li class="empty">Niets wacht op jou.</li>';
+
+// register
+$('g-count').textContent = sessions.length;
+const row = s => `
+  <tr><td class="${s.generic ? 'generic' : ''}">${esc(s.name)}</td>
+  <td>${s.proj ? esc(s.proj) : '<span class="muted">geen</span>'}</td>
+  <td><span class="st ${s.status === 'werkt' ? 'work' : s.status === 'wacht' ? 'blocked' : ''}">${s.status}</span></td>
+  <td class="n mono">${since(s.startedAt)}</td></tr>`;
+const named = sessions.filter(s => !s.generic), unnamed = sessions.filter(s => s.generic);
+const busyUnnamed = unnamed.filter(s => s.status !== 'open');
+$('g-rows').innerHTML = [...named, ...busyUnnamed].map(row).join('') + (unnamed.length - busyUnnamed.length ? `
+  <tr class="fold" id="fold"><td colspan="3"><span class="muted">${unnamed.length - busyUnnamed.length} open sessies zonder naam</span></td><td class="n mono muted">tonen</td></tr>` : '');
+document.getElementById('fold')?.addEventListener('click', e => {
+  e.currentTarget.outerHTML = unnamed.filter(s => s.status === 'open').map(row).join('');
+});
+
+// today
+const R = D.reminders, over = R.filter(r => r.days < 0), now = R.filter(r => r.days === 0),
+      week = R.filter(r => r.days > 0 && r.days <= 7), later = R.filter(r => r.days > 7);
+$('v-sub').textContent = `${over.length} vervallen`;
+const rlist = (title, rows, fmt) => rows.length ? `<div class="group">${title}</div><ul class="rows">${rows.map(r => `
+  <li><div><div class="ttl ${r.days < 0 ? 'over' : ''}">${esc(r.title)}</div><div class="p">${esc(r.project || '')}</div></div>
+  <span class="mono n ${r.days < 0 ? '' : 'muted'}">${fmt(r)}</span></li>`).join('')}</ul>` : '';
+const dm = r => { const d = new Date(r.date + 'T12:00:00'); return `${days[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`; };
+$('v-body').innerHTML = rlist('Vervallen', over, r => `${-r.days} d`) + rlist('Vandaag', now, () => 'vandaag')
+  + rlist('Deze week', week, dm) + (later.length ? `<div class="more">Later: ${later.length} reminders</div>` : '');
+
+// projects
+const live = D.projects.filter(p => ['Active', 'Blocked'].includes(p.state));
+const rest = D.projects.length - live.length;
+$('p-body').innerHTML = ['Antenna', 'Meersman', 'Personal'].map(c => {
+  const rows = live.filter(p => p.context === c).sort((a, b) => (b.open ?? -1) - (a.open ?? -1)).slice(0, c === 'Antenna' ? 6 : 4);
+  return rows.length ? `<div class="group">${c}</div><ul class="rows">${rows.map(p => `
+    <li><div>${esc(p.name)}${p.state === 'Blocked' ? ' <span class="p">wacht op iemand</span>' : ''}</div>
+    <span class="mono n">${p.open ?? '·'}</span></li>`).join('')}</ul>` : '';
+}).join('') + `<div class="more">Stil en gepauzeerd: ${rest} projecten</div>`;
+
+// input: project detection
+function hint() {
+  const q = $('q').value.trim(), hits = findProjects(q);
+  if (!q) { $('hint').innerHTML = ''; return; }
+  if (hits.length === 1) {
+    const s = sessions.find(x => x.proj === hits[0] && x.status !== 'klaar');
+    $('hint').innerHTML = `<span class="chip cut">${esc(hits[0])}</span>${s ? `gesprek loopt, ${s.status}, sinds ${since(s.startedAt)}` : 'nieuw gesprek met de projectnote geladen'}`;
+  } else if (hits.length > 1) {
+    $('hint').innerHTML = `Welk project? ${hits.map(h => `<span class="chip cut">${esc(h)}</span>`).join(' ')}`;
+  } else {
+    $('hint').innerHTML = 'Geen project herkend, gaat naar het algemeen gesprek';
+  }
+}
+$('q').addEventListener('input', hint); hint();
+</script>
+</body>
+</html>
