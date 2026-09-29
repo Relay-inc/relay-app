@@ -216,3 +216,12 @@ body.prefs .set h2:first-child{margin-top:0}
 .ctx button{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:280px}
 .ctx-a .prow .g{stroke:var(--ctx-a)} .ctx-m .prow .g{stroke:var(--ctx-m)} .ctx-p .prow .g{stroke:var(--ctx-p)}
 .ctx-a .prow.sel .g,.ctx-m .prow.sel .g,.ctx-p .prow.sel .g{stroke:var(--on-accent)}
+.working{display:flex;align-items:center;gap:10px;color:var(--secondary);font-size:14px;padding:4px 0}
+.working .wt{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+.working .wt code{font-family:var(--mono);font-size:12.5px}
+.working .ws{margin-left:auto;font-size:12px;color:var(--secondary)}
+.pulse{display:inline-flex;gap:4px}
+.pulse i{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pl 1.2s ease-in-out infinite}
+.pulse i:nth-child(2){animation-delay:.15s}
+.pulse i:nth-child(3){animation-delay:.3s}
+@keyframes pl{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}

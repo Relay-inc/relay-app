@@ -28,6 +28,7 @@ const store = { get: (k: string, d: any) => { try { return JSON.parse(localStora
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
 const status: Record<string, "idle" | "busy"> = {};
+const busySince: Record<string, number> = {};
 const unseen = new Set<string>();
 const dismissed = new Set<string>();
 let chats: Record<string, Chat> = store.get("chats", {});
@@ -325,7 +326,8 @@ function renderChat() {
   }).join("") : `<div class="note">${P ? `Nieuw gesprek over ${esc(pn)}. Claude leest eerst de projectnote.` : "Algemeen gesprek. Noem je een project, dan komt het gesprek onder dat project."}</div>`)
     + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">Over welk project gaat dit?</div><div class="opts">${routeChoice.hits.map(h =>
         `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">Hier houden</button></div></div>` : "")
-    + pendingList.filter(r => r.project === sel).map(card).join("");
+    + pendingList.filter(r => r.project === sel).map(card).join("")
+    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel) : "");
   const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
   $("movebar").innerHTML = T ? `<span>Dit gesprek staat open in de terminal${T.status === "busy" ? " en werkt nog" : ""}. Typ je hier, dan gaat het verder als kopie in de app. De terminal blijft zoals hij is.</span>`
     : about ? `<span>Dit gesprek gaat over <b>${esc(about)}</b>.</span><span class="sp"></span>
@@ -369,6 +371,17 @@ async function onPop(e: MouseEvent) {
   $("pop").hidden = true; render();
 }
 function alertMsg(m: string) { const p = $("pop"); p.insertAdjacentHTML("afterbegin", `<div class="err">${esc(m)}</div>`); }
+
+// visible while Claude works: pulsing dots, the step it is on, and the seconds since the question
+function workingHtml(k: string): string {
+  // the running step already has its own line with a spinner, so this only says that Claude is at it
+  const running = (convo[k] || []).some(i => i.kind === "tool" && i.state === "run");
+  const since = busySince[k] || Date.now(), sec = Math.round((Date.now() - since) / 1000);
+  return `<div class="working" aria-live="polite"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${running ? "Claude werkt" : "Claude denkt na"}</span><span class="mono ws" data-since="${since}">${sec} s</span></div>`;
+}
+setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => {
+  const s = Math.round((Date.now() - Number(e.dataset.since)) / 1000); e.textContent = s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+}), 1000);
 
 function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
@@ -434,7 +447,7 @@ async function sendMsg(forced?: string) {
     else if (hits.length > 1) { routeChoice = { key: k, text, hits }; renderChat(); return; }
   }
   if (c) { if (c.title === NEW) c.title = text.slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
-  push(k, { kind: "me", text }); status[k] = "busy"; render();
+  push(k, { kind: "me", text }); status[k] = "busy"; busySince[k] = Date.now(); render();
   $("log").scrollTop = 1e9;
   const name = `${c?.project || "Algemeen"}: ${c?.title || k}`;
   try { await invoke("send", { project: k, text, name, fork: c?.fork ?? null }); }
