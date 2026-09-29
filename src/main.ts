@@ -348,7 +348,8 @@ function renderChat() {
     + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">Over welk project gaat dit?</div><div class="opts">${routeChoice.hits.map(h =>
         `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">Hier houden</button></div></div>` : "")
     + pendingList.filter(r => r.project === sel).map(card).join("")
-    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel) : "");
+    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel) : "")
+    + (T && T.status === "busy" ? `<div class="working"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">Claude schrijft in de terminal. Tekst verschijnt hier zodra een blok af is.</span></div>` : "");
   const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
   $("movebar").innerHTML = T ? `<span>Dit gesprek staat open in de terminal${T.status === "busy" ? " en werkt nog" : ""}. Typ je hier, dan gaat het verder als kopie in de app. De terminal blijft zoals hij is.</span>`
     : about ? `<span>Dit gesprek gaat over <b>${esc(about)}</b>.</span><span class="sp"></span>
@@ -671,5 +672,10 @@ await select(sel);
 pollPending();
 setInterval(pollPending, 700);
 setInterval(pollAgents, 10000);
-setInterval(async () => { if (isTerm(sel) && await tailTerm(sel)) renderChat(); }, 2000);
+// a terminal conversation that is open in the app: new transcript lines and its busy state every 2 s
+setInterval(async () => {
+  if (!isTerm(sel)) return;
+  const [grew] = await Promise.all([tailTerm(sel), invoke<any[]>("agents").then(a => { agentsList = a; })]);
+  if (grew || termOf(sel)?.status === "busy") renderChat(); renderNav();
+}, 2000);
 setInterval(loadSnapshot, 30000);
