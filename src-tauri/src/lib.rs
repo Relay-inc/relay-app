@@ -298,6 +298,24 @@ fn reminder(state: State<App>, action: String, id: String, date: Option<String>)
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // native menu bar: Vault > Instellingen… (Cmd-comma), plus Wijzig and Venster so copy, paste
+        // and window shortcuts keep working once the default menu is replaced
+        .menu(|h| {
+            use tauri::menu::{Menu, MenuItem, PredefinedMenuItem as P, Submenu};
+            let settings = MenuItem::with_id(h, "settings", "Instellingen…", true, Some("CmdOrCtrl+,"))?;
+            let app = Submenu::with_items(h, "Vault", true, &[
+                &P::about(h, Some("Over Vault"), None)?, &P::separator(h)?, &settings, &P::separator(h)?,
+                &P::hide(h, Some("Verberg Vault"))?, &P::hide_others(h, Some("Verberg andere"))?, &P::show_all(h, Some("Toon alles"))?,
+                &P::separator(h)?, &P::quit(h, Some("Stop Vault"))?])?;
+            let edit = Submenu::with_items(h, "Wijzig", true, &[
+                &P::undo(h, Some("Herstel"))?, &P::redo(h, Some("Opnieuw"))?, &P::separator(h)?,
+                &P::cut(h, Some("Knip"))?, &P::copy(h, Some("Kopieer"))?, &P::paste(h, Some("Plak"))?, &P::select_all(h, Some("Selecteer alles"))?])?;
+            let window = Submenu::with_items(h, "Venster", true, &[
+                &P::minimize(h, Some("Minimaliseer"))?, &P::maximize(h, Some("Zoom"))?, &P::fullscreen(h, Some("Volledig scherm"))?,
+                &P::separator(h)?, &P::close_window(h, Some("Sluit venster"))?])?;
+            Menu::with_items(h, &[&app, &edit, &window])
+        })
+        .on_menu_event(|app, event| { if event.id() == "settings" { app.emit("menu", "settings").ok(); } })
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let sids = fs::read_to_string(data_dir(app.handle()).join("sessions.json")).ok()

@@ -274,7 +274,6 @@ function renderNav() {
     h += `<div class="sec ${CTX[ctx]}">${head(ctx, ctx.toUpperCase(), shown.length)}${body}</div>`;
   }
   $("nav").innerHTML = h;
-  $("gear").classList.toggle("sel", sel === SETTINGS);
 }
 
 function renderChat() {
@@ -344,7 +343,7 @@ function settingsHtml(): string {
     <div class="setrow"><input class="field" id="vaultpath" value="${esc(settings.vault)}" spellcheck="false"><button class="btn" data-set="pick">Kies map…</button><button class="btn primary" data-set="save">Opslaan</button></div>
     ${settingsMsg ? `<div class="err">${esc(settingsMsg)}</div>` : ""}
     <h2>Aangepaste projecten</h2>
-    <div class="meta">Icoon en naam zet je per project, en het project van een gesprek wijzig je, door bovenaan een gesprek op de projectnaam met het pijltje te klikken. Instellingen open je altijd met ⌘,</div>
+    <div class="meta">Icoon en naam zet je per project, en het project van een gesprek wijzig je, door bovenaan een gesprek op de projectnaam met het pijltje te klikken. Instellingen open je via Vault › Instellingen… in de menubalk, of met ⌘,</div>
     ${custom.length ? `<ul class="todo">${custom.map(([n, c]) => `<li class="setli"><span>${esc(c.icon || "")} ${esc(c.label || n)} <span class="count">${c.label ? esc(n) : ""}</span></span><button class="btn" data-set="clear" data-p="${esc(n)}">Herstellen</button></li>`).join("")}</ul>`
       : '<div class="meta">Nog geen.</div>'}
   </div>`;
@@ -481,7 +480,7 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
-$("gear").addEventListener("click", () => select(SETTINGS));
+listen("menu", e => { if (e.payload === "settings") select(SETTINGS); });
 $("t").addEventListener("click", openPop);
 $("pop").addEventListener("click", onPop);
 $("msgs").addEventListener("change", e => { onRemindersEvent(e, remAct); });
@@ -530,7 +529,6 @@ $("term").addEventListener("click", () => {
 const setInsp = (hide: boolean) => { document.body.classList.toggle("noinsp", hide); store.set("noinsp", hide); };
 setInsp(store.get("noinsp", false));
 $("toggleinsp").addEventListener("click", () => setInsp(!document.body.classList.contains("noinsp")));
-window.addEventListener("keydown", e => { if (e.metaKey && !e.altKey && e.key === ",") { e.preventDefault(); select(SETTINGS); } });
 window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code === "KeyI") { e.preventDefault(); setInsp(!document.body.classList.contains("noinsp")); } });
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; renderInsp(); } });
 
