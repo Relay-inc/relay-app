@@ -255,14 +255,15 @@ let collapsed: Record<string, boolean> = store.get("collapsed", {});
 // order Laurent dragged: sections, and projects within a section
 let secOrder: string[] = store.get("secOrder", ["Algemeen", "Antenna", "Meersman", "Personal"]);
 let projOrder: Record<string, string[]> = store.get("projOrder", {});
+let convOrder: Record<string, string[]> = store.get("convOrder", {}); // per project (or "" for Algemeen): conversation keys
 const lead = (p: string) => settings.projects[p]?.icon ? `<span class="emo">${esc(settings.projects[p].icon)}</span>` : glyph("folder");
 
 function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const selP = projOf(sel), T = terms();
   const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="Sluiten">×</button>`;
-  const sub = (c: Chat, indent = true) => `<div class="row ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${trailOf([c.key])}${x(c.key)}</div>`;
-  const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
+  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${trailOf([c.key])}${x(c.key)}</div>`;
+  const tsub = (t: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" data-parent="${esc(t.project ?? "")}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
   const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
     `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
 
@@ -271,8 +272,12 @@ function renderNav() {
     + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">Reminders</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`;
 
   const gc = chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
+  // conversations in the order Laurent dragged, the rest after them in their default order
+  const byConv = (parent: string, rows: { key: string; html: string }[]) => { const o = convOrder[parent] || [];
+    return rows.map((r, i) => ({ ...r, i })).sort((a, b) => { const ia = o.indexOf(a.key), ib = o.indexOf(b.key);
+      return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : a.i - b.i; }).map(r => r.html).join(""); };
   const general = `<div class="sec" data-drop="Algemeen">${head("Algemeen", "ALGEMEEN", gc.length + gt.length, "", "")}`
-    + (collapsed.Algemeen && !q ? "" : gc.map(c => sub(c, false)).join("") + gt.map(t => tsub(t, false)).join("")) + `</div>`;
+    + (collapsed.Algemeen && !q ? "" : byConv("", [...gc.map(c => ({ key: c.key, html: sub(c, false) })), ...gt.map(t => ({ key: t.key, html: tsub(t, false) }))])) + `</div>`;
 
   // an app conversation stays until Laurent closes it, a terminal session as long as it is open
   const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
@@ -287,7 +292,7 @@ function renderNav() {
       const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
       const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
       body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
-        + ts.map(t => tsub(t)).join("") + cs.slice(0, 5).map(c => sub(c)).join("")
+        + byConv(p.name, [...ts.map(t => ({ key: t.key, html: tsub(t) })), ...cs.slice(0, 5).map(c => ({ key: c.key, html: sub(c) }))])
         + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
   } return body; };
   const secs: Record<string, string> = { Algemeen: general };
@@ -516,21 +521,24 @@ $("nav").addEventListener("click", e => {
 $("find").addEventListener("input", renderNav);
 // reorder by pressing and moving: a section header among headers, a project among the projects of its
 // section. Pointer events instead of HTML drag and drop, which the Mac webview does not deliver reliably.
-let drag: { kind: "sec" | "proj"; id: string; ctx?: string; y: number; on: boolean; target?: HTMLElement; after?: boolean } | null = null;
+let drag: { kind: "sec" | "proj" | "conv"; id: string; ctx?: string; y: number; on: boolean; target?: HTMLElement; after?: boolean } | null = null;
 let justDragged = false;
 $("nav").addEventListener("pointerdown", e => {
   const t = e.target as HTMLElement;
   if (e.button !== 0 || t.closest("button")) return;
-  const g = t.closest<HTMLElement>(".grp"), pr = t.closest<HTMLElement>(".prow");
-  if (g || pr) e.preventDefault(); // no text selection starting from a row that can be dragged
-  drag = pr ? { kind: "proj", id: pr.dataset.p!, ctx: pr.dataset.ctx, y: e.clientY, on: false } : g ? { kind: "sec", id: g.dataset.sec!, y: e.clientY, on: false } : null;
+  const g = t.closest<HTMLElement>(".grp"), pr = t.closest<HTMLElement>(".prow"), cv = t.closest<HTMLElement>(".row.conv");
+  if (g || pr || cv) e.preventDefault(); // no text selection starting from a row that can be dragged
+  drag = cv ? { kind: "conv", id: cv.dataset.k!, ctx: cv.dataset.parent, y: e.clientY, on: false }
+    : pr ? { kind: "proj", id: pr.dataset.p!, ctx: pr.dataset.ctx, y: e.clientY, on: false } : g ? { kind: "sec", id: g.dataset.sec!, y: e.clientY, on: false } : null;
 });
 window.addEventListener("pointermove", e => {
   if (!drag) return;
   if (!drag.on) { if (Math.abs(e.clientY - drag.y) < 5) return; drag.on = true; document.body.classList.add("reordering");
-    (drag.kind === "proj" ? document.querySelector(`.prow[data-p="${CSS.escape(drag.id)}"]`) : document.querySelector(`.grp[data-sec="${CSS.escape(drag.id)}"]`))?.classList.add("dragging"); }
+    (drag.kind === "conv" ? document.querySelector(`.row.conv[data-k="${CSS.escape(drag.id)}"]`) : drag.kind === "proj" ? document.querySelector(`.prow[data-p="${CSS.escape(drag.id)}"]`) : document.querySelector(`.grp[data-sec="${CSS.escape(drag.id)}"]`))?.classList.add("dragging"); }
   const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-  const tgt = drag.kind === "sec" ? under?.closest<HTMLElement>(".sec[data-drop]") : under?.closest<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`);
+  const tgt = drag.kind === "sec" ? under?.closest<HTMLElement>(".sec[data-drop]")
+    : drag.kind === "conv" ? under?.closest<HTMLElement>(`.row.conv[data-parent="${CSS.escape(drag.ctx ?? "")}"]`)
+    : under?.closest<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`);
   document.querySelectorAll(".dropbefore,.dropafter").forEach(x => x.classList.remove("dropbefore", "dropafter"));
   if (!tgt) { drag.target = undefined; return; }
   const box = (drag.kind === "sec" ? tgt.querySelector(".grp")! : tgt).getBoundingClientRect();
@@ -547,6 +555,10 @@ window.addEventListener("pointerup", () => {
   const place = (list: string[], id: string, ref: string, after: boolean) => {
     const l = list.filter(x => x !== id), i = l.indexOf(ref); l.splice(i < 0 ? l.length : i + (after ? 1 : 0), 0, id); return l; };
   if (d.kind === "sec") { secOrder = place(secOrder, d.id, d.target.dataset.drop!, !!d.after); store.set("secOrder", secOrder); }
+  else if (d.kind === "conv") {
+    const visible = [...document.querySelectorAll<HTMLElement>(`.row.conv[data-parent="${CSS.escape(d.ctx ?? "")}"]`)].map(r => r.dataset.k!);
+    convOrder[d.ctx ?? ""] = place(visible, d.id, d.target.dataset.k!, !!d.after); store.set("convOrder", convOrder);
+  }
   else {
     const visible = [...document.querySelectorAll<HTMLElement>(`.prow[data-ctx="${d.ctx}"]`)].map(r => r.dataset.p!);
     projOrder[d.ctx!] = place(visible, d.id, d.target.dataset.p!, !!d.after); store.set("projOrder", projOrder);

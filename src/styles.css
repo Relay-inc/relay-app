@@ -233,3 +233,5 @@ body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
 /* app chrome is not text: no selection in the sidebar, the bars and the tabs, like a native Mac app */
 aside.side,.bar,.seg,.grp,.row,.ctx,.pop .plab,.toast{-webkit-user-select:none;user-select:none}
 aside.side input{-webkit-user-select:text;user-select:text}
+.row.conv.dropbefore{box-shadow:inset 0 2px 0 var(--accent)}
+.row.conv.dropafter{box-shadow:inset 0 -2px 0 var(--accent)}
