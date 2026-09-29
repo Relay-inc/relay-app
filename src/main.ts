@@ -137,9 +137,8 @@ function onEvent(k: string, ev: any) {
 }
 
 // ---------- history from the transcript, when a conversation opens for the first time
-async function ensureHistory(k: string, fresh = false) {
-  if (convo[k] && !fresh) return;
-  const hist: any[] = isTerm(k) ? await invoke("history_sid", { sid: k.slice(2) }) : await invoke("history", { project: k });
+const termOffset: Record<string, number> = {};
+function toItems(hist: any[]): Item[] {
   const items: Item[] = [];
   for (const e of hist) {
     const c = e.message?.content;
@@ -151,6 +150,21 @@ async function ensureHistory(k: string, fresh = false) {
       if (x.type === "tool_use") items.push({ kind: "tool", id: x.id, text: toolLine(x.name, x.input), state: "ok", path: x.input?.file_path });
     }
   }
+  return items;
+}
+// a terminal conversation: first the whole transcript, then only what was added since the last read
+async function tailTerm(k: string): Promise<boolean> {
+  const r = await invoke<{ items: any[]; next: number }>("history_sid", { sid: k.slice(2), from: termOffset[k] ?? 0 });
+  const fresh = termOffset[k] === undefined;
+  termOffset[k] = r.next;
+  const add = toItems(r.items);
+  if (fresh) convo[k] = add; else if (add.length) convo[k].push(...add);
+  return fresh || add.length > 0;
+}
+async function ensureHistory(k: string, fresh = false) {
+  if (isTerm(k)) { if (!convo[k] || fresh) await tailTerm(k); return; }
+  if (convo[k] && !fresh) return;
+  const items = toItems(await invoke<any[]>("history", { project: k }));
   convo[k] = items;
   if (isTerm(k)) return;
   const first = items.find(i => i.kind === "me");
@@ -238,6 +252,9 @@ const G: Record<string, string> = {
 const glyph = (n: string) => `<svg class="g" viewBox="0 0 16 16">${G[n]}</svg>`;
 const CTX: Record<string, string> = { Antenna: "ctx-a", Meersman: "ctx-m", Personal: "ctx-p" };
 let collapsed: Record<string, boolean> = store.get("collapsed", {});
+// order Laurent dragged: sections, and projects within a section
+let secOrder: string[] = store.get("secOrder", ["Algemeen", "Antenna", "Meersman", "Personal"]);
+let projOrder: Record<string, string[]> = store.get("projOrder", {});
 const lead = (p: string) => settings.projects[p]?.icon ? `<span class="emo">${esc(settings.projects[p].icon)}</span>` : glyph("folder");
 
 function renderNav() {
@@ -247,39 +264,38 @@ function renderNav() {
   const sub = (c: Chat, indent = true) => `<div class="row ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${trailOf([c.key])}${x(c.key)}</div>`;
   const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
   const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
-    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
+    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}" draggable="true"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
 
   const w = waitCount(), due = snap.reminders.filter((r: any) => r.days <= 0).length;
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
     + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">Reminders</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`;
 
   const gc = chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
-  h += `<div class="sec">${head("Algemeen", "ALGEMEEN", gc.length + gt.length, "", "")}`
+  const general = `<div class="sec" data-drop="Algemeen">${head("Algemeen", "ALGEMEEN", gc.length + gt.length, "", "")}`
     + (collapsed.Algemeen && !q ? "" : gc.map(c => sub(c, false)).join("") + gt.map(t => tsub(t, false)).join("")) + `</div>`;
 
   // an app conversation stays until Laurent closes it, a terminal session as long as it is open
   const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
   const lastAt = (n: string) => Math.max(0, ...chatsOf(n).map(c => c.at), ...T.filter(t => t.project === n).map(t => t.mtime));
-  // active = something happens now: working, waiting on Laurent, news, or a message typed in the last 30 minutes
-  const active = (n: string) => chatsOf(n).some(c => status[c.key] === "busy" || waits(c.key) || unseen.has(c.key))
-    || T.some(t => t.project === n && (t.status === "busy" || t.state === "blocked")) || Date.now() - lastAt(n) < 30 * 60_000;
   const match = (p: any) => p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q);
   const byRecent = (a: any, b: any) => lastAt(b.name) - lastAt(a.name);
-  const act = q ? [] : snap.projects.filter((p: any) => open(p) && active(p.name)).sort(byRecent);
+  // manual order from dragging comes first, the rest follows by recency
+  const ordered = (ctx: string, list: any[]) => { const o: string[] = projOrder[ctx] || [];
+    return [...list].sort((a, b) => { const ia = o.indexOf(a.name), ib = o.indexOf(b.name);
+      return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : byRecent(a, b); }); };
   const projRows = (list: any[]) => { let body = ""; for (const p of list) {
       const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
       const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
-      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
+      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}" draggable="true">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
         + ts.map(t => tsub(t)).join("") + cs.slice(0, 5).map(c => sub(c)).join("")
         + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
   } return body; };
-  const wrap = (p: any, html: string) => `<div class="${CTX[p.context] || ""}">${html}</div>`;
-  if (act.length) h = h.replace(/(<div class="sec">)/, `<div class="sec">${head("Actief", "ACTIEF", act.length)}${collapsed.Actief ? "" : act.map((p: any) => wrap(p, projRows([p]))).join("")}</div>$1`);
+  const secs: Record<string, string> = { Algemeen: general };
   for (const ctx of ["Antenna", "Meersman", "Personal"]) {
-    const shown = snap.projects.filter((p: any) => p.context === ctx && match(p) && (q || ((open(p) || p.name === selP) && !act.includes(p)))).sort(byRecent);
-    if (!shown.length) continue;
-    h += `<div class="sec ${CTX[ctx]}">${head(ctx, ctx.toUpperCase(), shown.length)}${collapsed[ctx] && !q ? "" : projRows(shown)}</div>`;
+    const shown = ordered(ctx, snap.projects.filter((p: any) => p.context === ctx && match(p) && (q || open(p) || p.name === selP)));
+    if (shown.length) secs[ctx] = `<div class="sec ${CTX[ctx]}" data-drop="${ctx}">${head(ctx, ctx.toUpperCase(), shown.length)}${collapsed[ctx] && !q ? "" : projRows(shown)}</div>`;
   }
+  h += secOrder.filter(k => secs[k]).map(k => secs[k]).join("");
   $("nav").innerHTML = h;
 }
 
@@ -497,6 +513,32 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
+// drag a section header onto another header, or a project onto another project in the same section
+let drag: { kind: "sec" | "proj"; id: string; ctx?: string } | null = null;
+$("nav").addEventListener("dragstart", e => {
+  const t = e.target as HTMLElement, g = t.closest<HTMLElement>(".grp"), pr = t.closest<HTMLElement>(".prow");
+  drag = pr ? { kind: "proj", id: pr.dataset.p!, ctx: pr.dataset.ctx } : g ? { kind: "sec", id: g.dataset.sec! } : null;
+  if (drag) { e.dataTransfer!.effectAllowed = "move"; e.dataTransfer!.setData("text/plain", drag.id); (pr || g)!.classList.add("dragging"); }
+});
+const dropTarget = (e: DragEvent) => { const t = e.target as HTMLElement;
+  return drag?.kind === "sec" ? t.closest<HTMLElement>(".sec[data-drop]") : drag?.kind === "proj" ? t.closest<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`) : null; };
+$("nav").addEventListener("dragover", e => {
+  const t = dropTarget(e); if (!t) return;
+  e.preventDefault();
+  document.querySelectorAll(".dropover").forEach(x => x.classList.remove("dropover")); t.classList.add("dropover");
+});
+$("nav").addEventListener("drop", e => {
+  const t = dropTarget(e); if (!t || !drag) return;
+  e.preventDefault();
+  const move = (list: string[], id: string, before: string) => { const l = list.filter(x => x !== id); l.splice(Math.max(0, l.indexOf(before)), 0, id); return l; };
+  if (drag.kind === "sec") { secOrder = move(secOrder, drag.id, t.dataset.drop!); store.set("secOrder", secOrder); }
+  else {
+    const visible = [...document.querySelectorAll<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`)].map(r => r.dataset.p!);
+    projOrder[drag.ctx!] = move(visible, drag.id, t.dataset.p!); store.set("projOrder", projOrder);
+  }
+  drag = null; renderNav();
+});
+$("nav").addEventListener("dragend", () => { drag = null; document.querySelectorAll(".dropover,.dragging").forEach(x => x.classList.remove("dropover", "dragging")); });
 listen<Settings>("settings-changed", e => { settings = { ...settings, ...e.payload }; loadSnapshot(); });
 $("t").addEventListener("click", openPop);
 // right-click on a conversation in the sidebar: the Mac context menu
@@ -581,7 +623,6 @@ async function pollPending() {
 }
 async function pollAgents() {
   [agentsList, appSids] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids")]);
-  if (isTerm(sel)) await ensureHistory(sel, true);
   renderNav(); if (sel === WAIT || isTerm(sel)) renderChat();
 }
 
@@ -604,4 +645,5 @@ await select(sel);
 pollPending();
 setInterval(pollPending, 700);
 setInterval(pollAgents, 10000);
+setInterval(async () => { if (isTerm(sel) && await tailTerm(sel)) renderChat(); }, 2000);
 setInterval(loadSnapshot, 30000);

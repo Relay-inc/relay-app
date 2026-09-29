@@ -225,3 +225,7 @@ body.prefs .set h2:first-child{margin-top:0}
 .pulse i:nth-child(2){animation-delay:.15s}
 .pulse i:nth-child(3){animation-delay:.3s}
 @keyframes pl{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.grp[draggable],.prow[draggable]{-webkit-user-drag:element}
+.dragging{opacity:.4}
+.sec.dropover>.grp{box-shadow:inset 0 2px 0 var(--accent)}
+.prow.dropover{box-shadow:inset 0 2px 0 var(--accent)}

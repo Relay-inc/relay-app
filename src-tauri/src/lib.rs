@@ -167,12 +167,21 @@ fn app_sids(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().value
 
 /// Read-only history of any session in the vault, e.g. one that is open in the terminal.
 #[tauri::command]
-fn history_sid(state: State<App>, sid: String) -> Vec<Value> {
-    if !sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return vec![]; }
-    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts(&state))) else { return vec![] };
-    raw.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok())
+fn history_sid(state: State<App>, sid: String, from: Option<u64>) -> Value {
+    use std::io::{Read, Seek, SeekFrom};
+    if !sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return json!({"items": [], "next": 0}); }
+    // transcripts only grow at the end: read from the byte offset of the previous call, up to the last full line
+    let Ok(mut f) = fs::File::open(format!("{}/{sid}.jsonl", transcripts(&state))) else { return json!({"items": [], "next": 0}) };
+    let start = from.unwrap_or(0);
+    if f.seek(SeekFrom::Start(start)).is_err() { return json!({"items": [], "next": start}); }
+    let mut buf = Vec::new();
+    f.read_to_end(&mut buf).ok();
+    let end = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0);
+    let items: Vec<Value> = String::from_utf8_lossy(&buf[..end]).lines()
+        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
-        .map(|e| json!({"type": e["type"], "message": e["message"]})).collect()
+        .map(|e| json!({"type": e["type"], "message": e["message"]})).collect();
+    json!({"items": items, "next": start + end as u64})
 }
 
 #[tauri::command]
