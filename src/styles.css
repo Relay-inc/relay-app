@@ -208,3 +208,11 @@ body.prefs .set h2:first-child{margin-top:0}
 .ctx button{all:unset;padding:5px 10px;border-radius:calc(var(--r) - 3px);font-size:13px;color:var(--label)}
 .ctx button:hover{background:var(--accent);color:var(--on-accent)}
 .pop{left:auto;right:16px}
+.toast{max-width:720px;width:calc(100% - 56px);margin:0 auto 8px;display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r);background:var(--label);color:var(--bg);font-size:13px}
+.toast[hidden]{display:none}
+.toast .btn{background:transparent;color:var(--bg);border-color:color-mix(in srgb,var(--bg) 40%,transparent)}
+.toast .sp{flex:1}
+.ctxh{font-size:11px;font-weight:600;color:var(--secondary);padding:6px 10px 2px}
+.ctx button{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;max-width:280px}
+.ctx-a .prow .g{stroke:var(--ctx-a)} .ctx-m .prow .g{stroke:var(--ctx-m)} .ctx-p .prow .g{stroke:var(--ctx-p)}
+.ctx-a .prow.sel .g,.ctx-m .prow.sel .g,.ctx-p .prow.sel .g{stroke:var(--on-accent)}

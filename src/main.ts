@@ -23,7 +23,7 @@ const md = (s: string) => marked.parse(s, { async: false }) as string;
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
 type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string };
-type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string };
+type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
@@ -57,7 +57,7 @@ async function saveSettings(next: Settings) {
 const saveChats = () => store.set("chats", Object.fromEntries(Object.entries(chats).filter(([, c]) => !c.draft)));
 const projOf = (key: string) => chats[key]?.project ?? null;
 const label = (key: string) => chats[key]?.title || key;
-const chatsOf = (p: string | null) => Object.values(chats).filter(c => c.project === p && !c.draft).sort((a, b) => b.at - a.at);
+const chatsOf = (p: string | null) => Object.values(chats).filter(c => c.project === p && !c.draft && !c.closed).sort((a, b) => b.at - a.at);
 function newChat(p: string | null): string {
   const key = `c:${Date.now().toString(36)}`;
   chats[key] = { key, project: p, title: NEW, at: Date.now(), draft: true };
@@ -204,14 +204,14 @@ async function onCard(e: MouseEvent) {
 }
 
 // ---------- sessions open in the terminal (not started by the app), with the project snapshot.py read from their transcript
-type Term = { key: string; sid: string; id: string; project: string | null; title: string; kind: string; status: string; state?: string };
+type Term = { key: string; sid: string; id: string; project: string | null; title: string; kind: string; status: string; state?: string; mtime: number };
 const GENERIC = /^obsidian-context-management-\w+$/;
-function terms(): Term[] {
+function terms(hiddenOnes = false): Term[] {
   const live = new Map(agentsList.map(a => [a.sessionId, a]));
-  return (snap.sessions?.items || []).filter((x: any) => !appSids.includes(x.sessionId) && !forked.includes(x.sessionId) && live.has(x.sessionId))
+  return (snap.sessions?.items || []).filter((x: any) => !appSids.includes(x.sessionId) && forked.includes(x.sessionId) === hiddenOnes && live.has(x.sessionId))
     .map((x: any) => { const a = live.get(x.sessionId);
       const ov = settings.overrides[x.sessionId];
-      return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, project: ov !== undefined ? ov : x.project ?? null, kind: a.kind, status: a.status, state: a.state,
+      return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, mtime: x.last_at ? Date.parse(x.last_at) : 0, project: ov !== undefined ? ov : x.project ?? null, kind: a.kind, status: a.status, state: a.state,
         title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || "Terminalsessie").slice(0, 48) }; })
     .filter((t: Term) => !(t.kind === "background" && t.state === "done"));
 }
@@ -256,22 +256,28 @@ function renderNav() {
   h += `<div class="sec">${head("Algemeen", "ALGEMEEN", gc.length + gt.length, "", "")}`
     + (collapsed.Algemeen && !q ? "" : gc.map(c => sub(c, false)).join("") + gt.map(t => tsub(t, false)).join("")) + `</div>`;
 
-  for (const ctx of ["Antenna", "Meersman", "Personal"]) {
-    const all = snap.projects.filter((p: any) => p.context === ctx && (p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q)));
-    // an app conversation stays until Laurent closes it, a terminal session as long as it is open
-    const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
-    const shown = q ? all : all.filter((p: any) => open(p) || p.name === selP);
-    if (!shown.length) continue;
-    const shut = collapsed[ctx] && !q;
-    let body = "";
-    if (!shut) for (const p of shown) {
+  // an app conversation stays until Laurent closes it, a terminal session as long as it is open
+  const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
+  const lastAt = (n: string) => Math.max(0, ...chatsOf(n).map(c => c.at), ...T.filter(t => t.project === n).map(t => t.mtime));
+  // active = something happens now: working, waiting on Laurent, news, or a message typed in the last 30 minutes
+  const active = (n: string) => chatsOf(n).some(c => status[c.key] === "busy" || waits(c.key) || unseen.has(c.key))
+    || T.some(t => t.project === n && (t.status === "busy" || t.state === "blocked")) || Date.now() - lastAt(n) < 30 * 60_000;
+  const match = (p: any) => p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q);
+  const byRecent = (a: any, b: any) => lastAt(b.name) - lastAt(a.name);
+  const act = q ? [] : snap.projects.filter((p: any) => open(p) && active(p.name)).sort(byRecent);
+  const projRows = (list: any[]) => { let body = ""; for (const p of list) {
       const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
       const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
       body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
         + ts.map(t => tsub(t)).join("") + cs.slice(0, 5).map(c => sub(c)).join("")
         + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
-    }
-    h += `<div class="sec ${CTX[ctx]}">${head(ctx, ctx.toUpperCase(), shown.length)}${body}</div>`;
+  } return body; };
+  const wrap = (p: any, html: string) => `<div class="${CTX[p.context] || ""}">${html}</div>`;
+  if (act.length) h = h.replace(/(<div class="sec">)/, `<div class="sec">${head("Actief", "ACTIEF", act.length)}${collapsed.Actief ? "" : act.map((p: any) => wrap(p, projRows([p]))).join("")}</div>$1`);
+  for (const ctx of ["Antenna", "Meersman", "Personal"]) {
+    const shown = snap.projects.filter((p: any) => p.context === ctx && match(p) && (q || ((open(p) || p.name === selP) && !act.includes(p)))).sort(byRecent);
+    if (!shown.length) continue;
+    h += `<div class="sec ${CTX[ctx]}">${head(ctx, ctx.toUpperCase(), shown.length)}${collapsed[ctx] && !q ? "" : projRows(shown)}</div>`;
   }
   $("nav").innerHTML = h;
 }
@@ -282,7 +288,7 @@ function renderChat() {
   $("t").classList.remove("editable"); $("t").title = "";
   if (sel === REM) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = $("close").style.display = $("assign").style.display = "none";
+    $("new").style.display = $("term").style.display = $("close").style.display = "none";
     $("ts").textContent = "";
     $("t").textContent = "Reminders"; msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel });
     return;
@@ -290,7 +296,7 @@ function renderChat() {
   if (sel === WAIT) {
     $("t").textContent = "Wacht op jou"; $("ts").textContent = `${waitCount()}`;
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = $("close").style.display = $("assign").style.display = "none";
+    $("new").style.display = $("term").style.display = $("close").style.display = "none";
     const byK: Record<string, any[]> = {};
     for (const r of pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${esc(projOf(k))} · ` : ""}${esc(label(k))}`;
@@ -303,7 +309,6 @@ function renderChat() {
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
   $("composer").style.display = ""; $("new").style.display = ""; $("close").style.display = chats[sel]?.draft ? "none" : "";
-  $("assign").style.display = "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
   $("t").textContent = pLabel(pn);
@@ -436,13 +441,35 @@ async function sendMsg(forced?: string) {
   catch (e) { push(k, { kind: "err", text: String(e) }); status[k] = "idle"; renderChat(); }
 }
 
-// closing: an app conversation stops and leaves the sidebar (the session stays in Claude Code,
-// resumable with claude --resume), a terminal session only leaves the sidebar
+// closing hides a conversation from the sidebar. An app conversation stops but keeps its session, a
+// terminal session keeps running in iTerm. Both come back via the undo bar or right-click > Heropen.
 async function closeChat(k: string) {
+  const title = isTerm(k) ? termOf(k)?.title : label(k);
   if (isTerm(k)) { forked.push(k.slice(2)); store.set("forkedTerms", forked); }
-  else { await invoke("reset", { project: k }); delete chats[k]; delete convo[k]; delete status[k]; saveChats(); }
-  if (sel === k) { const p = projOf(k) ?? (isTerm(k) ? termOf(k)?.project ?? null : null); sel = WAIT; await select(p && chatsOf(p)[0] ? chatsOf(p)[0].key : WAIT); }
+  else if (chats[k]) { await invoke("stop", { project: k }); chats[k].closed = Date.now(); delete status[k]; saveChats(); }
+  toast(`Gesloten: ${title}`, () => reopen(k));
+  if (sel === k) { const p = isTerm(k) ? null : projOf(k); await select(p && chatsOf(p)[0] ? chatsOf(p)[0].key : WAIT); }
   else render();
+}
+async function reopen(k: string) {
+  if (isTerm(k)) { forked = forked.filter(x => x !== k.slice(2)); store.set("forkedTerms", forked); }
+  else if (chats[k]) { delete chats[k].closed; saveChats(); }
+  $("toast").hidden = true;
+  await select(k);
+}
+let toastTimer = 0;
+function toast(text: string, undo: () => void) {
+  const t = $("toast");
+  t.innerHTML = `<span>${esc(text)}</span><span class="sp"></span><button class="btn" id="undo">Ongedaan maken</button>`;
+  t.hidden = false;
+  $("undo").onclick = undo;
+  clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { t.hidden = true; }, 8000);
+}
+// what was closed under a project (or under Algemeen when p is null), newest first
+function closedOf(p: string | null): { key: string; title: string }[] {
+  const cs = Object.values(chats).filter(c => c.closed && c.project === p).sort((a, b) => b.closed! - a.closed!).map(c => ({ key: c.key, title: c.title }));
+  const ts = terms(true).filter(t => t.project === p).map(t => ({ key: t.key, title: t.title }));
+  return [...cs, ...ts].slice(0, 8);
 }
 
 $("nav").addEventListener("click", e => {
@@ -459,20 +486,28 @@ $("nav").addEventListener("click", e => {
 $("find").addEventListener("input", renderNav);
 listen<Settings>("settings-changed", e => { settings = { ...settings, ...e.payload }; loadSnapshot(); });
 $("t").addEventListener("click", openPop);
-$("assign").addEventListener("click", openPop);
 // right-click on a conversation in the sidebar: the Mac context menu
 $("nav").addEventListener("contextmenu", e => {
-  const r = (e.target as HTMLElement).closest<HTMLElement>(".row[data-k]");
-  if (!r || VIEWS.includes(r.dataset.k!)) return;
+  const t = e.target as HTMLElement, m = $("ctx");
+  const r = t.closest<HTMLElement>(".row[data-k]"), pr = t.closest<HTMLElement>(".prow"), gh = t.closest<HTMLElement>('.grp[data-sec="Algemeen"]');
+  if (r && !VIEWS.includes(r.dataset.k!)) {
+    m.dataset.k = r.dataset.k!;
+    m.innerHTML = `<button data-ctx="assign">Wijzig project…</button><button data-ctx="close">Sluiten</button>`;
+  } else if (pr || gh) {
+    const p = pr ? pr.dataset.p! : null, closed = closedOf(p);
+    m.dataset.k = ""; m.dataset.p = p ?? "";
+    m.innerHTML = `<button data-ctx="new">Nieuw gesprek</button>${closed.length ? `<div class="ctxh">Onlangs gesloten</div>${closed.map(c =>
+      `<button data-ctx="reopen" data-k="${esc(c.key)}">${esc(c.title)}</button>`).join("")}` : '<div class="ctxh">Niets gesloten</div>'}`;
+  } else return;
   e.preventDefault();
-  const m = $("ctx"); m.dataset.k = r.dataset.k!;
-  m.innerHTML = `<button data-ctx="assign">Wijzig project…</button><button data-ctx="close">Sluiten</button>`;
   m.style.left = `${e.clientX}px`; m.style.top = `${e.clientY}px`; m.hidden = false;
 });
 $("ctx").addEventListener("click", async e => {
-  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ctx]"); const k = $("ctx").dataset.k!; $("ctx").hidden = true;
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ctx]"); const k = $("ctx").dataset.k!, p = $("ctx").dataset.p || null; $("ctx").hidden = true;
   if (!b) return;
   if (b.dataset.ctx === "close") closeChat(k);
+  else if (b.dataset.ctx === "reopen") reopen(b.dataset.k!);
+  else if (b.dataset.ctx === "new") select(newChat(p));
   else { await select(k); openPop(); }
 });
 window.addEventListener("click", e => { if (!(e.target as HTMLElement).closest("#ctx")) $("ctx").hidden = true; });

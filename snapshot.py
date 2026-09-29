@@ -107,10 +107,10 @@ def topics(items, projs):
         f = os.path.join(TRANSCRIPTS, f"{sid}.jsonl")
         if not sid or not os.path.exists(f):
             continue
-        c = cache.get(sid, {"offset": 0, "hits": [], "last": ""})
+        c = cache.get(sid, {"offset": 0, "hits": [], "last": "", "last_at": ""})
         size = os.path.getsize(f)
         if size < c["offset"]:
-            c = {"offset": 0, "hits": [], "last": ""}
+            c = {"offset": 0, "hits": [], "last": "", "last_at": ""}
         with open(f, "rb") as fh:
             fh.seek(c["offset"])
             for raw in fh:
@@ -126,6 +126,7 @@ def topics(items, projs):
                     for t in texts:
                         if t and not t.startswith(INJECTED):
                             c["last"] = t[:80]
+                            c["last_at"] = e.get("timestamp", "")
                             c["hits"] += sorted(find(t))
                 elif e.get("type") == "assistant" and isinstance(content, list):
                     for x in content:
@@ -141,6 +142,8 @@ def topics(items, projs):
         recent = c["hits"][-20:] + named
         it["project"] = max(set(recent), key=lambda n: (recent.count(n), len(recent) - recent[::-1].index(n))) if recent else None
         it["last_user"] = c["last"]
+        # last message Laurent typed (ISO timestamp): the real "working on it now", unlike the file mtime
+        it["last_at"] = c.get("last_at", "")
     live = {it.get("sessionId") for it in items}
     cache = {k: v for k, v in cache.items() if k in live}
     os.makedirs(os.path.dirname(CACHE), exist_ok=True)
