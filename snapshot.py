@@ -72,6 +72,81 @@ def first_sentence(text):
     return re.split(r"(?<=[.:?!])\s", plain, maxsplit=1)[0][:120]
 
 
+CACHE = os.path.expanduser("~/Library/Application Support/be.laurentmeersman.vault/topics.json")
+TRANSCRIPTS = os.path.expanduser("~/.claude/projects/-Users-laurentmeersman-Documents-LaurentMe-Obsidian---Context-management")
+
+
+# user-role messages the harness injects, not typed by Laurent
+INJECTED = ("<", "Another Claude session", "Base directory for this skill", "[Image", "Stop hook feedback",
+            "[Request interrupted", "The user sent a new message", "This session is being continued")
+
+
+def matcher(projs):
+    terms = [(t, p["name"]) for p in projs for t in [p["name"], *p.get("aliases", [])] if len(t) >= 3]
+    rx = [(re.compile(r"(?<![\w])" + re.escape(t) + r"(?![\w])", re.I), n) for t, n in terms]
+    return lambda text: {n for r, n in rx if r.search(text)}
+
+
+def topics(items, projs):
+    """Which project each open session is about, from the tail of its transcript.
+
+    Transcripts only grow at the end, so per session we keep an offset and the last 40 project hits
+    (user messages naming a project, project notes Claude read or edited). Recent hits decide, so a
+    session that moved on to another project follows. Parsing 200 MB once, then only new lines.
+    """
+    try:
+        cache = json.load(open(CACHE))
+    except (OSError, ValueError):
+        cache = {}
+    find, names = matcher(projs), {p["name"] for p in projs}
+    for it in items:
+        sid = it.get("sessionId")
+        f = os.path.join(TRANSCRIPTS, f"{sid}.jsonl")
+        if not sid or not os.path.exists(f):
+            continue
+        c = cache.get(sid, {"offset": 0, "hits": [], "last": ""})
+        size = os.path.getsize(f)
+        if size < c["offset"]:
+            c = {"offset": 0, "hits": [], "last": ""}
+        with open(f, "rb") as fh:
+            fh.seek(c["offset"])
+            for raw in fh:
+                if b'"type":"user"' not in raw and b'"tool_use"' not in raw:
+                    continue
+                try:
+                    e = json.loads(raw)
+                except ValueError:
+                    continue
+                content = (e.get("message") or {}).get("content")
+                if e.get("type") == "user" and not e.get("isSidechain"):
+                    texts = [content] if isinstance(content, str) else [x.get("text", "") for x in content or [] if isinstance(x, dict) and x.get("type") == "text"]
+                    for t in texts:
+                        if t and not t.startswith(INJECTED):
+                            c["last"] = t[:80]
+                            c["hits"] += sorted(find(t))
+                elif e.get("type") == "assistant" and isinstance(content, list):
+                    for x in content:
+                        path = (x.get("input") or {}).get("file_path", "") if x.get("type") == "tool_use" else ""
+                        m = re.search(r"/Contexts/[^/]+/(?:Portfolio|Documents)/([^/]+?)(?:\.md)?(?:/|$)", path)
+                        if m and m.group(1) in names:
+                            c["hits"] += [m.group(1)] * 2
+            c["offset"] = fh.tell()
+        c["hits"] = c["hits"][-40:]
+        cache[sid] = c
+        name = it.get("name") or ""
+        named = [] if re.match(r"^obsidian-context-management-\w+$", name) else sorted(find(name)) * 3
+        recent = c["hits"][-20:] + named
+        it["project"] = max(set(recent), key=lambda n: (recent.count(n), len(recent) - recent[::-1].index(n))) if recent else None
+        it["last_user"] = c["last"]
+    live = {it.get("sessionId") for it in items}
+    cache = {k: v for k, v in cache.items() if k in live}
+    os.makedirs(os.path.dirname(CACHE), exist_ok=True)
+    with open(CACHE + ".tmp", "w") as fh:
+        json.dump(cache, fh)
+    os.replace(CACHE + ".tmp", CACHE)
+    return items
+
+
 def sessions():
     try:
         raw = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True,
@@ -83,5 +158,8 @@ def sessions():
 
 
 if __name__ == "__main__":
-    json.dump({"today": TODAY.isoformat(), "projects": projects(), "reminders": reminders(),
-               "sessions": sessions()}, sys.stdout, ensure_ascii=False, indent=1)
+    projs = projects()
+    ses = sessions()
+    ses["items"] = topics(ses["items"], projs)
+    json.dump({"today": TODAY.isoformat(), "projects": projs, "reminders": reminders(),
+               "sessions": ses}, sys.stdout, ensure_ascii=False, indent=1)

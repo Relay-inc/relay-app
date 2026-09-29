@@ -140,3 +140,5 @@ textarea{resize:none;max-height:40vh;overflow-y:auto}
 .tb{white-space:nowrap}
 .bar h1,.bar .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .bar h1{flex:none;max-width:40%}
+.tag{font-size:11px;color:var(--secondary)}
+.row.sel .tag{color:var(--on-accent)}

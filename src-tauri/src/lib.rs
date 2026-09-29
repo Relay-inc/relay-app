@@ -145,6 +145,20 @@ fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Res
 #[tauri::command]
 fn chats(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().keys().cloned().collect() }
 
+/// Session ids of the app's own conversations, so the sidebar does not list them twice.
+#[tauri::command]
+fn app_sids(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().values().cloned().collect() }
+
+/// Read-only history of any session in the vault, e.g. one that is open in the terminal.
+#[tauri::command]
+fn history_sid(sid: String) -> Vec<Value> {
+    if !sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return vec![]; }
+    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts())) else { return vec![] };
+    raw.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok())
+        .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
+        .map(|e| json!({"type": e["type"], "message": e["message"]})).collect()
+}
+
 #[tauri::command]
 fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys().cloned().collect() }
 
@@ -219,7 +233,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, history, running, pending, answer, agents, open_terminal])
+        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, pending, answer, agents, open_terminal])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

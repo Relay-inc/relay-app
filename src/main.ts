@@ -32,7 +32,8 @@ let chats: Record<string, Chat> = store.get("chats", {});
 let pendingList: any[] = [];
 let agentsList: any[] = [];
 let hidden: string[] = store.get("hiddenAgents", []);
-let snap: any = { projects: [], reminders: [] };
+let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
+let appSids: string[] = [];
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
 const WAIT = "__wait", NEW = "Nieuw gesprek";
 let sel: string = store.get("sel", "") || WAIT;
@@ -122,9 +123,9 @@ function onEvent(k: string, ev: any) {
 }
 
 // ---------- history from the transcript, when a conversation opens for the first time
-async function ensureHistory(k: string) {
-  if (convo[k]) return;
-  const hist: any[] = await invoke("history", { project: k });
+async function ensureHistory(k: string, fresh = false) {
+  if (convo[k] && !fresh) return;
+  const hist: any[] = isTerm(k) ? await invoke("history_sid", { sid: k.slice(2) }) : await invoke("history", { project: k });
   const items: Item[] = [];
   for (const e of hist) {
     const c = e.message?.content;
@@ -137,6 +138,7 @@ async function ensureHistory(k: string) {
     }
   }
   convo[k] = items;
+  if (isTerm(k)) return;
   const first = items.find(i => i.kind === "me");
   if (chats[k] && [NEW, "Gesprek", "Algemeen gesprek"].includes(chats[k].title) && first) { chats[k].title = first.text.slice(0, 48); saveChats(); }
 }
@@ -188,6 +190,20 @@ async function onCard(e: MouseEvent) {
   render();
 }
 
+// ---------- sessions open in the terminal (not started by the app), with the project snapshot.py read from their transcript
+type Term = { key: string; sid: string; id: string; project: string | null; title: string; kind: string; status: string; state?: string };
+const GENERIC = /^obsidian-context-management-\w+$/;
+function terms(): Term[] {
+  const live = new Map(agentsList.map(a => [a.sessionId, a]));
+  return (snap.sessions?.items || []).filter((x: any) => !appSids.includes(x.sessionId) && live.has(x.sessionId))
+    .map((x: any) => { const a = live.get(x.sessionId);
+      return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, project: x.project ?? null, kind: a.kind, status: a.status, state: a.state,
+        title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || "Terminalsessie").slice(0, 48) }; })
+    .filter((t: Term) => !(t.kind === "background" && t.state === "done"));
+}
+const termOf = (k: string) => terms().find(t => t.key === k);
+const isTerm = (k: string) => k.startsWith("t:");
+
 // ---------- terminal sessions that wait (background, not started by the app)
 const blockedAgents = () => agentsList.filter(a => a.kind === "background" && a.state === "blocked" && !hidden.includes(a.id));
 const waitCount = () => pendingList.length + blockedAgents().length;
@@ -201,17 +217,23 @@ function renderNav() {
   const sub = (c: Chat) => `<div class="row subrow ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}"><span class="nm">${esc(c.title)}</span>${trailOf([c.key])}</div>`;
   const w = waitCount();
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}"><span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`;
+  const T = terms();
+  const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}"><span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : '<span class="tag">terminal</span>'}</div>`;
   h += `<div class="grp">ALGEMEEN<button class="add" data-add="" title="Nieuw algemeen gesprek">+</button></div>`
-    + chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)).map(c => sub(c).replace("subrow", "")).join("");
+    + chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)).map(c => sub(c).replace("subrow", "")).join("")
+    + T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q))).map(t => tsub(t, false)).join("");
   for (const ctx of ["Antenna", "Meersman", "Personal"]) {
     const all = snap.projects.filter((p: any) => p.context === ctx && p.name.toLowerCase().includes(q));
-    const shown = q ? all : all.filter((p: any) => ["Active", "Blocked"].includes(p.state) || chatsOf(p.name).length || p.name === selP);
+    // only what is open: a terminal session on it, or an app conversation that runs, waits or has news
+    const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).some(c => status[c.key] === "busy" || waits(c.key) || unseen.has(c.key));
+    const shown = q ? all : all.filter((p: any) => open(p) || p.name === selP);
     if (!shown.length) continue;
     h += `<div class="grp">${ctx.toUpperCase()}</div>`;
     for (const p of shown) {
       const cs = chatsOf(p.name), keys = cs.map(c => c.key);
       const on = p.name === selP && !chats[sel]?.draft ? "" : p.name === selP ? "sel" : "";
       h += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}"><span class="nm">${esc(p.name)}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
+        + T.filter(t => t.project === p.name).map(t => tsub(t)).join("")
         + cs.slice(0, 5).map(sub).join("") + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
     }
   }
@@ -235,13 +257,16 @@ function renderChat() {
       : '<div class="note">Niets wacht op jou.</div>';
     return;
   }
-  $("composer").style.display = ""; $("new").style.display = $("term").style.display = "";
-  const pn = projOf(sel), P = project(pn);
+  const T = isTerm(sel) ? termOf(sel) : undefined;
+  $("composer").style.display = T ? "none" : ""; $("new").style.display = "";
+  $("term").style.display = T && T.kind !== "background" ? "none" : "";
+  const pn = T ? T.project : projOf(sel), P = project(pn);
   $("t").textContent = pn || "Algemeen";
   const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
   $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
   const items = convo[sel] || [];
-  msgs.innerHTML = (items.length ? items.map(it => {
+  const ro = T ? `<div class="note">Dit gesprek staat open in de terminal${T.status === "busy" ? " en werkt" : ""}. Hier lees je enkel mee.</div>` : "";
+  msgs.innerHTML = ro + (items.length ? items.map(it => {
     if (it.kind === "me") return `<div class="me">${esc(it.text).replace(/\n/g, "<br>")}</div>`;
     if (it.kind === "ai") return `<div class="ai">${md(it.text)}</div>`;
     if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
@@ -265,7 +290,7 @@ function renderChat() {
 }
 
 function renderInsp() {
-  const P = project(projOf(sel)), box = $("insp");
+  const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
   document.querySelectorAll<HTMLElement>("#seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   if (!P) {
     const due = snap.reminders.filter((r: any) => r.days <= 0);
@@ -293,7 +318,7 @@ async function select(k: string) {
   if (sel !== k && chats[sel]?.draft && !(convo[sel] || []).length) delete chats[sel];
   sel = k; unseen.delete(k); routeChoice = routeChoice?.key === k ? routeChoice : null;
   store.set("sel", chats[k]?.draft ? WAIT : k);
-  if (k !== WAIT && !chats[k]?.draft) await ensureHistory(k);
+  if (k !== WAIT && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
   render();
   $("log").scrollTop = 1e9;
 }
@@ -355,13 +380,14 @@ $("send").addEventListener("click", () => {
   if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: "Gestopt." }); render(); }
   else sendMsg();
 });
-$("new").addEventListener("click", () => { if (sel !== WAIT) select(newChat(projOf(sel))); });
+$("new").addEventListener("click", () => { if (sel !== WAIT) select(newChat(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel))); });
 $("movebar").addEventListener("click", e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
   if (b.dataset.move) { setProject(sel, b.dataset.move, `Onder ${b.dataset.move} gezet`); render(); } else { dismissed.add(sel); renderChat(); }
 });
 $("term").addEventListener("click", () => {
   if (sel === WAIT) return;
+  if (isTerm(sel)) { const t = termOf(sel); if (t) invoke("bg", { action: "attach", id: t.id }); return; }
   invoke("open_terminal", { project: sel, session: null, name: `${projOf(sel) || "Algemeen"}: ${label(sel)}` });
   status[sel] = "idle"; render();
 });
@@ -373,7 +399,11 @@ async function pollPending() {
   const next: any[] = await invoke("pending");
   if (JSON.stringify(next.map(x => x.id)) !== JSON.stringify(pendingList.map(x => x.id))) { pendingList = next; render(); }
 }
-async function pollAgents() { agentsList = await invoke("agents"); renderNav(); if (sel === WAIT) renderChat(); }
+async function pollAgents() {
+  [agentsList, appSids] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids")]);
+  if (isTerm(sel)) await ensureHistory(sel, true);
+  renderNav(); if (sel === WAIT || isTerm(sel)) renderChat();
+}
 
 // ---------- start: adopt conversations from earlier versions (general:<id>, plain project names)
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
@@ -387,9 +417,10 @@ for (const k of await invoke<string[]>("chats")) {
 }
 saveChats();
 await Promise.all(Object.values(chats).filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title)).map(c => ensureHistory(c.key)));
-if (sel !== WAIT && !chats[sel]) sel = WAIT;
+await pollAgents();
+if (sel !== WAIT && !chats[sel] && !termOf(sel)) sel = WAIT;
 await select(sel);
-pollPending(); pollAgents();
+pollPending();
 setInterval(pollPending, 700);
 setInterval(pollAgents, 10000);
-setInterval(loadSnapshot, 60000);
+setInterval(loadSnapshot, 30000);
