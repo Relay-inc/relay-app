@@ -17,7 +17,7 @@ marked.use({
 const md = (s: string) => marked.parse(s, { async: false }) as string;
 
 // ---------- state
-type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err" };
+type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string };
 type Status = "idle" | "busy";
 const convo: Record<string, Item[]> = {};
 const status: Record<string, Status> = {};
@@ -25,12 +25,44 @@ const unseen = new Set<string>();
 let pendingList: any[] = [];
 let agentsList: any[] = [];
 let snap: any = { projects: [], reminders: [] };
-const WAIT = "__wait", GENERAL = "Algemeen";
-let sel = (() => { try { return localStorage.getItem("sel") || GENERAL; } catch { return GENERAL; } })();
+const WAIT = "__wait";
+// general chats: key "general:<id>", title and start time kept locally (a convenience, the session lives in Claude Code)
+type Gen = { key: string; title: string; at: number };
+const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
+  set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
+let gens: Record<string, Gen> = store.get("gens", {});
+const isGen = (k: string) => k.startsWith("general:");
+const newGen = () => { const key = `general:${Date.now().toString(36)}`; gens[key] = { key, title: "Nieuw gesprek", at: Date.now() }; store.set("gens", gens); return key; };
+const label = (k: string) => isGen(k) ? (gens[k]?.title || "Algemeen gesprek") : k;
+let routeChoice: { key: string; text: string; hits: string[] } | null = null;
+const dismissed = new Set<string>();
+let sel = store.get("sel", "") || WAIT;
 let tab = "open";
 
 const $ = (id: string) => document.getElementById(id)!;
 const project = (n: string) => snap.projects.find((p: any) => p.name === n);
+
+// ---------- which project a text is about: names plus aliases from the note frontmatter
+const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function findProjects(text: string): string[] {
+  const hits = new Set<string>();
+  for (const p of snap.projects) for (const t of [p.name, ...(p.aliases || [])]) {
+    if (t.length < 3) continue;
+    if (new RegExp(`(^|[^\\p{L}\\p{N}])${reEsc(t)}([^\\p{L}\\p{N}]|$)`, "iu").test(text)) hits.add(p.name);
+  }
+  return [...hits];
+}
+function aboutProject(key: string): string | null {
+  const score: Record<string, number> = {};
+  for (const it of convo[key] || []) {
+    if (it.kind === "me") for (const p of findProjects(it.text)) score[p] = (score[p] || 0) + 1;
+    if (it.kind === "tool" && it.path) for (const p of snap.projects) {
+      if (it.path.endsWith(`/${p.name}.md`) || it.path.includes(`/Portfolio/${p.name}/`)) score[p.name] = (score[p.name] || 0) + 2;
+    }
+  }
+  const top = Object.entries(score).sort((a, b) => b[1] - a[1]);
+  return top.length && (top.length === 1 || top[0][1] >= 2 * top[1][1]) ? top[0][0] : null;
+}
 
 // ---------- tool lines
 function base(p = "") { return p.split("/").pop() || p; }
@@ -59,7 +91,7 @@ function onEvent(p: string, ev: any) {
   if (ev.type === "assistant") {
     for (const c of ev.message?.content || []) {
       if (c.type === "text" && c.text.trim()) push(p, { kind: "ai", text: c.text });
-      if (c.type === "tool_use") push(p, { kind: "tool", id: c.id, text: toolLine(c.name, c.input), state: "run" });
+      if (c.type === "tool_use") push(p, { kind: "tool", id: c.id, text: toolLine(c.name, c.input), state: "run", path: c.input?.file_path });
     }
   } else if (ev.type === "user") {
     for (const c of ev.message?.content || []) {
@@ -92,10 +124,11 @@ async function ensureHistory(p: string) {
       else if (Array.isArray(c)) for (const x of c) if (x.type === "text" && !x.text.startsWith("<")) items.push({ kind: "me", text: x.text });
     } else for (const x of c || []) {
       if (x.type === "text" && x.text.trim()) items.push({ kind: "ai", text: x.text });
-      if (x.type === "tool_use") items.push({ kind: "tool", id: x.id, text: toolLine(x.name, x.input), state: "ok" });
+      if (x.type === "tool_use") items.push({ kind: "tool", id: x.id, text: toolLine(x.name, x.input), state: "ok", path: x.input?.file_path });
     }
   }
   convo[p] = items;
+  if (isGen(p) && gens[p]?.title === "Nieuw gesprek") { const first = items.find(i => i.kind === "me"); if (first) { gens[p].title = first.text.slice(0, 48); store.set("gens", gens); } }
 }
 
 // ---------- permission and question cards
@@ -113,7 +146,7 @@ function card(r: any): string {
         `<button class="btn" data-label="${esc(o.label)}" title="${esc(o.description || "")}">${esc(o.label)}</button>`).join("")}</div>`).join("")}
       <div class="acts"><button class="btn primary" data-act="answer">Antwoorden</button></div></div>`;
   }
-  return `<div class="perm" data-id="${esc(r.id)}"><div class="q">Claude wil <b>${esc(r.tool_name)}</b> gebruiken${r.project && r.project !== sel ? ` in ${esc(r.project)}` : ""}. Het wacht op jou.</div>
+  return `<div class="perm" data-id="${esc(r.id)}"><div class="q">Claude wil <b>${esc(r.tool_name)}</b> gebruiken${r.project && r.project !== sel ? ` in ${esc(label(r.project))}` : ""}. Het wacht op jou.</div>
     <pre>${describe(r)}</pre>
     <div class="acts"><button class="btn" data-act="deny">Weigeren</button><button class="btn primary" data-act="allow">Toestaan</button></div></div>`;
 }
@@ -154,10 +187,13 @@ function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const row = (name: string, label: string, trail: string, cls = "") =>
     `<div class="row ${cls} ${sel === name ? "sel" : ""}" data-p="${esc(name)}"><span class="nm">${esc(label)}</span>${trail}</div>`;
-  const trail = (n: string) => pendingList.some(r => (r.project || GENERAL) === n) ? '<span class="dot"></span>'
+  const trail = (n: string) => pendingList.some(r => r.project === n) ? '<span class="dot"></span>'
     : status[n] === "busy" ? '<span class="spin"></span>' : "";
   const w = waitCount();
-  let h = row(WAIT, "Wacht op jou", w ? `<span class="badge">${w}</span>` : "") + row(GENERAL, "Algemeen", trail(GENERAL), unseen.has(GENERAL) ? "new" : "");
+  let h = row(WAIT, "Wacht op jou", w ? `<span class="badge">${w}</span>` : "");
+  const g = Object.values(gens).filter(x => !q || x.title.toLowerCase().includes(q)).sort((a, b) => b.at - a.at);
+  h += `<div class="grp">ALGEMEEN<button class="add" id="addgen" title="Nieuw algemeen gesprek">+</button></div>`
+    + g.map(x => row(x.key, x.title, trail(x.key), unseen.has(x.key) ? "new" : "")).join("");
   for (const c of ["Antenna", "Meersman", "Personal"]) {
     const all = snap.projects.filter((p: any) => p.context === c && p.name.toLowerCase().includes(q));
     const shown = q ? all : all.filter((p: any) => ["Active", "Blocked"].includes(p.state) || status[p.name] || p.name === sel);
@@ -174,8 +210,8 @@ function renderChat() {
     $("t").textContent = "Wacht op jou"; $("ts").textContent = `${waitCount()}`;
     $("composer").style.display = "none";
     const byP: Record<string, any[]> = {};
-    for (const r of pendingList) (byP[r.project || GENERAL] ||= []).push(r);
-    msgs.innerHTML = waitCount() ? `<div class="waitlist">${Object.entries(byP).map(([p, rs]) => `<div class="proj">${esc(p)}</div>${rs.map(card).join("")}`).join("")}
+    for (const r of pendingList) (byP[r.project] ||= []).push(r);
+    msgs.innerHTML = waitCount() ? `<div class="waitlist">${Object.entries(byP).map(([p, rs]) => `<div class="proj">${esc(label(p))}</div>${rs.map(card).join("")}`).join("")}
       ${blockedAgents().map(a => `<div class="proj">${esc(a.name)}</div><div class="perm"><div class="q">Achtergrondsessie in de terminal, geblokkeerd, gestart ${new Date(a.startedAt).toLocaleDateString("nl-BE")}.</div>
         <div class="acts"><button class="btn primary" data-term="${esc(a.sessionId)}" data-name="${esc(a.name)}">Openen in Terminal</button></div></div>`).join("")}</div>`
       : '<div class="note">Niets wacht op jou.</div>';
@@ -183,7 +219,7 @@ function renderChat() {
   }
   $("composer").style.display = "";
   const P = project(sel);
-  $("t").textContent = sel;
+  $("t").textContent = label(sel);
   const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
   $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
   const items = convo[sel] || [];
@@ -193,8 +229,14 @@ function renderChat() {
     if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
     if (it.kind === "err") return `<div class="err">${esc(it.text)}</div>`;
     return `<div class="note">${esc(it.text)}</div>`;
-  }).join("") : `<div class="note">${P ? `Vraag iets over ${esc(sel)}. Claude leest eerst de projectnote.` : "Algemeen gesprek, niet aan een project gebonden."}</div>`)
-    + pendingList.filter(r => (r.project || GENERAL) === sel).map(card).join("");
+  }).join("") : `<div class="note">${P ? `Vraag iets over ${esc(sel)}. Claude leest eerst de projectnote.` : "Algemeen gesprek. Noem je een project, dan gaat het gesprek naar dat project."}</div>`)
+    + (routeChoice && routeChoice.key === sel ? `<div class="perm" data-route="1"><div class="q">Over welk project gaat dit?</div><div class="opts">${routeChoice.hits.map(h =>
+        `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">Hier houden</button></div></div>` : "")
+    + pendingList.filter(r => r.project === sel).map(card).join("");
+  const about = isGen(sel) && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
+  $("movebar").innerHTML = about ? `<span>Dit gesprek gaat over <b>${esc(about)}</b>.</span><span class="sp"></span>
+    <button class="btn" data-move-no="1">Nee</button><button class="btn primary" data-move="${esc(about)}">Verhuizen naar ${esc(about)}</button>` : "";
+  $("movebar").style.display = about ? "" : "none";
   const busy = status[sel] === "busy";
   $("send").classList.toggle("stop", busy);
   $("send").innerHTML = busy ? '<svg class="i" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none"/></svg>'
@@ -207,7 +249,13 @@ function renderChat() {
 function renderInsp() {
   const P = project(sel), box = $("insp");
   document.querySelectorAll<HTMLElement>("#seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
-  if (!P) { box.innerHTML = sel === WAIT ? "" : '<div class="meta">Geen projectnote.</div>'; return; }
+  if (!P) {
+    const due = snap.reminders.filter((r: any) => r.days <= 0);
+    box.innerHTML = `<h2>Vandaag <span class="count">${due.length}</span></h2>${due.length ? `<ul class="todo">${due.map((r: any) =>
+      `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count">${esc(r.project || "")} · ${r.days < 0 ? `${-r.days} d vervallen` : "vandaag"}</span></span></li>`).join("")}</ul>`
+      : '<div class="meta">Niets vervallen, niets voor vandaag.</div>'}`;
+    return;
+  }
   const rem = snap.reminders.filter((r: any) => r.project === P.name);
   const when = (r: any) => r.days < 0 ? `${-r.days} d vervallen` : r.days === 0 ? "vandaag" : `over ${r.days} d`;
   const items: string[] = P.open_items || [];
@@ -224,28 +272,55 @@ function render() { renderNav(); renderChat(); renderInsp(); }
 // ---------- actions
 async function select(p: string) {
   sel = p; unseen.delete(p);
-  try { localStorage.setItem("sel", p); } catch { /* storage unavailable */ }
+  store.set("sel", p);
   if (p !== WAIT) await ensureHistory(p);
   render();
   $("log").scrollTop = 1e9;
 }
+// a first message that names one project goes straight to that project, the empty general chat disappears
+async function route(from: string, to: string, text: string) {
+  routeChoice = null;
+  if (!(convo[from] || []).length) { delete gens[from]; store.set("gens", gens); delete convo[from]; }
+  await select(to);
+  push(to, { kind: "note", text: "Doorgestuurd vanuit Algemeen" });
+  await sendMsg(text);
+}
+async function moveChat(from: string, to: string) {
+  await invoke("move_chat", { from, to });
+  convo[to] = [...(convo[from] || []), { kind: "note", text: "Verhuisd vanuit Algemeen" }];
+  delete convo[from]; delete gens[from]; store.set("gens", gens);
+  status[to] = "idle";
+  await select(to);
+}
+
 function grow() { const ta = $("c") as HTMLTextAreaElement; ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
-async function sendMsg() {
-  const ta = $("c") as HTMLTextAreaElement, text = ta.value.trim();
+async function sendMsg(forced?: string) {
+  const ta = $("c") as HTMLTextAreaElement, text = forced ?? ta.value.trim();
   if (!text || sel === WAIT) return;
-  const p = sel;
   ta.value = ""; grow();
+  if (isGen(sel) && !forced && !(convo[sel] || []).length) {
+    const hits = findProjects(text);
+    if (hits.length === 1) return route(sel, hits[0], text);
+    if (hits.length > 1) { routeChoice = { key: sel, text, hits }; renderChat(); return; }
+  }
+  const p = sel;
+  if (isGen(p) && gens[p]?.title === "Nieuw gesprek") { gens[p].title = text.slice(0, 48); store.set("gens", gens); renderNav(); }
   push(p, { kind: "me", text }); status[p] = "busy"; renderChat(); renderNav();
   $("log").scrollTop = 1e9;
-  try { await invoke("send", { project: p, text }); }
+  try { await invoke("send", { project: p, text, name: isGen(p) ? `Algemeen: ${gens[p]?.title}` : p }); }
   catch (e) { push(p, { kind: "err", text: String(e) }); status[p] = "idle"; renderChat(); }
 }
 
-$("nav").addEventListener("click", e => { const r = (e.target as HTMLElement).closest<HTMLElement>(".row"); if (r) select(r.dataset.p!); });
+$("nav").addEventListener("click", e => {
+  if ((e.target as HTMLElement).closest("#addgen")) { select(newGen()); return; }
+  const r = (e.target as HTMLElement).closest<HTMLElement>(".row"); if (r) select(r.dataset.p!);
+});
 $("find").addEventListener("input", renderNav);
 $("msgs").addEventListener("click", e => {
   const t = (e.target as HTMLElement).closest<HTMLElement>("[data-term]");
   if (t) { invoke("open_terminal", { project: t.dataset.name, session: t.dataset.term }); return; }
+  const rt = (e.target as HTMLElement).closest<HTMLElement>("[data-route-to]");
+  if (rt && routeChoice) { const c = routeChoice; routeChoice = null; if (rt.dataset.routeTo) route(c.key, rt.dataset.routeTo, c.text); else { sel = c.key; sendMsg(c.text); } return; }
   onCard(e);
 });
 $("c").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); } });
@@ -254,7 +329,14 @@ $("send").addEventListener("click", () => {
   if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: "Gestopt." }); renderChat(); renderNav(); }
   else sendMsg();
 });
-$("new").addEventListener("click", async () => { if (sel === WAIT) return; await invoke("reset", { project: sel }); convo[sel] = []; status[sel] = "idle"; render(); });
+$("new").addEventListener("click", async () => {
+  if (sel === WAIT || isGen(sel)) { select(newGen()); return; }
+  await invoke("reset", { project: sel }); convo[sel] = []; status[sel] = "idle"; render();
+});
+$("movebar").addEventListener("click", e => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
+  if (b.dataset.move) moveChat(sel, b.dataset.move); else { dismissed.add(sel); renderChat(); }
+});
 $("term").addEventListener("click", () => { if (sel !== WAIT) { invoke("open_terminal", { project: sel, session: null }); status[sel] = "idle"; render(); } });
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; renderInsp(); } });
 
@@ -268,6 +350,10 @@ async function pollAgents() { agentsList = await invoke("agents"); renderNav(); 
 
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
 await loadSnapshot();
+for (const k of await invoke<string[]>("chats")) if (isGen(k) && !gens[k]) gens[k] = { key: k, title: "Algemeen gesprek", at: parseInt(k.slice(8), 36) || 0 };
+store.set("gens", gens);
+if (sel !== WAIT && !isGen(sel) && !project(sel)) sel = WAIT;
+if (isGen(sel) && !gens[sel]) sel = WAIT;
 await select(sel);
 pollPending(); pollAgents();
 setInterval(pollPending, 700);

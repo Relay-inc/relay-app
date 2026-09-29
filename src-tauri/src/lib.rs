@@ -53,14 +53,14 @@ fn snapshot(state: State<App>) -> Result<Value, String> {
     serde_json::from_slice(&out.stdout).map_err(|e| format!("snapshot: {e}"))
 }
 
-fn spawn(app: &AppHandle, state: &App, project: &str) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, project: &str, name: &str) -> Result<Proc, String> {
     let mcp = json!({"mcpServers": {"vaultperm": {
         "command": "/usr/bin/python3", "args": [format!("{REPO}/perm_server.py")],
         "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
     let mut cmd = Command::new(claude_bin());
     cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-        .arg(mcp.to_string()).args(["-n", project]);
+        .arg(mcp.to_string()).args(["-n", name]);
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
     cmd.current_dir(vault()).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
         .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for Laurent
@@ -95,10 +95,10 @@ fn spawn(app: &AppHandle, state: &App, project: &str) -> Result<Proc, String> {
 }
 
 #[tauri::command]
-fn send(app: AppHandle, state: State<App>, project: String, text: String) -> Result<(), String> {
+fn send(app: AppHandle, state: State<App>, project: String, text: String, name: Option<String>) -> Result<(), String> {
     let mut procs = state.procs.lock().unwrap();
     if !procs.contains_key(&project) {
-        let p = spawn(&app, &state, &project)?;
+        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project))?;
         procs.insert(project.clone(), p);
     }
     let msg = json!({"type": "user", "message": {"role": "user", "content": text}});
@@ -129,6 +129,21 @@ fn reset(app: AppHandle, state: State<App>, project: String) {
     sids.remove(&project);
     save_sids(&app, &sids);
 }
+
+/// Hang a conversation under another key, e.g. a general chat that turned out to be about a
+/// project. Only while idle: the process stops and the next message resumes it under the new key.
+#[tauri::command]
+fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Result<(), String> {
+    if let Some(mut p) = state.procs.lock().unwrap().remove(&from) { p.child.kill().ok(); }
+    let mut sids = state.sids.lock().unwrap();
+    if let Some(sid) = sids.remove(&from) { sids.insert(to, sid); }
+    save_sids(&app, &sids);
+    Ok(())
+}
+
+/// Every conversation key the app has a session for (projects and general chats).
+#[tauri::command]
+fn chats(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().keys().cloned().collect() }
 
 #[tauri::command]
 fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys().cloned().collect() }
@@ -183,7 +198,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, history, running, pending, answer, agents, open_terminal])
+        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, history, running, pending, answer, agents, open_terminal])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

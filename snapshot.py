@@ -35,13 +35,16 @@ def note_state(name):
     hits = [p for p in glob.glob(os.path.join(VAULT, "Contexts/**", f"{name}.md"), recursive=True)
             if "/Documents/" not in os.path.relpath(p, VAULT)]
     if not hits:
-        return {"open": None, "open_items": [], "stand": None}
+        return {"open": None, "open_items": [], "stand": None, "aliases": []}
     s = open(hits[0], encoding="utf-8").read()
     op = re.search(r"^## Open\n(.*?)(?=^## |\Z)", s, re.S | re.M)
     items = [unlink(i) for i in re.findall(r"^\s*- \[ \] (.+)$", op.group(1), re.M)] if op else []
     st = re.search(r"^## Stand van zaken\n(.*?)(?=^## |\Z)", s, re.S | re.M)
     stand = unlink(re.sub(r"^\*Stand van zaken[^\n]*\n", "", st.group(1).strip())).strip() if st else None
-    return {"open": len(items) if op else None, "open_items": items, "stand": stand}
+    fm = re.match(r"^---\n(.*?)\n---", s, re.S)
+    aliases = re.findall(r"^\s*-\s*\"?([^\"\n]+?)\"?\s*$", re.search(r"^aliases:\n((?:\s+-.*\n?)*)", fm.group(1), re.M).group(1), re.M) \
+        if fm and re.search(r"^aliases:\n\s+-", fm.group(1), re.M) else []
+    return {"open": len(items) if op else None, "open_items": items, "stand": stand, "aliases": aliases}
 
 
 def reminders():

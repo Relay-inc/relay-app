@@ -125,3 +125,9 @@ aside.insp{background:var(--inspector);border-left:1px solid var(--separator);di
 .hint{font-size:12px}
 .send.stop{background:var(--label)}
 textarea{resize:none;max-height:40vh;overflow-y:auto}
+.grp{display:flex;align-items:center}
+.add{margin-left:auto;width:20px;height:18px;border:0;border-radius:calc(var(--r) - 2px);background:transparent;color:var(--secondary);font-size:15px;line-height:1;cursor:default}
+.add:hover{background:var(--fill);color:var(--label)}
+.movebar{max-width:720px;width:calc(100% - 56px);margin:0 auto;display:flex;align-items:center;gap:8px;padding:8px 12px;
+  border:1px solid var(--separator);border-radius:var(--r);background:var(--fill);font-size:13px}
+.movebar .sp{flex:1}
