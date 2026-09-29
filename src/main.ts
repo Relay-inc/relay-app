@@ -21,7 +21,7 @@ const md = (s: string) => marked.parse(s, { async: false }) as string;
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
 type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string };
-type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean };
+type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
@@ -258,15 +258,14 @@ function renderChat() {
     return;
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
-  $("composer").style.display = T ? "none" : ""; $("new").style.display = "";
+  $("composer").style.display = ""; $("new").style.display = "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
   $("t").textContent = pn || "Algemeen";
   const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
   $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
   const items = convo[sel] || [];
-  const ro = T ? `<div class="note">Dit gesprek staat open in de terminal${T.status === "busy" ? " en werkt" : ""}. Hier lees je enkel mee.</div>` : "";
-  msgs.innerHTML = ro + (items.length ? items.map(it => {
+  msgs.innerHTML = (items.length ? items.map(it => {
     if (it.kind === "me") return `<div class="me">${esc(it.text).replace(/\n/g, "<br>")}</div>`;
     if (it.kind === "ai") return `<div class="ai">${md(it.text)}</div>`;
     if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
@@ -276,16 +275,17 @@ function renderChat() {
     + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">Over welk project gaat dit?</div><div class="opts">${routeChoice.hits.map(h =>
         `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">Hier houden</button></div></div>` : "")
     + pendingList.filter(r => r.project === sel).map(card).join("");
-  const about = !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
-  $("movebar").innerHTML = about ? `<span>Dit gesprek gaat over <b>${esc(about)}</b>.</span><span class="sp"></span>
+  const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
+  $("movebar").innerHTML = T ? `<span>Dit gesprek staat open in de terminal${T.status === "busy" ? " en werkt nog" : ""}. Typ je hier, dan gaat het verder als kopie in de app. De terminal blijft zoals hij is.</span>`
+    : about ? `<span>Dit gesprek gaat over <b>${esc(about)}</b>.</span><span class="sp"></span>
     <button class="btn" data-move-no="1">Nee</button><button class="btn primary" data-move="${esc(about)}">Onder ${esc(about)} zetten</button>` : "";
-  $("movebar").style.display = about ? "" : "none";
+  $("movebar").style.display = T || about ? "" : "none";
   const busy = status[sel] === "busy";
   $("send").classList.toggle("stop", busy);
   $("send").innerHTML = busy ? '<svg class="i" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none"/></svg>'
     : '<svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg>';
   $("hint").textContent = busy ? "Claude werkt. Je kan naar een ander gesprek, dit loopt door." : "";
-  ($("c") as HTMLTextAreaElement).placeholder = P ? `Vraag iets over ${pn}…` : "Vraag iets…";
+  ($("c") as HTMLTextAreaElement).placeholder = T ? "Verder in de app…" : P ? `Vraag iets over ${pn}…` : "Vraag iets…";
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
@@ -333,6 +333,15 @@ function grow() { const ta = $("c") as HTMLTextAreaElement; ta.style.height = "a
 async function sendMsg(forced?: string) {
   const ta = $("c") as HTMLTextAreaElement, text = forced ?? ta.value.trim();
   if (!text || sel === WAIT) return;
+  if (isTerm(sel)) {
+    // typing in a terminal conversation: fork it into an app conversation under the same project
+    const t = termOf(sel); if (!t) return;
+    const k = newChat(t.project);
+    Object.assign(chats[k], { title: t.title, fork: t.sid, draft: false });
+    convo[k] = [...(convo[sel] || []), { kind: "note", text: "Verder in de app. De terminal blijft zoals hij is." }];
+    await select(k);
+    return sendMsg(text);
+  }
   const k = sel, c = chats[k];
   ta.value = ""; grow();
   // first message of a general conversation: if it names one project, it goes under that project
@@ -345,7 +354,7 @@ async function sendMsg(forced?: string) {
   push(k, { kind: "me", text }); status[k] = "busy"; render();
   $("log").scrollTop = 1e9;
   const name = `${c?.project || "Algemeen"}: ${c?.title || k}`;
-  try { await invoke("send", { project: k, text, name }); }
+  try { await invoke("send", { project: k, text, name, fork: c?.fork ?? null }); }
   catch (e) { push(k, { kind: "err", text: String(e) }); status[k] = "idle"; renderChat(); }
 }
 

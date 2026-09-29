@@ -53,7 +53,7 @@ fn snapshot(state: State<App>) -> Result<Value, String> {
     serde_json::from_slice(&out.stdout).map_err(|e| format!("snapshot: {e}"))
 }
 
-fn spawn(app: &AppHandle, state: &App, project: &str, name: &str) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>) -> Result<Proc, String> {
     let mcp = json!({"mcpServers": {"vaultperm": {
         "command": "/usr/bin/python3", "args": [format!("{REPO}/perm_server.py")],
         "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
@@ -62,6 +62,8 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str) -> Result<Proc
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
         .arg(mcp.to_string()).args(["-n", name]);
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
+    // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
+    else if let Some(f) = fork.filter(|f| f.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) { cmd.args(["--resume", f, "--fork-session"]); }
     cmd.current_dir(vault()).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
         .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for Laurent
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -95,10 +97,10 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str) -> Result<Proc
 }
 
 #[tauri::command]
-fn send(app: AppHandle, state: State<App>, project: String, text: String, name: Option<String>) -> Result<(), String> {
+fn send(app: AppHandle, state: State<App>, project: String, text: String, name: Option<String>, fork: Option<String>) -> Result<(), String> {
     let mut procs = state.procs.lock().unwrap();
     if !procs.contains_key(&project) {
-        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project))?;
+        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref())?;
         procs.insert(project.clone(), p);
     }
     let msg = json!({"type": "user", "message": {"role": "user", "content": text}});
