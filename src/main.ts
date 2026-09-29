@@ -179,7 +179,8 @@ async function onCard(e: MouseEvent) {
 }
 
 // ---------- terminal sessions that wait (background, not started by the app)
-const blockedAgents = () => agentsList.filter(a => a.kind === "background" && a.state === "blocked");
+let hidden: string[] = store.get("hiddenAgents", []);
+const blockedAgents = () => agentsList.filter(a => a.kind === "background" && a.state === "blocked" && !hidden.includes(a.id));
 const waitCount = () => pendingList.length + blockedAgents().length;
 
 // ---------- rendering
@@ -208,16 +209,18 @@ function renderChat() {
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   if (sel === WAIT) {
     $("t").textContent = "Wacht op jou"; $("ts").textContent = `${waitCount()}`;
-    $("composer").style.display = "none";
+    $("composer").style.display = "none"; $("movebar").style.display = "none";
+    $("new").style.display = $("term").style.display = "none";
     const byP: Record<string, any[]> = {};
     for (const r of pendingList) (byP[r.project] ||= []).push(r);
     msgs.innerHTML = waitCount() ? `<div class="waitlist">${Object.entries(byP).map(([p, rs]) => `<div class="proj">${esc(label(p))}</div>${rs.map(card).join("")}`).join("")}
       ${blockedAgents().map(a => `<div class="proj">${esc(a.name)}</div><div class="perm"><div class="q">Achtergrondsessie in de terminal, geblokkeerd, gestart ${new Date(a.startedAt).toLocaleDateString("nl-BE")}.</div>
-        <div class="acts"><button class="btn primary" data-term="${esc(a.sessionId)}" data-name="${esc(a.name)}">Openen in Terminal</button></div></div>`).join("")}</div>`
+        <div class="acts"><button class="btn" data-bg="hide" data-id="${esc(a.id)}">Verbergen</button><button class="btn" data-bg="stop" data-id="${esc(a.id)}">Stoppen</button>
+        <button class="btn primary" data-bg="attach" data-id="${esc(a.id)}">Openen in Terminal</button></div></div>`).join("")}</div>`
       : '<div class="note">Niets wacht op jou.</div>';
     return;
   }
-  $("composer").style.display = "";
+  $("composer").style.display = ""; $("new").style.display = $("term").style.display = "";
   const P = project(sel);
   $("t").textContent = label(sel);
   const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
@@ -317,8 +320,14 @@ $("nav").addEventListener("click", e => {
 });
 $("find").addEventListener("input", renderNav);
 $("msgs").addEventListener("click", e => {
-  const t = (e.target as HTMLElement).closest<HTMLElement>("[data-term]");
-  if (t) { invoke("open_terminal", { project: t.dataset.name, session: t.dataset.term }); return; }
+  const g = (e.target as HTMLElement).closest<HTMLElement>("[data-bg]");
+  if (g) {
+    const id = g.dataset.id!, act = g.dataset.bg!;
+    if (act === "hide") { hidden.push(id); store.set("hiddenAgents", hidden); render(); return; }
+    invoke("bg", { action: act, id }).then(() => { if (act === "stop") { agentsList = agentsList.filter(a => a.id !== id); render(); } })
+      .catch(err => { g.textContent = String(err).slice(0, 60); });
+    return;
+  }
   const rt = (e.target as HTMLElement).closest<HTMLElement>("[data-route-to]");
   if (rt && routeChoice) { const c = routeChoice; routeChoice = null; if (rt.dataset.routeTo) route(c.key, rt.dataset.routeTo, c.text); else { sel = c.key; sendMsg(c.text); } return; }
   onCard(e);

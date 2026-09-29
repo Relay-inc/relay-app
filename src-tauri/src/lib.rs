@@ -189,6 +189,27 @@ fn open_terminal(state: State<App>, project: String, session: Option<String>) ->
     Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
 }
 
+/// Background sessions of Claude Code itself (not started by the app): step into one in iTerm, or
+/// stop it. `stop` keeps the conversation, `claude attach <id>` resumes it later. No `rm`, that deletes.
+#[tauri::command]
+fn bg(state: State<App>, action: String, id: String) -> Result<(), String> {
+    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return Err("bad id".into()); }
+    match action.as_str() {
+        "stop" => {
+            let out = Command::new(claude_bin()).args(["stop", &id]).env("PATH", &state.path).stdin(Stdio::null())
+                .output().map_err(|e| e.to_string())?;
+            if out.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+        }
+        "attach" => {
+            let script = format!(
+                "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
+                serde_json::to_string(&format!("claude attach {id}")).unwrap());
+            Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
+        }
+        _ => Err("unknown action".into()),
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -198,7 +219,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, history, running, pending, answer, agents, open_terminal])
+        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, history, running, pending, answer, agents, open_terminal])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
