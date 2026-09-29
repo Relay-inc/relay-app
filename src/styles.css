@@ -187,3 +187,8 @@ section.chat{position:relative}
 .due-late{color:var(--late)!important;font-weight:600}
 .due-soon{color:var(--soon)!important;font-weight:600}
 .row.sel .due-late,.row.sel .due-soon{color:var(--on-accent)!important}
+body.noinsp{grid-template-columns:240px minmax(0,1fr)}
+body.noinsp aside.insp{display:none}
+.tb.ib{width:28px;padding:0;display:grid;place-items:center}
+.tb .g{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+body.noinsp #toggleinsp{color:var(--accent)}

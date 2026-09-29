@@ -524,6 +524,11 @@ $("term").addEventListener("click", () => {
   invoke("open_terminal", { project: sel, session: null, name: `${projOf(sel) || "Algemeen"}: ${label(sel)}` });
   status[sel] = "idle"; render();
 });
+// the right panel can be folded away, the choice is remembered
+const setInsp = (hide: boolean) => { document.body.classList.toggle("noinsp", hide); store.set("noinsp", hide); };
+setInsp(store.get("noinsp", false));
+$("toggleinsp").addEventListener("click", () => setInsp(!document.body.classList.contains("noinsp")));
+window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code === "KeyI") { e.preventDefault(); setInsp(!document.body.classList.contains("noinsp")); } });
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; renderInsp(); } });
 
 // ---------- polling: pending questions often, sessions and the vault now and then
