@@ -63,7 +63,7 @@ fallbacks for the mockup in a browser.
 | `--fill` | `rgba(0,0,0,.05)` | `rgba(255,255,255,.07)` | Laurent's bubble, cards, selected row at rest |
 | `--accent` | `#007AFF` | `#0A84FF` | selection, primary button, the waiting badge |
 
-The accent means "this needs you or is selected". Nothing else is colored.
+The accent means "this needs you or is selected". Two more colour meanings, both asked for by Laurent on 2026-09-29: the context colours in the sidebar (Antenna indigo `#5856D6`, Meersman teal `#30B0C7`, Personal green `#34C759`), and reminder dates by urgency: overdue in system red `#FF3B30`, today and the next 2 days in system orange `#FF9500`, later in secondary grey. Nothing else is coloured.
 
 ## Type
 

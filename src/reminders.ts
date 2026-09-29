@@ -1,3 +1,6 @@
+/** red when overdue, orange today and in the next 2 days, grey after that (Laurent, 29/9) */
+export const urgency = (days: number) => days < 0 ? "due-late" : days <= 2 ? "due-soon" : "";
+
 export type Reminder = { id: string; date: string; days: number; project: string | null; title: string; repeat: string | null };
 type H = { esc: (s: unknown) => string; md: (s: string) => string; projectLabel: (p: string | null) => string };
 
@@ -20,7 +23,7 @@ export function renderReminders(rem: Reminder[], h: H): string {
     const rep = r.repeat ? `<span>elke <span class="rem-n">${h.esc(r.repeat)}</span></span>` : "";
     return `<div class="rem-row${r.days < 0 ? " late" : ""}">
       <div class="rem-main"><div class="rem-t">${h.md(r.title)}</div>
-        <div class="rem-meta">${proj}<span>${when(r)}</span>${rep}</div></div>
+        <div class="rem-meta">${proj}<span class="${urgency(r.days)}">${when(r)}</span>${rep}</div></div>
       <div class="rem-acts">
         <button class="btn" data-rem="done" data-id="${id}">Klaar</button>
         <button class="btn" data-rem="push" data-date="morgen" data-id="${id}">Morgen</button>

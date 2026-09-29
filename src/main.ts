@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { marked } from "marked";
-import { renderReminders, onRemindersEvent } from "./reminders";
+import { renderReminders, onRemindersEvent, urgency } from "./reminders";
 import "./reminders.css";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
@@ -225,34 +225,53 @@ const waitCount = () => pendingList.length + blockedAgents().length;
 // ---------- rendering
 const waits = (k: string) => pendingList.some(r => r.project === k);
 const trailOf = (keys: string[]) => keys.some(waits) ? '<span class="dot"></span>' : keys.some(k => status[k] === "busy") ? '<span class="spin"></span>' : "";
+// sidebar glyphs, the way Mail and Finder put one in front of each row
+const G: Record<string, string> = {
+  bell: '<path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3L4 11ZM6.5 14h3"/>',
+  list: '<path d="M6 4.5h7M6 8h7M6 11.5h7M3 4.5h.5M3 8h.5M3 11.5h.5"/>',
+  chat: '<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-3 2.5V11h.5"/>',
+  term: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/>',
+  gear: '<circle cx="8" cy="8" r="2"/><path d="M8 2.5v1.5M8 12v1.5M2.5 8H4M12 8h1.5M4.1 4.1l1.1 1.1M10.8 10.8l1.1 1.1M4.1 11.9l1.1-1.1M10.8 5.2l1.1-1.1"/>',
+  folder: '<path d="M2.5 5V4a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V5Z"/>',
+};
+const glyph = (n: string) => `<svg class="g" viewBox="0 0 16 16">${G[n]}</svg>`;
+const CTX: Record<string, string> = { Antenna: "ctx-a", Meersman: "ctx-m", Personal: "ctx-p" };
+let collapsed: Record<string, boolean> = store.get("collapsed", {});
+const lead = (p: string) => settings.projects[p]?.icon ? `<span class="emo">${esc(settings.projects[p].icon)}</span>` : glyph("folder");
+
 function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
-  const selP = projOf(sel);
-  const sub = (c: Chat) => `<div class="row subrow ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}"><span class="nm">${esc(c.title)}</span>${trailOf([c.key])}<button class="x" data-close="${esc(c.key)}" title="Sluiten">×</button></div>`;
-  const w = waitCount();
-  let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}"><span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`;
-  const due = snap.reminders.filter((r: any) => r.days <= 0).length;
-  h += `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}"><span class="nm">Reminders</span>${due ? `<span class="count">${due}</span>` : ""}</div>`;
-  const T = terms();
-  const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}"><span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : '<span class="tag">terminal</span>'}<button class="x" data-close="${esc(t.key)}" title="Sluiten">×</button></div>`;
-  h += `<div class="grp">ALGEMEEN<button class="add" data-add="" title="Nieuw algemeen gesprek">+</button></div>`
-    + chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)).map(c => sub(c).replace("subrow", "")).join("")
-    + T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q))).map(t => tsub(t, false)).join("");
+  const selP = projOf(sel), T = terms();
+  const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="Sluiten">×</button>`;
+  const sub = (c: Chat, indent = true) => `<div class="row ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${trailOf([c.key])}${x(c.key)}</div>`;
+  const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
+  const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
+    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
+
+  const w = waitCount(), due = snap.reminders.filter((r: any) => r.days <= 0).length;
+  let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
+    + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">Reminders</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`;
+
+  const gc = chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
+  h += `<div class="sec">${head("Algemeen", "ALGEMEEN", gc.length + gt.length, "", "")}`
+    + (collapsed.Algemeen && !q ? "" : gc.map(c => sub(c, false)).join("") + gt.map(t => tsub(t, false)).join("")) + `</div>`;
+
   for (const ctx of ["Antenna", "Meersman", "Personal"]) {
-    const all = snap.projects.filter((p: any) => p.context === ctx && p.name.toLowerCase().includes(q));
-    // only what is open: a terminal session on it, or an app conversation that runs, waits or has news
+    const all = snap.projects.filter((p: any) => p.context === ctx && (p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q)));
     // an app conversation stays until Laurent closes it, a terminal session as long as it is open
     const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
     const shown = q ? all : all.filter((p: any) => open(p) || p.name === selP);
     if (!shown.length) continue;
-    h += `<div class="grp">${ctx.toUpperCase()}</div>`;
-    for (const p of shown) {
-      const cs = chatsOf(p.name), keys = cs.map(c => c.key);
-      const on = p.name === selP && !chats[sel]?.draft ? "" : p.name === selP ? "sel" : "";
-      h += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}"><span class="nm">${esc(pLabel(p.name))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
-        + T.filter(t => t.project === p.name).map(t => tsub(t)).join("")
-        + cs.slice(0, 5).map(sub).join("") + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
+    const shut = collapsed[ctx] && !q;
+    let body = "";
+    if (!shut) for (const p of shown) {
+      const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
+      const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
+      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
+        + ts.map(t => tsub(t)).join("") + cs.slice(0, 5).map(c => sub(c)).join("")
+        + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
     }
+    h += `<div class="sec ${CTX[ctx]}">${head(ctx, ctx.toUpperCase(), shown.length)}${body}</div>`;
   }
   $("nav").innerHTML = h;
   $("gear").classList.toggle("sel", sel === SETTINGS);
@@ -374,7 +393,7 @@ function renderInsp() {
   if (!P) {
     const due = snap.reminders.filter((r: any) => r.days <= 0);
     box.innerHTML = `<h2>Vandaag <span class="count">${due.length}</span></h2>${due.length ? `<ul class="todo">${due.map((r: any) =>
-      `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count">${esc(r.project || "")} · ${r.days < 0 ? `${-r.days} d vervallen` : "vandaag"}</span></span></li>`).join("")}</ul>`
+      `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count">${esc(r.project || "")} · <span class="${urgency(r.days)}">${r.days < 0 ? `${-r.days} d vervallen` : "vandaag"}</span></span></span></li>`).join("")}</ul>`
       : '<div class="meta">Niets vervallen, niets voor vandaag.</div>'}`;
     return;
   }
@@ -383,7 +402,7 @@ function renderInsp() {
   const items: string[] = P.open_items || [];
   if (tab === "stand") box.innerHTML = `<h2>Stand van zaken</h2><div class="meta">Bijgewerkt ${esc(P.last)}</div><div class="stand">${md(P.stand || "Geen stand van zaken.")}</div>`;
   else if (tab === "rem") box.innerHTML = rem.length ? `<h2>Reminders</h2><ul class="todo">${rem.map((r: any) =>
-    `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count">${when(r)}</span></span></li>`).join("")}</ul>` : '<div class="meta">Geen reminders voor dit project.</div>';
+    `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count ${urgency(r.days)}">${when(r)}</span></span></li>`).join("")}</ul>` : '<div class="meta">Geen reminders voor dit project.</div>';
   else box.innerHTML = `<h2>Open <span class="count">${items.length}</span></h2>${items.length
     ? `<ul class="todo">${items.map(x => `<li><input type="checkbox" disabled><span class="tx">${md(x)}</span></li>`).join("")}</ul>`
     : '<div class="meta">Geen open lussen in de note.</div>'}`;
@@ -400,7 +419,7 @@ async function select(k: string) {
   store.set("sel", chats[k]?.draft ? WAIT : k);
   if (!VIEWS.includes(k) && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
   render();
-  $("log").scrollTop = 1e9;
+  $("log").scrollTop = VIEWS.includes(k) ? 0 : 1e9;
 }
 const openProject = (p: string) => select(chatsOf(p)[0]?.key || newChat(p));
 function setProject(k: string, p: string, note: string) {
@@ -450,6 +469,8 @@ async function closeChat(k: string) {
 
 $("nav").addEventListener("click", e => {
   const t = e.target as HTMLElement;
+  const sec = t.closest<HTMLElement>(".grp");
+  if (sec && !t.closest("[data-add]")) { const id = sec.dataset.sec!; collapsed[id] = !collapsed[id]; store.set("collapsed", collapsed); renderNav(); return; }
   const x = t.closest<HTMLElement>("[data-close]");
   if (x) { e.stopPropagation(); closeChat(x.dataset.close!); return; }
   const add = t.closest<HTMLElement>("[data-add]");
