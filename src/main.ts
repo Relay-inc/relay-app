@@ -264,7 +264,7 @@ function renderNav() {
   const sub = (c: Chat, indent = true) => `<div class="row ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${trailOf([c.key])}${x(c.key)}</div>`;
   const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
   const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
-    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}" draggable="true"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
+    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
 
   const w = waitCount(), due = snap.reminders.filter((r: any) => r.days <= 0).length;
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
@@ -286,7 +286,7 @@ function renderNav() {
   const projRows = (list: any[]) => { let body = ""; for (const p of list) {
       const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
       const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
-      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}" draggable="true">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
+      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
         + ts.map(t => tsub(t)).join("") + cs.slice(0, 5).map(c => sub(c)).join("")
         + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
   } return body; };
@@ -502,6 +502,7 @@ function closedOf(p: string | null): { key: string; title: string }[] {
 }
 
 $("nav").addEventListener("click", e => {
+  if (justDragged) return;
   const t = e.target as HTMLElement;
   const sec = t.closest<HTMLElement>(".grp");
   if (sec && !t.closest("[data-add]")) { const id = sec.dataset.sec!; collapsed[id] = !collapsed[id]; store.set("collapsed", collapsed); renderNav(); return; }
@@ -513,32 +514,44 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
-// drag a section header onto another header, or a project onto another project in the same section
-let drag: { kind: "sec" | "proj"; id: string; ctx?: string } | null = null;
-$("nav").addEventListener("dragstart", e => {
-  const t = e.target as HTMLElement, g = t.closest<HTMLElement>(".grp"), pr = t.closest<HTMLElement>(".prow");
-  drag = pr ? { kind: "proj", id: pr.dataset.p!, ctx: pr.dataset.ctx } : g ? { kind: "sec", id: g.dataset.sec! } : null;
-  if (drag) { e.dataTransfer!.effectAllowed = "move"; e.dataTransfer!.setData("text/plain", drag.id); (pr || g)!.classList.add("dragging"); }
+// reorder by pressing and moving: a section header among headers, a project among the projects of its
+// section. Pointer events instead of HTML drag and drop, which the Mac webview does not deliver reliably.
+let drag: { kind: "sec" | "proj"; id: string; ctx?: string; y: number; on: boolean; target?: HTMLElement; after?: boolean } | null = null;
+let justDragged = false;
+$("nav").addEventListener("pointerdown", e => {
+  const t = e.target as HTMLElement;
+  if (e.button !== 0 || t.closest("button")) return;
+  const g = t.closest<HTMLElement>(".grp"), pr = t.closest<HTMLElement>(".prow");
+  drag = pr ? { kind: "proj", id: pr.dataset.p!, ctx: pr.dataset.ctx, y: e.clientY, on: false } : g ? { kind: "sec", id: g.dataset.sec!, y: e.clientY, on: false } : null;
 });
-const dropTarget = (e: DragEvent) => { const t = e.target as HTMLElement;
-  return drag?.kind === "sec" ? t.closest<HTMLElement>(".sec[data-drop]") : drag?.kind === "proj" ? t.closest<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`) : null; };
-$("nav").addEventListener("dragover", e => {
-  const t = dropTarget(e); if (!t) return;
-  e.preventDefault();
-  document.querySelectorAll(".dropover").forEach(x => x.classList.remove("dropover")); t.classList.add("dropover");
+window.addEventListener("pointermove", e => {
+  if (!drag) return;
+  if (!drag.on) { if (Math.abs(e.clientY - drag.y) < 5) return; drag.on = true; document.body.classList.add("reordering");
+    (drag.kind === "proj" ? document.querySelector(`.prow[data-p="${CSS.escape(drag.id)}"]`) : document.querySelector(`.grp[data-sec="${CSS.escape(drag.id)}"]`))?.classList.add("dragging"); }
+  const under = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+  const tgt = drag.kind === "sec" ? under?.closest<HTMLElement>(".sec[data-drop]") : under?.closest<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`);
+  document.querySelectorAll(".dropbefore,.dropafter").forEach(x => x.classList.remove("dropbefore", "dropafter"));
+  if (!tgt) { drag.target = undefined; return; }
+  const box = (drag.kind === "sec" ? tgt.querySelector(".grp")! : tgt).getBoundingClientRect();
+  drag.after = drag.kind === "sec" ? e.clientY > tgt.getBoundingClientRect().top + tgt.getBoundingClientRect().height / 2 : e.clientY > box.top + box.height / 2;
+  drag.target = tgt; tgt.classList.add(drag.after ? "dropafter" : "dropbefore");
 });
-$("nav").addEventListener("drop", e => {
-  const t = dropTarget(e); if (!t || !drag) return;
-  e.preventDefault();
-  const move = (list: string[], id: string, before: string) => { const l = list.filter(x => x !== id); l.splice(Math.max(0, l.indexOf(before)), 0, id); return l; };
-  if (drag.kind === "sec") { secOrder = move(secOrder, drag.id, t.dataset.drop!); store.set("secOrder", secOrder); }
+window.addEventListener("pointerup", () => {
+  const d = drag; drag = null;
+  document.body.classList.remove("reordering");
+  document.querySelectorAll(".dropbefore,.dropafter,.dragging").forEach(x => x.classList.remove("dropbefore", "dropafter", "dragging"));
+  if (!d?.on) return;
+  justDragged = true; setTimeout(() => { justDragged = false; }, 0);
+  if (!d.target) return;
+  const place = (list: string[], id: string, ref: string, after: boolean) => {
+    const l = list.filter(x => x !== id), i = l.indexOf(ref); l.splice(i < 0 ? l.length : i + (after ? 1 : 0), 0, id); return l; };
+  if (d.kind === "sec") { secOrder = place(secOrder, d.id, d.target.dataset.drop!, !!d.after); store.set("secOrder", secOrder); }
   else {
-    const visible = [...document.querySelectorAll<HTMLElement>(`.prow[data-ctx="${drag.ctx}"]`)].map(r => r.dataset.p!);
-    projOrder[drag.ctx!] = move(visible, drag.id, t.dataset.p!); store.set("projOrder", projOrder);
+    const visible = [...document.querySelectorAll<HTMLElement>(`.prow[data-ctx="${d.ctx}"]`)].map(r => r.dataset.p!);
+    projOrder[d.ctx!] = place(visible, d.id, d.target.dataset.p!, !!d.after); store.set("projOrder", projOrder);
   }
-  drag = null; renderNav();
+  renderNav();
 });
-$("nav").addEventListener("dragend", () => { drag = null; document.querySelectorAll(".dropover,.dragging").forEach(x => x.classList.remove("dropover", "dragging")); });
 listen<Settings>("settings-changed", e => { settings = { ...settings, ...e.payload }; loadSnapshot(); });
 $("t").addEventListener("click", openPop);
 // right-click on a conversation in the sidebar: the Mac context menu
