@@ -6,6 +6,7 @@ Read-only. The app calls this and renders the result, so the parsing lives in on
 """
 import datetime as dt
 import glob
+import hashlib
 import json
 import os
 import re
@@ -57,7 +58,8 @@ def reminders():
         proj = re.search(r"\[\[([^\]|]+)", text)
         title = re.search(r"\*\*(.+?)\*\*", text)
         days = (dt.date.fromisoformat(date) - TODAY).days
-        out.append({"date": date, "days": days, "project": proj.group(1) if proj else None,
+        out.append({"id": hashlib.sha1(f"{date}|{text}".encode("utf-8")).hexdigest()[:8],  # same id as reminder-digest.py
+                    "date": date, "days": days, "project": proj.group(1) if proj else None,
                     "title": unlink(title.group(1) if title else first_sentence(text)).rstrip("."),
                     "repeat": repeat.strip() or None})
     return sorted(out, key=lambda r: r["date"])
@@ -73,7 +75,8 @@ def first_sentence(text):
 
 
 CACHE = os.path.expanduser("~/Library/Application Support/be.laurentmeersman.vault/topics.json")
-TRANSCRIPTS = os.path.expanduser("~/.claude/projects/-Users-laurentmeersman-Documents-LaurentMe-Obsidian---Context-management")
+# Claude Code keeps a project's transcripts under its path with every non-alphanumeric character as "-"
+TRANSCRIPTS = os.path.expanduser("~/.claude/projects/" + re.sub(r"[^A-Za-z0-9]", "-", VAULT))
 
 
 # user-role messages the harness injects, not typed by Laurent

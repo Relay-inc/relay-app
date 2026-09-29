@@ -14,10 +14,23 @@ use tauri::{AppHandle, Emitter, Manager, State};
 // ponytail: paths are Laurent's own machine and this repo, fine for a personal app that is not distributed.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
-fn vault() -> String { format!("{}/Documents/LaurentMe/Obsidian - Context-management", home()) }
+fn default_vault() -> String { format!("{}/Documents/LaurentMe/Obsidian - Context-management", home()) }
 fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
-fn transcripts() -> String {
-    format!("{}/.claude/projects/-Users-laurentmeersman-Documents-LaurentMe-Obsidian---Context-management", home())
+/// The vault folder from the settings.
+fn vault(st: &App) -> String {
+    st.settings.lock().unwrap()["vault"].as_str().map(String::from).unwrap_or_else(default_vault)
+}
+/// Claude Code's transcript folder for the vault: the path with every non-alphanumeric char as `-`.
+fn transcripts(st: &App) -> String {
+    let slug: String = vault(st).chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    format!("{}/.claude/projects/{slug}", home())
+}
+/// Settings as stored on disk, with the defaults filled in for missing or malformed keys.
+fn norm(mut v: Value) -> Value {
+    if !v.is_object() { v = json!({}); }
+    if !v["vault"].is_string() { v["vault"] = json!(default_vault()); }
+    for k in ["projects", "overrides"] { if !v[k].is_object() { v[k] = json!({}); } }
+    v
 }
 
 struct Proc { child: Child, stdin: ChildStdin }
@@ -26,6 +39,7 @@ struct App {
     procs: Mutex<HashMap<String, Proc>>,
     sids: Mutex<HashMap<String, String>>, // project -> session id, persisted
     path: String,                          // login-shell PATH, so Claude's tools find gh, himalaya, node
+    settings: Mutex<Value>,                // settings.json: vault, projects, overrides
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -49,7 +63,7 @@ fn login_path() -> String {
 #[tauri::command]
 fn snapshot(state: State<App>) -> Result<Value, String> {
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
-        .env("PATH", &state.path).output().map_err(|e| e.to_string())?;
+        .env("PATH", &state.path).env("VAULT", vault(&state)).output().map_err(|e| e.to_string())?;
     serde_json::from_slice(&out.stdout).map_err(|e| format!("snapshot: {e}"))
 }
 
@@ -64,7 +78,7 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
     // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
     else if let Some(f) = fork.filter(|f| f.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) { cmd.args(["--resume", f, "--fork-session"]); }
-    cmd.current_dir(vault()).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
+    cmd.current_dir(vault(state)).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
         .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for Laurent
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| format!("claude start: {e}"))?;
@@ -117,7 +131,7 @@ fn stop(state: State<App>, project: String) {
 #[tauri::command]
 fn history(state: State<App>, project: String) -> Vec<Value> {
     let Some(sid) = state.sids.lock().unwrap().get(&project).cloned() else { return vec![] };
-    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts())) else { return vec![] };
+    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts(&state))) else { return vec![] };
     raw.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
         .map(|e| json!({"type": e["type"], "message": e["message"]})).collect()
@@ -153,9 +167,9 @@ fn app_sids(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().value
 
 /// Read-only history of any session in the vault, e.g. one that is open in the terminal.
 #[tauri::command]
-fn history_sid(sid: String) -> Vec<Value> {
+fn history_sid(state: State<App>, sid: String) -> Vec<Value> {
     if !sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return vec![]; }
-    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts())) else { return vec![] };
+    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts(&state))) else { return vec![] };
     raw.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
         .map(|e| json!({"type": e["type"], "message": e["message"]})).collect()
@@ -196,8 +210,8 @@ fn open_terminal(state: State<App>, project: String, session: Option<String>, na
     let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).cloned());
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
     let cmd = match sid {
-        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&vault())),
-        _ => format!("cd {} && claude -n {}", q(&vault()), q(name.as_deref().unwrap_or(&project))),
+        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&vault(&state))),
+        _ => format!("cd {} && claude -n {}", q(&vault(&state)), q(name.as_deref().unwrap_or(&project))),
     };
     let script = format!(
         "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
@@ -226,16 +240,74 @@ fn bg(state: State<App>, action: String, id: String) -> Result<(), String> {
     }
 }
 
+/// The saved settings: vault, projects (icon, label) and session overrides.
+#[tauri::command]
+fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clone() }
+
+/// Validate, save and activate new settings. Returns what was saved.
+#[tauri::command]
+fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
+    let s = norm(settings);
+    let v = s["vault"].as_str().unwrap();
+    if !PathBuf::from(v).join("Resources/Meta/Claude/rules/core/work-state.md").is_file() {
+        return Err(format!("Geen vault: work-state.md niet gevonden in {v}"));
+    }
+    for (name, p) in s["projects"].as_object().unwrap() {
+        let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
+            ("icon", Some(t)) => t.chars().count() <= 4,
+            ("label", Some(t)) => t.chars().count() <= 60,
+            _ => false,
+        }));
+        if !ok { return Err(format!("Ongeldig project '{name}': icon (max 4 tekens) en label (max 60) moeten tekst zijn")); }
+    }
+    for (sid, t) in s["overrides"].as_object().unwrap() {
+        if sid.is_empty() || !sid.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c) || c == '-') || !(t.is_string() || t.is_null()) {
+            return Err(format!("Ongeldige override '{sid}'"));
+        }
+    }
+    fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
+    *state.settings.lock().unwrap() = s.clone();
+    Ok(s)
+}
+
+/// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
+#[tauri::command]
+async fn pick_folder(app: AppHandle) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    app.dialog().file().blocking_pick_folder().and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Mark a reminder done, push it to a new date, or drop it, via the vault's own reminder script.
+#[tauri::command]
+fn reminder(state: State<App>, action: String, id: String, date: Option<String>) -> Result<String, String> {
+    if !["done", "push", "drop"].contains(&action.as_str()) { return Err("unknown action".into()); }
+    if id.len() != 8 || !id.chars().all(|c| c.is_ascii_hexdigit()) { return Err("bad id".into()); }
+    let v = vault(&state);
+    let mut cmd = Command::new("/usr/bin/python3");
+    cmd.arg(format!("{v}/Resources/Meta/Claude/scripts/reminder-digest.py")).args([&action, &id]);
+    if action == "push" {
+        let d = date.filter(|d| !d.is_empty() && d.len() <= 12 && d.chars().all(|c| c.is_ascii_alphanumeric() || "+/-".contains(c)))
+            .ok_or("date required (max 12 chars of [0-9A-Za-z+/-])")?;
+        cmd.arg(d);
+    }
+    let out = cmd.current_dir(&v).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+    if out.status.success() { Ok(String::from_utf8_lossy(&out.stdout).trim().to_string()) }
+    else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let sids = fs::read_to_string(data_dir(app.handle()).join("sessions.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path() });
+            let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
+                .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings) });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, pending, answer, agents, open_terminal])
+        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, reminder])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

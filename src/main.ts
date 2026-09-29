@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { marked } from "marked";
+import { renderReminders, onRemindersEvent } from "./reminders";
+import "./reminders.css";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -36,12 +38,22 @@ let forked: string[] = store.get("forkedTerms", []); // terminal sessions contin
 let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
 let appSids: string[] = [];
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
-const WAIT = "__wait", NEW = "Nieuw gesprek";
+const WAIT = "__wait", REM = "__rem", SETTINGS = "__settings", NEW = "Nieuw gesprek";
+const VIEWS = [WAIT, REM, SETTINGS];
+type Settings = { vault: string; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null> };
+let settings: Settings = { vault: "", projects: {}, overrides: {} };
+let settingsMsg = "";
 let sel: string = store.get("sel", "") || WAIT;
 let tab = "open";
 
 const $ = (id: string) => document.getElementById(id)!;
 const project = (n: string | null) => n ? snap.projects.find((p: any) => p.name === n) : undefined;
+// how a project is shown: its own icon and name from the settings, else the note name
+const pLabel = (n: string | null) => { if (!n) return "Algemeen"; const c = settings.projects[n] || {}; return `${c.icon ? c.icon + " " : ""}${c.label || n}`; };
+async function saveSettings(next: Settings) {
+  try { settings = await invoke<Settings>("set_settings", { settings: next }); settingsMsg = ""; return true; }
+  catch (e) { settingsMsg = String(e); return false; }
+}
 const saveChats = () => store.set("chats", Object.fromEntries(Object.entries(chats).filter(([, c]) => !c.draft)));
 const projOf = (key: string) => chats[key]?.project ?? null;
 const label = (key: string) => chats[key]?.title || key;
@@ -198,7 +210,8 @@ function terms(): Term[] {
   const live = new Map(agentsList.map(a => [a.sessionId, a]));
   return (snap.sessions?.items || []).filter((x: any) => !appSids.includes(x.sessionId) && !forked.includes(x.sessionId) && live.has(x.sessionId))
     .map((x: any) => { const a = live.get(x.sessionId);
-      return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, project: x.project ?? null, kind: a.kind, status: a.status, state: a.state,
+      const ov = settings.overrides[x.sessionId];
+      return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, project: ov !== undefined ? ov : x.project ?? null, kind: a.kind, status: a.status, state: a.state,
         title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || "Terminalsessie").slice(0, 48) }; })
     .filter((t: Term) => !(t.kind === "background" && t.state === "done"));
 }
@@ -215,39 +228,51 @@ const trailOf = (keys: string[]) => keys.some(waits) ? '<span class="dot"></span
 function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const selP = projOf(sel);
-  const sub = (c: Chat) => `<div class="row subrow ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}"><span class="nm">${esc(c.title)}</span>${trailOf([c.key])}</div>`;
+  const sub = (c: Chat) => `<div class="row subrow ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}"><span class="nm">${esc(c.title)}</span>${trailOf([c.key])}<button class="x" data-close="${esc(c.key)}" title="Sluiten">×</button></div>`;
   const w = waitCount();
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}"><span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`;
+  const due = snap.reminders.filter((r: any) => r.days <= 0).length;
+  h += `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}"><span class="nm">Reminders</span>${due ? `<span class="count">${due}</span>` : ""}</div>`;
   const T = terms();
-  const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}"><span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : '<span class="tag">terminal</span>'}</div>`;
+  const tsub = (t: Term, indent = true) => `<div class="row ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}"><span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : '<span class="tag">terminal</span>'}<button class="x" data-close="${esc(t.key)}" title="Sluiten">×</button></div>`;
   h += `<div class="grp">ALGEMEEN<button class="add" data-add="" title="Nieuw algemeen gesprek">+</button></div>`
     + chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)).map(c => sub(c).replace("subrow", "")).join("")
     + T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q))).map(t => tsub(t, false)).join("");
   for (const ctx of ["Antenna", "Meersman", "Personal"]) {
     const all = snap.projects.filter((p: any) => p.context === ctx && p.name.toLowerCase().includes(q));
     // only what is open: a terminal session on it, or an app conversation that runs, waits or has news
-    const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).some(c => status[c.key] === "busy" || waits(c.key) || unseen.has(c.key));
+    // an app conversation stays until Laurent closes it, a terminal session as long as it is open
+    const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
     const shown = q ? all : all.filter((p: any) => open(p) || p.name === selP);
     if (!shown.length) continue;
     h += `<div class="grp">${ctx.toUpperCase()}</div>`;
     for (const p of shown) {
       const cs = chatsOf(p.name), keys = cs.map(c => c.key);
       const on = p.name === selP && !chats[sel]?.draft ? "" : p.name === selP ? "sel" : "";
-      h += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}"><span class="nm">${esc(p.name)}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
+      h += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}"><span class="nm">${esc(pLabel(p.name))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
         + T.filter(t => t.project === p.name).map(t => tsub(t)).join("")
         + cs.slice(0, 5).map(sub).join("") + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
     }
   }
   $("nav").innerHTML = h;
+  $("gear").classList.toggle("sel", sel === SETTINGS);
 }
 
 function renderChat() {
   const msgs = $("msgs"), log = $("log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  if (sel === REM || sel === SETTINGS) {
+    $("composer").style.display = "none"; $("movebar").style.display = "none";
+    $("new").style.display = $("term").style.display = $("close").style.display = "none";
+    $("ts").textContent = "";
+    if (sel === REM) { $("t").textContent = "Reminders"; msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel }); }
+    else { $("t").textContent = "Instellingen"; msgs.innerHTML = settingsHtml(); }
+    return;
+  }
   if (sel === WAIT) {
     $("t").textContent = "Wacht op jou"; $("ts").textContent = `${waitCount()}`;
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = "none";
+    $("new").style.display = $("term").style.display = $("close").style.display = "none";
     const byK: Record<string, any[]> = {};
     for (const r of pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${esc(projOf(k))} · ` : ""}${esc(label(k))}`;
@@ -259,10 +284,10 @@ function renderChat() {
     return;
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
-  $("composer").style.display = ""; $("new").style.display = "";
+  $("composer").style.display = ""; $("new").style.display = ""; $("close").style.display = chats[sel]?.draft ? "none" : "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
-  $("t").textContent = pn || "Algemeen";
+  $("t").textContent = pLabel(pn);
   const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
   $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
   const items = convo[sel] || [];
@@ -290,8 +315,61 @@ function renderChat() {
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
+function settingsHtml(): string {
+  const custom = Object.entries(settings.projects).filter(([, c]) => c.icon || c.label);
+  return `<div class="set">
+    <h2>Vault</h2>
+    <div class="meta">De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.</div>
+    <div class="setrow"><input class="field" id="vaultpath" value="${esc(settings.vault)}" spellcheck="false"><button class="btn" data-set="pick">Kies map…</button><button class="btn primary" data-set="save">Opslaan</button></div>
+    ${settingsMsg ? `<div class="err">${esc(settingsMsg)}</div>` : ""}
+    <h2>Aangepaste projecten</h2>
+    <div class="meta">Icoon en naam zet je per project door op de titel bovenaan een gesprek te klikken.</div>
+    ${custom.length ? `<ul class="todo">${custom.map(([n, c]) => `<li class="setli"><span>${esc(c.icon || "")} ${esc(c.label || n)} <span class="count">${c.label ? esc(n) : ""}</span></span><button class="btn" data-set="clear" data-p="${esc(n)}">Herstellen</button></li>`).join("")}</ul>`
+      : '<div class="meta">Nog geen.</div>'}
+  </div>`;
+}
+async function onSettings(e: MouseEvent) {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-set]"); if (!b) return false;
+  const input = document.getElementById("vaultpath") as HTMLInputElement | null;
+  if (b.dataset.set === "pick") { const f = await invoke<string | null>("pick_folder"); if (f && input) input.value = f; }
+  if (b.dataset.set === "save" && input) { if (await saveSettings({ ...settings, vault: input.value.trim() })) { settingsMsg = "Opgeslagen."; await loadSnapshot(); } }
+  if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await saveSettings(next); }
+  renderChat(); renderNav();
+  return true;
+}
+
+// the title opens a small panel: which project this conversation belongs to, and the project's icon and name
+function openPop() {
+  if (VIEWS.includes(sel)) return;
+  const T = isTerm(sel) ? termOf(sel) : undefined, cur = T ? T.project : projOf(sel), c = cur ? settings.projects[cur] || {} : {};
+  const names = snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
+  $("pop").innerHTML = `<label class="plab">Project van dit gesprek
+      <select id="popproj"><option value="">Algemeen</option>${names.map((n: string) => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+    ${cur ? `<div class="plab">${esc(cur)} in de zijbalk
+      <div class="setrow"><input class="field ico" id="popicon" maxlength="4" placeholder="Icoon" value="${esc(c.icon || "")}"><input class="field" id="poplabel" placeholder="${esc(cur)}" value="${esc(c.label || "")}"></div></div>` : ""}
+    <div class="acts"><button class="btn" data-pop="cancel">Annuleren</button><button class="btn primary" data-pop="save">Bewaren</button></div>`;
+  $("pop").hidden = false;
+}
+async function onPop(e: MouseEvent) {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-pop]"); if (!b) return;
+  if (b.dataset.pop === "save") {
+    const proj = ($("popproj") as HTMLSelectElement).value || null;
+    const next = structuredClone(settings);
+    const T0 = isTerm(sel) ? termOf(sel) : undefined, cur = T0 ? T0.project : projOf(sel); // the project the icon fields belong to
+    if (isTerm(sel)) next.overrides[sel.slice(2)] = proj;
+    else if (chats[sel]) { chats[sel].project = proj; saveChats(); }
+    const icon = (document.getElementById("popicon") as HTMLInputElement | null)?.value.trim();
+    const lab = (document.getElementById("poplabel") as HTMLInputElement | null)?.value.trim();
+    if (cur && icon !== undefined) next.projects[cur] = { ...(icon ? { icon } : {}), ...(lab ? { label: lab } : {}) };
+    if (!(await saveSettings(next))) { alertMsg(settingsMsg); return; }
+  }
+  $("pop").hidden = true; render();
+}
+function alertMsg(m: string) { const p = $("pop"); p.insertAdjacentHTML("afterbegin", `<div class="err">${esc(m)}</div>`); }
+
 function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
+  if (sel === SETTINGS) { box.innerHTML = ""; return; }
   document.querySelectorAll<HTMLElement>("#seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   if (!P) {
     const due = snap.reminders.filter((r: any) => r.days <= 0);
@@ -317,9 +395,10 @@ function render() { renderNav(); renderChat(); renderInsp(); }
 async function select(k: string) {
   // an empty draft that is left behind disappears
   if (sel !== k && chats[sel]?.draft && !(convo[sel] || []).length) delete chats[sel];
+  $("pop").hidden = true;
   sel = k; unseen.delete(k); routeChoice = routeChoice?.key === k ? routeChoice : null;
   store.set("sel", chats[k]?.draft ? WAIT : k);
-  if (k !== WAIT && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
+  if (!VIEWS.includes(k) && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
   render();
   $("log").scrollTop = 1e9;
 }
@@ -360,15 +439,36 @@ async function sendMsg(forced?: string) {
   catch (e) { push(k, { kind: "err", text: String(e) }); status[k] = "idle"; renderChat(); }
 }
 
+// closing: an app conversation stops and leaves the sidebar (the session stays in Claude Code,
+// resumable with claude --resume), a terminal session only leaves the sidebar
+async function closeChat(k: string) {
+  if (isTerm(k)) { forked.push(k.slice(2)); store.set("forkedTerms", forked); }
+  else { await invoke("reset", { project: k }); delete chats[k]; delete convo[k]; delete status[k]; saveChats(); }
+  if (sel === k) { const p = projOf(k) ?? (isTerm(k) ? termOf(k)?.project ?? null : null); sel = WAIT; await select(p && chatsOf(p)[0] ? chatsOf(p)[0].key : WAIT); }
+  else render();
+}
+
 $("nav").addEventListener("click", e => {
   const t = e.target as HTMLElement;
+  const x = t.closest<HTMLElement>("[data-close]");
+  if (x) { e.stopPropagation(); closeChat(x.dataset.close!); return; }
   const add = t.closest<HTMLElement>("[data-add]");
   if (add) { e.stopPropagation(); select(newChat(add.dataset.add || null)); return; }
   const r = t.closest<HTMLElement>(".row"); if (!r) return;
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
+$("gear").addEventListener("click", () => select(SETTINGS));
+$("t").addEventListener("click", openPop);
+$("pop").addEventListener("click", onPop);
+$("msgs").addEventListener("change", e => { onRemindersEvent(e, remAct); });
+async function remAct(action: "done" | "push", id: string, date?: string) {
+  try { await invoke("reminder", { action, id, date: date ?? null }); } catch (err) { console.error(err); }
+  await loadSnapshot();
+}
 $("msgs").addEventListener("click", e => {
+  if (sel === REM && onRemindersEvent(e, remAct)) return;
+  if (sel === SETTINGS) { onSettings(e); return; }
   const g = (e.target as HTMLElement).closest<HTMLElement>("[data-bg]");
   if (g) {
     const id = g.dataset.id!, act = g.dataset.bg!;
@@ -391,6 +491,7 @@ $("send").addEventListener("click", () => {
   if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: "Gestopt." }); render(); }
   else sendMsg();
 });
+$("close").addEventListener("click", () => { if (sel !== WAIT) closeChat(sel); });
 $("new").addEventListener("click", () => { if (sel !== WAIT) select(newChat(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel))); });
 $("movebar").addEventListener("click", e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
@@ -418,6 +519,7 @@ async function pollAgents() {
 
 // ---------- start: adopt conversations from earlier versions (general:<id>, plain project names)
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
+try { settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; } catch { /* older backend */ }
 await loadSnapshot();
 const oldGens: Record<string, { title: string; at: number }> = store.get("gens", {});
 for (const k of await invoke<string[]>("chats")) {
@@ -429,7 +531,7 @@ for (const k of await invoke<string[]>("chats")) {
 saveChats();
 await Promise.all(Object.values(chats).filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title)).map(c => ensureHistory(c.key)));
 await pollAgents();
-if (sel !== WAIT && !chats[sel] && !termOf(sel)) sel = WAIT;
+if (!VIEWS.includes(sel) && !chats[sel] && !termOf(sel)) sel = WAIT;
 await select(sel);
 pollPending();
 setInterval(pollPending, 700);

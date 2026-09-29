@@ -1,0 +1,17 @@
+.rem-grp{margin-bottom:22px}
+.rem-h{font-size:13px;font-weight:600;color:var(--secondary);margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--separator)}
+.rem-n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.rem-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--separator)}
+.rem-main{min-width:0}
+.rem-t{font-size:16px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.rem-t p{margin:0}
+.rem-t code{font-family:var(--mono);font-size:14px;background:var(--fill);padding:1px 4px;border-radius:4px}
+.rem-row.late .rem-t{font-weight:600}
+.rem-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--secondary);margin-top:2px}
+/* always visible, a fixed column on the right */
+.rem-acts{display:flex;align-items:center;gap:6px}
+.rem-acts .btn{height:26px;padding:0 9px;font-size:13px;white-space:nowrap}
+.rem-acts :disabled{opacity:.5}
+.rem-date{height:26px;padding:0 6px;border-radius:var(--r);border:1px solid var(--separator);background:var(--bg);color:var(--label);font:inherit;font-size:13px;font-family:var(--mono)}
+.rem-date:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:1px}
+.rem-empty{color:var(--secondary);text-align:center;padding:24px 0}
