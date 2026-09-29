@@ -32,6 +32,7 @@ let chats: Record<string, Chat> = store.get("chats", {});
 let pendingList: any[] = [];
 let agentsList: any[] = [];
 let hidden: string[] = store.get("hiddenAgents", []);
+let forked: string[] = store.get("forkedTerms", []); // terminal sessions continued in the app, no longer listed
 let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
 let appSids: string[] = [];
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
@@ -195,7 +196,7 @@ type Term = { key: string; sid: string; id: string; project: string | null; titl
 const GENERIC = /^obsidian-context-management-\w+$/;
 function terms(): Term[] {
   const live = new Map(agentsList.map(a => [a.sessionId, a]));
-  return (snap.sessions?.items || []).filter((x: any) => !appSids.includes(x.sessionId) && live.has(x.sessionId))
+  return (snap.sessions?.items || []).filter((x: any) => !appSids.includes(x.sessionId) && !forked.includes(x.sessionId) && live.has(x.sessionId))
     .map((x: any) => { const a = live.get(x.sessionId);
       return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, project: x.project ?? null, kind: a.kind, status: a.status, state: a.state,
         title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || "Terminalsessie").slice(0, 48) }; })
@@ -338,6 +339,7 @@ async function sendMsg(forced?: string) {
     const t = termOf(sel); if (!t) return;
     const k = newChat(t.project);
     Object.assign(chats[k], { title: t.title, fork: t.sid, draft: false });
+    forked.push(t.sid); store.set("forkedTerms", forked);
     convo[k] = [...(convo[sel] || []), { kind: "note", text: "Verder in de app. De terminal blijft zoals hij is." }];
     await select(k);
     return sendMsg(text);
