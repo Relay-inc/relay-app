@@ -11,24 +11,30 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
-// ponytail: paths are Laurent's own machine and this repo, fine for a personal app that is not distributed.
+// ponytail: REPO and the claude binary are fixed, fine as long as the app runs from its own checkout.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
-fn default_vault() -> String { format!("{}/Documents/LaurentMe/Obsidian - Context-management", home()) }
 fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
-/// The vault folder from the settings.
+/// The vault folder from the settings, empty until the user picks one (no default: a new user starts blank).
 fn vault(st: &App) -> String {
-    st.settings.lock().unwrap()["vault"].as_str().map(String::from).unwrap_or_else(default_vault)
+    st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
+}
+/// The vault, or an error when none is set up yet: nothing runs or reads outside a chosen vault.
+fn need_vault(st: &App) -> Result<String, String> {
+    let v = vault(st);
+    brain(&v).map(|_| v).ok_or_else(|| "Kies eerst je vault in Vault › Instellingen…".into())
 }
 /// Claude Code's transcript folder for the vault: the path with every non-alphanumeric char as `-`.
 fn transcripts(st: &App) -> String {
-    let slug: String = vault(st).chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    let v = vault(st);
+    if v.is_empty() { return String::new(); } // no vault: never fall back to ~/.claude/projects itself
+    let slug: String = v.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
     format!("{}/.claude/projects/{slug}", home())
 }
 /// Settings as stored on disk, with the defaults filled in for missing or malformed keys.
 fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
-    if !v["vault"].is_string() { v["vault"] = json!(default_vault()); }
+    if !v["vault"].is_string() { v["vault"] = json!(""); }
     for k in ["projects", "overrides"] { if !v[k].is_object() { v[k] = json!({}); } }
     v
 }
@@ -78,7 +84,7 @@ fn brain(vault: &str) -> Option<String> {
 #[tauri::command]
 fn snapshot(state: State<App>) -> Result<Value, String> {
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
-        .env("PATH", &state.path).env("VAULT", vault(&state)).output().map_err(|e| e.to_string())?;
+        .env("PATH", &state.path).env("VAULT", need_vault(&state)?).output().map_err(|e| e.to_string())?;
     serde_json::from_slice(&out.stdout).map_err(|e| format!("snapshot: {e}"))
 }
 
@@ -86,6 +92,7 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
     let mcp = json!({"mcpServers": {"vaultperm": {
         "command": "/usr/bin/python3", "args": [format!("{REPO}/perm_server.py")],
         "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
+    let dir = need_vault(state)?;
     let mut cmd = Command::new(claude_bin());
     cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
@@ -93,7 +100,7 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
     // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
     else if let Some(f) = fork.filter(|f| f.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) { cmd.args(["--resume", f, "--fork-session"]); }
-    cmd.current_dir(vault(state)).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
+    cmd.current_dir(dir).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
         .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for Laurent
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| format!("claude start: {e}"))?;
@@ -387,11 +394,12 @@ fn turn_ended(path: &std::path::Path) -> bool {
 #[tauri::command]
 fn open_terminal(state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+    let v = need_vault(&state)?;
     let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).cloned());
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
     let cmd = match sid {
-        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&vault(&state))),
-        _ => format!("cd {} && claude -n {}", q(&vault(&state)), q(name.as_deref().unwrap_or(&project))),
+        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&v)),
+        _ => format!("cd {} && claude -n {}", q(&v), q(name.as_deref().unwrap_or(&project))),
     };
     let script = format!(
         "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
@@ -477,6 +485,13 @@ fn reminder(state: State<App>, action: String, id: String, date: Option<String>)
     else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
 }
 
+fn open_settings(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
+    tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
+        .title("Instellingen").inner_size(600.0, 460.0).min_inner_size(520.0, 360.0)
+        .minimizable(false).maximizable(false).build().ok();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -500,10 +515,7 @@ pub fn run() {
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
         .on_menu_event(|app, event| {
             if event.id() != "settings" { return; }
-            if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
-            tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
-                .title("Instellingen").inner_size(600.0, 460.0).min_inner_size(520.0, 360.0)
-                .minimizable(false).maximizable(false).build().ok();
+            open_settings(app);
         })
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
@@ -511,7 +523,9 @@ pub fn run() {
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
+            let first_run = brain(settings["vault"].as_str().unwrap()).is_none();
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
+            if first_run { open_settings(app.handle()); } // a new user picks a vault before anything else
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, reminder])

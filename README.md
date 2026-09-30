@@ -17,8 +17,8 @@ pnpm tauri dev
 Needs Rust, pnpm, `/usr/bin/python3`, Claude Code at `~/.local/bin/claude` (logged in), and iTerm
 for "open in terminal".
 
-On first start, pick the vault in Vault › Instellingen… (Cmd-,). The built-in default still points to
-the old vault folder. A folder counts as a vault when it has `System/rules/core/work-state.md` (or
+There is no default vault. Until one is picked, the settings window opens at start and no
+conversation, terminal or snapshot runs. A folder counts as a vault when it has `System/rules/core/work-state.md` (or
 the old `Resources/Meta/Claude/` layout).
 
 `pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py` and `perm_server.py`

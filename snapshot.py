@@ -13,7 +13,7 @@ import re
 import subprocess
 import sys
 
-VAULT = os.environ.get("VAULT", os.path.expanduser("~/Documents/LaurentMe/Obsidian - Context-management"))
+VAULT = os.environ["VAULT"]  # set by the app from the user's own settings, no default
 # the brain lives in System/ in the new layout, in Resources/Meta/Claude/ in the old one
 META = next((os.path.join(VAULT, d) for d in ("System", "Resources/Meta/Claude") if os.path.isdir(os.path.join(VAULT, d))), os.path.join(VAULT, "System"))
 TODAY = dt.date.fromisoformat(os.environ["TODAY"]) if os.environ.get("TODAY") else dt.date.today()
