@@ -15,8 +15,8 @@
     <div class="ctx" id="ctx" hidden></div>
   </aside>
   <section class="chat">
-    <div class="bar" data-tauri-drag-region><h1 id="t"></h1><span class="sub" id="ts"></span><span class="sp" data-tauri-drag-region></span>
-      <button class="tb" id="close">Sluiten</button><button class="tb" id="new">Nieuw gesprek</button><button class="tb" id="term">Openen in Terminal</button><button class="tb ib" id="toggleinsp" title="Paneel verbergen of tonen (⌥⌘I)" aria-label="Paneel verbergen of tonen"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
+    <div class="bar" data-tauri-drag-region><h1 id="t"></h1><span class="crumb" id="ctsep">›</span><input class="ctitle" id="ct" spellcheck="false" aria-label="Titel van het gesprek"><span class="sub" id="ts"></span><span class="sp" data-tauri-drag-region></span>
+      <button class="tb ib" id="term" title="Openen in Terminal" aria-label="Openen in Terminal"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/></svg></button><button class="tb ib" id="toggleinsp" title="Paneel verbergen of tonen (⌥⌘I)" aria-label="Paneel verbergen of tonen"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
     <div class="pop" id="pop" hidden></div>
     <div class="log" id="log"><div class="msgs" id="msgs"></div></div>
     <div class="subs" id="subs" style="display:none"></div>
@@ -25,13 +25,16 @@
     <div class="composer" id="composer">
       <div class="atts" id="atts" hidden></div>
       <textarea rows="1" id="c"></textarea>
-      <div class="cfoot"><span class="hint" id="hint"></span><span class="sp"></span>
+      <div class="cfoot"><select class="pick" id="model" title="Model" aria-label="Model"><option value="">Standaard model</option><option value="fable">Fable</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select>
+        <select class="pick" id="effort" title="Effort" aria-label="Effort"><option value="">Standaard effort</option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select>
+        <span class="hint" id="hint"></span><span class="sp"></span>
         <button class="send" id="send" aria-label="Versturen"><svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button></div>
     </div>
   </section>
   <div class="zoom" id="zoom" hidden><img alt=""></div>
+  <div class="qk" id="qk" hidden><div class="qkbox" id="qkbox"><div class="atts" id="qkatts" hidden></div><textarea id="qkin" rows="1" spellcheck="false" placeholder="Vraag iets, het wordt een nieuw algemeen gesprek…" aria-label="Snelle vraag"></textarea><div class="qkhint">↵ start op de achtergrond · plak of sleep een afbeelding · esc sluit</div></div></div>
   <aside class="insp">
-    <div class="bar" data-tauri-drag-region><div class="seg" id="seg"><button data-tab="open" class="on">Open</button><button data-tab="stand">Stand</button><button data-tab="rem">Reminders</button></div></div>
+    <div class="bar" data-tauri-drag-region><div class="seg" id="seg"><button data-tab="open" class="on">Open</button><button data-tab="stand">Stand</button><button data-tab="rem">Reminders</button><button data-tab="prs" hidden>PR's</button></div></div>
     <div class="ibody" id="insp"></div>
   </aside>
 </body>

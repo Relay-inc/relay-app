@@ -51,5 +51,5 @@ in the macOS keychain (`vault-app.productive`) and never reaches the webview.
 cd src-tauri && cargo test
 ```
 
-The transcript tests read Laurent's own Claude Code transcripts and skip themselves on a machine
-without them.
+The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and
+skip themselves without it.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Permission tool for Claude Code sessions started by the Vault app (stdio MCP server).
 
-Claude calls `approve` for every tool call that needs Laurent, and for AskUserQuestion. The request
+Claude calls `approve` for every tool call that needs the user, and for AskUserQuestion. The request
 is written to $PENDING/<id>.json, the app shows it, and writes $PENDING/<id>.answer.json. We wait for
 that file, pass the decision back to Claude, and remove both. Files, not a socket: nothing listens on
 a port, and a waiting question survives an app restart.
@@ -42,7 +42,7 @@ def ask(args):
 
 TOOL = {
     "name": "approve",
-    "description": "Ask Laurent to approve a tool call or answer a question",
+    "description": "Ask the user to approve a tool call or answer a question",
     "inputSchema": {"type": "object", "required": ["tool_name", "input"], "properties": {
         "tool_name": {"type": "string"}, "input": {"type": "object"}, "tool_use_id": {"type": "string"}}},
 }
