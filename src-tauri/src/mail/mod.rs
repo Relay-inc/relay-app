@@ -358,7 +358,7 @@ fn quarantine(p: &Path) -> Result<(), String> {
 }
 /// A draft as it may be appended: at most 5 MB, parseable, CRLF line ends, exactly one From that is the account.
 /// Also returns the To and Cc addresses, so the app shows the real recipients whatever the model says.
-type Draft = (Vec<u8>, Vec<String>, Vec<String>);
+type Draft = (Vec<u8>, Vec<String>, Vec<String>, Vec<String>); // raw, to, cc, bcc
 fn draft(raw: &str, email: &str) -> Result<Draft, String> {
     if raw.len() > DRAFT_MAX { return Err("draft is larger than 5 MB".into()); }
     if raw.contains('\0') { return Err("draft contains a NUL byte".into()); }
@@ -368,8 +368,8 @@ fn draft(raw: &str, email: &str) -> Result<Draft, String> {
     let from: Vec<_> = m.from().map(|a| a.iter().filter_map(|x| x.address.as_deref()).collect()).unwrap_or_default();
     if froms != 1 || from.len() != 1 || !from[0].eq_ignore_ascii_case(email) { return Err(format!("From must be {email}, or pass the account the mail belongs to")); }
     let emails = |a: Option<&Address>| a.map(|a| a.iter().filter_map(|x| x.address.as_deref().map(str::to_string)).collect()).unwrap_or_default();
-    let (to, cc) = (emails(m.to()), emails(m.cc()));
-    Ok((crlf.into_bytes(), to, cc))
+    let (to, cc, bcc) = (emails(m.to()), emails(m.cc()), emails(m.bcc()));
+    Ok((crlf.into_bytes(), to, cc, bcc))
 }
 
 // ---------- public API
@@ -490,9 +490,9 @@ impl Mail {
                 Ok(json!({ "path": path }))
             }
             _ => {
-                let (raw, to, cc) = draft(args["raw"].as_str().ok_or("raw is required")?, email)?;
+                let (raw, to, cc, bcc) = draft(args["raw"].as_str().ok_or("raw is required")?, email)?;
                 let folder = run!(self, &acct, true, c => append(c, &raw))?;
-                Ok(json!({ "account": email, "folder": folder, "saved": true, "to": to, "cc": cc }))
+                Ok(json!({ "account": email, "folder": folder, "saved": true, "to": to, "cc": cc, "bcc": bcc }))
             }
         }
     }
@@ -570,10 +570,11 @@ mod tests {
     #[test]
     fn draft_from_check() {
         let ok = "From: Laurent <Laurent@WeAreAntenna.be>\nTo: x@y.be\nSubject: Re: hi\n\nBody\n";
-        let (raw, to, cc) = draft(ok, "laurent@weareantenna.be").unwrap();
+        let (raw, to, cc, _bcc) = draft(ok, "laurent@weareantenna.be").unwrap();
         assert_eq!(raw, ok.replace('\n', "\r\n").into_bytes());
         assert_eq!((to, cc), (vec!["x@y.be".to_string()], vec![]));
-        let (_, to, cc) = draft("From: laurent@weareantenna.be\nTo: A <a@x.be>, b@x.be\nCc: c@x.be\n\nb", "laurent@weareantenna.be").unwrap();
+        let (_, to, cc, bcc) = draft("From: laurent@weareantenna.be\nTo: A <a@x.be>, b@x.be\nCc: c@x.be\nBcc: d@x.be\n\nb", "laurent@weareantenna.be").unwrap();
+        assert_eq!(bcc, vec!["d@x.be".to_string()], "a hidden recipient shows in the app note too");
         assert_eq!((to, cc), (vec!["a@x.be".to_string(), "b@x.be".to_string()], vec!["c@x.be".to_string()]));
         for bad in [
             "From: someone@else.be\nSubject: x\n\nb",

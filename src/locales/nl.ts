@@ -264,6 +264,7 @@ export default {
   "note.mailStarted": "Over de mail van {from}: {subject}",
   "note.draftSaved": "Draft bewaard in {folder}: aan {to}",
   "note.draftCc": ", cc {cc}",
+  "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Inbox tonen",
   "mail.account": "Account:",
   "mail.default": "eerste account",

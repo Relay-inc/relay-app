@@ -22,22 +22,26 @@ CLAUDE = os.path.expanduser("~/.local/bin/claude")
 TOOLS = [{"name": n, "description": "Test tool, returns pong plus the text.",
           "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}} for n in ("ping", "gone")]
 
-def run(decision: str, tool: str = "ping", bash: bool = False, taint: bool = False) -> dict:
+def run(decision: str, tool: str = "ping", bash: bool = False, taint: bool = False, early: bool = False) -> dict:
     seen = {"tainted": [], "initialize": False, "tools/list": False, "call": False, "can_use_tool": False, "result": "", "tools": [], "key": None, "denied": ""}
     mcp = {"mcpServers": {"vaultmail": {"type": "sdk", "name": "vaultmail"}}}
     args = [CLAUDE, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
             "--permission-prompt-tool", "stdio", "--mcp-config", json.dumps(mcp), "--strict-mcp-config",
-            "--setting-sources", "", "--tools", "Bash" if bash or taint else "",
-            *(["--settings", json.dumps({"permissions": {"allow": ["Bash(git push*)"]}})] if taint else []), "--model", "haiku", "--no-session-persistence",
+            "--setting-sources", "", "--tools", "Bash" if bash or taint or early else "",
+            *(["--settings", json.dumps({"permissions": {"allow": ["Bash(git push*)"]}})] if taint or early else []), "--model", "haiku", "--no-session-persistence",
             # the same layout as lib.rs denied(): a glob, a Bash rule with a space inside one argv entry, then -n
-            "--disallowedTools", "mcp__vaultmail__go*", *([] if taint else ["Bash(git push*)"]), "Bash(himalaya*)", "-n", "pipe-check"]
+            "--disallowedTools", "mcp__vaultmail__go*", *([] if taint or early else ["Bash(git push*)"]), "Bash(himalaya*)", "-n", "pipe-check"]
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                          env=env, cwd=tempfile.mkdtemp(prefix="pipe-check-"))
     timer = threading.Timer(120, p.kill); timer.start()
     def send(o): p.stdin.write(json.dumps(o) + "\n"); p.stdin.flush()
     send({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": ["vaultmail"]}})
-    ask = ("First call the ping tool of the vaultmail server with text 'check'. Then run exactly this Bash command: git push --dry-run origin main. Report both results exactly." if taint else
+    if early:  # what spawn() sends for a chat about a mail: the taint right after init, before any message
+        send({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"deny": ["Bash(git push*)"]}}}})
+        send({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})
+    ask = ("Run exactly this Bash command: git push --dry-run origin main. Reply with exactly the error or output you got." if early else
+           "First call the ping tool of the vaultmail server with text 'check'. Then run exactly this Bash command: git push --dry-run origin main. Report both results exactly." if taint else
            "Run exactly this Bash command: git push --dry-run origin main. Reply with exactly the error or output you got." if bash else
            f"Call the {tool} tool of the vaultmail server with text 'check'. Reply with exactly the tool result, or with exactly the error you got.")
     send({"type": "user", "message": {"role": "user", "content": ask}})
@@ -96,6 +100,8 @@ def main():
     check("Bash(git push*) is denied without asking", b["denied"] and not b["can_use_tool"])
     t = run("allow", taint=True)
     check("the taint is accepted and takes away an allowed git push", t["call"] and t["tainted"].count("success") >= 3 and "git push" in t["denied"])
+    e = run("allow", early=True)
+    check("the taint sent at spawn, before any message, also holds", e["tainted"].count("success") >= 3 and "git push" in e["denied"])
     sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":

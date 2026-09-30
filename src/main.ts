@@ -336,8 +336,9 @@ function push(k: string, it: Item) { (convo[k] ||= []).push(it); }
 const queued: Record<string, number> = {};
 function onEvent(k: string, ev: any) {
   if (ev.type === "draft_saved") { // the real recipients, independent of what Claude writes about it
-    const cc: string[] = ev.cc || [];
-    push(k, { kind: "note", text: t("note.draftSaved", { folder: ev.folder, to: (ev.to || []).join(", ") }) + (cc.length ? t("note.draftCc", { cc: cc.join(", ") }) : "") });
+    const cc: string[] = ev.cc || [], bcc: string[] = ev.bcc || [];
+    push(k, { kind: "note", text: t("note.draftSaved", { folder: ev.folder, to: (ev.to || []).join(", ") }) + (cc.length ? t("note.draftCc", { cc: cc.join(", ") }) : "")
+      + (bcc.length ? t("note.draftBcc", { bcc: bcc.join(", ") }) : "") });
     if (k === sel) renderChat(); return;
   }
   if (ev.type === "assistant") {

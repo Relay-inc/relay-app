@@ -324,27 +324,41 @@ fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault:
 const DENIED: [&str; 2] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"];
 
 /// What a session loses once it holds mail text, a stranger's words that may try to steer it: pushing, PRs, gh
-/// api, Slack posts, calendar invites, agents, and every rule the user's settings allow without asking (deny beats
-/// allow). It also goes to default mode, so everything else asks first on a card. Sent over the pipe: at spawn for
-/// a chat about a mail, else right before the first mail tool answers (scripts/pipe-check.py proves both requests).
-fn taint(settings: &[Value]) -> [Value; 2] {
-    let mut deny: Vec<String> = ["Bash(git push*)", "Bash(gh pr create*)", "Bash(gh api*)", "Bash(gh gist*)", "Bash(launchctl*)",
+/// api and comments, Slack posts, calendar invites, agents, work handed to the cloud or to later, messages to other
+/// sessions, the skills whose own allowed-tools would skip the cards, and every rule the user's settings allow
+/// without asking (deny beats allow). It also goes to default mode, so everything else asks first on a card. Sent
+/// over the pipe: at spawn for a chat about a mail, else right before the first mail tool answers
+/// (scripts/pipe-check.py proves both). A settings file that does not parse costs Bash as a whole.
+/// ponytail: skills with a broad allowed-tools are named here, a new one needs adding.
+fn taint(settings: &[Value], all_read: bool) -> [Value; 2] {
+    let mut deny: Vec<String> = ["Bash(git push*)", "Bash(gh pr create*)", "Bash(gh pr comment*)", "Bash(gh api*)", "Bash(gh gist*)", "Bash(launchctl*)",
         "mcp__claude_ai_Slack__slack_send_message", "mcp__claude_ai_Slack__slack_schedule_message",
-        "mcp__claude_ai_Google_Calendar__create_event", "mcp__claude_ai_Google_Calendar__update_event"].map(String::from).to_vec();
+        "mcp__claude_ai_Google_Calendar__create_event", "mcp__claude_ai_Google_Calendar__update_event",
+        "RemoteTrigger", "CronCreate", "ScheduleWakeup", "SendMessage", "ShareOnboardingGuide", "DesignSync", "Workflow",
+        "Skill(skill:initcraftcms)", "Skill(skill:code-review:code-review)"].map(String::from).to_vec();
+    deny.extend(DENIED.map(String::from)); // the flag layer may not keep the CLI's own denies, so they go along
+    if !all_read { deny.push("Bash".into()); }
     deny.extend(settings.iter().flat_map(|s| s["permissions"]["allow"].as_array().into_iter().flatten())
         .filter_map(|r| r.as_str()).filter(|r| !r.starts_with("mcp__vaultmail")).map(String::from));
     deny.sort(); deny.dedup();
     [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"deny": deny}}}}),
      json!({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})]
 }
-/// The settings a session in the vault loads that can allow tools: the user's and the vault's, shared and local.
-fn allow_sources(vault: &str) -> Vec<Value> {
-    [format!("{}/.claude/settings.json", home()), format!("{}/.claude/settings.local.json", home()),
-     format!("{vault}/.claude/settings.json"), format!("{vault}/.claude/settings.local.json")]
-        .iter().filter_map(|f| fs::read_to_string(f).ok()).filter_map(|t| serde_json::from_str(&t).ok()).collect()
+/// The settings a session in the vault loads that can allow tools, the user's and the vault's, shared and local,
+/// and whether every one that exists parsed (Claude Code rewrites them, a half-written file gets one more try).
+fn allow_sources(vault: &str) -> (Vec<Value>, bool) {
+    let files = [format!("{}/.claude/settings.json", home()), format!("{}/.claude/settings.local.json", home()),
+                 format!("{vault}/.claude/settings.json"), format!("{vault}/.claude/settings.local.json")];
+    let (mut out, mut all) = (vec![], true);
+    for f in files.iter().filter(|f| PathBuf::from(f).is_file()) {
+        let read = || fs::read_to_string(f).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
+        match read().or_else(|| { std::thread::sleep(std::time::Duration::from_millis(100)); read() }) { Some(v) => out.push(v), None => all = false }
+    }
+    (out, all)
 }
 fn write_taint(p: &mut Proc, vault: &str) {
-    for m in taint(&allow_sources(vault)) { writeln!(p.stdin, "{m}").ok(); }
+    let (settings, all_read) = allow_sources(vault);
+    for m in taint(&settings, all_read) { writeln!(p.stdin, "{m}").ok(); }
     p.stdin.flush().ok();
     p.tainted = true;
 }
@@ -386,7 +400,12 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
             if ev["type"] == "control_request" { control(&a, &p, pid, &ev); continue; }
             if ev["type"] == "control_response" {
                 if ev["response"]["subtype"] == "error" {
-                    a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": format!("vaultmail: {}", ev["response"]["error"])}})).ok();
+                    let rid = ev["response"]["request_id"].as_str().unwrap_or("");
+                    // a session that holds mail text and could not be restricted does not go on
+                    if rid.starts_with("taint") {
+                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&p).filter(|x| x.child.id() == pid) { x.child.kill().ok(); }
+                    }
+                    a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": format!("vaultmail ({rid}): {}", ev["response"]["error"])}})).ok();
                 }
                 continue;
             }
@@ -448,7 +467,7 @@ fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
                 if name == "save_draft" && res["isError"] != true {
                     // the chat shows who the draft is really for, whatever Claude writes about it
                     let d: Value = serde_json::from_str(res["content"][0]["text"].as_str().unwrap_or("")).unwrap_or_default();
-                    app.emit("claude", json!({"project": key, "event": {"type": "draft_saved", "folder": d["folder"], "to": d["to"], "cc": d["cc"]}})).ok();
+                    app.emit("claude", json!({"project": key, "event": {"type": "draft_saved", "folder": d["folder"], "to": d["to"], "cc": d["cc"], "bcc": d["bcc"]}})).ok();
                 }
                 pipe_reply(&app, &key, pid, pipe_ok(rid, mail::rpc_result(id, res)));
             });
@@ -480,9 +499,10 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let opts = (model, effort);
     let mut procs = state.procs.lock().unwrap();
     // model and effort are start flags: a switch restarts the process on the same session
-    if procs.get(&project).is_some_and(|p| p.opts != opts) { if let Some(mut p) = procs.remove(&project) { p.child.kill().ok(); } }
+    let mut was_tainted = false;
+    if procs.get(&project).is_some_and(|p| p.opts != opts) { if let Some(mut p) = procs.remove(&project) { p.child.kill().ok(); was_tainted = p.tainted; } }
     if !procs.contains_key(&project) {
-        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref(), opts, mail.unwrap_or(false))?;
+        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref(), opts, mail.unwrap_or(false) || was_tainted)?;
         procs.insert(project.clone(), p);
     }
     let msg = json!({"type": "user", "message": {"role": "user", "content": content}});
@@ -1240,12 +1260,15 @@ mod github_tests {
 mod mail_tests {
     #[test]
     fn sessions_can_never_send_mail() {
-        assert_eq!(super::DENIED, ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"]);
         // a session with mail text loses the user's allow rules (deny beats allow) and goes to default mode
         let user = serde_json::json!({"permissions": {"allow": ["Bash(git push *)", "Bash(pandoc *)", "mcp__vaultmail__read", "mcp__pencil"]}});
-        let [rules, mode] = super::taint(&[user, serde_json::json!({"hooks": {}})]);
+        let [rules, mode] = super::taint(&[user.clone(), serde_json::json!({"hooks": {}})], true);
         let deny: Vec<&str> = rules["request"]["settings"]["permissions"]["deny"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-        for t in ["Bash(git push *)", "Bash(pandoc *)", "mcp__pencil", "Bash(git push*)", "Bash(gh api*)", "mcp__claude_ai_Google_Calendar__create_event"] { assert!(deny.contains(&t), "{t}"); }
+        for t in ["Bash(git push *)", "Bash(pandoc *)", "mcp__pencil", "Bash(git push*)", "Bash(gh api*)", "mcp__claude_ai_Google_Calendar__create_event",
+                  "mcp__claude_ai_Gmail__*", "Bash(himalaya*)", "RemoteTrigger", "SendMessage", "Skill(skill:initcraftcms)"] { assert!(deny.contains(&t), "{t}"); }
+        assert!(!deny.contains(&"Bash"), "Bash stays when every settings file parsed");
+        let [unread, _] = super::taint(&[user], false);
+        assert!(unread["request"]["settings"]["permissions"]["deny"].as_array().unwrap().contains(&serde_json::json!("Bash")), "an unreadable settings file costs Bash");
         assert!(!deny.iter().any(|d| d.starts_with("mcp__vaultmail")), "the mail tools themselves stay");
         assert_eq!((rules["request"]["subtype"].as_str(), mode["request"]["subtype"].as_str(), mode["request"]["mode"].as_str()),
                    (Some("apply_flag_settings"), Some("set_permission_mode"), Some("default")));

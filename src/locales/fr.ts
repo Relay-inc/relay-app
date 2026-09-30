@@ -264,6 +264,7 @@ export default {
   "note.mailStarted": "À propos du mail de {from} : {subject}",
   "note.draftSaved": "Brouillon enregistré dans {folder} : à {to}",
   "note.draftCc": ", cc {cc}",
+  "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Afficher la boîte de réception",
   "mail.account": "Compte :",
   "mail.default": "premier compte",

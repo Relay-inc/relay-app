@@ -263,6 +263,7 @@ const en = {
   "note.mailStarted": "About the mail from {from}: {subject}",
   "note.draftSaved": "Draft saved in {folder}: to {to}",
   "note.draftCc": ", cc {cc}",
+  "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Show the inbox",
   "mail.account": "Account:",
   "mail.default": "first account",

@@ -264,6 +264,7 @@ export default {
   "note.mailStarted": "Zur Mail von {from}: {subject}",
   "note.draftSaved": "Entwurf gespeichert in {folder}: an {to}",
   "note.draftCc": ", cc {cc}",
+  "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Posteingang anzeigen",
   "mail.account": "Konto:",
   "mail.default": "erstes Konto",
