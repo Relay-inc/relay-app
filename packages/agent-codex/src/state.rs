@@ -18,9 +18,12 @@ pub fn query(db: &Path, sql: &str) -> Option<Vec<Value>> {
 }
 fn quote(s: &str) -> String { format!("'{}'", s.replace('\'', "''")) }
 
-pub fn threads_sql(vault: &str) -> String {
-    format!("select id, rollout_path, title, preview, first_user_message, updated_at from threads where archived = 0 and (cwd = {} or cwd like {} escape '\\') order by updated_at desc limit 100",
-        quote(vault), quote(&format!("{}/%", vault.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_"))))
+/// The vault's threads, the newest first: in the folder or below it, as given or as its real path.
+pub fn threads_sql(vault: &str, real: &str) -> String {
+    let like = |d: &str| quote(&format!("{}/%", d.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")));
+    let mut w: Vec<String> = vec![];
+    for d in [vault, real].into_iter().filter(|d| !d.is_empty()) { w.push(format!("cwd = {}", quote(d))); w.push(format!("cwd like {} escape '\\'", like(d))); }
+    format!("select id, rollout_path, title, preview, first_user_message, updated_at from threads where archived = 0 and ({}) order by updated_at desc limit 100", w.join(" or "))
 }
 pub fn rollout_sql(sid: &str) -> String { format!("select rollout_path from threads where id = {}", quote(sid)) }
 
@@ -47,7 +50,8 @@ mod tests {
         assert_eq!(s[0], json!({"id": "019a0000-aaaa-7000-8000-000000000001", "sessionId": "019a0000-aaaa-7000-8000-000000000001",
             "name": "Inbox opruimen", "kind": "interactive", "status": "idle", "updatedAt": 1790755300000i64}));
         assert_eq!(s[1]["name"], "Wat staat er open?"); // no title: the first message
-        assert!(threads_sql("/Users/me/it's_v").contains("cwd = '/Users/me/it''s_v' or cwd like '/Users/me/it''s\\_v/%'"));
+        assert!(threads_sql("/Users/me/it's_v", "").contains("(cwd = '/Users/me/it''s_v' or cwd like '/Users/me/it''s\\_v/%' escape '\\')"));
+        assert!(threads_sql("/tmp/v", "/private/tmp/v").contains("or cwd = '/private/tmp/v' or"));
 
         // the real thing when sqlite3 is there: a database with the columns this version has
         let d = std::env::temp_dir().join(format!("vault-codex-state-{}.sqlite", std::process::id()));
@@ -58,7 +62,7 @@ mod tests {
             insert into threads values ('019a0000-dddd-7000-8000-000000000004', '/r/d.jsonl', 1, 40, '/vx', 'Elders', 0, '', '');
             insert into threads values ('019a0000-eeee-7000-8000-000000000005', '/r/e.jsonl', 1, 50, '/v', 'Weg', 1, '', '');").status();
         if made.is_ok_and(|s| s.success()) {
-            let s = sessions_of(&query(&d, &threads_sql("/v")).unwrap());
+            let s = sessions_of(&query(&d, &threads_sql("/v", "")).unwrap());
             assert_eq!(s.iter().map(|x| x["name"].as_str().unwrap()).collect::<Vec<_>>(), ["Drie", "Twee"]);
             assert_eq!(query(&d, &rollout_sql("019a0000-bbbb-7000-8000-000000000002")).unwrap()[0]["rollout_path"], "/r/b.jsonl");
             assert_eq!(query(&d, &rollout_sql("nope")).unwrap().len(), 0);

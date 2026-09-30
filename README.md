@@ -161,7 +161,7 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 
 ## Agent providers
 
-The conversations run on a coding-agent CLI: Claude Code now, others (Codex, OpenCode) as more packages of the same
+The conversations run on a coding-agent CLI: Claude Code or Codex, others (OpenCode) as more packages of the same
 kind. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
 [`packages/agent-core`](packages/agent-core/README.md). The app owns the processes, `sessions.json`, the pending folder,
 the settings and the commands; a provider builds its command line, turns its output into normalised events, reads its
@@ -170,6 +170,7 @@ own transcripts and logs, and reports its limits and tokens.
 | Agent | Package |
 |---|---|
 | Claude Code | [`packages/agent-claude`](packages/agent-claude/README.md) |
+| Codex | [`packages/agent-codex`](packages/agent-codex/README.md) |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
 registered in `PROVIDERS` in `src-tauri/src/agents.rs`:
@@ -187,7 +188,8 @@ registered in `PROVIDERS` in `src-tauri/src/agents.rs`:
 | `sessions`, `subagents`, `agent_log`, `terminal`, `stop_background`, `title` | Terminal and background sessions, subagents, "open in terminal" (`Terminal::Resume/New/Attach` → a shell command), the conversation title. All optional. |
 | `limits(env)`, `usage(env, since)` | Usage, below. |
 
-`env` is `Env { home, vault, path, bin, pending }`.
+`env` is `Env { home, vault, path, bin, pending, opts }`; `opts` is the provider's own settings object
+(`settings.agents.providers.<id>`, read with `env.opt(key)`).
 
 **Events** (`agent_core::Event`, JSON with `type` in snake_case), sent as the Tauri event `agent` with
 `{project, provider, event}`: `session {id}`, `text {text, delta}`, `thinking {text, delta}`, `tool_call {id, name, input}`,
@@ -213,12 +215,13 @@ per provider (today, this week, by model, the vault's conversations) and over al
 constrained window over all providers.
 
 **Webview**, the package's TypeScript (`src/index.ts`, default export): an `AgentProvider<Key>` from
-`@vault/agent-core` (`id`, `name`, `glyph`, `strings` in en/nl/fr/de, optional `modelName`), registered in `AGENTS` in
+`@vault/agent-core` (`id`, `name`, `glyph`, `strings` in en/nl/fr/de, optional `modelName` and `options`: selects shown
+in Settings › Agents and stored next to `on` and `bin`, the first choice the default), registered in `AGENTS` in
 `src/agents/index.ts`. Its strings are merged into the app's as `<id>.<key>`; the app looks up `limits.loading`,
 `off.<reason>`, each window's `label`, `tokens.reading` and `set.help`.
 
-**Settings** (Settings › Agents): `settings.agents = { default, providers: { <id>: { on, bin } } }`, Claude Code on by
-default. The composer shows an agent pick next to model and effort when more than one is on; a conversation keeps its
+**Settings** (Settings › Agents): `settings.agents = { default, providers: { <id>: { on, bin, …options } } }`, Claude Code
+on by default, the others off. The composer shows an agent pick next to model and effort when more than one is on; a conversation keeps its
 agent once it has a message. `sessions.json` maps a conversation key to a session id string (Claude Code, as before the
 providers, so old files and old builds keep working) or to `{provider, sid}`. Terminal keys are `t:<sid>` (Claude Code)
 or `t:<provider>:<sid>`.

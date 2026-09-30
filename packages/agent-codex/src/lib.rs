@@ -99,9 +99,11 @@ impl AgentProvider for Codex {
     /// The vault's Codex threads, from the thread index, else from the rollouts read for the usage.
     fn sessions(&self, env: &Env) -> Vec<Value> {
         if env.vault.is_empty() { return vec![]; }
-        if let Some(rows) = state::query(&codex_home(env.home).join("state_5.sqlite"), &state::threads_sql(env.vault)) { return state::sessions_of(&rows); }
+        // the index keeps the folder's real path
+        let real = std::fs::canonicalize(env.vault).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+        if let Some(rows) = state::query(&codex_home(env.home).join("state_5.sqlite"), &state::threads_sql(env.vault, &real)) { return state::sessions_of(&rows); }
         with_logs(env, usage::now_ms() - usage::KEEP_MS, |l| {
-            let mut m: Vec<&rollout::Meta> = l.meta.values().filter(|m| m.cwd == env.vault && agent_core::safe_id(&m.session)).collect();
+            let mut m: Vec<&rollout::Meta> = l.meta.values().filter(|m| rollout::in_vault(&m.cwd, env.vault) && agent_core::safe_id(&m.session)).collect();
             m.sort_by_key(|m| -m.updated);
             m.iter().map(|m| state::session(&m.session, &m.title, m.updated / 1000)).collect()
         })

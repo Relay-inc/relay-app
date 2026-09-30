@@ -121,7 +121,11 @@ pub struct Meta { pub session: String, pub cwd: String, pub model: String, pub u
 #[derive(Default)]
 pub struct Logs { pub vault: String, pub tail: Tail<Record>, pub meta: HashMap<PathBuf, Meta>, pub limits: Option<(i64, Value)> }
 
-fn in_vault(cwd: &str, vault: &str) -> bool { !vault.is_empty() && (cwd == vault || cwd.starts_with(&format!("{vault}/"))) }
+fn under(cwd: &str, dir: &str) -> bool { !dir.is_empty() && (cwd == dir || cwd.starts_with(&format!("{dir}/"))) }
+/// In the vault: rollouts keep the folder as given, the thread index its real path (/tmp is /private/tmp).
+pub fn in_vault(cwd: &str, vault: &str) -> bool {
+    under(cwd, vault) || std::fs::canonicalize(vault).is_ok_and(|v| under(cwd, &v.to_string_lossy()))
+}
 
 /// Whole new lines of one rollout as token records. token_count carries the thread's running total: one already
 /// counted (the same total again, as after a rate-limit-only update) is skipped.
@@ -153,8 +157,9 @@ pub fn parse_chunk(path: &Path, text: &str, seen: &mut HashSet<String>, meta: &m
                 let u = &info["last_token_usage"];
                 let n = |k: &str| u[k].as_u64().unwrap_or(0);
                 out.push(Record { at, model: if meta.model.is_empty() { "codex".into() } else { meta.model.clone() }, session: meta.session.clone(),
-                    vault: in_vault(&meta.cwd, vault), input: n("input_tokens").saturating_sub(n("cached_input_tokens")), output: n("output_tokens"),
-                    cache_read: n("cached_input_tokens"), cache_write: 0, cost: None });
+                    vault: in_vault(&meta.cwd, vault), output: n("output_tokens"), cache_read: n("cached_input_tokens"), cache_write: n("cache_write_input_tokens"),
+                    // input_tokens includes the cached ones
+                    input: n("input_tokens").saturating_sub(n("cached_input_tokens") + n("cache_write_input_tokens")), cost: None });
             }
             _ => {}
         }
@@ -280,6 +285,26 @@ mod tests {
         let mut other = Logs::default();
         other.refresh(&d, "/elsewhere", 0);
         assert!(other.tail.records().iter().all(|r| !r.vault));
+        std::fs::remove_dir_all(d).ok();
+    }
+
+    /// A rollout codex-cli 0.159.2 wrote (the one live run, trimmed: no instructions, ids or home folder).
+    #[test]
+    fn a_live_rollout() {
+        let d = tmp("live");
+        let p = d.join("2026/09/30/rollout-2026-09-30T11-37-25-01a0f39b-6f2e-7661-9201-994c88076205.jsonl");
+        std::fs::write(&p, include_str!("../tests/fixtures/rollout-live.jsonl")).unwrap();
+        let ev: Vec<Event> = history(&p, 0).0.into_iter().filter(|e| !matches!(e, Event::Time { .. })).collect();
+        assert_eq!(ev, [Event::User { text: "Reply with just the word ok. Do not run any commands.".into(), images: vec![] }, Event::Text { text: "ok".into(), delta: false }]);
+        let mut logs = Logs::default();
+        logs.refresh(&d, "/v", 0);
+        let r = logs.tail.records();
+        assert_eq!(r.len(), 1);
+        assert_eq!((r[0].input, r[0].cache_read, r[0].output, r[0].model.as_str(), r[0].vault), (2615, 12288, 5, "gpt-6.1-sol", true));
+        assert_eq!(r[0].session, "01a0f39b-6f2e-7661-9201-994c88076205");
+        let (at, snap) = logs.limits.clone().unwrap();
+        let Limits::On { windows, .. } = limits_of(&snap, at, at) else { panic!() };
+        assert_eq!(windows, [Window { id: "primary".into(), label: "limit.week".into(), name: None, pct: 6.0, resets: Some(iso(1791314902)) }]);
         std::fs::remove_dir_all(d).ok();
     }
 

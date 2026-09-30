@@ -41,7 +41,7 @@ pub fn respond(req: &Request, decision: &Value) -> Option<String> {
 fn tokens(b: &Value) -> TurnUsage {
     let n = |k: &str| b[k].as_u64().unwrap_or(0);
     // inputTokens includes the cached ones
-    TurnUsage { input: n("inputTokens").saturating_sub(n("cachedInputTokens")), output: n("outputTokens"),
+    TurnUsage { input: n("inputTokens").saturating_sub(n("cachedInputTokens") + n("cacheWriteInputTokens")), output: n("outputTokens"),
         cache_read: n("cachedInputTokens"), cache_write: n("cacheWriteInputTokens"), cost: None }
 }
 
@@ -113,6 +113,8 @@ impl State {
         let ask = m.get("id").filter(|_| m.get("params").is_some()).cloned();
         match method {
             "thread/started" => self.session(p["thread"]["id"].as_str(), &mut out),
+            // a resumed thread reports its old total first: the turn's tokens are what it adds
+            "turn/started" => self.base = self.total.clone(),
             "item/agentMessage/delta" => out.extend(self.piece(p["itemId"].as_str().unwrap_or(""), p["delta"].as_str().unwrap_or(""), false)),
             "item/reasoning/summaryTextDelta" | "item/reasoning/textDelta" =>
                 out.extend(self.piece(p["itemId"].as_str().unwrap_or(""), p["delta"].as_str().unwrap_or(""), true)),
@@ -171,7 +173,6 @@ impl State {
                 let ok = t["status"] == "completed";
                 let error = (!ok).then(|| t["error"]["message"].as_str().or(t["status"].as_str()).unwrap_or("").to_string());
                 let usage = self.total.as_ref().map(|tot| self.base.as_ref().map_or(tot.clone(), |b| minus(tot, b)));
-                self.base = self.total.clone();
                 self.streamed.clear();
                 out.push(Event::TurnEnd { ok, error, usage, duration_ms: t["durationMs"].as_u64() });
             }
@@ -221,6 +222,31 @@ mod tests {
         assert_eq!(it.next(), None); // deltas of other kinds, retried errors, unknown methods give nothing
         let live = LIVE_LIMITS.lock().unwrap().clone().unwrap();
         assert_eq!(live.1["primary"]["usedPercent"], 12.0);
+
+        // what codex-cli 0.159.2 wrote in the one live run (README: What ran live)
+        let mut st = State::default();
+        let ev: Vec<Event> = include_str!("../tests/fixtures/app-server-live.jsonl").lines().flat_map(|l| st.parse(l)).collect();
+        assert_eq!(ev[0], Event::Session { id: "01a0f39b-6f2e-7661-9201-994c88076205".into() });
+        let text: String = ev.iter().filter_map(|e| if let Event::Text { text, .. } = e { Some(text.as_str()) } else { None }).collect();
+        assert_eq!(text, "ok");
+        let Some(Event::TurnEnd { ok: true, error: None, usage: Some(u), .. }) = ev.last() else { panic!("{ev:?}") };
+        assert_eq!((u.input, u.cache_read, u.output), (14903 - 12288, 12288, 5));
+        assert!(!ev.iter().any(|e| matches!(e, Event::Error { .. } | Event::Permission { .. })));
+        assert_eq!(LIVE_LIMITS.lock().unwrap().clone().unwrap().1["primary"]["windowDurationMins"], 10080);
+
+        // the second live run: that thread resumed, a command asked for and declined
+        let mut st = State::default();
+        let ev: Vec<Event> = include_str!("../tests/fixtures/app-server-live-resume.jsonl").lines().flat_map(|l| st.parse(l)).collect();
+        assert_eq!(ev[0], Event::Session { id: "01a0f39b-6f2e-7661-9201-994c88076205".into() });
+        let call = ev.iter().position(|e| matches!(e, Event::ToolCall { name, .. } if name == "Bash")).unwrap();
+        let Event::Permission { request: r } = &ev[call + 1] else { panic!("{:?}", ev[call + 1]) };
+        assert!(r.tool_use_id.as_deref().is_some_and(|i| i.starts_with("v2:")) && r.input["command"].is_string());
+        assert!(matches!(&ev[call + 2], Event::ToolResult { error: true, .. }));
+        let Some(Event::TurnEnd { ok: true, usage: Some(u), .. }) = ev.last() else { panic!("{ev:?}") };
+        // the resumed thread's first total (the first run's 14908) is not this turn's
+        let last: Value = include_str!("../tests/fixtures/app-server-live-resume.jsonl").lines().filter(|l| l.contains("thread/tokenUsage/updated"))
+            .last().and_then(|l| serde_json::from_str(l).ok()).unwrap();
+        assert_eq!(u.input + u.cache_read + u.output, last["params"]["tokenUsage"]["total"]["totalTokens"].as_u64().unwrap() - 14908);
     }
 
     #[test]
