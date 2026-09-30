@@ -1,0 +1,4 @@
+{ "data": { "issues": { "nodes": [
+  { "id": "d0000000-0000-4000-8000-000000000003", "identifier": "ANT-14", "title": "Ship it", "priority": 3, "url": "https://linear.app/antenna/issue/ANT-14/ship-it",
+    "sortOrder": 3, "dueDate": null, "state": { "id": "s-review" }, "assignee": { "name": "Jan Peeters", "displayName": "" } }
+], "pageInfo": { "hasNextPage": false, "endCursor": "cursor-2" } } } }

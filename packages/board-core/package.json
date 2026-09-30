@@ -1,0 +1,10 @@
+{
+  "name": "@vault/board-core",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The board contract: BoardProvider and its shapes, and the i18n bridge to the app",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

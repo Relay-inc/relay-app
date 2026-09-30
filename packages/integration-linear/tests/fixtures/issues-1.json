@@ -1,0 +1,6 @@
+{ "data": { "issues": { "nodes": [
+  { "id": "d0000000-0000-4000-8000-000000000001", "identifier": "ANT-12", "title": "Fix the header", "priority": 1, "url": "https://linear.app/antenna/issue/ANT-12/fix-the-header",
+    "sortOrder": -42.5, "dueDate": "2026-10-03", "state": { "id": "s-todo" }, "assignee": { "name": "Kristof Example", "displayName": "kristof" } },
+  { "id": "d0000000-0000-4000-8000-000000000002", "identifier": "ANT-13", "title": "Write docs", "priority": 0, "url": "https://linear.app/antenna/issue/ANT-13/write-docs",
+    "sortOrder": 10, "dueDate": null, "state": { "id": "s-progress" }, "assignee": null }
+], "pageInfo": { "hasNextPage": true, "endCursor": "cursor-1" } } } }

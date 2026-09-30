@@ -1,0 +1,9 @@
+[package]
+name = "integration-productive"
+version = "0.1.0"
+edition = "2021"
+description = "One board integration on the backend: allowlist, headers, errors and secrets"
+
+[dependencies]
+board-core.workspace = true
+serde_json.workspace = true

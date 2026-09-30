@@ -1,0 +1,5 @@
+[
+  { "id": "600000000000000000000c02", "name": "Doing", "pos": 32768, "closed": false },
+  { "id": "600000000000000000000c01", "name": "To do", "pos": 16384, "closed": false },
+  { "id": "600000000000000000000c03", "name": "Done", "pos": 49152.5, "closed": false }
+]

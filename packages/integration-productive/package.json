@@ -1,0 +1,16 @@
+{
+  "name": "@vault/integration-productive",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Productive board: provider, response mapping, strings and glyph",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@vault/board-core": "workspace:*"
+  },
+  "peerDependencies": {
+    "@tauri-apps/api": "^2"
+  }
+}

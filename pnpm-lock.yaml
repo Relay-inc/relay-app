@@ -11,6 +11,18 @@ importers:
       '@tauri-apps/api':
         specifier: ^2
         version: 2.12.0
+      '@vault/board-core':
+        specifier: workspace:*
+        version: link:packages/board-core
+      '@vault/integration-linear':
+        specifier: workspace:*
+        version: link:packages/integration-linear
+      '@vault/integration-productive':
+        specifier: workspace:*
+        version: link:packages/integration-productive
+      '@vault/integration-trello':
+        specifier: workspace:*
+        version: link:packages/integration-trello
       marked:
         specifier: ^18.0.14
         version: 18.0.14
@@ -24,6 +36,29 @@ importers:
       vite:
         specifier: ^8.0.16
         version: 8.3.1
+
+  packages/board-core: {}
+
+  packages/integration-linear:
+    dependencies:
+      '@vault/board-core':
+        specifier: workspace:*
+        version: link:../board-core
+
+  packages/integration-productive:
+    dependencies:
+      '@tauri-apps/api':
+        specifier: ^2
+        version: 2.12.0
+      '@vault/board-core':
+        specifier: workspace:*
+        version: link:../board-core
+
+  packages/integration-trello:
+    dependencies:
+      '@vault/board-core':
+        specifier: workspace:*
+        version: link:../board-core
 
 packages:
 

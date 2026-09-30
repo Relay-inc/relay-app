@@ -293,6 +293,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "board-core"
+version = "0.1.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "brotli"
 version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1698,6 +1705,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4200d433cbd5178df7797c9c2e75b348b728e39631cf14520d1e2fc424201f4"
 dependencies = [
  "cfb",
+]
+
+[[package]]
+name = "integration-linear"
+version = "0.1.0"
+dependencies = [
+ "board-core",
+ "serde_json",
+]
+
+[[package]]
+name = "integration-productive"
+version = "0.1.0"
+dependencies = [
+ "board-core",
+ "serde_json",
+]
+
+[[package]]
+name = "integration-trello"
+version = "0.1.0"
+dependencies = [
+ "board-core",
+ "serde_json",
 ]
 
 [[package]]
@@ -4116,6 +4147,10 @@ dependencies = [
 name = "vault"
 version = "0.1.0"
 dependencies = [
+ "board-core",
+ "integration-linear",
+ "integration-productive",
+ "integration-trello",
  "serde",
  "serde_json",
  "sys-locale",
