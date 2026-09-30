@@ -8,7 +8,7 @@ export type Reminder = { id: string; date: string; days: number; project: string
 type H = { esc: (s: unknown) => string; md: (s: string) => string; projectLabel: (p: string | null) => string; glyph: (n: string) => string };
 
 const GROUPS: [Key, (d: number) => boolean][] = [
-  ["rem.late", d => d < 0], ["rem.today", d => d === 0], ["rem.week", d => d >= 1 && d <= 7], ["rem.later", d => d > 7],
+  ["rem.late", d => d < 0], ["rem.today", d => d === 0], ["rem.tomorrow", d => d === 1], ["rem.week", d => d >= 2 && d <= 7], ["rem.later", d => d > 7],
 ];
 
 function when(r: Reminder): string {
