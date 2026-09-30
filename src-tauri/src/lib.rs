@@ -11,14 +11,25 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod vault;
+
 // ponytail: paths are Laurent's own machine and this repo, fine for a personal app that is not distributed.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
-fn default_vault() -> String { format!("{}/Documents/LaurentMe/Obsidian - Context-management", home()) }
 fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
-/// The vault folder from the settings.
+/// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
-    st.settings.lock().unwrap()["vault"].as_str().map(String::from).unwrap_or_else(default_vault)
+    st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
+}
+/// The vault's mapping: what detection finds, with what the user set in settings.json on top.
+fn vault_map(s: &Value, v: &str) -> Value {
+    if v.is_empty() { return vault::merge(&json!({}), &json!({})); }
+    vault::merge(&vault::detect(v).1, &s["vaults"][v])
+}
+/// The configured vault with its mapping and which mapped paths exist.
+fn vault_of(s: &Value) -> Value {
+    let v = s["vault"].as_str().unwrap_or("");
+    vault::status(v, &vault_map(s, v))
 }
 /// Claude Code's transcript folder for the vault: the path with every non-alphanumeric char as `-`.
 fn transcripts(st: &App) -> String {
@@ -28,8 +39,8 @@ fn transcripts(st: &App) -> String {
 /// Settings as stored on disk, with the defaults filled in for missing or malformed keys.
 fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
-    if !v["vault"].is_string() { v["vault"] = json!(default_vault()); }
-    for k in ["projects", "overrides"] { if !v[k].is_object() { v[k] = json!({}); } }
+    if !v["vault"].is_string() { v["vault"] = json!(""); }
+    for k in ["projects", "overrides", "vaults"] { if !v[k].is_object() { v[k] = json!({}); } }
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     v
 }
@@ -70,8 +81,9 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("close_window", ["Close Window", "Sluit venster", "Fermer la fenêtre", "Fenster schließen"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
         "Pas de coffre : work-state.md introuvable dans {v}", "Kein Vault: work-state.md nicht gefunden in {v}"]),
-    ("err.no_brain", ["No vault: System/ or Resources/Meta/Claude/ not found", "Geen vault: System/ of Resources/Meta/Claude/ niet gevonden",
-        "Pas de coffre : System/ ou Resources/Meta/Claude/ introuvable", "Kein Vault: System/ oder Resources/Meta/Claude/ nicht gefunden"]),
+    ("err.no_script", ["No reminder script set for this vault (Settings > Vault)", "Geen herinneringsscript ingesteld voor deze vault (Instellingen > Vault)",
+        "Aucun script de rappels défini pour ce coffre (Réglages > Vault)", "Kein Erinnerungsskript für diesen Vault festgelegt (Einstellungen > Vault)"]),
+    ("err.no_vault_set", ["No vault chosen yet", "Nog geen vault gekozen", "Aucun coffre choisi", "Noch kein Vault gewählt"]),
     ("err.project", ["Invalid project '{v}': icon (max 4 characters) and label (max 60) must be text",
         "Ongeldig project '{v}': icon (max 4 tekens) en label (max 60) moeten tekst zijn",
         "Projet '{v}' invalide : l'icône (4 caractères max.) et le nom (60 max.) doivent être du texte",
@@ -140,18 +152,43 @@ fn login_path() -> String {
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
-/// The brain folder of a vault: System/ in the new layout, Resources/Meta/Claude/ in the old one.
-fn brain(vault: &str) -> Option<String> {
-    ["System", "Resources/Meta/Claude"].iter().map(|d| format!("{vault}/{d}"))
-        .find(|m| PathBuf::from(m).join("rules/core/work-state.md").is_file())
-}
-
+/// Everything the sidebar shows, read by snapshot.py from the mapped paths. Also returns the vault
+/// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
 fn snapshot(state: State<App>) -> Result<Value, String> {
+    let (st, lang) = { let s = state.settings.lock().unwrap(); (vault_of(&s), ui_lang_of(&s)) };
+    let v = st["vault"].as_str().unwrap();
+    if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
+    if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
+    let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
-        .env("PATH", &state.path).env("VAULT", vault(&state)).output().map_err(|e| e.to_string())?;
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("snapshot: {e}"))
+        .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
+        .env("VAULT_REMINDERS", path("reminders")).env("VAULT_NOTES", path("notes"))
+        .output().map_err(|e| e.to_string())?;
+    let mut snap: Value = serde_json::from_slice(&out.stdout).map_err(|e| {
+        // a crash leaves stdout empty: its last stderr line says more than "EOF while parsing"
+        let err = String::from_utf8_lossy(&out.stderr);
+        format!("snapshot: {}", err.lines().rev().find(|l| !l.trim().is_empty()).map_or(e.to_string(), str::to_string))
+    })?;
+    snap["vault"] = st;
+    Ok(snap)
 }
+
+/// The configured vault: path, mapping, found per path, ok.
+#[tauri::command]
+fn vault_status(state: State<App>) -> Value { vault_of(&state.settings.lock().unwrap()) }
+
+/// The mapping for a folder being set up: detected, with what settings.json already had for it.
+#[tauri::command]
+async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, String> {
+    let stored = state.settings.lock().unwrap()["vaults"].clone();
+    let (v, m) = vault::detect(&path);
+    Ok(vault::status(&v, &vault::merge(&m, &stored[&v])))
+}
+
+/// Found / missing for a mapping being edited, without detection.
+#[tauri::command]
+fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
 
 fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>) -> Result<Proc, String> {
     let mcp = json!({"mcpServers": {"vaultperm": {
@@ -499,11 +536,15 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 #[tauri::command]
 fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
     let s = norm(settings);
-    let v = s["vault"].as_str().unwrap();
+    let mut s = s;
     let lang = ui_lang_of(&s);
-    if brain(v).is_none() {
-        return Err(tr_v(lang, "err.no_vault", v));
-    }
+    // the vault by its real path, with its full mapping stored, so the file shows what the app uses
+    let v = vault::canon(s["vault"].as_str().unwrap());
+    if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
+    s["vault"] = json!(v);
+    let map = vault_map(&s, &v);
+    if vault::status(&v, &map)["ok"] != true { return Err(tr_v(lang, "err.no_vault", &v)); }
+    s["vaults"][&v] = map;
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
             ("icon", Some(t)) => t.chars().count() <= 4,
@@ -535,15 +576,26 @@ async fn pick_folder(app: AppHandle) -> Option<String> {
     app.dialog().file().blocking_pick_folder().and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
 }
 
+/// Native picker for one mapped path, a file or a folder, opening in `start` (the vault).
+#[tauri::command]
+async fn pick_path(app: AppHandle, folder: bool, start: Option<String>) -> Option<String> {
+    use tauri_plugin_dialog::DialogExt;
+    let mut d = app.dialog().file();
+    if let Some(s) = start.filter(|s| !s.is_empty()) { d = d.set_directory(s); }
+    let p = if folder { d.blocking_pick_folder() } else { d.blocking_pick_file() };
+    p.and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
+}
+
 /// Mark a reminder done, push it to a new date, or drop it, via the vault's own reminder script.
 #[tauri::command]
 fn reminder(state: State<App>, action: String, id: String, date: Option<String>) -> Result<String, String> {
     if !["done", "push", "drop"].contains(&action.as_str()) { return Err("unknown action".into()); }
     if id.len() != 8 || !id.chars().all(|c| c.is_ascii_hexdigit()) { return Err("bad id".into()); }
-    let v = vault(&state);
+    let (st, lang) = { let s = state.settings.lock().unwrap(); (vault_of(&s), ui_lang_of(&s)) };
+    if st["found"]["reminderScript"] != true { return Err(tr(lang, "err.no_script")); }
+    let v = st["vault"].as_str().unwrap().to_string();
     let mut cmd = Command::new("/usr/bin/python3");
-    let meta = brain(&v).ok_or_else(|| tr(ui_lang_of(&state.settings.lock().unwrap()), "err.no_brain"))?;
-    cmd.arg(format!("{meta}/scripts/reminder-digest.py")).args([&action, &id]);
+    cmd.arg(vault::resolve(&v, st["map"]["reminderScript"].as_str().unwrap())).args([&action, &id]);
     if action == "push" {
         let d = date.filter(|d| !d.is_empty() && d.len() <= 12 && d.chars().all(|c| c.is_ascii_alphanumeric() || "+/-".contains(c)))
             .ok_or("date required (max 12 chars of [0-9A-Za-z+/-])")?;
@@ -576,7 +628,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, reminder, ui_lang])
+        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -5,6 +5,7 @@ import { renderReminders, onRemindersEvent, urgency } from "./reminders";
 import "./reminders.css";
 import { initI18n, applyStatic, t, tn, currentLang } from "./i18n";
 import type { Key } from "./locales/en";
+import { onboard, type VaultStatus } from "./vault-setup";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -359,7 +360,8 @@ function renderNav() {
         + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">${t("nav.more", { n: cs.length - 5 })}</span></div>` : "");
   } return body; };
   const secs: Record<string, string> = { Algemeen: general };
-  for (const ctx of ["Antenna", "Meersman", "Personal"]) {
+  // the contexts in work-state order, whatever the vault calls them
+  for (const ctx of [...new Set<string>(snap.projects.map((p: any) => p.context))]) {
     const shown = ordered(ctx, snap.projects.filter((p: any) => p.context === ctx && match(p) && (q || open(p) || p.name === selP)));
     if (shown.length) secs[ctx] = `<div class="sec ${CTX[ctx]}" data-drop="${ctx}">${head(ctx, ctx.toUpperCase(), shown.length)}${collapsed[ctx] && !q ? "" : projRows(shown)}</div>`;
   }
@@ -376,7 +378,7 @@ function renderChat() {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("new").style.display = $("term").style.display = $("close").style.display = "none";
     $("ts").textContent = "";
-    $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel });
+    $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel }, snap.vault?.found);
     return;
   }
   if (sel === WAIT) {
@@ -769,7 +771,16 @@ window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code ==
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; renderInsp(); } });
 
 // ---------- polling: pending questions often, sessions and the vault now and then
-async function loadSnapshot() { try { snap = await invoke("snapshot"); render(); } catch (e) { console.error(e); } }
+// an error shows once, in a bar at the top, and goes when a later snapshot works again
+let snapErr = "";
+async function loadSnapshot() {
+  let err = "";
+  try { snap = await invoke("snapshot"); render(); } catch (e) { err = String(e); }
+  if (err === snapErr) return;
+  snapErr = err;
+  if (err) console.error(err);
+  $("snaperr").hidden = !err; $("snaperr").textContent = err ? t("vault.snapErr", { e: err }) : "";
+}
 async function pollPending() {
   const next: any[] = await invoke("pending");
   if (JSON.stringify(next.map(x => x.id)) !== JSON.stringify(pendingList.map(x => x.id))) { pendingList = next; render(); }
@@ -789,6 +800,9 @@ async function pollAgents() {
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
 try { settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; } catch { /* older backend */ }
 await initI18n(); applyStatic();
+// no vault yet, or the configured one is gone: choose one before anything reads it
+const vs = await invoke<VaultStatus>("vault_status");
+if (!vs.ok) { await onboard(vs); settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; }
 await loadSnapshot();
 const oldGens: Record<string, { title: string; at: number }> = store.get("gens", {});
 for (const k of await invoke<string[]>("chats")) {
