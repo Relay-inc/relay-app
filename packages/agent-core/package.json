@@ -1,0 +1,10 @@
+{
+  "name": "@vault/agent-core",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The agent contract: AgentProvider, the normalised events, permissions, usage, and the i18n bridge to the app",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

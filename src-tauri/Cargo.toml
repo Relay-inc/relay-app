@@ -33,3 +33,6 @@ integration-productive = { path = "../packages/integration-productive" }
 integration-trello = { path = "../packages/integration-trello" }
 integration-linear = { path = "../packages/integration-linear" }
 
+# the agent providers, registered in src/agents.rs (PROVIDERS)
+agent-core.workspace = true
+agent-claude = { path = "../packages/agent-claude" }

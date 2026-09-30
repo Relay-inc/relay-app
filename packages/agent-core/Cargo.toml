@@ -1,0 +1,9 @@
+[package]
+name = "agent-core"
+version = "0.1.0"
+edition = "2021"
+description = "The contract an agent provider (Claude Code, Codex, OpenCode, …) implements on the backend"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true

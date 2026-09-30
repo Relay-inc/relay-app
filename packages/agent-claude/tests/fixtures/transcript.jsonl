@@ -1,0 +1,7 @@
+{"type":"summary","summary":"x"}
+{"type":"user","timestamp":"2026-09-30T08:00:00.000Z","message":{"role":"user","content":"Wat staat er open?"}}
+{"type":"user","message":{"role":"user","content":"<command-name>/clear</command-name>"}}
+{"type":"user","message":{"role":"user","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AA=="}},{"type":"image","source":{"type":"url","url":"https://x"}},{"type":"text","text":"en dit"},{"type":"text","text":"<system-reminder>x</system-reminder>"}]}}
+{"type":"assistant","message":{"content":[{"type":"text","text":"Drie dingen."},{"type":"tool_use","id":"toolu_9","name":"Bash","input":{"command":"ls"}}]}}
+{"type":"user","timestamp":"2026-09-30T08:00:07.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"a"}]}}
+{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"side"}]}}

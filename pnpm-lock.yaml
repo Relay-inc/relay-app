@@ -11,6 +11,12 @@ importers:
       '@tauri-apps/api':
         specifier: ^2
         version: 2.12.0
+      '@vault/agent-claude':
+        specifier: workspace:*
+        version: link:packages/agent-claude
+      '@vault/agent-core':
+        specifier: workspace:*
+        version: link:packages/agent-core
       '@vault/board-core':
         specifier: workspace:*
         version: link:packages/board-core
@@ -36,6 +42,14 @@ importers:
       vite:
         specifier: ^8.0.16
         version: 8.3.1
+
+  packages/agent-claude:
+    dependencies:
+      '@vault/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+
+  packages/agent-core: {}
 
   packages/board-core: {}
 

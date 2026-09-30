@@ -1,6 +1,6 @@
-// Vault: a shell around the real Claude Code CLI. Every conversation is a `claude -p` process in
-// stream-json mode, in the vault, on the user's subscription (no API key). Permission requests and
-// Claude's questions come in through perm_server.py as files in the pending folder.
+// Vault: a shell around real coding-agent CLIs (Claude Code, and more behind the agent-provider contract in
+// packages/agent-core). Every conversation is a process of its provider, in the vault, on the user's own
+// login (no API key). Permission requests and questions come in as files in the pending folder.
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -10,21 +10,17 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
+use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
+mod agents;
 mod providers;
 mod reminders;
 mod tray;
-mod usage;
 mod vault;
 
-// ponytail: REPO and the claude binary are fixed, fine as long as the app runs from its own checkout.
+// ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
-fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
-/// The vault folder from the settings, "" before one is chosen.
-fn vault(st: &App) -> String {
-    st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
-}
 /// The vault's mapping: the one stored in settings.json, or what detection finds for a vault without one.
 /// set_settings always stores the full mapping, so detection (a folder scan) only runs before that.
 fn vault_map(s: &Value, v: &str) -> Value {
@@ -57,19 +53,13 @@ fn brain(vault: &str) -> Option<String> {
     ["System", "Resources/Meta/Claude"].iter().map(|d| format!("{vault}/{d}"))
         .find(|m| PathBuf::from(m).join("rules/core/work-state.md").is_file())
 }
-/// Claude Code's transcript folder for the vault: the path with every non-alphanumeric char as `-`.
-fn transcripts(st: &App) -> String {
-    let v = vault(st);
-    if v.is_empty() { return String::new(); } // no vault: never fall back to ~/.claude/projects itself
-    let slug: String = v.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
-    format!("{}/.claude/projects/{slug}", home())
-}
 /// Settings as stored on disk, with the defaults filled in for missing or malformed keys.
 fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(""); }
     for k in ["projects", "overrides", "vaults", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
     providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
+    agents::migrate(&mut v);    // agents.default and agents.providers.<id>: on, bin
     if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
     if !v["mail"]["on"].is_boolean() { v["mail"]["on"] = json!(false); }
@@ -168,6 +158,11 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
     ("err.mail_account", ["Mail: invalid account name", "Mail: ongeldige accountnaam", "Mail : nom de compte invalide", "Mail: ungültiger Kontoname"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
+    ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
+    ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
+    ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
+    ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
+    ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
     let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
@@ -217,22 +212,14 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
     Menu::with_items(h, &[&app, &chat, &edit, &window])
 }
 
-struct Proc { child: Child, stdin: ChildStdin, opts: (String, String) } // opts: the --model and --effort it runs with
+struct Proc { child: Child, stdin: ChildStdin, opts: (String, String), provider: &'static str } // opts: the model and effort it runs with
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
-    sids: Mutex<HashMap<String, String>>, // project -> session id, persisted
-    path: String,                          // login-shell PATH, so Claude's tools find gh, himalaya, node
-    settings: Mutex<Value>,                // settings.json: vault, projects, overrides
-    subs: Mutex<SubCache>,
-}
-
-/// Subagent rows per agent file (reparsed only when mtime or size changes), and per parent session
-/// the byte offset read so far plus the last task-notification time per agent id.
-#[derive(Default)]
-struct SubCache {
-    files: HashMap<PathBuf, (std::time::SystemTime, u64, Value)>,
-    notes: HashMap<String, (u64, HashMap<String, String>)>,
+    sids: Mutex<HashMap<String, agents::Sess>>, // conversation key -> provider and session id, persisted
+    path: String,                          // login-shell PATH, so the agent's tools find gh, himalaya, node
+    settings: Mutex<Value>,                // settings.json: vault, projects, overrides, agents
+    limits: Mutex<HashMap<String, (i64, Value)>>, // per provider: its last limits answer and when
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -242,8 +229,8 @@ fn data_dir(app: &AppHandle) -> PathBuf {
 }
 fn pending_dir(app: &AppHandle) -> PathBuf { data_dir(app).join("pending") }
 
-fn save_sids(app: &AppHandle, sids: &HashMap<String, String>) {
-    fs::write(data_dir(app).join("sessions.json"), serde_json::to_string_pretty(sids).unwrap()).ok();
+fn save_sids(app: &AppHandle, sids: &HashMap<String, agents::Sess>) {
+    fs::write(data_dir(app).join("sessions.json"), agents::save_sessions(sids)).ok();
 }
 
 fn login_path() -> String {
@@ -310,81 +297,119 @@ async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, Stri
 #[tauri::command]
 fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
 
-fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>, opts: (String, String)) -> Result<Proc, String> {
-    let mcp = json!({"mcpServers": {"vaultperm": {
-        "command": "/usr/bin/python3", "args": [format!("{REPO}/perm_server.py")],
-        "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
+// ---------- Agent providers (agents.rs, packages/agent-*): the app owns the processes, sessions.json and the
+// pending folder; a provider builds the command, turns its output into agent_core::Event, reads its own logs.
+
+/// A provider's Env, owned, so it can go to a blocking thread.
+struct EnvBuf { home: String, vault: String, path: String, bin: String, pending: PathBuf }
+impl EnvBuf {
+    fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending } }
+}
+fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
+    let s = st.settings.lock().unwrap();
+    EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home()), pending: pending_dir(app) }
+}
+/// A conversation's provider: its session's, else the one asked for when switched on, else the default.
+fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentProvider {
+    if let Some(s) = st.sids.lock().unwrap().get(key) { return agents::get_or_first(Some(&s.provider)); }
+    let s = st.settings.lock().unwrap();
+    asked.and_then(|a| agents::enabled(&s).into_iter().find(|p| p.id() == a)).unwrap_or_else(|| agents::get_or_first(Some(&agents::default_id(&s))))
+}
+/// Run a shell command in a new iTerm window.
+fn iterm(cmd: &str) -> Result<(), String> {
+    let script = format!(
+        "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
+        serde_json::to_string(cmd).unwrap());
+    Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>) -> Result<Proc, String> {
     let dir = need_vault(state)?;
-    let mut cmd = Command::new(claude_bin());
-    cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-              "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-        .arg(mcp.to_string()).args(["-n", name]);
-    if !opts.0.is_empty() { cmd.args(["--model", &opts.0]); }
-    if !opts.1.is_empty() { cmd.args(["--effort", &opts.1]); }
-    if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
-    // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
-    else if let Some(f) = fork.filter(|f| f.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) { cmd.args(["--resume", f, "--fork-session"]); }
-    cmd.current_dir(dir).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
-        .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for the user
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = cmd.spawn().map_err(|e| format!("claude start: {e}"))?;
+    let eb = env_of(app, state, p);
+    let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
+    let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
+    let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
+    let mut cmd = p.command(&eb.env(), &l)?;
+    cmd.current_dir(dir).env("PATH", &state.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = cmd.spawn().map_err(|e| format!("{} start: {e}", p.id()))?;
     let stdin = child.stdin.take().unwrap();
     let (stdout, stderr) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
 
-    let (a, p, pid) = (app.clone(), project.to_string(), child.id());
+    let (a, k, pid, id, pend, mut parse) = (app.clone(), project.to_string(), child.id(), p.id(), eb.pending.clone(), p.parser());
     std::thread::spawn(move || {
+        let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
-            let Ok(ev) = serde_json::from_str::<Value>(&line) else { continue };
-            if ev["type"] == "system" && ev["subtype"] == "init" {
-                if let Some(sid) = ev["session_id"].as_str() {
-                    let st = a.state::<App>();
-                    let mut sids = st.sids.lock().unwrap();
-                    sids.insert(p.clone(), sid.to_string());
-                    save_sids(&a, &sids);
+            for ev in parse(&line) {
+                match &ev {
+                    Event::Session { id: sid } => {
+                        let st = a.state::<App>();
+                        let mut sids = st.sids.lock().unwrap();
+                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone() });
+                        save_sids(&a, &sids);
+                    }
+                    // raised in the provider's own protocol: a card like any other, answered through respond()
+                    Event::Permission { request } => {
+                        let mut r = request.clone();
+                        (r.project, r.provider, r.relay) = (k.clone(), id.into(), true);
+                        pending::write(&pend, &r).ok();
+                    }
+                    _ => {}
                 }
+                emit(serde_json::to_value(&ev).unwrap_or_default());
             }
-            a.emit("claude", json!({"project": p, "event": ev})).ok();
         }
         // a process replaced for a model or effort switch exits quietly, its successor keeps the slot
         {
             let st = a.state::<App>();
             let mut procs = st.procs.lock().unwrap();
-            if procs.get(&p).is_some_and(|x| x.child.id() != pid) { return; }
-            procs.remove(&p);
+            if procs.get(&k).is_some_and(|x| x.child.id() != pid) { return; }
+            procs.remove(&k);
         }
-        a.emit("claude", json!({"project": p, "event": {"type": "exit"}})).ok();
+        emit(json!({"type": "exit"}));
     });
-    let (a, p) = (app.clone(), project.to_string());
+    let (a, k) = (app.clone(), project.to_string());
     std::thread::spawn(move || {
         let err: Vec<String> = BufReader::new(stderr).lines().map_while(Result::ok).collect();
-        if !err.is_empty() { a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": err.join("\n")}})).ok(); }
+        if !err.is_empty() { a.emit("agent", json!({"project": k, "provider": id, "event": {"type": "stderr", "text": err.join("\n")}})).ok(); }
     });
-    Ok(Proc { child, stdin, opts })
+    Ok(Proc { child, stdin, opts, provider: p.id() })
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>) -> Result<(), String> {
-    // pasted images go as base64 image blocks before the text, the shape stream-json accepts
-    let mut content: Vec<Value> = images.unwrap_or_default().into_iter()
-        .filter(|i| ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&i["media_type"].as_str().unwrap_or("")) && i["data"].is_string())
-        .map(|i| json!({"type": "image", "source": {"type": "base64", "media_type": i["media_type"], "data": i["data"]}})).collect();
-    if content.is_empty() && text.trim().is_empty() { return Err(tr(ui_lang_of(&state.settings.lock().unwrap()), "err.empty")); }
-    if !text.is_empty() { content.push(json!({"type": "text", "text": text})); }
-    // empty = the CLI default from settings. Only aliases and model ids, never a stray flag
-    let model = model.filter(|m| m.chars().all(|c| c.is_ascii_alphanumeric() || "-.[]".contains(c))).unwrap_or_default();
-    let effort = effort.filter(|e| ["low", "medium", "high", "xhigh", "max"].contains(&e.as_str())).unwrap_or_default();
+        model: Option<String>, effort: Option<String>, provider: Option<String>) -> Result<(), String> {
+    let p = provider_of(&state, &project, provider.as_deref());
+    // pasted images, only the types the webview allows, for a provider that takes them
+    let images: Vec<Image> = if !p.caps().images { vec![] } else {
+        images.unwrap_or_default().into_iter().filter_map(|i| Some(Image { media_type: i["media_type"].as_str()?.into(), data: i["data"].as_str()?.into() }))
+            .filter(|i| IMAGE_TYPES.contains(&i.media_type.as_str())).collect()
+    };
+    if images.is_empty() && text.trim().is_empty() { return Err(tr(ui_lang_of(&state.settings.lock().unwrap()), "err.empty")); }
+    let turn = Turn { text, images };
+    // empty = the CLI default from its settings. Only aliases and model ids, never a stray flag
+    let model = model.filter(|m| agent_core::safe_model(m)).unwrap_or_default();
+    let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
     let opts = (model, effort);
+    let name = name.unwrap_or_else(|| project.clone());
     let mut procs = state.procs.lock().unwrap();
-    // model and effort are start flags: a switch restarts the process on the same session
-    if procs.get(&project).is_some_and(|p| p.opts != opts) { if let Some(mut p) = procs.remove(&project) { p.child.kill().ok(); } }
-    if !procs.contains_key(&project) {
-        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref(), opts)?;
-        procs.insert(project.clone(), p);
+    if !p.caps().persistent {
+        // one process per turn: the next message waits for this one
+        if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn))?;
+        procs.insert(project, x);
+        return Ok(());
     }
-    let msg = json!({"type": "user", "message": {"role": "user", "content": content}});
-    let p = procs.get_mut(&project).unwrap();
-    writeln!(p.stdin, "{msg}").and_then(|_| p.stdin.flush()).map_err(|e| e.to_string())
+    // model and effort are start flags: a switch restarts the process on the same session
+    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id()) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); } }
+    if !procs.contains_key(&project) {
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None)?;
+        procs.insert(project.clone(), x);
+    }
+    let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
+    let x = procs.get_mut(&project).unwrap();
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -392,30 +417,25 @@ fn stop(state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
 }
 
-/// A short title for a new conversation, the way the terminal gets its ai-title: one Haiku call on the
-/// subscription, outside the vault, without settings, tools, MCP or a transcript. Async, so the ~5 s wait
-/// never blocks the window.
+/// A short title for a new conversation, from its provider or else the first switched-on one that can.
+/// Async, so the wait (~5 s for Claude) never blocks the window.
 #[tauri::command]
-async fn ai_title(state: State<'_, App>, text: String) -> Result<String, String> {
-    let text: String = text.chars().take(2000).collect();
-    let out = Command::new(claude_bin())
-        .args(["-p", "--model", "haiku", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "",
-               "--system-prompt", "Geef een korte titel (2 tot 5 woorden, in de taal van het bericht, geen aanhalingstekens, geen punt) voor een gesprek dat met dit bericht begint. Antwoord enkel met de titel."])
-        .arg(text).current_dir(std::env::temp_dir()).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
-        .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
-    let t = String::from_utf8_lossy(&out.stdout);
-    let t: String = t.lines().next().unwrap_or("").trim().trim_matches(|c| c == '"' || c == '\'' || c == '.').chars().take(60).collect();
-    if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider: Option<String>) -> Result<String, String> {
+    let p = {
+        let on = agents::enabled(&state.settings.lock().unwrap());
+        provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().title)).or_else(|| on.iter().copied().find(|p| p.caps().title))
+    };
+    let p = p.ok_or_else(|| trc("err.no_agent"))?;
+    let eb = env_of(&app, &state, p);
+    tauri::async_runtime::spawn_blocking(move || p.title(&eb.env(), &text)).await.map_err(|e| e.to_string())?
 }
 
-/// Past messages of a project's conversation, read from the same transcript the terminal uses.
+/// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
 #[tauri::command]
-fn history(state: State<App>, project: String) -> Vec<Value> {
-    let Some(sid) = state.sids.lock().unwrap().get(&project).cloned() else { return vec![] };
-    let Ok(raw) = fs::read_to_string(format!("{}/{sid}.jsonl", transcripts(&state))) else { return vec![] };
-    raw.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
-        .map(|e| json!({"type": e["type"], "message": e["message"]})).collect()
+fn history(app: AppHandle, state: State<App>, project: String) -> Value {
+    let Some(s) = state.sids.lock().unwrap().get(&project).cloned() else { return json!([]) };
+    let p = agents::get_or_first(Some(&s.provider));
+    json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0)
 }
 
 /// "Nieuw gesprek": stop the process and forget the session, the next message starts fresh.
@@ -438,148 +458,44 @@ fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Res
     Ok(())
 }
 
-/// Every conversation key the app has a session for (projects and general chats).
+/// Every conversation key the app has a session for (projects and general chats), with its provider.
 #[tauri::command]
 fn chats(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().keys().cloned().collect() }
+/// The provider per conversation key, for the composer's pick.
+#[tauri::command]
+fn chat_providers(state: State<App>) -> HashMap<String, String> { state.sids.lock().unwrap().iter().map(|(k, s)| (k.clone(), s.provider.clone())).collect() }
 
 /// Session ids of the app's own conversations, so the sidebar does not list them twice.
 #[tauri::command]
-fn app_sids(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().values().cloned().collect() }
-/// Which session each app conversation resumes, so the page can follow a turn it gets no events from.
+fn app_sids(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().values().map(|s| s.sid.clone()).collect() }
+/// Which provider and session each app conversation resumes, so the page can follow a turn it gets no events from.
 #[tauri::command]
-fn app_sessions(state: State<App>) -> HashMap<String, String> { state.sids.lock().unwrap().clone() }
+fn app_sessions(state: State<App>) -> Value {
+    state.sids.lock().unwrap().iter().map(|(k, s)| (k.clone(), json!({"provider": s.provider, "sid": s.sid}))).collect()
+}
 
-/// Read-only history of any session in the vault, e.g. one that is open in the terminal.
+/// Read-only history of any session in the vault, e.g. one that is open in the terminal, from byte offset `from`.
 #[tauri::command]
-fn history_sid(state: State<App>, sid: String, from: Option<u64>) -> Value {
-    use std::io::{Read, Seek, SeekFrom};
-    if !sid.chars().all(|c| c.is_ascii_hexdigit() || c == '-') { return json!({"items": [], "next": 0}); }
-    // transcripts only grow at the end: read from the byte offset of the previous call, up to the last full line
-    let Ok(mut f) = fs::File::open(format!("{}/{sid}.jsonl", transcripts(&state))) else { return json!({"items": [], "next": 0}) };
-    let start = from.unwrap_or(0);
-    if f.seek(SeekFrom::Start(start)).is_err() { return json!({"items": [], "next": start}); }
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf).ok();
-    let end = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0);
-    let items: Vec<Value> = String::from_utf8_lossy(&buf[..end]).lines()
-        .filter_map(|l| serde_json::from_str::<Value>(l).ok())
-        .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
-        .map(|e| json!({"type": e["type"], "message": e["message"], "at": e["timestamp"]})).collect();
-    json!({"items": items, "next": start + end as u64})
+fn history_sid(app: AppHandle, state: State<App>, sid: String, from: Option<u64>, provider: Option<String>) -> Value {
+    let p = agents::get_or_first(provider.as_deref());
+    if !p.valid_session(&sid) { return json!({"items": [], "next": 0}); }
+    let (items, next) = p.history(&env_of(&app, &state, p).env(), &sid, from.unwrap_or(0));
+    json!({"items": items, "next": next})
 }
 
-/// Complete JSON lines from the last `n` bytes of a file, the first cut line dropped.
-fn tail_lines(path: &std::path::Path, n: u64) -> (Vec<Value>, bool) {
-    use std::io::{Read, Seek, SeekFrom};
-    let Ok(mut f) = fs::File::open(path) else { return (vec![], true) };
-    let start = f.metadata().map(|m| m.len()).unwrap_or(0).saturating_sub(n);
-    f.seek(SeekFrom::Start(start)).ok();
-    let mut buf = Vec::new();
-    f.read_to_end(&mut buf).ok();
-    let s = String::from_utf8_lossy(&buf);
-    let rows = s.lines().skip(if start > 0 { 1 } else { 0 }).filter_map(|l| serde_json::from_str(l).ok()).collect();
-    (rows, start == 0)
-}
-
-/// One subagent from its transcript tail and meta file. `ended`: the last message is Claude's and
-/// its turn stopped for a reason other than a tool call, so the agent handed back.
-fn agent_row(path: &std::path::Path) -> Value {
-    let id = path.file_stem().unwrap_or_default().to_string_lossy().trim_start_matches("agent-").to_string();
-    let meta: Value = fs::read_to_string(path.with_extension("meta.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(json!({}));
-    let mut first = String::new();
-    fs::File::open(path).map(|f| BufReader::new(f).read_line(&mut first)).ok();
-    let started = serde_json::from_str::<Value>(&first).ok().map(|e| e["timestamp"].clone()).unwrap_or(Value::Null);
-    let mut row = json!({"id": id, "description": meta["description"], "agentType": meta["agentType"], "model": meta["model"],
-        "started_at": started, "last_at": started, "ended": false});
-    // widen the window until the last user or assistant line and the last visible step are in it
-    for n in [64u64 << 10, 1 << 20, 8 << 20] {
-        let (ev, whole) = tail_lines(path, n);
-        let msgs: Vec<&Value> = ev.iter().filter(|e| e["type"] == "user" || e["type"] == "assistant").collect();
-        if let Some(last) = msgs.last() {
-            row["last_at"] = last["timestamp"].clone();
-            let stop = last["message"]["stop_reason"].as_str();
-            row["ended"] = json!(last["type"] == "assistant" && stop.is_some_and(|s| s != "tool_use"));
-        }
-        let step = msgs.iter().rev().filter(|e| e["type"] == "assistant")
-            .flat_map(|e| e["message"]["content"].as_array().into_iter().flatten().rev())
-            .find(|c| c["type"] == "tool_use" || (c["type"] == "text" && c["text"].as_str().is_some_and(|t| !t.trim().is_empty())));
-        if let Some(c) = step {
-            if c["type"] == "tool_use" {
-                // only the small fields the tool line needs, never a file's content
-                let input: serde_json::Map<String, Value> = ["file_path", "command", "pattern", "query", "url", "description", "skill", "subagent_type"].iter()
-                    .filter_map(|k| c["input"][*k].as_str().map(|v| (k.to_string(), json!(v.chars().take(120).collect::<String>())))).collect();
-                row["tool"] = c["name"].clone();
-                row["input"] = Value::Object(input);
-            } else { row["text"] = json!(c["text"].as_str().unwrap_or("").trim().chars().take(80).collect::<String>()); }
-        }
-        if (step.is_some() && !msgs.is_empty()) || whole { break; }
-    }
-    row
-}
-
-/// Last task-notification per agent id in a parent transcript, read incrementally from the saved offset.
-fn notifications<'a>(dir: &str, sid: &str, notes: &'a mut HashMap<String, (u64, HashMap<String, String>)>) -> &'a HashMap<String, String> {
-    use std::io::{Read, Seek, SeekFrom};
-    let e = notes.entry(sid.to_string()).or_default();
-    if let Ok(mut f) = fs::File::open(format!("{dir}/{sid}.jsonl")) {
-        if f.metadata().map(|m| m.len()).unwrap_or(0) < e.0 { *e = Default::default(); }
-        let mut buf = Vec::new();
-        if f.seek(SeekFrom::Start(e.0)).is_ok() && f.read_to_end(&mut buf).is_ok() {
-            let end = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0);
-            for l in String::from_utf8_lossy(&buf[..end]).lines().filter(|l| l.contains("\"queue-operation\"") && l.contains("<task-id>")) {
-                let Ok(v) = serde_json::from_str::<Value>(l) else { continue };
-                let c = v["content"].as_str().unwrap_or("");
-                if v["operation"] != "enqueue" || c.contains("<status>running</status>") { continue; }
-                let Some(id) = c.split("<task-id>").nth(1).and_then(|x| x.split('<').next()) else { continue };
-                let ts = v["timestamp"].as_str().unwrap_or("").to_string();
-                let cur = e.1.entry(id.to_string()).or_default();
-                if ts > *cur { *cur = ts; }
-            }
-            e.0 += end as u64;
-        }
-    }
-    &e.1
-}
-
-/// The subagents of one session. Running unless the agent handed back, the parent got a notification
-/// (completed, failed, killed) after its last line, or its file has been silent for 15 minutes.
-fn subagents_of(dir: &str, sid: &str, cache: &mut SubCache) -> Vec<Value> {
-    let Ok(rd) = fs::read_dir(format!("{dir}/{sid}/subagents")) else { return vec![] };
-    let notes = notifications(dir, sid, &mut cache.notes).clone();
-    let now = std::time::SystemTime::now();
-    let mut rows: Vec<Value> = rd.flatten().map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "jsonl") && p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("agent-")))
-        .filter_map(|p| {
-            let m = p.metadata().ok()?;
-            let (mt, len) = (m.modified().ok()?, m.len());
-            let mut row = match cache.files.get(&p) {
-                Some((a, b, r)) if *a == mt && *b == len => r.clone(),
-                _ => { let r = agent_row(&p); cache.files.insert(p.clone(), (mt, len, r.clone())); r }
-            };
-            let last = row["last_at"].as_str().unwrap_or("").to_string();
-            let noted = row["id"].as_str().and_then(|id| notes.get(id)).is_some_and(|t| *t >= last);
-            let stale = now.duration_since(mt).map_or(false, |d| d.as_secs() > 900);
-            row["running"] = json!(!(row["ended"] == true || noted || stale));
-            Some(row)
-        }).collect();
-    rows.sort_by(|a, b| a["started_at"].as_str().cmp(&b["started_at"].as_str()));
-    rows
-}
-
-/// The session id behind a conversation key: `t:<sid>` for a terminal session, else the app's own.
-fn sid_of(state: &App, key: &str) -> Option<String> {
-    key.strip_prefix("t:").map(String::from).or_else(|| state.sids.lock().unwrap().get(key).cloned())
-        .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
+/// The provider and session id behind a conversation key: `t:…` for a terminal session, else the app's own.
+fn sid_of(state: &App, key: &str) -> Option<(&'static dyn AgentProvider, String)> {
+    agents::term_key(key).or_else(|| state.sids.lock().unwrap().get(key).map(|s| (agents::get_or_first(Some(&s.provider)), s.sid.clone())))
+        .filter(|(p, s)| p.valid_session(s))
 }
 
 /// Subagents per conversation key, only for keys that ever spawned one.
 #[tauri::command]
-fn subagents(state: State<App>, keys: Vec<String>) -> Value {
-    let dir = transcripts(&state);
+fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
     let mut out = serde_json::Map::new();
     for k in keys {
-        let Some(sid) = sid_of(&state, &k) else { continue };
-        let list = subagents_of(&dir, &sid, &mut state.subs.lock().unwrap());
+        let Some((p, sid)) = sid_of(&state, &k).filter(|(p, _)| p.caps().subagents) else { continue };
+        let list = p.subagents(&env_of(&app, &state, p).env(), &sid);
         if !list.is_empty() { out.insert(k, json!(list)); }
     }
     Value::Object(out)
@@ -587,102 +503,134 @@ fn subagents(state: State<App>, keys: Vec<String>) -> Value {
 
 /// The last few things a subagent wrote, read-only, from the tail of its transcript.
 #[tauri::command]
-fn agent_log(state: State<App>, key: String, id: String) -> Vec<String> {
-    let Some(sid) = sid_of(&state, &key) else { return vec![] };
-    if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return vec![]; }
-    let (ev, _) = tail_lines(&PathBuf::from(format!("{}/{sid}/subagents/agent-{id}.jsonl", transcripts(&state))), 512 << 10);
-    let texts: Vec<String> = ev.iter().filter(|e| e["type"] == "assistant")
-        .flat_map(|e| e["message"]["content"].as_array().cloned().unwrap_or_default())
-        .filter_map(|c| c["text"].as_str().map(|t| t.trim().chars().take(2000).collect::<String>())).filter(|t| !t.is_empty()).collect();
-    texts[texts.len().saturating_sub(3)..].to_vec()
+fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<String> {
+    let Some((p, sid)) = sid_of(&state, &key) else { return vec![] };
+    p.agent_log(&env_of(&app, &state, p).env(), &sid, &id)
 }
 
 #[tauri::command]
 fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys().cloned().collect() }
 
+/// The open permission requests and questions of every provider.
 #[tauri::command]
-fn pending(app: AppHandle) -> Vec<Value> {
-    let mut out: Vec<Value> = fs::read_dir(pending_dir(&app)).into_iter().flatten().flatten()
-        .map(|e| e.path())
-        .filter(|p| p.extension().is_some_and(|x| x == "json") && !p.to_string_lossy().ends_with(".answer.json"))
-        .filter(|p| !PathBuf::from(p.to_string_lossy().replace(".json", ".answer.json")).exists())
-        .filter_map(|p| fs::read_to_string(p).ok()).filter_map(|s| serde_json::from_str(&s).ok()).collect();
-    out.sort_by(|a: &Value, b: &Value| a["at"].as_f64().partial_cmp(&b["at"].as_f64()).unwrap());
-    out
-}
+fn pending(app: AppHandle) -> Vec<Value> { pending::list(&pending_dir(&app)) }
 
+/// The user's decision. A provider that raised the request in its own protocol gets it over stdin.
 #[tauri::command]
-fn answer(app: AppHandle, id: String, decision: Value) -> Result<(), String> {
-    if !id.chars().all(|c| c.is_ascii_hexdigit()) { return Err("bad id".into()); }
-    fs::write(pending_dir(&app).join(format!("{id}.answer.json")), decision.to_string()).map_err(|e| e.to_string())
-}
-
-/// Sessions Claude Code knows about, including the ones in the terminal and in the background.
-#[tauri::command]
-fn agents(state: State<App>) -> Value {
-    let mut list: Value = Command::new(claude_bin()).args(["agents", "--json"]).env("PATH", &state.path).stdin(Stdio::null())
-        .output().ok().and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(json!([]));
-    let dir = transcripts(&state);
-    for a in list.as_array_mut().into_iter().flatten() {
-        let sid = a["sessionId"].as_str().unwrap_or("").to_string();
-        if a["status"] == "busy" && !sid.is_empty() && turn_ended(&PathBuf::from(format!("{dir}/{sid}.jsonl"))) { a["status"] = json!("idle"); }
+fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Result<(), String> {
+    if !pending::valid_id(&id) { return Err("bad id".into()); }
+    let dir = pending_dir(&app);
+    let req = pending::read(&dir, &id);
+    pending::answer(&dir, &id, &decision)?;
+    if let Some(r) = req.filter(|r| r.relay) {
+        pending::take(&dir, &id);
+        if let Some(line) = agents::get(&r.provider)?.respond(&r, &decision) {
+            if let Some(x) = state.procs.lock().unwrap().get_mut(&r.project) {
+                writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+            }
+        }
     }
-    list
+    Ok(())
 }
 
-/// `claude agents` keeps a session busy while a background shell of it still runs, also after the turn
-/// ended. The transcript closes every turn with a `turn_duration` line: when that comes after the last
-/// prompt (typed, or a notification that starts a new turn), Claude is done.
-fn turn_ended(path: &std::path::Path) -> bool {
-    let (rows, _) = tail_lines(path, 256 << 10);
-    for v in rows.iter().rev() {
-        if v["type"] == "system" && v["subtype"] == "turn_duration" { return true; }
-        if v["type"] != "user" || v["isSidechain"] == true || v["isMeta"] == true { continue; }
-        let c = &v["message"]["content"];
-        let prompt = c.is_string() || c.as_array().is_some_and(|b| b.iter().all(|x| x["type"] != "tool_result"));
-        if prompt { return false; }
-    }
-    false
-}
-
-/// Continue a project's conversation in iTerm. The app's own process for it stops first, so two
-/// processes never write the same session.
+/// Sessions the switched-on providers know about outside the app (terminal, background), each with its provider.
 #[tauri::command]
-fn open_terminal(state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
+fn agents(app: AppHandle, state: State<App>) -> Value {
+    let on = agents::enabled(&state.settings.lock().unwrap());
+    let mut out = vec![];
+    for p in on.into_iter().filter(|p| p.caps().background) {
+        for mut a in p.sessions(&env_of(&app, &state, p).env()) { a["provider"] = json!(p.id()); out.push(a); }
+    }
+    json!(out)
+}
+
+/// Continue a conversation in iTerm. The app's own process for it stops first, so two processes never
+/// write the same session.
+#[tauri::command]
+fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
-    let v = need_vault(&state)?;
-    let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).cloned());
-    let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
-    let cmd = match sid {
-        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&v)),
-        _ => format!("cd {} && claude -n {}", q(&v), q(name.as_deref().unwrap_or(&project))),
-    };
-    let script = format!(
-        "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
-        serde_json::to_string(&cmd).unwrap());
-    Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
+    need_vault(&state)?;
+    let p = provider_of(&state, &project, None);
+    let eb = env_of(&app, &state, p);
+    let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).map(|s| s.sid.clone()));
+    let cmd = sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
+        .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(&project))))
+        .ok_or_else(|| trc_v("err.agent_terminal", p.name()))?;
+    iterm(&cmd)
 }
 
-/// Background sessions of Claude Code itself (not started by the app): step into one in iTerm, or
-/// stop it. `stop` keeps the conversation, `claude attach <id>` resumes it later. No `rm`, that deletes.
+/// Background sessions of a provider (not started by the app): step into one in iTerm, or stop it.
 #[tauri::command]
-fn bg(state: State<App>, action: String, id: String) -> Result<(), String> {
+fn bg(app: AppHandle, state: State<App>, action: String, id: String, provider: Option<String>) -> Result<(), String> {
     if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return Err("bad id".into()); }
+    let p = agents::get_or_first(provider.as_deref());
+    let eb = env_of(&app, &state, p);
     match action.as_str() {
-        "stop" => {
-            let out = Command::new(claude_bin()).args(["stop", &id]).env("PATH", &state.path).stdin(Stdio::null())
-                .output().map_err(|e| e.to_string())?;
-            if out.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
-        }
-        "attach" => {
-            let script = format!(
-                "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
-                serde_json::to_string(&format!("claude attach {id}")).unwrap());
-            Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
-        }
+        "stop" => p.stop_background(&eb.env(), &id),
+        "attach" => iterm(&p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
         _ => Err("unknown action".into()),
     }
 }
+
+/// Every provider: switched on, detected (installed, version, logged in), capabilities, models and efforts.
+#[tauri::command]
+async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
+    let s = state.settings.lock().unwrap().clone();
+    let bufs: Vec<_> = agents::PROVIDERS.iter().map(|p| (*p, env_of(&app, &state, *p))).collect();
+    tauri::async_runtime::spawn_blocking(move || {
+        let list: Vec<Value> = bufs.iter().map(|(p, eb)| json!({"id": p.id(), "name": p.name(), "on": s["agents"]["providers"][p.id()]["on"] == true,
+            "caps": p.caps(), "detect": p.detect(&eb.env()), "models": p.models(), "efforts": p.efforts(), "bin": eb.bin, "defaultBin": p.default_bin(&eb.home)})).collect();
+        json!({"default": agents::default_id(&s), "providers": list})
+    }).await.map_err(|e| e.to_string())
+}
+
+/// Token usage per switched-on provider and over all of them. `today` and `week` are the local starts of the
+/// day and the week, in ms. Each provider reads only what its logs gained since the last call.
+#[tauri::command]
+async fn usage_tokens(app: AppHandle, state: State<'_, App>, today: i64, week: i64) -> Result<Value, String> {
+    let on = agents::enabled(&state.settings.lock().unwrap());
+    let bufs: Vec<_> = on.into_iter().map(|p| (p, env_of(&app, &state, p))).collect();
+    // the app's own conversations by their key, so the UI can show their title
+    let keys: HashMap<(String, String), String> = state.sids.lock().unwrap().iter().map(|(k, s)| ((s.provider.clone(), s.sid.clone()), k.clone())).collect();
+    tauri::async_runtime::spawn_blocking(move || {
+        let since = usage::now_ms() - usage::KEEP_MS;
+        let mut all = vec![];
+        let providers: Vec<Value> = bufs.iter().map(|(p, eb)| {
+            let recs = p.usage(&eb.env(), since);
+            let mut v = usage::aggregate(&recs, today, week);
+            for s in v["sessions"].as_array_mut().into_iter().flatten() {
+                if let Some(k) = s["sid"].as_str().and_then(|sid| keys.get(&(p.id().to_string(), sid.to_string()))) { s["key"] = json!(k); }
+            }
+            v["provider"] = json!(p.id());
+            all.extend(recs);
+            v
+        }).collect();
+        let total = usage::aggregate(&all, today, week);
+        json!({"providers": providers, "today": total["today"], "week": total["week"]})
+    }).await.map_err(|e| e.to_string())
+}
+
+/// The plan or rate limits of every switched-on provider that has them, each at most once a minute.
+#[tauri::command]
+async fn usage_limits(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
+    let on: Vec<_> = agents::enabled(&state.settings.lock().unwrap()).into_iter().filter(|p| p.caps().limits).collect();
+    let mut out = vec![];
+    for p in on {
+        let cached = state.limits.lock().unwrap().get(p.id()).filter(|(at, _)| usage::now_ms() - at < 60_000).map(|(_, v)| v.clone());
+        let v = match cached {
+            Some(v) => v,
+            None => {
+                let eb = env_of(&app, &state, p);
+                let v = tauri::async_runtime::spawn_blocking(move || p.limits(&eb.env()).json()).await.unwrap_or_else(|_| json!({"ok": false, "reason": "unavailable"}));
+                state.limits.lock().unwrap().insert(p.id().to_string(), (usage::now_ms(), v.clone()));
+                v
+            }
+        };
+        out.push(json!({"provider": p.id(), "limits": v}));
+    }
+    Ok(json!(out))
+}
+
 
 /// The saved settings: vault, projects (icon, label) and session overrides.
 #[tauri::command]
@@ -717,7 +665,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     // the provider checks answer in the language being saved
     let was = ui_lang_of(&state.settings.lock().unwrap());
     set_cur_lang(lang);
-    if let Err(e) = providers::check(&s) { set_cur_lang(was); return Err(e); }
+    if let Err(e) = providers::check(&s).and_then(|_| agents::check(&s)) { set_cur_lang(was); return Err(e); }
     let owners: Vec<&str> = s["github"]["owners"].as_str().unwrap().split([' ', ',']).filter(|o| !o.is_empty()).collect();
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(tr(lang, "err.gh_owners"));
@@ -1003,47 +951,22 @@ pub fn run() {
             if w.label() == "main" { api.prevent_close(); w.hide().ok(); }
         })
         .setup(|app| {
-            let sids = fs::read_to_string(data_dir(app.handle()).join("sessions.json")).ok()
-                .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+            let sids = agents::load_sessions(&fs::read_to_string(data_dir(app.handle()).join("sessions.json")).unwrap_or_default());
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), limits: Default::default() });
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
         .run(|app, e| if let tauri::RunEvent::Reopen { .. } = e { tray::show_main(app); });
 }
 
-#[cfg(test)]
-mod tests {
-    // runs against the transcripts of the vault in $VAULT, skipped without it
-    #[test]
-    fn subagents_of_example_session() {
-        let Ok(v) = std::env::var("VAULT") else { return };
-        let slug: String = v.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
-        let dir = format!("{}/.claude/projects/{slug}", super::home());
-        let sid = "36099ce4-d17c-482a-8907-23790cc0e8db";
-        if !std::path::Path::new(&format!("{dir}/{sid}/subagents")).is_dir() { return; }
-        let mut c = super::SubCache::default();
-        let t = std::time::Instant::now();
-        let rows = super::subagents_of(&dir, sid, &mut c);
-        let first = t.elapsed();
-        let t = std::time::Instant::now();
-        super::subagents_of(&dir, sid, &mut c);
-        for r in &rows { println!("{} {:5} {} {} | {}", r["id"], r["running"], r["started_at"], r["last_at"], r["description"]); }
-        println!("{} agents, first {:?}, cached {:?}", rows.len(), first, t.elapsed());
-        let get = |id: &str| rows.iter().find(|r| r["id"] == id).unwrap();
-        assert_eq!(get("a13a6342c4ed7b3e7")["running"], false); // ended with end_turn
-        assert_eq!(get("a896673643d285b30")["running"], false); // no end_turn, finished per the parent's notification
-        assert!(rows.iter().all(|r| r["description"].is_string() && r["started_at"].is_string()));
-    }
-}
 
 #[cfg(test)]
 mod lang_tests {
@@ -1065,20 +988,6 @@ mod lang_tests {
     }
 }
 
-#[cfg(test)]
-mod turn_tests {
-    #[test]
-    fn turn_ended_follows_the_last_marker() {
-        let d = std::env::temp_dir().join("vault-turn-test.jsonl");
-        let prompt = r#"{"type":"user","message":{"content":"doe iets"}}"#;
-        let tool = r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}"#;
-        let done = r#"{"type":"system","subtype":"turn_duration"}"#;
-        std::fs::write(&d, format!("{prompt}\n{tool}\n{done}\n")).unwrap();
-        assert!(super::turn_ended(&d));
-        std::fs::write(&d, format!("{done}\n{prompt}\n{tool}\n")).unwrap();
-        assert!(!super::turn_ended(&d));
-    }
-}
 
 #[cfg(test)]
 mod curl_tests {
