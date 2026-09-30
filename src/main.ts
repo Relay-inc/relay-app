@@ -38,6 +38,13 @@ let hidden: string[] = store.get("hiddenAgents", []);
 let forked: string[] = store.get("forkedTerms", []); // terminal sessions continued in the app, no longer listed
 let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
 let appSids: string[] = [];
+// subagents a session spawned (Agent tool, background agents), per conversation key, polled every 2 s
+type Sub = { id: string; description: string; agentType?: string; model?: string; running: boolean; started_at: string; last_at: string; tool?: string; input?: any; text?: string };
+let subs: Record<string, Sub[]> = {};
+const subsOpen = new Set<string>(); // conversations whose finished agents are unfolded
+const subLog: Record<string, string[]> = {}; // agent id: its last messages, while unfolded
+const runningSubs = (k: string) => (subs[k] || []).filter(a => a.running).length;
+const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${n} ${n === 1 ? "agent werkt" : "agents werken"}">${n}</span>` : ""; };
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
 const WAIT = "__wait", REM = "__rem", NEW = "Nieuw gesprek";
 const VIEWS = [WAIT, REM];
@@ -262,8 +269,8 @@ function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const selP = projOf(sel), T = terms();
   const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="Sluiten">×</button>`;
-  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${trailOf([c.key])}${x(c.key)}</div>`;
-  const tsub = (t: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" data-parent="${esc(t.project ?? "")}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
+  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${subBadge(c.key)}${trailOf([c.key])}${x(c.key)}</div>`;
+  const tsub = (t: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" data-parent="${esc(t.project ?? "")}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${subBadge(t.key)}${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
   const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
     `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
 
@@ -307,6 +314,7 @@ function renderNav() {
 function renderChat() {
   const msgs = $("msgs"), log = $("log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+  renderSubs();
   $("t").classList.remove("editable"); $("t").title = "";
   if (sel === REM) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
@@ -364,6 +372,21 @@ function renderChat() {
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
+// the agents of the open conversation above the composer, like the terminal lists them under the prompt
+function renderSubs() {
+  const box = $("subs"), list = VIEWS.includes(sel) ? [] : subs[sel] || [];
+  box.style.display = list.length ? "" : "none";
+  if (!list.length) { box.innerHTML = ""; return; }
+  const run = list.filter(a => a.running), done = list.filter(a => !a.running);
+  const meta = (a: Sub) => [a.agentType, a.model].filter(Boolean).map(esc).join(" · ");
+  const row = (a: Sub) => `<div class="sa ${a.running ? "on" : ""}" data-agent="${esc(a.id)}" title="Laatste berichten tonen"><span class="sdot"></span><span class="sd">${esc(a.description)}</span><span class="sm">${meta(a)}</span>`
+    + `<span class="sl">${a.running ? (a.tool ? toolLine(a.tool, a.input) : esc(a.text || "")) : ""}</span>`
+    + (a.running ? `<span class="ws" data-since="${Date.parse(a.started_at)}">${dur((Date.now() - Date.parse(a.started_at)) / 1000)}</span>` : `<span class="sm">${dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}</span>`) + `</div>`
+    + (subLog[a.id] ? `<div class="slog">${subLog[a.id].length ? subLog[a.id].map(t => `<div class="ai">${md(t)}</div>`).join("") : '<div class="sm">Nog niets geschreven.</div>'}</div>` : "");
+  box.innerHTML = run.map(row).join("")
+    + (done.length ? `<button class="sdone" data-subs-toggle>${done.length} ${done.length === 1 ? "agent" : "agents"} klaar</button>${subsOpen.has(sel) ? done.map(row).join("") : ""}` : "");
+}
+
 // the title opens a small panel: which project this conversation belongs to, and the project's icon and name
 function openPop() {
   if (VIEWS.includes(sel)) return;
@@ -401,9 +424,8 @@ function workingHtml(k: string): string {
   const since = busySince[k] || Date.now(), sec = Math.round((Date.now() - since) / 1000);
   return `<div class="working" aria-live="polite"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${running ? "Claude werkt" : "Claude denkt na"}</span><span class="mono ws" data-since="${since}">${sec} s</span></div>`;
 }
-setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => {
-  const s = Math.round((Date.now() - Number(e.dataset.since)) / 1000); e.textContent = s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
-}), 1000);
+const dur = (sec: number) => { const s = Math.max(0, Math.round(sec)); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`; };
+setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => { e.textContent = dur((Date.now() - Number(e.dataset.since)) / 1000); }), 1000);
 
 function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
@@ -617,6 +639,13 @@ $("msgs").addEventListener("click", e => {
   }
   onCard(e);
 });
+$("subs").addEventListener("click", async e => {
+  const t = e.target as HTMLElement, a = t.closest<HTMLElement>("[data-agent]");
+  if (t.closest("[data-subs-toggle]")) { if (subsOpen.has(sel)) subsOpen.delete(sel); else subsOpen.add(sel); }
+  else if (a) { const id = a.dataset.agent!; if (subLog[id]) delete subLog[id]; else subLog[id] = await invoke<string[]>("agent_log", { key: sel, id }); }
+  else return;
+  renderSubs();
+});
 $("c").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); } });
 $("c").addEventListener("input", grow);
 $("send").addEventListener("click", () => {
@@ -648,6 +677,12 @@ async function pollPending() {
   const next: any[] = await invoke("pending");
   if (JSON.stringify(next.map(x => x.id)) !== JSON.stringify(pendingList.map(x => x.id))) { pendingList = next; render(); }
 }
+async function pollSubs() {
+  const keys = [...Object.values(chats).filter(c => !c.draft && !c.closed).map(c => c.key), ...terms().map(t => t.key)];
+  const next = await invoke<Record<string, Sub[]>>("subagents", { keys }).catch(() => subs);
+  if (JSON.stringify(next) === JSON.stringify(subs)) return;
+  subs = next; renderNav(); renderSubs();
+}
 async function pollAgents() {
   [agentsList, appSids] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids")]);
   renderNav(); if (sel === WAIT || isTerm(sel)) renderChat();
@@ -672,6 +707,8 @@ await select(sel);
 pollPending();
 setInterval(pollPending, 700);
 setInterval(pollAgents, 10000);
+pollSubs();
+setInterval(pollSubs, 2000);
 // a terminal conversation that is open in the app: new transcript lines and its busy state every 2 s
 setInterval(async () => {
   if (!isTerm(sel)) return;
