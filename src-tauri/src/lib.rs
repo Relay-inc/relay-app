@@ -12,6 +12,8 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod providers;
+mod reminders;
+mod tray;
 mod usage;
 mod vault;
 
@@ -41,6 +43,15 @@ fn need_vault(st: &App) -> Result<String, String> {
     let vs = vault_of(&s);
     if vs["ok"] == true { Ok(vs["vault"].as_str().unwrap().to_string()) } else { Err(tr(ui_lang_of(&s), "err.no_vault_set")) }
 }
+/// The reminders file (it may not exist yet), the action log and the UI language. Needs a usable vault.
+fn rem_ctx(app: &AppHandle) -> Result<(PathBuf, PathBuf, &'static str), String> {
+    let (st, lang) = { let s = app.state::<App>().settings.lock().unwrap().clone(); (vault_of(&s), ui_lang_of(&s)) };
+    if st["ok"] != true { return Err(tr(lang, "err.no_vault_set")); }
+    let file = vault::resolve(st["vault"].as_str().unwrap(), st["map"]["reminders"].as_str().unwrap_or(vault::REMINDERS));
+    Ok((file, data_dir(app).join("reminder-actions.log"), lang))
+}
+/// An engine error in the UI language: its err.* keys translated, anything else (I/O) as is.
+fn rem_err(lang: &str, e: String) -> String { if e.starts_with("err.") { tr(lang, &e) } else { e } }
 /// The brain folder of a vault (System/, or Resources/Meta/Claude/ in the old layout), for its index/repos.json.
 fn brain(vault: &str) -> Option<String> {
     ["System", "Resources/Meta/Claude"].iter().map(|d| format!("{vault}/{d}"))
@@ -112,8 +123,28 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("close_chat", ["Close Conversation", "Sluit gesprek", "Fermer la conversation", "Gespräch schließen"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
         "Pas de coffre : work-state.md introuvable dans {v}", "Kein Vault: work-state.md nicht gefunden in {v}"]),
-    ("err.no_script", ["No reminder script set for this vault (Settings > Vault)", "Geen herinneringsscript ingesteld voor deze vault (Instellingen > Vault)",
-        "Aucun script de rappels défini pour ce coffre (Réglages > Vault)", "Kein Erinnerungsskript für diesen Vault festgelegt (Einstellungen > Vault)"]),
+    ("err.rem_gone", ["This reminder no longer exists, the list is refreshed", "Deze reminder bestaat niet meer, de lijst is ververst",
+        "Ce rappel n'existe plus, la liste est actualisée", "Diese Erinnerung gibt es nicht mehr, die Liste wurde aktualisiert"]),
+    ("err.rem_date", ["Date not understood", "Datum niet begrepen", "Date non comprise", "Datum nicht verstanden"]),
+    ("err.rem_repeat", ["Repeat not understood, use for example 14d, 2w or 1m", "Herhaling niet begrepen, gebruik bijvoorbeeld 14d, 2w of 1m",
+        "Répétition non comprise, utilisez par exemple 14d, 2w ou 1m", "Wiederholung nicht verstanden, zum Beispiel 14d, 2w oder 1m"]),
+    ("err.rem_text", ["The reminder needs a text (max 2000 characters) and a project name without [ ] or |",
+        "De reminder heeft een tekst nodig (max 2000 tekens) en een projectnaam zonder [ ] of |",
+        "Le rappel a besoin d'un texte (2000 caractères max.) et d'un nom de projet sans [ ] ni |",
+        "Die Erinnerung braucht einen Text (max. 2000 Zeichen) und einen Projektnamen ohne [ ] oder |"]),
+    ("tray.open", ["Open Vault", "Open Vault", "Ouvrir Vault", "Vault öffnen"]),
+    ("tray.late", ["Overdue", "Vervallen", "En retard", "Überfällig"]),
+    ("tray.today", ["Today", "Vandaag", "Aujourd'hui", "Heute"]),
+    ("tray.tomorrow", ["Tomorrow", "Morgen", "Demain", "Morgen"]),
+    ("tray.week", ["This week", "Deze week", "Cette semaine", "Diese Woche"]),
+    ("tray.later", ["Later", "Later", "Plus tard", "Später"]),
+    ("tray.none", ["No reminders", "Geen reminders", "Aucun rappel", "Keine Erinnerungen"]),
+    ("tray.done", ["✓ Done", "✓ Klaar", "✓ Fait", "✓ Erledigt"]),
+    ("tray.to_tomorrow", ["→ Tomorrow", "→ Morgen", "→ Demain", "→ Morgen"]),
+    ("tray.to_monday", ["→ Monday", "→ Maandag", "→ Lundi", "→ Montag"]),
+    ("tray.plus_week", ["→ +1 week", "→ +1 week", "→ +1 semaine", "→ +1 Woche"]),
+    ("tray.plus_month", ["→ +1 month", "→ +1 maand", "→ +1 mois", "→ +1 Monat"]),
+    ("tray.drop", ["✕ Drop", "✕ Schrappen", "✕ Supprimer", "✕ Verwerfen"]),
     ("err.no_vault_set", ["No vault chosen yet", "Nog geen vault gekozen", "Aucun coffre choisi", "Noch kein Vault gewählt"]),
     ("err.project", ["Invalid project '{v}': icon (max 4 characters), label (max 60) and img (png data url) must be text",
         "Ongeldig project '{v}': icon (max 4 tekens), label (max 60) en img (png data url) moeten tekst zijn",
@@ -225,7 +256,7 @@ fn login_path() -> String {
 /// Everything the sidebar shows, read by snapshot.py from the mapped paths. Also returns the vault
 /// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
-fn snapshot(state: State<App>) -> Result<Value, String> {
+fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let (st, lang) = { let s = state.settings.lock().unwrap(); (vault_of(&s), ui_lang_of(&s)) };
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
@@ -233,7 +264,7 @@ fn snapshot(state: State<App>) -> Result<Value, String> {
     let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
         .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
-        .env("VAULT_REMINDERS", path("reminders")).env("VAULT_NOTES", path("notes"))
+        .env("VAULT_NOTES", path("notes"))
         .output().map_err(|e| e.to_string())?;
     let mut snap: Value = serde_json::from_slice(&out.stdout).map_err(|e| {
         // a crash leaves stdout empty: its last stderr line says more than "EOF while parsing"
@@ -241,6 +272,9 @@ fn snapshot(state: State<App>) -> Result<Value, String> {
         format!("snapshot: {}", err.lines().rev().find(|l| !l.trim().is_empty()).map_or(e.to_string(), str::to_string))
     })?;
     snap["vault"] = st;
+    let (file, _, _) = rem_ctx(&app)?;
+    snap["reminders"] = reminders::list(&file, chrono::Local::now().date_naive()).into();
+    tray::refresh(&app); // the file may have changed outside the app
     Ok(snap)
 }
 
@@ -694,6 +728,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     *state.settings.lock().unwrap() = s.clone();
     set_cur_lang(lang);
+    tray::refresh(&app); // another vault or language
     if relang { // the menu bar and the settings window title follow a new language right away
         if let Ok(m) = build_menu(&app, lang) { app.set_menu(m).ok(); }
         if let Some(w) = app.get_webview_window("settings") { w.set_title(&tr(lang, "settings.title")).ok(); }
@@ -914,24 +949,24 @@ async fn pick_path(app: AppHandle, folder: bool, start: Option<String>) -> Optio
     p.and_then(|p| p.into_path().ok()).map(|p| p.to_string_lossy().into_owned())
 }
 
-/// Mark a reminder done, push it to a new date, or drop it, via the vault's own reminder script.
+/// Mark a reminder done, push it to a new date (ISO, tomorrow, +1w, monday...), or drop it.
 #[tauri::command]
-fn reminder(state: State<App>, action: String, id: String, date: Option<String>) -> Result<String, String> {
+fn reminder(app: AppHandle, action: String, id: String, date: Option<String>) -> Result<String, String> {
     if !["done", "push", "drop"].contains(&action.as_str()) { return Err("unknown action".into()); }
     if id.len() != 8 || !id.chars().all(|c| c.is_ascii_hexdigit()) { return Err("bad id".into()); }
-    let (st, lang) = { let s = state.settings.lock().unwrap(); (vault_of(&s), ui_lang_of(&s)) };
-    if st["found"]["reminderScript"] != true { return Err(tr(lang, "err.no_script")); }
-    let v = st["vault"].as_str().unwrap().to_string();
-    let mut cmd = Command::new("/usr/bin/python3");
-    cmd.arg(vault::resolve(&v, st["map"]["reminderScript"].as_str().unwrap())).args([&action, &id]);
-    if action == "push" {
-        let d = date.filter(|d| !d.is_empty() && d.len() <= 12 && d.chars().all(|c| c.is_ascii_alphanumeric() || "+/-".contains(c)))
-            .ok_or("date required (max 12 chars of [0-9A-Za-z+/-])")?;
-        cmd.arg(d);
-    }
-    let out = cmd.current_dir(&v).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
-    if out.status.success() { Ok(String::from_utf8_lossy(&out.stdout).trim().to_string()) }
-    else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+    let (file, log, lang) = rem_ctx(&app)?;
+    let r = reminders::act(&file, &log, &action, &id, date.as_deref(), chrono::Local::now().date_naive());
+    tray::refresh(&app);
+    r.map_err(|e| rem_err(lang, e))
+}
+
+/// A new reminder, the file created when the vault has none yet. Returns its id.
+#[tauri::command]
+fn reminder_add(app: AppHandle, text: String, date: String, project: Option<String>, repeat: Option<String>) -> Result<String, String> {
+    let (file, log, lang) = rem_ctx(&app)?;
+    let r = reminders::add(&file, &log, &text, &date, project.as_deref(), repeat.as_deref(), chrono::Local::now().date_naive());
+    tray::refresh(&app);
+    r.map_err(|e| rem_err(lang, e))
 }
 
 fn open_settings(app: &AppHandle) {
@@ -954,6 +989,7 @@ pub fn run() {
             if event.id() == "close-chat" && settings.as_ref().is_some_and(|w| w.is_focused().unwrap_or(false)) {
                 settings.unwrap().close().ok(); return;
             }
+            if tray::owns(event.id().as_ref()) { return; } // handled by the tray's own listener
             if event.id() != "settings" { app.emit("menu", event.id().as_ref()).ok(); return; }
             open_settings(app);
         })
@@ -962,6 +998,10 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default()
             .with_state_flags(tauri_plugin_window_state::StateFlags::SIZE | tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::MAXIMIZED)
             .build())
+        // closing the main window hides it: the app keeps running for the menu bar icon, Cmd-Q quits
+        .on_window_event(|w, e| if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+            if w.label() == "main" { api.prevent_close(); w.hide().ok(); }
+        })
         .setup(|app| {
             let sids = fs::read_to_string(data_dir(app.handle()).join("sessions.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -970,11 +1010,14 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
+            tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        // a click on the Dock icon brings the hidden main window back
+        .run(|app, e| if let tauri::RunEvent::Reopen { .. } = e { tray::show_main(app); });
 }
 
 #[cfg(test)]

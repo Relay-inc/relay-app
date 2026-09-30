@@ -40,3 +40,14 @@
 .cal-grid button.today:hover{color:var(--on-accent)}
 .rem-cal button:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent)}
 .rem-empty{color:var(--secondary);text-align:center;padding:24px 0}
+/* the new-reminder form */
+.rem-new{margin-bottom:16px}
+.rem-new.open{display:flex;flex-direction:column;gap:8px;padding:12px;border:1px solid var(--separator);border-radius:10px;background:var(--fill)}
+.rem-new-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.rem-f{height:28px;border:1px solid var(--separator);border-radius:var(--r);background:var(--bg);color:var(--label);font:13px var(--sans);padding:0 8px;min-width:0}
+input.rem-f[data-rem-f=text]{font-size:15px;height:32px}
+.rem-f:focus-visible{outline:2px solid color-mix(in srgb,var(--accent) 45%,transparent)}
+.rem-new-go{margin-left:auto;display:flex;gap:6px}
+.rem-new .btn:disabled{opacity:.5}
+.rem-err{font-size:13px;color:var(--red,#d33)}
+.rem-hint code{font-family:var(--mono)}

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { marked } from "marked";
-import { renderReminders, onRemindersEvent, urgency } from "./reminders";
+import { renderReminders, onRemindersEvent, onReminderField, keepFormFocus, urgency } from "./reminders";
 import "./reminders.css";
 import { initI18n, applyStatic, t, tn, currentLocale } from "./i18n";
 import type { Key } from "./locales/en";
@@ -607,7 +607,7 @@ function renderChat() {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("term").style.display = "none";
     $("ts").textContent = "";
-    $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel, glyph }, snap.vault?.found);
+    $("t").textContent = t("nav.reminders"); keepFormFocus(() => { msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel, glyph }, snap.vault?.found, snap.vault?.map?.reminders, snap.projects.map((p: any) => ({ name: p.name, label: pLabel(p.name) })).sort((a: any, b: any) => a.label.localeCompare(b.label, currentLocale()))); });
     return;
   }
   if (sel === WAIT) {
@@ -876,6 +876,7 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
+for (const ev of ["input", "change", "keydown"]) $("msgs").addEventListener(ev, e => { if (sel === REM) onReminderField(e, remAdd); });
 $("msgs").addEventListener("input", e => { if ((e.target as HTMLElement).id === "mailq") setMailFilter({ q: (e.target as HTMLInputElement).value }); });
 $("msgs").addEventListener("change", e => { if ((e.target as HTMLElement).id === "mailproj") setMailFilter({ project: (e.target as HTMLSelectElement).value }); });
 // reorder by pressing and moving: a section header among headers, a project among the projects of its
@@ -973,6 +974,10 @@ async function remAct(action: "done" | "push", id: string, date?: string) {
   try { await invoke("reminder", { action, id, date: date ?? null }); } catch (err) { console.error(err); }
   await loadSnapshot();
 }
+async function remAdd(text: string, date: string, project: string | null, repeat: string | null) {
+  await invoke("reminder_add", { text, date, project, repeat });
+  await loadSnapshot();
+}
 // a new conversation with the whole reminder in the composer, one Enter away from sending
 async function remChat(id: string) {
   const r = snap.reminders.find((x: any) => x.id === id); if (!r) return;
@@ -983,7 +988,7 @@ async function remChat(id: string) {
 $("msgs").addEventListener("click", e => {
   const rc = sel === REM && (e.target as HTMLElement).closest<HTMLElement>("[data-rem-chat]");
   if (rc) { remChat(rc.dataset.id!); return; }
-  if (sel === REM && onRemindersEvent(e, remAct)) return;
+  if (sel === REM && onRemindersEvent(e, remAct, remAdd)) return;
   if ((e.target as HTMLElement).closest("[data-pr=reload]")) { loadPrs(); return; }
   if ((e.target as HTMLElement).closest("[data-mail=reload]")) { loadMails(); return; }
   if ((e.target as HTMLElement).closest("[data-mail=more]")) { moreMails(); return; }
@@ -1283,6 +1288,7 @@ setInterval(async () => {
   if (grew || termOf(sel)?.status === "busy") renderChat(); renderNav();
 }, 2000);
 setInterval(loadSnapshot, 30000);
+listen("reminders-changed", loadSnapshot);
 checkFavicons();
 setInterval(checkFavicons, 60 * 60000); // hourly, it acts once a day
 if (sel !== PRS) loadPrs(); // select() already loads it when the view is open

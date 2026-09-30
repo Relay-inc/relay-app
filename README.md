@@ -26,13 +26,12 @@ Vault › Settings… (Cmd-,). Vaults differ, so the app keeps a mapping per vau
 "vaults": { "/Users/me/vault": {
   "workState": "Contexts/Personal/State/work-state.md",
   "reminders": "Contexts/Personal/State/reminders.md",
-  "reminderScript": "",
   "notes": "Contexts" } }
 ```
 
 Paths are relative to the vault (absolute ones work too). Picking a folder detects them: the
 `System/` layout, the old `Resources/Meta/Claude/` one, else a search by file name; symlinks are
-resolved. Only `workState` is required; without `reminders` or `reminderScript` those features are off.
+resolved. Only `workState` is required; a missing `reminders` file is created by the first reminder you add (default `reminders.md` in the vault root).
 
 `pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py` and `perm_server.py`
 from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on this machine.
