@@ -9,8 +9,10 @@ import de from "./locales/de";
 export const LANGS = ["en", "nl", "fr", "de"] as const;
 export type Lang = (typeof LANGS)[number];
 const dicts: Record<Lang, Record<Key, string>> = { en, nl, fr, de };
-let lang: Lang = "en";
+let lang: Lang = "en", locale = "en";
 export const currentLang = () => lang;
+// for dates and sorting: the macOS locale in the UI language (nl-BE for nl), so 30/9 stays 30/9
+export const currentLocale = () => locale;
 
 type Params = Record<string, string | number>;
 const fill = (s: string, p?: Params) => p ? s.replace(/\{(\w+)\}/g, (m, k) => (k in p ? String(p[k]) : m)) : s;
@@ -26,6 +28,8 @@ export const tn = (base: PluralBase, n: number, p?: Params) =>
 export async function initI18n(): Promise<Lang> {
   const l = await invoke<string>("ui_lang").catch(() => navigator.language.slice(0, 2));
   lang = (LANGS as readonly string[]).includes(l) ? (l as Lang) : "en";
+  const loc = await invoke<string>("ui_locale").catch(() => lang);
+  locale = Intl.DateTimeFormat.supportedLocalesOf([loc]).length ? loc : lang;
   document.documentElement.lang = lang;
   return lang;
 }

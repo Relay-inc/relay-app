@@ -111,12 +111,43 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Ungültiges Projekt '{v}': Symbol (max. 4 Zeichen), Name (max. 60) und img (PNG-Data-URL) müssen Text sein"]),
     ("err.override", ["Invalid override '{v}'", "Ongeldige override '{v}'", "Remplacement '{v}' invalide", "Ungültige Zuordnung '{v}'"]),
     ("err.empty", ["empty message", "leeg bericht", "message vide", "leere Nachricht"]),
+    ("err.pv_digits", ["Productive: {v} may only contain digits", "Productive: {v} bestaat enkel uit cijfers", "Productive : {v} ne peut contenir que des chiffres", "Productive: {v} darf nur Ziffern enthalten"]),
+    ("pv.org_id", ["organisation ID", "organisatie-id", "l'ID d'organisation", "die Organisations-ID"]),
+    ("pv.user_id", ["user ID", "gebruikers-id", "l'ID utilisateur", "die Benutzer-ID"]),
+    ("err.gh_owners", ["GitHub: at most 10 owners, only letters, digits and -", "GitHub: hoogstens 10 owners, enkel letters, cijfers en -", "GitHub : 10 propriétaires au plus, uniquement lettres, chiffres et -", "GitHub: höchstens 10 Owner, nur Buchstaben, Ziffern und -"]),
+    ("err.token_chars", ["The token may only contain letters, digits, - and _", "Het token mag enkel letters, cijfers, - en _ bevatten", "Le jeton ne peut contenir que des lettres, des chiffres, - et _", "Das Token darf nur Buchstaben, Ziffern, - und _ enthalten"]),
+    ("err.keychain", ["Could not save the token in the keychain", "Kon het token niet in de sleutelhanger bewaren", "Impossible d'enregistrer le jeton dans le trousseau", "Das Token konnte nicht im Schlüsselbund gespeichert werden"]),
+    ("err.claude_json", ["~/.claude.json not found or unreadable", "~/.claude.json niet gevonden of onleesbaar", "~/.claude.json introuvable ou illisible", "~/.claude.json nicht gefunden oder nicht lesbar"]),
+    ("err.no_pv_token_json", ["No Productive token in ~/.claude.json", "Geen Productive-token in ~/.claude.json", "Aucun jeton Productive dans ~/.claude.json", "Kein Productive-Token in ~/.claude.json"]),
+    ("err.pv_call", ["This Productive call is not allowed", "Deze Productive-oproep is niet toegelaten", "Cet appel Productive n'est pas autorisé", "Dieser Productive-Aufruf ist nicht erlaubt"]),
+    ("err.no_org", ["No organisation ID. Fill it in under Vault › Settings… › Integrations.", "Geen organisatie-id. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun ID d'organisation. Renseignez-le dans Vault › Réglages… › Intégrations.", "Keine Organisations-ID. Trag sie unter Vault › Einstellungen… › Integrationen ein."]),
+    ("err.no_pv_token", ["No Productive token. Fill it in under Vault › Settings… › Integrations.", "Geen Productive-token. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun jeton Productive. Renseignez-le dans Vault › Réglages… › Intégrations.", "Kein Productive-Token. Trag es unter Vault › Einstellungen… › Integrationen ein."]),
+    ("err.pv_down", ["Productive unreachable: {v}", "Productive niet bereikbaar: {v}", "Productive injoignable : {v}", "Productive nicht erreichbar: {v}"]),
+    ("err.unknown", ["unknown error", "onbekende fout", "erreur inconnue", "unbekannter Fehler"]),
+    ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
+    ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
+    ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
+    ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
     let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
     TEXT.iter().find(|(k, _)| *k == key).map_or(key, |(_, row)| row[i]).to_string()
 }
 fn tr_v(lang: &str, key: &str, v: &str) -> String { tr(lang, key).replace("{v}", v) }
+// the UI language for code without the settings at hand (Productive and gh errors), kept in step by setup and set_settings
+static CUR_LANG: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+fn set_cur_lang(lang: &str) { CUR_LANG.store(LANGS.iter().position(|l| *l == lang).unwrap_or(0), std::sync::atomic::Ordering::Relaxed); }
+fn trc(key: &str) -> String { tr(LANGS[CUR_LANG.load(std::sync::atomic::Ordering::Relaxed)], key) }
+fn trc_v(key: &str, v: &str) -> String { trc(key).replace("{v}", v) }
+/// The locale for dates in the webview: the first macOS preferred locale in the UI language (nl-BE for nl),
+/// else the language itself.
+fn ui_locale_of(settings: &Value) -> String {
+    let lang = ui_lang_of(settings);
+    sys_locale::get_locales().find(|l| l.split(['-', '_']).next().is_some_and(|p| p.eq_ignore_ascii_case(lang)))
+        .map(|l| l.replace('_', "-")).unwrap_or_else(|| lang.to_string())
+}
+#[tauri::command]
+fn ui_locale(state: State<App>) -> String { ui_locale_of(&state.settings.lock().unwrap()) }
 
 /// Native menu bar: Vault > Settings… (Cmd-comma), Conversation, plus Edit and Window so copy, paste and
 /// window shortcuts keep working once the default menu is replaced. Rebuilt when the language changes.
@@ -619,17 +650,18 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     }
     for k in ["org", "user"] {
         if !s["productive"][k].as_str().unwrap().chars().all(|c| c.is_ascii_digit()) {
-            return Err(format!("Productive: {} bestaat enkel uit cijfers", if k == "org" { "organisatie-id" } else { "gebruikers-id" }));
+            return Err(tr_v(lang, "err.pv_digits", &tr(lang, if k == "org" { "pv.org_id" } else { "pv.user_id" })));
         }
     }
     let owners: Vec<&str> = s["github"]["owners"].as_str().unwrap().split([' ', ',']).filter(|o| !o.is_empty()).collect();
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
-        return Err("GitHub: hoogstens 10 owners, enkel letters, cijfers en -".into());
+        return Err(tr(lang, "err.gh_owners"));
     }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     *state.settings.lock().unwrap() = s.clone();
+    set_cur_lang(lang);
     if relang { // the menu bar and the settings window title follow a new language right away
         if let Ok(m) = build_menu(&app, lang) { app.set_menu(m).ok(); }
         if let Some(w) = app.get_webview_window("settings") { w.set_title(&tr(lang, "settings.title")).ok(); }
@@ -653,13 +685,13 @@ fn pv_set_token(t: &str) -> Result<(), String> {
         return Ok(());
     }
     if t.len() > 200 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err("Het token mag enkel letters, cijfers, - en _ bevatten".into());
+        return Err(trc("err.token_chars"));
     }
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
     writeln!(ch.stdin.take().unwrap(), "add-generic-password -U {KC} -w {t}").map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     // `security -i` exits 0 even when the command inside failed, so read it back
-    if pv_token().as_deref() == Some(t) { Ok(()) } else { Err("Kon het token niet in de sleutelhanger bewaren".into()) }
+    if pv_token().as_deref() == Some(t) { Ok(()) } else { Err(trc("err.keychain")) }
 }
 /// A value inside double quotes in a curl config file.
 fn curl_quote(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")) }
@@ -681,9 +713,9 @@ fn productive_token(app: AppHandle, state: State<App>, token: String) -> Result<
 #[tauri::command]
 fn productive_import() -> Result<Value, String> {
     let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
-        .and_then(|s| serde_json::from_str(&s).ok()).ok_or("~/.claude.json niet gevonden of onleesbaar")?;
+        .and_then(|s| serde_json::from_str(&s).ok()).ok_or_else(|| trc("err.claude_json"))?;
     let env = &cfg["mcpServers"]["productive"]["env"];
-    pv_set_token(env["PRODUCTIVE_API_TOKEN"].as_str().ok_or("Geen Productive-token in ~/.claude.json")?)?;
+    pv_set_token(env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| trc("err.no_pv_token_json"))?)?;
     Ok(json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") }))
 }
 
@@ -693,10 +725,10 @@ fn productive_import() -> Result<Value, String> {
 async fn productive(state: State<'_, App>, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
     let path_ok = path.starts_with('/') && path.len() < 600 && !path.contains("..") && path.chars().all(|c| c.is_ascii_alphanumeric() || "/?&=[]_-.,%".contains(c));
     let one_task = path.strip_prefix("/tasks/").is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
-    if !path_ok || !(method == "GET" || (method == "PATCH" && one_task && body.is_some())) { return Err("Deze Productive-oproep is niet toegelaten".into()); }
+    if !path_ok || !(method == "GET" || (method == "PATCH" && one_task && body.is_some())) { return Err(trc("err.pv_call")); }
     let org = state.settings.lock().unwrap()["productive"]["org"].as_str().unwrap_or("").to_string();
-    if org.is_empty() { return Err("Geen organisatie-id. Vul het in bij Vault › Instellingen… › Integraties.".into()); }
-    let token = pv_token().ok_or("Geen Productive-token. Vul het in bij Vault › Instellingen… › Integraties.")?;
+    if org.is_empty() { return Err(trc("err.no_org")); }
+    let token = pv_token().ok_or_else(|| trc("err.no_pv_token"))?;
     // globoff: the [ ] in filter[...] are not curl ranges
     let mut cfg = format!("globoff\nurl = {}\nrequest = {method}\nheader = {}\nheader = {}\nheader = \"Content-Type: application/vnd.api+json\"\n",
         curl_quote(&format!("https://api.productive.io/api/v2{path}")), curl_quote(&format!("X-Auth-Token: {token}")), curl_quote(&format!("X-Organization-Id: {org}")));
@@ -705,13 +737,13 @@ async fn productive(state: State<'_, App>, method: String, path: String, body: O
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
     ch.stdin.take().unwrap().write_all(cfg.as_bytes()).map_err(|e| e.to_string())?;
     let o = ch.wait_with_output().map_err(|e| e.to_string())?;
-    if !o.status.success() { return Err(format!("Productive niet bereikbaar: {}", String::from_utf8_lossy(&o.stderr).trim())); }
+    if !o.status.success() { return Err(trc_v("err.pv_down", String::from_utf8_lossy(&o.stderr).trim())); }
     let out = String::from_utf8_lossy(&o.stdout);
     let (text, code) = out.rsplit_once('\n').unwrap_or(("", &out));
     let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
     if code.starts_with('2') { return Ok(v); }
     let e = &v["errors"][0];
-    Err(format!("Productive {code}: {}", e["detail"].as_str().or(e["title"].as_str()).unwrap_or("onbekende fout")))
+    Err(format!("Productive {code}: {}", e["detail"].as_str().or(e["title"].as_str()).map_or_else(|| trc("err.unknown"), str::to_string)))
 }
 
 // ---------- GitHub: pull requests through the gh CLI and its own login, so no token in the app.
@@ -720,11 +752,11 @@ async fn productive(state: State<'_, App>, method: String, path: String, body: O
 /// gh from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
 fn gh(state: &App, args: &[&str]) -> Result<String, String> {
     let bin = state.path.split(':').map(|d| format!("{d}/gh")).find(|p| PathBuf::from(p).is_file())
-        .ok_or("gh niet gevonden. Installeer het met `brew install gh`.")?;
+        .ok_or_else(|| trc("err.no_gh"))?;
     let o = Command::new(bin).args(args).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
     if o.status.success() { return Ok(String::from_utf8_lossy(&o.stdout).into_owned()); }
     let e = String::from_utf8_lossy(&o.stderr);
-    Err(if e.contains("auth login") { "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.".into() } else { format!("gh: {}", e.trim()) })
+    Err(if e.contains("auth login") { trc("err.gh_login") } else { format!("gh: {}", e.trim()) })
 }
 /// `owner/repo` of a GitHub remote url (ssh, scp-style or https), lowercased.
 fn gh_slug(url: &str) -> Option<String> {
@@ -800,11 +832,11 @@ const PR_DETAIL: &str = "query($o:String!,$n:String!,$p:Int!){repository(owner:$
 #[tauri::command]
 async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<Value, String> {
     let ok = |s: &str| !s.is_empty() && s.len() <= 100 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
-    let (owner, name) = repo.split_once('/').filter(|(o, n)| ok(o) && ok(n)).ok_or("Ongeldige repo")?;
+    let (owner, name) = repo.split_once('/').filter(|(o, n)| ok(o) && ok(n)).ok_or_else(|| trc("err.bad_repo"))?;
     let out = gh(&state, &["api", "graphql", "-f", &format!("query={PR_DETAIL}"), "-f", &format!("o={owner}"), "-f", &format!("n={name}"), "-F", &format!("p={number}")])?;
     let v: Value = serde_json::from_str(&out).map_err(|e| format!("gh: {e}"))?;
     let pr = &v["data"]["repository"]["pullRequest"];
-    if pr.is_null() { return Err("PR niet gevonden".into()); }
+    if pr.is_null() { return Err(trc("err.no_pr")); }
     Ok(pr.clone())
 }
 
@@ -872,11 +904,12 @@ pub fn run() {
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
+            set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, productive_status, productive_token, productive_import, productive, github_status, github_prs, github_pr])
+        .invoke_handler(tauri::generate_handler![snapshot, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, productive_status, productive_token, productive_import, productive, github_status, github_prs, github_pr])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -920,6 +953,8 @@ mod lang_tests {
         assert_eq!(ui_lang_of(&norm(json!({"language": "de"}))), "de");
         assert_eq!(norm(json!({"language": "xx"}))["language"], "system");
         assert!(LANGS.contains(&ui_lang_of(&norm(json!({})))));
+        assert!(ui_locale_of(&norm(json!({"language": "nl"}))).starts_with("nl"));
+        set_cur_lang("fr"); assert_eq!(trc("err.no_pr"), "PR introuvable"); set_cur_lang("en");
         println!("system locales: {:?}, ui language: {}", sys_locale::get_locales().collect::<Vec<_>>(), ui_lang_of(&norm(json!({}))));
     }
 }

@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { marked } from "marked";
 import { renderReminders, onRemindersEvent, urgency } from "./reminders";
 import "./reminders.css";
-import { initI18n, applyStatic, t, tn, currentLang } from "./i18n";
+import { initI18n, applyStatic, t, tn, currentLocale } from "./i18n";
 import type { Key } from "./locales/en";
 import { onboard, type VaultStatus } from "./vault-setup";
 import { showBoard, resetBoard, fetchTask, renderTask, cachedTask } from "./productive";
@@ -477,7 +477,7 @@ function renderChat() {
     for (const r of pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${esc(projOf(k))} · ` : ""}${esc(label(k))}`;
     msgs.innerHTML = waitCount() ? `<div class="waitlist">${Object.entries(byK).map(([k, rs]) => `<div class="proj">${head(k)}</div>${rs.map(card).join("")}`).join("")}
-      ${blockedAgents().map(a => `<div class="proj">${esc(a.name)}</div><div class="perm"><div class="q">${t("wait.bg", { date: new Date(a.startedAt).toLocaleDateString(currentLang()) })}</div>
+      ${blockedAgents().map(a => `<div class="proj">${esc(a.name)}</div><div class="perm"><div class="q">${t("wait.bg", { date: new Date(a.startedAt).toLocaleDateString(currentLocale()) })}</div>
         <div class="acts"><button class="btn" data-bg="hide" data-id="${esc(a.id)}">${t("wait.hide")}</button><button class="btn" data-bg="stop" data-id="${esc(a.id)}">${t("wait.stop")}</button>
         <button class="btn primary" data-bg="attach" data-id="${esc(a.id)}">${t("bar.openTerminal")}</button></div></div>`).join("")}</div>`
       : `<div class="note">${t("wait.none")}</div>`;
@@ -555,7 +555,7 @@ function openPop() {
   // an image replaces the emoji and the other way round
   document.getElementById("popfile")?.addEventListener("change", async e => {
     const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
-    const u = await iconFrom(f); if (!u) { alertMsg("Deze afbeelding kan ik niet lezen."); return; }
+    const u = await iconFrom(f); if (!u) { alertMsg(t("img.unreadable")); return; }
     popImg = u; document.querySelector(".picon")!.firstChild!.replaceWith(document.createRange().createContextualFragment(pImg(u)));
     ($("popicon") as HTMLInputElement).value = "";
   });
@@ -778,7 +778,8 @@ listen<Settings>("settings-changed", async e => {
   if (JSON.stringify(e.payload.productive) !== JSON.stringify(settings.productive)) { resetBoard(); document.getElementById("kb")?.remove(); }
   const ghChanged = JSON.stringify(e.payload.github) !== JSON.stringify(settings.github);
   settings = { ...settings, ...e.payload };
-  if (relang) { await initI18n(); applyStatic(); render(); } // a new language applies without a restart
+  // a new language applies without a restart. The board drops its cache: task labels are built in the language
+  if (relang) { await initI18n(); applyStatic(); resetBoard(); document.getElementById("kb")?.remove(); render(); }
   if (ghChanged) { prs = null; prErr = ""; if (!ghOn() && sel === PRS) select(WAIT); loadPrs(); }
   checkPv().then(() => { if (!pvReady && sel === BOARD) select(WAIT); loadSnapshot(); });
 });

@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { t, currentLocale } from "./i18n";
+import type { Key } from "./locales/en";
 
 // Productive boards as a kanban: pick a project and one of its boards, the columns are the board's task
 // lists (a board is a `folder` in the API), the cards its open tasks. Dragging a card to another column
@@ -24,7 +26,7 @@ async function all(path: string) {
   }
   return { data, included };
 }
-const byName = (a: Opt, b: Opt) => a.name.localeCompare(b.name, "nl");
+const byName = (a: Opt, b: Opt) => a.name.localeCompare(b.name, currentLocale());
 // with a user id only the projects the user is on, else every active project
 const fetchProjects = async (user: string): Promise<Opt[]> =>
   (await all(`/projects?filter[status]=1${user ? `&filter[person_id]=${user}` : ""}`)).data.map((p: any) => ({ id: p.id, name: p.attributes.name })).sort(byName);
@@ -84,11 +86,11 @@ function draw() {
   // a redraw replaces the columns, keep where the board and each column were scrolled to
   const sx = el.querySelector(".kb")?.scrollLeft ?? 0;
   const sy = new Map([...el.querySelectorAll<HTMLElement>(".kcol")].map(c => [c.dataset.list, c.querySelector(".kcards")!.scrollTop]));
-  el.innerHTML = `<div class="kbhead">${pick("pvproj", projects || [], project, projects ? "Kies een project" : "Laden…")}`
-    + (project ? pick("pvboard", boards, board, "Geen borden") : "")
-    + `<span class="sp"></span>${busy ? '<span class="spin"></span>' : ""}<button class="btn" data-kb="reload">Vernieuwen</button></div>`
+  el.innerHTML = `<div class="kbhead">${pick("pvproj", projects || [], project, projects ? t("kb.pickProject") : t("pr.loading"))}`
+    + (project ? pick("pvboard", boards, board, t("kb.noBoards")) : "")
+    + `<span class="sp"></span>${busy ? '<span class="spin"></span>' : ""}<button class="btn" data-kb="reload">${t("pr.reload")}</button></div>`
     + (err ? `<div class="err">${e(err)}</div>` : "")
-    + (board && lists.length ? `<div class="kb">${lists.map(col).join("")}</div>` : board && !busy && !err ? '<div class="note">Dit bord heeft geen kolommen.</div>' : "");
+    + (board && lists.length ? `<div class="kb">${lists.map(col).join("")}</div>` : board && !busy && !err ? `<div class="note">${t("kb.noCols")}</div>` : "");
   const kb = el.querySelector(".kb"); if (kb) kb.scrollLeft = sx;
   el.querySelectorAll<HTMLElement>(".kcol").forEach(c => { c.querySelector(".kcards")!.scrollTop = sy.get(c.dataset.list) ?? 0; });
 }
@@ -162,9 +164,9 @@ function clean(html: string): string {
   return doc.body.innerHTML;
 }
 const person = (p: any) => p ? [p.attributes.first_name, p.attributes.last_name].filter(Boolean).join(" ") : "";
-const hours = (min: number | null) => min == null ? "" : `${Math.floor(min / 60)} u${min % 60 ? ` ${min % 60}` : ""}`;
-const LABEL: Record<string, string> = { title: "Titel", task_list: "Taaklijst", assignee: "Toegewezen aan", workflow_status: "Status", due_date: "Deadline",
-  start_date: "Start", description: "Beschrijving", initial_estimate: "Schatting", tag_list: "Tags", closed: "Afgesloten", private: "Privé" };
+const hours = (min: number | null) => min == null ? "" : `${t("kb.hours", { h: Math.floor(min / 60) })}${min % 60 ? ` ${min % 60}` : ""}`;
+const LABEL: Record<string, Key> = { title: "f.title", task_list: "f.taskList", assignee: "f.assignee", workflow_status: "f.status", due_date: "f.due",
+  start_date: "f.start", description: "pr.desc", initial_estimate: "f.estimate", tag_list: "f.tags", closed: "kb.closed", private: "f.private" };
 
 // custom field names and select options (the task only carries ids) and the org part of the web URL, once
 async function ready() {
@@ -188,16 +190,16 @@ function build(task: any, inc: any[], cs: any[], csInc: any[], acts: any[], acts
   // the feed, newest first like Productive: comments, and what changed on the task itself
   const feed = [...cs.map((c: any) => ({ at: c.attributes.created_at, who: person(pick(csInc, "people", c.relationships.creator)), html: clean(c.attributes.body), change: "" })),
     ...acts.filter((x: any) => x.attributes.item_type === "task").map((x: any) => ({ at: x.attributes.created_at, who: person(pick(actsInc, "people", x.relationships.creator)), html: "",
-      change: x.attributes.event === "create" ? "maakte de taak aan" : (x.attributes.changeset || []).map((c: any) => Object.entries(c).map(([k, [from, to]]: [string, any]) =>
-        k === "description" ? "wijzigde de beschrijving" : `${LABEL[k] || k}: ${from?.value ?? "(leeg)"} → ${to?.value ?? "(leeg)"}`).join(", ")).join(", ") }))]
+      change: x.attributes.event === "create" ? t("kb.created") : (x.attributes.changeset || []).map((c: any) => Object.entries(c).map(([k, [from, to]]: [string, any]) =>
+        k === "description" ? t("kb.descChanged") : `${LABEL[k] ? t(LABEL[k]) : k}: ${from?.value ?? t("kb.empty")} → ${to?.value ?? t("kb.empty")}`).join(", ")).join(", ") }))]
     .filter(f => f.html || f.change).sort((x, y) => y.at.localeCompare(x.at));
   const list = pick(inc, "task_lists", rel.task_list)?.attributes.name || "";
   return { title: a.title, number: a.number, closed: a.closed, description: clean(a.description), created: a.created_at, creator: person(pick(inc, "people", rel.creator)),
     board: boards.find(b => b.id === board)?.name || "", list, url: `https://app.productive.io/${orgSlug}/projects/${project}/tasks/task/${id}`,
-    fields: ([["Status", pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || ""], ["Taaklijst", list],
-      ["Toegewezen aan", person(pick(inc, "people", rel.assignee))], ["Start", a.start_date || ""], ["Deadline", [a.due_date, a.due_time].filter(Boolean).join(" ")],
-      ["Schatting", hours(a.initial_estimate)], ["Gewerkt", hours(a.worked_time)], ["Resterend", hours(a.remaining_time)],
-      ["Tags", (a.tag_list || []).join(", ")], ...custom] as [string, string][]).filter(([, v]) => v),
+    fields: ([[t("f.status"), pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || ""], [t("f.taskList"), list],
+      [t("f.assignee"), person(pick(inc, "people", rel.assignee))], [t("f.start"), a.start_date || ""], [t("f.due"), [a.due_date, a.due_time].filter(Boolean).join(" ")],
+      [t("f.estimate"), hours(a.initial_estimate)], [t("f.worked"), hours(a.worked_time)], [t("f.remaining"), hours(a.remaining_time)],
+      [t("f.tags"), (a.tag_list || []).join(", ")], ...custom] as [string, string][]).filter(([, v]) => v),
     feed };
 }
 type Task = ReturnType<typeof build>;
@@ -232,22 +234,22 @@ export async function fetchTask(id: string) {
   return task;
 }
 
-const when = (iso: string) => new Date(iso).toLocaleString("nl-BE", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const when = (iso: string) => new Date(iso).toLocaleString(currentLocale(), { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 /** The panel, in the PR detail's classes so both look alike. */
-export function renderTask(t: Task | null, err: string, e: (s: unknown) => string): string {
-  const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="Sluiten (Esc)">×</button>`
-    + (t ? `<span class="sp"></span><a class="btn" href="${e(t.url)}">Openen in Productive</a>` : "") + `</div>`;
+export function renderTask(tk: Task | null, err: string, e: (s: unknown) => string): string {
+  const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("pr.close")}">×</button>`
+    + (tk ? `<span class="sp"></span><a class="btn" href="${e(tk.url)}">${t("kb.open")}</a>` : "") + `</div>`;
   if (err) return bar + `<div class="err">${e(err)}</div>`;
-  if (!t) return bar + '<div class="meta">Laden…</div>';
+  if (!tk) return bar + `<div class="meta">${t("pr.loading")}</div>`;
   const sec = (title: string, n: number | string, body: string) => `<section class="prd-sec"><h3>${title}${n !== "" ? ` <span class="count">${n}</span>` : ""}</h3>${body}</section>`;
   return bar + `<div class="prd">
-    <div class="pr-meta">${[t.board, t.list, `#${t.number}`].filter(Boolean).map(x => `<span>${e(x)}</span>`).join("")}</div>
-    <h2 class="prd-t">${t.closed ? '<span class="pr-draft">Afgesloten</span>' : ""}${e(t.title)}</h2>
-    <div class="pr-meta"><span>${e(t.creator)}</span><span>${e(when(t.created))}</span></div>
-    <dl class="pvf">${t.fields.map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join("")}</dl>`
-    + sec("Beschrijving", "", t.description.trim() ? `<div class="prd-md">${t.description}</div>` : '<div class="meta">Geen beschrijving.</div>')
-    + sec("Feed", t.feed.length, t.feed.length ? t.feed.map(f => `<div class="prd-c"><div class="prd-ch"><b>${e(f.who || "Productive")}</b><span class="count">${e(when(f.at))}</span></div>`
-      + (f.html ? `<div class="prd-md">${f.html}</div>` : `<div class="meta">${e(f.change)}</div>`) + `</div>`).join("") : '<div class="meta">Nog niets.</div>')
+    <div class="pr-meta">${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => `<span>${e(x)}</span>`).join("")}</div>
+    <h2 class="prd-t">${tk.closed ? `<span class="pr-draft">${t("kb.closed")}</span>` : ""}${e(tk.title)}</h2>
+    <div class="pr-meta"><span>${e(tk.creator)}</span><span>${e(when(tk.created))}</span></div>
+    <dl class="pvf">${tk.fields.map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join("")}</dl>`
+    + sec(t("pr.desc"), "", tk.description.trim() ? `<div class="prd-md">${tk.description}</div>` : `<div class="meta">${t("pr.noDesc")}</div>`)
+    + sec(t("kb.feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => `<div class="prd-c"><div class="prd-ch"><b>${e(f.who || "Productive")}</b><span class="count">${e(when(f.at))}</span></div>`
+      + (f.html ? `<div class="prd-md">${f.html}</div>` : `<div class="meta">${e(f.change)}</div>`) + `</div>`).join("") : `<div class="meta">${t("kb.nothing")}</div>`)
     + `</div>`;
 }
 
@@ -259,6 +261,6 @@ async function move(c: Card, to: string) {
     const r = await invoke<any>("productive", { method: "PATCH", path: `/tasks/${c.id}`,
       body: { data: { type: "tasks", id: c.id, relationships: { task_list: { data: { type: "task_lists", id: to } } } } } });
     if (r?.data?.attributes?.placement != null) c.placement = r.data.attributes.placement;
-  } catch (x) { c.list = from; c.placement = was; err = `Verplaatsen mislukt: ${x}`; }
+  } catch (x) { c.list = from; c.placement = was; err = t("kb.moveFailed", { e: String(x) }); }
   draw();
 }

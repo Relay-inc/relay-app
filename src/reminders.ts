@@ -1,4 +1,4 @@
-import { t, currentLang } from "./i18n";
+import { t, currentLocale } from "./i18n";
 import type { Key } from "./locales/en";
 
 /** red when overdue, orange today and in the next 2 days, grey after that (decided 29/9) */
@@ -15,7 +15,7 @@ function when(r: Reminder): string {
   if (r.days < 0) return t("due.overdue", { n: `<span class="rem-n">${-r.days}</span>` });
   if (r.days === 0) return t("due.today");
   const [y, m, d] = r.date.split("-").map(Number), day = new Date(Date.UTC(y, m - 1, d)), fmt = (o: Intl.DateTimeFormatOptions) =>
-    new Intl.DateTimeFormat(currentLang(), { ...o, timeZone: "UTC" }).format(day);
+    new Intl.DateTimeFormat(currentLocale(), { ...o, timeZone: "UTC" }).format(day);
   return `${fmt({ weekday: "short" })} <span class="rem-n">${fmt({ day: "numeric", month: "numeric" })}</span>`;
 }
 
