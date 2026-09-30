@@ -16,3 +16,4 @@
 .pvf{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:12px 0 0;font-size:13px}
 .pvf dt{color:var(--secondary)}
 .pvf dd{margin:0;overflow-wrap:anywhere}
+.kblink{font-size:12px;color:var(--secondary-label,var(--label));opacity:.75}

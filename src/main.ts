@@ -6,7 +6,8 @@ import "./reminders.css";
 import { initI18n, applyStatic, t, tn, currentLocale } from "./i18n";
 import type { Key } from "./locales/en";
 import { onboard, type VaultStatus } from "./vault-setup";
-import { showBoard, resetBoard, fetchTask, renderTask, cachedTask } from "./productive";
+import { showBoard, resetBoard } from "./board";
+import { PROVIDERS, provider, ctxOf, ready as providerReady, type BoardProvider, type BoardRef } from "./providers";
 import "./productive.css";
 import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
 import "./github.css";
@@ -110,16 +111,34 @@ const runningSubs = (k: string) => (subs[k] || []).filter(a => a.running).length
 const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${tn("nav.agentsWorking", n)}">${n}</span>` : ""; };
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
 const WAIT = "__wait", REM = "__rem", BOARD = "__board", PRS = "__prs", NEW = "Nieuw gesprek";
-const VIEWS = [WAIT, REM, BOARD, PRS];
+const VIEWS = [WAIT, REM, PRS];
+// a provider's board is the view "__board:<provider id>"
+const boardKey = (id: string) => `${BOARD}:${id}`;
+const boardOf = (k: string) => k.startsWith(`${BOARD}:`) ? provider(k.slice(BOARD.length + 1)) : undefined;
+const isView = (k: string) => VIEWS.includes(k) || !!boardOf(k);
 // placeholder titles are stored as they always were (Dutch) and shown in the UI language
 const PLACEHOLDER: Record<string, Key> = { [NEW]: "nav.newChat", Gesprek: "chat.untitled", "Algemeen gesprek": "chat.general" };
 const shownTitle = (title: string) => PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title;
 type Settings = { vault: string; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
-  productive: { org: string; user: string }; github: { on: boolean; owners: string }; language?: string };
-let settings: Settings = { vault: "", projects: {}, overrides: {}, productive: { org: "", user: "" }, github: { on: false, owners: "" } };
-// the Productive row only shows once the integration is set up: an org id and a token in the keychain
-let pvReady = false;
-const checkPv = async () => { pvReady = !!settings.productive?.org && await invoke<boolean>("productive_status").catch(() => false); };
+  integrations: Record<string, any>; boards: Record<string, BoardRef>; github: { on: boolean; owners: string }; language?: string };
+let settings: Settings = { vault: "", projects: {}, overrides: {}, integrations: {}, boards: {}, github: { on: false, owners: "" } };
+// a board row only shows once its integration is switched on and set up, with a token in the keychain
+let boardsReady: string[] = [];
+const checkBoards = async () => { boardsReady = (await Promise.all(PROVIDERS.map(async p => await providerReady(p) ? p.id : ""))).filter(Boolean); };
+const boardDown = (k: string) => { const p = boardOf(k); return !!p && !boardsReady.includes(p.id); };
+// the vault project last shown, so its linked board (settings.boards) opens with the board view
+let lastP: string | null = null;
+const boardHelpers = (bp: BoardProvider) => ({
+  esc, ctx: () => ctxOf(bp, settings.integrations), open: (id: string, ref: BoardRef) => openCard(bp, ref, id),
+  vaultProjects: () => snap.projects.map((p: any): [string, string] => [p.name, pLabel(p.name)]).sort((a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], currentLocale())),
+  linked: () => settings.boards || {},
+  // one board per vault project, and the board shown under one vault project
+  link: (vp: string, ref: BoardRef) => {
+    const boards = Object.fromEntries(Object.entries(settings.boards || {}).filter(([, r]) => !(r.provider === ref.provider && r.project === ref.project && r.board === ref.board)));
+    if (vp) boards[vp] = ref;
+    invoke<Settings>("set_settings", { settings: { ...settings, boards } }).then(s => { settings = s; }).catch(e => console.error(e));
+  },
+});
 // pull requests via gh in the backend, once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view
 let prs: PRs | null = null, prErr = "", prBusy = false;
 const ghOn = () => !!settings.github?.on;
@@ -129,15 +148,23 @@ async function loadPrs() {
   try { prs = await invoke<PRs>("github_prs"); prErr = ""; } catch (e) { prErr = String(e); }
   prBusy = false; render();
 }
-// one PR, or a Productive task (key "pv:<id>"), open in the right panel, which widens for it. The last answer per PR shows at once, a fresh one follows
+// one PR, or a board card (key "card:<provider>:<id>"), open in the right panel, which widens for it. The last answer per PR shows at once, a fresh one follows
 let prOpen = "", prDetailErr = "", prHtml = "";
 const prDetail: Record<string, any> = {};
+const cardRefs: Record<string, BoardRef> = {};
+const cardOf = (key: string) => { const m = /^card:([^:]+):(.+)$/.exec(key), p = m ? provider(m[1]) : undefined; return p?.detail ? { p, d: p.detail, id: m![2] } : undefined; };
+// a card opens in the right panel when its provider has one, else in the browser
+async function openCard(p: BoardProvider, ref: BoardRef, id: string) {
+  if (p.detail) { cardRefs[`card:${p.id}:${id}`] = ref; return openPr(`card:${p.id}:${id}`); }
+  try { invoke("plugin:opener|open_url", { url: await p.url(ctxOf(p, settings.integrations), ref, id) }); } catch (e) { console.error(e); }
+}
 async function openPr(key: string) {
   prOpen = key; prDetailErr = "";
-  if (key.startsWith("pv:")) prDetail[key] ??= cachedTask(key.slice(3));
+  const card = cardOf(key);
+  if (card) prDetail[key] ??= card.d.cached(card.id);
   document.body.classList.add("prwide"); setInsp(false); render();
   const i = key.lastIndexOf("#");
-  try { prDetail[key] = key.startsWith("pv:") ? await fetchTask(key.slice(3)) : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
+  try { prDetail[key] = card ? await card.d.fetch(ctxOf(card.p, settings.integrations), cardRefs[key], card.id) : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
   catch (e) { if (!prDetail[key]) prDetailErr = String(e); }
   if (prOpen === key) renderInsp();
 }
@@ -370,8 +397,6 @@ const trailOf = (keys: string[]) => keys.some(waits) ? '<span class="dot"></span
 const G: Record<string, string> = {
   bell: '<path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3L4 11ZM6.5 14h3"/>',
   list: '<path d="M6 4.5h7M6 8h7M6 11.5h7M3 4.5h.5M3 8h.5M3 11.5h.5"/>',
-  // Productive's favicon (productive.io), as vector: its own colours, not the glyph stroke
-  board: '<defs><linearGradient id="pvg" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#AB40FF"/><stop offset="1" stop-color="#5D2BFF"/></linearGradient></defs><rect width="16" height="16" rx="3.6" fill="url(#pvg)" stroke="none"/><g transform="translate(2.5 1.6) scale(.357)" fill="#fff" stroke="none"><path d="M6.036 28.89L.17 18.977a1.217 1.217 0 01.426-1.667l4.633-2.74a1.217 1.217 0 011.666.426l3.3 5.579 3.424-5.89c4.28-7.018 8.712.738 6.693 4.034l-5.89 10.139a2.836 2.836 0 01-2.443 1.412l-3.492.015a2.838 2.838 0 01-2.451-1.393z"/><path d="M30.847 21.445a4.4 4.4 0 11-8.802.001 4.4 4.4 0 018.802 0zm-18.259 3.176c.966 1.64 3.34 1.632 4.297-.014l3.429-5.9c1.787-2.917 3.807-4.476 6.333-4.82.612-.083 1.211-.224 1.374-1.145l.938-5.259a1.234 1.234 0 00-1.207-1.485c-4.603 0-9.956 1.825-14.131 8.672l-3.426 5.892 2.393 4.059z"/></g>',
   chat: '<path d="M4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-2.5 2.5V11A1.5 1.5 0 0 1 3 9.5v-5A1.5 1.5 0 0 1 4.5 3Z"/>',
   term: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/>',
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 2.5v1.5M8 12v1.5M2.5 8H4M12 8h1.5M4.1 4.1l1.1 1.1M10.8 10.8l1.1 1.1M4.1 11.9l1.1-1.1M10.8 5.2l1.1-1.1"/>',
@@ -404,7 +429,7 @@ function renderNav() {
   const w = waitCount(), due = snap.reminders.filter((r: any) => r.days <= 0).length;
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">${t("nav.waiting")}</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
     + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">${t("nav.reminders")}</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`
-    + (pvReady ? `<div class="row ${sel === BOARD ? "sel" : ""}" data-k="${BOARD}">${glyph("board")}<span class="nm">Productive</span></div>` : "")
+    + PROVIDERS.filter(p => boardsReady.includes(p.id)).map(p => `<div class="row ${sel === boardKey(p.id) ? "sel" : ""}" data-k="${boardKey(p.id)}"><svg class="g" viewBox="0 0 16 16">${p.glyph}</svg><span class="nm">${esc(p.name)}</span></div>`).join("")
     + (ghOn() ? `<div class="row ${sel === PRS ? "sel" : ""}" data-k="${PRS}">${glyph("pr")}<span class="nm">${t("nav.prs")}</span>${prs?.review.length ? `<span class="count" title="${t("nav.prsReview")}">${prs.review.length}</span>` : ""}</div>` : "");
 
   const gc = listed(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
@@ -445,14 +470,18 @@ function renderChat() {
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   renderSubs();
   $("t").classList.remove("editable"); $("t").title = "";
-  $("ct").style.display = $("ctsep").style.display = VIEWS.includes(sel) ? "none" : "";
-  msgs.classList.toggle("wide", sel === BOARD);
-  if (sel === BOARD) {
+  $("ct").style.display = $("ctsep").style.display = isView(sel) ? "none" : "";
+  const bp = boardOf(sel);
+  msgs.classList.toggle("wide", !!bp);
+  if (bp) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("term").style.display = "none";
-    $("t").textContent = "Productive"; $("ts").textContent = "";
+    $("t").textContent = bp.name; $("ts").textContent = "";
     // mounted once: the board redraws itself, a render of the app does not interrupt a drag or an open menu
-    if (!document.getElementById("kb")) { msgs.innerHTML = '<div id="kb"></div>'; showBoard($("kb"), { esc, user: () => settings.productive?.user || "", org: () => settings.productive?.org || "", open: id => openPr(`pv:${id}`) }); }
+    if (document.getElementById("kb")?.dataset.provider !== bp.id) {
+      msgs.innerHTML = `<div id="kb" data-provider="${bp.id}"></div>`;
+      showBoard($("kb"), bp, boardHelpers(bp), lastP ? settings.boards?.[lastP] : undefined);
+    }
     return;
   }
   if (sel === PRS) {
@@ -487,6 +516,7 @@ function renderChat() {
   $("composer").style.display = "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
+  lastP = pn;
   $("t").innerHTML = pImg(pn ? settings.projects[pn]?.img : "") + esc(pLabel(pn));
   $("t").classList.add("editable"); $("t").title = t("chat.editTitle");
   // the conversation title, edited in place. A terminal session takes its title from the transcript
@@ -526,7 +556,7 @@ function renderChat() {
 
 // the agents of the open conversation above the composer, like the terminal lists them under the prompt
 function renderSubs() {
-  const box = $("subs"), list = VIEWS.includes(sel) ? [] : subs[sel] || [];
+  const box = $("subs"), list = isView(sel) ? [] : subs[sel] || [];
   box.style.display = list.length ? "" : "none";
   if (!list.length) { box.innerHTML = ""; return; }
   const run = list.filter(a => a.running), done = list.filter(a => !a.running);
@@ -541,7 +571,7 @@ function renderSubs() {
 
 // the title opens a small panel: which project this conversation belongs to, and the project's icon and name
 function openPop() {
-  if (VIEWS.includes(sel)) return;
+  if (isView(sel)) return;
   const T = isTerm(sel) ? termOf(sel) : undefined, cur = T ? T.project : projOf(sel), c = cur ? settings.projects[cur] || {} : {};
   const names = snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
   $("pop").innerHTML = `<label class="plab">${t("pop.project")}
@@ -592,7 +622,8 @@ function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
   if (prOpen) {
     // only when it changed: a redraw of the same PR would throw away the scroll position
-    const html = prOpen.startsWith("pv:") ? renderTask(prDetail[prOpen] ?? null, prDetailErr, esc) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
+    const cd = cardOf(prOpen);
+    const html = cd ? cd.d.render(prDetail[prOpen] ?? null, prDetailErr, esc) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
     if (html !== prHtml || !box.querySelector(".prd-bar")) { box.innerHTML = html; prHtml = html; }
     return;
   }
@@ -629,11 +660,11 @@ async function select(k: string) {
   sel = k; unseen.delete(k); routeChoice = routeChoice?.key === k ? routeChoice : null;
   store.set("sel", chats[k]?.draft && !typed[k] ? WAIT : k);
   const ta = $("c") as HTMLTextAreaElement; ta.value = typed[k] || ""; grow();
-  if (!VIEWS.includes(k) && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
+  if (!isView(k) && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
   if (k === PRS) loadPrs();
   render();
-  $("log").scrollTop = VIEWS.includes(k) ? 0 : 1e9;
-  if (!VIEWS.includes(k)) ta.focus();
+  $("log").scrollTop = isView(k) ? 0 : 1e9;
+  if (!isView(k)) ta.focus();
 }
 const openProject = (p: string) => select(chatsOf(p)[0]?.key || newChat(p));
 function setProject(k: string, p: string, note: string) {
@@ -775,20 +806,20 @@ window.addEventListener("pointerup", () => {
 });
 listen<Settings>("settings-changed", async e => {
   const relang = e.payload.language !== settings.language;
-  if (JSON.stringify(e.payload.productive) !== JSON.stringify(settings.productive)) { resetBoard(); document.getElementById("kb")?.remove(); }
+  if (JSON.stringify(e.payload.integrations) !== JSON.stringify(settings.integrations)) { resetBoard(); document.getElementById("kb")?.remove(); }
   const ghChanged = JSON.stringify(e.payload.github) !== JSON.stringify(settings.github);
   settings = { ...settings, ...e.payload };
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
   if (relang) { await initI18n(); applyStatic(); resetBoard(); document.getElementById("kb")?.remove(); render(); }
   if (ghChanged) { prs = null; prErr = ""; if (!ghOn() && sel === PRS) select(WAIT); loadPrs(); }
-  checkPv().then(() => { if (!pvReady && sel === BOARD) select(WAIT); loadSnapshot(); });
+  checkBoards().then(() => { if (boardDown(sel)) select(WAIT); loadSnapshot(); });
 });
 $("t").addEventListener("click", openPop);
 // right-click on a conversation in the sidebar: the Mac context menu
 $("nav").addEventListener("contextmenu", e => {
   const el = e.target as HTMLElement, m = $("ctx");
   const r = el.closest<HTMLElement>(".row[data-k]"), pr = el.closest<HTMLElement>(".prow"), gh = el.closest<HTMLElement>('.grp[data-sec="Algemeen"]');
-  if (r && !VIEWS.includes(r.dataset.k!)) {
+  if (r && !isView(r.dataset.k!)) {
     m.dataset.k = r.dataset.k!;
     m.innerHTML = `<button data-ctx="assign">${t("ctx.assign")}</button><button data-ctx="close">${t("nav.close")}</button>`;
   } else if (pr || gh) {
@@ -944,7 +975,7 @@ for (const id of ["model", "effort"]) {
 $("send").addEventListener("click", () => { if (status[sel] === "busy") stopChat(); else sendMsg(); });
 // typing anywhere in an open conversation goes to the composer, focused or not
 window.addEventListener("keydown", e => {
-  if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.isComposing || VIEWS.includes(sel) || !$("pop").hidden) return;
+  if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.isComposing || isView(sel) || !$("pop").hidden) return;
   if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
   ($("c") as HTMLTextAreaElement).focus(); // the key itself then lands in the composer
 });
@@ -970,8 +1001,8 @@ $("ct").addEventListener("change", () => {
 // the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation
 listen<string>("menu", e => {
   if (e.payload === "new-general") select(newChat(null));
-  else if (e.payload === "new-project") select(newChat(VIEWS.includes(sel) ? null : isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)));
-  else if (e.payload === "close-chat" && !VIEWS.includes(sel) && !chats[sel]?.draft) closeChat(sel);
+  else if (e.payload === "new-project") select(newChat(isView(sel) ? null : isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)));
+  else if (e.payload === "close-chat" && !isView(sel) && !chats[sel]?.draft) closeChat(sel);
 });
 $("movebar").addEventListener("click", e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
@@ -1034,8 +1065,9 @@ for (const k of await invoke<string[]>("chats")) {
 saveChats();
 await Promise.all(Object.values(chats).filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title)).map(c => ensureHistory(c.key)));
 await pollAgents();
-await checkPv();
-if ((!VIEWS.includes(sel) && !chats[sel] && !termOf(sel)) || (sel === BOARD && !pvReady) || (sel === PRS && !ghOn())) sel = WAIT;
+await checkBoards();
+if (sel === BOARD) sel = boardKey("productive"); // the one board before the providers
+if ((!isView(sel) && !chats[sel] && !termOf(sel)) || boardDown(sel) || (sel === PRS && !ghOn())) sel = WAIT;
 await select(sel);
 pollPending();
 setInterval(pollPending, 700);

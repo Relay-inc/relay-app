@@ -46,14 +46,64 @@ from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on 
 | `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
 | `src/main.ts` | Main window: sidebar, conversations, permission cards, inspector, agents strip. |
 | `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
-| `src/productive.ts` | Productive board in the sidebar. Moving a card writes to Productive right away. |
+| `src/board.ts`, `src/providers/` | The board in the sidebar, one per switched-on provider (Productive now). Moving a card writes to the tracker right away. See [Board providers](#board-providers). |
+| `src-tauri/src/providers.rs` | The backend half of each board provider: allowed API calls, token in the keychain, settings migration. |
 | `src-tauri/src/vault.rs`, `src/vault-setup.ts` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
-| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Productive integration, language. |
+| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.vault/`: `settings.json`,
-`sessions.json` (conversation to session id) and `pending/`. The Productive token sits
-in the macOS keychain (`vault-app.productive`) and never reaches the webview.
+`sessions.json` (conversation to session id) and `pending/`. Board provider tokens sit
+in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
+
+## Board providers
+
+A task tracker shows as a kanban in the sidebar by implementing one contract in two halves.
+
+**Backend**, `src-tauri/src/providers.rs`: a `Provider` in `PROVIDERS`.
+
+| Field | What it does |
+|---|---|
+| `id`, `name` | `"productive"`, `"Productive"`. The id keys `settings.integrations.<id>` and the keychain service `vault-app.<id>`. |
+| `defaults(&mut cfg)`, `check(&cfg)` | Fill in and validate `settings.integrations.<id>` on every load and save. Keep `on` (bool, sidebar row shown). |
+| `ready(&cfg)`, `not_ready` | Whether the config is complete enough to call the API, and the `TEXT` key of the error when not. |
+| `url(cfg, method, path, body)` | The full URL for a call the webview asks for, `None` when that method and path are not allowed. This is the allowlist: keep it to reads plus the one write that moves a card. |
+| `headers(cfg, token)` | The headers carrying the token (and content type). |
+| `error(code, body)` | An error answer as one line. |
+
+Commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
+`integration_token` (save, or remove with `""`), `integration_call(method, path, body)`. The call runs curl
+with the token over stdin; the webview never sees it.
+
+**Webview**, `src/providers/types.ts`: a `BoardProvider`, registered in `src/providers/index.ts`.
+
+```ts
+interface BoardProvider {
+  id: string; name: string; glyph: string;             // glyph: 16×16 SVG body
+  projects(ctx): Promise<Opt[]>;                       // level 1: Productive project, Trello workspace, Linear team
+  boards(ctx, project): Promise<Opt[]>;                // level 2: Productive board, Trello board, Linear project
+  columns(ctx, ref): Promise<Column[]>;                // task lists, lists, workflow states
+  cards(ctx, ref): Promise<Card[]>;
+  move(ctx, ref, card, toColumn): Promise<number | void>; // resolves with the new placement if known
+  url(ctx, ref, cardId): Promise<string>;              // the card in the browser
+  detail?: CardDetail;                                 // right-panel view; without it a click opens url()
+  reset?(): void;                                      // drop caches
+  settings: { fields: Field[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>; import?: {...} };
+}
+```
+
+`ctx` is `{ config: settings.integrations.<id>, call(method, path, body?) }`. `ref` is a `BoardRef`
+`{ provider, project, board }`. Settings › Integrations draws a pane per provider from `settings.fields`
+(each a string in `integrations.<id>`), with the sidebar switch, the token and a Save that runs `test`.
+
+A vault project maps to at most one board: `settings.boards[<vault project>] = BoardRef`, set from the
+board's header. Opening the board after a conversation in that project shows the linked board.
+
+Settings from before the providers (a top-level `productive: { org, user }`) move to
+`integrations.productive` with `on: true` when they are read.
+
+A new provider: a `Provider` in `providers.rs` (with a test for its `url` allowlist), a `BoardProvider`
+in `src/providers/<id>.ts` added to `PROVIDERS`, its UI strings in all four locales.
 
 ## Other folders
 

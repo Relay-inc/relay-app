@@ -11,6 +11,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod providers;
 mod vault;
 
 // ponytail: REPO and the claude binary are fixed, fine as long as the app runs from its own checkout.
@@ -55,8 +56,8 @@ fn transcripts(st: &App) -> String {
 fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(""); }
-    for k in ["projects", "overrides", "vaults", "productive", "github"] { if !v[k].is_object() { v[k] = json!({}); } }
-    for k in ["org", "user"] { if !v["productive"][k].is_string() { v["productive"][k] = json!(""); } }
+    for k in ["projects", "overrides", "vaults", "github"] { if !v[k].is_object() { v[k] = json!({}); } }
+    providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
     if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
@@ -119,10 +120,12 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.keychain", ["Could not save the token in the keychain", "Kon het token niet in de sleutelhanger bewaren", "Impossible d'enregistrer le jeton dans le trousseau", "Das Token konnte nicht im Schlüsselbund gespeichert werden"]),
     ("err.claude_json", ["~/.claude.json not found or unreadable", "~/.claude.json niet gevonden of onleesbaar", "~/.claude.json introuvable ou illisible", "~/.claude.json nicht gefunden oder nicht lesbar"]),
     ("err.no_pv_token_json", ["No Productive token in ~/.claude.json", "Geen Productive-token in ~/.claude.json", "Aucun jeton Productive dans ~/.claude.json", "Kein Productive-Token in ~/.claude.json"]),
-    ("err.pv_call", ["This Productive call is not allowed", "Deze Productive-oproep is niet toegelaten", "Cet appel Productive n'est pas autorisé", "Dieser Productive-Aufruf ist nicht erlaubt"]),
+    ("err.call", ["This {v} call is not allowed", "Deze {v}-oproep is niet toegelaten", "Cet appel {v} n'est pas autorisé", "Dieser {v}-Aufruf ist nicht erlaubt"]),
+    ("err.no_provider", ["Unknown integration '{v}'", "Onbekende integratie '{v}'", "Intégration inconnue '{v}'", "Unbekannte Integration '{v}'"]),
+    ("err.board_map", ["Invalid board for project '{v}'", "Ongeldig bord voor project '{v}'", "Tableau invalide pour le projet '{v}'", "Ungültiges Board für Projekt '{v}'"]),
     ("err.no_org", ["No organisation ID. Fill it in under Vault › Settings… › Integrations.", "Geen organisatie-id. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun ID d'organisation. Renseignez-le dans Vault › Réglages… › Intégrations.", "Keine Organisations-ID. Trag sie unter Vault › Einstellungen… › Integrationen ein."]),
-    ("err.no_pv_token", ["No Productive token. Fill it in under Vault › Settings… › Integrations.", "Geen Productive-token. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun jeton Productive. Renseignez-le dans Vault › Réglages… › Intégrations.", "Kein Productive-Token. Trag es unter Vault › Einstellungen… › Integrationen ein."]),
-    ("err.pv_down", ["Productive unreachable: {v}", "Productive niet bereikbaar: {v}", "Productive injoignable : {v}", "Productive nicht erreichbar: {v}"]),
+    ("err.no_token", ["No {v} token. Fill it in under Vault › Settings… › Integrations.", "Geen {v}-token. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun jeton {v}. Renseignez-le dans Vault › Réglages… › Intégrations.", "Kein {v}-Token. Trag es unter Vault › Einstellungen… › Integrationen ein."]),
+    ("err.down", ["{p} unreachable: {v}", "{p} niet bereikbaar: {v}", "{p} injoignable : {v}", "{p} nicht erreichbar: {v}"]),
     ("err.unknown", ["unknown error", "onbekende fout", "erreur inconnue", "unbekannter Fehler"]),
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
@@ -648,11 +651,10 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
             return Err(tr_v(lang, "err.override", sid));
         }
     }
-    for k in ["org", "user"] {
-        if !s["productive"][k].as_str().unwrap().chars().all(|c| c.is_ascii_digit()) {
-            return Err(tr_v(lang, "err.pv_digits", &tr(lang, if k == "org" { "pv.org_id" } else { "pv.user_id" })));
-        }
-    }
+    // the provider checks answer in the language being saved
+    let was = ui_lang_of(&state.settings.lock().unwrap());
+    set_cur_lang(lang);
+    if let Err(e) = providers::check(&s) { set_cur_lang(was); return Err(e); }
     let owners: Vec<&str> = s["github"]["owners"].as_str().unwrap().split([' ', ',']).filter(|o| !o.is_empty()).collect();
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(tr(lang, "err.gh_owners"));
@@ -669,43 +671,33 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     Ok(s)
 }
 
-// ---------- Productive: the token lives in the macOS keychain, org and user id in settings.json.
-// The token goes to `security` and curl over stdin, never as an argument (visible in the process list),
-// and it never goes back to a webview.
-const KC: &str = "-s vault-app.productive -a token";
-fn pv_token() -> Option<String> {
-    let o = Command::new("/usr/bin/security").arg("find-generic-password").args(KC.split(' ')).arg("-w").output().ok()?;
-    let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
-    (o.status.success() && !t.is_empty()).then_some(t)
-}
-/// Save the token, or remove it when empty.
-fn pv_set_token(t: &str) -> Result<(), String> {
-    if t.is_empty() {
-        Command::new("/usr/bin/security").arg("delete-generic-password").args(KC.split(' ')).output().map_err(|e| e.to_string())?;
-        return Ok(());
-    }
-    if t.len() > 200 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err(trc("err.token_chars"));
-    }
-    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U {KC} -w {t}").map_err(|e| e.to_string())?;
-    ch.wait().map_err(|e| e.to_string())?;
-    // `security -i` exits 0 even when the command inside failed, so read it back
-    if pv_token().as_deref() == Some(t) { Ok(()) } else { Err(trc("err.keychain")) }
-}
-/// A value inside double quotes in a curl config file.
-fn curl_quote(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")) }
+// ---------- Board providers (providers.rs): token in the keychain, config in settings.integrations.<id>.
 
-/// Whether a Productive token is in the keychain.
+/// Whether the provider is switched on, its config complete and a token in the keychain.
 #[tauri::command]
-fn productive_status() -> bool { pv_token().is_some() }
+fn integration_status(state: State<App>, provider: String) -> Result<bool, String> {
+    let p = providers::get(&provider)?;
+    let cfg = state.settings.lock().unwrap()["integrations"][p.id].clone();
+    Ok(cfg["on"] == true && (p.ready)(&cfg) && providers::token(p).is_some())
+}
+/// Whether a token for the provider is in the keychain, for the settings window.
+#[tauri::command]
+fn integration_has_token(provider: String) -> Result<bool, String> { Ok(providers::token(providers::get(&provider)?).is_some()) }
 
-/// Save the Productive token, or remove it with "". The main window follows, it shows the board only with a token.
+/// Save the provider's token, or remove it with "". The main window follows, it shows a board only with a token.
 #[tauri::command]
-fn productive_token(app: AppHandle, state: State<App>, token: String) -> Result<(), String> {
-    pv_set_token(token.trim())?;
+fn integration_token(app: AppHandle, state: State<App>, provider: String, token: String) -> Result<(), String> {
+    providers::set_token(providers::get(&provider)?, token.trim())?;
     app.emit("settings-changed", state.settings.lock().unwrap().clone()).ok();
     Ok(())
+}
+
+/// One API call for a provider, only the ones its `url` allows. Async, so the network wait stays off the main thread.
+#[tauri::command]
+async fn integration_call(state: State<'_, App>, provider: String, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
+    let p = providers::get(&provider)?;
+    let cfg = state.settings.lock().unwrap()["integrations"][p.id].clone();
+    tauri::async_runtime::spawn_blocking(move || providers::call(p, &cfg, &method, &path, body)).await.map_err(|e| e.to_string())?
 }
 
 /// Take the token, org and user from Claude Code's own Productive MCP config. The token goes to the
@@ -715,35 +707,8 @@ fn productive_import() -> Result<Value, String> {
     let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
         .and_then(|s| serde_json::from_str(&s).ok()).ok_or_else(|| trc("err.claude_json"))?;
     let env = &cfg["mcpServers"]["productive"]["env"];
-    pv_set_token(env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| trc("err.no_pv_token_json"))?)?;
+    providers::set_token(providers::get("productive")?, env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| trc("err.no_pv_token_json"))?)?;
     Ok(json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") }))
-}
-
-/// One Productive API call: GET on any path, PATCH only on a single task (a card moved to another
-/// column). Async, so the network wait stays off the main thread.
-#[tauri::command]
-async fn productive(state: State<'_, App>, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
-    let path_ok = path.starts_with('/') && path.len() < 600 && !path.contains("..") && path.chars().all(|c| c.is_ascii_alphanumeric() || "/?&=[]_-.,%".contains(c));
-    let one_task = path.strip_prefix("/tasks/").is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
-    if !path_ok || !(method == "GET" || (method == "PATCH" && one_task && body.is_some())) { return Err(trc("err.pv_call")); }
-    let org = state.settings.lock().unwrap()["productive"]["org"].as_str().unwrap_or("").to_string();
-    if org.is_empty() { return Err(trc("err.no_org")); }
-    let token = pv_token().ok_or_else(|| trc("err.no_pv_token"))?;
-    // globoff: the [ ] in filter[...] are not curl ranges
-    let mut cfg = format!("globoff\nurl = {}\nrequest = {method}\nheader = {}\nheader = {}\nheader = \"Content-Type: application/vnd.api+json\"\n",
-        curl_quote(&format!("https://api.productive.io/api/v2{path}")), curl_quote(&format!("X-Auth-Token: {token}")), curl_quote(&format!("X-Organization-Id: {org}")));
-    if let Some(b) = body { cfg += &format!("data-binary = {}\n", curl_quote(&b.to_string())); }
-    let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "20", "-K", "-", "-w", "\n%{http_code}"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
-    ch.stdin.take().unwrap().write_all(cfg.as_bytes()).map_err(|e| e.to_string())?;
-    let o = ch.wait_with_output().map_err(|e| e.to_string())?;
-    if !o.status.success() { return Err(trc_v("err.pv_down", String::from_utf8_lossy(&o.stderr).trim())); }
-    let out = String::from_utf8_lossy(&o.stdout);
-    let (text, code) = out.rsplit_once('\n').unwrap_or(("", &out));
-    let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
-    if code.starts_with('2') { return Ok(v); }
-    let e = &v["errors"][0];
-    Err(format!("Productive {code}: {}", e["detail"].as_str().or(e["title"].as_str()).map_or_else(|| trc("err.unknown"), str::to_string)))
 }
 
 // ---------- GitHub: pull requests through the gh CLI and its own login, so no token in the app.
@@ -909,7 +874,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, productive_status, productive_token, productive_import, productive, github_status, github_prs, github_pr])
+        .invoke_handler(tauri::generate_handler![snapshot, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -983,7 +948,7 @@ mod curl_tests {
         let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
         let body = r#"{"t":"a \"b\" c\\d\n","n":1}"#;
         let cfg = format!("globoff\nurl = {}\nrequest = PATCH\nheader = {}\ndata-binary = {}\n",
-            super::curl_quote(&format!("http://{}/tasks/1?filter[x]=1", l.local_addr().unwrap())), super::curl_quote("X-Auth-Token: t-1"), super::curl_quote(body));
+            super::providers::curl_quote(&format!("http://{}/tasks/1?filter[x]=1", l.local_addr().unwrap())), super::providers::curl_quote("X-Auth-Token: t-1"), super::providers::curl_quote(body));
         let mut ch = std::process::Command::new("/usr/bin/curl").args(["-sS", "-K", "-"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn().unwrap();
         ch.stdin.take().unwrap().write_all(cfg.as_bytes()).unwrap();
         let (mut s, _) = l.accept().unwrap();
