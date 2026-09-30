@@ -60,6 +60,12 @@ fn login_path() -> String {
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
+/// The brain folder of a vault: System/ in the new layout, Resources/Meta/Claude/ in the old one.
+fn brain(vault: &str) -> Option<String> {
+    ["System", "Resources/Meta/Claude"].iter().map(|d| format!("{vault}/{d}"))
+        .find(|m| PathBuf::from(m).join("rules/core/work-state.md").is_file())
+}
+
 #[tauri::command]
 fn snapshot(state: State<App>) -> Result<Value, String> {
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
@@ -258,7 +264,7 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
     let s = norm(settings);
     let v = s["vault"].as_str().unwrap();
-    if !PathBuf::from(v).join("Resources/Meta/Claude/rules/core/work-state.md").is_file() {
+    if brain(v).is_none() {
         return Err(format!("Geen vault: work-state.md niet gevonden in {v}"));
     }
     for (name, p) in s["projects"].as_object().unwrap() {
@@ -294,7 +300,8 @@ fn reminder(state: State<App>, action: String, id: String, date: Option<String>)
     if id.len() != 8 || !id.chars().all(|c| c.is_ascii_hexdigit()) { return Err("bad id".into()); }
     let v = vault(&state);
     let mut cmd = Command::new("/usr/bin/python3");
-    cmd.arg(format!("{v}/Resources/Meta/Claude/scripts/reminder-digest.py")).args([&action, &id]);
+    let meta = brain(&v).ok_or("Geen vault: System/ of Resources/Meta/Claude/ niet gevonden")?;
+    cmd.arg(format!("{meta}/scripts/reminder-digest.py")).args([&action, &id]);
     if action == "push" {
         let d = date.filter(|d| !d.is_empty() && d.len() <= 12 && d.chars().all(|c| c.is_ascii_alphanumeric() || "+/-".contains(c)))
             .ok_or("date required (max 12 chars of [0-9A-Za-z+/-])")?;

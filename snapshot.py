@@ -14,7 +14,8 @@ import subprocess
 import sys
 
 VAULT = os.environ.get("VAULT", os.path.expanduser("~/Documents/LaurentMe/Obsidian - Context-management"))
-META = os.path.join(VAULT, "Resources/Meta/Claude")
+# the brain lives in System/ in the new layout, in Resources/Meta/Claude/ in the old one
+META = next((os.path.join(VAULT, d) for d in ("System", "Resources/Meta/Claude") if os.path.isdir(os.path.join(VAULT, d))), os.path.join(VAULT, "System"))
 TODAY = dt.date.fromisoformat(os.environ["TODAY"]) if os.environ.get("TODAY") else dt.date.today()
 
 
@@ -34,7 +35,7 @@ def projects():
 
 def note_state(name):
     hits = [p for p in glob.glob(os.path.join(VAULT, "Contexts/**", f"{name}.md"), recursive=True)
-            if "/Documents/" not in os.path.relpath(p, VAULT)]
+            if not any(d in os.path.relpath(p, VAULT) for d in ("/Documents/", "/Gesprekken/", "/_archive/"))]
     if not hits:
         return {"open": None, "open_items": [], "stand": None, "aliases": []}
     s = open(hits[0], encoding="utf-8").read()
