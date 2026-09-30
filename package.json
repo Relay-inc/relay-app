@@ -15,6 +15,7 @@
     "@vault/agent-claude": "workspace:*",
     "@vault/agent-codex": "workspace:*",
     "@vault/agent-core": "workspace:*",
+    "@vault/agent-opencode": "workspace:*",
     "@vault/board-core": "workspace:*",
     "@vault/integration-linear": "workspace:*",
     "@vault/integration-productive": "workspace:*",

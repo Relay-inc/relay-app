@@ -37,3 +37,4 @@ integration-linear = { path = "../packages/integration-linear" }
 agent-core.workspace = true
 agent-claude = { path = "../packages/agent-claude" }
 agent-codex = { path = "../packages/agent-codex" }
+agent-opencode = { path = "../packages/agent-opencode" }

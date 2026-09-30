@@ -161,16 +161,25 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 
 ## Agent providers
 
-The conversations run on a coding-agent CLI: Claude Code or Codex, others (OpenCode) as more packages of the same
-kind. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
+The conversations run on a coding-agent CLI: Claude Code, Codex or OpenCode. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
 [`packages/agent-core`](packages/agent-core/README.md). The app owns the processes, `sessions.json`, the pending folder,
 the settings and the commands; a provider builds its command line, turns its output into normalised events, reads its
 own transcripts and logs, and reports its limits and tokens.
 
-| Agent | Package |
-|---|---|
-| Claude Code | [`packages/agent-claude`](packages/agent-claude/README.md) |
-| Codex | [`packages/agent-codex`](packages/agent-codex/README.md) |
+| | Claude Code | Codex | OpenCode |
+|---|---|---|---|
+| Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) |
+| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` |
+| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) |
+| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) |
+| Thinking, images | –, yes | yes, yes | yes, yes |
+| Resume, fork | yes, yes | yes, – | yes, yes |
+| Subagents, titles | yes, yes | –, – | –, – |
+| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants |
+| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` |
+| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded |
+| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) |
+| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
 registered in `PROVIDERS` in `src-tauri/src/agents.rs`:
@@ -230,12 +239,27 @@ or `t:<provider>:<sid>`.
 
 1. `packages/agent-<id>/` with a `package.json` (`@vault/agent-<id>`, depending on `@vault/agent-core`) and a `Cargo.toml`
    (crate `agent-<id>`, depending on `agent-core`).
-2. `src/lib.rs`: `pub static PROVIDER` implementing `AgentProvider`; the output parsing in its own module, tested on
-   fixture files in `tests/fixtures/`.
-3. `src/index.ts` with its glyph and `strings`, `src/locales.ts` in all four languages, tests in `tests/`.
-4. A README: how it runs, where it logs, how it asks for permissions and reports usage.
+2. `src/lib.rs`: `pub static PROVIDER` implementing `AgentProvider`. Set `caps` honestly: the webview hides what is false.
+   - `default_bin` and `detect`: where the CLI installs itself; not installed, `installed: false` and a `note` with the
+     install command (Settings shows it next to the status); `logged_in` only when the provider can really tell.
+   - `command` (+ `input` for persistent providers): remove API keys from the environment when it should run on the
+     user's subscription; check every id that goes on a command line (`valid_session`, `safe_model`).
+   - `parser`: the output as `Event`s, in its own module, tested on fixture files in `tests/fixtures/` (live runs,
+     trimmed, where you can; say which were written from docs). One `turn_end` per turn, also when it fails.
+   - Permissions: raise `Event::Permission` and answer in `respond`, or use the pending folder directly. A request the
+     app has no card for must be declined, never left waiting.
+   - `history`, `sessions`, `terminal` from the CLI's own storage, read-only.
+   - Usage: `usage(env, since)` as `Record`s (`cost` None when there is no price), `limits(env)` only where the CLI
+     reports them, else `caps.limits` false.
+3. `src/index.ts` with its glyph, `strings` and optional `options` (settings selects, read back as `env.opt(key)`);
+   `src/locales.ts` in all four languages with `limits.loading`, `off.<reason>`, each window's `label`,
+   `tokens.reading` and `set.help` (which should say how to install it); tests in `tests/` (at least the keys of every
+   language and `modelName`).
+4. A README: how to install it, how it runs, where it logs, how it asks for permissions and reports usage, what ran
+   live and what did not, known gaps. A column in the table above.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
    `src-tauri/src/agents.rs` and `package.json` + `src/agents/index.ts`, then `pnpm install`.
+6. `pnpm build`, `pnpm test` and `cargo test --workspace`.
 
 ## Other folders
 
