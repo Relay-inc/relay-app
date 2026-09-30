@@ -11,7 +11,7 @@ import { PROVIDERS, provider, ctxOf, ready as providerReady, type BoardProvider,
 import "./productive.css";
 import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
 import "./github.css";
-import { startUsage, openUsage, renderUsage, usageTrail } from "./usage";
+import { startUsage, openUsage, renderUsage, usageSummary } from "./usage";
 import { renderMailBar, renderMailTools, renderMailList, renderMailDetail, mailKey, unread, sender, setSeen, type Mail, type MailFilter } from "./mail";
 import "./mail.css";
 
@@ -513,8 +513,6 @@ function renderNav() {
     + (ghOn() ? `<div class="row ${sel === PRS ? "sel" : ""}" data-k="${PRS}">${glyph("pr")}<span class="nm">${t("nav.prs")}</span>${prs?.review.length ? `<span class="count" title="${t("nav.prsReview")}">${prs.review.length}</span>` : ""}</div>` : "")
     + (mailOn() ? `<div class="row ${sel === MAIL ? "sel" : ""}" data-k="${MAIL}">${glyph("mail")}<span class="nm">${t("nav.mail")}</span>${mails?.some(unread) ? `<span class="count">${mails.filter(unread).length}</span>` : ""}</div>` : "");
 
-  h += `<div class="row ${sel === USAGE ? "sel" : ""}" data-k="${USAGE}">${glyph("gauge")}<span class="nm">${t("nav.usage")}</span>${usageTrail()}</div>`;
-
   const gc = listed(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
   // conversations in the order the user dragged, the rest after them in their default order
   const byConv = (parent: string, rows: { key: string; html: string }[]) => { const o = convOrder[parent] || [];
@@ -555,7 +553,16 @@ const usageSession = (k: string | undefined, sid: string) => {
   const tm = terms().find(x => x.sid === sid);
   return tm ? { label: `${pLabel(tm.project)} › ${tm.title}`, key: tm.key } : null;
 };
-const usageChanged = () => { renderNav(); if (sel === USAGE) renderChat(); };
+function updateUsageButton() {
+  const btn = $("usage-btn"), dot = btn.querySelector(".usage-dot") as HTMLElement, u = usageSummary();
+  const title = u ? `${t("nav.usage")} — ${u.label}` : t("nav.usage");
+  btn.title = title; btn.setAttribute("aria-label", title);
+  btn.classList.toggle("sel", sel === USAGE);
+  dot.classList.toggle("on", !!u);
+  dot.classList.toggle("soon", u?.level === "soon");
+  dot.classList.toggle("late", u?.level === "late");
+}
+const usageChanged = () => { renderNav(); updateUsageButton(); if (sel === USAGE) renderChat(); };
 
 function renderChat() {
   const msgs = $("msgs"), log = $("log");
@@ -762,7 +769,7 @@ function renderInsp() {
     : `<div class="meta">${t("insp.noOpen")}</div>`}`;
 }
 
-function render() { renderNav(); renderChat(); renderInsp(); }
+function render() { renderNav(); renderChat(); renderInsp(); updateUsageButton(); }
 
 // ---------- actions
 async function select(k: string) {
@@ -1296,6 +1303,7 @@ setInterval(loadPrs, 5 * 60000);
 // usage: plan limits for the sidebar, tokens while the view is open. Settings from the sidebar's foot
 startUsage(() => sel === USAGE, usageChanged);
 document.addEventListener("click", e => { const a = (e.target as HTMLElement).closest<HTMLElement>("[data-usage-open]"); if (a) select(a.dataset.usageOpen!); });
+$("usage-btn").addEventListener("click", () => select(USAGE));
 $("opensettings").addEventListener("click", () => invoke("open_settings_window"));
 if (sel !== MAIL) loadMails();
 setInterval(loadMails, 5 * 60000);

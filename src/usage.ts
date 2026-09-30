@@ -41,23 +41,29 @@ export function startUsage(visible: () => boolean, changed: () => void) {
 // on opening the view: tokens right away when the last read is older than a minute
 export function openUsage(changed: () => void) { if (Date.now() - tokAt > 60000) loadTokens(changed); }
 
-const level = (p: number) => p >= 95 ? "late" : p >= 80 ? "soon" : "";
-// sidebar: the 5-hour window's use, in the reminders' urgency colours when it runs out
-export function usageTrail() {
-  const s = limits?.ok ? limits.session : null;
-  return s ? `<span class="count ${level(s.pct) ? `due-${level(s.pct)}` : ""}">${Math.round(s.pct)}%</span>` : "";
+const level = (p: number): "" | "soon" | "late" => p >= 95 ? "late" : p >= 80 ? "soon" : "";
+// sidebar: the most constrained limit, for the Usage button's dot (in the reminders' urgency colours) and tooltip
+export function usageSummary(): { pct: number; level: "" | "soon" | "late"; label: string } | null {
+  if (!limits?.ok) return null;
+  const all: [string, Win][] = [];
+  if (limits.session) all.push([t("usage.session"), limits.session]);
+  if (limits.weekly) all.push([t("usage.weekly"), limits.weekly]);
+  for (const w of limits.scoped) all.push([t("usage.weeklyModel", { name: w.name }), w]);
+  if (!all.length) return null;
+  const [label, w] = all.reduce((a, b) => b[1].pct > a[1].pct ? b : a), pct = Math.round(w.pct), when = resetWhen(w.resets);
+  return { pct: w.pct, level: level(w.pct), label: when ? t("usage.summaryResets", { label, pct, when }) : t("usage.summary", { label, pct }) };
 }
 
 const num = (n: number) => new Intl.NumberFormat(currentLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(n);
 const usd = (n: number) => new Intl.NumberFormat(currentLocale(), { style: "currency", currency: "USD", maximumFractionDigits: n < 10 ? 2 : 0 }).format(n);
-function resets(iso: string | null) {
+function resetWhen(iso: string | null) {
   const at = iso ? Date.parse(iso) : NaN;
   if (isNaN(at)) return "";
   const min = Math.max(1, Math.round((at - Date.now()) / 60000)), rtf = new Intl.RelativeTimeFormat(currentLocale(), { numeric: "auto" });
-  const when = min < 60 ? rtf.format(min, "minute") : min < 24 * 60 ? rtf.format(Math.round(min / 60), "hour")
+  return min < 60 ? rtf.format(min, "minute") : min < 24 * 60 ? rtf.format(Math.round(min / 60), "hour")
     : new Intl.DateTimeFormat(currentLocale(), { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(at);
-  return t("usage.resets", { when });
 }
+const resets = (iso: string | null) => { const when = resetWhen(iso); return when ? t("usage.resets", { when }) : ""; };
 // claude-opus-5-5 as Opus 5.5, claude-haiku-4-5-20251001 as Haiku 4.5, anything else as it is
 export const modelName = (id: string) => {
   const m = id.match(/^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/);
