@@ -106,6 +106,9 @@ aside.insp{background:var(--inspector);border-left:1px solid var(--separator);di
 .row{user-select:none}
 .row .who{font-size:11px;color:var(--secondary)}
 .msgs .note{color:var(--secondary);font-size:13px;text-align:center}
+/* the end of a turn: a quiet line under the answer, so it is clear Claude stopped */
+.msgs .done{display:flex;align-items:center;gap:6px;color:var(--secondary);font-size:12px;padding:2px 0 6px}
+.msgs .done .g{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .tool.run::before{animation:r 1s linear infinite;border:0;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--separator);border-top-color:var(--secondary);opacity:1}
 .tool.err{color:var(--label)}
 .err{border:1px solid var(--separator);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--secondary);white-space:pre-wrap;font-family:var(--mono)}

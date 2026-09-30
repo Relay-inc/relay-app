@@ -55,10 +55,18 @@ fn transcripts(st: &App) -> String {
 fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(""); }
-    for k in ["projects", "overrides", "vaults", "productive", "github"] { if !v[k].is_object() { v[k] = json!({}); } }
+    for k in ["projects", "overrides", "vaults", "productive", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
     for k in ["org", "user"] { if !v["productive"][k].is_string() { v["productive"][k] = json!(""); } }
     if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
+    if !v["mail"]["on"].is_boolean() { v["mail"]["on"] = json!(false); }
+    if !v["mail"]["account"].is_string() { v["mail"]["account"] = json!(""); }
+    // favicons: the daily check, on by default. tried holds the site each project was fetched for, so it goes once
+    if !v["favicons"].is_object() { v["favicons"] = json!({}); }
+    if !v["favicons"]["on"].is_boolean() { v["favicons"]["on"] = json!(true); }
+    if !v["favicons"]["last"].as_str().is_some_and(|d| d.len() == 10 && d.chars().all(|c| c.is_ascii_digit() || c == '-')) { v["favicons"]["last"] = json!(""); }
+    if !v["favicons"]["tried"].is_object() { v["favicons"]["tried"] = json!({}); }
+    v["favicons"]["tried"].as_object_mut().unwrap().retain(|_, s| s.as_str().is_some_and(|s| s.len() <= 253));
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     v
 }
@@ -127,6 +135,9 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
+    ("err.no_himalaya", ["himalaya not found. Install it with `brew install himalaya`.", "himalaya niet gevonden. Installeer het met `brew install himalaya`.", "himalaya introuvable. Installez-le avec `brew install himalaya`.", "himalaya nicht gefunden. Installiere es mit `brew install himalaya`."]),
+    ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
+    ("err.mail_account", ["Mail: invalid account name", "Mail: ongeldige accountnaam", "Mail : nom de compte invalide", "Mail: ungültiger Kontoname"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
@@ -229,6 +240,22 @@ fn snapshot(state: State<App>) -> Result<Value, String> {
     })?;
     snap["vault"] = st;
     Ok(snap)
+}
+
+/// The favicon of each project's website, guessed from its notes by favicon.py, for the projects
+/// ([{name, aliases}]) whose guess is not in favicons.tried yet: {name: {site, data}}, data the raw icon or null.
+#[tauri::command]
+async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, String> {
+    let (st, tried) = { let s = state.settings.lock().unwrap(); (vault_of(&s), s["favicons"]["tried"].clone()) };
+    if st["ok"] != true { return Ok(json!({})); }
+    let v = st["vault"].as_str().unwrap();
+    let notes = if st["found"]["notes"] == true { vault::resolve(v, st["map"]["notes"].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
+    let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
+        .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried}).to_string().as_bytes()).map_err(|e| e.to_string())?;
+    let out = child.wait_with_output().map_err(|e| e.to_string())?;
+    serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
 }
 
 /// The configured vault: path, mapping, found per path, ok.
@@ -382,6 +409,9 @@ fn chats(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().keys().c
 /// Session ids of the app's own conversations, so the sidebar does not list them twice.
 #[tauri::command]
 fn app_sids(state: State<App>) -> Vec<String> { state.sids.lock().unwrap().values().cloned().collect() }
+/// Which session each app conversation resumes, so the page can follow a turn it gets no events from.
+#[tauri::command]
+fn app_sessions(state: State<App>) -> HashMap<String, String> { state.sids.lock().unwrap().clone() }
 
 /// Read-only history of any session in the vault, e.g. one that is open in the terminal.
 #[tauri::command]
@@ -398,7 +428,7 @@ fn history_sid(state: State<App>, sid: String, from: Option<u64>) -> Value {
     let items: Vec<Value> = String::from_utf8_lossy(&buf[..end]).lines()
         .filter_map(|l| serde_json::from_str::<Value>(l).ok())
         .filter(|e| (e["type"] == "user" || e["type"] == "assistant") && e["isSidechain"] != true)
-        .map(|e| json!({"type": e["type"], "message": e["message"]})).collect();
+        .map(|e| json!({"type": e["type"], "message": e["message"], "at": e["timestamp"]})).collect();
     json!({"items": items, "next": start + end as u64})
 }
 
@@ -657,6 +687,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(tr(lang, "err.gh_owners"));
     }
+    if !mail_name_ok(s["mail"]["account"].as_str().unwrap()) { return Err(tr(lang, "err.mail_account")); }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
@@ -749,10 +780,13 @@ async fn productive(state: State<'_, App>, method: String, path: String, body: O
 // ---------- GitHub: pull requests through the gh CLI and its own login, so no token in the app.
 // Read-only. The search queries are built here from the settings, the webview only asks for the list.
 
+/// A binary from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
+fn in_path(state: &App, name: &str) -> Option<String> {
+    state.path.split(':').map(|d| format!("{d}/{name}")).find(|p| PathBuf::from(p).is_file())
+}
 /// gh from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
 fn gh(state: &App, args: &[&str]) -> Result<String, String> {
-    let bin = state.path.split(':').map(|d| format!("{d}/gh")).find(|p| PathBuf::from(p).is_file())
-        .ok_or_else(|| trc("err.no_gh"))?;
+    let bin = in_path(state, "gh").ok_or_else(|| trc("err.no_gh"))?;
     let o = Command::new(bin).args(args).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
     if o.status.success() { return Ok(String::from_utf8_lossy(&o.stdout).into_owned()); }
     let e = String::from_utf8_lossy(&o.stderr);
@@ -840,6 +874,60 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
+// ---------- Mail: the inbox through himalaya and its own config, so no password in the app.
+// Listing and reading never change a flag (himalaya v2 reads with BODY.PEEK, checked 30/9). The one write is
+// read/unread, on the user's click. Nothing here sends, moves or deletes: that happens in a conversation, as a draft.
+
+/// An account name as himalaya writes them, or "" for its default account.
+fn mail_name_ok(a: &str) -> bool { a.len() <= 64 && !a.starts_with('-') && a.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) }
+fn himalaya(state: &App, args: &[&str]) -> Result<String, String> {
+    let bin = in_path(state, "himalaya").ok_or_else(|| trc("err.no_himalaya"))?;
+    let o = Command::new(bin).args(args).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+    if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).into_owned()) } else { Err(format!("himalaya: {}", String::from_utf8_lossy(&o.stderr).trim())) }
+}
+/// `-a <account>` when one is set, else himalaya's default.
+fn mail_args<'a>(acct: &'a str, rest: &[&'a str]) -> Vec<&'a str> {
+    let mut a = if acct.is_empty() { vec![] } else { vec!["-a", acct] };
+    a.extend_from_slice(rest); a
+}
+fn mail_account(state: &App) -> String { state.settings.lock().unwrap()["mail"]["account"].as_str().unwrap_or("").to_string() }
+
+/// The himalaya accounts, for the settings window.
+#[tauri::command]
+async fn mail_accounts(state: State<'_, App>) -> Result<Value, String> {
+    let v: Value = serde_json::from_str(&himalaya(&state, &["--json", "account", "list"])?).map_err(|e| format!("himalaya: {e}"))?;
+    Ok(v["accounts"].clone())
+}
+
+/// One page of 50 mails from the inbox of the account from the settings, page 1 is the newest.
+#[tauri::command]
+async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
+    let (acct, page) = (mail_account(&state), page.clamp(1, 1000).to_string());
+    let out = himalaya(&state, &mail_args(&acct, &["--json", "envelope", "list", "-s", "50", "-p", &page]))?;
+    let v: Value = serde_json::from_str(&out).map_err(|e| format!("himalaya: {e}"))?;
+    Ok(v["envelopes"].clone())
+}
+
+/// The text of one mail, without its headers: the list already has sender, subject and date.
+#[tauri::command]
+async fn mail_read(state: State<'_, App>, id: String) -> Result<String, String> {
+    if id.is_empty() || id.len() > 20 || !id.chars().all(|c| c.is_ascii_digit()) { return Err(trc("err.bad_mail")); }
+    let acct = mail_account(&state);
+    let out = himalaya(&state, &mail_args(&acct, &["message", "read", &id]))?;
+    let body = out.split_once("\n\n").map_or(out.as_str(), |(_, b)| b).trim();
+    // ponytail: long threads cut at 100k characters, the conversation reads the full mail with himalaya itself
+    Ok(body.chars().take(100_000).collect())
+}
+
+/// Mark one mail read or unread, on the user's click.
+#[tauri::command]
+async fn mail_seen(state: State<'_, App>, id: String, seen: bool) -> Result<(), String> {
+    if id.is_empty() || id.len() > 20 || !id.chars().all(|c| c.is_ascii_digit()) { return Err(trc("err.bad_mail")); }
+    let acct = mail_account(&state);
+    himalaya(&state, &mail_args(&acct, &["flag", if seen { "add" } else { "remove" }, "-f", "seen", &id]))?;
+    Ok(())
+}
+
 /// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
 #[tauri::command]
 async fn pick_folder(app: AppHandle) -> Option<String> {
@@ -909,7 +997,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, productive_status, productive_token, productive_import, productive, github_status, github_prs, github_pr])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, productive_status, productive_token, productive_import, productive, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -1016,5 +1104,14 @@ mod github_tests {
         let m = super::repo_projects(&v);
         assert_eq!(m.get("weareantenna/craft-veride").map(String::as_str), Some("Website Onderhoud"));
         println!("{} repos mapped", m.len());
+    }
+}
+
+#[cfg(test)]
+mod mail_tests {
+    #[test]
+    fn account_names() {
+        assert!(super::mail_name_ok("") && super::mail_name_ok("weareantenna") && super::mail_name_ok("medq_2.old-x"));
+        assert!(!super::mail_name_ok("-a x") && !super::mail_name_ok("-ax") && !super::mail_name_ok("a;rm") && !super::mail_name_ok(&"a".repeat(65)));
     }
 }
