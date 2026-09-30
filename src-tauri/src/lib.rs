@@ -12,6 +12,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod providers;
+mod usage;
 mod vault;
 
 // ponytail: REPO and the claude binary are fixed, fine as long as the app runs from its own checkout.
@@ -940,6 +941,9 @@ fn open_settings(app: &AppHandle) {
         .title(title).inner_size(680.0, 520.0).min_inner_size(600.0, 420.0)
         .minimizable(false).maximizable(false).build().ok();
 }
+/// The settings row at the bottom of the sidebar: the same window as Vault › Settings….
+#[tauri::command]
+fn open_settings_window(app: AppHandle) { open_settings(&app); }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -968,7 +972,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

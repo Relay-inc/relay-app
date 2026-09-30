@@ -11,6 +11,7 @@ import { PROVIDERS, provider, ctxOf, ready as providerReady, type BoardProvider,
 import "./productive.css";
 import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
 import "./github.css";
+import { startUsage, openUsage, renderUsage, usageTrail } from "./usage";
 import { renderMailBar, renderMailTools, renderMailList, renderMailDetail, mailKey, unread, sender, setSeen, type Mail, type MailFilter } from "./mail";
 import "./mail.css";
 
@@ -124,8 +125,9 @@ const subLog: Record<string, string[]> = {}; // agent id: its last messages, whi
 const runningSubs = (k: string) => (subs[k] || []).filter(a => a.running).length;
 const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${tn("nav.agentsWorking", n)}">${n}</span>` : ""; };
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
+const USAGE = "__usage";
 const WAIT = "__wait", REM = "__rem", BOARD = "__board", PRS = "__prs", MAIL = "__mail", NEW = "Nieuw gesprek";
-const VIEWS = [WAIT, REM, PRS, MAIL];
+const VIEWS = [WAIT, REM, PRS, MAIL, USAGE];
 // a provider's board is the view "__board:<provider id>"
 const boardKey = (id: string) => `${BOARD}:${id}`;
 const boardOf = (k: string) => k.startsWith(`${BOARD}:`) ? provider(k.slice(BOARD.length + 1)) : undefined;
@@ -473,6 +475,7 @@ const G: Record<string, string> = {
   term: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/>',
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 2.5v1.5M8 12v1.5M2.5 8H4M12 8h1.5M4.1 4.1l1.1 1.1M10.8 10.8l1.1 1.1M4.1 11.9l1.1-1.1M10.8 5.2l1.1-1.1"/>',
   folder: '<path d="M2.5 5V4a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V5Z"/>',
+  gauge: '<path d="M2.8 11.5a5.5 5.5 0 1 1 10.4 0M8 9.5 10.5 6"/><circle cx="8" cy="9.5" r=".8"/>',
   check: '<path d="M3.5 8.5 6.5 11.5 12.5 4.5"/>',
   cal: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>',
   left: '<path d="M10 3.5 5.5 8 10 12.5"/>',
@@ -510,6 +513,8 @@ function renderNav() {
     + (ghOn() ? `<div class="row ${sel === PRS ? "sel" : ""}" data-k="${PRS}">${glyph("pr")}<span class="nm">${t("nav.prs")}</span>${prs?.review.length ? `<span class="count" title="${t("nav.prsReview")}">${prs.review.length}</span>` : ""}</div>` : "")
     + (mailOn() ? `<div class="row ${sel === MAIL ? "sel" : ""}" data-k="${MAIL}">${glyph("mail")}<span class="nm">${t("nav.mail")}</span>${mails?.some(unread) ? `<span class="count">${mails.filter(unread).length}</span>` : ""}</div>` : "");
 
+  h += `<div class="row ${sel === USAGE ? "sel" : ""}" data-k="${USAGE}">${glyph("gauge")}<span class="nm">${t("nav.usage")}</span>${usageTrail()}</div>`;
+
   const gc = listed(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
   // conversations in the order the user dragged, the rest after them in their default order
   const byConv = (parent: string, rows: { key: string; html: string }[]) => { const o = convOrder[parent] || [];
@@ -543,6 +548,15 @@ function renderNav() {
   $("nav").innerHTML = h;
 }
 
+// the usage view names the conversations it lists and opens them on a click
+const usageSession = (k: string | undefined, sid: string) => {
+  const c = k ? chats[k] : undefined;
+  if (c) return { label: `${pLabel(c.project)} › ${shownTitle(c.title)}`, key: c.key };
+  const tm = terms().find(x => x.sid === sid);
+  return tm ? { label: `${pLabel(tm.project)} › ${tm.title}`, key: tm.key } : null;
+};
+const usageChanged = () => { renderNav(); if (sel === USAGE) renderChat(); };
+
 function renderChat() {
   const msgs = $("msgs"), log = $("log");
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
@@ -567,6 +581,14 @@ function renderChat() {
     $("term").style.display = "none";
     $("t").textContent = "Pull requests"; $("ts").textContent = "";
     msgs.innerHTML = renderPrs(prs, prErr, prBusy, { esc, projectLabel: pLabel, open: prOpen });
+    return;
+  }
+  if (sel === USAGE) {
+    $("composer").style.display = "none"; $("movebar").style.display = "none";
+    $("term").style.display = "none";
+    $("t").textContent = t("nav.usage"); $("ts").textContent = "";
+    msgs.innerHTML = renderUsage({ esc, session: usageSession });
+    openUsage(usageChanged);
     return;
   }
   if (sel === MAIL) {
@@ -1265,5 +1287,9 @@ checkFavicons();
 setInterval(checkFavicons, 60 * 60000); // hourly, it acts once a day
 if (sel !== PRS) loadPrs(); // select() already loads it when the view is open
 setInterval(loadPrs, 5 * 60000);
+// usage: plan limits for the sidebar, tokens while the view is open. Settings from the sidebar's foot
+startUsage(() => sel === USAGE, usageChanged);
+document.addEventListener("click", e => { const a = (e.target as HTMLElement).closest<HTMLElement>("[data-usage-open]"); if (a) select(a.dataset.usageOpen!); });
+$("opensettings").addEventListener("click", () => invoke("open_settings_window"));
 if (sel !== MAIL) loadMails();
 setInterval(loadMails, 5 * 60000);
