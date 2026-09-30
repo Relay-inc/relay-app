@@ -2,7 +2,9 @@
 """One JSON snapshot of everything the control room shows.
 
 Reads the vault (work-state.md, each project's ## Open, reminders.md) and `claude agents --json`.
-Read-only. The app calls this and renders the result, so the parsing lives in one place.
+Read-only. The app calls this and renders the result, so the parsing lives in one place. The app
+passes the vault's mapped paths (VAULT_WORK_STATE, VAULT_REMINDERS, VAULT_NOTES; "" when missing);
+run by hand, the known layouts are the fallback.
 """
 import datetime as dt
 import glob
@@ -13,29 +15,38 @@ import re
 import subprocess
 import sys
 
-VAULT = os.environ["VAULT"]  # set by the app from the user's own settings, no default
+VAULT = os.environ.get("VAULT") or sys.exit("snapshot: VAULT not set")
 # the brain lives in System/ in the new layout, in Resources/Meta/Claude/ in the old one
 META = next((os.path.join(VAULT, d) for d in ("System", "Resources/Meta/Claude") if os.path.isdir(os.path.join(VAULT, d))), os.path.join(VAULT, "System"))
+WORK_STATE = os.environ.get("VAULT_WORK_STATE", os.path.join(META, "rules/core/work-state.md"))
+REMINDERS = os.environ.get("VAULT_REMINDERS", os.path.join(META, "reminders.md"))
+NOTES = os.environ.get("VAULT_NOTES", os.path.join(VAULT, "Contexts"))
+NOTES = NOTES if os.path.isdir(NOTES) else VAULT
+# a context is a heading in work-state named after a folder of the notes (Contexts/Antenna…), or a known one
+CONTEXTS = {"Antenna", "Meersman", "Personal"} | {d for d in os.listdir(NOTES) if os.path.isdir(os.path.join(NOTES, d)) and not d.startswith(".")}
 TODAY = dt.date.fromisoformat(os.environ["TODAY"]) if os.environ.get("TODAY") else dt.date.today()
 
 
 def projects():
     out, context = [], None
-    for line in open(os.path.join(META, "rules/core/work-state.md"), encoding="utf-8"):
-        h = re.match(r"^### (\S.*?)\s*$", line)  # every context heading in the index
+    for line in open(WORK_STATE, encoding="utf-8"):
+        h = re.match(r"^#{2,3} (.+?)\s*$", line)
         if h:
-            context = h.group(1)
-        m = re.match(r"^\| \[\[([^\]]+)\]\][^|]* \| (\w+) \| ([\d-]+) \| (.*) \|$", line.rstrip("\n"))
+            context = h.group(1) if h.group(1) in CONTEXTS else None
+        # a row names its project as a [[link]] or as plain text: | [[Name]] | Active | 2026-09-29 | … |
+        m = re.match(r"^\| (?:\[\[([^\]]+)\]\][^|]*|([^|\[]+?)) \| (\w+) \| ([\d-]+) \| (.*) \|$", line.rstrip("\n"))
         if m and context:
-            name, state, last, summary = m.groups()
+            link, plain, state, last, summary = m.groups()
+            name = link or plain.strip()
             out.append({"name": name, "context": context, "state": state, "last": last,
                         "summary": summary, **note_state(name)})
     return out
 
 
 def note_state(name):
-    hits = [p for p in glob.glob(os.path.join(VAULT, "Contexts/**", f"{name}.md"), recursive=True)
-            if not any(d in os.path.relpath(p, VAULT) for d in ("/Documents/", "/Gesprekken/", "/_archive/"))]
+    hits = [p for n in dict.fromkeys([name, re.sub(r"\s*\(.*\)$", "", name)])  # "Brutsaert (ERP op maat)": Brutsaert.md too
+            for p in glob.glob(os.path.join(glob.escape(NOTES), "**", f"{glob.escape(n)}.md"), recursive=True)
+            if not any(d in "/" + os.path.relpath(p, NOTES) for d in ("/Documents/", "/Gesprekken/", "/_archive/"))]
     if not hits:
         return {"open": None, "open_items": [], "stand": None, "aliases": []}
     s = open(hits[0], encoding="utf-8").read()
@@ -51,8 +62,11 @@ def note_state(name):
 
 def reminders():
     out = []
-    for line in open(os.path.join(META, "reminders.md"), encoding="utf-8"):
-        m = re.match(r"^\| (\d{4}-\d\d-\d\d) \| (.*?) \| (.*?) \| (.*?) \|$", line.rstrip("\n"))
+    if not REMINDERS or not os.path.isfile(REMINDERS):
+        return out
+    # | date | reminder | source | repeat |, the repeat column optional
+    for line in open(REMINDERS, encoding="utf-8"):
+        m = re.match(r"^\| (\d{4}-\d\d-\d\d) \| (.*?) \| (.*?)(?: \| (.*?))? \|$", line.rstrip("\n"))
         if not m:
             continue
         date, text, _source, repeat = m.groups()
@@ -62,7 +76,7 @@ def reminders():
         out.append({"id": hashlib.sha1(f"{date}|{text}".encode("utf-8")).hexdigest()[:8],  # same id as reminder-digest.py
                     "date": date, "days": days, "project": proj.group(1) if proj else None,
                     "title": unlink(title.group(1) if title else first_sentence(text)).rstrip("."),
-                    "repeat": repeat.strip() or None})
+                    "repeat": (repeat or "").strip() or None})
     return sorted(out, key=lambda r: r["date"])
 
 
