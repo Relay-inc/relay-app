@@ -268,3 +268,13 @@ aside.side input{-webkit-user-select:text;user-select:text}
 .zoom{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:40px;background:rgba(0,0,0,.55);cursor:zoom-out}
 .zoom[hidden]{display:none}
 .zoom img{max-width:100%;max-height:100%;border-radius:var(--r);box-shadow:0 8px 32px rgba(0,0,0,.3);background:var(--bg)}
+
+/* first launch: choose the vault, over the main window */
+.onboard{position:fixed;inset:0;z-index:50;overflow:auto;background:var(--inspector);padding:28px 32px}
+.onboard .set{max-width:640px;margin:40px auto}
+.vmap{display:grid;gap:10px}
+.vrow{display:grid;gap:4px}
+.vlabel{font-weight:500}
+.vfound{min-width:52px;font-size:12px}
+.snaperr{position:fixed;top:0;left:50%;transform:translateX(-50%);z-index:40;max-width:70%;padding:6px 12px;border-radius:0 0 var(--r) var(--r);background:var(--bg);border:1px solid var(--separator);color:var(--red,#d33);font-size:12px}
+.rem-hint{margin-bottom:10px}

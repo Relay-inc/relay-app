@@ -17,9 +17,21 @@ pnpm tauri dev
 Needs Rust, pnpm, `/usr/bin/python3`, Claude Code at `~/.local/bin/claude` (logged in), and iTerm
 for "open in terminal".
 
-On first start, pick the vault in Vault › Instellingen… (Cmd-,). The built-in default still points to
-the old vault folder. A folder counts as a vault when it has `System/rules/core/work-state.md` (or
-the old `Resources/Meta/Claude/` layout).
+On first start the app asks for the vault folder and shows what it found in it; change it later in
+Vault › Settings… (Cmd-,). Vaults differ, so the app keeps a mapping per vault in `settings.json`:
+
+```json
+"vault": "/Users/me/vault",
+"vaults": { "/Users/me/vault": {
+  "workState": "Contexts/Personal/State/work-state.md",
+  "reminders": "Contexts/Personal/State/reminders.md",
+  "reminderScript": "",
+  "notes": "Contexts" } }
+```
+
+Paths are relative to the vault (absolute ones work too). Picking a folder detects them: the
+`System/` layout, the old `Resources/Meta/Claude/` one, else a search by file name; symlinks are
+resolved. Only `workState` is required; without `reminders` or `reminderScript` those features are off.
 
 `pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py` and `perm_server.py`
 from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on this machine.
@@ -34,6 +46,7 @@ from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on 
 | `src/main.ts` | Main window: sidebar, conversations, permission cards, inspector, agents strip. |
 | `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
 | `src/productive.ts` | Productive board in the sidebar. Moving a card writes to Productive right away. |
+| `src-tauri/src/vault.rs`, `src/vault-setup.ts` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
 | `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Productive integration, language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 

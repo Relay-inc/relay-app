@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { initI18n, t } from "./i18n";
+import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
 
 // The settings window: vault folder and the projects Laurent customised. Saving emits
 // "settings-changed" from the backend, the main window follows it.
-type Settings = { vault: string; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null>; language?: string };
+type Settings = { vault: string; vaults?: Record<string, VaultMap>; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null>; language?: string };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const root = document.getElementById("set")!;
 let settings: Settings = await invoke<Settings>("get_settings");
+let vs: VaultStatus = await invoke<VaultStatus>("vault_status");
 let msg = "", ok = false;
 await initI18n();
 
@@ -17,7 +19,9 @@ function render() {
   root.innerHTML = `
     <h2>Vault</h2>
     <div class="meta">${t("set.vaultHelp")}</div>
-    <div class="setrow"><input class="field" id="vaultpath" value="${esc(settings.vault)}" spellcheck="false"><button class="btn" data-set="pick">${t("set.pick")}</button></div>
+    <div class="setrow"><input class="field" id="vaultpath" value="${esc(vs.vault)}" readonly spellcheck="false"><button class="btn" data-set="pick">${t("set.pick")}</button></div>
+    <div class="meta">${t("vault.mapHelp")}</div>
+    ${renderMapping(vs)}
     <div class="setrow end">${msg ? `<span class="${ok ? "okmsg" : "errmsg"}">${esc(msg)}</span>` : ""}<button class="btn primary" data-set="save">${t("set.save")}</button></div>
     <h2>${t("set.custom")}</h2>
     <div class="meta">${t("set.customHelp")}</div>
@@ -30,19 +34,20 @@ function render() {
   document.title = t("set.title");
 }
 async function save(next: Settings, done: string) {
-  try { settings = await invoke<Settings>("set_settings", { settings: next }); msg = done; ok = true; }
+  try { settings = await invoke<Settings>("set_settings", { settings: next }); vs = await invoke<VaultStatus>("vault_status"); msg = done; ok = true; }
   catch (e) { msg = String(e); ok = false; }
   render();
 }
 root.addEventListener("click", async e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-set]"); if (!b) return;
-  const input = document.getElementById("vaultpath") as HTMLInputElement;
-  if (b.dataset.set === "pick") { const f = await invoke<string | null>("pick_folder"); if (f) input.value = f; }
-  if (b.dataset.set === "save") await save({ ...settings, vault: input.value.trim() }, t("set.saved"));
+  if (b.dataset.set === "pick") { vs = (await pickVault()) ?? vs; msg = ""; render(); }
+  if (b.dataset.set === "pickmap") { vs = await pickMapped(vs, b.dataset.k as MapKey, readMapping(root, vs)); render(); }
+  if (b.dataset.set === "save") await save({ ...settings, vault: vs.vault, vaults: { ...settings.vaults, [vs.vault]: readMapping(root, vs) } }, t("set.saved"));
   if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await save(next, t("set.restored")); }
 });
 // the language applies right away: saved, then this window and the main one redraw in it
 root.addEventListener("change", async e => {
+  if ((e.target as HTMLElement).matches("[data-map]")) { vs = await checkMapping(vs.vault, readMapping(root, vs)); render(); return; }
   const sel = (e.target as HTMLElement).closest<HTMLSelectElement>("#language"); if (!sel) return;
   await save({ ...settings, language: sel.value }, "");
   await initI18n(); render();
