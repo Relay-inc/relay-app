@@ -97,10 +97,10 @@ export function renderBody(body: string, esc: (s: unknown) => string, depth = 0)
     + (after ? `<div class="mail-body">${prose(after, esc)}</div>` : "");
 }
 
-// the escaped srcdoc / rendered text per body object: a streaming conversation redraws the panel often, a big mail is escaped once
-const built = new WeakMap<MailBody, { frame?: string; text?: string }>();
+// the escaped srcdoc per body object: a streaming conversation redraws the panel often, a big mail is escaped once
+const built = new WeakMap<MailBody, { frame?: string }>();
 const main = (b: MailBody, textView: boolean, esc: (s: unknown) => string) => { const c = built.get(b) ?? {}; built.set(b, c);
-  return b.html && !textView ? (c.frame ??= `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(b.html)}"></iframe>`) : (c.text ??= renderBody(b.text, esc)); };
+  return b.html && !textView ? (c.frame ??= `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(b.html)}"></iframe>`) : renderBody(b.text, esc); };
 const kb = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`;
 /** The confirm bar for a link clicked inside a mail. Lives in its own element (#maillink) so the frame below is not redrawn. */
 export const renderMailLink = (url: string, esc: (s: unknown) => string) => url

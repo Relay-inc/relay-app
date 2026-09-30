@@ -11,7 +11,7 @@ pub use rpc::{rpc, rpc_result, Rpc};
 
 use async_imap::types::{Fetch, Flag, Name, NameAttribute};
 use futures::TryStreamExt;
-use mail_parser::{Address, HeaderName, Message, MessageParser, MimeHeaders};
+use mail_parser::{Address, HeaderName, HeaderValue, Message, MessageParser, MimeHeaders};
 use render::cap;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -73,11 +73,12 @@ struct Conn { s: Imap, email: String, all: String, drafts: Option<String>, valid
 struct Slot { conn: Option<Conn>, validity: Option<u32> }
 
 /// Net: drop the session, reconnect and retry once. Imap: the server refused, drop the session (its state is
-/// unknown), no retry. User: our own check failed, the session stays.
+/// unknown), no retry. User: our own check failed, the session stays. Auth: Gmail refused the login, the
+/// cached password is forgotten.
 #[derive(Debug)]
-enum Fail { Net(String), Imap(String), User(String) }
+enum Fail { Net(String), Imap(String), User(String), Auth(String) }
 impl Fail {
-    fn msg(self) -> String { match self { Fail::Net(m) | Fail::Imap(m) | Fail::User(m) => m } }
+    fn msg(self) -> String { match self { Fail::Net(m) | Fail::Imap(m) | Fail::User(m) | Fail::Auth(m) => m } }
 }
 impl From<async_imap::error::Error> for Fail {
     fn from(e: async_imap::error::Error) -> Self {
@@ -112,7 +113,7 @@ fn quoted(s: &str) -> Result<String, Fail> {
     Ok(format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")))
 }
 
-async fn password(a: &Account) -> Result<String, Fail> {
+async fn keychain(a: &Account) -> Result<String, Fail> {
     let (svc, acc) = (a.keychain_service.clone(), a.keychain_account.clone());
     if !key_ok(&svc) || !key_ok(&acc) { return Err(user("invalid keychain entry name")); }
     // `security` can show an approval dialog, never hold the account's lock on it forever
@@ -128,17 +129,17 @@ async fn password(a: &Account) -> Result<String, Fail> {
     Ok(pw)
 }
 
-async fn connect(a: &Account) -> Result<Conn, Fail> {
-    let pw = password(a).await?;
+async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {
     let slow = |_| Fail::Net(format!("{HOST} did not answer in time"));
     let tcp = timeout(CONNECT, TcpStream::connect((HOST, 993))).await.map_err(slow)?.map_err(|e| Fail::Net(format!("{HOST}: {e}")))?;
     let tls = timeout(CONNECT, async_native_tls::connect(HOST, tcp)).await.map_err(slow)?.map_err(|e| Fail::Net(format!("TLS: {e}")))?;
     let mut cl = async_imap::Client::new(tls);
     // Client::new does not read the greeting (login would skip it), read it here so a mute server fails fast
     timeout(CONNECT, cl.read_response()).await.map_err(slow)?.map_err(|e| Fail::Net(e.to_string()))?.ok_or_else(|| Fail::Net("no IMAP greeting".into()))?;
-    let mut s = timeout(CMD, cl.login(&a.email, &pw)).await.map_err(slow)?
-        .map_err(|(e, _)| user(format!("Login failed for {}: {}", a.email, Fail::from(e).msg())))?;
-    drop(pw);
+    let mut s = timeout(CMD, cl.login(&a.email, pw)).await.map_err(slow)?.map_err(|(e, _)| match Fail::from(e) {
+        Fail::Imap(m) => Fail::Auth(format!("Login failed for {}: {m}", a.email)),
+        f => f,
+    })?;
     if !t(s.capabilities()).await?.has_str("X-GM-EXT-1") { return Err(user("Only Gmail accounts are supported")); }
     let names: Vec<Name> = t(async { s.list(Some(""), Some("*")).await?.try_collect().await }).await?;
     // the special-use attributes, the names are localized ([Gmail]/Alle berichten)
@@ -161,7 +162,9 @@ macro_rules! run {
         loop {
             if g.conn.as_ref().is_some_and(|c| c.used.elapsed().map_or(true, |d| d > IDLE)) { g.conn = None; }
             if g.conn.is_none() {
-                let c = connect($acct).await.map_err(Fail::msg)?;
+                let c = $self.connect($acct).await.map_err(Fail::msg)?;
+                // ponytail: Gmail's All Mail UIDVALIDITY practically never changes, this reports a change once and
+                // does not track which ids were handed out before it
                 let changed = g.validity.is_some() && g.validity != c.validity;
                 (g.validity, g.conn) = (c.validity, Some(c));
                 if changed { break Err(STALE.to_string()); }
@@ -172,7 +175,7 @@ macro_rules! run {
             match $body.await {
                 Ok(v) => { g.conn.as_mut().unwrap().used = SystemTime::now(); break Ok::<_, String>(v); }
                 Err(Fail::User(m)) => break Err(m),
-                Err(Fail::Imap(m)) => { g.conn = None; break Err(m); }
+                Err(Fail::Imap(m) | Fail::Auth(m)) => { g.conn = None; break Err(m); }
                 Err(Fail::Net(m)) => { g.conn = None; if retried { break Err(m); } retried = true; }
             }
         }
@@ -188,12 +191,14 @@ async fn search(c: &mut Conn, q: &str) -> Result<Vec<u32>, Fail> {
     Ok(v)
 }
 
-/// UI rows, newest first. The fetch stream may carry unsolicited FETCHes for other mails, hence the uid filter.
+/// UI rows, newest first. The fetch stream also carries unsolicited FETCHes (flag updates for these or other
+/// mails), so only the ones with our headers count, once per uid.
 async fn rows(c: &mut Conn, uids: &[u32]) -> Result<Vec<Value>, Fail> {
     if uids.is_empty() { return Ok(vec![]); }
     let mut f = fetch(c, &set(uids), "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE)])").await?;
-    f.retain(|f| f.uid.is_some_and(|u| uids.contains(&u)));
+    f.retain(|f| f.header().is_some() && f.uid.is_some_and(|u| uids.contains(&u)));
     f.sort_by_key(|f| std::cmp::Reverse(f.uid));
+    f.dedup_by_key(|f| f.uid);
     Ok(f.iter().map(|f| row(f, &c.email)).collect())
 }
 /// A row, id-only (empty subject and addresses) when the headers do not parse, so a page never shrinks.
@@ -218,27 +223,28 @@ async fn search_rows(c: &mut Conn, q: &str, limit: usize) -> Result<Vec<Value>, 
 
 /// The whole raw mail, size-checked first.
 async fn full(c: &mut Conn, uid: u32) -> Result<Vec<u8>, Fail> {
-    let one = |f: &Fetch| f.uid == Some(uid);
-    let size = fetch(c, &uid.to_string(), "(UID RFC822.SIZE)").await?.iter().find(|f| one(f)).and_then(|f| f.size)
+    // a flags-only FETCH for the same uid can come first, so look for the one that carries the attribute
+    let size = fetch(c, &uid.to_string(), "(UID RFC822.SIZE)").await?.iter().find_map(|f| f.size.filter(|_| f.uid == Some(uid)))
         .ok_or_else(|| user(format!("No mail with id {uid}")))?;
     if size > MSG_MAX { return Err(user(format!("Mail {uid} is larger than 50 MB"))); }
-    fetch(c, &uid.to_string(), "(UID BODY.PEEK[])").await?.iter().find(|f| one(f)).and_then(|f| f.body()).map(<[u8]>::to_vec)
+    fetch(c, &uid.to_string(), "(UID BODY.PEEK[])").await?.iter().find_map(|f| f.body().filter(|_| f.uid == Some(uid)).map(<[u8]>::to_vec))
         .ok_or_else(|| user(format!("No mail with id {uid}")))
 }
 
 /// The conversation of a mail: its root is the first References id, else its own Message-ID.
 // ponytail: the 30 newest mails of the thread, header search only (no X-GM-THRID)
-async fn thread(c: &mut Conn, uid: u32) -> Result<Vec<(u32, Vec<u8>, bool)>, Fail> {
+async fn thread(c: &mut Conn, uid: u32) -> Result<(Option<String>, Vec<(u32, Vec<u8>, bool)>), Fail> {
     let raw = full(c, uid).await?;
     let root = root(&parse(&raw)?);
-    let mut uids: Vec<u32> = match root.and_then(|r| quoted(&r).ok()) {
+    let mut uids: Vec<u32> = match root.as_deref().and_then(|r| quoted(r).ok()) {
         Some(q) => t(c.s.uid_search(format!("OR HEADER Message-ID {q} HEADER References {q}"))).await?.into_iter().collect(),
         None => vec![],
     };
     if !uids.contains(&uid) { uids.push(uid); }
     uids.sort_unstable();
     let uids = uids.split_off(uids.len().saturating_sub(30));
-    let sizes: HashMap<u32, u32> = fetch(c, &set(&uids), "(UID RFC822.SIZE)").await?.iter().filter_map(|f| Some((f.uid?, f.size?))).collect();
+    let sizes: HashMap<u32, u32> = fetch(c, &set(&uids), "(UID RFC822.SIZE)").await?.iter()
+        .filter_map(|f| Some((f.uid.filter(|u| uids.contains(u))?, f.size?))).collect();
     let (small, big): (Vec<u32>, Vec<u32>) = uids.iter().filter(|u| sizes.contains_key(u)).partition(|u| sizes[u] <= THREAD_BODY_MAX);
     let mut got: HashMap<u32, (Vec<u8>, bool)> = HashMap::new();
     for (list, q, whole) in [(&small, "(UID BODY.PEEK[])", true), (&big, "(UID BODY.PEEK[HEADER])", false)] {
@@ -248,16 +254,21 @@ async fn thread(c: &mut Conn, uid: u32) -> Result<Vec<(u32, Vec<u8>, bool)>, Fai
             if let (Some(u), Some(d)) = (f.uid, data) { if list.contains(&u) { got.insert(u, (d.to_vec(), whole)); } }
         }
     }
-    Ok(uids.iter().filter_map(|u| got.remove(u).map(|(d, w)| (*u, d, w))).collect())
+    Ok((root, uids.iter().filter_map(|u| got.remove(u).map(|(d, w)| (*u, d, w))).collect()))
 }
 
-/// The thread root: the first References id, else the own Message-ID. An id without '@' or under 8 characters
-/// would match half the mailbox as a substring, it counts as missing.
+/// The thread root: the first References id, else the own Message-ID. An id without a local part, a domain
+/// or 8 characters would match half the mailbox as a substring, it counts as missing.
 fn root(m: &Message) -> Option<String> {
-    let ok = |s: &&str| s.len() >= 8 && s.contains('@');
-    let r = m.references();
-    r.as_text_list().and_then(|l| l.first().map(|s| s.as_ref())).or(r.as_text()).filter(ok)
-        .or(m.message_id().filter(ok)).map(str::to_string)
+    let ok = |s: &&str| s.len() >= 8 && s.split_once('@').is_some_and(|(l, d)| !l.is_empty() && !d.is_empty());
+    ids(m.references()).first().copied().filter(ok).or(m.message_id().filter(ok)).map(str::to_string)
+}
+fn ids<'a>(v: &'a HeaderValue) -> Vec<&'a str> {
+    v.as_text_list().map(|l| l.iter().map(|s| s.as_ref()).collect()).or(v.as_text().map(|s| vec![s])).unwrap_or_default()
+}
+/// HEADER search matches substrings, a mail only belongs to the thread when an id equals the root exactly.
+fn in_thread(m: &Message, root: &str) -> bool {
+    m.message_id() == Some(root) || ids(m.references()).contains(&root) || ids(m.in_reply_to()).contains(&root)
 }
 
 async fn store(c: &mut Conn, uid: u32, seen: bool) -> Result<(), Fail> {
@@ -346,7 +357,9 @@ fn quarantine(p: &Path) -> Result<(), String> {
     if ok { Ok(()) } else { Err("Could not set the quarantine flag, the attachment was not saved".into()) }
 }
 /// A draft as it may be appended: at most 5 MB, parseable, CRLF line ends, exactly one From that is the account.
-fn draft(raw: &str, email: &str) -> Result<Vec<u8>, String> {
+/// Also returns the To and Cc addresses, so the app shows the real recipients whatever the model says.
+type Draft = (Vec<u8>, Vec<String>, Vec<String>);
+fn draft(raw: &str, email: &str) -> Result<Draft, String> {
     if raw.len() > DRAFT_MAX { return Err("draft is larger than 5 MB".into()); }
     if raw.contains('\0') { return Err("draft contains a NUL byte".into()); }
     let crlf = raw.replace("\r\n", "\n").replace('\n', "\r\n");
@@ -354,18 +367,39 @@ fn draft(raw: &str, email: &str) -> Result<Vec<u8>, String> {
     let froms = m.headers().iter().filter(|h| h.name == HeaderName::From).count();
     let from: Vec<_> = m.from().map(|a| a.iter().filter_map(|x| x.address.as_deref()).collect()).unwrap_or_default();
     if froms != 1 || from.len() != 1 || !from[0].eq_ignore_ascii_case(email) { return Err(format!("From must be {email}, or pass the account the mail belongs to")); }
-    Ok(crlf.into_bytes())
+    let emails = |a: Option<&Address>| a.map(|a| a.iter().filter_map(|x| x.address.as_deref().map(str::to_string)).collect()).unwrap_or_default();
+    let (to, cc) = (emails(m.to()), emails(m.cc()));
+    Ok((crlf.into_bytes(), to, cc))
 }
 
 // ---------- public API
 
-pub struct Mail { slots: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Slot>>>> }
+type Shared<T> = std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<T>>>>;
+/// Sessions per slot, and the app password per account email, read from the keychain once: every slot and
+/// every reconnect asking `security` again stacked up approval dialogs.
+// ponytail: the cached password is a plain String in memory for the app's lifetime
+pub struct Mail { slots: Shared<Slot>, pws: Shared<Option<String>> }
+
+fn entry<T: Default>(m: &Shared<T>, key: String) -> Arc<tokio::sync::Mutex<T>> { m.lock().unwrap().entry(key).or_default().clone() }
 
 impl Mail {
-    pub fn new() -> Self { Mail { slots: Default::default() } }
+    pub fn new() -> Self { Mail { slots: Default::default(), pws: Default::default() } }
+
+    /// A logged-in session. The account's password lock is held while the keychain is read, so two slots never
+    /// ask at once, and a refused login forgets the password so a changed one is read again.
+    async fn connect(&self, a: &Account) -> Result<Conn, Fail> {
+        let pw = {
+            let lock = entry(&self.pws, a.email.to_ascii_lowercase());
+            let mut g = lock.lock().await;
+            if g.is_none() { *g = Some(keychain(a).await?); }
+            g.clone().unwrap()
+        };
+        let r = connect(a, &pw).await;
+        if let Err(Fail::Auth(_)) = r { *entry(&self.pws, a.email.to_ascii_lowercase()).lock().await = None; }
+        r
+    }
     fn slot(&self, a: &Account, tool: bool) -> Arc<tokio::sync::Mutex<Slot>> {
-        let key = format!("{}{}", a.email.to_ascii_lowercase(), if tool { "/tool" } else { "" });
-        self.slots.lock().unwrap().entry(key).or_default().clone()
+        entry(&self.slots, format!("{}{}", a.email.to_ascii_lowercase(), if tool { "/tool" } else { "" }))
     }
 
     /// One page of 50 inbox rows, page 1 is the newest.
@@ -394,7 +428,7 @@ impl Mail {
 
     /// A fresh login outside the cache, so the settings pane tests exactly what it shows.
     pub async fn test(&self, acct: &Account) -> Result<String, String> {
-        let mut c = connect(acct).await.map_err(Fail::msg)?;
+        let mut c = self.connect(acct).await.map_err(Fail::msg)?;
         let n = search(&mut c, "in:inbox").await.map_err(Fail::msg)?.len();
         let _ = timeout(CONNECT, c.s.logout()).await;
         Ok(format!("ok, {n} in inbox"))
@@ -435,13 +469,14 @@ impl Mail {
             }
             "thread" => {
                 let u = uid(&args["id"])?;
-                let mails = run!(self, &acct, true, c => thread(c, u))?;
+                let (root, mails) = run!(self, &acct, true, c => thread(c, u))?;
                 let mut budget = 60_000;
-                let messages: Vec<Value> = mails.iter().filter_map(|(u, raw, whole)| {
+                let messages: Vec<Value> = mails.iter().filter_map(|(id, raw, whole)| {
                     let m = MessageParser::default().parse(raw)?;
+                    if *id != u && !root.as_deref().is_some_and(|r| in_thread(&m, r)) { return None; }
                     let text = if *whole { cap(&render::text(&m), budget.min(8000)) } else { "(larger than 1 MB, read it with the read tool)".into() };
                     budget -= text.chars().count().min(budget);
-                    Some(json!({ "id": u.to_string(), "from": addrs(m.from()), "date": date(&m), "subject": subject(&m), "untrusted_mail": text }))
+                    Some(json!({ "id": id.to_string(), "from": addrs(m.from()), "date": date(&m), "subject": subject(&m), "untrusted_mail": text }))
                 }).collect();
                 Ok(json!({ "account": email, "messages": messages }))
             }
@@ -455,9 +490,9 @@ impl Mail {
                 Ok(json!({ "path": path }))
             }
             _ => {
-                let raw = draft(args["raw"].as_str().ok_or("raw is required")?, email)?;
+                let (raw, to, cc) = draft(args["raw"].as_str().ok_or("raw is required")?, email)?;
                 let folder = run!(self, &acct, true, c => append(c, &raw))?;
-                Ok(json!({ "account": email, "folder": folder, "saved": true }))
+                Ok(json!({ "account": email, "folder": folder, "saved": true, "to": to, "cc": cc }))
             }
         }
     }
@@ -535,7 +570,11 @@ mod tests {
     #[test]
     fn draft_from_check() {
         let ok = "From: Laurent <Laurent@WeAreAntenna.be>\nTo: x@y.be\nSubject: Re: hi\n\nBody\n";
-        assert_eq!(draft(ok, "laurent@weareantenna.be").unwrap(), ok.replace('\n', "\r\n").into_bytes());
+        let (raw, to, cc) = draft(ok, "laurent@weareantenna.be").unwrap();
+        assert_eq!(raw, ok.replace('\n', "\r\n").into_bytes());
+        assert_eq!((to, cc), (vec!["x@y.be".to_string()], vec![]));
+        let (_, to, cc) = draft("From: laurent@weareantenna.be\nTo: A <a@x.be>, b@x.be\nCc: c@x.be\n\nb", "laurent@weareantenna.be").unwrap();
+        assert_eq!((to, cc), (vec!["a@x.be".to_string(), "b@x.be".to_string()], vec!["c@x.be".to_string()]));
         for bad in [
             "From: someone@else.be\nSubject: x\n\nb",
             "Subject: no from\n\nb",
@@ -583,6 +622,17 @@ mod tests {
         assert_eq!(r("Message-ID: <own@example.com>\r\n\r\nb").as_deref(), Some("own@example.com"));
         assert_eq!(r("References: <.>\r\nMessage-ID: <own@example.com>\r\n\r\nb").as_deref(), Some("own@example.com"));
         assert_eq!(r("References: <.>\r\nMessage-ID: <a@b>\r\n\r\nb"), None);
+        // an id an attacker controls as a substring: no local part
+        assert_eq!(r("References: <@mail.gmail.com>\r\nMessage-ID: <own@example.com>\r\n\r\nb").as_deref(), Some("own@example.com"));
+        assert_eq!(r("References: <abcdefgh@>\r\n\r\nb"), None);
+        let m = |raw: &str| MessageParser::default().parse(raw.as_bytes()).unwrap().into_owned();
+        let root = "first@example.com";
+        assert!(in_thread(&m("Message-ID: <first@example.com>\r\n\r\nb"), root));
+        assert!(in_thread(&m("References: <x@y.z> <first@example.com>\r\n\r\nb"), root));
+        assert!(in_thread(&m("In-Reply-To: <first@example.com>\r\n\r\nb"), root));
+        // HEADER search would return these, the exact check drops them
+        assert!(!in_thread(&m("Message-ID: <evil.first@example.com>\r\nReferences: <first@example.com.evil>\r\n\r\nb"), root));
+        assert!(!in_thread(&m("Subject: first@example.com\r\n\r\nb"), root));
     }
 
     /// VAULTMAIL_EMAIL=... VAULTMAIL_SERVICE=... VAULTMAIL_ACCOUNT=... cargo test --lib live_gmail -- --ignored
@@ -595,7 +645,7 @@ mod tests {
         let ok = |v: Value| -> Value { assert!(v["isError"].is_null(), "{v}"); serde_json::from_str(v["content"][0]["text"].as_str().unwrap()).unwrap() };
         // a fresh session in a fresh EXAMINE, so nothing cached answers
         let seen = async |id: u32| {
-            let mut c = connect(&a).await.unwrap();
+            let mut c = m.connect(&a).await.unwrap();
             let f = fetch(&mut c, &id.to_string(), "(UID FLAGS)").await.unwrap();
             let seen = f.iter().find(|f| f.uid == Some(id)).unwrap().flags().any(|x| x == Flag::Seen);
             seen

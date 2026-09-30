@@ -215,13 +215,13 @@ root.addEventListener("click", async e => {
   if (b.dataset.set?.startsWith("mail")) {
     mailSync();
     const em = b.dataset.email ?? "";
-    if (b.dataset.set === "mailrm") { mailEdit.accounts = mailEdit.accounts.filter(a => a.email !== em); if (mailEdit.account === em) mailEdit.account = ""; }
+    if (b.dataset.set === "mailrm") { delete mailTest[em]; mailEdit.accounts = mailEdit.accounts.filter(a => a.email !== em); if (mailEdit.account === em) mailEdit.account = ""; }
     if (b.dataset.set === "mailadd") {
       const a = { email: val("mailnew"), keychain_service: val("mailsvc"), keychain_account: val("mailkacc") };
       // light check, the backend validates strictly
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email) || !a.keychain_service || !a.keychain_account) { mailMsg = t("mail.invalid"); mailOk = false; }
       else if (mailEdit.accounts.some(x => x.email.toLowerCase() === a.email.toLowerCase())) { mailMsg = t("mail.duplicate"); mailOk = false; }
-      else { mailEdit.accounts = [...mailEdit.accounts, a]; mailMsg = ""; mailNew.email = mailNew.keychain_service = mailNew.keychain_account = ""; }
+      else { mailEdit.accounts = [...mailEdit.accounts, a]; delete mailTest[a.email]; mailMsg = ""; mailNew.email = mailNew.keychain_service = mailNew.keychain_account = ""; }
     }
     if (b.dataset.set === "mailtest") {
       const a = mailEdit.accounts.find(x => x.email === em); if (!a) return;

@@ -23,7 +23,7 @@ marked.use({
     image: ({ text }) => esc(text),
     link({ href, tokens }) {
       const inner = this.parser.parseInline(tokens);
-      return /^(https?:|mailto:)/i.test(href) ? `<a href="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>` : inner;
+      return mailUrlOk(href) ? `<a href="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>` : inner;
     },
   },
 });
@@ -89,7 +89,7 @@ function renderAtts(id = "atts", list = attached) {
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
 type Item = { kind: "me" | "ai" | "tool" | "err" | "note" | "done"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string; imgs?: string[] };
-type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number; mail?: string; fromMail?: boolean };
+type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number; mail?: string; fromMail?: boolean /* about a mail or has read mail */ };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
@@ -219,7 +219,7 @@ async function moreMails() {
     if (g !== mailGen || !mails) { mailMore = false; render(); return; }
     mails = [...mails, ...next.filter(n => !mails!.some(m => m.id === n.id))];
     mailPages++; mailEnd = next.length < 50; mailErr = "";
-  } catch (e) { mailErr = String(e); }
+  } catch (e) { if (g === mailGen) mailErr = String(e); }
   mailMore = false; render();
 }
 let mailFilter: MailFilter = { q: "", state: "all", project: "", ...store.get("mailFilter", {}) };
@@ -239,11 +239,14 @@ async function loadMails() {
     // the newest page replaces what it covers, older pages loaded with "more" stay below it
     const fresh = await invoke<Mail[]>("mail_list", { page: 1 }), edge = Math.min(...fresh.map(m => Date.parse(m.date)));
     if (g !== mailGen) { mailBusy = false; loadMails(); return; }
-    mails = [...fresh, ...(mails || []).filter(m => Date.parse(m.date) < edge && !fresh.some(f => f.id === m.id))];
+    // an empty page means an empty inbox: edge would be Infinity and keep every stale row
+    mails = fresh.length ? [...fresh, ...(mails || []).filter(m => Date.parse(m.date) < edge && !fresh.some(f => f.id === m.id))] : [];
     if (!mailPages) { mailPages = 1; mailEnd = fresh.length < 50; }
     mailErr = "";
-  } catch (e) { mailErr = String(e); }
-  mailBusy = false; render();
+  } catch (e) { if (g === mailGen) mailErr = String(e); }
+  mailBusy = false;
+  if (g !== mailGen) { loadMails(); return; }
+  render();
 }
 // the project a mail is about: one project named in the subject, the sender or the sender's domain, else none
 const mailProject = (m: Mail) => { const hits = findProjects(`${m.subject} ${sender(m)} ${m.from[0]?.email.split("@")[1]?.split(".")[0] ?? ""}`); return hits.length === 1 ? hits[0] : null; };
@@ -332,9 +335,16 @@ function push(k: string, it: Item) { (convo[k] ||= []).push(it); }
 // messages sent but not answered yet: Claude Code answers queued messages one by one, one result each
 const queued: Record<string, number> = {};
 function onEvent(k: string, ev: any) {
+  if (ev.type === "draft_saved") { // the real recipients, independent of what Claude writes about it
+    const cc: string[] = ev.cc || [];
+    push(k, { kind: "note", text: t("note.draftSaved", { folder: ev.folder, to: (ev.to || []).join(", ") }) + (cc.length ? t("note.draftCc", { cc: cc.join(", ") }) : "") });
+    if (k === sel) renderChat(); return;
+  }
   if (ev.type === "assistant") {
     for (const c of ev.message?.content || []) {
       if (c.type === "text" && c.text.trim()) push(k, { kind: "ai", text: c.text });
+      // a chat that touched mail stays restricted: every later spawn of it starts with the mail limits
+      if (c.type === "tool_use" && String(c.name).startsWith("mcp__vaultmail__") && chats[k] && !chats[k].fromMail) { chats[k].fromMail = true; saveChats(); }
       if (c.type === "tool_use") push(k, { kind: "tool", id: c.id, text: toolLine(c.name, c.input), state: "run", path: c.input?.file_path });
     }
   } else if (ev.type === "user") {
@@ -636,6 +646,8 @@ function renderChat() {
   const T = isTerm(sel) ? termOf(sel) : undefined;
   $("composer").style.display = "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
+  const locked = !!chats[sel]?.fromMail, tb = $("term") as HTMLButtonElement; // the terminal would resume it without the app's restrictions
+  tb.disabled = locked; tb.title = t(locked ? "bar.termMail" : "bar.openTerminal");
   const pn = T ? T.project : projOf(sel), P = project(pn);
   lastP = pn;
   $("t").innerHTML = pImg(pn ? settings.projects[pn]?.img : "") + esc(pLabel(pn));
@@ -1070,7 +1082,7 @@ $("zoom").addEventListener("click", () => { $("zoom").hidden = true; });
 // links in a conversation open in the default browser or mail app, a webview window cannot open them itself
 document.addEventListener("click", e => {
   const a = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
-  if (!a || !/^(https?:|mailto:)/i.test(a.href)) return;
+  if (!a || !mailUrlOk(a.href)) return;
   e.preventDefault(); invoke("plugin:opener|open_url", { url: a.href });
 });
 // Cmd-K: a question that becomes a new general conversation in the background, the open screen stays
@@ -1173,7 +1185,7 @@ $("movebar").addEventListener("click", e => {
   if (b.dataset.move) { setProject(sel, b.dataset.move, t("note.moved", { name: b.dataset.move })); render(); } else { dismissed.add(sel); renderChat(); }
 });
 $("term").addEventListener("click", () => {
-  if (sel === WAIT) return;
+  if (sel === WAIT || chats[sel]?.fromMail) return;
   if (isTerm(sel)) { const t = termOf(sel); if (t) invoke("bg", { action: "attach", id: t.id }); return; }
   invoke("open_terminal", { project: sel, session: null, name: `${projOf(sel) || "Algemeen"}: ${label(sel)}` });
   queued[sel] = 0; status[sel] = "idle"; render();

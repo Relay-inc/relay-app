@@ -11,6 +11,8 @@ comes from the Agent SDK's source, not from a documented protocol, so this scrip
      before it reaches the app
      (the tool still shows in the init tool list, the deny is enforced at call time)
   4. no API key is used (apiKeySource "none": the claude.ai subscription)
+  5. the taint lib.rs sends before the first mail answer (apply_flag_settings with a deny, set_permission_mode
+     default) takes away a rule the settings allow: git push runs before it and is denied after it
 
 Uses Haiku without settings, built-in tools or other MCP servers, in an empty temp dir. Exit 0 when all hold.
 """
@@ -20,21 +22,23 @@ CLAUDE = os.path.expanduser("~/.local/bin/claude")
 TOOLS = [{"name": n, "description": "Test tool, returns pong plus the text.",
           "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}} for n in ("ping", "gone")]
 
-def run(decision: str, tool: str = "ping", bash: bool = False) -> dict:
-    seen = {"initialize": False, "tools/list": False, "call": False, "can_use_tool": False, "result": "", "tools": [], "key": None, "denied": ""}
+def run(decision: str, tool: str = "ping", bash: bool = False, taint: bool = False) -> dict:
+    seen = {"tainted": [], "initialize": False, "tools/list": False, "call": False, "can_use_tool": False, "result": "", "tools": [], "key": None, "denied": ""}
     mcp = {"mcpServers": {"vaultmail": {"type": "sdk", "name": "vaultmail"}}}
     args = [CLAUDE, "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
             "--permission-prompt-tool", "stdio", "--mcp-config", json.dumps(mcp), "--strict-mcp-config",
-            "--setting-sources", "", "--tools", "Bash" if bash else "", "--model", "haiku", "--no-session-persistence",
+            "--setting-sources", "", "--tools", "Bash" if bash or taint else "",
+            *(["--settings", json.dumps({"permissions": {"allow": ["Bash(git push*)"]}})] if taint else []), "--model", "haiku", "--no-session-persistence",
             # the same layout as lib.rs denied(): a glob, a Bash rule with a space inside one argv entry, then -n
-            "--disallowedTools", "mcp__vaultmail__go*", "Bash(git push*)", "Bash(himalaya*)", "-n", "pipe-check"]
+            "--disallowedTools", "mcp__vaultmail__go*", *([] if taint else ["Bash(git push*)"]), "Bash(himalaya*)", "-n", "pipe-check"]
     env = {k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"}
     p = subprocess.Popen(args, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
                          env=env, cwd=tempfile.mkdtemp(prefix="pipe-check-"))
     timer = threading.Timer(120, p.kill); timer.start()
     def send(o): p.stdin.write(json.dumps(o) + "\n"); p.stdin.flush()
     send({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": ["vaultmail"]}})
-    ask = ("Run exactly this Bash command: git push --dry-run origin main. Reply with exactly the error or output you got." if bash else
+    ask = ("First call the ping tool of the vaultmail server with text 'check'. Then run exactly this Bash command: git push --dry-run origin main. Report both results exactly." if taint else
+           "Run exactly this Bash command: git push --dry-run origin main. Reply with exactly the error or output you got." if bash else
            f"Call the {tool} tool of the vaultmail server with text 'check'. Reply with exactly the tool result, or with exactly the error you got.")
     send({"type": "user", "message": {"role": "user", "content": ask}})
     for line in p.stdout:
@@ -54,6 +58,9 @@ def run(decision: str, tool: str = "ping", bash: bool = False) -> dict:
                 elif meth == "tools/list": seen["tools/list"] = True; out = {"jsonrpc": "2.0", "id": mid, "result": {"tools": TOOLS}}
                 elif meth == "tools/call":
                     seen["call"] = True
+                    if taint:  # what lib.rs write_taint sends, before the answer
+                        send({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"deny": ["Bash(git push*)"]}}}})
+                        send({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})
                     out = {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": "pong: " + msg["params"]["arguments"].get("text", "")}]}}
                 else: out = {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": "unknown"}}
                 resp = {"mcp_response": out}
@@ -62,6 +69,8 @@ def run(decision: str, tool: str = "ping", bash: bool = False) -> dict:
                 resp = {"behavior": "allow", "updatedInput": req.get("input", {})} if decision == "allow" else {"behavior": "deny", "message": "denied by pipe-check"}
             else: resp = {}
             send({"type": "control_response", "response": {"subtype": "success", "request_id": m["request_id"], "response": resp}})
+        elif m.get("type") == "control_response":
+            seen["tainted"].append(m["response"].get("subtype"))
         elif m.get("type") == "user" and isinstance(m["message"].get("content"), list):
             for c in m["message"]["content"]:
                 if c.get("type") == "tool_result" and "denied" in json.dumps(c.get("content")): seen["denied"] = json.dumps(c.get("content"))
@@ -85,6 +94,8 @@ def main():
     check("--disallowedTools glob blocks the call without asking or reaching the host", g["denied"] and not g["call"] and not g["can_use_tool"])
     b = run("allow", bash=True)
     check("Bash(git push*) is denied without asking", b["denied"] and not b["can_use_tool"])
+    t = run("allow", taint=True)
+    check("the taint is accepted and takes away an allowed git push", t["call"] and t["tainted"].count("success") >= 3 and "git push" in t["denied"])
     sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":
