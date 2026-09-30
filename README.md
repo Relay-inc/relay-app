@@ -17,7 +17,8 @@ pnpm tauri dev
 Needs Rust, pnpm, `/usr/bin/python3`, Claude Code at `~/.local/bin/claude` (logged in), and iTerm
 for "open in terminal".
 
-On first start the app asks for the vault folder and shows what it found in it; change it later in
+There is no default vault. On first start the main window asks for the vault folder and shows what it
+found in it, and no conversation, terminal or snapshot runs until one is saved. Change it later in
 Vault › Settings… (Cmd-,). Vaults differ, so the app keeps a mapping per vault in `settings.json`:
 
 ```json
@@ -65,5 +66,5 @@ in the macOS keychain (`vault-app.productive`) and never reaches the webview.
 cd src-tauri && cargo test
 ```
 
-The transcript tests read Laurent's own Claude Code transcripts and skip themselves on a machine
-without them.
+The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and
+skip themselves without it.

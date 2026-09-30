@@ -1,9 +1,9 @@
 # Vault. Design system, v2
 
-v1 (the laurentmeersman.com house style on a dashboard) was rejected on 2026-09-29: wrong style,
+v1 (a personal-site house style on a dashboard) was rejected on 2026-09-29: wrong style,
 wrong layout, and the main task, talking to a project, was missing. v1 lives in git history only.
 
-v2 follows Laurent's picks: **projects on the left, the conversation on the right, native macOS.**
+v2 follows the owner's picks: **projects on the left, the conversation on the right, native macOS.**
 It should feel like part of the Mac, next to Mail and Notes, and teach nothing new.
 
 Adjectives: **native, direct, calm, informed.** A choice that cannot be traced to one of them does
@@ -25,7 +25,7 @@ Default window 1280 x 820, minimum 900 x 600. Three panes, the way Mail does it.
 │ Weemaes  ● │                                  │              │
 │ C-All   25 │   ┌ Toestemming ──────────────┐  │              │
 │ Cloet   18 │   │ gh pr merge 741           │  │              │
-│ MEERSMAN   │   │        Weigeren  Toestaan │  │              │
+│ ZAAK       │   │        Weigeren  Toestaan │  │              │
 │ ...        │   └───────────────────────────┘  │              │
 │            │ ┌──────────────────────────────┐ │              │
 │            │ │ Vraag iets over Weemaes…     │ │              │
@@ -35,13 +35,13 @@ Default window 1280 x 820, minimum 900 x 600. Three panes, the way Mail does it.
 ```
 
 - **Sidebar** (240px): search field, then "Wacht op jou" and "Algemeen" as the two fixed rows, then
-  the projects per context (Antenna, Meersman, Personal), Active and Blocked only. "Stil" folds the
+  the projects per context of the vault index, Active and Blocked only. "Stil" folds the
   rest. A row shows the project name and one trailing indicator, see States.
 - **Conversation** (flexible): the toolbar carries the project name and its state. Messages run
-  top to bottom, Laurent's in a filled bubble on the right, Claude's as plain text on the left.
+  top to bottom, the user's in a filled bubble on the right, Claude's as plain text on the left.
   Tool calls are one collapsed line each ("Weemaes.md gelezen"). A permission request is an inline
   card with the exact command and two buttons. The composer sits at the bottom, one field and a
-  send button. There is no "background" switch: every conversation keeps running when Laurent
+  send button. There is no "background" switch: every conversation keeps running when the user
   clicks to another project, and the sidebar reports back (decided 2026-09-29).
 - **Inspector** (300px, ⌘⌥I hides it): the project's Stand van zaken and its `## Open` as
   checkboxes, straight from the note. This is where "op de hoogte blijven" happens without asking.
@@ -60,10 +60,10 @@ fallbacks for the mockup in a browser.
 | `--label` | `rgba(0,0,0,.85)` | `rgba(255,255,255,.85)` | text |
 | `--secondary` | `rgba(0,0,0,.50)` | `rgba(255,255,255,.55)` | meta, tool lines |
 | `--separator` | `rgba(0,0,0,.10)` | `rgba(255,255,255,.10)` | every divider |
-| `--fill` | `rgba(0,0,0,.05)` | `rgba(255,255,255,.07)` | Laurent's bubble, cards, selected row at rest |
+| `--fill` | `rgba(0,0,0,.05)` | `rgba(255,255,255,.07)` | the user's bubble, cards, selected row at rest |
 | `--accent` | `#007AFF` | `#0A84FF` | selection, primary button, the waiting badge |
 
-The accent means "this needs you or is selected". Two more colour meanings, both asked for by Laurent on 2026-09-29: the context colours in the sidebar (Antenna indigo `#5856D6`, Meersman teal `#30B0C7`, Personal green `#34C759`), and reminder dates by urgency: overdue in system red `#FF3B30`, today and the next 2 days in system orange `#FF9500`, later in secondary grey. Nothing else is coloured.
+The accent means "this needs you or is selected". Two more colour meanings, both asked for on 2026-09-29: the context colours in the sidebar (per context in index order: indigo `#5856D6`, teal `#30B0C7`, green `#34C759`), and reminder dates by urgency: overdue in system red `#FF3B30`, today and the next 2 days in system orange `#FF9500`, later in secondary grey. Nothing else is coloured.
 
 ## Type
 

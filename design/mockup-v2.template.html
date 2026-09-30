@@ -135,7 +135,7 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const md = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
 const SEL = 'Weemaes';
 
-// which projects need Laurent, work, or finished since he last looked, from claude agents --json
+// which projects need the user, work, or finished since they last looked, from claude agents --json
 const names = D.projects.map(p => p.name).sort((a, b) => b.length - a.length);
 const projOf = t => names.find(n => new RegExp(`(^|[^\\p{L}])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'iu').test(t || ''));
 const flags = {};
@@ -150,7 +150,7 @@ const waiting = Object.values(flags).filter(f => f === 'wait').length;
 const row = (name, trail, cls = '') => `<div class="row ${cls}"><span class="nm">${esc(name)}</span>${trail}</div>`;
 const trailOf = n => flags[n] === 'wait' ? '<span class="dot"></span>' : flags[n] === 'busy' ? '<span class="spin"></span>' : '';
 let nav = row('Wacht op jou', waiting ? `<span class="badge">${waiting}</span>` : '') + row('Algemeen', '');
-for (const c of ['Antenna', 'Meersman', 'Personal']) {
+for (const c of ['Antenna', 'Zaak', 'Personal']) {
   const live = D.projects.filter(p => p.context === c && ['Active', 'Blocked'].includes(p.state));
   const quiet = D.projects.filter(p => p.context === c).length - live.length;
   nav += `<div class="grp">${c.toUpperCase()}</div>` + live.map(p =>

@@ -221,7 +221,7 @@ $('v-body').innerHTML = rlist('Vervallen', over, r => `${-r.days} d`) + rlist('V
 // projects
 const live = D.projects.filter(p => ['Active', 'Blocked'].includes(p.state));
 const rest = D.projects.length - live.length;
-$('p-body').innerHTML = ['Antenna', 'Meersman', 'Personal'].map(c => {
+$('p-body').innerHTML = ['Antenna', 'Zaak', 'Personal'].map(c => {
   const rows = live.filter(p => p.context === c).sort((a, b) => (b.open ?? -1) - (a.open ?? -1)).slice(0, c === 'Antenna' ? 6 : 4);
   return rows.length ? `<div class="group">${c}</div><ul class="rows">${rows.map(p => `
     <li><div>${esc(p.name)}${p.state === 'Blocked' ? ' <span class="p">wacht op iemand</span>' : ''}</div>

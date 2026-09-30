@@ -6,6 +6,10 @@ import "./reminders.css";
 import { initI18n, applyStatic, t, tn, currentLang } from "./i18n";
 import type { Key } from "./locales/en";
 import { onboard, type VaultStatus } from "./vault-setup";
+import { showBoard, resetBoard, fetchTask, renderTask, cachedTask } from "./productive";
+import "./productive.css";
+import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
+import "./github.css";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -50,18 +54,30 @@ async function prepImage(f: File): Promise<Img | null> {
   const m = out.match(/^data:(image\/[a-z]+);base64,(.+)$/);
   return m && IMG_OK.includes(m[1]) ? toImg(m[1], m[2]) : null;
 }
-async function attach(files: File[]) {
+// a project icon from an image file (png, jpg, ico, svg, ...): drawn centered on 64 px, kept as a png data url in the settings
+async function iconFrom(f: File): Promise<string | null> {
+  const img = new Image(); img.src = await readUrl(f);
+  try { await img.decode(); } catch { return null; }
+  const n = Math.max(img.naturalWidth, img.naturalHeight) || 64, w = img.naturalWidth * 64 / n || 64, h = img.naturalHeight * 64 / n || 64;
+  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
+  cv.getContext("2d")!.drawImage(img, (64 - w) / 2, (64 - h) / 2, w, h);
+  return cv.toDataURL("image/png");
+}
+// settings.json is a file on disk: only a plain png data url becomes an <img>
+const pImg = (u?: string) => u && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(u) ? `<img class="pimg" src="${u}" alt="">` : "";
+// into the composer by default, or into the Cmd-K field
+async function attach(files: File[], list = attached, box = "atts") {
   const imgs = (await Promise.all(files.filter(f => f.type.startsWith("image/")).map(f => prepImage(f).catch(() => null)))).filter((x): x is Img => !!x);
   if (!imgs.length) return;
-  attached.push(...imgs); renderAtts();
+  list.push(...imgs); renderAtts(box, list);
 }
 const thumbs = (urls: string[], removable = false) => urls.map((u, i) => u
   ? `<span class="att"><img src="${esc(u)}" alt="" data-zoom>${removable ? `<button class="rm" data-rm="${i}" title="${t("img.remove")}" aria-label="${t("img.removeLabel")}">×</button>` : ""}</span>`
   : `<span class="imgph">${t("img.placeholder")}</span>`).join("");
-function renderAtts() {
-  const box = $("atts");
-  box.hidden = !attached.length;
-  box.innerHTML = thumbs(attached.map(a => a.url), true);
+function renderAtts(id = "atts", list = attached) {
+  const box = $(id);
+  box.hidden = !list.length;
+  box.innerHTML = thumbs(list.map(a => a.url), true);
 }
 
 // ---------- state
@@ -74,10 +90,11 @@ const store = { get: (k: string, d: any) => { try { return JSON.parse(localStora
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
 const status: Record<string, "idle" | "busy"> = {};
-const busySince: Record<string, number> = {};
 const unseen = new Set<string>();
 const dismissed = new Set<string>();
 let chats: Record<string, Chat> = store.get("chats", {});
+// what is typed but not sent, per conversation: survives switching and closing the app
+const typed: Record<string, string> = store.get("typed", {});
 let pendingList: any[] = [];
 let agentsList: any[] = [];
 let hidden: string[] = store.get("hiddenAgents", []);
@@ -92,13 +109,52 @@ const subLog: Record<string, string[]> = {}; // agent id: its last messages, whi
 const runningSubs = (k: string) => (subs[k] || []).filter(a => a.running).length;
 const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${tn("nav.agentsWorking", n)}">${n}</span>` : ""; };
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
-const WAIT = "__wait", REM = "__rem", NEW = "Nieuw gesprek";
+const WAIT = "__wait", REM = "__rem", BOARD = "__board", PRS = "__prs", NEW = "Nieuw gesprek";
+const VIEWS = [WAIT, REM, BOARD, PRS];
 // placeholder titles are stored as they always were (Dutch) and shown in the UI language
 const PLACEHOLDER: Record<string, Key> = { [NEW]: "nav.newChat", Gesprek: "chat.untitled", "Algemeen gesprek": "chat.general" };
 const shownTitle = (title: string) => PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title;
-const VIEWS = [WAIT, REM];
-type Settings = { vault: string; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null>; language?: string };
-let settings: Settings = { vault: "", projects: {}, overrides: {} };
+type Settings = { vault: string; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
+  productive: { org: string; user: string }; github: { on: boolean; owners: string }; language?: string };
+let settings: Settings = { vault: "", projects: {}, overrides: {}, productive: { org: "", user: "" }, github: { on: false, owners: "" } };
+// the Productive row only shows once the integration is set up: an org id and a token in the keychain
+let pvReady = false;
+const checkPv = async () => { pvReady = !!settings.productive?.org && await invoke<boolean>("productive_status").catch(() => false); };
+// pull requests via gh in the backend, once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view
+let prs: PRs | null = null, prErr = "", prBusy = false;
+const ghOn = () => !!settings.github?.on;
+async function loadPrs() {
+  if (!ghOn() || prBusy) return;
+  prBusy = true; if (sel === PRS) renderChat();
+  try { prs = await invoke<PRs>("github_prs"); prErr = ""; } catch (e) { prErr = String(e); }
+  prBusy = false; render();
+}
+// one PR, or a Productive task (key "pv:<id>"), open in the right panel, which widens for it. The last answer per PR shows at once, a fresh one follows
+let prOpen = "", prDetailErr = "", prHtml = "";
+const prDetail: Record<string, any> = {};
+async function openPr(key: string) {
+  prOpen = key; prDetailErr = "";
+  if (key.startsWith("pv:")) prDetail[key] ??= cachedTask(key.slice(3));
+  document.body.classList.add("prwide"); setInsp(false); render();
+  const i = key.lastIndexOf("#");
+  try { prDetail[key] = key.startsWith("pv:") ? await fetchTask(key.slice(3)) : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
+  catch (e) { if (!prDetail[key]) prDetailErr = String(e); }
+  if (prOpen === key) renderInsp();
+}
+// "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
+// posting on GitHub is something others see, so it waits for the user (decided 29/9)
+async function reviewPr(key: string) {
+  const pr = prDetail[key]; if (!pr) return;
+  const repo = key.slice(0, key.lastIndexOf("#")), row = [...(prs?.review || []), ...(prs?.mine || [])].find(p => p.repo === repo && p.number === pr.number);
+  const k = newChat(row?.project && project(row.project) ? row.project : null);
+  chats[k].title = `Review ${repo.split("/")[1]} #${pr.number}`;
+  convo[k] = [{ kind: "note", text: t("note.reviewStarted", { repo, n: pr.number }) }]; // also keeps the typed title, no generated one
+  await select(k);
+  sendMsg(`Review PR ${pr.url} (${repo} #${pr.number}: ${pr.title}). Haal de diff en context op met gh, en lees de projectnote als die er is. `
+    + "Plaats niets op GitHub: geen review, comment of approve. Geef je bevindingen hier, meest ernstige eerst, met bestand en regel. "
+    + "Wil ik iets posten, dan vraag ik het je daarna.");
+}
+function closePr() { if (!prOpen) return; prOpen = ""; document.body.classList.remove("prwide"); render(); }
 let settingsMsg = "";
 let sel: string = store.get("sel", "") || WAIT;
 let tab = "open";
@@ -111,7 +167,7 @@ async function saveSettings(next: Settings) {
   try { settings = await invoke<Settings>("set_settings", { settings: next }); settingsMsg = ""; return true; }
   catch (e) { settingsMsg = String(e); return false; }
 }
-const saveChats = () => store.set("chats", Object.fromEntries(Object.entries(chats).filter(([, c]) => !c.draft)));
+const saveChats = () => store.set("chats", Object.fromEntries(Object.entries(chats).filter(([k, c]) => !c.draft || typed[k])));
 const projOf = (key: string) => chats[key]?.project ?? null;
 const label = (key: string) => shownTitle(chats[key]?.title || key);
 const chatsOf = (p: string | null) => Object.values(chats).filter(c => c.project === p && !c.draft && !c.closed).sort((a, b) => b.at - a.at);
@@ -166,6 +222,8 @@ function toolLine(name: string, input: any): string {
 
 // ---------- incoming events from the claude processes
 function push(k: string, it: Item) { (convo[k] ||= []).push(it); }
+// messages sent but not answered yet: Claude Code answers queued messages one by one, one result each
+const queued: Record<string, number> = {};
 function onEvent(k: string, ev: any) {
   if (ev.type === "assistant") {
     for (const c of ev.message?.content || []) {
@@ -179,7 +237,8 @@ function onEvent(k: string, ev: any) {
       if (t) t.state = c.is_error ? "err" : "ok";
     }
   } else if (ev.type === "result") {
-    status[k] = "idle";
+    queued[k] = Math.max(0, (queued[k] || 1) - 1);
+    status[k] = queued[k] ? "busy" : "idle";
     if (ev.is_error || ev.subtype !== "success") push(k, { kind: "err", text: ev.result || ev.subtype || t("err.unknown") });
     if (k !== sel) unseen.add(k);
     if (chats[k]) { chats[k].at = Date.now(); saveChats(); }
@@ -187,7 +246,7 @@ function onEvent(k: string, ev: any) {
   } else if (ev.type === "stderr") {
     if (ev.text.trim()) push(k, { kind: "err", text: ev.text.slice(0, 2000) });
   } else if (ev.type === "exit") {
-    status[k] = "idle";
+    queued[k] = 0; status[k] = "idle";
   } else return;
   if (k === sel) renderChat(); else renderNav();
 }
@@ -247,8 +306,9 @@ function card(r: any): string {
     return `<div class="perm" data-id="${esc(r.id)}"><div class="q">${t("card.asks")}</div>${(r.input.questions || []).map((q: any, qi: number) => `
       <div class="qh">${esc(q.question)}</div>
       <div class="opts" data-q="${qi}" data-multi="${q.multiSelect ? 1 : 0}">${(q.options || []).map((o: any) =>
-        `<button class="btn" data-label="${esc(o.label)}" title="${esc(o.description || "")}">${esc(o.label)}</button>`).join("")}</div>`).join("")}
-      <div class="acts"><button class="btn primary" data-act="answer">${t("card.answer")}</button></div></div>`;
+        `<button class="btn" data-label="${esc(o.label)}" title="${esc(o.description || "")}">${esc(o.label)}</button>`).join("")}</div>
+      <input class="other" data-q="${qi}" placeholder="${t("card.other")}">`).join("")}
+      <div class="acts"><button class="btn" data-act="deny">${t("card.skip")}</button><button class="btn primary" data-act="answer">${t("card.answer")}</button></div></div>`;
   }
   return `<div class="perm" data-id="${esc(r.id)}"><div class="q">${t("card.wants", { tool: esc(r.tool_name), where: r.project && r.project !== sel ? t("card.in", { name: esc(label(r.project)) }) : "" })}</div>
     <pre>${describe(r)}</pre>
@@ -265,12 +325,14 @@ async function onCard(e: MouseEvent) {
   }
   let decision: any;
   if (b.dataset.act === "allow") decision = { behavior: "allow", updatedInput: r.input };
-  else if (b.dataset.act === "deny") decision = { behavior: "deny", message: "Laurent weigerde dit in de app." };
+  else if (b.dataset.act === "deny") decision = { behavior: "deny", message: r.tool_name === "AskUserQuestion" ? "Laurent sloeg de vraag over en antwoordt zelf in het gesprek. Wacht op zijn bericht." : "Geweigerd in de app." };
   else if (b.dataset.act === "answer") {
     const answers: Record<string, string> = {};
     box.querySelectorAll<HTMLElement>(".opts").forEach(g => {
       const q = r.input.questions[Number(g.dataset.q)];
       const on = [...g.querySelectorAll<HTMLElement>(".btn.on")].map(x => x.dataset.label!);
+      const other = box.querySelector<HTMLInputElement>(`.other[data-q="${g.dataset.q}"]`)!.value.trim();
+      if (other) on.push(other);
       if (on.length) answers[q.question] = on.join(", ");
     });
     if (!Object.keys(answers).length) return;
@@ -308,42 +370,52 @@ const trailOf = (keys: string[]) => keys.some(waits) ? '<span class="dot"></span
 const G: Record<string, string> = {
   bell: '<path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3L4 11ZM6.5 14h3"/>',
   list: '<path d="M6 4.5h7M6 8h7M6 11.5h7M3 4.5h.5M3 8h.5M3 11.5h.5"/>',
-  chat: '<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-3 2.5V11h.5"/>',
+  // Productive's favicon (productive.io), as vector: its own colours, not the glyph stroke
+  board: '<defs><linearGradient id="pvg" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#AB40FF"/><stop offset="1" stop-color="#5D2BFF"/></linearGradient></defs><rect width="16" height="16" rx="3.6" fill="url(#pvg)" stroke="none"/><g transform="translate(2.5 1.6) scale(.357)" fill="#fff" stroke="none"><path d="M6.036 28.89L.17 18.977a1.217 1.217 0 01.426-1.667l4.633-2.74a1.217 1.217 0 011.666.426l3.3 5.579 3.424-5.89c4.28-7.018 8.712.738 6.693 4.034l-5.89 10.139a2.836 2.836 0 01-2.443 1.412l-3.492.015a2.838 2.838 0 01-2.451-1.393z"/><path d="M30.847 21.445a4.4 4.4 0 11-8.802.001 4.4 4.4 0 018.802 0zm-18.259 3.176c.966 1.64 3.34 1.632 4.297-.014l3.429-5.9c1.787-2.917 3.807-4.476 6.333-4.82.612-.083 1.211-.224 1.374-1.145l.938-5.259a1.234 1.234 0 00-1.207-1.485c-4.603 0-9.956 1.825-14.131 8.672l-3.426 5.892 2.393 4.059z"/></g>',
+  chat: '<path d="M4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-2.5 2.5V11A1.5 1.5 0 0 1 3 9.5v-5A1.5 1.5 0 0 1 4.5 3Z"/>',
   term: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/>',
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 2.5v1.5M8 12v1.5M2.5 8H4M12 8h1.5M4.1 4.1l1.1 1.1M10.8 10.8l1.1 1.1M4.1 11.9l1.1-1.1M10.8 5.2l1.1-1.1"/>',
   folder: '<path d="M2.5 5V4a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V5Z"/>',
+  pr: '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="12.5" r="1.5"/><path d="M4.5 5v6M11.5 11V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6"/>',
 };
 const glyph = (n: string) => `<svg class="g" viewBox="0 0 16 16">${G[n]}</svg>`;
-const CTX: Record<string, string> = { Antenna: "ctx-a", Meersman: "ctx-m", Personal: "ctx-p" };
+// contexts come from the vault index, in its order, each takes the next of three colours
+const contexts = (): string[] => [...new Set<string>(snap.projects.map((p: any) => p.context))];
+const CTX = ["ctx-a", "ctx-m", "ctx-p"];
 let collapsed: Record<string, boolean> = store.get("collapsed", {});
-// order Laurent dragged: sections, and projects within a section
-let secOrder: string[] = store.get("secOrder", ["Algemeen", "Antenna", "Meersman", "Personal"]);
+const unfolded = new Set<string>(); // projects whose conversations past the first five are shown
+// order the user dragged: sections, and projects within a section
+let secOrder: string[] = store.get("secOrder", ["Algemeen"]);
 let projOrder: Record<string, string[]> = store.get("projOrder", {});
 let convOrder: Record<string, string[]> = store.get("convOrder", {}); // per project (or "" for Algemeen): conversation keys
-const lead = (p: string) => settings.projects[p]?.icon ? `<span class="emo">${esc(settings.projects[p].icon)}</span>` : glyph("folder");
+const lead = (p: string) => pImg(settings.projects[p]?.img) || (settings.projects[p]?.icon ? `<span class="emo">${esc(settings.projects[p].icon)}</span>` : glyph("folder"));
 
 function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const selP = projOf(sel), T = terms();
   const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="${t("nav.close")}">×</button>`;
-  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(shownTitle(c.title))}</span>${subBadge(c.key)}${trailOf([c.key])}${x(c.key)}</div>`;
+  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(shownTitle(c.title))}</span>${subBadge(c.key)}${trailOf([c.key])}${c.draft && !typed[c.key] ? "" : x(c.key)}</div>`;
+  // the open draft shows as "Nieuw gesprek" under its project, its title follows what is typed
+  const listed = (p: string | null) => [...Object.values(chats).filter(c => c.draft && !c.closed && c.project === p && (c.key === sel || typed[c.key])), ...chatsOf(p)];
   const tsub = (tm: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === tm.key ? "sel" : ""}" data-k="${esc(tm.key)}" data-parent="${esc(tm.project ?? "")}" title="${t("nav.inTerminal")}">${glyph("term")}<span class="nm">${esc(tm.title)}</span>${subBadge(tm.key)}${tm.status === "busy" ? '<span class="spin"></span>' : tm.state === "blocked" ? '<span class="dot"></span>' : ""}${x(tm.key)}</div>`;
   const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
     `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="${t("nav.newChat")}">+</button>` : ""}</div>`;
 
   const w = waitCount(), due = snap.reminders.filter((r: any) => r.days <= 0).length;
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">${t("nav.waiting")}</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
-    + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">${t("nav.reminders")}</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`;
+    + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">${t("nav.reminders")}</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`
+    + (pvReady ? `<div class="row ${sel === BOARD ? "sel" : ""}" data-k="${BOARD}">${glyph("board")}<span class="nm">Productive</span></div>` : "")
+    + (ghOn() ? `<div class="row ${sel === PRS ? "sel" : ""}" data-k="${PRS}">${glyph("pr")}<span class="nm">${t("nav.prs")}</span>${prs?.review.length ? `<span class="count" title="${t("nav.prsReview")}">${prs.review.length}</span>` : ""}</div>` : "");
 
-  const gc = chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
-  // conversations in the order Laurent dragged, the rest after them in their default order
+  const gc = listed(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
+  // conversations in the order the user dragged, the rest after them in their default order
   const byConv = (parent: string, rows: { key: string; html: string }[]) => { const o = convOrder[parent] || [];
     return rows.map((r, i) => ({ ...r, i })).sort((a, b) => { const ia = o.indexOf(a.key), ib = o.indexOf(b.key);
       return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : a.i - b.i; }).map(r => r.html).join(""); };
   const general = `<div class="sec" data-drop="Algemeen">${head("Algemeen", t("general").toUpperCase(), gc.length + gt.length, "", "")}`
     + (collapsed.Algemeen && !q ? "" : byConv("", [...gc.map(c => ({ key: c.key, html: sub(c, false) })), ...gt.map(t => ({ key: t.key, html: tsub(t, false) }))])) + `</div>`;
 
-  // an app conversation stays until Laurent closes it, a terminal session as long as it is open
+  // an app conversation stays until the user closes it, a terminal session as long as it is open
   const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
   const lastAt = (n: string) => Math.max(0, ...chatsOf(n).map(c => c.at), ...T.filter(t => t.project === n).map(t => t.mtime));
   const match = (p: any) => p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q);
@@ -353,19 +425,18 @@ function renderNav() {
     return [...list].sort((a, b) => { const ia = o.indexOf(a.name), ib = o.indexOf(b.name);
       return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : byRecent(a, b); }); };
   const projRows = (list: any[]) => { let body = ""; for (const p of list) {
-      const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
-      const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
-      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="${t("nav.newChatAbout", { name: esc(p.name) })}">+</button></div>`
-        + byConv(p.name, [...ts.map(t => ({ key: t.key, html: tsub(t) })), ...cs.slice(0, 5).map(c => ({ key: c.key, html: sub(c) }))])
-        + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">${t("nav.more", { n: cs.length - 5 })}</span></div>` : "");
+      const cs = listed(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
+      body += `<div class="row prow ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="${t("nav.newChatAbout", { name: esc(p.name) })}">+</button></div>`
+        + byConv(p.name, [...ts.map(t => ({ key: t.key, html: tsub(t) })), ...cs.slice(0, unfolded.has(p.name) ? cs.length : 5).map(c => ({ key: c.key, html: sub(c) }))])
+        + (cs.length > 5 ? `<div class="row subrow fold" data-fold="${esc(p.name)}"><span class="nm">${unfolded.has(p.name) ? t("nav.less") : t("nav.more", { n: cs.length - 5 })}</span></div>` : "");
   } return body; };
   const secs: Record<string, string> = { Algemeen: general };
-  // the contexts in work-state order, whatever the vault calls them
-  for (const ctx of [...new Set<string>(snap.projects.map((p: any) => p.context))]) {
+  contexts().forEach((ctx, i) => {
     const shown = ordered(ctx, snap.projects.filter((p: any) => p.context === ctx && match(p) && (q || open(p) || p.name === selP)));
-    if (shown.length) secs[ctx] = `<div class="sec ${CTX[ctx]}" data-drop="${ctx}">${head(ctx, ctx.toUpperCase(), shown.length)}${collapsed[ctx] && !q ? "" : projRows(shown)}</div>`;
-  }
-  h += secOrder.filter(k => secs[k]).map(k => secs[k]).join("");
+    if (shown.length) secs[ctx] = `<div class="sec ${CTX[i % CTX.length]}" data-drop="${esc(ctx)}">${head(ctx, esc(ctx.toUpperCase()), shown.length)}${collapsed[ctx] && !q ? "" : projRows(shown)}</div>`;
+  });
+  // sections the user never dragged follow in the index order
+  h += [...secOrder, ...Object.keys(secs).filter(k => !secOrder.includes(k))].filter(k => secs[k]).map(k => secs[k]).join("");
   $("nav").innerHTML = h;
 }
 
@@ -374,9 +445,26 @@ function renderChat() {
   const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
   renderSubs();
   $("t").classList.remove("editable"); $("t").title = "";
+  $("ct").style.display = $("ctsep").style.display = VIEWS.includes(sel) ? "none" : "";
+  msgs.classList.toggle("wide", sel === BOARD);
+  if (sel === BOARD) {
+    $("composer").style.display = "none"; $("movebar").style.display = "none";
+    $("term").style.display = "none";
+    $("t").textContent = "Productive"; $("ts").textContent = "";
+    // mounted once: the board redraws itself, a render of the app does not interrupt a drag or an open menu
+    if (!document.getElementById("kb")) { msgs.innerHTML = '<div id="kb"></div>'; showBoard($("kb"), { esc, user: () => settings.productive?.user || "", org: () => settings.productive?.org || "", open: id => openPr(`pv:${id}`) }); }
+    return;
+  }
+  if (sel === PRS) {
+    $("composer").style.display = "none"; $("movebar").style.display = "none";
+    $("term").style.display = "none";
+    $("t").textContent = "Pull requests"; $("ts").textContent = "";
+    msgs.innerHTML = renderPrs(prs, prErr, prBusy, { esc, projectLabel: pLabel, open: prOpen });
+    return;
+  }
   if (sel === REM) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = $("close").style.display = "none";
+    $("term").style.display = "none";
     $("ts").textContent = "";
     $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel }, snap.vault?.found);
     return;
@@ -384,7 +472,7 @@ function renderChat() {
   if (sel === WAIT) {
     $("t").textContent = t("nav.waiting"); $("ts").textContent = `${waitCount()}`;
     $("composer").style.display = "none"; $("movebar").style.display = "none";
-    $("new").style.display = $("term").style.display = $("close").style.display = "none";
+    $("term").style.display = "none";
     const byK: Record<string, any[]> = {};
     for (const r of pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${esc(projOf(k))} · ` : ""}${esc(label(k))}`;
@@ -396,14 +484,16 @@ function renderChat() {
     return;
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
-  $("composer").style.display = ""; $("new").style.display = ""; $("close").style.display = chats[sel]?.draft ? "none" : "";
+  $("composer").style.display = "";
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
-  $("t").textContent = pLabel(pn);
+  $("t").innerHTML = pImg(pn ? settings.projects[pn]?.img : "") + esc(pLabel(pn));
   $("t").classList.add("editable"); $("t").title = t("chat.editTitle");
-  // the state is the vault's own word (Active, Blocked…), shown translated when it is a known one
-  const st = ["Active", "Blocked", "Quiet", "Paused"].includes(P?.state) ? t(`state.${P.state}` as Key) : P?.state;
-  $("ts").textContent = P ? `${st}${P.open != null ? ` · ${t("chat.openCount", { n: P.open })}` : ""}` : "";
+  // the conversation title, edited in place. A terminal session takes its title from the transcript
+  const ct = $("ct") as HTMLInputElement;
+  ct.readOnly = !!T; ct.title = T ? t("chat.titleFromTerm") : t("chat.titleEdit");
+  if (document.activeElement !== ct) setTitleField(T ? T.title : label(sel));
+  $("ts").textContent = "";
   const items = convo[sel] || [];
   msgs.innerHTML = (items.length ? items.map(it => {
     if (it.kind === "me") return (it.imgs?.length ? `<div class="mimgs">${thumbs(it.imgs)}</div>` : "")
@@ -416,7 +506,7 @@ function renderChat() {
     + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">${t("route.question")}</div><div class="opts">${routeChoice.hits.map(h =>
         `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">${t("route.keep")}</button></div></div>` : "")
     + pendingList.filter(r => r.project === sel).map(card).join("")
-    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel) : "")
+    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml() : "")
     + (T && T.status === "busy" ? `<div class="working"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${t("term.writing")}</span></div>` : "");
   const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
   $("movebar").innerHTML = T ? `<span>${t("move.term", { busy: T.status === "busy" ? t("move.termBusy") : "" })}</span>`
@@ -427,6 +517,8 @@ function renderChat() {
   $("send").classList.toggle("stop", busy);
   $("send").innerHTML = busy ? '<svg class="i" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none"/></svg>'
     : '<svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg>';
+  // a switch restarts the process, so not while a turn runs
+  for (const id of ["model", "effort"]) ($(id) as HTMLSelectElement).disabled = busy;
   $("hint").textContent = busy ? t("hint.busy") : "";
   ($("c") as HTMLTextAreaElement).placeholder = T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general");
   if (atBottom) log.scrollTop = log.scrollHeight;
@@ -455,11 +547,23 @@ function openPop() {
   $("pop").innerHTML = `<label class="plab">${t("pop.project")}
       <select id="popproj"><option value="">${t("general")}</option>${names.map((n: string) => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
     ${cur ? `<div class="plab">${t("pop.sidebar", { name: esc(cur) })}
-      <div class="setrow"><input class="field ico" id="popicon" maxlength="4" placeholder="${t("pop.icon")}" value="${esc(c.icon || "")}"><input class="field" id="poplabel" placeholder="${esc(cur)}" value="${esc(c.label || "")}"></div></div>` : ""}
+      <div class="setrow"><label class="btn picon" title="${t("pop.imgPick")}">${pImg(c.img) || t("pop.img")}<input type="file" id="popfile" accept="image/*,.ico,.svg" hidden></label><input class="field ico" id="popicon" maxlength="4" placeholder="Emoji" value="${esc(c.img ? "" : c.icon || "")}"><input class="field" id="poplabel" placeholder="${esc(cur)}" value="${esc(c.label || "")}"></div></div>` : ""}
     <div class="acts"><button class="btn" data-pop="cancel">${t("pop.cancel")}</button><button class="btn primary" data-pop="save">${t("pop.save")}</button></div>`;
   $("pop").hidden = false;
+  popImg = c.img;
   ($("popproj") as HTMLSelectElement).focus();
+  // an image replaces the emoji and the other way round
+  document.getElementById("popfile")?.addEventListener("change", async e => {
+    const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
+    const u = await iconFrom(f); if (!u) { alertMsg("Deze afbeelding kan ik niet lezen."); return; }
+    popImg = u; document.querySelector(".picon")!.firstChild!.replaceWith(document.createRange().createContextualFragment(pImg(u)));
+    ($("popicon") as HTMLInputElement).value = "";
+  });
+  document.getElementById("popicon")?.addEventListener("input", () => {
+    if (!popImg) return; popImg = undefined; document.querySelector(".picon")!.firstChild!.replaceWith("Afbeelding…");
+  });
 }
+let popImg: string | undefined; // the image chosen in the open panel
 async function onPop(e: MouseEvent) {
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-pop]"); if (!b) return;
   if (b.dataset.pop === "save") {
@@ -470,26 +574,31 @@ async function onPop(e: MouseEvent) {
     else if (chats[sel]) { chats[sel].project = proj; saveChats(); }
     const icon = (document.getElementById("popicon") as HTMLInputElement | null)?.value.trim();
     const lab = (document.getElementById("poplabel") as HTMLInputElement | null)?.value.trim();
-    if (cur && icon !== undefined) next.projects[cur] = { ...(icon ? { icon } : {}), ...(lab ? { label: lab } : {}) };
+    if (cur && icon !== undefined) next.projects[cur] = { ...(popImg ? { img: popImg } : icon ? { icon } : {}), ...(lab ? { label: lab } : {}) };
     if (!(await saveSettings(next))) { alertMsg(settingsMsg); return; }
   }
   $("pop").hidden = true; render();
 }
 function alertMsg(m: string) { const p = $("pop"); p.insertAdjacentHTML("afterbegin", `<div class="err">${esc(m)}</div>`); }
 
-// visible while Claude works: pulsing dots, the step it is on, and the seconds since the question
-function workingHtml(k: string): string {
-  // the running step already has its own line with a spinner, so this only says that Claude is at it
-  const running = (convo[k] || []).some(i => i.kind === "tool" && i.state === "run");
-  const since = busySince[k] || Date.now(), sec = Math.round((Date.now() - since) / 1000);
-  return `<div class="working" aria-live="polite"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${running ? t("work.working") : t("work.thinking")}</span><span class="mono ws" data-since="${since}">${sec} s</span></div>`;
+// visible while Claude works: only the pulsing dots, the running step has its own line
+function workingHtml(): string {
+  return `<div class="working" role="status" aria-label="${t("work.working")}"><span class="pulse"><i></i><i></i><i></i></span></div>`;
 }
 const dur = (sec: number) => { const s = Math.max(0, Math.round(sec)); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`; };
 setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => { e.textContent = dur((Date.now() - Number(e.dataset.since)) / 1000); }), 1000);
 
 function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
-  document.querySelectorAll<HTMLElement>("#seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
+  if (prOpen) {
+    // only when it changed: a redraw of the same PR would throw away the scroll position
+    const html = prOpen.startsWith("pv:") ? renderTask(prDetail[prOpen] ?? null, prDetailErr, esc) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
+    if (html !== prHtml || !box.querySelector(".prd-bar")) { box.innerHTML = html; prHtml = html; }
+    return;
+  }
+  prHtml = "";
+  if (tab === "prs" && !ghOn()) tab = "open";
+  document.querySelectorAll<HTMLElement>("#seg button").forEach(b => { b.classList.toggle("on", b.dataset.tab === tab); if (b.dataset.tab === "prs") b.hidden = !ghOn(); });
   if (!P) {
     const due = snap.reminders.filter((r: any) => r.days <= 0);
     box.innerHTML = `<h2>${t("insp.today")} <span class="count">${due.length}</span></h2>${due.length ? `<ul class="todo">${due.map((r: any) =>
@@ -500,7 +609,8 @@ function renderInsp() {
   const rem = snap.reminders.filter((r: any) => r.project === P.name);
   const when = (r: any) => r.days < 0 ? t("due.overdue", { n: -r.days }) : r.days === 0 ? t("due.today") : t("due.in", { n: r.days });
   const items: string[] = P.open_items || [];
-  if (tab === "stand") box.innerHTML = `<h2>${t("insp.stand")}</h2><div class="meta">${t("insp.updated", { date: esc(P.last) })}</div><div class="stand">${md(P.stand || t("insp.noStand"))}</div>`;
+  if (tab === "prs") box.innerHTML = renderProjectPrs(prs, P.name, { esc, projectLabel: pLabel, open: prOpen });
+  else if (tab === "stand") box.innerHTML = `<h2>${t("insp.stand")}</h2><div class="meta">${t("insp.updated", { date: esc(P.last) })}</div><div class="stand">${md(P.stand || t("insp.noStand"))}</div>`;
   else if (tab === "rem") box.innerHTML = rem.length ? `<h2>${t("nav.reminders")}</h2><ul class="todo">${rem.map((r: any) =>
     `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count ${urgency(r.days)}">${when(r)}</span></span></li>`).join("")}</ul>` : `<div class="meta">${t("insp.noRem")}</div>`;
   else box.innerHTML = `<h2>${t("tab.open")} <span class="count">${items.length}</span></h2>${items.length
@@ -512,14 +622,18 @@ function render() { renderNav(); renderChat(); renderInsp(); }
 
 // ---------- actions
 async function select(k: string) {
-  // an empty draft that is left behind disappears
-  if (sel !== k && chats[sel]?.draft && !(convo[sel] || []).length) delete chats[sel];
+  // an empty draft that is left behind disappears, one with typed text stays
+  if (sel !== k && chats[sel]?.draft && !(convo[sel] || []).length && !typed[sel]) delete chats[sel];
   $("pop").hidden = true;
+  if (sel !== k && prOpen) { prOpen = ""; document.body.classList.remove("prwide"); }
   sel = k; unseen.delete(k); routeChoice = routeChoice?.key === k ? routeChoice : null;
-  store.set("sel", chats[k]?.draft ? WAIT : k);
+  store.set("sel", chats[k]?.draft && !typed[k] ? WAIT : k);
+  const ta = $("c") as HTMLTextAreaElement; ta.value = typed[k] || ""; grow();
   if (!VIEWS.includes(k) && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
+  if (k === PRS) loadPrs();
   render();
   $("log").scrollTop = VIEWS.includes(k) ? 0 : 1e9;
+  if (!VIEWS.includes(k)) ta.focus();
 }
 const openProject = (p: string) => select(chatsOf(p)[0]?.key || newChat(p));
 function setProject(k: string, p: string, note: string) {
@@ -529,10 +643,12 @@ function setProject(k: string, p: string, note: string) {
 }
 
 function grow() { const ta = $("c") as HTMLTextAreaElement; ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
-async function sendMsg(forced?: string) {
+// `to` sends to a conversation that is not open (Cmd-K) with its own images: the composer, its images and the view stay as they are
+async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
   const ta = $("c") as HTMLTextAreaElement, text = forced ?? ta.value.trim();
-  if ((!text && !attached.length) || sel === WAIT) return;
-  if (isTerm(sel)) {
+  if (forced === undefined && text) { delete typed[sel]; store.set("typed", typed); }
+  if ((!text && !(to ? toImgs : attached).length) || (!to && sel === WAIT)) return;
+  if (!to && isTerm(sel)) {
     // typing in a terminal conversation: fork it into an app conversation under the same project
     const tm = termOf(sel); if (!tm) return;
     const k = newChat(tm.project);
@@ -542,8 +658,8 @@ async function sendMsg(forced?: string) {
     await select(k);
     return sendMsg(text);
   }
-  const k = sel, c = chats[k];
-  ta.value = ""; grow();
+  const k = to ?? sel, c = chats[k];
+  if (!to) { ta.value = ""; grow(); }
   // first message of a general conversation: if it names one project, it goes under that project
   if (c && !c.project && !forced && !(convo[k] || []).length) {
     const hits = findProjects(text);
@@ -551,12 +667,18 @@ async function sendMsg(forced?: string) {
     else if (hits.length > 1) { routeChoice = { key: k, text, hits }; renderChat(); return; }
   }
   if (c) { if (c.title === NEW) c.title = (text || t("chat.image")).slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
-  const imgs = attached; attached = []; renderAtts();
-  push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; busySince[k] = Date.now(); render();
-  $("log").scrollTop = 1e9;
+  // first message: a short generated title replaces the typed start, unless the user renamed it meanwhile
+  if (c && text && !(convo[k] || []).length) {
+    const auto = c.title;
+    invoke<string>("ai_title", { text }).then(title => { if (chats[k]?.title === auto) { chats[k].title = title; saveChats(); render(); } }).catch(() => {});
+  }
+  const imgs = to ? toImgs : attached; if (!to) { attached = []; renderAtts(); }
+  push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; queued[k] = (queued[k] || 0) + 1; render();
+  if (k === sel) $("log").scrollTop = 1e9;
   const name = `${c?.project || "Algemeen"}: ${c?.title || k}`;
-  try { await invoke("send", { project: k, text, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null }); }
-  catch (e) { push(k, { kind: "err", text: String(e) }); status[k] = "idle"; renderChat(); }
+  try { await invoke("send", { project: k, text, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null,
+    model: ($("model") as HTMLSelectElement).value, effort: ($("effort") as HTMLSelectElement).value }); }
+  catch (e) { push(k, { kind: "err", text: String(e) }); queued[k] = Math.max(0, (queued[k] || 1) - 1); status[k] = queued[k] ? "busy" : "idle"; renderChat(); }
 }
 
 // closing hides a conversation from the sidebar. An app conversation stops but keeps its session, a
@@ -564,7 +686,7 @@ async function sendMsg(forced?: string) {
 async function closeChat(k: string) {
   const title = isTerm(k) ? termOf(k)?.title : label(k);
   if (isTerm(k)) { forked.push(k.slice(2)); store.set("forkedTerms", forked); }
-  else if (chats[k]) { await invoke("stop", { project: k }); chats[k].closed = Date.now(); delete status[k]; saveChats(); }
+  else if (chats[k]) { await invoke("stop", { project: k }); chats[k].closed = Date.now(); delete status[k]; delete queued[k]; saveChats(); }
   toast(t("toast.closed", { title: title ?? "" }), () => reopen(k));
   if (sel === k) { const p = isTerm(k) ? null : projOf(k); await select(p && chatsOf(p)[0] ? chatsOf(p)[0].key : WAIT); }
   else render();
@@ -576,9 +698,9 @@ async function reopen(k: string) {
   await select(k);
 }
 let toastTimer = 0;
-function toast(text: string, undo: () => void) {
+function toast(text: string, undo: () => void, btn = t("toast.undo")) {
   const el = $("toast");
-  el.innerHTML = `<span>${esc(text)}</span><span class="sp"></span><button class="btn" id="undo">${t("toast.undo")}</button>`;
+  el.innerHTML = `<span>${esc(text)}</span><span class="sp"></span><button class="btn" id="undo">${esc(btn)}</button>`;
   el.hidden = false;
   $("undo").onclick = undo;
   clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el.hidden = true; }, 8000);
@@ -599,6 +721,8 @@ $("nav").addEventListener("click", e => {
   if (x) { e.stopPropagation(); closeChat(x.dataset.close!); return; }
   const add = t.closest<HTMLElement>("[data-add]");
   if (add) { e.stopPropagation(); select(newChat(add.dataset.add || null)); return; }
+  const fold = t.closest<HTMLElement>("[data-fold]");
+  if (fold) { const p = fold.dataset.fold!; unfolded.has(p) ? unfolded.delete(p) : unfolded.add(p); renderNav(); return; }
   const r = t.closest<HTMLElement>(".row"); if (!r) return;
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
@@ -651,9 +775,12 @@ window.addEventListener("pointerup", () => {
 });
 listen<Settings>("settings-changed", async e => {
   const relang = e.payload.language !== settings.language;
+  if (JSON.stringify(e.payload.productive) !== JSON.stringify(settings.productive)) { resetBoard(); document.getElementById("kb")?.remove(); }
+  const ghChanged = JSON.stringify(e.payload.github) !== JSON.stringify(settings.github);
   settings = { ...settings, ...e.payload };
   if (relang) { await initI18n(); applyStatic(); render(); } // a new language applies without a restart
-  loadSnapshot();
+  if (ghChanged) { prs = null; prErr = ""; if (!ghOn() && sel === PRS) select(WAIT); loadPrs(); }
+  checkPv().then(() => { if (!pvReady && sel === BOARD) select(WAIT); loadSnapshot(); });
 });
 $("t").addEventListener("click", openPop);
 // right-click on a conversation in the sidebar: the Mac context menu
@@ -689,6 +816,7 @@ async function remAct(action: "done" | "push", id: string, date?: string) {
 }
 $("msgs").addEventListener("click", e => {
   if (sel === REM && onRemindersEvent(e, remAct)) return;
+  if ((e.target as HTMLElement).closest("[data-pr=reload]")) { loadPrs(); return; }
   const g = (e.target as HTMLElement).closest<HTMLElement>("[data-bg]");
   if (g) {
     const id = g.dataset.id!, act = g.dataset.bg!;
@@ -713,16 +841,24 @@ $("subs").addEventListener("click", async e => {
   renderSubs();
 });
 $("c").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); } });
-$("c").addEventListener("input", grow);
+$("c").addEventListener("input", () => {
+  grow();
+  const v = ($("c") as HTMLTextAreaElement).value, c = chats[sel];
+  if (v) typed[sel] = v; else delete typed[sel];
+  store.set("typed", typed);
+  if (c?.draft) { store.set("sel", v ? sel : WAIT); saveChats(); }
+  if (c?.draft) { c.title = ($("c") as HTMLTextAreaElement).value.trim().slice(0, 48) || NEW; setTitleField(c.title); renderNav(); }
+});
 // an image on the clipboard becomes a thumbnail. Copied text that also carries an image rendering
 // (Numbers, Word) pastes as text the way it always did, only a bare file name (a Finder copy) gives way.
-$("c").addEventListener("paste", e => {
+function pastedImages(e: ClipboardEvent): File[] {
   const cd = e.clipboardData, t = cd?.getData("text/plain").trim() || "";
-  if (!cd || (t && !/^[^\n/]+\.(png|jpe?g|gif|webp|heic|tiff?)$/i.test(t))) return;
+  if (!cd || (t && !/^[^\n/]+\.(png|jpe?g|gif|webp|heic|tiff?)$/i.test(t))) return [];
   const files = [...cd.items].filter(i => i.kind === "file" && i.type.startsWith("image/")).map(i => i.getAsFile()).filter((f): f is File => !!f);
-  if (!files.length) return;
-  e.preventDefault(); attach(files);
-});
+  if (files.length) e.preventDefault();
+  return files;
+}
+$("c").addEventListener("paste", e => { const f = pastedImages(e); if (f.length) attach(f); });
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
 $("composer").addEventListener("dragover", e => { if (!hasFiles(e)) return; e.preventDefault(); $("composer").classList.add("drop"); });
 $("composer").addEventListener("dragleave", () => $("composer").classList.remove("drop"));
@@ -746,13 +882,96 @@ document.addEventListener("click", e => {
   $("zoom").querySelector("img")!.src = im.src; $("zoom").hidden = false;
 });
 $("zoom").addEventListener("click", () => { $("zoom").hidden = true; });
-window.addEventListener("keydown", e => { if (e.key === "Escape" && !$("zoom").hidden) { e.preventDefault(); $("zoom").hidden = true; } });
-$("send").addEventListener("click", () => {
-  if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: t("note.stopped") }); render(); }
-  else sendMsg();
+// links in a conversation open in the default browser or mail app, a webview window cannot open them itself
+document.addEventListener("click", e => {
+  const a = (e.target as HTMLElement).closest<HTMLAnchorElement>("a[href]");
+  if (!a || !/^(https?:|mailto:)/i.test(a.href)) return;
+  e.preventDefault(); invoke("plugin:opener|open_url", { url: a.href });
 });
-$("close").addEventListener("click", () => { if (sel !== WAIT) closeChat(sel); });
-$("new").addEventListener("click", () => { if (sel !== WAIT) select(newChat(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel))); });
+// Cmd-K: a question that becomes a new general conversation in the background, the open screen stays
+const qkIn = $("qkin") as HTMLTextAreaElement;
+let qkImgs: Img[] = []; // images waiting in the Cmd-K field, dropped when it closes without sending
+const qkShow = (on: boolean) => {
+  $("qk").hidden = !on;
+  if (on) { qkIn.value = ""; qkIn.style.height = "auto"; qkIn.focus(); }
+  else { qkImgs.forEach(i => URL.revokeObjectURL(i.url)); qkImgs = []; renderAtts("qkatts", qkImgs); }
+};
+window.addEventListener("keydown", e => {
+  if (!e.metaKey || e.altKey || e.shiftKey || e.ctrlKey || e.code !== "KeyK") return;
+  e.preventDefault(); qkShow(!!$("qk").hidden);
+});
+qkIn.addEventListener("input", () => { qkIn.style.height = "auto"; qkIn.style.height = qkIn.scrollHeight + "px"; });
+qkIn.addEventListener("keydown", e => {
+  if (e.key === "Escape") { if (!$("zoom").hidden) return; e.preventDefault(); e.stopPropagation(); qkShow(false); return; }
+  if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
+  e.preventDefault();
+  const text = qkIn.value.trim(), imgs = qkImgs; if (!text && !imgs.length) return;
+  qkImgs = []; qkShow(false);
+  const k = newChat(null);
+  sendMsg(text, k, imgs);
+  toast(t("toast.started", { text: (text || t("chat.image")).slice(0, 60) }), () => { $("toast").hidden = true; select(k); }, t("toast.open"));
+});
+qkIn.addEventListener("paste", e => { const f = pastedImages(e); if (f.length) attach(f, qkImgs, "qkatts"); });
+$("qkbox").addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+$("qkbox").addEventListener("drop", e => { if (!hasFiles(e)) return; e.preventDefault(); attach([...e.dataTransfer!.files], qkImgs, "qkatts"); });
+$("qkatts").addEventListener("click", e => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-rm]"); if (!b) return;
+  e.stopPropagation();
+  const [gone] = qkImgs.splice(Number(b.dataset.rm), 1); if (gone) URL.revokeObjectURL(gone.url);
+  renderAtts("qkatts", qkImgs); qkIn.focus();
+});
+$("qk").addEventListener("click", e => { if (e.target === $("qk")) qkShow(false); });
+window.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!$("zoom").hidden) { e.preventDefault(); $("zoom").hidden = true; }
+  else if (prOpen && $("pop").hidden && !(e.target as HTMLElement).closest("input, textarea, select")) { e.preventDefault(); closePr(); }
+});
+// a PR row, in the list or in a project's PR tab, opens the PR in the right panel
+document.addEventListener("click", e => {
+  const el = e.target as HTMLElement;
+  if (el.closest("[data-pr-close]")) { closePr(); return; }
+  if (el.closest("[data-pr-review]")) { reviewPr(prOpen); return; }
+  const r = el.closest<HTMLElement>("[data-pr-open]");
+  if (r && !el.closest("a[href]")) openPr(r.dataset.prOpen!);
+});
+const stopChat = () => { invoke("stop", { project: sel }); queued[sel] = 0; status[sel] = "idle"; push(sel, { kind: "note", text: t("note.stopped") }); render(); };
+for (const id of ["model", "effort"]) {
+  const el = $(id) as HTMLSelectElement;
+  el.value = store.get(id, "");
+  el.addEventListener("change", () => store.set(id, el.value));
+}
+$("send").addEventListener("click", () => { if (status[sel] === "busy") stopChat(); else sendMsg(); });
+// typing anywhere in an open conversation goes to the composer, focused or not
+window.addEventListener("keydown", e => {
+  if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.isComposing || VIEWS.includes(sel) || !$("pop").hidden) return;
+  if ((e.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) return;
+  ($("c") as HTMLTextAreaElement).focus(); // the key itself then lands in the composer
+});
+// Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
+window.addEventListener("keydown", e => {
+  if (!e.ctrlKey || e.metaKey || e.altKey || e.code !== "KeyC") return;
+  e.preventDefault();
+  if (status[sel] === "busy") stopChat();
+  else { const ta = $("c") as HTMLTextAreaElement; ta.value = ""; ta.dispatchEvent(new Event("input")); }
+});
+function setTitleField(v: string) { const ct = $("ct") as HTMLInputElement; ct.value = v; ct.size = Math.max(4, v.length); }
+$("ct").addEventListener("input", () => { const ct = $("ct") as HTMLInputElement; ct.size = Math.max(4, ct.value.length); });
+$("ct").addEventListener("keydown", e => {
+  const ct = e.target as HTMLInputElement;
+  if (e.key === "Enter") { e.preventDefault(); ct.blur(); }
+  else if (e.key === "Escape") { e.preventDefault(); setTitleField(label(sel)); ct.blur(); }
+});
+$("ct").addEventListener("change", () => {
+  const c = chats[sel], v = ($("ct") as HTMLInputElement).value.trim();
+  if (!c || !v) { setTitleField(label(sel)); return; }
+  c.title = v; saveChats(); renderNav();
+});
+// the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation
+listen<string>("menu", e => {
+  if (e.payload === "new-general") select(newChat(null));
+  else if (e.payload === "new-project") select(newChat(VIEWS.includes(sel) ? null : isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)));
+  else if (e.payload === "close-chat" && !VIEWS.includes(sel) && !chats[sel]?.draft) closeChat(sel);
+});
 $("movebar").addEventListener("click", e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
   if (b.dataset.move) { setProject(sel, b.dataset.move, t("note.moved", { name: b.dataset.move })); render(); } else { dismissed.add(sel); renderChat(); }
@@ -761,14 +980,14 @@ $("term").addEventListener("click", () => {
   if (sel === WAIT) return;
   if (isTerm(sel)) { const t = termOf(sel); if (t) invoke("bg", { action: "attach", id: t.id }); return; }
   invoke("open_terminal", { project: sel, session: null, name: `${projOf(sel) || "Algemeen"}: ${label(sel)}` });
-  status[sel] = "idle"; render();
+  queued[sel] = 0; status[sel] = "idle"; render();
 });
 // the right panel can be folded away, the choice is remembered
 const setInsp = (hide: boolean) => { document.body.classList.toggle("noinsp", hide); store.set("noinsp", hide); };
 setInsp(store.get("noinsp", false));
 $("toggleinsp").addEventListener("click", () => setInsp(!document.body.classList.contains("noinsp")));
 window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code === "KeyI") { e.preventDefault(); setInsp(!document.body.classList.contains("noinsp")); } });
-$("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; renderInsp(); } });
+$("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; if (prOpen) closePr(); else renderInsp(); } });
 
 // ---------- polling: pending questions often, sessions and the vault now and then
 // an error shows once, in a bar at the top, and goes when a later snapshot works again
@@ -814,7 +1033,8 @@ for (const k of await invoke<string[]>("chats")) {
 saveChats();
 await Promise.all(Object.values(chats).filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title)).map(c => ensureHistory(c.key)));
 await pollAgents();
-if (!VIEWS.includes(sel) && !chats[sel] && !termOf(sel)) sel = WAIT;
+await checkPv();
+if ((!VIEWS.includes(sel) && !chats[sel] && !termOf(sel)) || (sel === BOARD && !pvReady) || (sel === PRS && !ghOn())) sel = WAIT;
 await select(sel);
 pollPending();
 setInterval(pollPending, 700);
@@ -828,3 +1048,5 @@ setInterval(async () => {
   if (grew || termOf(sel)?.status === "busy") renderChat(); renderNav();
 }, 2000);
 setInterval(loadSnapshot, 30000);
+if (sel !== PRS) loadPrs(); // select() already loads it when the view is open
+setInterval(loadPrs, 5 * 60000);

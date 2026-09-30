@@ -1,7 +1,7 @@
 import { t, currentLang } from "./i18n";
 import type { Key } from "./locales/en";
 
-/** red when overdue, orange today and in the next 2 days, grey after that (Laurent, 29/9) */
+/** red when overdue, orange today and in the next 2 days, grey after that (decided 29/9) */
 export const urgency = (days: number) => days < 0 ? "due-late" : days <= 2 ? "due-soon" : "";
 
 export type Reminder = { id: string; date: string; days: number; project: string | null; title: string; repeat: string | null };

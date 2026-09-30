@@ -94,7 +94,7 @@ CACHE = os.path.expanduser("~/Library/Application Support/be.laurentmeersman.vau
 TRANSCRIPTS = os.path.expanduser("~/.claude/projects/" + re.sub(r"[^A-Za-z0-9]", "-", VAULT))
 
 
-# user-role messages the harness injects, not typed by Laurent
+# user-role messages the harness injects, not typed by the user
 INJECTED = ("<", "Another Claude session", "Base directory for this skill", "[Image", "Stop hook feedback",
             "[Request interrupted", "The user sent a new message", "This session is being continued")
 
@@ -157,7 +157,7 @@ def topics(items, projs):
         recent = c["hits"][-20:] + named
         it["project"] = max(set(recent), key=lambda n: (recent.count(n), len(recent) - recent[::-1].index(n))) if recent else None
         it["last_user"] = c["last"]
-        # last message Laurent typed (ISO timestamp): the real "working on it now", unlike the file mtime
+        # last message the user typed (ISO timestamp): the real "working on it now", unlike the file mtime
         it["last_at"] = c.get("last_at", "")
     live = {it.get("sessionId") for it in items}
     cache = {k: v for k, v in cache.items() if k in live}

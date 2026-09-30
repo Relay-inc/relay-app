@@ -1,5 +1,5 @@
 // Vault: a shell around the real Claude Code CLI. Every conversation is a `claude -p` process in
-// stream-json mode, in the vault, on Laurent's subscription (no API key). Permission requests and
+// stream-json mode, in the vault, on the user's subscription (no API key). Permission requests and
 // Claude's questions come in through perm_server.py as files in the pending folder.
 
 use serde_json::{json, Value};
@@ -13,7 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 mod vault;
 
-// ponytail: paths are Laurent's own machine and this repo, fine for a personal app that is not distributed.
+// ponytail: REPO and the claude binary are fixed, fine as long as the app runs from its own checkout.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
@@ -21,26 +21,44 @@ fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
 }
-/// The vault's mapping: what detection finds, with what the user set in settings.json on top.
+/// The vault's mapping: the one stored in settings.json, or what detection finds for a vault without one.
+/// set_settings always stores the full mapping, so detection (a folder scan) only runs before that.
 fn vault_map(s: &Value, v: &str) -> Value {
     if v.is_empty() { return vault::merge(&json!({}), &json!({})); }
-    vault::merge(&vault::detect(v).1, &s["vaults"][v])
+    let stored = &s["vaults"][v];
+    if stored.is_object() { vault::merge(&json!({}), stored) } else { vault::merge(&vault::detect(v).1, stored) }
 }
 /// The configured vault with its mapping and which mapped paths exist.
 fn vault_of(s: &Value) -> Value {
     let v = s["vault"].as_str().unwrap_or("");
     vault::status(v, &vault_map(s, v))
 }
+/// The vault, or an error when none is set up yet: nothing runs or reads outside a chosen vault.
+fn need_vault(st: &App) -> Result<String, String> {
+    let s = st.settings.lock().unwrap();
+    let vs = vault_of(&s);
+    if vs["ok"] == true { Ok(vs["vault"].as_str().unwrap().to_string()) } else { Err(tr(ui_lang_of(&s), "err.no_vault_set")) }
+}
+/// The brain folder of a vault (System/, or Resources/Meta/Claude/ in the old layout), for its index/repos.json.
+fn brain(vault: &str) -> Option<String> {
+    ["System", "Resources/Meta/Claude"].iter().map(|d| format!("{vault}/{d}"))
+        .find(|m| PathBuf::from(m).join("rules/core/work-state.md").is_file())
+}
 /// Claude Code's transcript folder for the vault: the path with every non-alphanumeric char as `-`.
 fn transcripts(st: &App) -> String {
-    let slug: String = vault(st).chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+    let v = vault(st);
+    if v.is_empty() { return String::new(); } // no vault: never fall back to ~/.claude/projects itself
+    let slug: String = v.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
     format!("{}/.claude/projects/{slug}", home())
 }
 /// Settings as stored on disk, with the defaults filled in for missing or malformed keys.
 fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(""); }
-    for k in ["projects", "overrides", "vaults"] { if !v[k].is_object() { v[k] = json!({}); } }
+    for k in ["projects", "overrides", "vaults", "productive", "github"] { if !v[k].is_object() { v[k] = json!({}); } }
+    for k in ["org", "user"] { if !v["productive"][k].is_string() { v["productive"][k] = json!(""); } }
+    if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
+    if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     v
 }
@@ -78,16 +96,19 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("minimize", ["Minimize", "Minimaliseer", "Placer dans le Dock", "Im Dock ablegen"]),
     ("zoom", ["Zoom", "Zoom", "Réduire/agrandir", "Zoomen"]),
     ("fullscreen", ["Enter Full Screen", "Volledig scherm", "Passer en mode plein écran", "Vollbildmodus"]),
-    ("close_window", ["Close Window", "Sluit venster", "Fermer la fenêtre", "Fenster schließen"]),
+    ("chat", ["Conversation", "Gesprek", "Conversation", "Gespräch"]),
+    ("new_general", ["New General Conversation", "Nieuw algemeen gesprek", "Nouvelle conversation générale", "Neues allgemeines Gespräch"]),
+    ("new_project", ["New Conversation in This Project", "Nieuw gesprek in dit project", "Nouvelle conversation dans ce projet", "Neues Gespräch in diesem Projekt"]),
+    ("close_chat", ["Close Conversation", "Sluit gesprek", "Fermer la conversation", "Gespräch schließen"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
         "Pas de coffre : work-state.md introuvable dans {v}", "Kein Vault: work-state.md nicht gefunden in {v}"]),
     ("err.no_script", ["No reminder script set for this vault (Settings > Vault)", "Geen herinneringsscript ingesteld voor deze vault (Instellingen > Vault)",
         "Aucun script de rappels défini pour ce coffre (Réglages > Vault)", "Kein Erinnerungsskript für diesen Vault festgelegt (Einstellungen > Vault)"]),
     ("err.no_vault_set", ["No vault chosen yet", "Nog geen vault gekozen", "Aucun coffre choisi", "Noch kein Vault gewählt"]),
-    ("err.project", ["Invalid project '{v}': icon (max 4 characters) and label (max 60) must be text",
-        "Ongeldig project '{v}': icon (max 4 tekens) en label (max 60) moeten tekst zijn",
-        "Projet '{v}' invalide : l'icône (4 caractères max.) et le nom (60 max.) doivent être du texte",
-        "Ungültiges Projekt '{v}': Symbol (max. 4 Zeichen) und Name (max. 60) müssen Text sein"]),
+    ("err.project", ["Invalid project '{v}': icon (max 4 characters), label (max 60) and img (png data url) must be text",
+        "Ongeldig project '{v}': icon (max 4 tekens), label (max 60) en img (png data url) moeten tekst zijn",
+        "Projet '{v}' invalide : l'icône (4 caractères max.), le nom (60 max.) et img (data url png) doivent être du texte",
+        "Ungültiges Projekt '{v}': Symbol (max. 4 Zeichen), Name (max. 60) und img (PNG-Data-URL) müssen Text sein"]),
     ("err.override", ["Invalid override '{v}'", "Ongeldige override '{v}'", "Remplacement '{v}' invalide", "Ungültige Zuordnung '{v}'"]),
     ("err.empty", ["empty message", "leeg bericht", "message vide", "leere Nachricht"]),
 ];
@@ -97,8 +118,8 @@ fn tr(lang: &str, key: &str) -> String {
 }
 fn tr_v(lang: &str, key: &str, v: &str) -> String { tr(lang, key).replace("{v}", v) }
 
-/// Native menu bar: Vault > Settings… (Cmd-comma), plus Edit and Window so copy, paste and window
-/// shortcuts keep working once the default menu is replaced. Rebuilt when the language changes.
+/// Native menu bar: Vault > Settings… (Cmd-comma), Conversation, plus Edit and Window so copy, paste and
+/// window shortcuts keep working once the default menu is replaced. Rebuilt when the language changes.
 fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem as P, Submenu};
     let t = |k: &str| tr(lang, k);
@@ -110,13 +131,18 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
     let edit = Submenu::with_items(h, t("edit"), true, &[
         &P::undo(h, Some(&t("undo")))?, &P::redo(h, Some(&t("redo")))?, &P::separator(h)?,
         &P::cut(h, Some(&t("cut")))?, &P::copy(h, Some(&t("copy")))?, &P::paste(h, Some(&t("paste")))?, &P::select_all(h, Some(&t("select_all")))?])?;
+    // Cmd-W closes the conversation like a browser tab, the main window stays open
+    let chat = Submenu::with_items(h, t("chat"), true, &[
+        &MenuItem::with_id(h, "new-general", t("new_general"), true, Some("CmdOrCtrl+T"))?,
+        &MenuItem::with_id(h, "new-project", t("new_project"), true, Some("CmdOrCtrl+N"))?,
+        &P::separator(h)?,
+        &MenuItem::with_id(h, "close-chat", t("close_chat"), true, Some("CmdOrCtrl+W"))?])?;
     let window = Submenu::with_items(h, t("window"), true, &[
-        &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?,
-        &P::separator(h)?, &P::close_window(h, Some(&t("close_window")))?])?;
-    Menu::with_items(h, &[&app, &edit, &window])
+        &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?])?;
+    Menu::with_items(h, &[&app, &chat, &edit, &window])
 }
 
-struct Proc { child: Child, stdin: ChildStdin }
+struct Proc { child: Child, stdin: ChildStdin, opts: (String, String) } // opts: the --model and --effort it runs with
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -190,25 +216,28 @@ async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, Stri
 #[tauri::command]
 fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
 
-fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>, opts: (String, String)) -> Result<Proc, String> {
     let mcp = json!({"mcpServers": {"vaultperm": {
         "command": "/usr/bin/python3", "args": [format!("{REPO}/perm_server.py")],
         "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
+    let dir = need_vault(state)?;
     let mut cmd = Command::new(claude_bin());
     cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
         .arg(mcp.to_string()).args(["-n", name]);
+    if !opts.0.is_empty() { cmd.args(["--model", &opts.0]); }
+    if !opts.1.is_empty() { cmd.args(["--effort", &opts.1]); }
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
     // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
     else if let Some(f) = fork.filter(|f| f.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) { cmd.args(["--resume", f, "--fork-session"]); }
-    cmd.current_dir(vault(state)).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
-        .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for Laurent
+    cmd.current_dir(dir).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
+        .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for the user
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| format!("claude start: {e}"))?;
     let stdin = child.stdin.take().unwrap();
     let (stdout, stderr) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
 
-    let (a, p) = (app.clone(), project.to_string());
+    let (a, p, pid) = (app.clone(), project.to_string(), child.id());
     std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let Ok(ev) = serde_json::from_str::<Value>(&line) else { continue };
@@ -222,7 +251,13 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
             }
             a.emit("claude", json!({"project": p, "event": ev})).ok();
         }
-        a.state::<App>().procs.lock().unwrap().remove(&p);
+        // a process replaced for a model or effort switch exits quietly, its successor keeps the slot
+        {
+            let st = a.state::<App>();
+            let mut procs = st.procs.lock().unwrap();
+            if procs.get(&p).is_some_and(|x| x.child.id() != pid) { return; }
+            procs.remove(&p);
+        }
         a.emit("claude", json!({"project": p, "event": {"type": "exit"}})).ok();
     });
     let (a, p) = (app.clone(), project.to_string());
@@ -230,20 +265,27 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
         let err: Vec<String> = BufReader::new(stderr).lines().map_while(Result::ok).collect();
         if !err.is_empty() { a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": err.join("\n")}})).ok(); }
     });
-    Ok(Proc { child, stdin })
+    Ok(Proc { child, stdin, opts })
 }
 
 #[tauri::command]
-fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>) -> Result<(), String> {
+fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
+        model: Option<String>, effort: Option<String>) -> Result<(), String> {
     // pasted images go as base64 image blocks before the text, the shape stream-json accepts
     let mut content: Vec<Value> = images.unwrap_or_default().into_iter()
         .filter(|i| ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&i["media_type"].as_str().unwrap_or("")) && i["data"].is_string())
         .map(|i| json!({"type": "image", "source": {"type": "base64", "media_type": i["media_type"], "data": i["data"]}})).collect();
     if content.is_empty() && text.trim().is_empty() { return Err(tr(ui_lang_of(&state.settings.lock().unwrap()), "err.empty")); }
     if !text.is_empty() { content.push(json!({"type": "text", "text": text})); }
+    // empty = the CLI default from settings. Only aliases and model ids, never a stray flag
+    let model = model.filter(|m| m.chars().all(|c| c.is_ascii_alphanumeric() || "-.[]".contains(c))).unwrap_or_default();
+    let effort = effort.filter(|e| ["low", "medium", "high", "xhigh", "max"].contains(&e.as_str())).unwrap_or_default();
+    let opts = (model, effort);
     let mut procs = state.procs.lock().unwrap();
+    // model and effort are start flags: a switch restarts the process on the same session
+    if procs.get(&project).is_some_and(|p| p.opts != opts) { if let Some(mut p) = procs.remove(&project) { p.child.kill().ok(); } }
     if !procs.contains_key(&project) {
-        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref())?;
+        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref(), opts)?;
         procs.insert(project.clone(), p);
     }
     let msg = json!({"type": "user", "message": {"role": "user", "content": content}});
@@ -254,6 +296,22 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
 #[tauri::command]
 fn stop(state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+}
+
+/// A short title for a new conversation, the way the terminal gets its ai-title: one Haiku call on the
+/// subscription, outside the vault, without settings, tools, MCP or a transcript. Async, so the ~5 s wait
+/// never blocks the window.
+#[tauri::command]
+async fn ai_title(state: State<'_, App>, text: String) -> Result<String, String> {
+    let text: String = text.chars().take(2000).collect();
+    let out = Command::new(claude_bin())
+        .args(["-p", "--model", "haiku", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "",
+               "--system-prompt", "Geef een korte titel (2 tot 5 woorden, in de taal van het bericht, geen aanhalingstekens, geen punt) voor een gesprek dat met dit bericht begint. Antwoord enkel met de titel."])
+        .arg(text).current_dir(std::env::temp_dir()).env("PATH", &state.path).env_remove("ANTHROPIC_API_KEY")
+        .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+    let t = String::from_utf8_lossy(&out.stdout);
+    let t: String = t.lines().next().unwrap_or("").trim().trim_matches(|c| c == '"' || c == '\'' || c == '.').chars().take(60).collect();
+    if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
 }
 
 /// Past messages of a project's conversation, read from the same transcript the terminal uses.
@@ -495,11 +553,12 @@ fn turn_ended(path: &std::path::Path) -> bool {
 #[tauri::command]
 fn open_terminal(state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+    let v = need_vault(&state)?;
     let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).cloned());
     let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));
     let cmd = match sid {
-        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&vault(&state))),
-        _ => format!("cd {} && claude -n {}", q(&vault(&state)), q(name.as_deref().unwrap_or(&project))),
+        Some(s) if s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') => format!("cd {} && claude --resume {s}", q(&v)),
+        _ => format!("cd {} && claude -n {}", q(&v), q(name.as_deref().unwrap_or(&project))),
     };
     let script = format!(
         "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
@@ -535,8 +594,7 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 /// Validate, save and activate new settings. Returns what was saved.
 #[tauri::command]
 fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
-    let s = norm(settings);
-    let mut s = s;
+    let mut s = norm(settings);
     let lang = ui_lang_of(&s);
     // the vault by its real path, with its full mapping stored, so the file shows what the app uses
     let v = vault::canon(s["vault"].as_str().unwrap());
@@ -549,6 +607,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
             ("icon", Some(t)) => t.chars().count() <= 4,
             ("label", Some(t)) => t.chars().count() <= 60,
+            ("img", Some(t)) => t.len() <= 200_000 && t.strip_prefix("data:image/png;base64,").is_some_and(|b| b.chars().all(|c| c.is_ascii_alphanumeric() || "+/=".contains(c))),
             _ => false,
         }));
         if !ok { return Err(tr_v(lang, "err.project", name)); }
@@ -557,6 +616,15 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         if sid.is_empty() || !sid.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c) || c == '-') || !(t.is_string() || t.is_null()) {
             return Err(tr_v(lang, "err.override", sid));
         }
+    }
+    for k in ["org", "user"] {
+        if !s["productive"][k].as_str().unwrap().chars().all(|c| c.is_ascii_digit()) {
+            return Err(format!("Productive: {} bestaat enkel uit cijfers", if k == "org" { "organisatie-id" } else { "gebruikers-id" }));
+        }
+    }
+    let owners: Vec<&str> = s["github"]["owners"].as_str().unwrap().split([' ', ',']).filter(|o| !o.is_empty()).collect();
+    if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
+        return Err("GitHub: hoogstens 10 owners, enkel letters, cijfers en -".into());
     }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
@@ -567,6 +635,177 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         if let Some(w) = app.get_webview_window("settings") { w.set_title(&tr(lang, "settings.title")).ok(); }
     }
     Ok(s)
+}
+
+// ---------- Productive: the token lives in the macOS keychain, org and user id in settings.json.
+// The token goes to `security` and curl over stdin, never as an argument (visible in the process list),
+// and it never goes back to a webview.
+const KC: &str = "-s vault-app.productive -a token";
+fn pv_token() -> Option<String> {
+    let o = Command::new("/usr/bin/security").arg("find-generic-password").args(KC.split(' ')).arg("-w").output().ok()?;
+    let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    (o.status.success() && !t.is_empty()).then_some(t)
+}
+/// Save the token, or remove it when empty.
+fn pv_set_token(t: &str) -> Result<(), String> {
+    if t.is_empty() {
+        Command::new("/usr/bin/security").arg("delete-generic-password").args(KC.split(' ')).output().map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+    if t.len() > 200 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err("Het token mag enkel letters, cijfers, - en _ bevatten".into());
+    }
+    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U {KC} -w {t}").map_err(|e| e.to_string())?;
+    ch.wait().map_err(|e| e.to_string())?;
+    // `security -i` exits 0 even when the command inside failed, so read it back
+    if pv_token().as_deref() == Some(t) { Ok(()) } else { Err("Kon het token niet in de sleutelhanger bewaren".into()) }
+}
+/// A value inside double quotes in a curl config file.
+fn curl_quote(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")) }
+
+/// Whether a Productive token is in the keychain.
+#[tauri::command]
+fn productive_status() -> bool { pv_token().is_some() }
+
+/// Save the Productive token, or remove it with "". The main window follows, it shows the board only with a token.
+#[tauri::command]
+fn productive_token(app: AppHandle, state: State<App>, token: String) -> Result<(), String> {
+    pv_set_token(token.trim())?;
+    app.emit("settings-changed", state.settings.lock().unwrap().clone()).ok();
+    Ok(())
+}
+
+/// Take the token, org and user from Claude Code's own Productive MCP config. The token goes to the
+/// keychain, org and user come back for the settings window to save.
+#[tauri::command]
+fn productive_import() -> Result<Value, String> {
+    let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
+        .and_then(|s| serde_json::from_str(&s).ok()).ok_or("~/.claude.json niet gevonden of onleesbaar")?;
+    let env = &cfg["mcpServers"]["productive"]["env"];
+    pv_set_token(env["PRODUCTIVE_API_TOKEN"].as_str().ok_or("Geen Productive-token in ~/.claude.json")?)?;
+    Ok(json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") }))
+}
+
+/// One Productive API call: GET on any path, PATCH only on a single task (a card moved to another
+/// column). Async, so the network wait stays off the main thread.
+#[tauri::command]
+async fn productive(state: State<'_, App>, method: String, path: String, body: Option<Value>) -> Result<Value, String> {
+    let path_ok = path.starts_with('/') && path.len() < 600 && !path.contains("..") && path.chars().all(|c| c.is_ascii_alphanumeric() || "/?&=[]_-.,%".contains(c));
+    let one_task = path.strip_prefix("/tasks/").is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
+    if !path_ok || !(method == "GET" || (method == "PATCH" && one_task && body.is_some())) { return Err("Deze Productive-oproep is niet toegelaten".into()); }
+    let org = state.settings.lock().unwrap()["productive"]["org"].as_str().unwrap_or("").to_string();
+    if org.is_empty() { return Err("Geen organisatie-id. Vul het in bij Vault › Instellingen… › Integraties.".into()); }
+    let token = pv_token().ok_or("Geen Productive-token. Vul het in bij Vault › Instellingen… › Integraties.")?;
+    // globoff: the [ ] in filter[...] are not curl ranges
+    let mut cfg = format!("globoff\nurl = {}\nrequest = {method}\nheader = {}\nheader = {}\nheader = \"Content-Type: application/vnd.api+json\"\n",
+        curl_quote(&format!("https://api.productive.io/api/v2{path}")), curl_quote(&format!("X-Auth-Token: {token}")), curl_quote(&format!("X-Organization-Id: {org}")));
+    if let Some(b) = body { cfg += &format!("data-binary = {}\n", curl_quote(&b.to_string())); }
+    let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "20", "-K", "-", "-w", "\n%{http_code}"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    ch.stdin.take().unwrap().write_all(cfg.as_bytes()).map_err(|e| e.to_string())?;
+    let o = ch.wait_with_output().map_err(|e| e.to_string())?;
+    if !o.status.success() { return Err(format!("Productive niet bereikbaar: {}", String::from_utf8_lossy(&o.stderr).trim())); }
+    let out = String::from_utf8_lossy(&o.stdout);
+    let (text, code) = out.rsplit_once('\n').unwrap_or(("", &out));
+    let v: Value = serde_json::from_str(text).unwrap_or(Value::Null);
+    if code.starts_with('2') { return Ok(v); }
+    let e = &v["errors"][0];
+    Err(format!("Productive {code}: {}", e["detail"].as_str().or(e["title"].as_str()).unwrap_or("onbekende fout")))
+}
+
+// ---------- GitHub: pull requests through the gh CLI and its own login, so no token in the app.
+// Read-only. The search queries are built here from the settings, the webview only asks for the list.
+
+/// gh from the login-shell PATH: an app started from the Finder does not have /opt/homebrew/bin.
+fn gh(state: &App, args: &[&str]) -> Result<String, String> {
+    let bin = state.path.split(':').map(|d| format!("{d}/gh")).find(|p| PathBuf::from(p).is_file())
+        .ok_or("gh niet gevonden. Installeer het met `brew install gh`.")?;
+    let o = Command::new(bin).args(args).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+    if o.status.success() { return Ok(String::from_utf8_lossy(&o.stdout).into_owned()); }
+    let e = String::from_utf8_lossy(&o.stderr);
+    Err(if e.contains("auth login") { "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.".into() } else { format!("gh: {}", e.trim()) })
+}
+/// `owner/repo` of a GitHub remote url (ssh, scp-style or https), lowercased.
+fn gh_slug(url: &str) -> Option<String> {
+    let s = url.split_once("github.com")?.1.trim_start_matches([':', '/']).trim_end_matches('/').trim_end_matches(".git");
+    (s.matches('/').count() == 1 && !s.starts_with('/') && !s.ends_with('/')).then(|| s.to_lowercase())
+}
+/// The origin of a checkout, read from .git/config (no git process per folder).
+fn gh_repo(dir: &str) -> Option<String> {
+    let cfg = fs::read_to_string(format!("{dir}/.git/config")).ok()?;
+    let mut origin = false;
+    for l in cfg.lines().map(str::trim) {
+        if l.starts_with('[') { origin = l == "[remote \"origin\"]"; continue; }
+        if !origin { continue; }
+        if let Some(u) = l.strip_prefix("url").and_then(|r| r.trim_start().strip_prefix('=')) { return gh_slug(u.trim()); }
+    }
+    None
+}
+/// repo -> vault project, from the vault's repos.json. An entry is a checkout or a folder of checkouts,
+/// a checkout listed by itself wins over the same one found inside a listed folder.
+fn repo_projects(vault: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    let Some(idx) = brain(vault).and_then(|b| fs::read_to_string(format!("{b}/index/repos.json")).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Map<String, Value>>(&s).ok()) else { return out };
+    let named: Vec<(String, String)> = idx.iter().filter_map(|(d, n)| Some((d.clone(), n.as_str()?.rsplit('/').next()?.trim_end_matches(".md").to_string()))).collect();
+    for (d, n) in &named { if let Some(r) = gh_repo(d) { out.insert(r, n.clone()); } }
+    // two levels down, not into a checkout: web-projecten keeps its sites in repos/<site>
+    fn scan(d: &str, depth: u8, n: &str, out: &mut HashMap<String, String>) {
+        if let Some(r) = gh_repo(d) { out.entry(r).or_insert_with(|| n.to_string()); return; }
+        if depth == 0 { return; }
+        for e in fs::read_dir(d).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())) {
+            scan(&e.path().to_string_lossy(), depth - 1, n, out);
+        }
+    }
+    for (d, n) in &named { if gh_repo(d).is_none() { scan(d, 2, n, &mut out); } }
+    out
+}
+
+/// The GitHub login gh is signed in with, the settings window shows it.
+#[tauri::command]
+async fn github_status(state: State<'_, App>) -> Result<String, String> {
+    Ok(gh(&state, &["api", "user", "--jq", ".login"])?.trim().to_string())
+}
+
+const PR_FIELDS: &str = "... on PullRequest{number title url isDraft createdAt updatedAt repository{nameWithOwner} author{login} reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state}}}}}";
+
+/// Open pull requests: the ones the user wrote and the ones waiting on their review, within the owners
+/// from the settings (empty: everywhere), each with the vault project of its repo.
+#[tauri::command]
+async fn github_prs(state: State<'_, App>) -> Result<Value, String> {
+    let (owners, v) = { let s = state.settings.lock().unwrap(); (s["github"]["owners"].as_str().unwrap_or("").to_string(), s["vault"].as_str().unwrap_or("").to_string()) };
+    let scope: String = owners.split([' ', ',']).filter(|o| !o.is_empty()).map(|o| format!(" user:{o}")).collect();
+    let q = |who: &str| format!("is:pr is:open archived:false sort:updated-desc {who}{scope}");
+    // ponytail: one page of 50 per list, paging once there are more open PRs than that
+    let query = format!("query($a:String!,$r:String!){{mine:search(query:$a,type:ISSUE,first:50){{nodes{{{PR_FIELDS}}}}} review:search(query:$r,type:ISSUE,first:50){{nodes{{{PR_FIELDS}}}}}}}");
+    let out = gh(&state, &["api", "graphql", "-f", &format!("query={query}"), "-f", &format!("a={}", q("author:@me")), "-f", &format!("r={}", q("review-requested:@me"))])?;
+    let data: Value = serde_json::from_str(&out).map_err(|e| format!("gh: {e}"))?;
+    let map = repo_projects(&v);
+    let rows = |k: &str| -> Vec<Value> {
+        data["data"][k]["nodes"].as_array().into_iter().flatten().filter(|n| n["number"].is_number()).map(|n| {
+            let repo = n["repository"]["nameWithOwner"].as_str().unwrap_or("");
+            json!({"number": n["number"], "title": n["title"], "url": n["url"], "repo": repo, "draft": n["isDraft"], "created": n["createdAt"],
+                "updated": n["updatedAt"], "author": n["author"]["login"], "review": n["reviewDecision"],
+                "ci": n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"], "project": map.get(&repo.to_lowercase())})
+        }).collect()
+    };
+    Ok(json!({"mine": rows("mine"), "review": rows("review")}))
+}
+
+const PR_DETAIL: &str = "query($o:String!,$n:String!,$p:Int!){repository(owner:$o,name:$n){pullRequest(number:$p){ number title url body state isDraft createdAt author{login} baseRefName headRefName additions deletions changedFiles mergeable reviewDecision reviewRequests(first:10){nodes{requestedReviewer{... on User{login} ... on Team{name}}}} commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:50){nodes{... on CheckRun{name conclusion status detailsUrl} ... on StatusContext{context state targetUrl}}}}}}} comments(last:50){nodes{author{login} body createdAt url}} reviews(last:30){nodes{author{login} state body createdAt}} reviewThreads(last:30){nodes{path line isResolved isOutdated comments(first:10){nodes{author{login} body createdAt}}}} files(first:100){nodes{path additions deletions}} }}}";
+
+/// One pull request in full for the side panel: description, checks, conversation, inline threads, files.
+// ponytail: the last 50 comments, 30 reviews and 30 threads, one page each, enough for a PR you read in a side panel
+#[tauri::command]
+async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<Value, String> {
+    let ok = |s: &str| !s.is_empty() && s.len() <= 100 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    let (owner, name) = repo.split_once('/').filter(|(o, n)| ok(o) && ok(n)).ok_or("Ongeldige repo")?;
+    let out = gh(&state, &["api", "graphql", "-f", &format!("query={PR_DETAIL}"), "-f", &format!("o={owner}"), "-f", &format!("n={name}"), "-F", &format!("p={number}")])?;
+    let v: Value = serde_json::from_str(&out).map_err(|e| format!("gh: {e}"))?;
+    let pr = &v["data"]["repository"]["pullRequest"];
+    if pr.is_null() { return Err("PR niet gevonden".into()); }
+    Ok(pr.clone())
 }
 
 /// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
@@ -606,19 +845,28 @@ fn reminder(state: State<App>, action: String, id: String, date: Option<String>)
     else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
 }
 
+fn open_settings(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
+    let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
+    tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
+        .title(title).inner_size(680.0, 520.0).min_inner_size(600.0, 420.0)
+        .minimizable(false).maximizable(false).build().ok();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
         .on_menu_event(|app, event| {
-            if event.id() != "settings" { return; }
-            if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
-            let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
-            tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
-                .title(title).inner_size(600.0, 460.0).min_inner_size(520.0, 360.0)
-                .minimizable(false).maximizable(false).build().ok();
+            let settings = app.get_webview_window("settings");
+            if event.id() == "close-chat" && settings.as_ref().is_some_and(|w| w.is_focused().unwrap_or(false)) {
+                settings.unwrap().close().ok(); return;
+            }
+            if event.id() != "settings" { app.emit("menu", event.id().as_ref()).ok(); return; }
+            open_settings(app);
         })
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let sids = fs::read_to_string(data_dir(app.handle()).join("sessions.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
@@ -628,17 +876,19 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang])
+        .invoke_handler(tauri::generate_handler![snapshot, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, ui_lang, productive_status, productive_token, productive_import, productive, github_status, github_prs, github_pr])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 #[cfg(test)]
 mod tests {
-    // runs against Laurent's own transcripts, skipped on a machine without them
+    // runs against the transcripts of the vault in $VAULT, skipped without it
     #[test]
     fn subagents_of_example_session() {
-        let dir = format!("{}/.claude/projects/-Users-laurentmeersman-Documents-LaurentMe-Obsidian---Context-management", super::home());
+        let Ok(v) = std::env::var("VAULT") else { return };
+        let slug: String = v.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect();
+        let dir = format!("{}/.claude/projects/{slug}", super::home());
         let sid = "36099ce4-d17c-482a-8907-23790cc0e8db";
         if !std::path::Path::new(&format!("{dir}/{sid}/subagents")).is_dir() { return; }
         let mut c = super::SubCache::default();
@@ -686,5 +936,50 @@ mod turn_tests {
         assert!(super::turn_ended(&d));
         std::fs::write(&d, format!("{done}\n{prompt}\n{tool}\n")).unwrap();
         assert!(!super::turn_ended(&d));
+    }
+}
+
+#[cfg(test)]
+mod curl_tests {
+    // the curl config round trip: a JSON body with quotes, backslashes and a newline escape arrives byte for byte
+    #[test]
+    fn curl_config_keeps_the_body_intact() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let body = r#"{"t":"a \"b\" c\\d\n","n":1}"#;
+        let cfg = format!("globoff\nurl = {}\nrequest = PATCH\nheader = {}\ndata-binary = {}\n",
+            super::curl_quote(&format!("http://{}/tasks/1?filter[x]=1", l.local_addr().unwrap())), super::curl_quote("X-Auth-Token: t-1"), super::curl_quote(body));
+        let mut ch = std::process::Command::new("/usr/bin/curl").args(["-sS", "-K", "-"]).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).spawn().unwrap();
+        ch.stdin.take().unwrap().write_all(cfg.as_bytes()).unwrap();
+        let (mut s, _) = l.accept().unwrap();
+        let mut buf = vec![0; 4096];
+        let mut got = String::new();
+        while !got.ends_with(body) { let n = s.read(&mut buf).unwrap(); if n == 0 { break; } got += &String::from_utf8_lossy(&buf[..n]); }
+        s.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").unwrap();
+        ch.wait().unwrap();
+        assert!(got.starts_with("PATCH /tasks/1?filter[x]=1 HTTP/1.1"), "{got}");
+        assert!(got.contains("X-Auth-Token: t-1\r\n"), "{got}");
+        assert!(got.ends_with(body), "{got}");
+    }
+}
+
+#[cfg(test)]
+mod github_tests {
+    #[test]
+    fn gh_slug_reads_every_remote_form() {
+        assert_eq!(super::gh_slug("git@github.com:weareantenna/Weemaes-Backend.git").as_deref(), Some("weareantenna/weemaes-backend"));
+        assert_eq!(super::gh_slug("https://github.com/Acme/vault-app").as_deref(), Some("acme/vault-app"));
+        assert_eq!(super::gh_slug("ssh://git@github.com/Acme/check-in.git/").as_deref(), Some("acme/check-in"));
+        assert_eq!(super::gh_slug("git@bitbucket.org:x/y.git"), None);
+        assert_eq!(super::gh_slug("https://github.com/Acme"), None);
+    }
+    // against the vault in $VAULT, skipped without it
+    #[test]
+    fn repo_projects_maps_folders_of_checkouts() {
+        let Ok(v) = std::env::var("VAULT") else { return };
+        if super::brain(&v).is_none() { return; }
+        let m = super::repo_projects(&v);
+        assert_eq!(m.get("weareantenna/craft-veride").map(String::as_str), Some("Website Onderhoud"));
+        println!("{} repos mapped", m.len());
     }
 }
