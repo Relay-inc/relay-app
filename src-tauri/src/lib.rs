@@ -1,6 +1,7 @@
 // Vault: a shell around the real Claude Code CLI. Every conversation is a `claude -p` process in
 // stream-json mode, in the vault, on the user's subscription (no API key). Permission requests and
-// Claude's questions come in through perm_server.py as files in the pending folder.
+// Claude's questions come in through perm_server.py as files in the pending folder. Mail tools (mail/) are answered
+// by the app itself over the same stdin/stdout pipe, as the in-process MCP server `vaultmail`.
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -11,6 +12,7 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
+mod mail;
 mod providers;
 mod reminders;
 mod tray;
@@ -74,6 +76,10 @@ fn norm(mut v: Value) -> Value {
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
     if !v["mail"]["on"].is_boolean() { v["mail"]["on"] = json!(false); }
     if !v["mail"]["account"].is_string() { v["mail"]["account"] = json!(""); }
+    if !v["mail"]["accounts"].is_array() { v["mail"]["accounts"] = json!([]); }
+    // the old himalaya account names are no emails: those fall back to the first account
+    let known = v["mail"]["accounts"].as_array().unwrap().iter().any(|a| a["email"] == v["mail"]["account"]);
+    if !known { v["mail"]["account"] = json!(""); }
     // favicons: the daily check, on by default. tried holds the site each project was fetched for, so it goes once
     if !v["favicons"].is_object() { v["favicons"] = json!({}); }
     if !v["favicons"]["on"].is_boolean() { v["favicons"]["on"] = json!(true); }
@@ -164,9 +170,9 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
-    ("err.no_himalaya", ["himalaya not found. Install it with `brew install himalaya`.", "himalaya niet gevonden. Installeer het met `brew install himalaya`.", "himalaya introuvable. Installez-le avec `brew install himalaya`.", "himalaya nicht gefunden. Installiere es mit `brew install himalaya`."]),
+    ("err.no_mail_account", ["Mail: no account set up. Add one under Vault › Settings… › Integrations › Mail.", "Mail: nog geen account. Voeg er een toe bij Vault › Instellingen… › Integraties › Mail.", "Mail : aucun compte. Ajoutez-en un dans Vault › Réglages… › Intégrations › Mail.", "Mail: noch kein Konto. Füge eins unter Vault › Einstellungen… › Integrationen › Mail hinzu."]),
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
-    ("err.mail_account", ["Mail: invalid account name", "Mail: ongeldige accountnaam", "Mail : nom de compte invalide", "Mail: ungültiger Kontoname"]),
+    ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
@@ -222,9 +228,10 @@ struct Proc { child: Child, stdin: ChildStdin, opts: (String, String) } // opts:
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
     sids: Mutex<HashMap<String, String>>, // project -> session id, persisted
-    path: String,                          // login-shell PATH, so Claude's tools find gh, himalaya, node
+    path: String,                          // login-shell PATH, so Claude's tools find gh and node
     settings: Mutex<Value>,                // settings.json: vault, projects, overrides
     subs: Mutex<SubCache>,
+    mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the vaultmail tools
 }
 
 /// Subagent rows per agent file (reparsed only when mtime or size changes), and per parent session
@@ -310,15 +317,31 @@ async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, Stri
 #[tauri::command]
 fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
 
-fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>, opts: (String, String)) -> Result<Proc, String> {
-    let mcp = json!({"mcpServers": {"vaultperm": {
+/// Tools no app session may call: mail only ever becomes a draft (hard wall), and in the app mail goes through
+/// vaultmail, never himalaya. A chat started from a mail also cannot push, open a PR or post on Slack: the mail
+/// is text from a stranger that may try to steer it. Enforced by the CLI at call time, before the app hears of it.
+fn denied(from_mail: bool) -> Vec<&'static str> {
+    let mut d = vec!["mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Gmail__reply", "mcp__claude_ai_Gmail__forward", "Bash(himalaya*)"];
+    if from_mail { d.extend(["Bash(git push*)", "Bash(gh pr create*)", "mcp__claude_ai_Slack__slack_send_message", "mcp__claude_ai_Slack__slack_schedule_message"]); }
+    d
+}
+/// The request that opens the pipe: which in-process MCP servers the app answers for.
+fn pipe_init(mail_on: bool) -> Value {
+    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": if mail_on { json!(["vaultmail"]) } else { json!([]) }}})
+}
+
+fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>, opts: (String, String), from_mail: bool) -> Result<Proc, String> {
+    let mut mcp = json!({"mcpServers": {"vaultperm": {
         "command": "/usr/bin/python3", "args": [format!("{REPO}/perm_server.py")],
         "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
+    // the mail tools only when mail is on and an account is set up, answered by the app over this pipe
+    let mail_on = { let s = state.settings.lock().unwrap(); s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() };
+    if mail_on { mcp["mcpServers"]["vaultmail"] = json!({"type": "sdk", "name": "vaultmail"}); }
     let dir = need_vault(state)?;
     let mut cmd = Command::new(claude_bin());
     cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-        .arg(mcp.to_string()).args(["-n", name]);
+        .arg(mcp.to_string()).arg("--disallowedTools").args(denied(from_mail)).args(["-n", name]);
     if !opts.0.is_empty() { cmd.args(["--model", &opts.0]); }
     if !opts.1.is_empty() { cmd.args(["--effort", &opts.1]); }
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
@@ -328,13 +351,17 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
         .env("MCP_TOOL_TIMEOUT", "86400000") // a permission may wait a day for the user
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().map_err(|e| format!("claude start: {e}"))?;
-    let stdin = child.stdin.take().unwrap();
+    let mut stdin = child.stdin.take().unwrap();
+    writeln!(stdin, "{}", pipe_init(mail_on)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?;
     let (stdout, stderr) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
 
     let (a, p, pid) = (app.clone(), project.to_string(), child.id());
     std::thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             let Ok(ev) = serde_json::from_str::<Value>(&line) else { continue };
+            // the pipe's own traffic stays between the CLI and the app
+            if ev["type"] == "control_request" { control(&a, &p, pid, &ev); continue; }
+            if ev["type"] == "control_response" { continue; }
             if ev["type"] == "system" && ev["subtype"] == "init" {
                 if let Some(sid) = ev["session_id"].as_str() {
                     let st = a.state::<App>();
@@ -362,9 +389,40 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
     Ok(Proc { child, stdin, opts })
 }
 
+/// A request from the CLI over the pipe. Only vaultmail's MCP messages are answered, a tool call runs off this
+/// reader thread so the conversation keeps streaming while IMAP works.
+fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
+    let (rid, req) = (ev["request_id"].clone(), &ev["request"]);
+    if req["subtype"] != "mcp_message" || req["server_name"] != "vaultmail" {
+        return pipe_reply(app, key, pid, json!({"subtype": "error", "request_id": rid, "error": "unsupported"}));
+    }
+    match mail::rpc(&req["message"]) {
+        mail::Rpc::Reply(r) => pipe_reply(app, key, pid, pipe_ok(rid, r)),
+        mail::Rpc::Call { id, name, args } => {
+            let (app, key) = (app.clone(), key.to_string());
+            tauri::async_runtime::spawn(async move {
+                let st = app.state::<App>();
+                let (accts, default) = { let s = st.settings.lock().unwrap(); (mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
+                let dl = PathBuf::from(home()).join("Downloads/Vault-mail");
+                let res = st.mail.tool(&accts, &default, &name, &args, &dl).await;
+                pipe_reply(&app, &key, pid, pipe_ok(rid, mail::rpc_result(id, res)));
+            });
+        }
+    }
+}
+fn pipe_ok(rid: Value, r: Value) -> Value { json!({"subtype": "success", "request_id": rid, "response": {"mcp_response": r}}) }
+/// Write a control_response to the process that asked, if it is still the one in that slot.
+fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
+    let st = app.state::<App>();
+    let mut procs = st.procs.lock().unwrap();
+    if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid) {
+        writeln!(p.stdin, "{}", json!({"type": "control_response", "response": response})).and_then(|_| p.stdin.flush()).ok();
+    }
+}
+
 #[tauri::command]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, mail: Option<bool>) -> Result<(), String> {
     // pasted images go as base64 image blocks before the text, the shape stream-json accepts
     let mut content: Vec<Value> = images.unwrap_or_default().into_iter()
         .filter(|i| ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&i["media_type"].as_str().unwrap_or("")) && i["data"].is_string())
@@ -379,7 +437,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     // model and effort are start flags: a switch restarts the process on the same session
     if procs.get(&project).is_some_and(|p| p.opts != opts) { if let Some(mut p) = procs.remove(&project) { p.child.kill().ok(); } }
     if !procs.contains_key(&project) {
-        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref(), opts)?;
+        let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref(), opts, mail.unwrap_or(false))?;
         procs.insert(project.clone(), p);
     }
     let msg = json!({"type": "user", "message": {"role": "user", "content": content}});
@@ -722,7 +780,13 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(tr(lang, "err.gh_owners"));
     }
-    if !mail_name_ok(s["mail"]["account"].as_str().unwrap()) { return Err(tr(lang, "err.mail_account")); }
+    let accts = s["mail"]["accounts"].as_array().unwrap();
+    let emails: Vec<&str> = accts.iter().filter_map(|a| a["email"].as_str()).collect();
+    let unique = emails.iter().enumerate().all(|(i, e)| !emails[..i].iter().any(|x| x.eq_ignore_ascii_case(e)));
+    let cur = s["mail"]["account"].as_str().unwrap();
+    if accts.len() > 5 || !accts.iter().all(mail::valid_account) || !unique || !(cur.is_empty() || emails.contains(&cur)) {
+        return Err(tr(lang, "err.mail_account"));
+    }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
@@ -878,58 +942,44 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
-// ---------- Mail: the inbox through himalaya and its own config, so no password in the app.
-// Listing and reading never change a flag (himalaya v2 reads with BODY.PEEK, checked 30/9). The one write is
-// read/unread, on the user's click. Nothing here sends, moves or deletes: that happens in a conversation, as a draft.
+// ---------- Mail: Gmail over IMAP in mail/, the app password stays in the macOS keychain.
+// Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
+// click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
 
-/// An account name as himalaya writes them, or "" for its default account.
-fn mail_name_ok(a: &str) -> bool { a.len() <= 64 && !a.starts_with('-') && a.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)) }
-fn himalaya(state: &App, args: &[&str]) -> Result<String, String> {
-    let bin = in_path(state, "himalaya").ok_or_else(|| trc("err.no_himalaya"))?;
-    let o = Command::new(bin).args(args).env("PATH", &state.path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
-    if o.status.success() { Ok(String::from_utf8_lossy(&o.stdout).into_owned()) } else { Err(format!("himalaya: {}", String::from_utf8_lossy(&o.stderr).trim())) }
-}
-/// `-a <account>` when one is set, else himalaya's default.
-fn mail_args<'a>(acct: &'a str, rest: &[&'a str]) -> Vec<&'a str> {
-    let mut a = if acct.is_empty() { vec![] } else { vec!["-a", acct] };
-    a.extend_from_slice(rest); a
-}
-fn mail_account(state: &App) -> String { state.settings.lock().unwrap()["mail"]["account"].as_str().unwrap_or("").to_string() }
-
-/// The himalaya accounts, for the settings window.
-#[tauri::command]
-async fn mail_accounts(state: State<'_, App>) -> Result<Value, String> {
-    let v: Value = serde_json::from_str(&himalaya(&state, &["--json", "account", "list"])?).map_err(|e| format!("himalaya: {e}"))?;
-    Ok(v["accounts"].clone())
+/// The account the sidebar shows: the one chosen in the settings, else the first.
+fn mail_acct(state: &App) -> Result<mail::Account, String> {
+    let s = state.settings.lock().unwrap();
+    let want = s["mail"]["account"].as_str().unwrap_or("");
+    mail::accounts(&s["mail"]).into_iter().find(|a| want.is_empty() || a.email == want).ok_or_else(|| trc("err.no_mail_account"))
 }
 
-/// One page of 50 mails from the inbox of the account from the settings, page 1 is the newest.
+/// One page of 50 mails from the inbox, page 1 is the newest.
 #[tauri::command]
 async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
-    let (acct, page) = (mail_account(&state), page.clamp(1, 1000).to_string());
-    let out = himalaya(&state, &mail_args(&acct, &["--json", "envelope", "list", "-s", "50", "-p", &page]))?;
-    let v: Value = serde_json::from_str(&out).map_err(|e| format!("himalaya: {e}"))?;
-    Ok(v["envelopes"].clone())
+    let a = mail_acct(&state)?;
+    state.mail.list(&a, page.clamp(1, 1000)).await
 }
 
-/// The text of one mail, without its headers: the list already has sender, subject and date.
+/// One mail for the panel: its text, the sanitized HTML as a srcdoc document (or null), the attachments.
 #[tauri::command]
-async fn mail_read(state: State<'_, App>, id: String) -> Result<String, String> {
-    if id.is_empty() || id.len() > 20 || !id.chars().all(|c| c.is_ascii_digit()) { return Err(trc("err.bad_mail")); }
-    let acct = mail_account(&state);
-    let out = himalaya(&state, &mail_args(&acct, &["message", "read", &id]))?;
-    let body = out.split_once("\n\n").map_or(out.as_str(), |(_, b)| b).trim();
-    // ponytail: long threads cut at 100k characters, the conversation reads the full mail with himalaya itself
-    Ok(body.chars().take(100_000).collect())
+async fn mail_read(state: State<'_, App>, id: String) -> Result<Value, String> {
+    let a = mail_acct(&state)?;
+    state.mail.open(&a, &id).await
 }
 
 /// Mark one mail read or unread, on the user's click.
 #[tauri::command]
 async fn mail_seen(state: State<'_, App>, id: String, seen: bool) -> Result<(), String> {
-    if id.is_empty() || id.len() > 20 || !id.chars().all(|c| c.is_ascii_digit()) { return Err(trc("err.bad_mail")); }
-    let acct = mail_account(&state);
-    himalaya(&state, &mail_args(&acct, &["flag", if seen { "add" } else { "remove" }, "-f", "seen", &id]))?;
-    Ok(())
+    let a = mail_acct(&state)?;
+    state.mail.set_seen(&a, &id, seen).await
+}
+
+/// Try an account from the settings window, saved or not yet: log in and count the inbox.
+#[tauri::command]
+async fn mail_test(state: State<'_, App>, account: Value) -> Result<String, String> {
+    if !mail::valid_account(&account) { return Err(trc("err.mail_account")); }
+    let a = mail::accounts(&json!({"accounts": [account]})).pop().ok_or_else(|| trc("err.mail_account"))?;
+    state.mail.test(&a).await
 }
 
 /// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
@@ -981,6 +1031,12 @@ fn open_settings(app: &AppHandle) {
 fn open_settings_window(app: AppHandle) { open_settings(&app); }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// The app's own pages: the bundle, the dev server, IPC and the about: documents a srcdoc frame starts as.
+fn nav_internal(url: &tauri::Url) -> bool {
+    matches!(url.scheme(), "tauri" | "ipc" | "about" | "asset")
+        || (matches!(url.scheme(), "http" | "https") && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "tauri.localhost" | "ipc.localhost")))
+}
+
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
@@ -993,6 +1049,13 @@ pub fn run() {
             if event.id() != "settings" { app.emit("menu", event.id().as_ref()).ok(); return; }
             open_settings(app);
         })
+        // a link clicked inside a mail navigates its sandboxed frame (no scripts run there). Every navigation passes
+        // here: the app's own pages load, a web or mailto link goes to the UI to ask first, anything else is dropped
+        .plugin(tauri::plugin::Builder::<tauri::Wry>::new("links").on_navigation(|w, url| {
+            if nav_internal(url) { return true; }
+            if matches!(url.scheme(), "http" | "https" | "mailto") { w.emit("mail-link", url.as_str()).ok(); }
+            false
+        }).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_window_state::Builder::default()
@@ -1009,11 +1072,11 @@ pub fn run() {
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default(), mail: mail::Mail::new() });
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_accounts, mail_list, mail_read, mail_seen])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -1128,8 +1191,19 @@ mod github_tests {
 #[cfg(test)]
 mod mail_tests {
     #[test]
-    fn account_names() {
-        assert!(super::mail_name_ok("") && super::mail_name_ok("weareantenna") && super::mail_name_ok("medq_2.old-x"));
-        assert!(!super::mail_name_ok("-a x") && !super::mail_name_ok("-ax") && !super::mail_name_ok("a;rm") && !super::mail_name_ok(&"a".repeat(65)));
+    fn sessions_can_never_send_mail() {
+        for from_mail in [false, true] {
+            let d = super::denied(from_mail);
+            for t in ["mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Gmail__reply", "mcp__claude_ai_Gmail__forward", "Bash(himalaya*)"] { assert!(d.contains(&t), "{t}"); }
+            assert_eq!(d.contains(&"Bash(git push*)"), from_mail);
+        }
+        assert_eq!(super::pipe_init(true)["request"]["sdkMcpServers"], serde_json::json!(["vaultmail"]));
+        assert_eq!(super::pipe_init(false)["request"]["sdkMcpServers"], serde_json::json!([]));
+    }
+    #[test]
+    fn only_the_apps_own_pages_navigate() {
+        let ok = |u: &str| super::nav_internal(&u.parse().unwrap());
+        for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x"] { assert!(ok(u), "{u}"); }
+        for u in ["https://example.com/", "http://localhost.evil.com/", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c"] { assert!(!ok(u), "{u}"); }
     }
 }

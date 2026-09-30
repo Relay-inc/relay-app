@@ -10,8 +10,10 @@ import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type V
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
 // Integrations the external services (the board providers from src/providers/, GitHub, Mail) as a list on the left with the details on the right,
 // like Mail's Accounts. Saving emits "settings-changed" from the backend, the main window follows it.
+type MailAcct = { email: string; keychain_service: string; keychain_account: string };
+type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
 type Settings = { vault: string; vaults?: Record<string, VaultMap>; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
-  integrations: Record<string, Record<string, any>>; boards: Record<string, BoardRef>; github: { on: boolean; owners: string }; mail: { on: boolean; account: string }; language?: string;
+  integrations: Record<string, Record<string, any>>; boards: Record<string, BoardRef>; github: { on: boolean; owners: string }; mail: MailCfg; language?: string;
   favicons?: { on: boolean; last: string; tried: Record<string, string> } };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const root = document.getElementById("set")!;
@@ -25,8 +27,9 @@ const tokens: Record<string, boolean> = Object.fromEntries(await Promise.all(PRO
 const pmsg: Record<string, { text: string; ok: boolean }> = {};
 // GitHub: no token of our own, the app uses gh's login. The status is the account gh is signed in with
 let ghLogin = "", ghErr = "", ghMsg = "", ghOk = false;
-// Mail: no password of our own either, the app uses himalaya's config. The status is its list of accounts
-let mailAccts: { name: string; default: boolean }[] | null = null, mailErr = "", mailMsg = "", mailOk = false;
+// Mail: no password of our own either, the app reads the app password from the macOS keychain. Edits stay local until Save.
+let mailEdit: MailCfg = { ...settings.mail, accounts: settings.mail?.accounts ?? [] }, mailMsg = "", mailOk = false;
+const mailTest: Record<string, { text: string; ok: boolean } | "busy"> = {};
 let acct = localStorage.getItem("prefsAcct") || "";
 if (acct !== "github" && acct !== "mail" && !provider(acct)) acct = PROVIDERS[0].id;
 
@@ -103,7 +106,7 @@ function integrations() {
     `<li class="${acct === id ? "sel" : ""}" data-acct="${id}"><span class="atile ${id}">${tile}</span><span><b>${name}</b><span class="asub">${on ? t("int.set") : t("int.notSet")}</span></span></li>`;
   const p = provider(acct);
   return `<div class="accts">
-    <ul class="alist">${PROVIDERS.map(x => li(x.id, pIcon(x), esc(x.name), setUp(x))).join("")}${li("github", icon("gh"), "GitHub", gh)}${li("mail", icon("mail"), "Mail", !!mailAccts?.length && settings.mail.on)}</ul>
+    <ul class="alist">${PROVIDERS.map(x => li(x.id, pIcon(x), esc(x.name), setUp(x))).join("")}${li("github", icon("gh"), "GitHub", gh)}${li("mail", icon("mail"), "Mail", !!settings.mail?.accounts?.length && settings.mail.on)}</ul>
     ${p ? boardPane(p) : acct === "mail" ? mail() : github()}</div>`;
 }
 function github() {
@@ -117,22 +120,26 @@ function github() {
       <div class="setrow end">${ghMsg ? `<span class="${ghOk ? "okmsg" : "errmsg"}">${esc(ghMsg)}</span>` : ""}<button class="btn" data-set="ghcheck">${t("gh.recheck")}</button><button class="btn primary" data-set="ghsave">${t("set.save")}</button></div>
     </div>`;
 }
+// the form fields back into mailEdit, before anything redraws the pane
+function mailSync() {
+  const on = document.getElementById("mailon") as HTMLInputElement | null, sel = document.getElementById("mailacct") as HTMLSelectElement | null;
+  if (on) mailEdit.on = on.checked;
+  if (sel) mailEdit.account = sel.value;
+}
 function mail() {
-  const cur = settings.mail.account, names = (mailAccts || []).map(a => a.name);
+  const c = mailEdit, tr = (a: MailAcct) => { const r = mailTest[a.email]; return r === "busy" ? '<span class="spin"></span>' : r ? `<span class="${r.ok ? "okmsg" : "errmsg"}">${esc(r.text)}</span>` : ""; };
   return `<div class="apane">
       <div class="form">
-        <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${mailAccts?.length ? "on" : ""}"></span>${mailAccts ? t("mail.accounts", { n: mailAccts.length }) : esc(mailErr || t("gh.checking"))}</span>
-        <span class="fl">${t("gh.sidebar")}</span><label class="chk"><input type="checkbox" id="mailon" ${settings.mail.on ? "checked" : ""}> ${t("int.mailSidebar")}</label>
-        <label class="fl" for="mailacct">${t("mail.account")}</label><select class="field" id="mailacct"><option value="">${t("mail.default")}</option>${[...new Set([...names, ...(cur ? [cur] : [])])].map(n =>
-          `<option value="${esc(n)}" ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+        <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${c.accounts.length ? "on" : ""}"></span>${t("mail.accounts", { n: c.accounts.length })}</span>
+        <span class="fl">${t("gh.sidebar")}</span><label class="chk"><input type="checkbox" id="mailon" ${c.on ? "checked" : ""}> ${t("int.mailSidebar")}</label>
+        <span class="fl">${t("mail.accountsH")}</span><div>${c.accounts.map(a => `<div class="mail-acct"><span>${esc(a.email)}</span><span class="hint">${esc(a.keychain_service)} / ${esc(a.keychain_account)}</span>${tr(a)}<span class="sp"></span><button class="btn" data-set="mailtest" data-email="${esc(a.email)}">${t("mail.test")}</button><button class="btn" data-set="mailrm" data-email="${esc(a.email)}">${t("mail.remove")}</button></div>`).join("") || `<span class="hint">${t("mail.noAccounts")}</span>`}</div>
+        <label class="fl" for="mailnew">${t("mail.add")}</label><div class="mail-acct"><input class="field" id="mailnew" placeholder="${t("mail.emailPh")}" spellcheck="false"><input class="field" id="mailsvc" placeholder="${t("mail.svcPh")}" spellcheck="false"><input class="field" id="mailkacc" placeholder="${t("mail.kaccPh")}" spellcheck="false"><button class="btn" data-set="mailadd">${t("mail.addBtn")}</button></div>
+        <label class="fl" for="mailacct">${t("mail.account")}</label><select class="field" id="mailacct"><option value="">${t("mail.default")}</option>${[...new Set([...c.accounts.map(a => a.email), ...(c.account ? [c.account] : [])])].map(n =>
+          `<option value="${esc(n)}" ${n === c.account ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
         <span></span><div class="hint">${t("mail.help")}</div>
       </div>
       <div class="setrow end">${mailMsg ? `<span class="${mailOk ? "okmsg" : "errmsg"}">${esc(mailMsg)}</span>` : ""}<button class="btn primary" data-set="mailsave">${t("set.save")}</button></div>
     </div>`;
-}
-async function mailCheck() {
-  try { mailAccts = await invoke<{ name: string; default: boolean }[]>("mail_accounts"); mailErr = ""; } catch (e) { mailAccts = null; mailErr = String(e); }
-  render();
 }
 // one board provider: switched on for the sidebar, the token, the fields of its config
 function boardPane(p: BoardProvider) {
@@ -203,10 +210,26 @@ root.addEventListener("click", async e => {
     catch (x) { ghMsg = String(x); ghOk = false; }
     render();
   }
-  if (b.dataset.set === "mailsave") {
-    const next = { ...settings, mail: { on: (document.getElementById("mailon") as HTMLInputElement).checked, account: (document.getElementById("mailacct") as HTMLSelectElement).value } };
-    try { settings = await invoke<Settings>("set_settings", { settings: next }); mailMsg = t("set.saved"); mailOk = true; }
-    catch (x) { mailMsg = String(x); mailOk = false; }
+  if (b.dataset.set?.startsWith("mail")) {
+    mailSync();
+    const em = b.dataset.email ?? "";
+    if (b.dataset.set === "mailrm") { mailEdit.accounts = mailEdit.accounts.filter(a => a.email !== em); if (mailEdit.account === em) mailEdit.account = ""; }
+    if (b.dataset.set === "mailadd") {
+      const a = { email: val("mailnew"), keychain_service: val("mailsvc"), keychain_account: val("mailkacc") };
+      // light check, the backend validates strictly
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email) || !a.keychain_service || !a.keychain_account) { mailMsg = t("mail.invalid"); mailOk = false; }
+      else if (mailEdit.accounts.some(x => x.email.toLowerCase() === a.email.toLowerCase())) { mailMsg = t("mail.duplicate"); mailOk = false; }
+      else { mailEdit.accounts = [...mailEdit.accounts, a]; mailMsg = ""; }
+    }
+    if (b.dataset.set === "mailtest") {
+      const a = mailEdit.accounts.find(x => x.email === em); if (!a) return;
+      mailTest[em] = "busy"; render();
+      try { mailTest[em] = { text: await invoke<string>("mail_test", { account: a }), ok: true }; } catch (x) { mailTest[em] = { text: String(x), ok: false }; }
+    }
+    if (b.dataset.set === "mailsave") {
+      try { settings = await invoke<Settings>("set_settings", { settings: { ...settings, mail: mailEdit } }); mailEdit = { ...settings.mail, accounts: settings.mail?.accounts ?? [] }; mailMsg = t("set.saved"); mailOk = true; }
+      catch (x) { mailMsg = String(x); mailOk = false; }
+    }
     render();
   }
   const bp = provider(acct);
@@ -256,4 +279,3 @@ window.addEventListener("keydown", e => {
 });
 render();
 ghCheck();
-mailCheck();

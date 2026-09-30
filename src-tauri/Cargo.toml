@@ -32,4 +32,10 @@ board-core.workspace = true
 integration-productive = { path = "../packages/integration-productive" }
 integration-trello = { path = "../packages/integration-trello" }
 integration-linear = { path = "../packages/integration-linear" }
+async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
+async-native-tls = { version = "0.6", default-features = false, features = ["runtime-tokio"] }
+tokio = { version = "1", features = ["net", "time", "sync", "rt", "macros"] }
+mail-parser = "0.11"
+ammonia = "4"
+futures = "0.3"
 

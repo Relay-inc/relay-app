@@ -36,3 +36,11 @@
 .skel i[style="width:0%"]{height:6px;background:none}
 @keyframes skel{50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.skel i{animation:none}}
+/* the html of a mail: sandboxed frame that scrolls itself, white because mails are designed for white */
+.mail-frame{display:block;width:100%;height:calc(100vh - 250px);min-height:280px;margin-top:12px;border:1px solid var(--separator);border-radius:var(--r);background:#fff}
+.mail-atts{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:10px;font-size:12px}
+/* confirm before a link in a mail opens */
+.mail-link{margin:8px 0;padding:8px 10px;border:1px solid var(--separator);border-radius:var(--r);background:var(--fill)}
+.mail-url{font-size:12px;word-break:break-all;user-select:text}
+.mail-link-btns{display:flex;gap:8px;margin-top:8px}
+.mail-acct{display:flex;align-items:center;gap:8px;margin-bottom:6px}

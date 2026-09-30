@@ -1,17 +1,18 @@
-// The inbox, fetched by the backend through himalaya: the newest mails. A row opens the mail in the right panel,
+// The inbox, fetched by the backend over IMAP (Gmail): the newest mails. A row opens the mail in the right panel,
 // and from there a button starts a conversation about it. Opening leaves a mail unread, read/unread only changes
 // on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
 import { t, currentLocale } from "./i18n";
 
-export type Mail = { id: string; subject: string; date: string; flags: { iana?: string }[];
-  from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; "has-attachment": boolean | null };
+export type Mail = { id: string; subject: string; date: string; unread: boolean;
+  from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; attachments: boolean };
+export type MailBody = { text: string; html: string | null; attachments: { index: number; name: string; size: number; mime: string }[] };
 export type MailFilter = { q: string; state: "all" | "unread" | "read"; project: string };
 type H = { esc: (s: unknown) => string; projectOf: (m: Mail) => string | null; projectLabel: (p: string | null) => string; open: string };
 export const mailKey = (id: string) => `mail:${id}`;
-export const unread = (m: Mail) => !m.flags.some(f => f.iana === "seen");
+export const unread = (m: Mail) => m.unread;
 export const sender = (m: Mail) => m.from[0]?.name || m.from[0]?.email || "";
-/** Flip the seen flag in the local copy, so the list follows before himalaya answers. */
-export const setSeen = (m: Mail, seen: boolean) => { m.flags = seen ? [...m.flags.filter(f => f.iana !== "seen"), { iana: "seen" }] : m.flags.filter(f => f.iana !== "seen"); };
+/** Flip the seen flag in the local copy, so the list follows before the backend answers. */
+export const setSeen = (m: Mail, seen: boolean) => { m.unread = !seen; };
 
 // today a time, this year a day and month, before that with the year
 function when(iso: string) {
@@ -93,16 +94,25 @@ export function renderBody(body: string, esc: (s: unknown) => string, depth = 0)
     + (after ? `<div class="mail-body">${prose(after, esc)}</div>` : "");
 }
 
-/** One mail in the right panel: who, when, the text, and the ways into a conversation. Headers show at once, the text loads. */
-export function renderMailDetail(m: Mail | undefined, body: string | undefined, err: string, esc: (s: unknown) => string): string {
+const kb = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`;
+/** The confirm bar for a link clicked inside a mail. Lives in its own element (#maillink) so the frame below is not redrawn. */
+export const renderMailLink = (url: string, esc: (s: unknown) => string) => url
+  ? `<div class="mail-link"><div class="mail-url">${esc(url)}</div><div class="mail-link-btns"><button class="btn primary" data-mail-link="open">${t("mail.linkOpen")}</button><button class="btn" data-mail-link="cancel">${t("mail.linkCancel")}</button></div></div>` : "";
+
+/** One mail in the right panel: who, when, the mail, and the ways into a conversation. Headers show at once, the body loads.
+ *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
+export function renderMailDetail(m: Mail | undefined, body: MailBody | undefined, err: string, esc: (s: unknown) => string, textView = false): string {
   const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("pr.close")}">×</button>${m ? seenBtn(m) : ""}<span class="sp"></span>`
+    + (body?.html ? `<button class="btn" data-mail-view>${textView ? t("mail.showMail") : t("mail.showText")}</button>` : "")
     + (m ? `<button class="btn" data-mail-chat="draft" title="${t("mail.draftTitle")}">${t("mail.draft")}</button><button class="btn primary" data-mail-chat="talk" title="${t("mail.talkTitle")}">${t("mail.talk")}</button>` : "") + `</div>`;
   if (!m) return bar + `<div class="meta">${t("mail.gone")}</div>`;
   const who = (l: Mail["from"]) => l.map(a => a.name ? `${esc(a.name)} <span class="count">${esc(a.email)}</span>` : esc(a.email)).join(", ");
   const loading = `<div class="mail-load"><span class="spin"></span>${t("mail.loadingBody")}</div><div class="skel">${[92, 100, 84, 96, 60, 0, 88, 72].map(w => `<i style="width:${w}%"></i>`).join("")}</div>`;
-  return bar + `<div class="prd">
+  const atts = body?.attachments.length ? `<div class="mail-atts">${body.attachments.map(a => `<span class="count">${esc(a.name)} (${kb(a.size)})</span>`).join("")}</div>` : "";
+  const main = body?.html && !textView ? `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(body.html)}"></iframe>` : body ? renderBody(body.text, esc) : "";
+  return bar + `<div id="maillink"></div><div class="prd">
     <h2 class="prd-t">${esc(m.subject || t("mail.noSubject"))}</h2>
     <div class="mail-hd"><div>${who(m.from)}</div><div class="count">${t("mail.to")} ${who(m.to)}</div><div class="count">${esc(new Date(m.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" }))}</div></div>`
-    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : renderBody(body, esc))
+    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : atts + main)
     + `</div>`;
 }
