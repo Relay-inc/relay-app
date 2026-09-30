@@ -18,11 +18,54 @@ marked.use({
 });
 const md = (s: string) => marked.parse(s, { async: false }) as string;
 
+// ---------- images: pasted or dropped on the composer, sent as base64 blocks, shown via blob URLs
+// (short strings, so re-rendering the log does not re-parse megabytes of base64)
+type Img = { mt: string; data: string; url: string };
+const IMG_OK = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const MAX_SIDE = 2000, MAX_BYTES = 4e6;
+let attached: Img[] = []; // waiting in the composer until the next send
+const toImg = (mt: string, data: string): Img =>
+  ({ mt, data, url: URL.createObjectURL(new Blob([Uint8Array.from(atob(data), ch => ch.charCodeAt(0))], { type: mt })) });
+const readUrl = (f: Blob) => new Promise<string>((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => no(r.error); r.readAsDataURL(f); });
+// small enough as is, or redrawn on a canvas: long side at most 2000 px, png stays png unless it is still too big
+async function prepImage(f: File): Promise<Img | null> {
+  const src = await readUrl(f), img = new Image();
+  img.src = src;
+  try { await img.decode(); } catch { return null; }
+  const w = img.naturalWidth, h = img.naturalHeight, long = Math.max(w, h);
+  let out = src;
+  if (!IMG_OK.includes(f.type) || long > MAX_SIDE || f.size > MAX_BYTES) {
+    const s = Math.min(1, MAX_SIDE / long), cv = document.createElement("canvas"), cx = cv.getContext("2d")!;
+    cv.width = Math.round(w * s); cv.height = Math.round(h * s);
+    cx.drawImage(img, 0, 0, cv.width, cv.height);
+    out = f.type === "image/png" || !IMG_OK.includes(f.type) ? cv.toDataURL("image/png") : "";
+    if (!out || out.length > MAX_BYTES * 4 / 3) { // jpeg has no transparency: white behind it
+      cx.globalCompositeOperation = "destination-over"; cx.fillStyle = "#fff"; cx.fillRect(0, 0, cv.width, cv.height);
+      out = cv.toDataURL("image/jpeg", 0.85);
+    }
+  }
+  const m = out.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+  return m && IMG_OK.includes(m[1]) ? toImg(m[1], m[2]) : null;
+}
+async function attach(files: File[]) {
+  const imgs = (await Promise.all(files.filter(f => f.type.startsWith("image/")).map(f => prepImage(f).catch(() => null)))).filter((x): x is Img => !!x);
+  if (!imgs.length) return;
+  attached.push(...imgs); renderAtts();
+}
+const thumbs = (urls: string[], removable = false) => urls.map((u, i) => u
+  ? `<span class="att"><img src="${esc(u)}" alt="" data-zoom>${removable ? `<button class="rm" data-rm="${i}" title="Verwijderen" aria-label="Afbeelding verwijderen">×</button>` : ""}</span>`
+  : '<span class="imgph">[afbeelding]</span>').join("");
+function renderAtts() {
+  const box = $("atts");
+  box.hidden = !attached.length;
+  box.innerHTML = thumbs(attached.map(a => a.url), true);
+}
+
 // ---------- state
 // A conversation has its own key and hangs under a project (or under Algemeen when project is null).
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
-type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string };
+type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string; imgs?: string[] };
 type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
@@ -151,7 +194,15 @@ function toItems(hist: any[]): Item[] {
     const c = e.message?.content;
     if (e.type === "user") {
       if (typeof c === "string" && !c.startsWith("<")) items.push({ kind: "me", text: c });
-      else if (Array.isArray(c)) for (const x of c) if (x.type === "text" && !x.text.startsWith("<")) items.push({ kind: "me", text: x.text });
+      else if (Array.isArray(c)) {
+        const texts = c.filter((x: any) => x.type === "text" && !x.text.startsWith("<")).map((x: any) => x.text);
+        // an image from the transcript as a thumbnail, or "" (a placeholder) when it is not inline base64
+        const imgs = c.filter((x: any) => x.type === "image").map((x: any) => {
+          const s = x.source || {};
+          return s.type === "base64" && IMG_OK.includes(s.media_type) && typeof s.data === "string" ? toImg(s.media_type, s.data).url : "";
+        });
+        if (texts.length || imgs.length) items.push({ kind: "me", text: texts.join("\n\n"), ...(imgs.length ? { imgs } : {}) });
+      }
     } else for (const x of c || []) {
       if (x.type === "text" && x.text.trim()) items.push({ kind: "ai", text: x.text });
       if (x.type === "tool_use") items.push({ kind: "tool", id: x.id, text: toolLine(x.name, x.input), state: "ok", path: x.input?.file_path });
@@ -175,7 +226,7 @@ async function ensureHistory(k: string, fresh = false) {
   convo[k] = items;
   if (isTerm(k)) return;
   const first = items.find(i => i.kind === "me");
-  if (chats[k] && [NEW, "Gesprek", "Algemeen gesprek"].includes(chats[k].title) && first) { chats[k].title = first.text.slice(0, 48); saveChats(); }
+  if (chats[k] && [NEW, "Gesprek", "Algemeen gesprek"].includes(chats[k].title) && first) { chats[k].title = (first.text || "Afbeelding").slice(0, 48); saveChats(); }
 }
 
 // ---------- permission and question cards
@@ -347,7 +398,8 @@ function renderChat() {
   $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
   const items = convo[sel] || [];
   msgs.innerHTML = (items.length ? items.map(it => {
-    if (it.kind === "me") return `<div class="me">${esc(it.text).replace(/\n/g, "<br>")}</div>`;
+    if (it.kind === "me") return (it.imgs?.length ? `<div class="mimgs">${thumbs(it.imgs)}</div>` : "")
+      + (it.text ? `<div class="me">${esc(it.text).replace(/\n/g, "<br>")}</div>` : "");
     if (it.kind === "ai") return `<div class="ai">${md(it.text)}</div>`;
     if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
     if (it.kind === "err") return `<div class="err">${esc(it.text)}</div>`;
@@ -471,7 +523,7 @@ function setProject(k: string, p: string, note: string) {
 function grow() { const ta = $("c") as HTMLTextAreaElement; ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; }
 async function sendMsg(forced?: string) {
   const ta = $("c") as HTMLTextAreaElement, text = forced ?? ta.value.trim();
-  if (!text || sel === WAIT) return;
+  if ((!text && !attached.length) || sel === WAIT) return;
   if (isTerm(sel)) {
     // typing in a terminal conversation: fork it into an app conversation under the same project
     const t = termOf(sel); if (!t) return;
@@ -490,11 +542,12 @@ async function sendMsg(forced?: string) {
     if (hits.length === 1) { c.project = hits[0]; push(k, { kind: "note", text: `Onder ${hits[0]} gezet` }); }
     else if (hits.length > 1) { routeChoice = { key: k, text, hits }; renderChat(); return; }
   }
-  if (c) { if (c.title === NEW) c.title = text.slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
-  push(k, { kind: "me", text }); status[k] = "busy"; busySince[k] = Date.now(); render();
+  if (c) { if (c.title === NEW) c.title = (text || "Afbeelding").slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
+  const imgs = attached; attached = []; renderAtts();
+  push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; busySince[k] = Date.now(); render();
   $("log").scrollTop = 1e9;
   const name = `${c?.project || "Algemeen"}: ${c?.title || k}`;
-  try { await invoke("send", { project: k, text, name, fork: c?.fork ?? null }); }
+  try { await invoke("send", { project: k, text, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null }); }
   catch (e) { push(k, { kind: "err", text: String(e) }); status[k] = "idle"; renderChat(); }
 }
 
@@ -648,6 +701,39 @@ $("subs").addEventListener("click", async e => {
 });
 $("c").addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); } });
 $("c").addEventListener("input", grow);
+// an image on the clipboard becomes a thumbnail. Copied text that also carries an image rendering
+// (Numbers, Word) pastes as text the way it always did, only a bare file name (a Finder copy) gives way.
+$("c").addEventListener("paste", e => {
+  const cd = e.clipboardData, t = cd?.getData("text/plain").trim() || "";
+  if (!cd || (t && !/^[^\n/]+\.(png|jpe?g|gif|webp|heic|tiff?)$/i.test(t))) return;
+  const files = [...cd.items].filter(i => i.kind === "file" && i.type.startsWith("image/")).map(i => i.getAsFile()).filter((f): f is File => !!f);
+  if (!files.length) return;
+  e.preventDefault(); attach(files);
+});
+const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
+$("composer").addEventListener("dragover", e => { if (!hasFiles(e)) return; e.preventDefault(); $("composer").classList.add("drop"); });
+$("composer").addEventListener("dragleave", () => $("composer").classList.remove("drop"));
+$("composer").addEventListener("drop", e => {
+  $("composer").classList.remove("drop");
+  if (!hasFiles(e)) return;
+  e.preventDefault(); attach([...e.dataTransfer!.files]);
+});
+// no stray drop outside the composer opens the file in the webview
+window.addEventListener("dragover", e => { if (hasFiles(e)) e.preventDefault(); });
+window.addEventListener("drop", e => { if (hasFiles(e)) e.preventDefault(); });
+$("atts").addEventListener("click", e => {
+  const b = (e.target as HTMLElement).closest<HTMLElement>("[data-rm]"); if (!b) return;
+  e.stopPropagation();
+  const [gone] = attached.splice(Number(b.dataset.rm), 1); if (gone) URL.revokeObjectURL(gone.url);
+  renderAtts(); ($("c") as HTMLTextAreaElement).focus();
+});
+// a thumbnail, in the composer or the conversation, opens larger. Esc or a click closes it.
+document.addEventListener("click", e => {
+  const im = (e.target as HTMLElement).closest<HTMLImageElement>("img[data-zoom]"); if (!im) return;
+  $("zoom").querySelector("img")!.src = im.src; $("zoom").hidden = false;
+});
+$("zoom").addEventListener("click", () => { $("zoom").hidden = true; });
+window.addEventListener("keydown", e => { if (e.key === "Escape" && !$("zoom").hidden) { e.preventDefault(); $("zoom").hidden = true; } });
 $("send").addEventListener("click", () => {
   if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: "Gestopt." }); render(); }
   else sendMsg();

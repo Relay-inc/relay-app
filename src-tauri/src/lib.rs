@@ -126,13 +126,19 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
 }
 
 #[tauri::command]
-fn send(app: AppHandle, state: State<App>, project: String, text: String, name: Option<String>, fork: Option<String>) -> Result<(), String> {
+fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>) -> Result<(), String> {
+    // pasted images go as base64 image blocks before the text, the shape stream-json accepts
+    let mut content: Vec<Value> = images.unwrap_or_default().into_iter()
+        .filter(|i| ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&i["media_type"].as_str().unwrap_or("")) && i["data"].is_string())
+        .map(|i| json!({"type": "image", "source": {"type": "base64", "media_type": i["media_type"], "data": i["data"]}})).collect();
+    if content.is_empty() && text.trim().is_empty() { return Err("leeg bericht".into()); }
+    if !text.is_empty() { content.push(json!({"type": "text", "text": text})); }
     let mut procs = state.procs.lock().unwrap();
     if !procs.contains_key(&project) {
         let p = spawn(&app, &state, &project, name.as_deref().unwrap_or(&project), fork.as_deref())?;
         procs.insert(project.clone(), p);
     }
-    let msg = json!({"type": "user", "message": {"role": "user", "content": text}});
+    let msg = json!({"type": "user", "message": {"role": "user", "content": content}});
     let p = procs.get_mut(&project).unwrap();
     writeln!(p.stdin, "{msg}").and_then(|_| p.stdin.flush()).map_err(|e| e.to_string())
 }
