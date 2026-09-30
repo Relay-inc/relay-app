@@ -132,7 +132,7 @@ def topics(items, projs):
                 elif e.get("type") == "assistant" and isinstance(content, list):
                     for x in content:
                         path = (x.get("input") or {}).get("file_path", "") if x.get("type") == "tool_use" else ""
-                        m = re.search(r"/Contexts/[^/]+/(?:Portfolio|Documents)/([^/]+?)(?:\.md)?(?:/|$)", path)
+                        m = re.search(r"/Contexts/[^/]+/(?:Portfolio|Projects|Documents)/([^/]+?)(?:\.md)?(?:/|$)", path)
                         if m and m.group(1) in names:
                             c["hits"] += [m.group(1)] * 2
             c["offset"] = fh.tell()

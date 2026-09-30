@@ -351,8 +351,29 @@ fn answer(app: AppHandle, id: String, decision: Value) -> Result<(), String> {
 /// Sessions Claude Code knows about, including the ones in the terminal and in the background.
 #[tauri::command]
 fn agents(state: State<App>) -> Value {
-    Command::new(claude_bin()).args(["agents", "--json"]).env("PATH", &state.path).stdin(Stdio::null())
-        .output().ok().and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(json!([]))
+    let mut list: Value = Command::new(claude_bin()).args(["agents", "--json"]).env("PATH", &state.path).stdin(Stdio::null())
+        .output().ok().and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(json!([]));
+    let dir = transcripts(&state);
+    for a in list.as_array_mut().into_iter().flatten() {
+        let sid = a["sessionId"].as_str().unwrap_or("").to_string();
+        if a["status"] == "busy" && !sid.is_empty() && turn_ended(&PathBuf::from(format!("{dir}/{sid}.jsonl"))) { a["status"] = json!("idle"); }
+    }
+    list
+}
+
+/// `claude agents` keeps a session busy while a background shell of it still runs, also after the turn
+/// ended. The transcript closes every turn with a `turn_duration` line: when that comes after the last
+/// prompt (typed, or a notification that starts a new turn), Claude is done.
+fn turn_ended(path: &std::path::Path) -> bool {
+    let (rows, _) = tail_lines(path, 256 << 10);
+    for v in rows.iter().rev() {
+        if v["type"] == "system" && v["subtype"] == "turn_duration" { return true; }
+        if v["type"] != "user" || v["isSidechain"] == true || v["isMeta"] == true { continue; }
+        let c = &v["message"]["content"];
+        let prompt = c.is_string() || c.as_array().is_some_and(|b| b.iter().all(|x| x["type"] != "tool_result"));
+        if prompt { return false; }
+    }
+    false
 }
 
 /// Continue a project's conversation in iTerm. The app's own process for it stops first, so two
@@ -512,5 +533,20 @@ mod tests {
         assert_eq!(get("a13a6342c4ed7b3e7")["running"], false); // ended with end_turn
         assert_eq!(get("a896673643d285b30")["running"], false); // no end_turn, finished per the parent's notification
         assert!(rows.iter().all(|r| r["description"].is_string() && r["started_at"].is_string()));
+    }
+}
+
+#[cfg(test)]
+mod turn_tests {
+    #[test]
+    fn turn_ended_follows_the_last_marker() {
+        let d = std::env::temp_dir().join("vault-turn-test.jsonl");
+        let prompt = r#"{"type":"user","message":{"content":"doe iets"}}"#;
+        let tool = r#"{"type":"user","message":{"content":[{"type":"tool_result","content":"ok"}]}}"#;
+        let done = r#"{"type":"system","subtype":"turn_duration"}"#;
+        std::fs::write(&d, format!("{prompt}\n{tool}\n{done}\n")).unwrap();
+        assert!(super::turn_ended(&d));
+        std::fs::write(&d, format!("{done}\n{prompt}\n{tool}\n")).unwrap();
+        assert!(!super::turn_ended(&d));
     }
 }
