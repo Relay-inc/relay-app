@@ -1,0 +1,8 @@
+[package]
+name = "board-core"
+version = "0.1.0"
+edition = "2021"
+description = "The contract a board integration implements on the backend: allowlist, headers, errors, secrets"
+
+[dependencies]
+serde_json.workspace = true

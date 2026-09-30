@@ -8,3 +8,4 @@ design/v2-*.png
 dist/
 design/app-*.png
 design/agents.json
+/target/

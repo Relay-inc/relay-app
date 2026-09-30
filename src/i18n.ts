@@ -3,12 +3,17 @@ import en, { type Key } from "./locales/en";
 import nl from "./locales/nl";
 import fr from "./locales/fr";
 import de from "./locales/de";
+import { LANGS, bindHost, type Lang } from "@vault/board-core";
+import { PROVIDERS, type BoardProvider } from "./providers";
 
 // UI strings: one dictionary per locale, English is the reference. nl, fr and de are typed against
 // it, so a missing or extra key fails tsc. Strings may hold HTML: callers escape what they pass in.
-export const LANGS = ["en", "nl", "fr", "de"] as const;
-export type Lang = (typeof LANGS)[number];
-const dicts: Record<Lang, Record<Key, string>> = { en, nl, fr, de };
+// Each integration brings its own strings (packages/integration-*/src/locales.ts, typed the same way),
+// merged in here as <id>.<key>.
+export { LANGS, type Lang };
+const app: Record<Lang, Record<Key, string>> = { en, nl, fr, de };
+const dicts = {} as Record<Lang, Record<string, string>>;
+for (const l of LANGS) dicts[l] = { ...app[l], ...Object.fromEntries(PROVIDERS.flatMap(p => Object.entries(p.strings[l]).map(([k, v]) => [`${p.id}.${k}`, v]))) };
 let lang: Lang = "en", locale = "en";
 export const currentLang = () => lang;
 // for dates and sorting: the macOS locale in the UI language (nl-BE for nl), so 30/9 stays 30/9
@@ -17,6 +22,10 @@ export const currentLocale = () => locale;
 type Params = Record<string, string | number>;
 const fill = (s: string, p?: Params) => p ? s.replace(/\{(\w+)\}/g, (m, k) => (k in p ? String(p[k]) : m)) : s;
 export const t = (key: Key, p?: Params) => fill(dicts[lang][key] ?? en[key], p);
+// an integration's own key (a settings label, its help), and its `t` for everything else
+const any = (key: string, p?: Params) => fill(dicts[lang][key] ?? dicts.en[key] ?? key, p);
+export const pt = (bp: BoardProvider, key: string, p?: Params) => any(`${bp.id}.${key}`, p);
+bindHost({ t: any, locale: () => locale });
 // plural: `${base}_one` or `${base}_other`, picked by the locale's rules, with {n} filled in
 type PluralBase = { [K in Key]: K extends `${infer B}_one` ? B : never }[Key];
 export const tn = (base: PluralBase, n: number, p?: Params) =>

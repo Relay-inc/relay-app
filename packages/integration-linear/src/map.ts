@@ -1,9 +1,9 @@
-import type { BoardOpt, BoardRef, Card, Column, Opt } from "./types";
+import type { BoardOpt, BoardRef, Card, Column, Opt } from "@vault/board-core";
 
 // Linear's GraphQL answers turned into the board's shapes, and the queries that ask for them. No imports
-// with side effects, so the tests (tests/linear.test.ts) run it in plain Node on fixture JSON.
+// with side effects, so the tests (tests/map.test.ts) run it in plain Node on fixture JSON.
 
-/** The one mutation the backend lets through (providers.rs, LINEAR_MOVE): an issue to another workflow state. */
+/** The one mutation the backend lets through (src/lib.rs, MOVE): an issue to another workflow state. */
 export const MOVE = "mutation Move($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { id sortOrder } } }";
 export const VIEWER = "query Viewer { viewer { id name displayName } }";
 export const TEAMS = "query Teams { teams(first: 100) { nodes { id name key projects(first: 50) { nodes { id name } } } } }";

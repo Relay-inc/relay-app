@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./settings.css";
-import { initI18n, t } from "./i18n";
+import { initI18n, pt, t } from "./i18n";
 import type { Key } from "./locales/en";
 import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type BoardRef } from "./providers";
 import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
@@ -118,15 +118,15 @@ function boardPane(p: BoardProvider) {
       <div class="form">
         <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${ready ? "on" : ""}"></span>${ready ? t("int.set") : t("int.notSet")}</span>
         <span class="fl">${t("int.sidebar")}</span><label class="chk"><input type="checkbox" id="on-${id}" ${cfg.on !== false ? "checked" : ""}> ${t("int.showBoard")}</label>
-        <label class="fl" for="tok-${id}">${t(p.settings.tokenLabel)}</label><input class="field" id="tok-${id}" type="password" autocomplete="off" spellcheck="false" placeholder="${has ? t("int.tokenStored") : t("int.tokenPaste")}">
+        <label class="fl" for="tok-${id}">${pt(p, p.settings.tokenLabel)}</label><input class="field" id="tok-${id}" type="password" autocomplete="off" spellcheck="false" placeholder="${has ? t("int.tokenStored") : t("int.tokenPaste")}">
         ${p.settings.fields.map(f => f.check
-          ? `<span class="fl">${t(f.label)}</span><label class="chk"><input type="checkbox" id="f-${id}-${esc(f.key)}" ${cfg[f.key] ? "checked" : ""}> ${f.placeholder ? t(f.placeholder) : ""}</label>`
-          : `<label class="fl" for="f-${id}-${esc(f.key)}">${t(f.label)}</label><input class="field" id="f-${id}-${esc(f.key)}"${f.numeric ? ' inputmode="numeric"' : ""}${f.secret
+          ? `<span class="fl">${pt(p, f.label)}</span><label class="chk"><input type="checkbox" id="f-${id}-${esc(f.key)}" ${cfg[f.key] ? "checked" : ""}> ${f.placeholder ? pt(p, f.placeholder) : ""}</label>`
+          : `<label class="fl" for="f-${id}-${esc(f.key)}">${pt(p, f.label)}</label><input class="field" id="f-${id}-${esc(f.key)}"${f.numeric ? ' inputmode="numeric"' : ""}${f.secret
             ? ` type="password" autocomplete="off" placeholder="${has ? t("int.tokenStored") : t("int.tokenPaste")}"`
-            : ` value="${esc(cfg[f.key] ?? "")}"${f.placeholder ? ` placeholder="${t(f.placeholder)}"` : ""}`} spellcheck="false">`).join("\n        ")}
-        <span></span><div class="hint">${t(p.settings.help)}</div>
+            : ` value="${esc(cfg[f.key] ?? "")}"${f.placeholder ? ` placeholder="${pt(p, f.placeholder)}"` : ""}`} spellcheck="false">`).join("\n        ")}
+        <span></span><div class="hint">${pt(p, p.settings.help)}</div>
       </div>
-      <div class="setrow">${p.settings.import ? `<button class="btn" data-set="bimport">${t(p.settings.import.label)}</button>` : ""}${has ? `<button class="btn" data-set="bclear">${t("int.clear")}</button>` : ""}</div>
+      <div class="setrow">${p.settings.import ? `<button class="btn" data-set="bimport">${pt(p, p.settings.import.label)}</button>` : ""}${has ? `<button class="btn" data-set="bclear">${t("int.clear")}</button>` : ""}</div>
       <div class="setrow end">${m ? `<span class="${m.ok ? "okmsg" : "errmsg"}">${esc(m.text)}</span>` : ""}<button class="btn primary" data-set="bsave">${t("int.save")}</button></div>
       ${boardMap(p)}
     </div>`;

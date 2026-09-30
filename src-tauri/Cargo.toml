@@ -20,16 +20,13 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["macos-private-api"] }
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json.workspace = true
 tauri-plugin-dialog = "2"
 sys-locale = "0.3.2"
 tauri-plugin-opener = "2"
+# the board integrations, registered in src/providers.rs (PROVIDERS)
+board-core.workspace = true
+integration-productive = { path = "../packages/integration-productive" }
+integration-trello = { path = "../packages/integration-trello" }
+integration-linear = { path = "../packages/integration-linear" }
 
-
-# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = 3
-panic = "abort"
-strip = true

@@ -2,9 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { allIssues, issueFilter, mapIssues, mapStates, mapTeams, MAX_PAGES } from "../src/providers/linear-map.ts";
+import { allIssues, issueFilter, mapIssues, mapStates, mapTeams, MAX_PAGES } from "../src/map.ts";
 
-const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/linear-${n}.json`, import.meta.url), "utf8"));
+const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8"));
 const T1 = "b0000000-0000-4000-8000-000000000001";
 
 test("teams are projects, each with the whole team first and then its projects", () => {

@@ -1,7 +1,7 @@
-import type { BoardOpt, Card, Column, Opt } from "./types";
+import type { BoardOpt, Card, Column, Opt } from "@vault/board-core";
 
 // Trello's answers turned into the board's shapes. No imports with side effects, so the tests
-// (tests/trello.test.ts) run it in plain Node on fixture JSON.
+// (tests/map.test.ts) run it in plain Node on fixture JSON.
 
 /** Boards the user has not got through a workspace they are a member of (personal, guest) sit under this project. */
 export const PERSONAL = "personal";

@@ -1,12 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { BoardProvider, Ctx } from "./types";
-import productive from "./productive";
-import trello from "./trello";
-import linear from "./linear";
+import type { BoardProvider, Ctx } from "@vault/board-core";
+import productive from "@vault/integration-productive";
+import trello from "@vault/integration-trello";
+import linear from "@vault/integration-linear";
 
-export type * from "./types";
+export type * from "@vault/board-core";
 
-/** Every board provider, in the order of the sidebar and the settings list. A new one is added here and in providers.rs. */
+/** Every integration (packages/integration-*), in the order of the sidebar and the settings list. A new one is
+ * one line here and one in src-tauri/src/providers.rs. */
 export const PROVIDERS: BoardProvider[] = [productive, trello, linear];
 export const provider = (id: string) => PROVIDERS.find(p => p.id === id);
 

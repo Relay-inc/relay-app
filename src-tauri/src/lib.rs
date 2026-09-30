@@ -112,25 +112,15 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Ungültiges Projekt '{v}': Symbol (max. 4 Zeichen), Name (max. 60) und img (PNG-Data-URL) müssen Text sein"]),
     ("err.override", ["Invalid override '{v}'", "Ongeldige override '{v}'", "Remplacement '{v}' invalide", "Ungültige Zuordnung '{v}'"]),
     ("err.empty", ["empty message", "leeg bericht", "message vide", "leere Nachricht"]),
-    ("err.pv_digits", ["Productive: {v} may only contain digits", "Productive: {v} bestaat enkel uit cijfers", "Productive : {v} ne peut contenir que des chiffres", "Productive: {v} darf nur Ziffern enthalten"]),
-    ("pv.org_id", ["organisation ID", "organisatie-id", "l'ID d'organisation", "die Organisations-ID"]),
-    ("pv.user_id", ["user ID", "gebruikers-id", "l'ID utilisateur", "die Benutzer-ID"]),
     ("err.gh_owners", ["GitHub: at most 10 owners, only letters, digits and -", "GitHub: hoogstens 10 owners, enkel letters, cijfers en -", "GitHub : 10 propriétaires au plus, uniquement lettres, chiffres et -", "GitHub: höchstens 10 Owner, nur Buchstaben, Ziffern und -"]),
     ("err.token_chars", ["The token may only contain letters, digits, - and _", "Het token mag enkel letters, cijfers, - en _ bevatten", "Le jeton ne peut contenir que des lettres, des chiffres, - et _", "Das Token darf nur Buchstaben, Ziffern, - und _ enthalten"]),
     ("err.keychain", ["Could not save the token in the keychain", "Kon het token niet in de sleutelhanger bewaren", "Impossible d'enregistrer le jeton dans le trousseau", "Das Token konnte nicht im Schlüsselbund gespeichert werden"]),
     ("err.claude_json", ["~/.claude.json not found or unreadable", "~/.claude.json niet gevonden of onleesbaar", "~/.claude.json introuvable ou illisible", "~/.claude.json nicht gefunden oder nicht lesbar"]),
-    ("err.no_pv_token_json", ["No Productive token in ~/.claude.json", "Geen Productive-token in ~/.claude.json", "Aucun jeton Productive dans ~/.claude.json", "Kein Productive-Token in ~/.claude.json"]),
     ("err.call", ["This {v} call is not allowed", "Deze {v}-oproep is niet toegelaten", "Cet appel {v} n'est pas autorisé", "Dieser {v}-Aufruf ist nicht erlaubt"]),
     ("err.no_provider", ["Unknown integration '{v}'", "Onbekende integratie '{v}'", "Intégration inconnue '{v}'", "Unbekannte Integration '{v}'"]),
     ("err.board_map", ["Invalid board for project '{v}'", "Ongeldig bord voor project '{v}'", "Tableau invalide pour le projet '{v}'", "Ungültiges Board für Projekt '{v}'"]),
-    ("err.no_org", ["No organisation ID. Fill it in under Vault › Settings… › Integrations.", "Geen organisatie-id. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun ID d'organisation. Renseignez-le dans Vault › Réglages… › Intégrations.", "Keine Organisations-ID. Trag sie unter Vault › Einstellungen… › Integrationen ein."]),
     ("err.no_token", ["No {v} token. Fill it in under Vault › Settings… › Integrations.", "Geen {v}-token. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun jeton {v}. Renseignez-le dans Vault › Réglages… › Intégrations.", "Kein {v}-Token. Trag es unter Vault › Einstellungen… › Integrationen ein."]),
     ("err.down", ["{p} unreachable: {v}", "{p} niet bereikbaar: {v}", "{p} injoignable : {v}", "{p} nicht erreichbar: {v}"]),
-    ("err.tr_auth", ["Trello refused the API key or token. Check both under Vault › Settings… › Integrations.", "Trello weigert de API-sleutel of het token. Controleer ze bij Vault › Instellingen… › Integraties.", "Trello refuse la clé API ou le jeton. Vérifiez-les dans Vault › Réglages… › Intégrations.", "Trello lehnt den API-Schlüssel oder das Token ab. Prüf beide unter Vault › Einstellungen… › Integrationen."]),
-    ("err.tr_rate", ["Trello's rate limit is reached. Wait a few seconds, then refresh.", "De limiet van Trello is bereikt. Wacht een paar seconden en vernieuw dan.", "La limite de requêtes de Trello est atteinte. Attendez quelques secondes, puis actualisez.", "Das Anfragelimit von Trello ist erreicht. Warte ein paar Sekunden und aktualisiere dann."]),
-    ("err.li_auth", ["Linear refused the API key. Check it under Vault › Settings… › Integrations.", "Linear weigert de API-sleutel. Controleer hem bij Vault › Instellingen… › Integraties.", "Linear refuse la clé API. Vérifiez-la dans Vault › Réglages… › Intégrations.", "Linear lehnt den API-Schlüssel ab. Prüf ihn unter Vault › Einstellungen… › Integrationen."]),
-    ("err.li_rate", ["Linear's rate limit is reached. Wait a minute, then refresh.", "De limiet van Linear is bereikt. Wacht een minuut en vernieuw dan.", "La limite de requêtes de Linear est atteinte. Attendez une minute, puis actualisez.", "Das Anfragelimit von Linear ist erreicht. Warte eine Minute und aktualisiere dann."]),
-    ("err.unknown", ["unknown error", "onbekende fout", "erreur inconnue", "unbekannter Fehler"]),
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
@@ -143,7 +133,11 @@ fn tr(lang: &str, key: &str) -> String {
 fn tr_v(lang: &str, key: &str, v: &str) -> String { tr(lang, key).replace("{v}", v) }
 // the UI language for code without the settings at hand (Productive and gh errors), kept in step by setup and set_settings
 static CUR_LANG: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-fn set_cur_lang(lang: &str) { CUR_LANG.store(LANGS.iter().position(|l| *l == lang).unwrap_or(0), std::sync::atomic::Ordering::Relaxed); }
+fn set_cur_lang(lang: &str) {
+    let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
+    CUR_LANG.store(i, std::sync::atomic::Ordering::Relaxed);
+    board_core::set_lang(i); // the integrations' own strings
+}
 fn trc(key: &str) -> String { tr(LANGS[CUR_LANG.load(std::sync::atomic::Ordering::Relaxed)], key) }
 fn trc_v(key: &str, v: &str) -> String { trc(key).replace("{v}", v) }
 /// The locale for dates in the webview: the first macOS preferred locale in the UI language (nl-BE for nl),
@@ -715,9 +709,9 @@ async fn integration_call(state: State<'_, App>, provider: String, method: Strin
 fn productive_import() -> Result<Value, String> {
     let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
         .and_then(|s| serde_json::from_str(&s).ok()).ok_or_else(|| trc("err.claude_json"))?;
-    let env = &cfg["mcpServers"]["productive"]["env"];
-    providers::set_token(providers::get("productive")?, "token", env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| trc("err.no_pv_token_json"))?)?;
-    Ok(json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") }))
+    let (token, fields) = integration_productive::import(&cfg)?;
+    providers::set_token(providers::get("productive")?, "token", &token)?;
+    Ok(fields)
 }
 
 // ---------- GitHub: pull requests through the gh CLI and its own login, so no token in the app.

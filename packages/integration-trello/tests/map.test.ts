@@ -2,9 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mapBoards, mapCards, mapColumns, PERSONAL } from "../src/providers/trello-map.ts";
+import { mapBoards, mapCards, mapColumns, PERSONAL } from "../src/map.ts";
 
-const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/trello-${n}.json`, import.meta.url), "utf8"));
+const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8"));
 
 test("boards group under their workspace, the rest under personal", () => {
   const r = mapBoards(fx("boards"), fx("orgs"), "Personal");

@@ -1,0 +1,16 @@
+{
+  "name": "@vault/integration-linear",
+  "private": true,
+  "version": "0.1.0",
+  "description": "The Linear board: provider, response mapping, strings and glyph",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
+  "dependencies": {
+    "@vault/board-core": "workspace:*"
+  }
+}

@@ -1,9 +1,10 @@
-import type { Key } from "../locales/en";
+import type { Locales } from "./i18n";
 
-// The contract a task tracker implements to show as a board in the sidebar (see README, "Board providers").
+// The contract a task tracker implements to show as a board in the sidebar (see README, "Integrations").
 // Two levels pick a board: a project (Productive project, Trello workspace, Linear team) and a board in it
-// (Productive board, Trello board, Linear project or the team itself). The backend half of a provider sits
-// in src-tauri/src/providers.rs: the allowed calls and the token, which never reaches the webview.
+// (Productive board, Trello board, Linear project or the team itself). The backend half of a provider is the
+// Rust crate in the same package (a board_core::Provider): the allowed calls and the token, which never
+// reaches the webview. `K` is the provider's own string keys (its locales.ts).
 
 export type Opt = { id: string; name: string };
 /** A column: a Productive task list, a Trello list, a Linear workflow state. */
@@ -29,17 +30,19 @@ export interface CardDetail<D = any> {
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).
  * `secret`: a password field kept in the keychain under that key (Trello's API key), never in the settings.
  * `check`: a checkbox stored as a boolean, `placeholder` is its text. */
-export type Field = { key: string; label: Key; placeholder?: Key; numeric?: boolean; optional?: boolean; secret?: boolean; check?: boolean };
+export type Field<K extends string = string> = { key: string; label: K; placeholder?: K; numeric?: boolean; optional?: boolean; secret?: boolean; check?: boolean };
 /** A board with the project it is in, for picking one in Settings without going level by level. */
 export type BoardOpt = Opt & { project: string; group: string };
 
-export interface BoardProvider {
+export interface BoardProvider<K extends string = string> {
   /** the key in settings.integrations and in the backend's PROVIDERS, e.g. "productive" */
   id: string;
   /** the product's name, not translated */
   name: string;
   /** a 16×16 SVG body for the sidebar row and the settings list */
   glyph: string;
+  /** its UI strings in every language, which the app keeps as <id>.<key> */
+  strings: Locales<K>;
 
   projects(ctx: Ctx): Promise<Opt[]>;
   boards(ctx: Ctx, project: string): Promise<Opt[]>;
@@ -54,14 +57,14 @@ export interface BoardProvider {
   reset?(): void;
 
   settings: {
-    fields: Field[];
-    tokenLabel: Key;
-    help: Key;
+    fields: Field<K>[];
+    tokenLabel: K;
+    help: K;
     /** One call that shows token and config work together, resolves with the message to show. */
     test(ctx: Ctx): Promise<string>;
     /** Every board the user can open, when the API gives them in one call: Settings then maps boards to vault projects. */
     allBoards?(ctx: Ctx): Promise<BoardOpt[]>;
     /** Take token and config from elsewhere (Productive: Claude Code's MCP config), resolves with the config fields to save. */
-    import?: { label: Key; run(): Promise<Record<string, string>> };
+    import?: { label: K; run(): Promise<Record<string, string>> };
   };
 }

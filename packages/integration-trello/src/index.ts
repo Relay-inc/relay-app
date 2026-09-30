@@ -1,6 +1,8 @@
-import { t, currentLocale } from "../i18n";
-import type { BoardOpt, BoardProvider, Ctx, Opt } from "./types";
-import { mapBoards, mapCards, mapColumns } from "./trello-map";
+import { currentLocale, translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@vault/board-core";
+import { mapBoards, mapCards, mapColumns } from "./map";
+import strings, { type Key } from "./locales";
+
+const t = translator<Key>("trello");
 
 // Trello: a project is a workspace, a board a board, its columns the open lists, its cards the open cards.
 // Key and token are both in the keychain (vault-app.trello), the backend sends them in the OAuth header.
@@ -14,13 +16,14 @@ async function all(c: Ctx) {
   if (mine) return mine;
   const [bs, os] = await Promise.all([c.call("GET", "/members/me/boards?filter=open&fields=name,idOrganization,closed"),
     c.call("GET", "/members/me/organizations?fields=displayName,name")]);
-  const r = mapBoards(bs || [], os || [], t("tr.personal"));
+  const r = mapBoards(bs || [], os || [], t("personal"));
   return mine = { projects: r.projects.sort(byName), boards: r.boards.sort(byName) };
 }
 
-const trello: BoardProvider = {
+const trello: BoardProvider<Key> = {
   id: "trello",
   name: "Trello",
+  strings,
   // Trello's mark: two bars in a blue tile
   glyph: '<rect width="16" height="16" rx="3" fill="#0C66E4" stroke="none"/><rect x="3.2" y="3.2" width="4" height="9.2" rx="1" fill="#fff" stroke="none"/><rect x="8.8" y="3.2" width="4" height="5.6" rx="1" fill="#fff" stroke="none"/>',
 
@@ -42,10 +45,10 @@ const trello: BoardProvider = {
   reset: () => { me = null; mine = null; links.clear(); },
 
   settings: {
-    tokenLabel: "tr.token",
-    help: "tr.help",
-    fields: [{ key: "key", label: "tr.key", secret: true }, { key: "mine", label: "tr.cards", placeholder: "tr.mine", check: true, optional: true }],
-    async test(c) { me = null; mine = null; const m = await who(c); return t("pv.connectedAs", { name: m.fullName || m.id }); },
+    tokenLabel: "token",
+    help: "help",
+    fields: [{ key: "key", label: "key", secret: true }, { key: "mine", label: "cards", placeholder: "mine", check: true, optional: true }],
+    async test(c) { me = null; mine = null; const m = await who(c); return t("connectedAs", { name: m.fullName || m.id }); },
     allBoards: async c => (await all(c)).boards,
   },
 };

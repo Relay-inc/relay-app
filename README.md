@@ -46,8 +46,9 @@ from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on 
 | `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
 | `src/main.ts` | Main window: sidebar, conversations, permission cards, inspector, agents strip. |
 | `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
-| `src/board.ts`, `src/providers/` | The board in the sidebar, one per switched-on provider (Productive now). Moving a card writes to the tracker right away. See [Board providers](#board-providers). |
-| `src-tauri/src/providers.rs` | The backend half of each board provider: allowed API calls, token in the keychain, settings migration. |
+| `src/board.ts`, `src/providers/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
+| `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
+| `packages/` | The integrations, one package each (TypeScript + Rust + strings + tests), and `board-core`, the contract. |
 | `src-tauri/src/vault.rs`, `src/vault-setup.ts` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
 | `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
@@ -59,40 +60,68 @@ in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.pr
 ## Integrations
 
 The sidebar board shows one of these per vault project. Set them up under Vault › Settings… › Integrations; every
-secret goes to the macOS keychain (service `vault-app.<id>`), never to settings.json or the webview.
+secret goes to the macOS keychain (service `vault-app.<id>`), never to settings.json or the webview. How to get a
+key and what the backend lets through is in each package's README.
 
-| Tracker | Project › board | Setup |
+| Tracker | Project › board | Package |
 |---|---|---|
-| Productive | project › board | 1. In Productive, Settings › API integrations: create a token. 2. Paste it, fill in the organisation ID (and optionally your user ID, or use "Import from Claude Code"). 3. Save and test, then pick the board from the board's header. |
-| Trello | workspace › board | 1. Create a Power-Up at trello.com/power-ups/admin and copy its API key. 2. Use the Token link next to it to allow access and copy the token. 3. Paste both, Save and test ("Connected as …"). 4. Pick a board per vault project under "Boards per vault project". Optionally show only cards assigned to you. |
-| Linear | team › all issues or a Linear project | 1. In Linear, Settings › Account › Security & access: create a personal API key. 2. Paste it, Save and test (runs the `viewer` query: "Connected as …"). 3. Pick a team, or one of its projects, per vault project under "Boards per vault project". Optionally show completed and canceled states. |
+| Productive | project › board | [`packages/integration-productive`](packages/integration-productive/README.md) |
+| Trello | workspace › board | [`packages/integration-trello`](packages/integration-trello/README.md) |
+| Linear | team › all issues or a Linear project | [`packages/integration-linear`](packages/integration-linear/README.md) |
 
-## Board providers
+### Layout
 
-A task tracker shows as a kanban in the sidebar by implementing one contract in two halves.
+Each tracker is one self-contained package in a pnpm workspace (`pnpm-workspace.yaml`) and a Cargo workspace
+(the root `Cargo.toml`, with `src-tauri` as a member). The app depends on them and registers them at compile
+time, no plugin loading.
 
-**Backend**, `src-tauri/src/providers.rs`: a `Provider` in `PROVIDERS`.
+```
+packages/
+  board-core/                 the contract, nothing tracker-specific
+    src/types.ts, i18n.ts     BoardProvider, Card, Column, Field, Ctx, …; Locales, translator
+    src/lib.rs                Provider, Text + t, path_ok, only_keys
+  integration-<id>/           one tracker (productive, trello, linear)
+    src/index.ts              the BoardProvider, with its glyph
+    src/map.ts                the response mapping, pure (Trello, Linear)
+    src/locales.ts            its UI strings in en, nl, fr, de
+    src/lib.rs                the backend Provider: base URL, allowlist, headers, errors, secrets
+    tests/, tests/fixtures/   the mapping on fixture JSON; the Rust tests sit in lib.rs
+    README.md                 setup and what the allowlist permits
+src/providers/index.ts        PROVIDERS, the webview registry
+src-tauri/src/providers.rs    PROVIDERS, the backend registry; keychain, curl, settings migration
+```
+
+Strings: a package's `locales.ts` is typed with `Locales<Key>` (English is the reference), so a missing key in
+any language fails `tsc`, as it does for the app's own `src/locales/`. The app merges them into its dictionaries
+as `<id>.<key>` (`src/i18n.ts`); in the package, `translator<Key>(id)` is its `t`. Its native error strings
+are a `Text` table in `lib.rs`.
+
+### The contract
+
+**Backend**, the package's Rust crate: a `board_core::Provider` (`pub const PROVIDER`), registered in `PROVIDERS` in `src-tauri/src/providers.rs`.
 
 | Field | What it does |
 |---|---|
 | `id`, `name` | `"productive"`, `"Productive"`. The id keys `settings.integrations.<id>` and the keychain service `vault-app.<id>`. |
+| `text` | Its native strings (errors) in en, nl, fr, de, looked up with `board_core::t`. |
 | `defaults(&mut cfg)`, `check(&cfg)` | Fill in and validate `settings.integrations.<id>` on every load and save. Keep `on` (bool, sidebar row shown). |
-| `ready(&cfg)`, `not_ready` | Whether the config is complete enough to call the API, and the `TEXT` key of the error when not. |
+| `ready(&cfg)`, `not_ready` | Whether the config is complete enough to call the API, and the `text` key of the error when not. |
 | `secrets` | The keychain accounts under `vault-app.<id>` that must all be there: `["token"]` for Productive and Linear, `["key", "token"]` for Trello. |
 | `url(cfg, method, path, body)` | The full URL for a call the webview asks for, `None` when that method and path are not allowed. This is the allowlist: keep it to reads plus the one write that moves a card. |
 | `headers(cfg, secrets)` | The headers carrying the secrets, in the order of `secrets` (and content type). |
 | `ok(body)` | Whether a 2xx answer is a success. `true` for REST; Linear (GraphQL) answers errors with 200 and `errors`. |
 | `error(code, body)` | An error answer as one line. |
 
-Commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
+The app's commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
 `integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
-with the token over stdin; the webview never sees it.
+with the token over stdin; the webview never sees it. The keychain, curl and the commands are the app's, not a package's.
 
-**Webview**, `src/providers/types.ts`: a `BoardProvider`, registered in `src/providers/index.ts`.
+**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@vault/board-core`, registered in `PROVIDERS` in `src/providers/index.ts`.
 
 ```ts
 interface BoardProvider {
   id: string; name: string; glyph: string;             // glyph: 16×16 SVG body
+  strings: Locales<Key>;                               // its UI strings, en/nl/fr/de
   projects(ctx): Promise<Opt[]>;                       // level 1: Productive project, Trello workspace, Linear team
   boards(ctx, project): Promise<Opt[]>;                // level 2: Productive board, Trello board, Linear project
   columns(ctx, ref): Promise<Column[]>;                // task lists, lists, workflow states
@@ -101,7 +130,7 @@ interface BoardProvider {
   url(ctx, ref, cardId): Promise<string>;              // the card in the browser
   detail?: CardDetail;                                 // right-panel view; without it a click opens url()
   reset?(): void;                                      // drop caches
-  settings: { fields: Field[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>;
+  settings: { fields: Field<Key>[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>;
               allBoards?(ctx): Promise<BoardOpt[]>; import?: {...} };
 }
 ```
@@ -118,26 +147,17 @@ board's header. Opening the board after a conversation in that project shows the
 Settings from before the providers (a top-level `productive: { org, user }`) move to
 `integrations.productive` with `on: true` when they are read.
 
-**Trello** (`src/providers/trello.ts`): a project is a workspace (boards outside the user's workspaces sit
-under "Personal and shared boards"), columns are the board's open lists, cards its open cards, optionally
-only those the user is a member of (`integrations.trello.mine`). A move sets `idList` with `pos: "bottom"`,
-a click opens the card's `shortUrl`. Key and token come from a Power-Up at trello.com/power-ups/admin and
-travel in the `Authorization: OAuth …` header. 401/403 and 429 read as a plain message, nothing retries by
-itself. The response mapping (`trello-map.ts`) is tested on fixture JSON with `pnpm test` (Node's test runner).
+### Adding an integration
 
-**Linear** (`src/providers/linear.ts`): a project is a team, a board the whole team ("All issues", board id =
-team id) or one of its Linear projects. Columns are the team's workflow states by type (triage, backlog,
-unstarted, started, completed, canceled) then position, completed and canceled only with
-`integrations.linear.done`. Cards are the issues (identifier, title, assignee, priority, due date), 100 per page,
-at most 10 pages. All calls are `POST /graphql` to api.linear.app with the personal API key as `Authorization`.
-The backend lets any query through but only one mutation, `issueUpdate(id, input: { stateId })` with nothing but
-the two ids (the `MOVE` document in `linear-map.ts`, `LINEAR_MOVE` in `providers.rs`). GraphQL errors, also those
-answered with 200, read as "Linear: <message>"; an authentication error and the rate limit (429 or `RATELIMITED`)
-as a plain message, nothing retries by itself. A click opens the issue's `url`. The mapping (`linear-map.ts`) is
-tested on fixture JSON with `pnpm test`.
-
-A new provider: a `Provider` in `providers.rs` (with a test for its `url` allowlist), a `BoardProvider`
-in `src/providers/<id>.ts` added to `PROVIDERS`, its UI strings in all four locales.
+1. `packages/integration-<id>/` with a `package.json` (`@vault/integration-<id>`, depending on
+   `@vault/board-core`) and a `Cargo.toml` (crate `integration-<id>`, depending on `board-core`).
+2. `src/lib.rs`: `pub const PROVIDER: Provider`. Keep the allowlist to reads plus the one write that moves a
+   card, and test it (and the error mapping) in the same file.
+3. `src/index.ts`: the `BoardProvider<Key>` with its glyph and `strings`; `src/locales.ts` in all four
+   languages; the response mapping in a pure module with fixture tests in `tests/`.
+4. A README: how to get the key or token, what the allowlist permits.
+5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
+   `src-tauri/src/providers.rs` and `package.json` + `src/providers/index.ts`, then `pnpm install`.
 
 ## Other folders
 
@@ -147,7 +167,9 @@ in `src/providers/<id>.ts` added to `PROVIDERS`, its UI strings in all four loca
 ## Tests
 
 ```sh
-cd src-tauri && cargo test
+cd src-tauri && cargo test   # the app
+cargo test --workspace        # the app and every integration crate, from the repo root
+pnpm test                     # the integrations' response mapping on fixture JSON
 ```
 
 The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and
