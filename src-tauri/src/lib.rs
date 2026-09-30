@@ -317,12 +317,17 @@ async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, Stri
 #[tauri::command]
 fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
 
-/// Tools no app session may call: mail only ever becomes a draft (hard wall), and in the app mail goes through
-/// vaultmail, never himalaya. A chat started from a mail also cannot push, open a PR or post on Slack: the mail
-/// is text from a stranger that may try to steer it. Enforced by the CLI at call time, before the app hears of it.
+/// Tools no app session may call: mail only ever becomes a draft (hard wall) and the mailbox is never touched, so
+/// the whole Gmail connector goes, and in the app mail goes through vaultmail, never himalaya. A chat started from a
+/// mail is text from a stranger that may try to steer it: it also cannot push, open a PR, post on Slack, invite
+/// people or load agents, and runs in default mode so everything else not allowed in the settings asks first.
+/// Enforced by the CLI at call time, before the app hears of it (scripts/pipe-check.py).
 fn denied(from_mail: bool) -> Vec<&'static str> {
-    let mut d = vec!["mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Gmail__reply", "mcp__claude_ai_Gmail__forward", "Bash(himalaya*)"];
-    if from_mail { d.extend(["Bash(git push*)", "Bash(gh pr create*)", "mcp__claude_ai_Slack__slack_send_message", "mcp__claude_ai_Slack__slack_schedule_message"]); }
+    let mut d = vec!["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"];
+    if from_mail {
+        d.extend(["Bash(git push*)", "Bash(gh pr create*)", "Bash(launchctl*)", "mcp__claude_ai_Slack__slack_send_message",
+                  "mcp__claude_ai_Slack__slack_schedule_message", "mcp__claude_ai_Google_Calendar__create_event", "mcp__claude_ai_Google_Calendar__update_event"]);
+    }
     d
 }
 /// The request that opens the pipe: which in-process MCP servers the app answers for.
@@ -342,6 +347,8 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
     cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
         .arg(mcp.to_string()).arg("--disallowedTools").args(denied(from_mail)).args(["-n", name]);
+    // auto mode would let a classifier approve what a mail talked Claude into: a mail chat asks instead
+    if from_mail { cmd.args(["--permission-mode", "default"]); }
     if !opts.0.is_empty() { cmd.args(["--model", &opts.0]); }
     if !opts.1.is_empty() { cmd.args(["--effort", &opts.1]); }
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
@@ -361,7 +368,12 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
             let Ok(ev) = serde_json::from_str::<Value>(&line) else { continue };
             // the pipe's own traffic stays between the CLI and the app
             if ev["type"] == "control_request" { control(&a, &p, pid, &ev); continue; }
-            if ev["type"] == "control_response" { continue; }
+            if ev["type"] == "control_response" {
+                if ev["response"]["subtype"] == "error" {
+                    a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": format!("vaultmail: {}", ev["response"]["error"])}})).ok();
+                }
+                continue;
+            }
             if ev["type"] == "system" && ev["subtype"] == "init" {
                 if let Some(sid) = ev["session_id"].as_str() {
                     let st = a.state::<App>();
@@ -402,9 +414,10 @@ fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
             let (app, key) = (app.clone(), key.to_string());
             tauri::async_runtime::spawn(async move {
                 let st = app.state::<App>();
-                let (accts, default) = { let s = st.settings.lock().unwrap(); (mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
+                let (on, accts, default) = { let s = st.settings.lock().unwrap(); (s["mail"]["on"] == true, mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
                 let dl = PathBuf::from(home()).join("Downloads/Vault-mail");
-                let res = st.mail.tool(&accts, &default, &name, &args, &dl).await;
+                let res = if on { st.mail.tool(&accts, &default, &name, &args, &dl).await }
+                    else { json!({"content": [{"type": "text", "text": "Mail is switched off in the app."}], "isError": true}) };
                 pipe_reply(&app, &key, pid, pipe_ok(rid, mail::rpc_result(id, res)));
             });
         }
@@ -780,13 +793,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(tr(lang, "err.gh_owners"));
     }
-    let accts = s["mail"]["accounts"].as_array().unwrap();
-    let emails: Vec<&str> = accts.iter().filter_map(|a| a["email"].as_str()).collect();
-    let unique = emails.iter().enumerate().all(|(i, e)| !emails[..i].iter().any(|x| x.eq_ignore_ascii_case(e)));
-    let cur = s["mail"]["account"].as_str().unwrap();
-    if accts.len() > 5 || !accts.iter().all(mail::valid_account) || !unique || !(cur.is_empty() || emails.contains(&cur)) {
-        return Err(tr(lang, "err.mail_account"));
-    }
+    if !mail_settings_ok(&s["mail"]) { return Err(tr(lang, "err.mail_account")); }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
@@ -798,6 +805,15 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         if let Some(w) = app.get_webview_window("settings") { w.set_title(&tr(lang, "settings.title")).ok(); }
     }
     Ok(s)
+}
+
+/// At most 5 valid accounts, no email twice, and the sidebar account "" or one of them. `mail` is normalized.
+fn mail_settings_ok(mail: &Value) -> bool {
+    let accts = mail["accounts"].as_array().unwrap();
+    let emails: Vec<&str> = accts.iter().filter_map(|a| a["email"].as_str()).collect();
+    let unique = emails.iter().enumerate().all(|(i, e)| !emails[..i].iter().any(|x| x.eq_ignore_ascii_case(e)));
+    let cur = mail["account"].as_str().unwrap();
+    accts.len() <= 5 && accts.iter().all(mail::valid_account) && unique && (cur.is_empty() || emails.contains(&cur))
 }
 
 // ---------- Board providers (providers.rs): token in the keychain, config in settings.integrations.<id>.
@@ -946,38 +962,37 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
 // Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
 // click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
 
-/// The account the sidebar shows: the one chosen in the settings, else the first.
-fn mail_acct(state: &App) -> Result<mail::Account, String> {
+/// A configured account by email, "" for the one the sidebar shows (chosen in the settings, else the first).
+fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
     let s = state.settings.lock().unwrap();
-    let want = s["mail"]["account"].as_str().unwrap_or("");
-    mail::accounts(&s["mail"]).into_iter().find(|a| want.is_empty() || a.email == want).ok_or_else(|| trc("err.no_mail_account"))
+    let want = if want.is_empty() { s["mail"]["account"].as_str().unwrap_or("") } else { want };
+    mail::pick_account(&mail::accounts(&s["mail"]), want).ok_or_else(|| trc("err.no_mail_account"))
 }
 
 /// One page of 50 mails from the inbox, page 1 is the newest.
 #[tauri::command]
 async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
-    let a = mail_acct(&state)?;
+    let a = mail_acct(&state, "")?;
     state.mail.list(&a, page.clamp(1, 1000)).await
 }
 
 /// One mail for the panel: its text, the sanitized HTML as a srcdoc document (or null), the attachments.
 #[tauri::command]
-async fn mail_read(state: State<'_, App>, id: String) -> Result<Value, String> {
-    let a = mail_acct(&state)?;
+async fn mail_read(state: State<'_, App>, account: String, id: String) -> Result<Value, String> {
+    let a = mail_acct(&state, &account)?;
     state.mail.open(&a, &id).await
 }
 
 /// Mark one mail read or unread, on the user's click.
 #[tauri::command]
-async fn mail_seen(state: State<'_, App>, id: String, seen: bool) -> Result<(), String> {
-    let a = mail_acct(&state)?;
+async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: bool) -> Result<(), String> {
+    let a = mail_acct(&state, &account)?;
     state.mail.set_seen(&a, &id, seen).await
 }
 
 /// Try an account from the settings window, saved or not yet: log in and count the inbox.
 #[tauri::command]
 async fn mail_test(state: State<'_, App>, account: Value) -> Result<String, String> {
-    if !mail::valid_account(&account) { return Err(trc("err.mail_account")); }
     let a = mail::accounts(&json!({"accounts": [account]})).pop().ok_or_else(|| trc("err.mail_account"))?;
     state.mail.test(&a).await
 }
@@ -1030,13 +1045,14 @@ fn open_settings(app: &AppHandle) {
 #[tauri::command]
 fn open_settings_window(app: AppHandle) { open_settings(&app); }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-/// The app's own pages: the bundle, the dev server, IPC and the about: documents a srcdoc frame starts as.
+/// The app's own pages: the bundle, IPC, the about: documents a srcdoc frame starts as, and in a dev build the
+/// vite server. Any other localhost port is a local service a mail link must not reach without asking.
 fn nav_internal(url: &tauri::Url) -> bool {
-    matches!(url.scheme(), "tauri" | "ipc" | "about" | "asset")
-        || (matches!(url.scheme(), "http" | "https") && matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "tauri.localhost" | "ipc.localhost")))
+    matches!(url.scheme(), "tauri" | "ipc" | "about")
+        || (cfg!(debug_assertions) && url.scheme() == "http" && url.host_str() == Some("localhost") && url.port() == Some(1420))
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
@@ -1194,8 +1210,9 @@ mod mail_tests {
     fn sessions_can_never_send_mail() {
         for from_mail in [false, true] {
             let d = super::denied(from_mail);
-            for t in ["mcp__claude_ai_Gmail__send_message", "mcp__claude_ai_Gmail__reply", "mcp__claude_ai_Gmail__forward", "Bash(himalaya*)"] { assert!(d.contains(&t), "{t}"); }
+            for t in ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"] { assert!(d.contains(&t), "{t}"); }
             assert_eq!(d.contains(&"Bash(git push*)"), from_mail);
+            assert_eq!(d.contains(&"mcp__claude_ai_Google_Calendar__create_event"), from_mail);
         }
         assert_eq!(super::pipe_init(true)["request"]["sdkMcpServers"], serde_json::json!(["vaultmail"]));
         assert_eq!(super::pipe_init(false)["request"]["sdkMcpServers"], serde_json::json!([]));
@@ -1204,6 +1221,22 @@ mod mail_tests {
     fn only_the_apps_own_pages_navigate() {
         let ok = |u: &str| super::nav_internal(&u.parse().unwrap());
         for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x"] { assert!(ok(u), "{u}"); }
-        for u in ["https://example.com/", "http://localhost.evil.com/", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c"] { assert!(!ok(u), "{u}"); }
+        for u in ["https://example.com/", "http://localhost.evil.com/", "http://localhost:1420@evil.com/", "http://localhost:4600/", "http://127.0.0.1:1420/",
+                  "asset://localhost/x", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c"] { assert!(!ok(u), "{u}"); }
+    }
+    #[test]
+    fn old_mail_settings_heal_and_bad_ones_fail() {
+        use serde_json::json;
+        // a himalaya account name from before is no email: it falls back to the first account
+        let s = super::norm(json!({"mail": {"on": true, "account": "weareantenna"}}));
+        assert_eq!((s["mail"]["accounts"].clone(), s["mail"]["account"].clone()), (json!([]), json!("")));
+        let a = |e: &str| json!({"email": e, "keychain_service": "svc", "keychain_account": "acc"});
+        let kept = super::norm(json!({"mail": {"account": "x@y.be", "accounts": [a("x@y.be")]}}));
+        assert_eq!(kept["mail"]["account"], "x@y.be");
+        let ok = |accts: Vec<serde_json::Value>, cur: &str| super::mail_settings_ok(&json!({"account": cur, "accounts": accts}));
+        assert!(ok(vec![a("x@y.be"), a("z@y.be")], "z@y.be") && ok(vec![], ""));
+        assert!(!ok((0..6).map(|i| a(&format!("u{i}@y.be"))).collect(), ""));
+        assert!(!ok(vec![a("x@y.be"), a("X@Y.be")], ""), "the same email twice");
+        assert!(!ok(vec![a("x@y.be")], "other@y.be"), "a sidebar account that is not configured");
     }
 }

@@ -3,12 +3,14 @@
 // on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
 import { t, currentLocale } from "./i18n";
 
-export type Mail = { id: string; subject: string; date: string; unread: boolean;
+export type Mail = { id: string; account: string; subject: string; date: string; unread: boolean;
   from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; attachments: boolean };
 export type MailBody = { text: string; html: string | null; attachments: { index: number; name: string; size: number; mime: string }[] };
 export type MailFilter = { q: string; state: "all" | "unread" | "read"; project: string };
 type H = { esc: (s: unknown) => string; projectOf: (m: Mail) => string | null; projectLabel: (p: string | null) => string; open: string };
-export const mailKey = (id: string) => `mail:${id}`;
+export const mailKey = (m: { account: string; id: string }) => `mail:${m.account}:${m.id}`;
+/** The account and id back out of a key (an email has no colon). */
+export const mailRef = (key: string) => { const i = key.lastIndexOf(":"); return { account: key.slice(5, i), id: key.slice(i + 1) }; };
 export const unread = (m: Mail) => m.unread;
 export const sender = (m: Mail) => m.from[0]?.name || m.from[0]?.email || "";
 /** Flip the seen flag in the local copy, so the list follows before the backend answers. */
@@ -20,11 +22,12 @@ function when(iso: string) {
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
 }
-const seenBtn = (m: Mail, cls = "btn") => `<button class="${cls}" data-mail-seen="${unread(m) ? 1 : 0}" data-id="${m.id}" title="${unread(m) ? t("mail.markRead") : t("mail.markUnread")}">${unread(m) ? t("mail.markRead") : t("mail.markUnread")}</button>`;
+const esc_ = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+const seenBtn = (m: Mail, cls = "btn") => `<button class="${cls}" data-mail-seen="${unread(m) ? 1 : 0}" data-key="${esc_(mailKey(m))}" title="${unread(m) ? t("mail.markRead") : t("mail.markUnread")}">${unread(m) ? t("mail.markRead") : t("mail.markUnread")}</button>`;
 
 function row(m: Mail, h: H) {
   const e = h.esc, p = h.projectOf(m);
-  return `<div class="pr-row mail-row${unread(m) ? " unread" : ""}${h.open === mailKey(m.id) ? " sel" : ""}" data-mail-open="${e(m.id)}">
+  return `<div class="pr-row mail-row${unread(m) ? " unread" : ""}${h.open === mailKey(m) ? " sel" : ""}" data-mail-open="${e(mailKey(m))}">
     <div class="pr-main"><div class="pr-t">${e(m.subject || t("mail.noSubject"))}</div>
       <div class="pr-meta"><span>${e(sender(m))}</span>${p ? `<span>${e(h.projectLabel(p))}</span>` : ""}</div></div>
     <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn mail-flip")}</div></div>`;
@@ -94,6 +97,10 @@ export function renderBody(body: string, esc: (s: unknown) => string, depth = 0)
     + (after ? `<div class="mail-body">${prose(after, esc)}</div>` : "");
 }
 
+// the escaped srcdoc / rendered text per body object: a streaming conversation redraws the panel often, a big mail is escaped once
+const built = new WeakMap<MailBody, { frame?: string; text?: string }>();
+const main = (b: MailBody, textView: boolean, esc: (s: unknown) => string) => { const c = built.get(b) ?? {}; built.set(b, c);
+  return b.html && !textView ? (c.frame ??= `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(b.html)}"></iframe>`) : (c.text ??= renderBody(b.text, esc)); };
 const kb = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`;
 /** The confirm bar for a link clicked inside a mail. Lives in its own element (#maillink) so the frame below is not redrawn. */
 export const renderMailLink = (url: string, esc: (s: unknown) => string) => url
@@ -109,10 +116,9 @@ export function renderMailDetail(m: Mail | undefined, body: MailBody | undefined
   const who = (l: Mail["from"]) => l.map(a => a.name ? `${esc(a.name)} <span class="count">${esc(a.email)}</span>` : esc(a.email)).join(", ");
   const loading = `<div class="mail-load"><span class="spin"></span>${t("mail.loadingBody")}</div><div class="skel">${[92, 100, 84, 96, 60, 0, 88, 72].map(w => `<i style="width:${w}%"></i>`).join("")}</div>`;
   const atts = body?.attachments.length ? `<div class="mail-atts">${body.attachments.map(a => `<span class="count">${esc(a.name)} (${kb(a.size)})</span>`).join("")}</div>` : "";
-  const main = body?.html && !textView ? `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(body.html)}"></iframe>` : body ? renderBody(body.text, esc) : "";
   return bar + `<div id="maillink"></div><div class="prd">
     <h2 class="prd-t">${esc(m.subject || t("mail.noSubject"))}</h2>
     <div class="mail-hd"><div>${who(m.from)}</div><div class="count">${t("mail.to")} ${who(m.to)}</div><div class="count">${esc(new Date(m.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" }))}</div></div>`
-    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : atts + main)
+    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : atts + main(body, textView, esc))
     + `</div>`;
 }

@@ -29,6 +29,7 @@ const pmsg: Record<string, { text: string; ok: boolean }> = {};
 let ghLogin = "", ghErr = "", ghMsg = "", ghOk = false;
 // Mail: no password of our own either, the app reads the app password from the macOS keychain. Edits stay local until Save.
 let mailEdit: MailCfg = { ...settings.mail, accounts: settings.mail?.accounts ?? [] }, mailMsg = "", mailOk = false;
+const mailNew = { email: "", keychain_service: "", keychain_account: "" }; // what sits in the add fields, survives a redraw
 const mailTest: Record<string, { text: string; ok: boolean } | "busy"> = {};
 let acct = localStorage.getItem("prefsAcct") || "";
 if (acct !== "github" && acct !== "mail" && !provider(acct)) acct = PROVIDERS[0].id;
@@ -123,6 +124,7 @@ function github() {
 // the form fields back into mailEdit, before anything redraws the pane
 function mailSync() {
   const on = document.getElementById("mailon") as HTMLInputElement | null, sel = document.getElementById("mailacct") as HTMLSelectElement | null;
+  for (const [id, k] of [["mailnew", "email"], ["mailsvc", "keychain_service"], ["mailkacc", "keychain_account"]] as const) { const f = document.getElementById(id) as HTMLInputElement | null; if (f) mailNew[k] = f.value; }
   if (on) mailEdit.on = on.checked;
   if (sel) mailEdit.account = sel.value;
 }
@@ -133,7 +135,7 @@ function mail() {
         <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${c.accounts.length ? "on" : ""}"></span>${t("mail.accounts", { n: c.accounts.length })}</span>
         <span class="fl">${t("gh.sidebar")}</span><label class="chk"><input type="checkbox" id="mailon" ${c.on ? "checked" : ""}> ${t("int.mailSidebar")}</label>
         <span class="fl">${t("mail.accountsH")}</span><div>${c.accounts.map(a => `<div class="mail-acct"><span>${esc(a.email)}</span><span class="hint">${esc(a.keychain_service)} / ${esc(a.keychain_account)}</span>${tr(a)}<span class="sp"></span><button class="btn" data-set="mailtest" data-email="${esc(a.email)}">${t("mail.test")}</button><button class="btn" data-set="mailrm" data-email="${esc(a.email)}">${t("mail.remove")}</button></div>`).join("") || `<span class="hint">${t("mail.noAccounts")}</span>`}</div>
-        <label class="fl" for="mailnew">${t("mail.add")}</label><div class="mail-acct"><input class="field" id="mailnew" placeholder="${t("mail.emailPh")}" spellcheck="false"><input class="field" id="mailsvc" placeholder="${t("mail.svcPh")}" spellcheck="false"><input class="field" id="mailkacc" placeholder="${t("mail.kaccPh")}" spellcheck="false"><button class="btn" data-set="mailadd">${t("mail.addBtn")}</button></div>
+        <label class="fl" for="mailnew">${t("mail.add")}</label><div class="mail-acct"><input class="field" id="mailnew" value="${esc(mailNew.email)}" placeholder="${t("mail.emailPh")}" spellcheck="false"><input class="field" id="mailsvc" value="${esc(mailNew.keychain_service)}" placeholder="${t("mail.svcPh")}" spellcheck="false"><input class="field" id="mailkacc" value="${esc(mailNew.keychain_account)}" placeholder="${t("mail.kaccPh")}" spellcheck="false"><button class="btn" data-set="mailadd">${t("mail.addBtn")}</button></div>
         <label class="fl" for="mailacct">${t("mail.account")}</label><select class="field" id="mailacct"><option value="">${t("mail.default")}</option>${[...new Set([...c.accounts.map(a => a.email), ...(c.account ? [c.account] : [])])].map(n =>
           `<option value="${esc(n)}" ${n === c.account ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
         <span></span><div class="hint">${t("mail.help")}</div>
@@ -219,12 +221,13 @@ root.addEventListener("click", async e => {
       // light check, the backend validates strictly
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(a.email) || !a.keychain_service || !a.keychain_account) { mailMsg = t("mail.invalid"); mailOk = false; }
       else if (mailEdit.accounts.some(x => x.email.toLowerCase() === a.email.toLowerCase())) { mailMsg = t("mail.duplicate"); mailOk = false; }
-      else { mailEdit.accounts = [...mailEdit.accounts, a]; mailMsg = ""; }
+      else { mailEdit.accounts = [...mailEdit.accounts, a]; mailMsg = ""; mailNew.email = mailNew.keychain_service = mailNew.keychain_account = ""; }
     }
     if (b.dataset.set === "mailtest") {
       const a = mailEdit.accounts.find(x => x.email === em); if (!a) return;
       mailTest[em] = "busy"; render();
       try { mailTest[em] = { text: await invoke<string>("mail_test", { account: a }), ok: true }; } catch (x) { mailTest[em] = { text: String(x), ok: false }; }
+      mailSync();
     }
     if (b.dataset.set === "mailsave") {
       try { settings = await invoke<Settings>("set_settings", { settings: { ...settings, mail: mailEdit } }); mailEdit = { ...settings.mail, accounts: settings.mail?.accounts ?? [] }; mailMsg = t("set.saved"); mailOk = true; }

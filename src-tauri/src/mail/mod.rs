@@ -19,7 +19,7 @@ use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
@@ -30,8 +30,13 @@ const IDLE: Duration = Duration::from_secs(300);
 const PAGE: usize = 50;
 // ponytail: Gmail's own ceiling, a mail is read whole into memory
 const MSG_MAX: u32 = 50 * 1024 * 1024;
-const THREAD_BODY_MAX: u32 = 5 * 1024 * 1024;
+const THREAD_BODY_MAX: u32 = 1024 * 1024;
 const DRAFT_MAX: usize = 5 * 1024 * 1024;
+const KEYCHAIN_WAIT: Duration = Duration::from_secs(60);
+const STALE: &str = "The mailbox changed on the server, reload the list";
+const SUBJECT_MAX: usize = 500;
+// Finder runs these on a double-click, Mail refuses them too
+const RUNS: &[&str] = &["terminal", "command", "tool", "fileloc", "inetloc", "webloc", "app", "pkg", "scpt", "applescript", "workflow", "jar"];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Account { pub email: String, pub keychain_service: String, pub keychain_account: String }
@@ -53,10 +58,19 @@ pub fn accounts(settings_mail: &Value) -> Vec<Account> {
     }).collect()
 }
 
+/// The account for `want` (case-insensitive), "" is the first one.
+pub fn pick_account(accts: &[Account], want: &str) -> Option<Account> {
+    if want.is_empty() { accts.first().cloned() } else { accts.iter().find(|a| a.email.eq_ignore_ascii_case(want)).cloned() }
+}
+
 // ---------- IMAP plumbing
 
 type Imap = async_imap::Session<async_native_tls::TlsStream<TcpStream>>;
-struct Conn { s: Imap, all: String, drafts: Option<String>, used: Instant }
+// `used` is wall-clock time: Instant stands still while the Mac sleeps, and a session that slept is dead
+struct Conn { s: Imap, email: String, all: String, drafts: Option<String>, validity: Option<u32>, used: SystemTime }
+/// A session plus the UIDVALIDITY it was opened with: ids from before a change would point at other mails.
+#[derive(Default)]
+struct Slot { conn: Option<Conn>, validity: Option<u32> }
 
 /// Net: drop the session, reconnect and retry once. Imap: the server refused, drop the session (its state is
 /// unknown), no retry. User: our own check failed, the session stays.
@@ -101,9 +115,11 @@ fn quoted(s: &str) -> Result<String, Fail> {
 async fn password(a: &Account) -> Result<String, Fail> {
     let (svc, acc) = (a.keychain_service.clone(), a.keychain_account.clone());
     if !key_ok(&svc) || !key_ok(&acc) { return Err(user("invalid keychain entry name")); }
-    let out = tokio::task::spawn_blocking(move || std::process::Command::new("/usr/bin/security")
-        .args(["find-generic-password", "-s", &svc, "-a", &acc, "-w"]).stderr(std::process::Stdio::null()).output())
-        .await.map_err(|e| user(e.to_string()))?.map_err(|e| user(e.to_string()))?;
+    // `security` can show an approval dialog, never hold the account's lock on it forever
+    let read = tokio::task::spawn_blocking(move || std::process::Command::new("/usr/bin/security")
+        .args(["find-generic-password", "-s", &svc, "-a", &acc, "-w"]).stderr(std::process::Stdio::null()).output());
+    let out = timeout(KEYCHAIN_WAIT, read).await.map_err(|_| user("Keychain access was not approved in time"))?
+        .map_err(|e| user(e.to_string()))?.map_err(|e| user(e.to_string()))?;
     // ponytail: the password is a plain String, not zeroized on drop
     let pw = String::from_utf8(out.stdout).unwrap_or_default().trim_end_matches(['\r', '\n']).to_string();
     if !out.status.success() || pw.is_empty() {
@@ -130,28 +146,34 @@ async fn connect(a: &Account) -> Result<Conn, Fail> {
         .filter(|n| n.len() <= 256 && !n.chars().any(char::is_control));
     let all = find(NameAttribute::All).ok_or_else(|| user("No \\All mailbox (Gmail All Mail) found"))?;
     let drafts = find(NameAttribute::Drafts);
-    t(s.examine(&all)).await?;
-    Ok(Conn { s, all, drafts, used: Instant::now() })
+    let validity = t(s.examine(&all)).await?.uid_validity;
+    Ok(Conn { s, email: a.email.clone(), all, drafts, validity, used: SystemTime::now() })
 }
 
-/// Run `$body` (an expression using `$c: &mut Conn`) on the account's cached session: connect when there is
-/// none or it sat idle too long, drop it on an IMAP error, reconnect and retry once on a network error.
+/// Run `$body` (an expression using `$c: &mut Conn`) on the account's cached session (the UI's or, `$tool`
+/// true, Claude's own, so the UI never waits behind a long tool call): connect when there is none or it sat
+/// idle too long, drop it on an IMAP error, reconnect and retry once on a network error.
 macro_rules! run {
-    ($self:ident, $acct:expr, $c:ident => $body:expr) => {{
-        let slot = $self.slot($acct);
+    ($self:ident, $acct:expr, $tool:expr, $c:ident => $body:expr) => {{
+        let slot = $self.slot($acct, $tool);
         let mut g = slot.lock().await;
         let mut retried = false;
         loop {
-            if g.as_ref().is_some_and(|c| c.used.elapsed() > IDLE) { *g = None; }
-            if g.is_none() { *g = Some(connect($acct).await.map_err(Fail::msg)?); }
-            let $c = g.as_mut().unwrap();
+            if g.conn.as_ref().is_some_and(|c| c.used.elapsed().map_or(true, |d| d > IDLE)) { g.conn = None; }
+            if g.conn.is_none() {
+                let c = connect($acct).await.map_err(Fail::msg)?;
+                let changed = g.validity.is_some() && g.validity != c.validity;
+                (g.validity, g.conn) = (c.validity, Some(c));
+                if changed { break Err(STALE.to_string()); }
+            }
+            let $c = g.conn.as_mut().unwrap();
             // async-imap parks unsolicited responses in a bounded channel (try_send, drops when full), empty it
             while $c.s.unsolicited_responses.try_recv().is_ok() {}
             match $body.await {
-                Ok(v) => { g.as_mut().unwrap().used = Instant::now(); break Ok::<_, String>(v); }
+                Ok(v) => { g.conn.as_mut().unwrap().used = SystemTime::now(); break Ok::<_, String>(v); }
                 Err(Fail::User(m)) => break Err(m),
-                Err(Fail::Imap(m)) => { *g = None; break Err(m); }
-                Err(Fail::Net(m)) => { *g = None; if retried { break Err(m); } retried = true; }
+                Err(Fail::Imap(m)) => { g.conn = None; break Err(m); }
+                Err(Fail::Net(m)) => { g.conn = None; if retried { break Err(m); } retried = true; }
             }
         }
     }};
@@ -172,15 +194,16 @@ async fn rows(c: &mut Conn, uids: &[u32]) -> Result<Vec<Value>, Fail> {
     let mut f = fetch(c, &set(uids), "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE)])").await?;
     f.retain(|f| f.uid.is_some_and(|u| uids.contains(&u)));
     f.sort_by_key(|f| std::cmp::Reverse(f.uid));
-    Ok(f.iter().filter_map(row).collect())
+    Ok(f.iter().map(|f| row(f, &c.email)).collect())
 }
-fn row(f: &Fetch) -> Option<Value> {
-    let m = MessageParser::default().parse(f.header()?)?;
-    let date = f.internal_date().map(|d| d.to_rfc3339()).or_else(|| m.date().map(|d| d.to_rfc3339()));
+/// A row, id-only (empty subject and addresses) when the headers do not parse, so a page never shrinks.
+fn row(f: &Fetch, email: &str) -> Value {
+    let m = f.header().and_then(|h| MessageParser::default().parse(h));
+    let date = f.internal_date().map(|d| d.to_rfc3339()).or_else(|| m.as_ref()?.date().map(|d| d.to_rfc3339()));
     // ponytail: a top-level multipart/mixed stands for "has attachments", BODYSTRUCTURE when that misleads
-    let att = m.content_type().is_some_and(|c| c.ctype().eq_ignore_ascii_case("multipart") && c.subtype().is_some_and(|s| s.eq_ignore_ascii_case("mixed")));
-    Some(json!({ "id": f.uid?.to_string(), "subject": m.subject().unwrap_or(""), "date": date, "unread": !f.flags().any(|x| x == Flag::Seen),
-        "from": addrs(m.from()), "to": addrs(m.to()), "attachments": att }))
+    let att = m.as_ref().and_then(|m| m.content_type()).is_some_and(|c| c.ctype().eq_ignore_ascii_case("multipart") && c.subtype().is_some_and(|s| s.eq_ignore_ascii_case("mixed")));
+    json!({ "account": email, "id": f.uid.unwrap_or(0).to_string(), "subject": m.as_ref().and_then(|m| m.subject()).unwrap_or(""), "date": date,
+        "unread": !f.flags().any(|x| x == Flag::Seen), "from": addrs(m.as_ref().and_then(|m| m.from())), "to": addrs(m.as_ref().and_then(|m| m.to())), "attachments": att })
 }
 
 async fn page(c: &mut Conn, page: u32) -> Result<Vec<Value>, Fail> {
@@ -207,11 +230,7 @@ async fn full(c: &mut Conn, uid: u32) -> Result<Vec<u8>, Fail> {
 // ponytail: the 30 newest mails of the thread, header search only (no X-GM-THRID)
 async fn thread(c: &mut Conn, uid: u32) -> Result<Vec<(u32, Vec<u8>, bool)>, Fail> {
     let raw = full(c, uid).await?;
-    let root = {
-        let m = parse(&raw)?;
-        let r = m.references();
-        r.as_text_list().and_then(|l| l.first().map(|s| s.to_string())).or(r.as_text().map(str::to_string)).or(m.message_id().map(str::to_string))
-    };
+    let root = root(&parse(&raw)?);
     let mut uids: Vec<u32> = match root.and_then(|r| quoted(&r).ok()) {
         Some(q) => t(c.s.uid_search(format!("OR HEADER Message-ID {q} HEADER References {q}"))).await?.into_iter().collect(),
         None => vec![],
@@ -232,6 +251,15 @@ async fn thread(c: &mut Conn, uid: u32) -> Result<Vec<(u32, Vec<u8>, bool)>, Fai
     Ok(uids.iter().filter_map(|u| got.remove(u).map(|(d, w)| (*u, d, w))).collect())
 }
 
+/// The thread root: the first References id, else the own Message-ID. An id without '@' or under 8 characters
+/// would match half the mailbox as a substring, it counts as missing.
+fn root(m: &Message) -> Option<String> {
+    let ok = |s: &&str| s.len() >= 8 && s.contains('@');
+    let r = m.references();
+    r.as_text_list().and_then(|l| l.first().map(|s| s.as_ref())).or(r.as_text()).filter(ok)
+        .or(m.message_id().filter(ok)).map(str::to_string)
+}
+
 async fn store(c: &mut Conn, uid: u32, seen: bool) -> Result<(), Fail> {
     let all = c.all.clone();
     t(c.s.select(&all)).await?;
@@ -243,8 +271,9 @@ async fn store(c: &mut Conn, uid: u32, seen: bool) -> Result<(), Fail> {
 
 async fn append(c: &mut Conn, raw: &[u8]) -> Result<String, Fail> {
     let d = c.drafts.clone().ok_or_else(|| user("No \\Drafts mailbox found"))?;
-    // APPEND is not idempotent: a retry after a lost connection could save the draft twice
-    t(c.s.append(&d, Some("(\\Draft)"), None, raw)).await.map_err(|e| match e { Fail::Net(m) => Fail::Imap(m), e => e })?;
+    // APPEND is not idempotent: no retry after a lost connection, it could save the draft twice
+    t(c.s.append(&d, Some("(\\Draft)"), None, raw)).await
+        .map_err(|e| match e { Fail::Net(_) => Fail::Imap("The draft may have been saved, check the Drafts folder before saving again".into()), e => e })?;
     Ok(d)
 }
 
@@ -261,6 +290,7 @@ fn attachments(m: &Message) -> Vec<Value> {
     }).collect()
 }
 fn date(m: &Message) -> Option<String> { m.date().map(|d| d.to_rfc3339()) }
+fn subject(m: &Message) -> Option<String> { m.subject().map(|s| cap(s, SUBJECT_MAX)) }
 
 /// A mail id: the UID in All Mail, decimal, non-zero, fits u32. JSON numbers are accepted too.
 fn uid(v: &Value) -> Result<u32, String> {
@@ -273,10 +303,11 @@ fn header_names(v: &Value) -> Result<Vec<String>, String> {
     let a = v.as_array().filter(|a| a.len() <= 10).ok_or("headers must be a list of at most 10 names")?;
     a.iter().map(|h| h.as_str().filter(|s| ok(s)).map(str::to_string).ok_or_else(|| "header names are [A-Za-z0-9-]{1,64}".to_string())).collect()
 }
-fn pick<'a>(accts: &'a [Account], default: &str, v: &Value) -> Result<&'a Account, String> {
-    let want = match v { Value::Null => default, Value::String(s) => s, _ => return Err("account must be a string".into()) };
-    if want.is_empty() { return accts.first().ok_or_else(|| "No mail account configured".into()); }
-    accts.iter().find(|a| a.email.eq_ignore_ascii_case(want)).ok_or_else(|| format!("Account {want} is not configured"))
+/// The tool's `account` argument, absent or "" is the default account.
+fn pick(accts: &[Account], default: &str, v: &Value) -> Result<Account, String> {
+    let want = match v { Value::Null => default, Value::String(s) if s.is_empty() => default, Value::String(s) => s, _ => return Err("account must be a string".into()) };
+    if accts.is_empty() { return Err("No mail account configured".into()); }
+    pick_account(accts, want).ok_or_else(|| format!("Account {want} is not configured"))
 }
 /// An attachment name that stays one plain file in the downloads folder.
 fn safe_name(n: &str) -> String {
@@ -290,15 +321,29 @@ fn save(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, String> {
     std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     let name = safe_name(name);
     let (stem, ext) = match name.rfind('.') { Some(i) if i > 0 => name.split_at(i), _ => (name.as_str(), "") };
+    if RUNS.iter().any(|r| ext[ext.len().min(1)..].eq_ignore_ascii_case(r)) {
+        return Err(format!("{ext} files run on a double-click and are not saved here, save it from Gmail if you need it"));
+    }
     for n in 0..1000 {
         let p = dir.join(if n == 0 { name.clone() } else { format!("{stem} ({n}){ext}") });
         match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
-            Ok(mut f) => return f.write_all(data).map(|_| p).map_err(|e| e.to_string()),
+            Ok(mut f) => {
+                let r = f.write_all(data).map_err(|e| e.to_string()).and_then(|_| quarantine(&p));
+                if r.is_err() { let _ = std::fs::remove_file(&p); }
+                return r.map(|_| p);
+            }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e.to_string()),
         }
     }
     Err("too many files with that name".into())
+}
+/// The quarantine flag Mail sets on a download, so Gatekeeper checks the file before it opens.
+fn quarantine(p: &Path) -> Result<(), String> {
+    let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
+    let ok = std::process::Command::new("/usr/bin/xattr").arg("-w").arg("com.apple.quarantine").arg(format!("0081;{now:x};Vault;")).arg(p)
+        .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
+    if ok { Ok(()) } else { Err("Could not set the quarantine flag, the attachment was not saved".into()) }
 }
 /// A draft as it may be appended: at most 5 MB, parseable, CRLF line ends, exactly one From that is the account.
 fn draft(raw: &str, email: &str) -> Result<Vec<u8>, String> {
@@ -308,30 +353,35 @@ fn draft(raw: &str, email: &str) -> Result<Vec<u8>, String> {
     let m = MessageParser::default().parse(crlf.as_bytes()).ok_or("draft is not a parseable RFC 5322 message")?;
     let froms = m.headers().iter().filter(|h| h.name == HeaderName::From).count();
     let from: Vec<_> = m.from().map(|a| a.iter().filter_map(|x| x.address.as_deref()).collect()).unwrap_or_default();
-    if froms != 1 || from.len() != 1 || !from[0].eq_ignore_ascii_case(email) { return Err(format!("From must be exactly {email}")); }
+    if froms != 1 || from.len() != 1 || !from[0].eq_ignore_ascii_case(email) { return Err(format!("From must be {email}, or pass the account the mail belongs to")); }
     Ok(crlf.into_bytes())
 }
 
 // ---------- public API
 
-pub struct Mail { slots: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Option<Conn>>>>> }
+pub struct Mail { slots: std::sync::Mutex<HashMap<String, Arc<tokio::sync::Mutex<Slot>>>> }
 
 impl Mail {
     pub fn new() -> Self { Mail { slots: Default::default() } }
-    fn slot(&self, a: &Account) -> Arc<tokio::sync::Mutex<Option<Conn>>> {
-        self.slots.lock().unwrap().entry(a.email.to_ascii_lowercase()).or_default().clone()
+    fn slot(&self, a: &Account, tool: bool) -> Arc<tokio::sync::Mutex<Slot>> {
+        let key = format!("{}{}", a.email.to_ascii_lowercase(), if tool { "/tool" } else { "" });
+        self.slots.lock().unwrap().entry(key).or_default().clone()
     }
 
     /// One page of 50 inbox rows, page 1 is the newest.
     pub async fn list(&self, acct: &Account, page: u32) -> Result<Value, String> {
         let p = page.clamp(1, 10_000);
-        run!(self, acct, c => self::page(c, p)).map(Value::from)
+        // a changed mailbox is exactly what a reload repairs, so the list retries once instead of failing
+        match run!(self, acct, false, c => self::page(c, p)) {
+            Err(e) if e == STALE => run!(self, acct, false, c => self::page(c, p)),
+            r => r,
+        }.map(Value::from)
     }
 
     /// One mail for the UI: text, sanitized HTML (or null) and the attachment list.
     pub async fn open(&self, acct: &Account, id: &str) -> Result<Value, String> {
         let u = uid(&json!(id))?;
-        let raw = run!(self, acct, c => full(c, u))?;
+        let raw = run!(self, acct, false, c => full(c, u))?;
         let m = parse(&raw).map_err(Fail::msg)?;
         Ok(json!({ "text": render::text(&m), "html": render::html(&m), "attachments": attachments(&m) }))
     }
@@ -339,7 +389,7 @@ impl Mail {
     /// Mark read or unread, the one flag change and only from a click in the UI.
     pub async fn set_seen(&self, acct: &Account, id: &str, seen: bool) -> Result<(), String> {
         let u = uid(&json!(id))?;
-        run!(self, acct, c => store(c, u, seen))
+        run!(self, acct, false, c => store(c, u, seen))
     }
 
     /// A fresh login outside the cache, so the settings pane tests exactly what it shows.
@@ -368,37 +418,37 @@ impl Mail {
                 let q = args["query"].as_str().ok_or("query is required")?;
                 quoted(q).map_err(Fail::msg)?;
                 let limit = match &args["limit"] { Value::Null => 20, v => v.as_u64().filter(|n| (1..=50).contains(n)).ok_or("limit must be 1 to 50")? as usize };
-                let results = run!(self, acct, c => search_rows(c, q, limit))?;
+                let results = run!(self, &acct, true, c => search_rows(c, q, limit))?;
                 Ok(json!({ "account": email, "results": results }))
             }
             "read" => {
                 let (u, hs) = (uid(&args["id"])?, header_names(&args["headers"])?);
-                let raw = run!(self, acct, c => full(c, u))?;
+                let raw = run!(self, &acct, true, c => full(c, u))?;
                 let m = parse(&raw).map_err(Fail::msg)?;
                 let headers: serde_json::Map<String, Value> = hs.into_iter().map(|h| {
                     let v = m.header_raw(h.clone()).map(|v| cap(v.trim(), 2000));
                     (h, json!(v))
                 }).collect();
                 Ok(json!({ "account": email, "id": u.to_string(), "from": addrs(m.from()), "to": addrs(m.to()), "cc": addrs(m.cc()),
-                    "date": date(&m), "subject": m.subject(), "message_id": m.message_id(), "attachments": attachments(&m),
-                    "headers": headers, "untrusted_mail": render::text(&m) }))
+                    "date": date(&m), "subject": subject(&m), "message_id": m.message_id(), "attachments": attachments(&m),
+                    "untrusted_headers": headers, "untrusted_mail": render::text(&m) }))
             }
             "thread" => {
                 let u = uid(&args["id"])?;
-                let mails = run!(self, acct, c => thread(c, u))?;
+                let mails = run!(self, &acct, true, c => thread(c, u))?;
                 let mut budget = 60_000;
                 let messages: Vec<Value> = mails.iter().filter_map(|(u, raw, whole)| {
                     let m = MessageParser::default().parse(raw)?;
-                    let text = if *whole { cap(&render::text(&m), budget.min(8000)) } else { "(larger than 5 MB, read it with the read tool)".into() };
+                    let text = if *whole { cap(&render::text(&m), budget.min(8000)) } else { "(larger than 1 MB, read it with the read tool)".into() };
                     budget -= text.chars().count().min(budget);
-                    Some(json!({ "id": u.to_string(), "from": addrs(m.from()), "date": date(&m), "subject": m.subject(), "untrusted_mail": text }))
+                    Some(json!({ "id": u.to_string(), "from": addrs(m.from()), "date": date(&m), "subject": subject(&m), "untrusted_mail": text }))
                 }).collect();
                 Ok(json!({ "account": email, "messages": messages }))
             }
             "attachment" => {
                 let u = uid(&args["id"])?;
                 let i = args["index"].as_u64().filter(|i| *i < 1000).ok_or("index must be an attachment index from read")? as usize;
-                let raw = run!(self, acct, c => full(c, u))?;
+                let raw = run!(self, &acct, true, c => full(c, u))?;
                 let m = parse(&raw).map_err(Fail::msg)?;
                 let p = m.attachments().nth(i).ok_or_else(|| format!("Mail {u} has no attachment {i}"))?;
                 let path = save(downloads, p.attachment_name().unwrap_or("attachment"), p.contents())?;
@@ -406,7 +456,7 @@ impl Mail {
             }
             _ => {
                 let raw = draft(args["raw"].as_str().ok_or("raw is required")?, email)?;
-                let folder = run!(self, acct, c => append(c, &raw))?;
+                let folder = run!(self, &acct, true, c => append(c, &raw))?;
                 Ok(json!({ "account": email, "folder": folder, "saved": true }))
             }
         }
@@ -472,7 +522,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         let names: Vec<_> = (0..3).map(|_| save(&dir, "report.pdf", b"x").unwrap().file_name().unwrap().to_string_lossy().to_string()).collect();
         assert_eq!(names, ["report.pdf", "report (1).pdf", "report (2).pdf"]);
-        assert_eq!(save(&dir, "../x", b"y").unwrap().parent().unwrap(), dir);
+        let p = save(&dir, "../x", b"y").unwrap();
+        assert_eq!(p.parent().unwrap(), dir);
+        let q = std::process::Command::new("/usr/bin/xattr").args(["-p", "com.apple.quarantine"]).arg(&p).output().unwrap();
+        assert!(String::from_utf8_lossy(&q.stdout).starts_with("0081;") && String::from_utf8_lossy(&q.stdout).contains(";Vault;"));
+        for bad in ["run.command", "x.APP", "a.terminal", "b.webloc", "c.jar", "x.tar.pkg"] {
+            assert!(save(&dir, bad, b"z").unwrap_err().contains("double-click"), "{bad}");
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -506,18 +562,27 @@ mod tests {
         assert!(err(&call("save_draft", json!({ "raw": "From: other@x.be\n\nb" })).await).contains("From"));
         assert!(err(&call("send", json!({})).await).contains("Unknown tool"));
         assert!(err(&m.tool(&[], "", "search", &json!({ "query": "x" }), &d).await).contains("No mail account"));
+        // "" is the default account, not the first: the default here is not configured
+        assert!(err(&m.tool(&a, "other@x.be", "read", &json!({ "id": "1", "account": "" }), &d).await).contains("not configured"));
     }
 
     #[test]
-    fn futures_are_send() {
-        // lib.rs runs these on tauri's multi-threaded runtime
-        fn send<T: Send>(_: T) {}
-        let (m, a) = (Mail::new(), acct("a@b.be"));
-        send(m.tool(&[], "", "read", &Value::Null, Path::new("/")));
-        send(m.list(&a, 1));
-        send(m.open(&a, "1"));
-        send(m.set_seen(&a, "1", true));
-        send(m.test(&a));
+    fn accounts_by_email() {
+        let a = [acct("a@b.be"), acct("c@d.be")];
+        assert_eq!(pick_account(&a, "").unwrap().email, "a@b.be");
+        assert_eq!(pick_account(&a, "C@D.be").unwrap().email, "c@d.be");
+        assert!(pick_account(&a, "x@y.be").is_none() && pick_account(&[], "").is_none());
+        assert_eq!(pick(&a, "c@d.be", &json!("")).unwrap().email, "c@d.be");
+        assert_eq!(pick(&a, "", &Value::Null).unwrap().email, "a@b.be");
+    }
+
+    #[test]
+    fn thread_root() {
+        let r = |raw: &str| root(&MessageParser::default().parse(raw.as_bytes()).unwrap());
+        assert_eq!(r("References: <first@example.com> <second@example.com>\r\nMessage-ID: <own@example.com>\r\n\r\nb").as_deref(), Some("first@example.com"));
+        assert_eq!(r("Message-ID: <own@example.com>\r\n\r\nb").as_deref(), Some("own@example.com"));
+        assert_eq!(r("References: <.>\r\nMessage-ID: <own@example.com>\r\n\r\nb").as_deref(), Some("own@example.com"));
+        assert_eq!(r("References: <.>\r\nMessage-ID: <a@b>\r\n\r\nb"), None);
     }
 
     /// VAULTMAIL_EMAIL=... VAULTMAIL_SERVICE=... VAULTMAIL_ACCOUNT=... cargo test --lib live_gmail -- --ignored
@@ -545,5 +610,9 @@ mod tests {
         let th = ok(m.tool(&accts, "", "thread", &json!({ "id": id }), &d).await);
         assert!(th["messages"].as_array().unwrap().iter().any(|x| x["id"] == id.as_str()));
         assert_eq!(seen(id.parse().unwrap()).await, before, "reading changed \\Seen");
+        if let Ok(t) = std::env::var("VAULTMAIL_THREAD_ID") {
+            let th = ok(m.tool(&accts, "", "thread", &json!({ "id": t }), &d).await);
+            assert!(th["messages"].as_array().unwrap().len() > 1, "{th}");
+        }
     }
 }
