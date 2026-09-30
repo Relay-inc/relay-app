@@ -901,6 +901,12 @@ $("nav").addEventListener("contextmenu", e => {
   e.preventDefault();
   m.style.left = `${e.clientX}px`; m.style.top = `${e.clientY}px`; m.hidden = false;
 });
+// middle-click on a conversation closes it, like a browser tab
+$("nav").addEventListener("auxclick", e => {
+  const r = (e.target as HTMLElement).closest<HTMLElement>(".row[data-k]");
+  if (e.button !== 1 || !r || VIEWS.includes(r.dataset.k!)) return;
+  e.preventDefault(); closeChat(r.dataset.k!);
+});
 $("ctx").addEventListener("click", async e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ctx]"); const k = $("ctx").dataset.k!, p = $("ctx").dataset.p || null; $("ctx").hidden = true;
   if (!b) return;
