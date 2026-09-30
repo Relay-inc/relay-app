@@ -1,0 +1,6 @@
+[
+  { "id": "600000000000000000000b01", "name": "Website", "idOrganization": "600000000000000000000a01", "closed": false },
+  { "id": "600000000000000000000b02", "name": "Archive", "idOrganization": "600000000000000000000a01", "closed": true },
+  { "id": "600000000000000000000b03", "name": "Groceries", "idOrganization": null, "closed": false },
+  { "id": "600000000000000000000b04", "name": "Client board", "idOrganization": "600000000000000000000a99", "closed": false }
+]

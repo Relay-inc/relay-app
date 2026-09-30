@@ -30,3 +30,4 @@ body.prefs .set{display:flex;flex-direction:column;gap:0;height:100%;min-height:
 .alist li[data-acct]:not(.sel):hover{background:color-mix(in srgb,var(--fill) 50%,transparent)}
 .chk{display:flex;align-items:center;gap:6px;font-size:13px}
 .hint code{font-family:var(--mono);font-size:11px;background:var(--fill);padding:1px 4px;border-radius:4px}
+.ahead{margin:6px 0 0;font-size:13px;font-weight:600}

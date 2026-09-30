@@ -25,8 +25,12 @@ export interface CardDetail<D = any> {
   render(d: D | null, err: string, e: (s: unknown) => string): string;
 }
 
-/** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string). */
-export type Field = { key: string; label: Key; placeholder?: Key; numeric?: boolean; optional?: boolean };
+/** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).
+ * `secret`: a password field kept in the keychain under that key (Trello's API key), never in the settings.
+ * `check`: a checkbox stored as a boolean, `placeholder` is its text. */
+export type Field = { key: string; label: Key; placeholder?: Key; numeric?: boolean; optional?: boolean; secret?: boolean; check?: boolean };
+/** A board with the project it is in, for picking one in Settings without going level by level. */
+export type BoardOpt = Opt & { project: string; group: string };
 
 export interface BoardProvider {
   /** the key in settings.integrations and in the backend's PROVIDERS, e.g. "productive" */
@@ -54,6 +58,8 @@ export interface BoardProvider {
     help: Key;
     /** One call that shows token and config work together, resolves with the message to show. */
     test(ctx: Ctx): Promise<string>;
+    /** Every board the user can open, when the API gives them in one call: Settings then maps boards to vault projects. */
+    allBoards?(ctx: Ctx): Promise<BoardOpt[]>;
     /** Take token and config from elsewhere (Productive: Claude Code's MCP config), resolves with the config fields to save. */
     import?: { label: Key; run(): Promise<Record<string, string>> };
   };

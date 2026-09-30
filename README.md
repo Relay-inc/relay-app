@@ -67,12 +67,13 @@ A task tracker shows as a kanban in the sidebar by implementing one contract in 
 | `id`, `name` | `"productive"`, `"Productive"`. The id keys `settings.integrations.<id>` and the keychain service `vault-app.<id>`. |
 | `defaults(&mut cfg)`, `check(&cfg)` | Fill in and validate `settings.integrations.<id>` on every load and save. Keep `on` (bool, sidebar row shown). |
 | `ready(&cfg)`, `not_ready` | Whether the config is complete enough to call the API, and the `TEXT` key of the error when not. |
+| `secrets` | The keychain accounts under `vault-app.<id>` that must all be there: `["token"]` for Productive, `["key", "token"]` for Trello. |
 | `url(cfg, method, path, body)` | The full URL for a call the webview asks for, `None` when that method and path are not allowed. This is the allowlist: keep it to reads plus the one write that moves a card. |
-| `headers(cfg, token)` | The headers carrying the token (and content type). |
+| `headers(cfg, secrets)` | The headers carrying the secrets, in the order of `secrets` (and content type). |
 | `error(code, body)` | An error answer as one line. |
 
 Commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
-`integration_token` (save, or remove with `""`), `integration_call(method, path, body)`. The call runs curl
+`integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
 with the token over stdin; the webview never sees it.
 
 **Webview**, `src/providers/types.ts`: a `BoardProvider`, registered in `src/providers/index.ts`.
@@ -88,19 +89,29 @@ interface BoardProvider {
   url(ctx, ref, cardId): Promise<string>;              // the card in the browser
   detail?: CardDetail;                                 // right-panel view; without it a click opens url()
   reset?(): void;                                      // drop caches
-  settings: { fields: Field[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>; import?: {...} };
+  settings: { fields: Field[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>;
+              allBoards?(ctx): Promise<BoardOpt[]>; import?: {...} };
 }
 ```
 
 `ctx` is `{ config: settings.integrations.<id>, call(method, path, body?) }`. `ref` is a `BoardRef`
 `{ provider, project, board }`. Settings › Integrations draws a pane per provider from `settings.fields`
-(each a string in `integrations.<id>`), with the sidebar switch, the token and a Save that runs `test`.
+(each a string in `integrations.<id>`; a `secret` field goes to the keychain under its key instead, a `check`
+field is a checkbox stored as a boolean), with the sidebar switch, the token and a Save that runs `test`.
+A provider with `allBoards` (one call for every board) also gets a board picker per vault project there.
 
 A vault project maps to at most one board: `settings.boards[<vault project>] = BoardRef`, set from the
 board's header. Opening the board after a conversation in that project shows the linked board.
 
 Settings from before the providers (a top-level `productive: { org, user }`) move to
 `integrations.productive` with `on: true` when they are read.
+
+**Trello** (`src/providers/trello.ts`): a project is a workspace (boards outside the user's workspaces sit
+under "Personal and shared boards"), columns are the board's open lists, cards its open cards, optionally
+only those the user is a member of (`integrations.trello.mine`). A move sets `idList` with `pos: "bottom"`,
+a click opens the card's `shortUrl`. Key and token come from a Power-Up at trello.com/power-ups/admin and
+travel in the `Authorization: OAuth …` header. 401/403 and 429 read as a plain message, nothing retries by
+itself. The response mapping (`trello-map.ts`) is tested on fixture JSON with `pnpm test` (Node's test runner).
 
 A new provider: a `Provider` in `providers.rs` (with a test for its `url` allowlist), a `BoardProvider`
 in `src/providers/<id>.ts` added to `PROVIDERS`, its UI strings in all four locales.

@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./settings.css";
 import { initI18n, t } from "./i18n";
 import type { Key } from "./locales/en";
-import { PROVIDERS, provider, ctxOf, type BoardProvider, type BoardRef } from "./providers";
+import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type BoardRef } from "./providers";
 import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
 
 // The settings window, laid out like Mail's: a toolbar of icon tabs, the window title follows the tab.
@@ -64,8 +64,33 @@ function projects() {
       : `<div class="hint">${t("set.none")}</div>`}
     ${msg ? `<div class="setrow end"><span class="${ok ? "okmsg" : "errmsg"}">${esc(msg)}</span></div>` : ""}`;
 }
-// set up: a token and every field that is not optional
-const setUp = (p: BoardProvider) => tokens[p.id] && p.settings.fields.every(f => f.optional || settings.integrations[p.id]?.[f.key]);
+// set up: every secret in the keychain and every field that is not optional
+const setUp = (p: BoardProvider) => tokens[p.id] && p.settings.fields.every(f => f.optional || f.secret || settings.integrations[p.id]?.[f.key]);
+// the boards per vault project, for a provider that lists all its boards in one call: loaded once the pane shows set up
+const allBoards: Record<string, { list: BoardOpt[] | null; err: string }> = {};
+let vaultProjects: string[] | null = null;
+async function loadBoards(p: BoardProvider) {
+  allBoards[p.id] = { list: null, err: "" };
+  try {
+    const [list, snap] = await Promise.all([p.settings.allBoards!(ctxOf(p, settings.integrations)), vaultProjects ?? invoke<any>("snapshot")]);
+    vaultProjects ??= (snap.projects || []).map((x: any) => String(x.name)).sort((a: string, b: string) => a.localeCompare(b));
+    allBoards[p.id] = { list, err: "" };
+  } catch (e) { allBoards[p.id] = { list: [], err: String(e) }; }
+  render();
+}
+function boardMap(p: BoardProvider) {
+  if (!p.settings.allBoards || !setUp(p)) return "";
+  const st = allBoards[p.id];
+  if (!st) { queueMicrotask(() => loadBoards(p)); return ""; }
+  if (!st.list) return `<div class="hint">${t("pr.loading")}</div>`;
+  if (st.err) return `<div class="setrow"><span class="errmsg">${esc(st.err)}</span></div>`;
+  const opts = (vp: string) => { const cur = settings.boards?.[vp], mine = cur?.provider === p.id;
+    return `<option value="">${mine || !cur ? t("kb.linkNone") : esc(provider(cur.provider)?.name ?? cur.provider)}</option>`
+      + st.list!.map(b => `<option value="${esc(b.project)}/${esc(b.id)}"${mine && cur.board === b.id ? " selected" : ""}>${esc(b.group)} › ${esc(b.name)}</option>`).join(""); };
+  return `<h3 class="ahead">${t("int.boards")}</h3><div class="form">
+    ${(vaultProjects || []).map(vp => `<label class="fl">${esc(vp)}</label><select class="field" data-bmap="${esc(vp)}">${opts(vp)}</select>`).join("\n    ")}
+    <span></span><div class="hint">${t("int.boardsHelp")}</div></div>`;
+}
 function integrations() {
   const gh = !!ghLogin && settings.github.on;
   const li = (id: string, tile: string, name: string, on: boolean) =>
@@ -94,11 +119,16 @@ function boardPane(p: BoardProvider) {
         <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${ready ? "on" : ""}"></span>${ready ? t("int.set") : t("int.notSet")}</span>
         <span class="fl">${t("int.sidebar")}</span><label class="chk"><input type="checkbox" id="on-${id}" ${cfg.on !== false ? "checked" : ""}> ${t("int.showBoard")}</label>
         <label class="fl" for="tok-${id}">${t(p.settings.tokenLabel)}</label><input class="field" id="tok-${id}" type="password" autocomplete="off" spellcheck="false" placeholder="${has ? t("int.tokenStored") : t("int.tokenPaste")}">
-        ${p.settings.fields.map(f => `<label class="fl" for="f-${id}-${esc(f.key)}">${t(f.label)}</label><input class="field" id="f-${id}-${esc(f.key)}"${f.numeric ? ' inputmode="numeric"' : ""} value="${esc(cfg[f.key] ?? "")}" spellcheck="false"${f.placeholder ? ` placeholder="${t(f.placeholder)}"` : ""}>`).join("\n        ")}
+        ${p.settings.fields.map(f => f.check
+          ? `<span class="fl">${t(f.label)}</span><label class="chk"><input type="checkbox" id="f-${id}-${esc(f.key)}" ${cfg[f.key] ? "checked" : ""}> ${f.placeholder ? t(f.placeholder) : ""}</label>`
+          : `<label class="fl" for="f-${id}-${esc(f.key)}">${t(f.label)}</label><input class="field" id="f-${id}-${esc(f.key)}"${f.numeric ? ' inputmode="numeric"' : ""}${f.secret
+            ? ` type="password" autocomplete="off" placeholder="${has ? t("int.tokenStored") : t("int.tokenPaste")}"`
+            : ` value="${esc(cfg[f.key] ?? "")}"${f.placeholder ? ` placeholder="${t(f.placeholder)}"` : ""}`} spellcheck="false">`).join("\n        ")}
         <span></span><div class="hint">${t(p.settings.help)}</div>
       </div>
       <div class="setrow">${p.settings.import ? `<button class="btn" data-set="bimport">${t(p.settings.import.label)}</button>` : ""}${has ? `<button class="btn" data-set="bclear">${t("int.clear")}</button>` : ""}</div>
       <div class="setrow end">${m ? `<span class="${m.ok ? "okmsg" : "errmsg"}">${esc(m.text)}</span>` : ""}<button class="btn primary" data-set="bsave">${t("int.save")}</button></div>
+      ${boardMap(p)}
     </div>`;
 }
 async function ghCheck() {
@@ -118,12 +148,13 @@ function render() {
 }
 const go = (to: Tab) => { tab = to; localStorage.setItem("prefsTab", to); msg = ""; render(); };
 // saves the token and the config, then one call to the provider to show they work together
-async function boardSave(p: BoardProvider, cfg: Record<string, any>, token?: string) {
+async function boardSave(p: BoardProvider, cfg: Record<string, any>, secrets: Record<string, string> = {}) {
   try {
-    if (token) await invoke("integration_token", { provider: p.id, token });
+    for (const [account, token] of Object.entries(secrets)) if (token) await invoke("integration_token", { provider: p.id, token, account });
     tokens[p.id] = await invoke<boolean>("integration_has_token", { provider: p.id });
     settings = await invoke<Settings>("set_settings", { settings: { ...settings, integrations: { ...settings.integrations, [p.id]: cfg } } });
     pmsg[p.id] = { text: await p.settings.test(ctxOf(p, settings.integrations)), ok: true };
+    delete allBoards[p.id];
   } catch (e) { pmsg[p.id] = { text: String(e), ok: false }; }
   render();
 }
@@ -152,21 +183,35 @@ root.addEventListener("click", async e => {
   const bp = provider(acct);
   if (bp && b.dataset.set === "bsave") {
     const cfg: Record<string, any> = { ...settings.integrations[bp.id], on: (document.getElementById(`on-${bp.id}`) as HTMLInputElement).checked };
-    for (const f of bp.settings.fields) cfg[f.key] = val(`f-${bp.id}-${f.key}`);
+    const secrets: Record<string, string> = { token: val(`tok-${bp.id}`) };
+    for (const f of bp.settings.fields) {
+      if (f.check) cfg[f.key] = (document.getElementById(`f-${bp.id}-${f.key}`) as HTMLInputElement).checked;
+      else if (f.secret) secrets[f.key] = val(`f-${bp.id}-${f.key}`);
+      else cfg[f.key] = val(`f-${bp.id}-${f.key}`);
+    }
     pmsg[bp.id] = { text: t("int.busy"), ok: true }; render();
-    await boardSave(bp, cfg, val(`tok-${bp.id}`));
+    await boardSave(bp, cfg, secrets);
   }
   if (bp?.settings.import && b.dataset.set === "bimport") {
     try { const r = await bp.settings.import.run(); await boardSave(bp, { ...settings.integrations[bp.id], ...r }); }
     catch (e) { pmsg[bp.id] = { text: String(e), ok: false }; render(); }
   }
   if (bp && b.dataset.set === "bclear") {
-    await invoke("integration_token", { provider: bp.id, token: "" }); tokens[bp.id] = false; pmsg[bp.id] = { text: t("int.cleared"), ok: true }; render();
+    await invoke("integration_token", { provider: bp.id, token: "" }); tokens[bp.id] = false; delete allBoards[bp.id]; pmsg[bp.id] = { text: t("int.cleared"), ok: true }; render();
   }
   if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await save(next, t("set.restored")); }
 });
 // the language applies right away: saved, then this window and the main one redraw in it
 root.addEventListener("change", async e => {
+  const bm = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-bmap]"), bp = provider(acct);
+  if (bm && bp) {
+    // a vault project has at most one board: picking one replaces what it had, None only drops this provider's
+    const vp = bm.dataset.bmap!, boards = { ...settings.boards }, [project, board] = bm.value.split("/");
+    if (board) boards[vp] = { provider: bp.id, project, board }; else if (boards[vp]?.provider === bp.id) delete boards[vp]; else return;
+    try { settings = await invoke<Settings>("set_settings", { settings: { ...settings, boards } }); pmsg[bp.id] = { text: t("set.saved"), ok: true }; }
+    catch (x) { pmsg[bp.id] = { text: String(x), ok: false }; }
+    render(); return;
+  }
   if ((e.target as HTMLElement).matches("[data-map]")) { vs = await checkMapping(vs.vault, readMapping(root, vs)); render(); return; }
   const sel = (e.target as HTMLElement).closest<HTMLSelectElement>("#language"); if (!sel) return;
   await save({ ...settings, language: sel.value }, "");

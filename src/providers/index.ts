@@ -1,11 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { BoardProvider, Ctx } from "./types";
 import productive from "./productive";
+import trello from "./trello";
 
 export type * from "./types";
 
 /** Every board provider, in the order of the sidebar and the settings list. A new one is added here and in providers.rs. */
-export const PROVIDERS: BoardProvider[] = [productive];
+export const PROVIDERS: BoardProvider[] = [productive, trello];
 export const provider = (id: string) => PROVIDERS.find(p => p.id === id);
 
 /** The call context for a provider, from the settings as they are now. */

@@ -126,6 +126,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_org", ["No organisation ID. Fill it in under Vault › Settings… › Integrations.", "Geen organisatie-id. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun ID d'organisation. Renseignez-le dans Vault › Réglages… › Intégrations.", "Keine Organisations-ID. Trag sie unter Vault › Einstellungen… › Integrationen ein."]),
     ("err.no_token", ["No {v} token. Fill it in under Vault › Settings… › Integrations.", "Geen {v}-token. Vul het in bij Vault › Instellingen… › Integraties.", "Aucun jeton {v}. Renseignez-le dans Vault › Réglages… › Intégrations.", "Kein {v}-Token. Trag es unter Vault › Einstellungen… › Integrationen ein."]),
     ("err.down", ["{p} unreachable: {v}", "{p} niet bereikbaar: {v}", "{p} injoignable : {v}", "{p} nicht erreichbar: {v}"]),
+    ("err.tr_auth", ["Trello refused the API key or token. Check both under Vault › Settings… › Integrations.", "Trello weigert de API-sleutel of het token. Controleer ze bij Vault › Instellingen… › Integraties.", "Trello refuse la clé API ou le jeton. Vérifiez-les dans Vault › Réglages… › Intégrations.", "Trello lehnt den API-Schlüssel oder das Token ab. Prüf beide unter Vault › Einstellungen… › Integrationen."]),
+    ("err.tr_rate", ["Trello's rate limit is reached. Wait a few seconds, then refresh.", "De limiet van Trello is bereikt. Wacht een paar seconden en vernieuw dan.", "La limite de requêtes de Trello est atteinte. Attendez quelques secondes, puis actualisez.", "Das Anfragelimit von Trello ist erreicht. Warte ein paar Sekunden und aktualisiere dann."]),
     ("err.unknown", ["unknown error", "onbekende fout", "erreur inconnue", "unbekannter Fehler"]),
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
@@ -684,10 +686,15 @@ fn integration_status(state: State<App>, provider: String) -> Result<bool, Strin
 #[tauri::command]
 fn integration_has_token(provider: String) -> Result<bool, String> { Ok(providers::token(providers::get(&provider)?).is_some()) }
 
-/// Save the provider's token, or remove it with "". The main window follows, it shows a board only with a token.
+/// Save one of the provider's secrets (`account`, "token" when absent), or remove it with "": without an
+/// account "" removes them all. The main window follows, it shows a board only with every secret there.
 #[tauri::command]
-fn integration_token(app: AppHandle, state: State<App>, provider: String, token: String) -> Result<(), String> {
-    providers::set_token(providers::get(&provider)?, token.trim())?;
+fn integration_token(app: AppHandle, state: State<App>, provider: String, token: String, account: Option<String>) -> Result<(), String> {
+    let p = providers::get(&provider)?;
+    match account {
+        None if token.trim().is_empty() => for a in p.secrets { providers::set_token(p, a, "")?; },
+        a => providers::set_token(p, a.as_deref().unwrap_or("token"), token.trim())?,
+    }
     app.emit("settings-changed", state.settings.lock().unwrap().clone()).ok();
     Ok(())
 }
@@ -707,7 +714,7 @@ fn productive_import() -> Result<Value, String> {
     let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
         .and_then(|s| serde_json::from_str(&s).ok()).ok_or_else(|| trc("err.claude_json"))?;
     let env = &cfg["mcpServers"]["productive"]["env"];
-    providers::set_token(providers::get("productive")?, env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| trc("err.no_pv_token_json"))?)?;
+    providers::set_token(providers::get("productive")?, "token", env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| trc("err.no_pv_token_json"))?)?;
     Ok(json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") }))
 }
 
