@@ -30,7 +30,78 @@ fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(default_vault()); }
     for k in ["projects", "overrides"] { if !v[k].is_object() { v[k] = json!({}); } }
+    if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     v
+}
+
+// ---------- UI language: the settings' "language", or "system" for the first macOS preferred language
+// the app has, else English. The webview gets it from ui_lang rather than navigator.language, which
+// WKWebView derives from the app bundle's localizations. Same list as src/i18n.ts.
+const LANGS: [&str; 4] = ["en", "nl", "fr", "de"];
+fn ui_lang_of(settings: &Value) -> &'static str {
+    let pick = |l: &str| LANGS.iter().copied().find(|x| l.split(['-', '_']).next().is_some_and(|p| p.eq_ignore_ascii_case(x)));
+    settings["language"].as_str().and_then(|l| LANGS.iter().copied().find(|x| *x == l))
+        .or_else(|| sys_locale::get_locales().find_map(|l| pick(&l)))
+        .unwrap_or("en")
+}
+#[tauri::command]
+fn ui_lang(state: State<App>) -> &'static str { ui_lang_of(&state.settings.lock().unwrap()) }
+
+/// Native strings (menu bar, window title, errors) in LANGS order. The menu follows the macOS names.
+const TEXT: &[(&str, [&str; 4])] = &[
+    ("settings", ["Settings…", "Instellingen…", "Réglages…", "Einstellungen…"]),
+    ("settings.title", ["Settings", "Instellingen", "Réglages", "Einstellungen"]),
+    ("about", ["About Vault", "Over Vault", "À propos de Vault", "Über Vault"]),
+    ("hide", ["Hide Vault", "Verberg Vault", "Masquer Vault", "Vault ausblenden"]),
+    ("hide_others", ["Hide Others", "Verberg andere", "Masquer les autres", "Andere ausblenden"]),
+    ("show_all", ["Show All", "Toon alles", "Tout afficher", "Alle einblenden"]),
+    ("quit", ["Quit Vault", "Stop Vault", "Quitter Vault", "Vault beenden"]),
+    ("edit", ["Edit", "Wijzig", "Édition", "Bearbeiten"]),
+    ("undo", ["Undo", "Herstel", "Annuler", "Widerrufen"]),
+    ("redo", ["Redo", "Opnieuw", "Rétablir", "Wiederholen"]),
+    ("cut", ["Cut", "Knip", "Couper", "Ausschneiden"]),
+    ("copy", ["Copy", "Kopieer", "Copier", "Kopieren"]),
+    ("paste", ["Paste", "Plak", "Coller", "Einsetzen"]),
+    ("select_all", ["Select All", "Selecteer alles", "Tout sélectionner", "Alles auswählen"]),
+    ("window", ["Window", "Venster", "Fenêtre", "Fenster"]),
+    ("minimize", ["Minimize", "Minimaliseer", "Placer dans le Dock", "Im Dock ablegen"]),
+    ("zoom", ["Zoom", "Zoom", "Réduire/agrandir", "Zoomen"]),
+    ("fullscreen", ["Enter Full Screen", "Volledig scherm", "Passer en mode plein écran", "Vollbildmodus"]),
+    ("close_window", ["Close Window", "Sluit venster", "Fermer la fenêtre", "Fenster schließen"]),
+    ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
+        "Pas de coffre : work-state.md introuvable dans {v}", "Kein Vault: work-state.md nicht gefunden in {v}"]),
+    ("err.no_brain", ["No vault: System/ or Resources/Meta/Claude/ not found", "Geen vault: System/ of Resources/Meta/Claude/ niet gevonden",
+        "Pas de coffre : System/ ou Resources/Meta/Claude/ introuvable", "Kein Vault: System/ oder Resources/Meta/Claude/ nicht gefunden"]),
+    ("err.project", ["Invalid project '{v}': icon (max 4 characters) and label (max 60) must be text",
+        "Ongeldig project '{v}': icon (max 4 tekens) en label (max 60) moeten tekst zijn",
+        "Projet '{v}' invalide : l'icône (4 caractères max.) et le nom (60 max.) doivent être du texte",
+        "Ungültiges Projekt '{v}': Symbol (max. 4 Zeichen) und Name (max. 60) müssen Text sein"]),
+    ("err.override", ["Invalid override '{v}'", "Ongeldige override '{v}'", "Remplacement '{v}' invalide", "Ungültige Zuordnung '{v}'"]),
+    ("err.empty", ["empty message", "leeg bericht", "message vide", "leere Nachricht"]),
+];
+fn tr(lang: &str, key: &str) -> String {
+    let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
+    TEXT.iter().find(|(k, _)| *k == key).map_or(key, |(_, row)| row[i]).to_string()
+}
+fn tr_v(lang: &str, key: &str, v: &str) -> String { tr(lang, key).replace("{v}", v) }
+
+/// Native menu bar: Vault > Settings… (Cmd-comma), plus Edit and Window so copy, paste and window
+/// shortcuts keep working once the default menu is replaced. Rebuilt when the language changes.
+fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem as P, Submenu};
+    let t = |k: &str| tr(lang, k);
+    let settings = MenuItem::with_id(h, "settings", t("settings"), true, Some("CmdOrCtrl+,"))?;
+    let app = Submenu::with_items(h, "Vault", true, &[
+        &P::about(h, Some(&t("about")), None)?, &P::separator(h)?, &settings, &P::separator(h)?,
+        &P::hide(h, Some(&t("hide")))?, &P::hide_others(h, Some(&t("hide_others")))?, &P::show_all(h, Some(&t("show_all")))?,
+        &P::separator(h)?, &P::quit(h, Some(&t("quit")))?])?;
+    let edit = Submenu::with_items(h, t("edit"), true, &[
+        &P::undo(h, Some(&t("undo")))?, &P::redo(h, Some(&t("redo")))?, &P::separator(h)?,
+        &P::cut(h, Some(&t("cut")))?, &P::copy(h, Some(&t("copy")))?, &P::paste(h, Some(&t("paste")))?, &P::select_all(h, Some(&t("select_all")))?])?;
+    let window = Submenu::with_items(h, t("window"), true, &[
+        &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?,
+        &P::separator(h)?, &P::close_window(h, Some(&t("close_window")))?])?;
+    Menu::with_items(h, &[&app, &edit, &window])
 }
 
 struct Proc { child: Child, stdin: ChildStdin }
@@ -131,7 +202,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let mut content: Vec<Value> = images.unwrap_or_default().into_iter()
         .filter(|i| ["image/png", "image/jpeg", "image/gif", "image/webp"].contains(&i["media_type"].as_str().unwrap_or("")) && i["data"].is_string())
         .map(|i| json!({"type": "image", "source": {"type": "base64", "media_type": i["media_type"], "data": i["data"]}})).collect();
-    if content.is_empty() && text.trim().is_empty() { return Err("leeg bericht".into()); }
+    if content.is_empty() && text.trim().is_empty() { return Err(tr(ui_lang_of(&state.settings.lock().unwrap()), "err.empty")); }
     if !text.is_empty() { content.push(json!({"type": "text", "text": text})); }
     let mut procs = state.procs.lock().unwrap();
     if !procs.contains_key(&project) {
@@ -429,8 +500,9 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
     let s = norm(settings);
     let v = s["vault"].as_str().unwrap();
+    let lang = ui_lang_of(&s);
     if brain(v).is_none() {
-        return Err(format!("Geen vault: work-state.md niet gevonden in {v}"));
+        return Err(tr_v(lang, "err.no_vault", v));
     }
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
@@ -438,16 +510,21 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
             ("label", Some(t)) => t.chars().count() <= 60,
             _ => false,
         }));
-        if !ok { return Err(format!("Ongeldig project '{name}': icon (max 4 tekens) en label (max 60) moeten tekst zijn")); }
+        if !ok { return Err(tr_v(lang, "err.project", name)); }
     }
     for (sid, t) in s["overrides"].as_object().unwrap() {
         if sid.is_empty() || !sid.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c) || c == '-') || !(t.is_string() || t.is_null()) {
-            return Err(format!("Ongeldige override '{sid}'"));
+            return Err(tr_v(lang, "err.override", sid));
         }
     }
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
+    let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     *state.settings.lock().unwrap() = s.clone();
+    if relang { // the menu bar and the settings window title follow a new language right away
+        if let Ok(m) = build_menu(&app, lang) { app.set_menu(m).ok(); }
+        if let Some(w) = app.get_webview_window("settings") { w.set_title(&tr(lang, "settings.title")).ok(); }
+    }
     Ok(s)
 }
 
@@ -465,7 +542,7 @@ fn reminder(state: State<App>, action: String, id: String, date: Option<String>)
     if id.len() != 8 || !id.chars().all(|c| c.is_ascii_hexdigit()) { return Err("bad id".into()); }
     let v = vault(&state);
     let mut cmd = Command::new("/usr/bin/python3");
-    let meta = brain(&v).ok_or("Geen vault: System/ of Resources/Meta/Claude/ niet gevonden")?;
+    let meta = brain(&v).ok_or_else(|| tr(ui_lang_of(&state.settings.lock().unwrap()), "err.no_brain"))?;
     cmd.arg(format!("{meta}/scripts/reminder-digest.py")).args([&action, &id]);
     if action == "push" {
         let d = date.filter(|d| !d.is_empty() && d.len() <= 12 && d.chars().all(|c| c.is_ascii_alphanumeric() || "+/-".contains(c)))
@@ -480,29 +557,13 @@ fn reminder(state: State<App>, action: String, id: String, date: Option<String>)
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        // native menu bar: Vault > Instellingen… (Cmd-comma), plus Wijzig and Venster so copy, paste
-        // and window shortcuts keep working once the default menu is replaced
-        .menu(|h| {
-            use tauri::menu::{Menu, MenuItem, PredefinedMenuItem as P, Submenu};
-            let settings = MenuItem::with_id(h, "settings", "Instellingen…", true, Some("CmdOrCtrl+,"))?;
-            let app = Submenu::with_items(h, "Vault", true, &[
-                &P::about(h, Some("Over Vault"), None)?, &P::separator(h)?, &settings, &P::separator(h)?,
-                &P::hide(h, Some("Verberg Vault"))?, &P::hide_others(h, Some("Verberg andere"))?, &P::show_all(h, Some("Toon alles"))?,
-                &P::separator(h)?, &P::quit(h, Some("Stop Vault"))?])?;
-            let edit = Submenu::with_items(h, "Wijzig", true, &[
-                &P::undo(h, Some("Herstel"))?, &P::redo(h, Some("Opnieuw"))?, &P::separator(h)?,
-                &P::cut(h, Some("Knip"))?, &P::copy(h, Some("Kopieer"))?, &P::paste(h, Some("Plak"))?, &P::select_all(h, Some("Selecteer alles"))?])?;
-            let window = Submenu::with_items(h, "Venster", true, &[
-                &P::minimize(h, Some("Minimaliseer"))?, &P::maximize(h, Some("Zoom"))?, &P::fullscreen(h, Some("Volledig scherm"))?,
-                &P::separator(h)?, &P::close_window(h, Some("Sluit venster"))?])?;
-            Menu::with_items(h, &[&app, &edit, &window])
-        })
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
         .on_menu_event(|app, event| {
             if event.id() != "settings" { return; }
             if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
+            let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
             tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
-                .title("Instellingen").inner_size(600.0, 460.0).min_inner_size(520.0, 360.0)
+                .title(title).inner_size(600.0, 460.0).min_inner_size(520.0, 360.0)
                 .minimizable(false).maximizable(false).build().ok();
         })
         .plugin(tauri_plugin_dialog::init())
@@ -511,10 +572,11 @@ pub fn run() {
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
+            app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), subs: Default::default() });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, reminder])
+        .invoke_handler(tauri::generate_handler![snapshot, send, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, open_terminal, get_settings, set_settings, pick_folder, reminder, ui_lang])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -539,6 +601,24 @@ mod tests {
         assert_eq!(get("a13a6342c4ed7b3e7")["running"], false); // ended with end_turn
         assert_eq!(get("a896673643d285b30")["running"], false); // no end_turn, finished per the parent's notification
         assert!(rows.iter().all(|r| r["description"].is_string() && r["started_at"].is_string()));
+    }
+}
+
+#[cfg(test)]
+mod lang_tests {
+    use super::*;
+    #[test]
+    fn every_native_string_has_all_languages() {
+        for (k, row) in TEXT { assert!(row.iter().all(|s| !s.is_empty()), "{k}"); }
+        assert_eq!(tr("fr", "settings"), "Réglages…");
+        assert_eq!(tr_v("de", "err.override", "x"), "Ungültige Zuordnung 'x'");
+    }
+    #[test]
+    fn language_from_settings_or_system() {
+        assert_eq!(ui_lang_of(&norm(json!({"language": "de"}))), "de");
+        assert_eq!(norm(json!({"language": "xx"}))["language"], "system");
+        assert!(LANGS.contains(&ui_lang_of(&norm(json!({})))));
+        println!("system locales: {:?}, ui language: {}", sys_locale::get_locales().collect::<Vec<_>>(), ui_lang_of(&norm(json!({}))));
     }
 }
 

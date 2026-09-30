@@ -34,7 +34,8 @@ from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on 
 | `src/main.ts` | Main window: sidebar, conversations, permission cards, inspector, agents strip. |
 | `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
 | `src/productive.ts` | Productive board in the sidebar. Moving a card writes to Productive right away. |
-| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Productive integration. |
+| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Productive integration, language. |
+| `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.vault/`: `settings.json`,
 `sessions.json` (conversation to session id) and `pending/`. The Productive token sits

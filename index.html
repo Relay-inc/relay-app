@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="nl">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -10,13 +10,13 @@
 <body>
   <aside class="side">
     <div class="drag" data-tauri-drag-region></div>
-    <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="find" placeholder="Zoek project"></label>
+    <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="find" data-i18n-placeholder="nav.search"></label>
     <nav class="nav" id="nav"></nav>
     <div class="ctx" id="ctx" hidden></div>
   </aside>
   <section class="chat">
     <div class="bar" data-tauri-drag-region><h1 id="t"></h1><span class="sub" id="ts"></span><span class="sp" data-tauri-drag-region></span>
-      <button class="tb" id="close">Sluiten</button><button class="tb" id="new">Nieuw gesprek</button><button class="tb" id="term">Openen in Terminal</button><button class="tb ib" id="toggleinsp" title="Paneel verbergen of tonen (⌥⌘I)" aria-label="Paneel verbergen of tonen"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
+      <button class="tb" id="close" data-i18n="nav.close"></button><button class="tb" id="new" data-i18n="nav.newChat"></button><button class="tb" id="term" data-i18n="bar.openTerminal"></button><button class="tb ib" id="toggleinsp" data-i18n-title="bar.togglePanelTitle" data-i18n-aria="bar.togglePanel"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
     <div class="pop" id="pop" hidden></div>
     <div class="log" id="log"><div class="msgs" id="msgs"></div></div>
     <div class="subs" id="subs" style="display:none"></div>
@@ -26,12 +26,12 @@
       <div class="atts" id="atts" hidden></div>
       <textarea rows="1" id="c"></textarea>
       <div class="cfoot"><span class="hint" id="hint"></span><span class="sp"></span>
-        <button class="send" id="send" aria-label="Versturen"><svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button></div>
+        <button class="send" id="send" data-i18n-aria="composer.send"><svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button></div>
     </div>
   </section>
   <div class="zoom" id="zoom" hidden><img alt=""></div>
   <aside class="insp">
-    <div class="bar" data-tauri-drag-region><div class="seg" id="seg"><button data-tab="open" class="on">Open</button><button data-tab="stand">Stand</button><button data-tab="rem">Reminders</button></div></div>
+    <div class="bar" data-tauri-drag-region><div class="seg" id="seg"><button data-tab="open" class="on" data-i18n="tab.open"></button><button data-tab="stand" data-i18n="tab.stand"></button><button data-tab="rem" data-i18n="nav.reminders"></button></div></div>
     <div class="ibody" id="insp"></div>
   </aside>
 </body>

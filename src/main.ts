@@ -3,6 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { marked } from "marked";
 import { renderReminders, onRemindersEvent, urgency } from "./reminders";
 import "./reminders.css";
+import { initI18n, applyStatic, t, tn, currentLang } from "./i18n";
+import type { Key } from "./locales/en";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -53,8 +55,8 @@ async function attach(files: File[]) {
   attached.push(...imgs); renderAtts();
 }
 const thumbs = (urls: string[], removable = false) => urls.map((u, i) => u
-  ? `<span class="att"><img src="${esc(u)}" alt="" data-zoom>${removable ? `<button class="rm" data-rm="${i}" title="Verwijderen" aria-label="Afbeelding verwijderen">×</button>` : ""}</span>`
-  : '<span class="imgph">[afbeelding]</span>').join("");
+  ? `<span class="att"><img src="${esc(u)}" alt="" data-zoom>${removable ? `<button class="rm" data-rm="${i}" title="${t("img.remove")}" aria-label="${t("img.removeLabel")}">×</button>` : ""}</span>`
+  : `<span class="imgph">${t("img.placeholder")}</span>`).join("");
 function renderAtts() {
   const box = $("atts");
   box.hidden = !attached.length;
@@ -87,11 +89,14 @@ let subs: Record<string, Sub[]> = {};
 const subsOpen = new Set<string>(); // conversations whose finished agents are unfolded
 const subLog: Record<string, string[]> = {}; // agent id: its last messages, while unfolded
 const runningSubs = (k: string) => (subs[k] || []).filter(a => a.running).length;
-const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${n} ${n === 1 ? "agent werkt" : "agents werken"}">${n}</span>` : ""; };
+const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${tn("nav.agentsWorking", n)}">${n}</span>` : ""; };
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
 const WAIT = "__wait", REM = "__rem", NEW = "Nieuw gesprek";
+// placeholder titles are stored as they always were (Dutch) and shown in the UI language
+const PLACEHOLDER: Record<string, Key> = { [NEW]: "nav.newChat", Gesprek: "chat.untitled", "Algemeen gesprek": "chat.general" };
+const shownTitle = (title: string) => PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title;
 const VIEWS = [WAIT, REM];
-type Settings = { vault: string; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null> };
+type Settings = { vault: string; projects: Record<string, { icon?: string; label?: string }>; overrides: Record<string, string | null>; language?: string };
 let settings: Settings = { vault: "", projects: {}, overrides: {} };
 let settingsMsg = "";
 let sel: string = store.get("sel", "") || WAIT;
@@ -100,14 +105,14 @@ let tab = "open";
 const $ = (id: string) => document.getElementById(id)!;
 const project = (n: string | null) => n ? snap.projects.find((p: any) => p.name === n) : undefined;
 // how a project is shown: its own icon and name from the settings, else the note name
-const pLabel = (n: string | null) => { if (!n) return "Algemeen"; const c = settings.projects[n] || {}; return `${c.icon ? c.icon + " " : ""}${c.label || n}`; };
+const pLabel = (n: string | null) => { if (!n) return t("general"); const c = settings.projects[n] || {}; return `${c.icon ? c.icon + " " : ""}${c.label || n}`; };
 async function saveSettings(next: Settings) {
   try { settings = await invoke<Settings>("set_settings", { settings: next }); settingsMsg = ""; return true; }
   catch (e) { settingsMsg = String(e); return false; }
 }
 const saveChats = () => store.set("chats", Object.fromEntries(Object.entries(chats).filter(([, c]) => !c.draft)));
 const projOf = (key: string) => chats[key]?.project ?? null;
-const label = (key: string) => chats[key]?.title || key;
+const label = (key: string) => shownTitle(chats[key]?.title || key);
 const chatsOf = (p: string | null) => Object.values(chats).filter(c => c.project === p && !c.draft && !c.closed).sort((a, b) => b.at - a.at);
 function newChat(p: string | null): string {
   const key = `c:${Date.now().toString(36)}`;
@@ -142,17 +147,17 @@ function base(p = "") { return p.split("/").pop() || p; }
 function toolLine(name: string, input: any): string {
   const i = input || {};
   switch (name) {
-    case "Read": return `${esc(base(i.file_path))} gelezen`;
-    case "Write": return `${esc(base(i.file_path))} geschreven`;
-    case "Edit": case "MultiEdit": return `${esc(base(i.file_path))} aangepast`;
+    case "Read": return t("tool.read", { file: esc(base(i.file_path)) });
+    case "Write": return t("tool.write", { file: esc(base(i.file_path)) });
+    case "Edit": case "MultiEdit": return t("tool.edit", { file: esc(base(i.file_path)) });
     case "Bash": return `<code>${esc(String(i.command || "").slice(0, 90))}</code>`;
-    case "Grep": return `gezocht naar <code>${esc(i.pattern)}</code>`;
-    case "Glob": return `bestanden gezocht: <code>${esc(i.pattern)}</code>`;
-    case "WebSearch": return `op het web gezocht: ${esc(i.query)}`;
-    case "WebFetch": try { return `pagina gelezen: ${esc(new URL(i.url).host)}`; } catch { return "pagina gelezen"; }
-    case "Agent": case "Task": return `agent: ${esc(i.description || i.subagent_type || "")}`;
-    case "Skill": return `skill: ${esc(i.skill)}`;
-    case "TodoWrite": return "takenlijst bijgewerkt";
+    case "Grep": return t("tool.grep", { p: `<code>${esc(i.pattern)}</code>` });
+    case "Glob": return t("tool.glob", { p: `<code>${esc(i.pattern)}</code>` });
+    case "WebSearch": return t("tool.webSearch", { q: esc(i.query) });
+    case "WebFetch": try { return t("tool.webFetchHost", { host: esc(new URL(i.url).host) }); } catch { return t("tool.webFetch"); }
+    case "Agent": case "Task": return t("tool.agent", { d: esc(i.description || i.subagent_type || "") });
+    case "Skill": return t("tool.skill", { s: esc(i.skill) });
+    case "TodoWrite": return t("tool.todo");
   }
   const m = name.match(/^mcp__(.+?)__(.+)$/);
   return m ? `${esc(m[1].replace(/^claude_ai_|^plugin_/g, ""))}: ${esc(m[2])}` : esc(name);
@@ -174,7 +179,7 @@ function onEvent(k: string, ev: any) {
     }
   } else if (ev.type === "result") {
     status[k] = "idle";
-    if (ev.is_error || ev.subtype !== "success") push(k, { kind: "err", text: ev.result || ev.subtype || "Onbekende fout" });
+    if (ev.is_error || ev.subtype !== "success") push(k, { kind: "err", text: ev.result || ev.subtype || t("err.unknown") });
     if (k !== sel) unseen.add(k);
     if (chats[k]) { chats[k].at = Date.now(); saveChats(); }
     loadSnapshot();
@@ -226,7 +231,7 @@ async function ensureHistory(k: string, fresh = false) {
   convo[k] = items;
   if (isTerm(k)) return;
   const first = items.find(i => i.kind === "me");
-  if (chats[k] && [NEW, "Gesprek", "Algemeen gesprek"].includes(chats[k].title) && first) { chats[k].title = (first.text || "Afbeelding").slice(0, 48); saveChats(); }
+  if (chats[k] && [NEW, "Gesprek", "Algemeen gesprek"].includes(chats[k].title) && first) { chats[k].title = (first.text || t("chat.image")).slice(0, 48); saveChats(); }
 }
 
 // ---------- permission and question cards
@@ -238,15 +243,15 @@ function describe(r: any): string {
 }
 function card(r: any): string {
   if (r.tool_name === "AskUserQuestion") {
-    return `<div class="perm" data-id="${esc(r.id)}"><div class="q">Claude vraagt</div>${(r.input.questions || []).map((q: any, qi: number) => `
+    return `<div class="perm" data-id="${esc(r.id)}"><div class="q">${t("card.asks")}</div>${(r.input.questions || []).map((q: any, qi: number) => `
       <div class="qh">${esc(q.question)}</div>
       <div class="opts" data-q="${qi}" data-multi="${q.multiSelect ? 1 : 0}">${(q.options || []).map((o: any) =>
         `<button class="btn" data-label="${esc(o.label)}" title="${esc(o.description || "")}">${esc(o.label)}</button>`).join("")}</div>`).join("")}
-      <div class="acts"><button class="btn primary" data-act="answer">Antwoorden</button></div></div>`;
+      <div class="acts"><button class="btn primary" data-act="answer">${t("card.answer")}</button></div></div>`;
   }
-  return `<div class="perm" data-id="${esc(r.id)}"><div class="q">Claude wil <b>${esc(r.tool_name)}</b> gebruiken${r.project && r.project !== sel ? ` in ${esc(label(r.project))}` : ""}. Het wacht op jou.</div>
+  return `<div class="perm" data-id="${esc(r.id)}"><div class="q">${t("card.wants", { tool: esc(r.tool_name), where: r.project && r.project !== sel ? t("card.in", { name: esc(label(r.project)) }) : "" })}</div>
     <pre>${describe(r)}</pre>
-    <div class="acts"><button class="btn" data-act="deny">Weigeren</button><button class="btn primary" data-act="allow">Toestaan</button></div></div>`;
+    <div class="acts"><button class="btn" data-act="deny">${t("card.deny")}</button><button class="btn primary" data-act="allow">${t("card.allow")}</button></div></div>`;
 }
 async function onCard(e: MouseEvent) {
   const b = (e.target as HTMLElement).closest("button"); if (!b) return;
@@ -285,7 +290,7 @@ function terms(hiddenOnes = false): Term[] {
     .map((x: any) => { const a = live.get(x.sessionId);
       const ov = settings.overrides[x.sessionId];
       return { key: `t:${x.sessionId}`, sid: x.sessionId, id: a.id, mtime: x.last_at ? Date.parse(x.last_at) : 0, project: ov !== undefined ? ov : x.project ?? null, kind: a.kind, status: a.status, state: a.state,
-        title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || "Terminalsessie").slice(0, 48) }; })
+        title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || t("chat.terminal")).slice(0, 48) }; })
     .filter((t: Term) => !(t.kind === "background" && t.state === "done"));
 }
 const termOf = (k: string) => terms().find(t => t.key === k);
@@ -319,22 +324,22 @@ const lead = (p: string) => settings.projects[p]?.icon ? `<span class="emo">${es
 function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const selP = projOf(sel), T = terms();
-  const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="Sluiten">×</button>`;
-  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(c.title)}</span>${subBadge(c.key)}${trailOf([c.key])}${x(c.key)}</div>`;
-  const tsub = (t: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === t.key ? "sel" : ""}" data-k="${esc(t.key)}" data-parent="${esc(t.project ?? "")}" title="Staat open in de terminal">${glyph("term")}<span class="nm">${esc(t.title)}</span>${subBadge(t.key)}${t.status === "busy" ? '<span class="spin"></span>' : t.state === "blocked" ? '<span class="dot"></span>' : ""}${x(t.key)}</div>`;
+  const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="${t("nav.close")}">×</button>`;
+  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(shownTitle(c.title))}</span>${subBadge(c.key)}${trailOf([c.key])}${x(c.key)}</div>`;
+  const tsub = (tm: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === tm.key ? "sel" : ""}" data-k="${esc(tm.key)}" data-parent="${esc(tm.project ?? "")}" title="${t("nav.inTerminal")}">${glyph("term")}<span class="nm">${esc(tm.title)}</span>${subBadge(tm.key)}${tm.status === "busy" ? '<span class="spin"></span>' : tm.state === "blocked" ? '<span class="dot"></span>' : ""}${x(tm.key)}</div>`;
   const head = (id: string, labelTxt: string, n: number, cls = "", add?: string) =>
-    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="Nieuw gesprek">+</button>` : ""}</div>`;
+    `<div class="grp ${cls} ${collapsed[id] ? "shut" : ""}" data-sec="${esc(id)}"><span class="chev"></span><span class="gl">${labelTxt}</span>${collapsed[id] && n ? `<span class="gn">${n}</span>` : ""}${add !== undefined ? `<button class="add" data-add="${esc(add)}" title="${t("nav.newChat")}">+</button>` : ""}</div>`;
 
   const w = waitCount(), due = snap.reminders.filter((r: any) => r.days <= 0).length;
-  let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">Wacht op jou</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
-    + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">Reminders</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`;
+  let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">${t("nav.waiting")}</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
+    + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">${t("nav.reminders")}</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`;
 
   const gc = chatsOf(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
   // conversations in the order Laurent dragged, the rest after them in their default order
   const byConv = (parent: string, rows: { key: string; html: string }[]) => { const o = convOrder[parent] || [];
     return rows.map((r, i) => ({ ...r, i })).sort((a, b) => { const ia = o.indexOf(a.key), ib = o.indexOf(b.key);
       return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : a.i - b.i; }).map(r => r.html).join(""); };
-  const general = `<div class="sec" data-drop="Algemeen">${head("Algemeen", "ALGEMEEN", gc.length + gt.length, "", "")}`
+  const general = `<div class="sec" data-drop="Algemeen">${head("Algemeen", t("general").toUpperCase(), gc.length + gt.length, "", "")}`
     + (collapsed.Algemeen && !q ? "" : byConv("", [...gc.map(c => ({ key: c.key, html: sub(c, false) })), ...gt.map(t => ({ key: t.key, html: tsub(t, false) }))])) + `</div>`;
 
   // an app conversation stays until Laurent closes it, a terminal session as long as it is open
@@ -349,9 +354,9 @@ function renderNav() {
   const projRows = (list: any[]) => { let body = ""; for (const p of list) {
       const cs = chatsOf(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
       const on = p.name === selP && chats[sel]?.draft ? "sel" : "";
-      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="Nieuw gesprek over ${esc(p.name)}">+</button></div>`
+      body += `<div class="row prow ${on} ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="${t("nav.newChatAbout", { name: esc(p.name) })}">+</button></div>`
         + byConv(p.name, [...ts.map(t => ({ key: t.key, html: tsub(t) })), ...cs.slice(0, 5).map(c => ({ key: c.key, html: sub(c) }))])
-        + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">nog ${cs.length - 5}</span></div>` : "");
+        + (cs.length > 5 ? `<div class="row subrow fold" data-p="${esc(p.name)}"><span class="nm">${t("nav.more", { n: cs.length - 5 })}</span></div>` : "");
   } return body; };
   const secs: Record<string, string> = { Algemeen: general };
   for (const ctx of ["Antenna", "Meersman", "Personal"]) {
@@ -371,21 +376,21 @@ function renderChat() {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("new").style.display = $("term").style.display = $("close").style.display = "none";
     $("ts").textContent = "";
-    $("t").textContent = "Reminders"; msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel });
+    $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel });
     return;
   }
   if (sel === WAIT) {
-    $("t").textContent = "Wacht op jou"; $("ts").textContent = `${waitCount()}`;
+    $("t").textContent = t("nav.waiting"); $("ts").textContent = `${waitCount()}`;
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("new").style.display = $("term").style.display = $("close").style.display = "none";
     const byK: Record<string, any[]> = {};
     for (const r of pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${esc(projOf(k))} · ` : ""}${esc(label(k))}`;
     msgs.innerHTML = waitCount() ? `<div class="waitlist">${Object.entries(byK).map(([k, rs]) => `<div class="proj">${head(k)}</div>${rs.map(card).join("")}`).join("")}
-      ${blockedAgents().map(a => `<div class="proj">${esc(a.name)}</div><div class="perm"><div class="q">Achtergrondsessie in de terminal, geblokkeerd, gestart ${new Date(a.startedAt).toLocaleDateString("nl-BE")}.</div>
-        <div class="acts"><button class="btn" data-bg="hide" data-id="${esc(a.id)}">Verbergen</button><button class="btn" data-bg="stop" data-id="${esc(a.id)}">Stoppen</button>
-        <button class="btn primary" data-bg="attach" data-id="${esc(a.id)}">Openen in Terminal</button></div></div>`).join("")}</div>`
-      : '<div class="note">Niets wacht op jou.</div>';
+      ${blockedAgents().map(a => `<div class="proj">${esc(a.name)}</div><div class="perm"><div class="q">${t("wait.bg", { date: new Date(a.startedAt).toLocaleDateString(currentLang()) })}</div>
+        <div class="acts"><button class="btn" data-bg="hide" data-id="${esc(a.id)}">${t("wait.hide")}</button><button class="btn" data-bg="stop" data-id="${esc(a.id)}">${t("wait.stop")}</button>
+        <button class="btn primary" data-bg="attach" data-id="${esc(a.id)}">${t("bar.openTerminal")}</button></div></div>`).join("")}</div>`
+      : `<div class="note">${t("wait.none")}</div>`;
     return;
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
@@ -393,9 +398,10 @@ function renderChat() {
   $("term").style.display = T && T.kind !== "background" ? "none" : "";
   const pn = T ? T.project : projOf(sel), P = project(pn);
   $("t").textContent = pLabel(pn);
-  $("t").classList.add("editable"); $("t").title = "Project aanpassen: icoon, naam, of dit gesprek naar een ander project";
-  const stateNl: Record<string, string> = { Active: "Actief", Blocked: "Wacht op iemand", Quiet: "Stil", Paused: "Gepauzeerd" };
-  $("ts").textContent = P ? `${stateNl[P.state] || P.state}${P.open != null ? ` · ${P.open} open` : ""}` : "";
+  $("t").classList.add("editable"); $("t").title = t("chat.editTitle");
+  // the state is the vault's own word (Active, Blocked…), shown translated when it is a known one
+  const st = ["Active", "Blocked", "Quiet", "Paused"].includes(P?.state) ? t(`state.${P.state}` as Key) : P?.state;
+  $("ts").textContent = P ? `${st}${P.open != null ? ` · ${t("chat.openCount", { n: P.open })}` : ""}` : "";
   const items = convo[sel] || [];
   msgs.innerHTML = (items.length ? items.map(it => {
     if (it.kind === "me") return (it.imgs?.length ? `<div class="mimgs">${thumbs(it.imgs)}</div>` : "")
@@ -404,23 +410,23 @@ function renderChat() {
     if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
     if (it.kind === "err") return `<div class="err">${esc(it.text)}</div>`;
     return `<div class="note">${esc(it.text)}</div>`;
-  }).join("") : `<div class="note">${P ? `Nieuw gesprek over ${esc(pn)}. Claude leest eerst de projectnote.` : "Algemeen gesprek. Noem je een project, dan komt het gesprek onder dat project."}</div>`)
-    + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">Over welk project gaat dit?</div><div class="opts">${routeChoice.hits.map(h =>
-        `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">Hier houden</button></div></div>` : "")
+  }).join("") : `<div class="note">${P ? t("chat.emptyProject", { name: esc(pn) }) : t("chat.emptyGeneral")}</div>`)
+    + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">${t("route.question")}</div><div class="opts">${routeChoice.hits.map(h =>
+        `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">${t("route.keep")}</button></div></div>` : "")
     + pendingList.filter(r => r.project === sel).map(card).join("")
     + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel) : "")
-    + (T && T.status === "busy" ? `<div class="working"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">Claude schrijft in de terminal. Tekst verschijnt hier zodra een blok af is.</span></div>` : "");
+    + (T && T.status === "busy" ? `<div class="working"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${t("term.writing")}</span></div>` : "");
   const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
-  $("movebar").innerHTML = T ? `<span>Dit gesprek staat open in de terminal${T.status === "busy" ? " en werkt nog" : ""}. Typ je hier, dan gaat het verder als kopie in de app. De terminal blijft zoals hij is.</span>`
-    : about ? `<span>Dit gesprek gaat over <b>${esc(about)}</b>.</span><span class="sp"></span>
-    <button class="btn" data-move-no="1">Nee</button><button class="btn primary" data-move="${esc(about)}">Onder ${esc(about)} zetten</button>` : "";
+  $("movebar").innerHTML = T ? `<span>${t("move.term", { busy: T.status === "busy" ? t("move.termBusy") : "" })}</span>`
+    : about ? `<span>${t("move.about", { name: esc(about) })}</span><span class="sp"></span>
+    <button class="btn" data-move-no="1">${t("move.no")}</button><button class="btn primary" data-move="${esc(about)}">${t("move.yes", { name: esc(about) })}</button>` : "";
   $("movebar").style.display = T || about ? "" : "none";
   const busy = status[sel] === "busy";
   $("send").classList.toggle("stop", busy);
   $("send").innerHTML = busy ? '<svg class="i" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none"/></svg>'
     : '<svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg>';
-  $("hint").textContent = busy ? "Claude werkt. Je kan naar een ander gesprek, dit loopt door." : "";
-  ($("c") as HTMLTextAreaElement).placeholder = T ? "Verder in de app…" : P ? `Vraag iets over ${pn}…` : "Vraag iets…";
+  $("hint").textContent = busy ? t("hint.busy") : "";
+  ($("c") as HTMLTextAreaElement).placeholder = T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general");
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
 
@@ -431,12 +437,12 @@ function renderSubs() {
   if (!list.length) { box.innerHTML = ""; return; }
   const run = list.filter(a => a.running), done = list.filter(a => !a.running);
   const meta = (a: Sub) => [a.agentType, a.model].filter(Boolean).map(esc).join(" · ");
-  const row = (a: Sub) => `<div class="sa ${a.running ? "on" : ""}" data-agent="${esc(a.id)}" title="Laatste berichten tonen"><span class="sdot"></span><span class="sd">${esc(a.description)}</span><span class="sm">${meta(a)}</span>`
+  const row = (a: Sub) => `<div class="sa ${a.running ? "on" : ""}" data-agent="${esc(a.id)}" title="${t("subs.show")}"><span class="sdot"></span><span class="sd">${esc(a.description)}</span><span class="sm">${meta(a)}</span>`
     + `<span class="sl">${a.running ? (a.tool ? toolLine(a.tool, a.input) : esc(a.text || "")) : ""}</span>`
     + (a.running ? `<span class="ws" data-since="${Date.parse(a.started_at)}">${dur((Date.now() - Date.parse(a.started_at)) / 1000)}</span>` : `<span class="sm">${dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}</span>`) + `</div>`
-    + (subLog[a.id] ? `<div class="slog">${subLog[a.id].length ? subLog[a.id].map(t => `<div class="ai">${md(t)}</div>`).join("") : '<div class="sm">Nog niets geschreven.</div>'}</div>` : "");
+    + (subLog[a.id] ? `<div class="slog">${subLog[a.id].length ? subLog[a.id].map(m => `<div class="ai">${md(m)}</div>`).join("") : `<div class="sm">${t("subs.nothing")}</div>`}</div>` : "");
   box.innerHTML = run.map(row).join("")
-    + (done.length ? `<button class="sdone" data-subs-toggle>${done.length} ${done.length === 1 ? "agent" : "agents"} klaar</button>${subsOpen.has(sel) ? done.map(row).join("") : ""}` : "");
+    + (done.length ? `<button class="sdone" data-subs-toggle>${tn("subs.done", done.length)}</button>${subsOpen.has(sel) ? done.map(row).join("") : ""}` : "");
 }
 
 // the title opens a small panel: which project this conversation belongs to, and the project's icon and name
@@ -444,11 +450,11 @@ function openPop() {
   if (VIEWS.includes(sel)) return;
   const T = isTerm(sel) ? termOf(sel) : undefined, cur = T ? T.project : projOf(sel), c = cur ? settings.projects[cur] || {} : {};
   const names = snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
-  $("pop").innerHTML = `<label class="plab">Project van dit gesprek
-      <select id="popproj"><option value="">Algemeen</option>${names.map((n: string) => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
-    ${cur ? `<div class="plab">${esc(cur)} in de zijbalk
-      <div class="setrow"><input class="field ico" id="popicon" maxlength="4" placeholder="Icoon" value="${esc(c.icon || "")}"><input class="field" id="poplabel" placeholder="${esc(cur)}" value="${esc(c.label || "")}"></div></div>` : ""}
-    <div class="acts"><button class="btn" data-pop="cancel">Annuleren</button><button class="btn primary" data-pop="save">Bewaren</button></div>`;
+  $("pop").innerHTML = `<label class="plab">${t("pop.project")}
+      <select id="popproj"><option value="">${t("general")}</option>${names.map((n: string) => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
+    ${cur ? `<div class="plab">${t("pop.sidebar", { name: esc(cur) })}
+      <div class="setrow"><input class="field ico" id="popicon" maxlength="4" placeholder="${t("pop.icon")}" value="${esc(c.icon || "")}"><input class="field" id="poplabel" placeholder="${esc(cur)}" value="${esc(c.label || "")}"></div></div>` : ""}
+    <div class="acts"><button class="btn" data-pop="cancel">${t("pop.cancel")}</button><button class="btn primary" data-pop="save">${t("pop.save")}</button></div>`;
   $("pop").hidden = false;
   ($("popproj") as HTMLSelectElement).focus();
 }
@@ -474,7 +480,7 @@ function workingHtml(k: string): string {
   // the running step already has its own line with a spinner, so this only says that Claude is at it
   const running = (convo[k] || []).some(i => i.kind === "tool" && i.state === "run");
   const since = busySince[k] || Date.now(), sec = Math.round((Date.now() - since) / 1000);
-  return `<div class="working" aria-live="polite"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${running ? "Claude werkt" : "Claude denkt na"}</span><span class="mono ws" data-since="${since}">${sec} s</span></div>`;
+  return `<div class="working" aria-live="polite"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${running ? t("work.working") : t("work.thinking")}</span><span class="mono ws" data-since="${since}">${sec} s</span></div>`;
 }
 const dur = (sec: number) => { const s = Math.max(0, Math.round(sec)); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`; };
 setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => { e.textContent = dur((Date.now() - Number(e.dataset.since)) / 1000); }), 1000);
@@ -484,20 +490,20 @@ function renderInsp() {
   document.querySelectorAll<HTMLElement>("#seg button").forEach(b => b.classList.toggle("on", b.dataset.tab === tab));
   if (!P) {
     const due = snap.reminders.filter((r: any) => r.days <= 0);
-    box.innerHTML = `<h2>Vandaag <span class="count">${due.length}</span></h2>${due.length ? `<ul class="todo">${due.map((r: any) =>
-      `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count">${esc(r.project || "")} · <span class="${urgency(r.days)}">${r.days < 0 ? `${-r.days} d vervallen` : "vandaag"}</span></span></span></li>`).join("")}</ul>`
-      : '<div class="meta">Niets vervallen, niets voor vandaag.</div>'}`;
+    box.innerHTML = `<h2>${t("insp.today")} <span class="count">${due.length}</span></h2>${due.length ? `<ul class="todo">${due.map((r: any) =>
+      `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count">${esc(r.project || "")} · <span class="${urgency(r.days)}">${r.days < 0 ? t("due.overdue", { n: -r.days }) : t("due.today")}</span></span></span></li>`).join("")}</ul>`
+      : `<div class="meta">${t("insp.nothingDue")}</div>`}`;
     return;
   }
   const rem = snap.reminders.filter((r: any) => r.project === P.name);
-  const when = (r: any) => r.days < 0 ? `${-r.days} d vervallen` : r.days === 0 ? "vandaag" : `over ${r.days} d`;
+  const when = (r: any) => r.days < 0 ? t("due.overdue", { n: -r.days }) : r.days === 0 ? t("due.today") : t("due.in", { n: r.days });
   const items: string[] = P.open_items || [];
-  if (tab === "stand") box.innerHTML = `<h2>Stand van zaken</h2><div class="meta">Bijgewerkt ${esc(P.last)}</div><div class="stand">${md(P.stand || "Geen stand van zaken.")}</div>`;
-  else if (tab === "rem") box.innerHTML = rem.length ? `<h2>Reminders</h2><ul class="todo">${rem.map((r: any) =>
-    `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count ${urgency(r.days)}">${when(r)}</span></span></li>`).join("")}</ul>` : '<div class="meta">Geen reminders voor dit project.</div>';
-  else box.innerHTML = `<h2>Open <span class="count">${items.length}</span></h2>${items.length
+  if (tab === "stand") box.innerHTML = `<h2>${t("insp.stand")}</h2><div class="meta">${t("insp.updated", { date: esc(P.last) })}</div><div class="stand">${md(P.stand || t("insp.noStand"))}</div>`;
+  else if (tab === "rem") box.innerHTML = rem.length ? `<h2>${t("nav.reminders")}</h2><ul class="todo">${rem.map((r: any) =>
+    `<li><input type="checkbox" disabled><span><span class="tx">${md(r.title)}</span><span class="count ${urgency(r.days)}">${when(r)}</span></span></li>`).join("")}</ul>` : `<div class="meta">${t("insp.noRem")}</div>`;
+  else box.innerHTML = `<h2>${t("tab.open")} <span class="count">${items.length}</span></h2>${items.length
     ? `<ul class="todo">${items.map(x => `<li><input type="checkbox" disabled><span class="tx">${md(x)}</span></li>`).join("")}</ul>`
-    : '<div class="meta">Geen open lussen in de note.</div>'}`;
+    : `<div class="meta">${t("insp.noOpen")}</div>`}`;
 }
 
 function render() { renderNav(); renderChat(); renderInsp(); }
@@ -526,11 +532,11 @@ async function sendMsg(forced?: string) {
   if ((!text && !attached.length) || sel === WAIT) return;
   if (isTerm(sel)) {
     // typing in a terminal conversation: fork it into an app conversation under the same project
-    const t = termOf(sel); if (!t) return;
-    const k = newChat(t.project);
-    Object.assign(chats[k], { title: t.title, fork: t.sid, draft: false });
-    forked.push(t.sid); store.set("forkedTerms", forked);
-    convo[k] = [...(convo[sel] || []), { kind: "note", text: "Verder in de app. De terminal blijft zoals hij is." }];
+    const tm = termOf(sel); if (!tm) return;
+    const k = newChat(tm.project);
+    Object.assign(chats[k], { title: tm.title, fork: tm.sid, draft: false });
+    forked.push(tm.sid); store.set("forkedTerms", forked);
+    convo[k] = [...(convo[sel] || []), { kind: "note", text: t("note.forked") }];
     await select(k);
     return sendMsg(text);
   }
@@ -539,10 +545,10 @@ async function sendMsg(forced?: string) {
   // first message of a general conversation: if it names one project, it goes under that project
   if (c && !c.project && !forced && !(convo[k] || []).length) {
     const hits = findProjects(text);
-    if (hits.length === 1) { c.project = hits[0]; push(k, { kind: "note", text: `Onder ${hits[0]} gezet` }); }
+    if (hits.length === 1) { c.project = hits[0]; push(k, { kind: "note", text: t("note.moved", { name: hits[0] }) }); }
     else if (hits.length > 1) { routeChoice = { key: k, text, hits }; renderChat(); return; }
   }
-  if (c) { if (c.title === NEW) c.title = (text || "Afbeelding").slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
+  if (c) { if (c.title === NEW) c.title = (text || t("chat.image")).slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
   const imgs = attached; attached = []; renderAtts();
   push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; busySince[k] = Date.now(); render();
   $("log").scrollTop = 1e9;
@@ -557,7 +563,7 @@ async function closeChat(k: string) {
   const title = isTerm(k) ? termOf(k)?.title : label(k);
   if (isTerm(k)) { forked.push(k.slice(2)); store.set("forkedTerms", forked); }
   else if (chats[k]) { await invoke("stop", { project: k }); chats[k].closed = Date.now(); delete status[k]; saveChats(); }
-  toast(`Gesloten: ${title}`, () => reopen(k));
+  toast(t("toast.closed", { title: title ?? "" }), () => reopen(k));
   if (sel === k) { const p = isTerm(k) ? null : projOf(k); await select(p && chatsOf(p)[0] ? chatsOf(p)[0].key : WAIT); }
   else render();
 }
@@ -569,15 +575,15 @@ async function reopen(k: string) {
 }
 let toastTimer = 0;
 function toast(text: string, undo: () => void) {
-  const t = $("toast");
-  t.innerHTML = `<span>${esc(text)}</span><span class="sp"></span><button class="btn" id="undo">Ongedaan maken</button>`;
-  t.hidden = false;
+  const el = $("toast");
+  el.innerHTML = `<span>${esc(text)}</span><span class="sp"></span><button class="btn" id="undo">${t("toast.undo")}</button>`;
+  el.hidden = false;
   $("undo").onclick = undo;
-  clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { t.hidden = true; }, 8000);
+  clearTimeout(toastTimer); toastTimer = window.setTimeout(() => { el.hidden = true; }, 8000);
 }
 // what was closed under a project (or under Algemeen when p is null), newest first
 function closedOf(p: string | null): { key: string; title: string }[] {
-  const cs = Object.values(chats).filter(c => c.closed && c.project === p).sort((a, b) => b.closed! - a.closed!).map(c => ({ key: c.key, title: c.title }));
+  const cs = Object.values(chats).filter(c => c.closed && c.project === p).sort((a, b) => b.closed! - a.closed!).map(c => ({ key: c.key, title: shownTitle(c.title) }));
   const ts = terms(true).filter(t => t.project === p).map(t => ({ key: t.key, title: t.title }));
   return [...cs, ...ts].slice(0, 8);
 }
@@ -641,20 +647,25 @@ window.addEventListener("pointerup", () => {
   }
   renderNav();
 });
-listen<Settings>("settings-changed", e => { settings = { ...settings, ...e.payload }; loadSnapshot(); });
+listen<Settings>("settings-changed", async e => {
+  const relang = e.payload.language !== settings.language;
+  settings = { ...settings, ...e.payload };
+  if (relang) { await initI18n(); applyStatic(); render(); } // a new language applies without a restart
+  loadSnapshot();
+});
 $("t").addEventListener("click", openPop);
 // right-click on a conversation in the sidebar: the Mac context menu
 $("nav").addEventListener("contextmenu", e => {
-  const t = e.target as HTMLElement, m = $("ctx");
-  const r = t.closest<HTMLElement>(".row[data-k]"), pr = t.closest<HTMLElement>(".prow"), gh = t.closest<HTMLElement>('.grp[data-sec="Algemeen"]');
+  const el = e.target as HTMLElement, m = $("ctx");
+  const r = el.closest<HTMLElement>(".row[data-k]"), pr = el.closest<HTMLElement>(".prow"), gh = el.closest<HTMLElement>('.grp[data-sec="Algemeen"]');
   if (r && !VIEWS.includes(r.dataset.k!)) {
     m.dataset.k = r.dataset.k!;
-    m.innerHTML = `<button data-ctx="assign">Wijzig project…</button><button data-ctx="close">Sluiten</button>`;
+    m.innerHTML = `<button data-ctx="assign">${t("ctx.assign")}</button><button data-ctx="close">${t("nav.close")}</button>`;
   } else if (pr || gh) {
     const p = pr ? pr.dataset.p! : null, closed = closedOf(p);
     m.dataset.k = ""; m.dataset.p = p ?? "";
-    m.innerHTML = `<button data-ctx="new">Nieuw gesprek</button>${closed.length ? `<div class="ctxh">Onlangs gesloten</div>${closed.map(c =>
-      `<button data-ctx="reopen" data-k="${esc(c.key)}">${esc(c.title)}</button>`).join("")}` : '<div class="ctxh">Niets gesloten</div>'}`;
+    m.innerHTML = `<button data-ctx="new">${t("nav.newChat")}</button>${closed.length ? `<div class="ctxh">${t("ctx.recent")}</div>${closed.map(c =>
+      `<button data-ctx="reopen" data-k="${esc(c.key)}">${esc(c.title)}</button>`).join("")}` : `<div class="ctxh">${t("ctx.none")}</div>`}`;
   } else return;
   e.preventDefault();
   m.style.left = `${e.clientX}px`; m.style.top = `${e.clientY}px`; m.hidden = false;
@@ -687,7 +698,7 @@ $("msgs").addEventListener("click", e => {
   const rt = (e.target as HTMLElement).closest<HTMLElement>("[data-route-to]");
   if (rt && routeChoice) {
     const r = routeChoice; routeChoice = null;
-    if (rt.dataset.routeTo) { chats[r.key].project = rt.dataset.routeTo; push(r.key, { kind: "note", text: `Onder ${rt.dataset.routeTo} gezet` }); }
+    if (rt.dataset.routeTo) { chats[r.key].project = rt.dataset.routeTo; push(r.key, { kind: "note", text: t("note.moved", { name: rt.dataset.routeTo }) }); }
     sendMsg(r.text); return;
   }
   onCard(e);
@@ -735,14 +746,14 @@ document.addEventListener("click", e => {
 $("zoom").addEventListener("click", () => { $("zoom").hidden = true; });
 window.addEventListener("keydown", e => { if (e.key === "Escape" && !$("zoom").hidden) { e.preventDefault(); $("zoom").hidden = true; } });
 $("send").addEventListener("click", () => {
-  if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: "Gestopt." }); render(); }
+  if (status[sel] === "busy") { invoke("stop", { project: sel }); status[sel] = "idle"; push(sel, { kind: "note", text: t("note.stopped") }); render(); }
   else sendMsg();
 });
 $("close").addEventListener("click", () => { if (sel !== WAIT) closeChat(sel); });
 $("new").addEventListener("click", () => { if (sel !== WAIT) select(newChat(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel))); });
 $("movebar").addEventListener("click", e => {
   const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
-  if (b.dataset.move) { setProject(sel, b.dataset.move, `Onder ${b.dataset.move} gezet`); render(); } else { dismissed.add(sel); renderChat(); }
+  if (b.dataset.move) { setProject(sel, b.dataset.move, t("note.moved", { name: b.dataset.move })); render(); } else { dismissed.add(sel); renderChat(); }
 });
 $("term").addEventListener("click", () => {
   if (sel === WAIT) return;
@@ -777,6 +788,7 @@ async function pollAgents() {
 // ---------- start: adopt conversations from earlier versions (general:<id>, plain project names)
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
 try { settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; } catch { /* older backend */ }
+await initI18n(); applyStatic();
 await loadSnapshot();
 const oldGens: Record<string, { title: string; at: number }> = store.get("gens", {});
 for (const k of await invoke<string[]>("chats")) {
