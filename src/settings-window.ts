@@ -14,7 +14,7 @@ import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type V
 type Settings = { vault: string; vaults?: Record<string, VaultMap>; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
   integrations: Record<string, Record<string, any>>; boards: Record<string, BoardRef>; github: { on: boolean; owners: string }; mail: { on: boolean; account: string }; language?: string;
   favicons?: { on: boolean; last: string; tried: Record<string, string> };
-  agents: { default: string; providers: Record<string, { on: boolean; bin: string }> } };
+  agents: { default: string; providers: Record<string, { on: boolean; bin: string; [opt: string]: unknown }> } };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const root = document.getElementById("set")!;
 let settings: Settings = await invoke<Settings>("get_settings");
@@ -180,6 +180,8 @@ function agentPane(p: AgentStatus) {
       <span class="fl">${t("ag.status")}</span><span class="status"><span class="sdot ${d.installed && d.loggedIn !== false ? "on" : ""}"></span>${found}${login}${d.note ? ` · <code>${esc(d.note)}</code>` : ""}</span>
       <span class="fl">${t("ag.on")}</span><label class="chk"><input type="checkbox" id="agon-${id}" ${cfg.on ? "checked" : ""}> ${t("ag.onLabel")}</label>
       <label class="fl" for="agbin-${id}">${t("ag.bin")}</label><input class="field" id="agbin-${id}" value="${esc(cfg.bin)}" placeholder="${t("ag.binPh", { bin: esc(p.defaultBin) })}" spellcheck="false">
+      ${(ap?.options ?? []).map(o => `<label class="fl" for="agopt-${id}-${esc(o.id)}">${at(ap!, o.label)}</label><select class="field" id="agopt-${id}-${esc(o.id)}">${o.choices.map(c =>
+        `<option value="${esc(c.id)}" ${(cfg[o.id] ?? o.choices[0].id) === c.id ? "selected" : ""}>${at(ap!, c.label)}</option>`).join("")}</select>`).join("")}
       <span class="fl">${t("ag.caps")}</span><span class="hint">${caps}</span>
       ${ap ? `<span></span><div class="hint">${at(ap, "set.help")}</div>` : ""}
     </div>`;
@@ -234,7 +236,10 @@ root.addEventListener("click", async e => {
   if (b.dataset.set === "ghcheck") ghCheck();
   if (b.dataset.set === "agcheck") { agMsg = ""; agCheck(); }
   if (b.dataset.set === "agsave" && agSt) {
-    const providers = Object.fromEntries(agSt.providers.map(p => [p.id, { on: (document.getElementById(`agon-${p.id}`) as HTMLInputElement).checked, bin: val(`agbin-${p.id}`) }]));
+    // a provider's options (packages/agent-<id>, `options`) are stored next to on and bin
+    const opts = (id: string) => Object.fromEntries((agent(id)?.options ?? []).map(o => [o.id, val(`agopt-${id}-${o.id}`)]));
+    const providers = Object.fromEntries(agSt.providers.map(p => [p.id, { ...settings.agents?.providers[p.id], ...opts(p.id),
+      on: (document.getElementById(`agon-${p.id}`) as HTMLInputElement).checked, bin: val(`agbin-${p.id}`) }]));
     const next = { ...settings, agents: { default: (document.getElementById("agdefault") as HTMLSelectElement).value, providers } };
     try { settings = await invoke<Settings>("set_settings", { settings: next }); agMsg = t("set.saved"); agOk = true; await agCheck(); }
     catch (x) { agMsg = String(x); agOk = false; render(); }

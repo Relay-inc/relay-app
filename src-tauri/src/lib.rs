@@ -301,13 +301,14 @@ fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault:
 // pending folder; a provider builds the command, turns its output into agent_core::Event, reads its own logs.
 
 /// A provider's Env, owned, so it can go to a blocking thread.
-struct EnvBuf { home: String, vault: String, path: String, bin: String, pending: PathBuf }
+struct EnvBuf { home: String, vault: String, path: String, bin: String, pending: PathBuf, opts: Value }
 impl EnvBuf {
-    fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending } }
+    fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending, opts: &self.opts } }
 }
 fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     let s = st.settings.lock().unwrap();
-    EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home()), pending: pending_dir(app) }
+    EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home()), pending: pending_dir(app),
+        opts: s["agents"]["providers"][p.id()].clone() }
 }
 /// A conversation's provider: its session's, else the one asked for when switched on, else the default.
 fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentProvider {

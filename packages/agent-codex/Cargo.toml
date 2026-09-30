@@ -1,0 +1,9 @@
+[package]
+name = "agent-codex"
+version = "0.1.0"
+edition = "2021"
+description = "OpenAI Codex as an agent provider: codex app-server over bridge.py, approvals, rollouts, the thread index, usage"
+
+[dependencies]
+agent-core.workspace = true
+serde_json.workspace = true

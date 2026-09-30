@@ -131,7 +131,7 @@ impl AgentProvider for Claude {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn env<'a>(p: &'a Path) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/Users/me/.local/bin/claude", pending: p } }
+    fn env<'a>(p: &'a Path) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/Users/me/.local/bin/claude", pending: p, opts: &Value::Null } }
     #[test]
     fn spawn_args_stay_as_before() {
         let p = PathBuf::from("/tmp/pending");

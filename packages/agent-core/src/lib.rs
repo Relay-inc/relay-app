@@ -52,6 +52,13 @@ pub struct Env<'a> {
     pub bin: &'a str,
     /// The pending folder: `<id>.json` requests, `<id>.answer.json` answers.
     pub pending: &'a Path,
+    /// The provider's own settings, `settings.agents.providers.<id>` (`on`, `bin` and the keys of its
+    /// options, see `options` in src/types.ts). Null when there are none.
+    pub opts: &'a Value,
+}
+impl Env<'_> {
+    /// A string option, "" when unset.
+    pub fn opt(&self, key: &str) -> &str { self.opts[key].as_str().unwrap_or("") }
 }
 
 /// Installed, which version, logged in. `None` where the provider cannot tell.

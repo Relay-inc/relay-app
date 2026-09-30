@@ -13,6 +13,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2",
     "@vault/agent-claude": "workspace:*",
+    "@vault/agent-codex": "workspace:*",
     "@vault/agent-core": "workspace:*",
     "@vault/board-core": "workspace:*",
     "@vault/integration-linear": "workspace:*",

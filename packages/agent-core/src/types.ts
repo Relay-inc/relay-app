@@ -54,4 +54,9 @@ export interface AgentProvider<K extends string = string> {
   strings: Locales<K>;
   /** A model id as the usage view names it. */
   modelName?(id: string): string;
+  /** Extra settings for Settings › Agents, stored next to `on` and `bin` in `settings.agents.providers.<id>` and
+   * given to the backend as `env.opts`. `label` and each choice's `label` are keys in `strings`; the first choice
+   * is the default. */
+  options?: AgentOption<K>[];
 }
+export type AgentOption<K extends string = string> = { id: string; label: K; choices: { id: string; label: K }[] };
