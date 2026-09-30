@@ -474,8 +474,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link",
 ]
 
@@ -3136,6 +3138,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha1_smol"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bbfa15b3dddfee50a0fff136974b3e1bde555604ba463834a7eb7deb6417705d"
+
+[[package]]
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4148,11 +4156,13 @@ name = "vault"
 version = "0.1.0"
 dependencies = [
  "board-core",
+ "chrono",
  "integration-linear",
  "integration-productive",
  "integration-trello",
  "serde",
  "serde_json",
+ "sha1_smol",
  "sys-locale",
  "tauri",
  "tauri-build",

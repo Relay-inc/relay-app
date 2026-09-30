@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """One JSON snapshot of everything the control room shows.
 
-Reads the vault (work-state.md, each project's ## Open, reminders.md) and `claude agents --json`.
+Reads the vault (work-state.md, each project's ## Open) and `claude agents --json`. Reminders are
+read by the app itself (src-tauri/src/reminders.rs).
 Read-only. The app calls this and renders the result, so the parsing lives in one place. The app
-passes the vault's mapped paths (VAULT_WORK_STATE, VAULT_REMINDERS, VAULT_NOTES; "" when missing);
+passes the vault's mapped paths (VAULT_WORK_STATE, VAULT_NOTES; "" when missing);
 run by hand, the known layouts are the fallback.
 """
 import datetime as dt
 import glob
-import hashlib
 import json
 import os
 import re
@@ -19,7 +19,6 @@ VAULT = os.environ.get("VAULT") or sys.exit("snapshot: VAULT not set")
 # the brain lives in System/ in the new layout, in Resources/Meta/Claude/ in the old one
 META = next((os.path.join(VAULT, d) for d in ("System", "Resources/Meta/Claude") if os.path.isdir(os.path.join(VAULT, d))), os.path.join(VAULT, "System"))
 WORK_STATE = os.environ.get("VAULT_WORK_STATE", os.path.join(META, "rules/core/work-state.md"))
-REMINDERS = os.environ.get("VAULT_REMINDERS", os.path.join(META, "reminders.md"))
 NOTES = os.environ.get("VAULT_NOTES", os.path.join(VAULT, "Contexts"))
 NOTES = NOTES if os.path.isdir(NOTES) else VAULT
 # a context is a heading in work-state named after a folder of the notes (Contexts/Antenna…), or a known one
@@ -60,33 +59,8 @@ def note_state(name):
     return {"open": len(items) if op else None, "open_items": items, "stand": stand, "aliases": aliases}
 
 
-def reminders():
-    out = []
-    if not REMINDERS or not os.path.isfile(REMINDERS):
-        return out
-    # | date | reminder | source | repeat |, the repeat column optional
-    for line in open(REMINDERS, encoding="utf-8"):
-        m = re.match(r"^\| (\d{4}-\d\d-\d\d) \| (.*?) \| (.*?)(?: \| (.*?))? \|$", line.rstrip("\n"))
-        if not m:
-            continue
-        date, text, _source, repeat = m.groups()
-        proj = re.search(r"\[\[([^\]|]+)", text)
-        title = re.search(r"\*\*(.+?)\*\*", text)
-        days = (dt.date.fromisoformat(date) - TODAY).days
-        out.append({"id": hashlib.sha1(f"{date}|{text}".encode("utf-8")).hexdigest()[:8],  # same id as reminder-digest.py
-                    "date": date, "days": days, "project": proj.group(1) if proj else None,
-                    "title": unlink(title.group(1) if title else first_sentence(text)).rstrip("."), "text": text,
-                    "repeat": (repeat or "").strip() or None})
-    return sorted(out, key=lambda r: r["date"])
-
-
 def unlink(text):
     return re.sub(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]", r"\1", text)
-
-
-def first_sentence(text):
-    plain = unlink(text)
-    return re.split(r"(?<=[.:?!])\s", plain, maxsplit=1)[0][:120]
 
 
 CACHE = os.path.expanduser("~/Library/Application Support/be.laurentmeersman.vault/topics.json")
@@ -182,5 +156,4 @@ if __name__ == "__main__":
     projs = projects()
     ses = sessions()
     ses["items"] = topics(ses["items"], projs)
-    json.dump({"today": TODAY.isoformat(), "projects": projs, "reminders": reminders(),
-               "sessions": ses}, sys.stdout, ensure_ascii=False, indent=1)
+    json.dump({"today": TODAY.isoformat(), "projects": projs, "sessions": ses}, sys.stdout, ensure_ascii=False, indent=1)
