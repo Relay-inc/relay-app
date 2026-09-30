@@ -11,6 +11,7 @@
 .kcards{display:flex;flex-direction:column;gap:6px;min-height:28px;overflow-y:auto}
 .kcard{background:var(--bg);border-radius:calc(var(--r) - 2px);box-shadow:0 0 0 .5px var(--separator),0 1px 2px rgba(0,0,0,.06);padding:8px 10px;cursor:grab;-webkit-user-select:none;user-select:none}
 .kt{font-size:13px;line-height:1.4}
+.km .kprio.p1{color:#e5484d}.km .kprio.p2{color:#f76b15}
 .km{display:flex;gap:10px;margin-top:4px;font-size:12px;color:var(--secondary);font-variant-numeric:tabular-nums}
 .kghost{position:fixed;left:0;top:0;z-index:40;pointer-events:none;opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.18)}
 .pvf{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:12px 0 0;font-size:13px}

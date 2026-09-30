@@ -1,0 +1,9 @@
+{ "data": { "team": { "states": { "nodes": [
+  { "id": "s-done", "name": "Done", "type": "completed", "position": 5 },
+  { "id": "s-review", "name": "In Review", "type": "started", "position": 3 },
+  { "id": "s-todo", "name": "Todo", "type": "unstarted", "position": 1 },
+  { "id": "s-progress", "name": "In Progress", "type": "started", "position": 2 },
+  { "id": "s-cancel", "name": "Canceled", "type": "canceled", "position": 6 },
+  { "id": "s-backlog", "name": "Backlog", "type": "backlog", "position": 0 },
+  { "id": "s-triage", "name": "Triage", "type": "triage", "position": 0 }
+] } } } }

@@ -56,6 +56,17 @@ State lives in `~/Library/Application Support/be.laurentmeersman.vault/`: `setti
 `sessions.json` (conversation to session id) and `pending/`. Board provider tokens sit
 in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
 
+## Integrations
+
+The sidebar board shows one of these per vault project. Set them up under Vault › Settings… › Integrations; every
+secret goes to the macOS keychain (service `vault-app.<id>`), never to settings.json or the webview.
+
+| Tracker | Project › board | Setup |
+|---|---|---|
+| Productive | project › board | 1. In Productive, Settings › API integrations: create a token. 2. Paste it, fill in the organisation ID (and optionally your user ID, or use "Import from Claude Code"). 3. Save and test, then pick the board from the board's header. |
+| Trello | workspace › board | 1. Create a Power-Up at trello.com/power-ups/admin and copy its API key. 2. Use the Token link next to it to allow access and copy the token. 3. Paste both, Save and test ("Connected as …"). 4. Pick a board per vault project under "Boards per vault project". Optionally show only cards assigned to you. |
+| Linear | team › all issues or a Linear project | 1. In Linear, Settings › Account › Security & access: create a personal API key. 2. Paste it, Save and test (runs the `viewer` query: "Connected as …"). 3. Pick a team, or one of its projects, per vault project under "Boards per vault project". Optionally show completed and canceled states. |
+
 ## Board providers
 
 A task tracker shows as a kanban in the sidebar by implementing one contract in two halves.
@@ -67,9 +78,10 @@ A task tracker shows as a kanban in the sidebar by implementing one contract in 
 | `id`, `name` | `"productive"`, `"Productive"`. The id keys `settings.integrations.<id>` and the keychain service `vault-app.<id>`. |
 | `defaults(&mut cfg)`, `check(&cfg)` | Fill in and validate `settings.integrations.<id>` on every load and save. Keep `on` (bool, sidebar row shown). |
 | `ready(&cfg)`, `not_ready` | Whether the config is complete enough to call the API, and the `TEXT` key of the error when not. |
-| `secrets` | The keychain accounts under `vault-app.<id>` that must all be there: `["token"]` for Productive, `["key", "token"]` for Trello. |
+| `secrets` | The keychain accounts under `vault-app.<id>` that must all be there: `["token"]` for Productive and Linear, `["key", "token"]` for Trello. |
 | `url(cfg, method, path, body)` | The full URL for a call the webview asks for, `None` when that method and path are not allowed. This is the allowlist: keep it to reads plus the one write that moves a card. |
 | `headers(cfg, secrets)` | The headers carrying the secrets, in the order of `secrets` (and content type). |
+| `ok(body)` | Whether a 2xx answer is a success. `true` for REST; Linear (GraphQL) answers errors with 200 and `errors`. |
 | `error(code, body)` | An error answer as one line. |
 
 Commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
@@ -112,6 +124,17 @@ only those the user is a member of (`integrations.trello.mine`). A move sets `id
 a click opens the card's `shortUrl`. Key and token come from a Power-Up at trello.com/power-ups/admin and
 travel in the `Authorization: OAuth …` header. 401/403 and 429 read as a plain message, nothing retries by
 itself. The response mapping (`trello-map.ts`) is tested on fixture JSON with `pnpm test` (Node's test runner).
+
+**Linear** (`src/providers/linear.ts`): a project is a team, a board the whole team ("All issues", board id =
+team id) or one of its Linear projects. Columns are the team's workflow states by type (triage, backlog,
+unstarted, started, completed, canceled) then position, completed and canceled only with
+`integrations.linear.done`. Cards are the issues (identifier, title, assignee, priority, due date), 100 per page,
+at most 10 pages. All calls are `POST /graphql` to api.linear.app with the personal API key as `Authorization`.
+The backend lets any query through but only one mutation, `issueUpdate(id, input: { stateId })` with nothing but
+the two ids (the `MOVE` document in `linear-map.ts`, `LINEAR_MOVE` in `providers.rs`). GraphQL errors, also those
+answered with 200, read as "Linear: <message>"; an authentication error and the rate limit (429 or `RATELIMITED`)
+as a plain message, nothing retries by itself. A click opens the issue's `url`. The mapping (`linear-map.ts`) is
+tested on fixture JSON with `pnpm test`.
 
 A new provider: a `Provider` in `providers.rs` (with a test for its `url` allowlist), a `BoardProvider`
 in `src/providers/<id>.ts` added to `PROVIDERS`, its UI strings in all four locales.

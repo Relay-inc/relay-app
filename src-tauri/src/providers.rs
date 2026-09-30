@@ -1,8 +1,7 @@
-// Board providers: the external task trackers the sidebar board can show (Productive, Trello; Linear
-// next). The backend part of a provider is small on purpose: where its API lives, which calls the
+// Board providers: the external task trackers the sidebar board can show (Productive, Trello, Linear). The backend part of a provider is small on purpose: where its API lives, which calls the
 // webview may make, how the token is sent and how an error reads. Listing, moving and mapping cards is
 // the webview's side (src/providers/). The token lives in the macOS keychain under `vault-app.<id>`
-// (one entry per name in `secrets`: Productive has a token, Trello a key and a token),
+// (one entry per name in `secrets`: Productive and Linear have a token, Trello a key and a token),
 // goes to `security` and curl over stdin, never as an argument (visible in the process list), and it
 // never goes back to a webview. The rest of a provider's config is in settings.json under
 // `integrations.<id>`.
@@ -32,11 +31,13 @@ pub struct Provider {
     pub url: fn(cfg: &Value, method: &str, path: &str, body: &Option<Value>) -> Option<String>,
     /// the headers that carry the secrets (in the order of `secrets`), and anything else the API wants
     pub headers: fn(cfg: &Value, secrets: &[String]) -> Vec<String>,
+    /// whether a 2xx answer is a success: a GraphQL API (Linear) answers its errors with 200 and `errors`
+    pub ok: fn(body: &Value) -> bool,
     /// an error answer as one line: HTTP status and the API's own message
     pub error: fn(code: &str, body: &Value) -> String,
 }
 
-pub const PROVIDERS: &[Provider] = &[PRODUCTIVE, TRELLO];
+pub const PROVIDERS: &[Provider] = &[PRODUCTIVE, TRELLO, LINEAR];
 
 pub fn get(id: &str) -> Result<&'static Provider, String> {
     PROVIDERS.iter().find(|p| p.id == id).ok_or_else(|| trc_v("err.no_provider", id))
@@ -126,7 +127,7 @@ pub fn call(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Va
     let (text, code) = out.rsplit_once('\n').unwrap_or(("", &out));
     // some APIs (Trello) answer an error as plain text: kept as a string, cut short
     let v: Value = serde_json::from_str(text).unwrap_or_else(|_| if text.trim().is_empty() { Value::Null } else { Value::String(text.trim().chars().take(200).collect()) });
-    if code.starts_with('2') { Ok(v) } else { Err((p.error)(code, &v)) }
+    if code.starts_with('2') && (p.ok)(&v) { Ok(v) } else { Err((p.error)(code, &v)) }
 }
 
 // ---------- Productive: org and user id in the config, GET on any path, PATCH only on a single task
@@ -157,6 +158,7 @@ const PRODUCTIVE: Provider = Provider {
     },
     headers: |c, s| vec![format!("X-Auth-Token: {}", s[0]), format!("X-Organization-Id: {}", c["org"].as_str().unwrap_or("")),
         "Content-Type: application/vnd.api+json".into()],
+    ok: |_| true,
     error: |code, v| {
         let e = &v["errors"][0];
         format!("Productive {code}: {}", e["detail"].as_str().or(e["title"].as_str()).map_or_else(|| trc("err.unknown"), str::to_string))
@@ -189,10 +191,55 @@ const TRELLO: Provider = Provider {
     },
     headers: |_, s| vec![format!("Authorization: OAuth oauth_consumer_key=\"{}\", oauth_token=\"{}\"", s[0], s[1]),
         "Content-Type: application/json".into(), "Accept: application/json".into()],
+    ok: |_| true,
     error: |code, v| match code {
         "401" | "403" => trc("err.tr_auth"),
         "429" => trc("err.tr_rate"),
         _ => format!("Trello {code}: {}", v.as_str().or(v["message"].as_str()).map_or_else(|| trc("err.unknown"), str::to_string)),
+    },
+};
+
+// ---------- Linear: a personal API key in the keychain, sent as the Authorization header as it is.
+// One endpoint, POST /graphql. Any query goes (a query cannot change anything); the only mutation allowed is
+// LINEAR_MOVE, the one in src/providers/linear-map.ts (MOVE), with nothing but an issue id and a state id.
+
+/// The mutation that moves an issue to another workflow state, compared with its whitespace collapsed.
+const LINEAR_MOVE: &str = "mutation Move($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { id sortOrder } } }";
+fn squash(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ") }
+/// A Linear id: a UUID.
+fn linear_id(v: &Value) -> bool { v.as_str().is_some_and(|s| (1..=64).contains(&s.len()) && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) }
+/// The code in the first GraphQL error, e.g. RATELIMITED or AUTHENTICATION_ERROR.
+fn gql_code(v: &Value) -> &str { v["errors"][0]["extensions"]["code"].as_str().unwrap_or("") }
+
+const LINEAR: Provider = Provider {
+    id: "linear",
+    name: "Linear",
+    defaults: |c| {
+        if !c["on"].is_boolean() { c["on"] = json!(true); }
+        if !c["done"].is_boolean() { c["done"] = json!(false); }
+    },
+    check: |_| Ok(()),
+    ready: |_| true,
+    not_ready: "err.unknown",
+    secrets: &["token"],
+    url: |_, method, path, body| {
+        let o = body.as_ref().and_then(Value::as_object)?;
+        let q = o.get("query")?.as_str()?;
+        let vars = o.get("variables").cloned().unwrap_or(json!({}));
+        let shape = o.keys().all(|k| k == "query" || k == "variables") && vars.is_object();
+        let words = |w: &str| q.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').any(|x| x == w);
+        let read = !words("mutation") && !words("subscription");
+        let moves = squash(q) == LINEAR_MOVE && vars.as_object().unwrap().len() == 2 && linear_id(&vars["id"]) && linear_id(&vars["stateId"]);
+        (method == "POST" && path == "/graphql" && shape && q.len() < 4000 && (read || moves)).then(|| "https://api.linear.app/graphql".into())
+    },
+    headers: |_, s| vec![format!("Authorization: {}", s[0]), "Content-Type: application/json".into()],
+    ok: |v| v["errors"].as_array().is_none_or(|e| e.is_empty()),
+    error: |code, v| {
+        let c = gql_code(v);
+        if code == "401" || code == "403" || c == "AUTHENTICATION_ERROR" || c == "FORBIDDEN" { return trc("err.li_auth"); }
+        if code == "429" || c == "RATELIMITED" { return trc("err.li_rate"); }
+        let m = v["errors"][0]["message"].as_str().or(v.as_str()).map_or_else(|| trc("err.unknown"), str::to_string);
+        if code.starts_with('2') { format!("Linear: {m}") } else { format!("Linear {code}: {m}") }
     },
 };
 
@@ -248,5 +295,37 @@ mod tests {
         assert_eq!((p.error)("429", &Value::Null), trc("err.tr_rate"));
         assert_eq!((p.error)("400", &json!("invalid value for idList")), "Trello 400: invalid value for idList");
         assert_eq!((p.error)("404", &json!({ "message": "not found" })), "Trello 404: not found");
+    }
+    #[test]
+    fn linear_allows_queries_and_only_the_move_mutation() {
+        let p = get("linear").unwrap();
+        let c = json!({});
+        let (id, st) = ("2b1c3d4e-0000-4000-8000-00000000000a", "5e6f7a8b-0000-4000-8000-00000000000b");
+        let q = |b: Value| (p.url)(&c, "POST", "/graphql", &Some(b));
+        assert!(q(json!({ "query": "query { viewer { id name } }" })).is_some());
+        assert!(q(json!({ "query": "query I($f: IssueFilter) { issues(filter: $f) { nodes { id } } }", "variables": { "f": {} } })).is_some());
+        let mv = "mutation Move($id: String!, $stateId: String!) {\n  issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { id sortOrder } }\n}";
+        assert!(q(json!({ "query": mv, "variables": { "id": id, "stateId": st } })).is_some());
+        assert!(q(json!({ "query": mv, "variables": { "id": id, "stateId": st, "x": 1 } })).is_none());
+        assert!(q(json!({ "query": mv, "variables": { "id": "a b", "stateId": st } })).is_none());
+        assert!(q(json!({ "query": "mutation { issueDelete(id: \"x\") { success } }" })).is_none());
+        assert!(q(json!({ "query": "query { viewer { id } } mutation { issueDelete(id: \"x\") { success } }" })).is_none());
+        assert!(q(json!({ "query": "subscription { x }" })).is_none());
+        assert!(q(json!({ "query": "query { viewer { id } }", "operationName": "x" })).is_none());
+        assert!((p.url)(&c, "GET", "/graphql", &None).is_none());
+        assert!((p.url)(&c, "POST", "/other", &Some(json!({ "query": "query { viewer { id } }" }))).is_none());
+        assert_eq!((p.headers)(&c, &["lin_api_x".into()])[0], "Authorization: lin_api_x");
+    }
+    #[test]
+    fn linear_errors_read_as_one_line() {
+        let p = get("linear").unwrap();
+        let e = |code: &str| json!({ "errors": [{ "message": "boom", "extensions": { "code": code } }] });
+        assert!((p.ok)(&json!({ "data": {} })) && !(p.ok)(&e("INVALID_INPUT")));
+        assert_eq!((p.error)("400", &e("RATELIMITED")), trc("err.li_rate"));
+        assert_eq!((p.error)("429", &Value::Null), trc("err.li_rate"));
+        assert_eq!((p.error)("400", &e("AUTHENTICATION_ERROR")), trc("err.li_auth"));
+        assert_eq!((p.error)("401", &Value::Null), trc("err.li_auth"));
+        assert_eq!((p.error)("200", &e("INVALID_INPUT")), "Linear: boom");
+        assert_eq!((p.error)("500", &json!("down")), "Linear 500: down");
     }
 }

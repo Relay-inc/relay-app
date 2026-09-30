@@ -1,4 +1,5 @@
 import { t } from "./i18n";
+import type { Key } from "./locales/en";
 import { PROVIDERS, type BoardProvider, type BoardRef, type Card, type Column, type Ctx, type Opt } from "./providers";
 
 // A provider's board as a kanban: pick a project and one of its boards, the columns and cards come from
@@ -63,7 +64,7 @@ function draw() {
   const pick = (id: string, opts: Opt[], cur: string, empty: string, always = false) =>
     `<select id="${id}" class="kbsel">${cur && !always ? "" : `<option value="">${empty}</option>`}${opts.map(o => `<option value="${e(o.id)}"${o.id === cur ? " selected" : ""}>${e(o.name)}</option>`).join("")}</select>`;
   const card = (c: Card) => `<div class="kcard" data-card="${e(c.id)}"><div class="kt">${e(c.title)}</div>
-    <div class="km">${c.number ? `<span>#${e(c.number)}</span>` : ""}${c.who ? `<span>${e(c.who)}</span>` : ""}${c.due ? `<span>${e(c.due.split("-").reverse().slice(0, 2).map(Number).join("/"))}</span>` : ""}</div></div>`;
+    <div class="km">${c.number ? `<span>${/^\d+$/.test(c.number) ? "#" : ""}${e(c.number)}</span>` : ""}${c.priority && c.priority <= 4 ? `<span class="kprio p${c.priority}">${t(`kb.prio${c.priority}` as Key)}</span>` : ""}${c.who ? `<span>${e(c.who)}</span>` : ""}${c.due ? `<span>${e(c.due.split("-").reverse().slice(0, 2).map(Number).join("/"))}</span>` : ""}</div></div>`;
   const col = (l: Column) => { const cs = s.cards.filter(c => c.column === l.id).sort((a, b) => a.placement - b.placement);
     return `<div class="kcol" data-list="${e(l.id)}"><div class="kh"><span>${e(l.name)}</span><span class="count">${cs.length}</span></div><div class="kcards">${cs.map(card).join("")}</div></div>`; };
   // which vault project this board belongs to: a vault project has at most one board

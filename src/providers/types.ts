@@ -8,8 +8,9 @@ import type { Key } from "../locales/en";
 export type Opt = { id: string; name: string };
 /** A column: a Productive task list, a Trello list, a Linear workflow state. */
 export type Column = { id: string; name: string; placement: number };
-/** A card in a column. `number` is shown as #number, `who` is the assignee's first name, `due` is yyyy-mm-dd. */
-export type Card = { id: string; title: string; number: string; column: string; placement: number; due: string | null; who: string };
+/** A card in a column. `number` is shown as #number (as it is when not only digits, Linear's ENG-12), `who` is the
+ * assignee's first name, `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
+export type Card = { id: string; title: string; number: string; column: string; placement: number; due: string | null; who: string; priority?: number };
 /** Which board a vault project maps to, settings.boards[vault project]. */
 export type BoardRef = { provider: string; project: string; board: string };
 
