@@ -10,6 +10,8 @@ import { showBoard, resetBoard, fetchTask, renderTask, cachedTask } from "./prod
 import "./productive.css";
 import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
 import "./github.css";
+import { renderMailBar, renderMailTools, renderMailList, renderMailDetail, mailKey, unread, sender, setSeen, type Mail, type MailFilter } from "./mail";
+import "./mail.css";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -84,8 +86,8 @@ function renderAtts(id = "atts", list = attached) {
 // A conversation has its own key and hangs under a project (or under Algemeen when project is null).
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
-type Item = { kind: "me" | "ai" | "tool" | "err" | "note"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string; imgs?: string[] };
-type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number };
+type Item = { kind: "me" | "ai" | "tool" | "err" | "note" | "done"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string; imgs?: string[] };
+type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number; mail?: string };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
@@ -101,6 +103,18 @@ let hidden: string[] = store.get("hiddenAgents", []);
 let forked: string[] = store.get("forkedTerms", []); // terminal sessions continued in the app, no longer listed
 let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
 let appSids: string[] = [];
+let sidOf: Record<string, string> = {}; // app conversation key: its Claude session id
+// app conversations whose turn runs in a process this page gets no events from (it outlived an app restart):
+// the transcript offset read so far. The page follows the transcript until `claude agents` says the turn ended
+const outside: Record<string, number> = {};
+// when that turn's prompt came in and the last line after it, from the transcript timestamps, for "Klaar · duur"
+const outsideAt: Record<string, { from: number; to: number }> = {};
+const isPrompt = (e: any) => { const c = e.message?.content;
+  return e.type === "user" && (typeof c === "string" ? !c.startsWith("<") : Array.isArray(c) && c.every((x: any) => x.type !== "tool_result") && c.some((x: any) => x.type === "text" && !x.text.startsWith("<"))); };
+function trackTimes(k: string, rows: any[]) {
+  for (const e of rows) { const at = Date.parse(e.at); if (!at) continue;
+    if (isPrompt(e)) outsideAt[k] = { from: at, to: at }; else if (outsideAt[k]) outsideAt[k].to = at; }
+}
 // subagents a session spawned (Agent tool, background agents), per conversation key, polled every 2 s
 type Sub = { id: string; description: string; agentType?: string; model?: string; running: boolean; started_at: string; last_at: string; tool?: string; input?: any; text?: string };
 let subs: Record<string, Sub[]> = {};
@@ -109,14 +123,15 @@ const subLog: Record<string, string[]> = {}; // agent id: its last messages, whi
 const runningSubs = (k: string) => (subs[k] || []).filter(a => a.running).length;
 const subBadge = (k: string) => { const n = runningSubs(k); return n ? `<span class="acount" title="${tn("nav.agentsWorking", n)}">${n}</span>` : ""; };
 let routeChoice: { key: string; text: string; hits: string[] } | null = null;
-const WAIT = "__wait", REM = "__rem", BOARD = "__board", PRS = "__prs", NEW = "Nieuw gesprek";
-const VIEWS = [WAIT, REM, BOARD, PRS];
+const WAIT = "__wait", REM = "__rem", BOARD = "__board", PRS = "__prs", MAIL = "__mail", NEW = "Nieuw gesprek";
+const VIEWS = [WAIT, REM, BOARD, PRS, MAIL];
 // placeholder titles are stored as they always were (Dutch) and shown in the UI language
 const PLACEHOLDER: Record<string, Key> = { [NEW]: "nav.newChat", Gesprek: "chat.untitled", "Algemeen gesprek": "chat.general" };
 const shownTitle = (title: string) => PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title;
 type Settings = { vault: string; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
-  productive: { org: string; user: string }; github: { on: boolean; owners: string }; language?: string };
-let settings: Settings = { vault: "", projects: {}, overrides: {}, productive: { org: "", user: "" }, github: { on: false, owners: "" } };
+  productive: { org: string; user: string }; github: { on: boolean; owners: string }; mail: { on: boolean; account: string }; language?: string;
+  favicons?: { on: boolean; last: string; tried: Record<string, string> } };
+let settings: Settings = { vault: "", projects: {}, overrides: {}, productive: { org: "", user: "" }, github: { on: false, owners: "" }, mail: { on: false, account: "" } };
 // the Productive row only shows once the integration is set up: an org id and a token in the keychain
 let pvReady = false;
 const checkPv = async () => { pvReady = !!settings.productive?.org && await invoke<boolean>("productive_status").catch(() => false); };
@@ -137,7 +152,8 @@ async function openPr(key: string) {
   if (key.startsWith("pv:")) prDetail[key] ??= cachedTask(key.slice(3));
   document.body.classList.add("prwide"); setInsp(false); render();
   const i = key.lastIndexOf("#");
-  try { prDetail[key] = key.startsWith("pv:") ? await fetchTask(key.slice(3)) : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
+  try { prDetail[key] = key.startsWith("pv:") ? await fetchTask(key.slice(3)) : key.startsWith("mail:") ? await invoke<string>("mail_read", { id: key.slice(5) })
+    : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
   catch (e) { if (!prDetail[key]) prDetailErr = String(e); }
   if (prOpen === key) renderInsp();
 }
@@ -155,6 +171,59 @@ async function reviewPr(key: string) {
     + "Wil ik iets posten, dan vraag ik het je daarna.");
 }
 function closePr() { if (!prOpen) return; prOpen = ""; document.body.classList.remove("prwide"); render(); }
+// the inbox via himalaya in the backend, once Mail is switched on in the settings. Refreshed every 5 minutes and on opening the view
+let mails: Mail[] | null = null, mailErr = "", mailBusy = false;
+const mailOn = () => !!settings.mail?.on;
+let mailPages = 0, mailEnd = false, mailMore = false; // pages of 50 loaded, whether the last one came back short
+// the next 50, appended under the list. ponytail: a mail archived meanwhile shifts the pages, so one at the border can be skipped until a reload
+async function moreMails() {
+  if (mailMore || mailEnd || !mails) return;
+  mailMore = true; renderChat();
+  try {
+    const next = await invoke<Mail[]>("mail_list", { page: mailPages + 1 });
+    mails = [...mails, ...next.filter(n => !mails!.some(m => m.id === n.id))];
+    mailPages++; mailEnd = next.length < 50; mailErr = "";
+  } catch (e) { mailErr = String(e); }
+  mailMore = false; render();
+}
+let mailFilter: MailFilter = { q: "", state: "all", project: "", ...store.get("mailFilter", {}) };
+const setMailFilter = (f: Partial<MailFilter>) => { mailFilter = { ...mailFilter, ...f }; store.set("mailFilter", { state: mailFilter.state, project: mailFilter.project }); renderChat(); };
+// read or unread on the user's click: the list follows at once, a failure puts it back and shows why
+async function mailSeen(id: string, seen: boolean) {
+  const m = mails?.find(x => x.id === id); if (!m) return;
+  setSeen(m, seen); render();
+  try { await invoke("mail_seen", { id, seen }); mailErr = ""; } catch (e) { setSeen(m, !seen); mailErr = String(e); }
+  render();
+}
+async function loadMails() {
+  if (!mailOn() || mailBusy) return;
+  mailBusy = true; if (sel === MAIL) renderChat();
+  try {
+    // the newest page replaces what it covers, older pages loaded with "more" stay below it
+    const fresh = await invoke<Mail[]>("mail_list", { page: 1 }), edge = Math.min(...fresh.map(m => Date.parse(m.date)));
+    mails = [...fresh, ...(mails || []).filter(m => Date.parse(m.date) < edge && !fresh.some(f => f.id === m.id))];
+    if (!mailPages) { mailPages = 1; mailEnd = fresh.length < 50; }
+    mailErr = "";
+  } catch (e) { mailErr = String(e); }
+  mailBusy = false; render();
+}
+// the project a mail is about: one project named in the subject, the sender or the sender's domain, else none
+const mailProject = (m: Mail) => { const hits = findProjects(`${m.subject} ${sender(m)} ${m.from[0]?.email.split("@")[1]?.split(".")[0] ?? ""}`); return hits.length === 1 ? hits[0] : null; };
+// a conversation about the open mail, under its project. Claude reads the mail itself with himalaya, so the
+// whole thread and its attachments are there. "talk" waits for the user's question, "draft" asks for a reply
+// as a draft through the mail-draft skill right away. Sending stays with the user (decided 29/9).
+async function mailChat(key: string, how: string) {
+  const m = mails?.find(x => mailKey(x.id) === key); if (!m) return;
+  const acct = settings.mail.account, from = `${sender(m)} <${m.from[0]?.email ?? ""}>`;
+  const ref = `Het gaat over deze mail: van ${from}, ${m.date}, onderwerp "${m.subject}". Lees ze met \`himalaya message read ${acct ? `-a ${acct} ` : ""}${m.id}\` `
+    + "en verander niets aan de mailbox: geen flags, niet verplaatsen, niets versturen.";
+  const k = newChat(mailProject(m));
+  chats[k].title = `${how === "draft" ? "Antwoord: " : ""}${m.subject || t("mail.noSubject")}`.slice(0, 48);
+  convo[k] = [{ kind: "note", text: t("note.mailStarted", { from: sender(m), subject: m.subject }) }]; // also keeps this title, no generated one
+  if (how === "talk") chats[k].mail = ref; // goes in front of the first message the user sends
+  await select(k);
+  if (how === "draft") sendMsg(`${ref} Maak een antwoord als draft via de mail-draft skill. Enkel een draft, niets versturen. Zeg hier wat je schreef en waar het staat.`);
+}
 let settingsMsg = "";
 let sel: string = store.get("sel", "") || WAIT;
 let tab = "open";
@@ -240,12 +309,15 @@ function onEvent(k: string, ev: any) {
     queued[k] = Math.max(0, (queued[k] || 1) - 1);
     status[k] = queued[k] ? "busy" : "idle";
     if (ev.is_error || ev.subtype !== "success") push(k, { kind: "err", text: ev.result || ev.subtype || t("err.unknown") });
+    else if (!queued[k]) push(k, { kind: "done", text: ev.duration_ms ? t("work.doneIn", { d: dur(ev.duration_ms / 1000) }) : t("work.done") });
     if (k !== sel) unseen.add(k);
     if (chats[k]) { chats[k].at = Date.now(); saveChats(); }
     loadSnapshot();
   } else if (ev.type === "stderr") {
     if (ev.text.trim()) push(k, { kind: "err", text: ev.text.slice(0, 2000) });
   } else if (ev.type === "exit") {
+    // the process stopped while a turn ran: say so, the dots alone would just disappear
+    if (status[k] === "busy") push(k, { kind: "err", text: t("work.interrupted") });
     queued[k] = 0; status[k] = "idle";
   } else return;
   if (k === sel) renderChat(); else renderNav();
@@ -376,8 +448,13 @@ const G: Record<string, string> = {
   term: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/>',
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 2.5v1.5M8 12v1.5M2.5 8H4M12 8h1.5M4.1 4.1l1.1 1.1M10.8 10.8l1.1 1.1M4.1 11.9l1.1-1.1M10.8 5.2l1.1-1.1"/>',
   folder: '<path d="M2.5 5V4a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V5Z"/>',
+  check: '<path d="M3.5 8.5 6.5 11.5 12.5 4.5"/>',
+  cal: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>',
+  left: '<path d="M10 3.5 5.5 8 10 12.5"/>',
+  right: '<path d="M6 3.5 10.5 8 6 12.5"/>',
   pr: '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="12.5" r="1.5"/><path d="M4.5 5v6M11.5 11V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6"/>',
 };
+G.mail = '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="m3 4.5 5 4 5-4"/>';
 const glyph = (n: string) => `<svg class="g" viewBox="0 0 16 16">${G[n]}</svg>`;
 // contexts come from the vault index, in its order, each takes the next of three colours
 const contexts = (): string[] => [...new Set<string>(snap.projects.map((p: any) => p.context))];
@@ -405,7 +482,8 @@ function renderNav() {
   let h = `<div class="row ${sel === WAIT ? "sel" : ""}" data-k="${WAIT}">${glyph("bell")}<span class="nm">${t("nav.waiting")}</span>${w ? `<span class="badge">${w}</span>` : ""}</div>`
     + `<div class="row ${sel === REM ? "sel" : ""}" data-k="${REM}">${glyph("list")}<span class="nm">${t("nav.reminders")}</span>${due ? `<span class="count ${snap.reminders.some((r: any) => r.days < 0) ? "due-late" : "due-soon"}">${due}</span>` : ""}</div>`
     + (pvReady ? `<div class="row ${sel === BOARD ? "sel" : ""}" data-k="${BOARD}">${glyph("board")}<span class="nm">Productive</span></div>` : "")
-    + (ghOn() ? `<div class="row ${sel === PRS ? "sel" : ""}" data-k="${PRS}">${glyph("pr")}<span class="nm">${t("nav.prs")}</span>${prs?.review.length ? `<span class="count" title="${t("nav.prsReview")}">${prs.review.length}</span>` : ""}</div>` : "");
+    + (ghOn() ? `<div class="row ${sel === PRS ? "sel" : ""}" data-k="${PRS}">${glyph("pr")}<span class="nm">${t("nav.prs")}</span>${prs?.review.length ? `<span class="count" title="${t("nav.prsReview")}">${prs.review.length}</span>` : ""}</div>` : "")
+    + (mailOn() ? `<div class="row ${sel === MAIL ? "sel" : ""}" data-k="${MAIL}">${glyph("mail")}<span class="nm">${t("nav.mail")}</span>${mails?.some(unread) ? `<span class="count">${mails.filter(unread).length}</span>` : ""}</div>` : "");
 
   const gc = listed(null).filter(c => !q || c.title.toLowerCase().includes(q)), gt = T.filter(t => !t.project && (!q || t.title.toLowerCase().includes(q)));
   // conversations in the order the user dragged, the rest after them in their default order
@@ -462,11 +540,23 @@ function renderChat() {
     msgs.innerHTML = renderPrs(prs, prErr, prBusy, { esc, projectLabel: pLabel, open: prOpen });
     return;
   }
+  if (sel === MAIL) {
+    $("composer").style.display = "none"; $("movebar").style.display = "none";
+    $("term").style.display = "none";
+    $("t").textContent = t("nav.mail"); $("ts").textContent = "";
+    // the bar is mounted once, so the search field keeps its focus and caret while the list redraws
+    if (!document.getElementById("mailbar")) msgs.innerHTML = `<div id="mailbar">${renderMailBar(mailFilter, esc)}</div><div id="maillist"></div>`;
+    const h = { esc, projectOf: mailProject, projectLabel: pLabel, open: prOpen };
+    $("mailtools").innerHTML = renderMailTools(mails, mailFilter, mailBusy, h);
+    $("maillist").innerHTML = renderMailList(mails, mailFilter, mailErr, mailBusy, h)
+      + (mails && !mailEnd ? `<div class="mail-more"><button class="btn" data-mail="more" ${mailMore ? "disabled" : ""}>${mailMore ? '<span class="spin"></span>' : ""}${t("mail.more")}</button></div>` : "");
+    return;
+  }
   if (sel === REM) {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("term").style.display = "none";
     $("ts").textContent = "";
-    $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel }, snap.vault?.found);
+    $("t").textContent = t("nav.reminders"); msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel, glyph }, snap.vault?.found);
     return;
   }
   if (sel === WAIT) {
@@ -501,12 +591,13 @@ function renderChat() {
     if (it.kind === "ai") return `<div class="ai">${md(it.text)}</div>`;
     if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
     if (it.kind === "err") return `<div class="err">${esc(it.text)}</div>`;
+    if (it.kind === "done") return `<div class="done">${glyph("check")}${esc(it.text)}</div>`;
     return `<div class="note">${esc(it.text)}</div>`;
   }).join("") : `<div class="note">${P ? t("chat.emptyProject", { name: esc(pn) }) : t("chat.emptyGeneral")}</div>`)
     + (routeChoice && routeChoice.key === sel ? `<div class="perm"><div class="q">${t("route.question")}</div><div class="opts">${routeChoice.hits.map(h =>
         `<button class="btn" data-route-to="${esc(h)}">${esc(h)}</button>`).join("")}<button class="btn" data-route-to="">${t("route.keep")}</button></div></div>` : "")
     + pendingList.filter(r => r.project === sel).map(card).join("")
-    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml() : "")
+    + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel in outside) : "")
     + (T && T.status === "busy" ? `<div class="working"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${t("term.writing")}</span></div>` : "");
   const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
   $("movebar").innerHTML = T ? `<span>${t("move.term", { busy: T.status === "busy" ? t("move.termBusy") : "" })}</span>`
@@ -582,8 +673,8 @@ async function onPop(e: MouseEvent) {
 function alertMsg(m: string) { const p = $("pop"); p.insertAdjacentHTML("afterbegin", `<div class="err">${esc(m)}</div>`); }
 
 // visible while Claude works: only the pulsing dots, the running step has its own line
-function workingHtml(): string {
-  return `<div class="working" role="status" aria-label="${t("work.working")}"><span class="pulse"><i></i><i></i><i></i></span></div>`;
+function workingHtml(away = false): string {
+  return `<div class="working" role="status" aria-label="${t("work.working")}"><span class="pulse"><i></i><i></i><i></i></span>${away ? `<span class="wt">${t("work.outside")}</span>` : ""}</div>`;
 }
 const dur = (sec: number) => { const s = Math.max(0, Math.round(sec)); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`; };
 setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => { e.textContent = dur((Date.now() - Number(e.dataset.since)) / 1000); }), 1000);
@@ -592,7 +683,8 @@ function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
   if (prOpen) {
     // only when it changed: a redraw of the same PR would throw away the scroll position
-    const html = prOpen.startsWith("pv:") ? renderTask(prDetail[prOpen] ?? null, prDetailErr, esc) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
+    const html = prOpen.startsWith("pv:") ? renderTask(prDetail[prOpen] ?? null, prDetailErr, esc)
+      : prOpen.startsWith("mail:") ? renderMailDetail(mails?.find(m => mailKey(m.id) === prOpen), prDetail[prOpen], prDetailErr, esc) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
     if (html !== prHtml || !box.querySelector(".prd-bar")) { box.innerHTML = html; prHtml = html; }
     return;
   }
@@ -631,6 +723,7 @@ async function select(k: string) {
   const ta = $("c") as HTMLTextAreaElement; ta.value = typed[k] || ""; grow();
   if (!VIEWS.includes(k) && !chats[k]?.draft) await ensureHistory(k, isTerm(k));
   if (k === PRS) loadPrs();
+  if (k === MAIL) loadMails();
   render();
   $("log").scrollTop = VIEWS.includes(k) ? 0 : 1e9;
   if (!VIEWS.includes(k)) ta.focus();
@@ -659,6 +752,8 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
     return sendMsg(text);
   }
   const k = to ?? sel, c = chats[k];
+  // a second process on the same session while the first still writes it would fork the transcript
+  if (k in outside) { push(k, { kind: "note", text: t("work.waitOutside") }); if (k === sel) renderChat(); return; }
   if (!to) { ta.value = ""; grow(); }
   // first message of a general conversation: if it names one project, it goes under that project
   if (c && !c.project && !forced && !(convo[k] || []).length) {
@@ -676,7 +771,9 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
   push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; queued[k] = (queued[k] || 0) + 1; render();
   if (k === sel) $("log").scrollTop = 1e9;
   const name = `${c?.project || "Algemeen"}: ${c?.title || k}`;
-  try { await invoke("send", { project: k, text, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null,
+  const sent = c?.mail ? `${c.mail}\n\n${text}` : text;
+  if (c?.mail) { delete c.mail; saveChats(); }
+  try { await invoke("send", { project: k, text: sent, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null,
     model: ($("model") as HTMLSelectElement).value, effort: ($("effort") as HTMLSelectElement).value }); }
   catch (e) { push(k, { kind: "err", text: String(e) }); queued[k] = Math.max(0, (queued[k] || 1) - 1); status[k] = queued[k] ? "busy" : "idle"; renderChat(); }
 }
@@ -727,6 +824,8 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
+$("msgs").addEventListener("input", e => { if ((e.target as HTMLElement).id === "mailq") setMailFilter({ q: (e.target as HTMLInputElement).value }); });
+$("msgs").addEventListener("change", e => { if ((e.target as HTMLElement).id === "mailproj") setMailFilter({ project: (e.target as HTMLSelectElement).value }); });
 // reorder by pressing and moving: a section header among headers, a project among the projects of its
 // section. Pointer events instead of HTML drag and drop, which the Mac webview does not deliver reliably.
 let drag: { kind: "sec" | "proj" | "conv"; id: string; ctx?: string; y: number; on: boolean; target?: HTMLElement; after?: boolean } | null = null;
@@ -777,10 +876,12 @@ listen<Settings>("settings-changed", async e => {
   const relang = e.payload.language !== settings.language;
   if (JSON.stringify(e.payload.productive) !== JSON.stringify(settings.productive)) { resetBoard(); document.getElementById("kb")?.remove(); }
   const ghChanged = JSON.stringify(e.payload.github) !== JSON.stringify(settings.github);
+  const mailChanged = JSON.stringify(e.payload.mail) !== JSON.stringify(settings.mail);
   settings = { ...settings, ...e.payload };
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
   if (relang) { await initI18n(); applyStatic(); resetBoard(); document.getElementById("kb")?.remove(); render(); }
   if (ghChanged) { prs = null; prErr = ""; if (!ghOn() && sel === PRS) select(WAIT); loadPrs(); }
+  if (mailChanged) { mails = null; mailErr = ""; mailPages = 0; mailEnd = false; if (!mailOn() && sel === MAIL) select(WAIT); loadMails(); }
   checkPv().then(() => { if (!pvReady && sel === BOARD) select(WAIT); loadSnapshot(); });
 });
 $("t").addEventListener("click", openPop);
@@ -810,14 +911,24 @@ $("ctx").addEventListener("click", async e => {
 });
 window.addEventListener("click", e => { if (!(e.target as HTMLElement).closest("#ctx")) $("ctx").hidden = true; });
 $("pop").addEventListener("click", onPop);
-$("msgs").addEventListener("change", e => { onRemindersEvent(e, remAct); });
 async function remAct(action: "done" | "push", id: string, date?: string) {
   try { await invoke("reminder", { action, id, date: date ?? null }); } catch (err) { console.error(err); }
   await loadSnapshot();
 }
+// a new conversation with the whole reminder in the composer, one Enter away from sending
+async function remChat(id: string) {
+  const r = snap.reminders.find((x: any) => x.id === id); if (!r) return;
+  await select(newChat(project(r.project) ? r.project : null));
+  const ta = $("c") as HTMLTextAreaElement;
+  ta.value = t("rem.chatText", { date: r.date, text: r.text }); ta.dispatchEvent(new Event("input"));
+}
 $("msgs").addEventListener("click", e => {
+  const rc = sel === REM && (e.target as HTMLElement).closest<HTMLElement>("[data-rem-chat]");
+  if (rc) { remChat(rc.dataset.id!); return; }
   if (sel === REM && onRemindersEvent(e, remAct)) return;
   if ((e.target as HTMLElement).closest("[data-pr=reload]")) { loadPrs(); return; }
+  if ((e.target as HTMLElement).closest("[data-mail=reload]")) { loadMails(); return; }
+  if ((e.target as HTMLElement).closest("[data-mail=more]")) { moreMails(); return; }
   const g = (e.target as HTMLElement).closest<HTMLElement>("[data-bg]");
   if (g) {
     const id = g.dataset.id!, act = g.dataset.bg!;
@@ -848,7 +959,7 @@ $("c").addEventListener("input", () => {
   if (v) typed[sel] = v; else delete typed[sel];
   store.set("typed", typed);
   if (c?.draft) { store.set("sel", v ? sel : WAIT); saveChats(); }
-  if (c?.draft) { c.title = ($("c") as HTMLTextAreaElement).value.trim().slice(0, 48) || NEW; setTitleField(c.title); renderNav(); }
+  if (c?.draft && !c.mail) { c.title = ($("c") as HTMLTextAreaElement).value.trim().slice(0, 48) || NEW; setTitleField(c.title); renderNav(); }
 });
 // an image on the clipboard becomes a thumbnail. Copied text that also carries an image rendering
 // (Numbers, Word) pastes as text the way it always did, only a bare file name (a Finder copy) gives way.
@@ -932,6 +1043,14 @@ document.addEventListener("click", e => {
   const el = e.target as HTMLElement;
   if (el.closest("[data-pr-close]")) { closePr(); return; }
   if (el.closest("[data-pr-review]")) { reviewPr(prOpen); return; }
+  const ms = el.closest<HTMLElement>("[data-mail-seen]");
+  if (ms) { e.stopPropagation(); mailSeen(ms.dataset.id!, ms.dataset.mailSeen === "1"); return; }
+  const mst = el.closest<HTMLElement>("[data-mail-state]");
+  if (mst) { setMailFilter({ state: mst.dataset.mailState as MailFilter["state"] }); return; }
+  const mc = el.closest<HTMLElement>("[data-mail-chat]");
+  if (mc) { mailChat(prOpen, mc.dataset.mailChat!); return; }
+  const mo = el.closest<HTMLElement>("[data-mail-open]");
+  if (mo) { openPr(mailKey(mo.dataset.mailOpen!)); return; }
   const r = el.closest<HTMLElement>("[data-pr-open]");
   if (r && !el.closest("a[href]")) openPr(r.dataset.prOpen!);
 });
@@ -990,6 +1109,26 @@ $("toggleinsp").addEventListener("click", () => setInsp(!document.body.classList
 window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code === "KeyI") { e.preventDefault(); setInsp(!document.body.classList.contains("noinsp")); } });
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; if (prOpen) closePr(); else renderInsp(); } });
 
+// ---------- favicons: once a day the website icon for projects without an icon. favicon.py guesses the site
+// from the notes and skips a project whose guess is in tried, so a site without a favicon is fetched once
+async function checkFavicons() {
+  const f = settings.favicons, day = new Date().toLocaleDateString("sv"); // YYYY-MM-DD, local time
+  if (!f?.on || f.last === day || !snap?.projects) return;
+  if (!await saveSettings({ ...settings, favicons: { ...f, last: day } })) return;
+  const bare = (n: string) => !settings.projects[n]?.img && !settings.projects[n]?.icon;
+  let found: Record<string, { site: string; data: string | null }> = {};
+  try { found = await invoke("favicons", { projects: snap.projects.filter((p: any) => bare(p.name)).map((p: any) => ({ name: p.name, aliases: p.aliases || [] })) }); }
+  catch (e) { console.error(e); return; }
+  if (!Object.keys(found).length) return;
+  const next = structuredClone(settings);
+  for (const [n, r] of Object.entries(found)) {
+    next.favicons!.tried[n] = r.site;
+    const img = r.data && bare(n) ? await iconFrom(new File([await (await fetch(r.data)).blob()], "favicon")) : null;
+    if (img) next.projects[n] = { ...next.projects[n], img };
+  }
+  if (await saveSettings(next)) render();
+}
+
 // ---------- polling: pending questions often, sessions and the vault now and then
 // an error shows once, in a bar at the top, and goes when a later snapshot works again
 let snapErr = "";
@@ -1011,10 +1150,46 @@ async function pollSubs() {
   if (JSON.stringify(next) === JSON.stringify(subs)) return;
   subs = next; renderNav(); renderSubs();
 }
+let agentsAt = 0;
 async function pollAgents() {
-  [agentsList, appSids] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids")]);
-  renderNav(); if (sel === WAIT || isTerm(sel)) renderChat();
+  agentsAt = Date.now();
+  [agentsList, appSids, sidOf] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids"), invoke<Record<string, string>>("app_sessions").catch(() => sidOf)]);
+  await syncBusy();
+  renderNav(); if (sel === WAIT || isTerm(sel) || status[sel] === "busy" || sel in outside) renderChat();
 }
+// a turn this page did not start: after a reload of the page (the app's process still sends its events, only
+// the dots are missing) or after an app restart (the process lives on without the app, the transcript is followed).
+// Only for a conversation the page knows nothing about yet, so a late "busy" never brings back the dots of a finished turn.
+async function syncBusy() {
+  const live = new Map(agentsList.map(a => [a.sessionId, a]));
+  const owned = new Set(await invoke<string[]>("running").catch(() => []));
+  for (const [k, sid] of Object.entries(sidOf)) {
+    if (!chats[k] || chats[k].closed) continue;
+    const busy = live.get(sid)?.status === "busy";
+    if (busy && status[k] === undefined) {
+      status[k] = "busy";
+      if (owned.has(k)) { if (!convo[k]) await ensureHistory(k); } // the events that follow land on top of the transcript
+      else { const r = await invoke<{ items: any[]; next: number }>("history_sid", { sid, from: 0 }); convo[k] = toItems(r.items); outside[k] = r.next; trackTimes(k, r.items); }
+    } else if (!busy && k in outside) {
+      await tailOutside(k); delete outside[k]; status[k] = "idle";
+      const span = outsideAt[k]; delete outsideAt[k];
+      push(k, { kind: "done", text: span && span.to > span.from ? t("work.doneIn", { d: dur((span.to - span.from) / 1000) }) : t("work.done") });
+      if (k !== sel) unseen.add(k);
+    }
+  }
+}
+async function tailOutside(k: string) {
+  const r = await invoke<{ items: any[]; next: number }>("history_sid", { sid: sidOf[k], from: outside[k] });
+  outside[k] = r.next; trackTimes(k, r.items);
+  const add = toItems(r.items);
+  if (add.length) { convo[k].push(...add); if (k === sel) renderChat(); }
+}
+// while one runs outside: its transcript every 2 s, and `claude agents` every 4 s to see the turn end
+setInterval(async () => {
+  const ks = Object.keys(outside); if (!ks.length) return;
+  for (const k of ks) await tailOutside(k).catch(() => {});
+  if (Date.now() - agentsAt > 4000) pollAgents();
+}, 2000);
 
 // ---------- start: adopt conversations from earlier versions (general:<id>, plain project names)
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
@@ -1035,7 +1210,7 @@ saveChats();
 await Promise.all(Object.values(chats).filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title)).map(c => ensureHistory(c.key)));
 await pollAgents();
 await checkPv();
-if ((!VIEWS.includes(sel) && !chats[sel] && !termOf(sel)) || (sel === BOARD && !pvReady) || (sel === PRS && !ghOn())) sel = WAIT;
+if ((!VIEWS.includes(sel) && !chats[sel] && !termOf(sel)) || (sel === BOARD && !pvReady) || (sel === PRS && !ghOn()) || (sel === MAIL && !mailOn())) sel = WAIT;
 await select(sel);
 pollPending();
 setInterval(pollPending, 700);
@@ -1049,5 +1224,9 @@ setInterval(async () => {
   if (grew || termOf(sel)?.status === "busy") renderChat(); renderNav();
 }, 2000);
 setInterval(loadSnapshot, 30000);
+checkFavicons();
+setInterval(checkFavicons, 60 * 60000); // hourly, it acts once a day
 if (sel !== PRS) loadPrs(); // select() already loads it when the view is open
 setInterval(loadPrs, 5 * 60000);
+if (sel !== MAIL) loadMails();
+setInterval(loadMails, 5 * 60000);

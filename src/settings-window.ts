@@ -7,10 +7,11 @@ import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type V
 
 // The settings window, laid out like Mail's: a toolbar of icon tabs, the window title follows the tab.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
-// Integrations the external services (Productive, GitHub) as a list on the left with the details on the right,
+// Integrations the external services (Productive, GitHub, Mail) as a list on the left with the details on the right,
 // like Mail's Accounts. Saving emits "settings-changed" from the backend, the main window follows it.
 type Settings = { vault: string; vaults?: Record<string, VaultMap>; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
-  productive: { org: string; user: string }; github: { on: boolean; owners: string }; language?: string };
+  productive: { org: string; user: string }; github: { on: boolean; owners: string }; mail: { on: boolean; account: string }; language?: string;
+  favicons?: { on: boolean; last: string; tried: Record<string, string> } };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const root = document.getElementById("set")!;
 let settings: Settings = await invoke<Settings>("get_settings");
@@ -21,7 +22,9 @@ await initI18n();
 let hasToken = await invoke<boolean>("productive_status"), pvMsg = "", pvOk = false;
 // GitHub: no token of our own, the app uses gh's login. The status is the account gh is signed in with
 let ghLogin = "", ghErr = "", ghMsg = "", ghOk = false;
-let acct = localStorage.getItem("prefsAcct") === "github" ? "github" : "productive";
+// Mail: no password of our own either, the app uses himalaya's config. The status is its list of accounts
+let mailAccts: { name: string; default: boolean }[] | null = null, mailErr = "", mailMsg = "", mailOk = false;
+let acct = ["github", "mail"].find(a => a === localStorage.getItem("prefsAcct")) ?? "productive";
 
 const G: Record<string, string> = {
   gear: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>',
@@ -30,6 +33,7 @@ const G: Record<string, string> = {
   // Productive's favicon (productive.io), as vector: its own colours, not the glyph stroke
   // GitHub's mark (octicon mark-github), in the label colour
   gh: '<path transform="translate(4 4)" fill="currentColor" stroke="none" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>',
+  mail: '<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="m4.5 7 7.5 6 7.5-6"/>',
   board: '<g transform="scale(1.5)"><defs><linearGradient id="pvg" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#AB40FF"/><stop offset="1" stop-color="#5D2BFF"/></linearGradient></defs><rect width="16" height="16" rx="3.6" fill="url(#pvg)" stroke="none"/><g transform="translate(2.5 1.6) scale(.357)" fill="#fff" stroke="none"><path d="M6.036 28.89L.17 18.977a1.217 1.217 0 01.426-1.667l4.633-2.74a1.217 1.217 0 011.666.426l3.3 5.579 3.424-5.89c4.28-7.018 8.712.738 6.693 4.034l-5.89 10.139a2.836 2.836 0 01-2.443 1.412l-3.492.015a2.838 2.838 0 01-2.451-1.393z"/><path d="M30.847 21.445a4.4 4.4 0 11-8.802.001 4.4 4.4 0 018.802 0zm-18.259 3.176c.966 1.64 3.34 1.632 4.297-.014l3.429-5.9c1.787-2.917 3.807-4.476 6.333-4.82.612-.083 1.211-.224 1.374-1.145l.938-5.259a1.234 1.234 0 00-1.207-1.485c-4.603 0-9.956 1.825-14.131 8.672l-3.426 5.892 2.393 4.059z"/></g></g>',
 };
 const icon = (n: string) => `<svg viewBox="0 0 24 24">${G[n]}</svg>`;
@@ -51,6 +55,8 @@ function general() {
       <select class="field" id="language">${LANG_OPTS().map(([v, name]) =>
         `<option value="${v}" ${(settings.language || "system") === v ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>
       <span></span><div class="hint">${t("set.languageHelp")}</div>
+      <span class="fl">${t("set.favicons")}</span><label class="chk"><input type="checkbox" id="favon" ${settings.favicons?.on !== false ? "checked" : ""}> ${t("set.faviconsOn")}</label>
+      <span></span><div class="hint">${t("set.faviconsHelp")}</div>
     </div>`;
 }
 function projects() {
@@ -65,8 +71,8 @@ function integrations() {
   const li = (id: string, g: string, name: string, on: boolean) =>
     `<li class="${acct === id ? "sel" : ""}" data-acct="${id}"><span class="atile ${id}">${icon(g)}</span><span><b>${name}</b><span class="asub">${on ? t("int.set") : t("int.notSet")}</span></span></li>`;
   return `<div class="accts">
-    <ul class="alist">${li("productive", "board", "Productive", ready)}${li("github", "gh", "GitHub", gh)}</ul>
-    ${acct === "github" ? github() : productive(ready)}</div>`;
+    <ul class="alist">${li("productive", "board", "Productive", ready)}${li("github", "gh", "GitHub", gh)}${li("mail", "mail", "Mail", !!mailAccts?.length && settings.mail.on)}</ul>
+    ${acct === "github" ? github() : acct === "mail" ? mail() : productive(ready)}</div>`;
 }
 function github() {
   return `<div class="apane">
@@ -78,6 +84,23 @@ function github() {
       </div>
       <div class="setrow end">${ghMsg ? `<span class="${ghOk ? "okmsg" : "errmsg"}">${esc(ghMsg)}</span>` : ""}<button class="btn" data-set="ghcheck">${t("gh.recheck")}</button><button class="btn primary" data-set="ghsave">${t("set.save")}</button></div>
     </div>`;
+}
+function mail() {
+  const cur = settings.mail.account, names = (mailAccts || []).map(a => a.name);
+  return `<div class="apane">
+      <div class="form">
+        <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${mailAccts?.length ? "on" : ""}"></span>${mailAccts ? t("mail.accounts", { n: mailAccts.length }) : esc(mailErr || t("gh.checking"))}</span>
+        <span class="fl">${t("gh.sidebar")}</span><label class="chk"><input type="checkbox" id="mailon" ${settings.mail.on ? "checked" : ""}> ${t("int.mailSidebar")}</label>
+        <label class="fl" for="mailacct">${t("mail.account")}</label><select class="field" id="mailacct"><option value="">${t("mail.default")}</option>${[...new Set([...names, ...(cur ? [cur] : [])])].map(n =>
+          `<option value="${esc(n)}" ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>
+        <span></span><div class="hint">${t("mail.help")}</div>
+      </div>
+      <div class="setrow end">${mailMsg ? `<span class="${mailOk ? "okmsg" : "errmsg"}">${esc(mailMsg)}</span>` : ""}<button class="btn primary" data-set="mailsave">${t("set.save")}</button></div>
+    </div>`;
+}
+async function mailCheck() {
+  try { mailAccts = await invoke<{ name: string; default: boolean }[]>("mail_accounts"); mailErr = ""; } catch (e) { mailAccts = null; mailErr = String(e); }
+  render();
 }
 function productive(ready: boolean) {
   return `<div class="apane">
@@ -143,6 +166,12 @@ root.addEventListener("click", async e => {
     catch (x) { ghMsg = String(x); ghOk = false; }
     render();
   }
+  if (b.dataset.set === "mailsave") {
+    const next = { ...settings, mail: { on: (document.getElementById("mailon") as HTMLInputElement).checked, account: (document.getElementById("mailacct") as HTMLSelectElement).value } };
+    try { settings = await invoke<Settings>("set_settings", { settings: next }); mailMsg = t("set.saved"); mailOk = true; }
+    catch (x) { mailMsg = String(x); mailOk = false; }
+    render();
+  }
   if (b.dataset.set === "pvsave") { pvMsg = t("pv.busy"); pvOk = true; render(); await pvSave(val("pvorg"), val("pvuser"), val("pvtoken")); }
   if (b.dataset.set === "pvimport") {
     try { const r = await invoke<{ org: string; user: string }>("productive_import"); await pvSave(r.org, r.user); }
@@ -154,6 +183,8 @@ root.addEventListener("click", async e => {
 // the language applies right away: saved, then this window and the main one redraw in it
 root.addEventListener("change", async e => {
   if ((e.target as HTMLElement).matches("[data-map]")) { vs = await checkMapping(vs.vault, readMapping(root, vs)); render(); return; }
+  const fav = (e.target as HTMLElement).closest<HTMLInputElement>("#favon");
+  if (fav) { await save({ ...settings, favicons: { last: "", tried: {}, ...settings.favicons, on: fav.checked } }, ""); return; }
   const sel = (e.target as HTMLElement).closest<HTMLSelectElement>("#language"); if (!sel) return;
   await save({ ...settings, language: sel.value }, "");
   await initI18n(); render();
@@ -166,3 +197,4 @@ window.addEventListener("keydown", e => {
 });
 render();
 ghCheck();
+mailCheck();
