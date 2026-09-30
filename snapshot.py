@@ -75,7 +75,7 @@ def reminders():
         days = (dt.date.fromisoformat(date) - TODAY).days
         out.append({"id": hashlib.sha1(f"{date}|{text}".encode("utf-8")).hexdigest()[:8],  # same id as reminder-digest.py
                     "date": date, "days": days, "project": proj.group(1) if proj else None,
-                    "title": unlink(title.group(1) if title else first_sentence(text)).rstrip("."),
+                    "title": unlink(title.group(1) if title else first_sentence(text)).rstrip("."), "text": text,
                     "repeat": (repeat or "").strip() or None})
     return sorted(out, key=lambda r: r["date"])
 
