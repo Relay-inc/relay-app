@@ -2,14 +2,11 @@
 """Guess each project's website from its notes and fetch the site's favicon. No AI, stdlib only.
 
 stdin: {"projects": [{"name", "aliases"}], "tried": {name: site}, "sites": {name: site}}. A project's site comes
-from "sites" (the vault's .relay/config.json) when it is there, else it is guessed: a domain named in the project
+from "sites" (a website set as its icon in the vault's .relay/config.json) when it is there, else it is guessed: a domain named in the project
 folder that holds the project's name or an alias (resolvus.be for Resolvus), else the domain named most often on
 the project note itself (at least twice). A project whose site equals its entry in "tried" is skipped, so a site
 without a favicon is only fetched once.
 stdout: {name: {"site": "" when no guess, "data": data url of the raw icon or null}} for the rest.
-
-`favicon.py --guess`: only the guesses, nothing fetched. stdin {"projects": [...]}, stdout {name: site}. The app
-uses it to fill "sites" when it writes a vault's .relay/config.json.
 """
 import base64
 import concurrent.futures
@@ -98,7 +95,11 @@ def mime(b):
 
 
 def favicon(site):
-    html, base = get(f"https://{site}")
+    # the page's own icons first; a site that blocks scripts or has a bad certificate still gets the fallbacks
+    try:
+        html, base = get(f"https://{site}")
+    except Exception:
+        html, base = b"", f"https://{site}/"
     links = []
     for tag in re.findall(r"<link[^>]+>", html.decode("utf-8", "ignore"), re.I):
         rel, href = re.search(r"rel=[\"']?([^\"'>]+)", tag, re.I), re.search(r"href=[\"']?([^\"' >]+)", tag, re.I)
@@ -108,7 +109,9 @@ def favicon(site):
         # the largest wins: an svg scales, an apple-touch-icon is 180 px
         n = int(size.group(1)) if size else 512 if ".svg" in href.group(1) else 180 if "apple" in rel.group(1).lower() else 16
         links.append((n, urllib.parse.urljoin(base, href.group(1).replace("&amp;", "&"))))
-    for _, url in sorted(links, reverse=True) + [(0, urllib.parse.urljoin(base, "/favicon.ico"))]:
+    # then the usual paths, then DuckDuckGo's favicon service (404 when it has none, so no generic globe)
+    rest = [urllib.parse.urljoin(base, p) for p in ("/favicon.ico", "/apple-touch-icon.png", "/favicon.png")] + [f"https://icons.duckduckgo.com/ip3/{site}.ico"]
+    for _, url in sorted(links, reverse=True) + [(0, u) for u in rest]:
         try:
             b, _ = get(url)
         except Exception:
@@ -131,9 +134,6 @@ def check(p, tried, sites):
 
 if __name__ == "__main__":
     job = json.load(sys.stdin)
-    if "--guess" in sys.argv:
-        json.dump({p["name"]: guess(p["name"], p.get("aliases") or []) for p in job["projects"]}, sys.stdout)
-        sys.exit()
     with concurrent.futures.ThreadPoolExecutor(8) as ex:
         done = ex.map(lambda p: check(p, job.get("tried") or {}, job.get("sites") or {}), job["projects"])
     json.dump(dict(r for r in done if r), sys.stdout)

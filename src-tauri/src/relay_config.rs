@@ -6,7 +6,9 @@
 //   contexts  the work-state headings that hold project tables
 //   skip      folder names project-note lookups pass over
 //   repos     GitHub "owner/repo" -> project, for the PRs per project
-//   sites     project -> its website, for its favicon ("" when none was found)
+//   icons     project -> its icon: "icons/<file>.png" (a file next to the config), an emoji, a website whose
+//             favicon the app fetches and stores as a file, or "" (none, do not guess). No entry: the app guesses
+//             the project's website from its notes and stores the favicon.
 //
 // Written once from what the app detects, the first time a vault is used; after that the file is the truth,
 // edited by hand or in Settings. snapshot.py and favicon.py read the same file.
@@ -55,7 +57,6 @@ fn seed(vault: &str, map: &Value) -> Value {
     let skip: Vec<String> = SKIP.iter().map(|s| s.to_string()).collect();
     let (projects, contexts) = abs("workState").map(|w| work_state(&w)).unwrap_or_default();
     let counts = headings(&notes, &skip);
-    let sites = guess_sites(vault, &notes, &projects);
     json!({
         "version": 1,
         "paths": map,
@@ -63,31 +64,121 @@ fn seed(vault: &str, map: &Value) -> Value {
         "contexts": contexts,
         "skip": skip,
         "repos": repos(vault, &projects),
-        "sites": sites,
     })
 }
 
-/// Each project's website, guessed from its notes by favicon.py (no AI, nothing fetched); "" when none was found.
-fn guess_sites(vault: &str, notes: &Path, projects: &[String]) -> Value {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-    let job = json!({"projects": projects.iter().map(|p| json!({"name": p})).collect::<Vec<_>>()});
-    let run = || -> Option<Value> {
-        let mut c = Command::new("/usr/bin/python3").arg(format!("{}/favicon.py", crate::REPO)).arg("--guess")
-            .env("VAULT", vault).env("VAULT_NOTES", notes).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
-        c.stdin.take()?.write_all(job.to_string().as_bytes()).ok()?;
-        serde_json::from_slice(&c.wait_with_output().ok()?.stdout).ok()
-    };
-    run().filter(Value::is_object).unwrap_or_else(|| json!({}))
+// ---------- repos
+
+/// A project's GitHub repos ("owner/repo", lowercased) replace the ones it had. One that came from the brain's
+/// index/repos.json and is taken off stays in `repos` as "" (unlinked), or it would come back from the index.
+pub fn set_repos(vault: &str, project: &str, repos: &[String]) -> Result<(), String> {
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["repos"].is_object() { c["repos"] = json!({}); }
+    let indexed: Vec<String> = crate::repo_index(vault).into_iter().filter(|(_, n)| n == project).map(|(r, _)| r).collect();
+    let m = c["repos"].as_object_mut().unwrap();
+    m.retain(|_, p| p != project);
+    for r in indexed { m.insert(r, json!("")); }
+    for r in repos {
+        let r = r.trim().trim_start_matches("https://github.com/").trim_end_matches(".git").trim_end_matches('/').to_lowercase();
+        let ok = r.split('/').count() == 2 && r.split('/').all(|w| !w.is_empty() && w.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)));
+        if !ok { return Err(format!("not owner/repo: {r}")); }
+        m.insert(r, json!(project));
+    }
+    save(vault, &c)
 }
-/// New guesses for projects the config has no site for yet (added to work-state later); what is there stays.
-pub fn add_sites(vault: &str, found: &Map<String, Value>) {
-    let Some(mut c) = load(vault) else { return };
-    if !c["sites"].is_object() { c["sites"] = json!({}); }
-    let sites = c["sites"].as_object_mut().unwrap();
-    let mut changed = false;
-    for (name, site) in found { if !sites.contains_key(name) { sites.insert(name.clone(), site.clone()); changed = true; } }
-    if changed { save(vault, &c).ok(); }
+
+// ---------- icons
+
+/// What an `icons` value is.
+pub enum Icon<'a> { File(&'a str), Emoji(&'a str), Site(&'a str), None }
+pub fn icon_kind(v: &str) -> Icon<'_> {
+    if v.is_empty() { Icon::None }
+    else if v.starts_with("icons/") { Icon::File(v) }
+    else if v.contains('.') && !v.contains(char::is_whitespace) { Icon::Site(v) }
+    else { Icon::Emoji(v) }
+}
+/// A website as typed (https://www.spardex.be/nl) to the domain the favicon is fetched from.
+pub fn site_of(s: &str) -> Option<String> {
+    let d = s.trim().trim_start_matches("https://").trim_start_matches("http://").split(['/', '?', '#']).next()?.trim_start_matches("www.").to_lowercase();
+    (d.contains('.') && d.chars().all(|c| c.is_ascii_alphanumeric() || ".-".contains(c))).then_some(d)
+}
+/// A file for a project's icon: readable name plus a short hash, so two names never share a file.
+fn icon_file(project: &str) -> String {
+    let slug: String = project.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect();
+    let slug: String = slug.split('-').filter(|w| !w.is_empty()).collect::<Vec<_>>().join("-");
+    format!("icons/{}-{}.png", &slug[..slug.len().min(40)], &sha1_smol::Sha1::from(project).digest().to_string()[..6])
+}
+/// An icon file as a data url for the webview; only files inside .relay/icons/.
+fn icon_data(vault: &str, rel: &str) -> Option<String> {
+    use base64::Engine;
+    if rel.contains("..") { return None; }
+    let p = path(vault).with_file_name(rel);
+    let mime = match p.extension()?.to_str()?.to_lowercase().as_str() { "png" => "image/png", "jpg" | "jpeg" => "image/jpeg", "gif" => "image/gif", "webp" => "image/webp", "svg" => "image/svg+xml", "ico" => "image/x-icon", _ => return None };
+    Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(fs::read(p).ok()?)))
+}
+/// Every project with an entry: its raw value, and what to show (`img` a data url, or `icon` an emoji).
+pub fn icons(vault: &str) -> Map<String, Value> {
+    let Some(c) = load(vault) else { return Map::new() };
+    c["icons"].as_object().into_iter().flatten().filter_map(|(n, v)| {
+        let v = v.as_str()?;
+        Some((n.clone(), match icon_kind(v) {
+            Icon::File(f) => json!({"value": v, "img": icon_data(vault, f)}),
+            Icon::Emoji(e) => json!({"value": v, "icon": e}),
+            _ => json!({"value": v}),
+        }))
+    }).collect()
+}
+/// Set a project's icon. `kind`: "img" (a png data url, stored as a file), "emoji", "site" (fetched by the favicon
+/// run), "none" (no icon, not guessed) or "reset" (no entry: guessed again). A file no project uses any more goes.
+pub fn set_icon(vault: &str, project: &str, kind: &str, value: &str) -> Result<(), String> {
+    use base64::Engine;
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["icons"].is_object() { c["icons"] = json!({}); }
+    let new = match kind {
+        "img" => {
+            let b64 = value.strip_prefix("data:image/png;base64,").ok_or("not a png")?;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
+            if bytes.len() > 512 * 1024 { return Err("image too large".into()); }
+            let f = icon_file(project);
+            let p = path(vault).with_file_name(&f);
+            fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
+            fs::write(&p, bytes).map_err(|e| e.to_string())?;
+            Some(f)
+        }
+        "emoji" if !value.trim().is_empty() && value.trim().chars().count() <= 8 && !value.contains('.') => Some(value.trim().to_string()),
+        "site" => Some(site_of(value).ok_or("not a website")?),
+        "none" => Some(String::new()),
+        "reset" => None,
+        _ => return Err("bad icon".into()),
+    };
+    let icons = c["icons"].as_object_mut().unwrap();
+    let old = icons.get(project).and_then(|v| v.as_str()).map(String::from);
+    match &new { Some(v) => { icons.insert(project.into(), json!(v)); } None => { icons.remove(project); } }
+    if let Some(o) = old.filter(|o| o.starts_with("icons/") && Some(o) != new.as_ref() && !icons.values().any(|v| v == o.as_str())) {
+        fs::remove_file(path(vault).with_file_name(o)).ok();
+    }
+    save(vault, &c)
+}
+/// The icons set before they lived in the vault (settings.json's projects: `img`, `icon`) and the `sites` of a
+/// config from before `icons`, moved into `icons` once. Returns the projects whose icon moved, for settings.json.
+pub fn migrate_icons(vault: &str, projects: &Map<String, Value>) -> Option<Vec<String>> {
+    let mut c = load(vault)?;
+    if c["icons"].is_object() { return None; }
+    c["icons"] = json!({});
+    if let Some(sites) = c.as_object_mut().unwrap().remove("sites").and_then(|s| s.as_object().cloned()) {
+        for (n, s) in sites { c["icons"][n] = s; }
+    }
+    save(vault, &c).ok()?;
+    let mut moved = vec![];
+    for (n, p) in projects {
+        let r = match (p["img"].as_str(), p["icon"].as_str()) {
+            (Some(img), _) => set_icon(vault, n, "img", img),
+            (_, Some(e)) if !e.is_empty() => set_icon(vault, n, "emoji", e),
+            _ => continue,
+        };
+        if r.is_ok() { moved.push(n.clone()); }
+    }
+    Some(moved)
 }
 
 /// The candidates the notes use, most used first; all of them when the notes use none (nothing to go on).
@@ -173,6 +264,33 @@ fn repos(vault: &str, projects: &[String]) -> Map<String, Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn icons_live_in_the_vault() {
+        let v = std::env::temp_dir().join(format!("relay-icons-{}", std::process::id()));
+        let vs = v.to_string_lossy().into_owned();
+        fs::create_dir_all(&v).unwrap();
+        save(&vs, &json!({"version": 1, "sites": {"o2o": "o2o.be", "Spardex": ""}})).unwrap();
+        // a 1x1 png
+        let png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+        let projects = json!({"Lemahieu": {"icon": "🛒", "label": "L"}, "BE Plastics (TradeHub)": {"img": png}}).as_object().unwrap().clone();
+        let mut moved = migrate_icons(&vs, &projects).unwrap(); moved.sort();
+        assert_eq!(moved, ["BE Plastics (TradeHub)", "Lemahieu"]);
+        let i = icons(&vs);
+        assert_eq!(i["o2o"]["value"], "o2o.be");
+        assert_eq!(i["Spardex"]["value"], "");
+        assert_eq!(i["Lemahieu"]["icon"], "🛒");
+        let f = i["BE Plastics (TradeHub)"]["value"].as_str().unwrap().to_string();
+        assert!(f.starts_with("icons/be-plastics-tradehub-") && i["BE Plastics (TradeHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert!(load(&vs).unwrap().get("sites").is_none(), "sites became icons");
+        assert!(migrate_icons(&vs, &projects).is_none(), "only once");
+        set_icon(&vs, "BE Plastics (TradeHub)", "site", "https://www.be-plastics.com/nl").unwrap();
+        assert_eq!(icons(&vs)["BE Plastics (TradeHub)"]["value"], "be-plastics.com");
+        assert!(!path(&vs).with_file_name(&f).exists(), "the old file goes");
+        set_icon(&vs, "Lemahieu", "reset", "").unwrap();
+        assert!(!icons(&vs).contains_key("Lemahieu"));
+        assert!(set_icon(&vs, "x", "emoji", "a.b").is_err());
+        fs::remove_dir_all(&v).ok();
+    }
     #[test]
     fn picks_the_headings_a_vault_uses() {
         let c: HashMap<String, usize> = [("status".to_string(), 8), ("current state".to_string(), 7), ("log".to_string(), 5)].into();

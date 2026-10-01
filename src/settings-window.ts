@@ -1,12 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./settings.css";
-import { currentLocale, initI18n, pt, t, at } from "./i18n";
+import { currentLocale, initI18n, pt, t, tn, at } from "./i18n";
 import type { Key } from "./locales/en";
 import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type BoardRef } from "./providers";
 import { agent, agentsStatus, type AgentsStatus, type AgentStatus } from "./agents";
 import { KEYS, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
 import { iconPaths } from "./icons";
+import { loadIcons, setIcon, iconFrom, iconImg, isSite, type ProjectIcon, type IconKind } from "./project-icons";
+import { listen } from "@tauri-apps/api/event";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
@@ -92,12 +94,68 @@ function general() {
         `<option value="${v}" ${(settings.language || "system") === v ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>`, { id: "language", hint: t("set.languageHelp") })
       + field(t("set.faviconsOn"), sw("favon", settings.favicons?.on !== false), { id: "favon", hint: t("set.faviconsHelp") }));
 }
+// the project icons live in the vault (.relay/config.json, src/project-icons.ts): every project, folded, to override
+let icons: Record<string, ProjectIcon> | null = null, iconNames: string[] = [], iconMsg = "", iconOk = false, finding = false;
+let repos: Record<string, string[]> = {};
+let iconProjects: { name: string; context?: string; summary?: string }[] = [];
+async function loadIconsPane() {
+  const [i, snap, rp] = await Promise.all([loadIcons(), invoke<any>("snapshot").catch(() => ({ projects: [] })), invoke<Record<string, string[]>>("project_repos").catch(() => ({}))]);
+  icons = i; repos = rp; iconProjects = snap.projects || [];
+  iconNames = iconProjects.map(x => String(x.name)).sort((a, b) => a.localeCompare(b));
+  render();
+}
+listen("icons-changed", () => { if (icons) loadIconsPane(); });
+// the Projects page: every project, a row folds open to its configuration. The name in Relay stays in the app's
+// settings; the icon and the repos live in the vault's .relay/config.json.
 function projects() {
-  const custom = Object.entries(settings.projects).filter(([, c]) => c.icon || c.img || c.label);
-  const rows = custom.map(([n, c]) => `<div class="srow"><span class="srow-i">${c.img && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(c.img) ? `<img src="${c.img}" alt="">` : esc(c.icon || "")}</span>
-    <span class="srow-t"><b>${esc(c.label || n)}</b>${c.label ? `<span>${esc(n)}</span>` : ""}</span>
-    <span class="srow-x"><button class="btn ghost" data-set="clear" data-p="${esc(n)}">${t("set.reset")}</button></span></div>`).join("");
-  return sec(t("set.custom"), rows || `<div class="sempty">${t("set.none")}</div>`, { desc: t("set.customHelp"), list: true, foot: msg ? foot(esc(msg), ok, "") : "" });
+  if (!icons) { queueMicrotask(loadIconsPane); return sec(t("set.tab.projects"), `<div class="st"><span class="spin"></span>${t("pr.loading")}</div>`); }
+  const preview = (n: string) => iconImg(icons?.[n]?.img, "") || (icons?.[n]?.icon ? `<span class="emo">${esc(icons[n].icon!)}</span>` : icon("folder"));
+  const ctx = (n: string) => iconProjects.find(p => p.name === n)?.context ?? "";
+  const title = (n: string) => { const l = settings.projects[n]?.label; return l ? `${esc(l)} <span class="opt">${esc(n)}</span>` : esc(n); };
+  const state = (n: string) => `<span class="st">${[ctx(n), repos[n]?.length ? tn("pc.repoCount", repos[n].length) : ""].filter(Boolean).map(esc).join(" · ")}</span>`;
+  const body = (n: string) => { const i = icons?.[n], id = esc(n);
+    // one input for an emoji or a website; the buttons for an image, none and guessing again
+    const val = i?.icon ?? (i && isSite(i.value) ? i.value : "");
+    return `${field(t("pc.name"), `<input class="field" data-plabel="${id}" value="${esc(settings.projects[n]?.label ?? "")}" placeholder="${id}" spellcheck="false">`)}
+      ${field(t("pc.icon"), `<span class="iconctl"><span class="itile">${preview(n)}</span><input class="field" data-picon="${id}" value="${esc(val)}" placeholder="${t("pc.iconPh")}" spellcheck="false">
+        <label class="btn ib" title="${t("pi.upload")}">${icon("upload")}<input type="file" data-pifile="${id}" accept="image/*,.ico,.svg" hidden></label>
+        <button class="btn ib" data-set="piset" data-kind-icon="none" data-id="${id}" title="${t("pi.none")}">${icon("none")}</button>
+        <button class="btn ib" data-set="piset" data-kind-icon="reset" data-id="${id}" title="${t("pi.reset")}">${icon("refresh")}</button></span>`, { hint: iconHint(n) })}
+      ${field(t("pc.repos"), `<span class="chips">${(repos[n] ?? []).map(r => `<span class="chip">${esc(r)}<button data-set="repodel" data-id="${id}" data-repo="${esc(r)}" title="${t("ag.remove")}">×</button></span>`).join("")}
+        <input class="field" data-repoadd="${id}" placeholder="owner/repo" spellcheck="false"></span>`, { hint: t("pc.reposHelp") })}`; };
+  return sec(t("set.tab.projects"), iconNames.map(n => foldRow("proj", n, preview(n), title(n), state(n), () => body(n))).join("") || `<div class="sempty">${t("set.none")}</div>`,
+    { desc: t("pc.desc"), list: true, foot: iconMsg || msg ? foot(esc(iconMsg || msg), iconMsg ? iconOk : ok, "") : "",
+      action: `<button class="btn" data-set="pifind" title="${t("pi.findHelp")}" ${finding ? "disabled" : ""}>${finding ? `<span class="spin"></span> ${t("pi.finding")}` : t("pi.find")}</button>` });
+}
+// what the icon is now, under the icon line
+function iconHint(n: string) {
+  const i = icons?.[n];
+  if (!i) return t("pi.guess");
+  if (i.img) return t("pi.image");
+  if (i.icon) return t("pi.emoji");
+  if (isSite(i.value)) return settings.favicons?.tried?.[n] === i.value ? t("pi.siteNoIcon", { site: esc(i.value) }) : t("pi.siteSoon", { site: esc(i.value) });
+  return t("pi.noIcon");
+}
+async function setRepos(project: string, list: string[]) {
+  try { await invoke("set_project_repos", { project, repos: list }); iconMsg = ""; iconOk = true; repos = await invoke<Record<string, string[]>>("project_repos"); }
+  catch (x) { iconMsg = String(x); iconOk = false; }
+  render();
+}
+// Find icons: Claude looks up the website of every project without an icon (or set to none), its favicon follows
+async function findIcons() {
+  const targets = iconProjects.filter(p => { const i = icons?.[p.name]; return !i || i.value === ""; });
+  if (!targets.length) { iconMsg = t("pi.findNone"); iconOk = true; render(); return; }
+  finding = true; iconMsg = ""; render();
+  try {
+    const found = await invoke<Record<string, string>>("find_icon_sites", { projects: targets.map(p => ({ name: p.name, context: p.context ?? "", summary: p.summary ?? "" })) });
+    for (const [n, site] of Object.entries(found)) await setIcon(n, "site", site);
+    const n = Object.keys(found).length;
+    iconMsg = n ? t("pi.found", { n, total: targets.length }) : t("pi.findNone"); iconOk = true;
+  } catch (x) { iconMsg = String(x); iconOk = false; }
+  finding = false; render();
+}
+async function iconSet(project: string, kind: IconKind, value = "") {
+  try { await setIcon(project, kind, value); iconMsg = ""; iconOk = true; } catch (x) { iconMsg = String(x); iconOk = false; render(); }
 }
 // set up: every secret in the keychain and every field that is not optional
 const setUp = (p: BoardProvider) => tokens[p.id] && p.settings.fields.every(f => f.optional || f.secret || settings.integrations[p.id]?.[f.key]);
@@ -375,10 +433,28 @@ root.addEventListener("click", async e => {
   if (bp && b.dataset.set === "bclear") {
     await invoke("integration_token", { provider: bp.id, token: "" }); tokens[bp.id] = false; delete allBoards[bp.id]; pmsg[bp.id] = { text: t("int.cleared"), ok: true }; render();
   }
+  if (b.dataset.set === "pifind") { await findIcons(); return; }
+  if (b.dataset.set === "piset") { await iconSet(b.dataset.id!, b.dataset.kindIcon as IconKind); return; }
+  if (b.dataset.set === "repodel") { await setRepos(b.dataset.id!, (repos[b.dataset.id!] ?? []).filter(r => r !== b.dataset.repo)); return; }
   if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await save(next, t("set.restored")); }
 });
 // the language applies right away: saved, then this window and the main one redraw in it
 root.addEventListener("change", async e => {
+  const ti = e.target as HTMLInputElement;
+  // one field for an emoji or a website: a dot makes it a website
+  if (ti.dataset.picon !== undefined) { const v = ti.value.trim(); await iconSet(ti.dataset.picon, !v ? "reset" : isSite(v) ? "site" : "emoji", v); return; }
+  if (ti.dataset.repoadd !== undefined) { const v = ti.value.trim(); if (v) await setRepos(ti.dataset.repoadd, [...(repos[ti.dataset.repoadd] ?? []), v]); return; }
+  if (ti.dataset.plabel !== undefined) {
+    const next = structuredClone(settings), n = ti.dataset.plabel, v = ti.value.trim();
+    if (v) next.projects[n] = { ...next.projects[n], label: v }; else delete next.projects[n];
+    await save(next, ""); return;
+  }
+  if (ti.dataset.pifile !== undefined) {
+    const f = ti.files?.[0]; if (!f) return;
+    const u = await iconFrom(f);
+    if (u) await iconSet(ti.dataset.pifile, "img", u); else { iconMsg = t("img.unreadable"); iconOk = false; render(); }
+    return;
+  }
   const bm = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-bmap]"), bp = bm && provider(bm.dataset.bp!);
   if (bm && bp) {
     // a vault project has at most one board: picking one replaces what it had, None only drops this provider's
