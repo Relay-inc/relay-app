@@ -237,6 +237,10 @@ export default {
   "set.language": "Sprache",
   "set.languageHelp":
     "Die Sprache der App. System folgt der macOS-Sprache, oder Englisch, wenn die App diese Sprache nicht hat.",
+  "set.theme": "Erscheinungsbild",
+  "set.themeHelp": "Hell oder dunkel. System folgt macOS.",
+  "set.themeLight": "Hell",
+  "set.themeDark": "Dunkel",
   "set.favicons": "Projektsymbole",
   "set.faviconsOn": "Favicon der Website als Symbol",
   "set.faviconsHelp":

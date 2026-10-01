@@ -22,14 +22,22 @@
   --color-ctx-a: var(--ctx-a);
   --color-ctx-m: var(--ctx-m);
   --color-ctx-p: var(--ctx-p);
-  --color-ok: #248a3d;
-  --color-bad: #d70015;
+  --color-ok: var(--ok);
+  --color-bad: var(--bad);
   --color-white: #fff;
   --color-black: #000;
   --color-transparent: transparent;
   --color-current: currentColor;
   --font-sans: var(--sans);
   --font-mono: var(--mono);
+  /* one ultra-diffuse shadow for every step: floating menus keep their border, the shadow only lifts them */
+  --shadow-*: initial;
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.045);
+  --shadow-xl: 0 4px 16px rgba(0, 0, 0, 0.045);
+  --shadow-2xl: 0 8px 24px rgba(0, 0, 0, 0.05);
   --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
   --animate-skel: skel 1.4s ease-in-out infinite;
   @keyframes pulse-dot {
@@ -48,13 +56,6 @@
     50% {
       opacity: 0.45;
     }
-  }
-}
-@media (prefers-color-scheme: dark) {
-  :root,
-  :host {
-    --color-ok: #30d158;
-    --color-bad: #ff6961;
   }
 }
 
@@ -110,7 +111,7 @@
 
 /* buttons */
 @utility btn {
-  @apply h-7 px-3.5 rounded-lg border border-separator bg-bg cursor-default transition hover:brightness-95 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-accent/45;
+  @apply h-7 px-3.5 rounded-md border border-separator bg-bg cursor-default transition hover:brightness-95 active:scale-98 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-accent/45;
   & svg {
     @apply size-4 fill-none stroke-current;
     stroke-width: 1.5;
@@ -119,7 +120,7 @@
   }
 }
 @utility btn-primary {
-  @apply bg-accent border-accent text-on-accent;
+  @apply bg-accent border-accent text-on-accent hover:brightness-100 hover:opacity-85;
 }
 /* a square icon button. !important: the compiled order puts btn-icon before btn, whose padding would win */
 @utility btn-icon {
@@ -127,7 +128,7 @@
 }
 /* a text field or select in the app's look */
 @utility field {
-  @apply h-7 px-2 rounded-lg border border-separator bg-bg text-label text-sm font-sans;
+  @apply h-7 px-2 rounded-md border border-separator bg-bg text-label text-sm font-sans;
 }
 /* the segmented control (the right panel's tabs, the mail filter) */
 @utility seg {
@@ -186,7 +187,7 @@
   }
 }
 @utility chip {
-  @apply text-xs px-2 py-0.5 rounded-lg bg-fill text-secondary whitespace-nowrap;
+  @apply text-[10px] font-medium uppercase tracking-wider px-2 py-0.5 rounded-full bg-fill text-secondary whitespace-nowrap;
 }
 
 /* markdown rendered from text (the agents' answers, PR and note bodies): its elements carry no classes */
@@ -237,7 +238,7 @@
     @apply text-accent;
   }
   & a:not(.vlink) {
-    @apply underline;
+    @apply underline decoration-secondary underline-offset-2;
   }
 }
 @utility md-panel {
@@ -265,5 +266,5 @@
 }
 /* a vault note named in the text: opens in the right panel */
 @utility vlink {
-  @apply text-accent cursor-pointer no-underline hover:underline;
+  @apply text-accent cursor-pointer underline decoration-separator underline-offset-2 hover:decoration-current;
 }

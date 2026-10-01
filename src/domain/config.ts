@@ -9,6 +9,8 @@ export type MailAcct = { email: string; keychain_service: string; keychain_accou
 export type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
 /** An agent provider's settings: switched on, the program, and its own options (Codex' sandbox, …). */
 export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
+/** The colour scheme: macOS's, or always light or dark. */
+export type Theme = "system" | "light" | "dark";
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
@@ -19,6 +21,7 @@ export type Settings = {
   github: { on: boolean; owners: string };
   mail: MailCfg;
   language?: string;
+  theme?: Theme;
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
 };

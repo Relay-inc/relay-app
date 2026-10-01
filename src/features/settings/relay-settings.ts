@@ -4,6 +4,8 @@ import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initI18n, t } from "../../core/i18n";
+import { applyTheme } from "../../core/theme";
+import type { Theme } from "../../domain/config";
 import type { Key } from "../../core/locales/en";
 import {
   KEYS,
@@ -85,6 +87,7 @@ export class RelaySettings extends SettingsElement {
     const settings = await invoke<Settings>("get_settings");
     this.vaultStatus = await invoke<VaultStatus>("vault_status");
     await initI18n();
+    applyTheme(settings.theme);
     this.settings = settings;
   }
 
@@ -128,6 +131,11 @@ export class RelaySettings extends SettingsElement {
     await this.save({ settings: { ...this.settings!, language }, done: "" });
     await initI18n();
     window.dispatchEvent(new Event("settings-lang"));
+  }
+
+  private async changeTheme(theme: Theme) {
+    applyTheme(theme);
+    await this.save({ settings: { ...this.settings!, theme }, done: "" });
   }
 
   private async pickVaultFolder(current: VaultStatus) {
@@ -185,6 +193,7 @@ export class RelaySettings extends SettingsElement {
       @map-check=${(e: CustomEvent<VaultMap>) => this.checkMap(vaultStatus, e.detail)}
       @folders-save=${(e: CustomEvent<VaultMap>) => this.saveFolders(settings, vaultStatus.vault, e.detail)}
       @language-change=${(e: CustomEvent<string>) => this.changeLanguage(e.detail)}
+      @theme-change=${(e: CustomEvent<Theme>) => this.changeTheme(e.detail)}
       @favicons-change=${(e: CustomEvent<boolean>) => this.saveFavicons(settings, e.detail)}
     ></relay-settings-general>`;
   }

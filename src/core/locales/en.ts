@@ -234,6 +234,10 @@ const en = {
   "set.language": "Language",
   "set.languageHelp":
     "The language of the app. System follows the macOS language, or English when the app doesn't have it.",
+  "set.theme": "Appearance",
+  "set.themeHelp": "Light or dark. System follows macOS.",
+  "set.themeLight": "Light",
+  "set.themeDark": "Dark",
   "set.favicons": "Project icons",
   "set.faviconsOn": "Use the website favicon as icon",
   "set.faviconsHelp":

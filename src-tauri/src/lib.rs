@@ -87,6 +87,7 @@ fn norm(mut v: Value) -> Value {
     if !v["favicons"]["tried"].is_object() { v["favicons"]["tried"] = json!({}); }
     v["favicons"]["tried"].as_object_mut().unwrap().retain(|_, s| s.as_str().is_some_and(|s| s.len() <= 253));
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
+    if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     v
 }
 

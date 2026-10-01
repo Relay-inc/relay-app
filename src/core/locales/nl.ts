@@ -236,6 +236,10 @@ export default {
   "set.restored": "Hersteld.",
   "set.language": "Taal",
   "set.languageHelp": "De taal van de app. Systeem volgt de taal van macOS, of Engels als de app die taal niet heeft.",
+  "set.theme": "Thema",
+  "set.themeHelp": "Licht of donker. Systeem volgt macOS.",
+  "set.themeLight": "Licht",
+  "set.themeDark": "Donker",
   "set.favicons": "Projecticonen",
   "set.faviconsOn": "Favicon van de website als icoon",
   "set.faviconsHelp":
