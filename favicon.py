@@ -65,8 +65,11 @@ def guess(name, aliases):
     everything = domains(f for f in glob.glob(os.path.join(glob.escape(folder), "**", "*.md"), recursive=True)
                          if not any(d in f[len(folder):] + "/" for d in SKIP_DIRS))
     keys = {k for n in [name, *aliases] for k in [compact(n), *(compact(w) for w in re.split(r"[\s/-]+", n))] if len(k) >= 4}
+    # a short name (o2o) only as the whole domain name: o2o.be, never o2oshop.be or a word that starts with it
+    short = {compact(n) for n in [name, *aliases] if 2 <= len(compact(n)) < 4}
     # the domain starts with the name: weemaesglas.be for Weemaes, not filmfestival.be for Trefpunt Festival
-    named = [(n, d) for d, n in everything.items() if d not in NOISE and any(compact(d.split(".")[0]).startswith(k) for k in keys)]
+    label = lambda d: compact(d.split(".")[0])
+    named = [(n, d) for d, n in everything.items() if d not in NOISE and (label(d) in short or any(label(d).startswith(k) for k in keys))]
     if named:
         return max(named)[1]
     common = [(n, d) for d, n in domains(notes[:1]).items() if d not in NOISE and n >= 2]
