@@ -391,6 +391,7 @@ export default {
   "mail.draft": "Draft antwoord",
   "mail.draftTitle": "Een nieuw gesprek dat een antwoord als draft klaarzet, er wordt niets verstuurd",
   "note.mailStarted": "Over de mail van {from}: {subject}",
+  "note.cardStarted": "Over {name}-taak {title}",
   "note.draftSaved": "Draft bewaard in {folder}: aan {to}",
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",

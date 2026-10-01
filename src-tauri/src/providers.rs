@@ -137,9 +137,35 @@ pub fn upload(p: &Provider, url: &str, fields: &serde_json::Map<String, Value>, 
     Ok(if location.trim().is_empty() { xml.unwrap_or_default() } else { location.trim().to_string() })
 }
 
+/// A picture's preview for the card panel, as a data URL: the webview loads no outside images (CSP). Only from a URL the
+/// provider's `thumb` allows, without the secrets and without following a redirect (one to a login page is no picture).
+pub fn thumb(p: &Provider, url: &str) -> Result<String, String> {
+    if !(p.thumb)(url) { return Err(trc_v("err.call", p.name)); }
+    let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--fail", "--proto", "=https", "--max-time", "30", "--max-filesize", "2097152", "-K", "-"])
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    ch.stdin.take().unwrap().write_all(format!("url = {}\n", curl_quote(url)).as_bytes()).map_err(|e| e.to_string())?;
+    let o = ch.wait_with_output().map_err(|e| e.to_string())?;
+    if !o.status.success() { return Err(trc_v("err.down", String::from_utf8_lossy(&o.stderr).trim()).replace("{p}", p.name)); }
+    picture(&o.stdout).ok_or_else(|| format!("{}: not a picture", p.name))
+}
+/// Bytes as a data URL when they are a PNG, JPEG, GIF or WebP, told by their first bytes, not by what the server says.
+fn picture(b: &[u8]) -> Option<String> {
+    use base64::Engine;
+    let mime = if b.starts_with(b"\x89PNG") { "image/png" } else if b.starts_with(&[0xFF, 0xD8, 0xFF]) { "image/jpeg" }
+        else if b.starts_with(b"GIF8") { "image/gif" } else if b.len() > 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" { "image/webp" } else { return None };
+    Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(b)))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_pictures_become_data_urls() {
+        assert!(picture(b"\x89PNG\r\n\x1a\n....").unwrap().starts_with("data:image/png;base64,"));
+        assert!(picture(&[0xFF, 0xD8, 0xFF, 0xE0]).unwrap().starts_with("data:image/jpeg"));
+        assert!(picture(b"RIFF\0\0\0\0WEBPVP8 ").unwrap().starts_with("data:image/webp"));
+        assert!(picture(b"<svg onload=x>").is_none() && picture(b"<!DOCTYPE html>").is_none());
+    }
     #[test]
     fn upload_posts_the_fields_then_the_file_and_reads_location() {
         use std::io::{Read, Write};

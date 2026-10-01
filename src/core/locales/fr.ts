@@ -392,6 +392,7 @@ export default {
   "mail.draft": "Préparer une réponse",
   "mail.draftTitle": "Une nouvelle conversation qui prépare une réponse en brouillon, rien n'est envoyé",
   "note.mailStarted": "À propos du mail de {from} : {subject}",
+  "note.cardStarted": "À propos de la tâche {name} {title}",
   "note.draftSaved": "Brouillon enregistré dans {folder} : à {to}",
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",

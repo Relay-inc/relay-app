@@ -37,6 +37,7 @@ export const ctxOf = (
       data,
     });
   },
+  thumb: url => invoke<string>("integration_thumb", { provider: boardProvider.id, url }),
 });
 /** Switched on, config complete and a token in the keychain: the board shows in the sidebar. */
 export const ready = (boardProvider: BoardProvider) =>

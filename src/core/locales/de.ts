@@ -391,6 +391,7 @@ export default {
   "mail.draft": "Antwort entwerfen",
   "mail.draftTitle": "Ein neues Gespräch, das eine Antwort als Entwurf ablegt, nichts wird gesendet",
   "note.mailStarted": "Zur Mail von {from}: {subject}",
+  "note.cardStarted": "Zur {name}-Aufgabe {title}",
   "note.draftSaved": "Entwurf gespeichert in {folder}: an {to}",
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
