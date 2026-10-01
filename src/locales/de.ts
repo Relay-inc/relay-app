@@ -283,6 +283,7 @@ export default {
   "mail.more": "50 weitere laden",
   "work.done": "Fertig",
   "work.doneIn": "Fertig · {d}",
+  "notify.waits": "Wartet auf dich: Claude möchte {tool} verwenden.",
   "work.interrupted": "Unterbrochen: Der Prozess hat mitten im Durchgang aufgehört.",
   "work.outside": "Läuft noch außerhalb der App, die App liest mit",
   "work.waitOutside": "Dieser Durchgang läuft noch außerhalb der App. Sende, wenn er fertig ist.",

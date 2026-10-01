@@ -100,6 +100,7 @@ let chats: Record<string, Chat> = store.get("chats", {});
 // what is typed but not sent, per conversation: survives switching and closing the app
 const typed: Record<string, string> = store.get("typed", {});
 let pendingList: any[] = [];
+let pendingPolled = false; // the cards already waiting at start get no banner
 let agentsList: any[] = [];
 let hidden: string[] = store.get("hiddenAgents", []);
 let forked: string[] = store.get("forkedTerms", []); // terminal sessions continued in the app, no longer listed
@@ -334,6 +335,12 @@ function toolLine(name: string, input: any): string {
 function push(k: string, it: Item) { (convo[k] ||= []).push(it); }
 // messages sent but not answered yet: Claude Code answers queued messages one by one, one result each
 const queued: Record<string, number> = {};
+// a banner while the window is in the background, a click opens that conversation (src-tauri/src/notify.rs)
+function notify(k: string, body: string) {
+  if (document.hasFocus()) return;
+  invoke("notify", { key: k, title: k === WAIT ? t("nav.waiting") : label(k), body: body.replace(/[#*`>_]+/g, "").replace(/\s+/g, " ").trim().slice(0, 160) });
+}
+const lastAi = (k: string) => [...(convo[k] || [])].reverse().find(i => i.kind === "ai")?.text || t("work.done");
 function onEvent(k: string, ev: any) {
   if (ev.type === "draft_saved") { // the real recipients, independent of what Claude writes about it
     const cc: string[] = ev.cc || [], bcc: string[] = ev.bcc || [];
@@ -359,6 +366,7 @@ function onEvent(k: string, ev: any) {
     status[k] = queued[k] ? "busy" : "idle";
     if (ev.is_error || ev.subtype !== "success") push(k, { kind: "err", text: ev.result || ev.subtype || t("err.unknown") });
     else if (!queued[k]) push(k, { kind: "done", text: ev.duration_ms ? t("work.doneIn", { d: dur(ev.duration_ms / 1000) }) : t("work.done") });
+    if (!queued[k]) notify(k, ev.is_error || ev.subtype !== "success" ? ev.result || ev.subtype || t("err.unknown") : lastAi(k));
     if (k !== sel) unseen.add(k);
     if (chats[k]) { chats[k].at = Date.now(); saveChats(); }
     loadSnapshot();
@@ -366,7 +374,7 @@ function onEvent(k: string, ev: any) {
     if (ev.text.trim()) push(k, { kind: "err", text: ev.text.slice(0, 2000) });
   } else if (ev.type === "exit") {
     // the process stopped while a turn ran: say so, the dots alone would just disappear
-    if (status[k] === "busy") push(k, { kind: "err", text: t("work.interrupted") });
+    if (status[k] === "busy") { push(k, { kind: "err", text: t("work.interrupted") }); notify(k, t("work.interrupted")); }
     queued[k] = 0; status[k] = "idle";
   } else return;
   if (k === sel) renderChat(); else renderNav();
@@ -1246,7 +1254,10 @@ async function loadSnapshot() {
 }
 async function pollPending() {
   const next: any[] = await invoke("pending");
-  if (JSON.stringify(next.map(x => x.id)) !== JSON.stringify(pendingList.map(x => x.id))) { pendingList = next; render(); }
+  if (JSON.stringify(next.map(x => x.id)) === JSON.stringify(pendingList.map(x => x.id))) return;
+  const known = new Set(pendingList.map(x => x.id));
+  if (pendingPolled) for (const r of next) if (!known.has(r.id)) notify(chats[r.project] ? r.project : WAIT, r.input?.questions?.[0]?.question || t("notify.waits", { tool: r.tool_name }));
+  pendingList = next; pendingPolled = true; render();
 }
 async function pollSubs() {
   const keys = [...Object.values(chats).filter(c => !c.draft && !c.closed).map(c => c.key), ...terms().map(t => t.key)];
@@ -1278,6 +1289,7 @@ async function syncBusy() {
       await tailOutside(k); delete outside[k]; status[k] = "idle";
       const span = outsideAt[k]; delete outsideAt[k];
       push(k, { kind: "done", text: span && span.to > span.from ? t("work.doneIn", { d: dur((span.to - span.from) / 1000) }) : t("work.done") });
+      notify(k, lastAi(k));
       if (k !== sel) unseen.add(k);
     }
   }
@@ -1297,6 +1309,7 @@ setInterval(async () => {
 
 // ---------- start: adopt conversations from earlier versions (general:<id>, plain project names)
 listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
+listen<string>("open-chat", e => select(e.payload));
 try { settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; } catch { /* older backend */ }
 await initI18n(); applyStatic();
 // no vault yet, or the configured one is gone: choose one before anything reads it

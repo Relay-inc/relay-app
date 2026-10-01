@@ -282,6 +282,7 @@ const en = {
   "mail.more": "Load 50 more",
   "work.done": "Done",
   "work.doneIn": "Done · {d}",
+  "notify.waits": "Waiting for you: Claude wants to use {tool}.",
   "work.interrupted": "Interrupted: the process stopped in the middle of the turn.",
   "work.outside": "Still running outside the app, following along",
   "work.waitOutside": "This turn still runs outside the app. Send once it is done.",

@@ -283,6 +283,7 @@ export default {
   "mail.more": "Laad 50 mails meer",
   "work.done": "Klaar",
   "work.doneIn": "Klaar · {d}",
+  "notify.waits": "Wacht op jou: Claude wil {tool} gebruiken.",
   "work.interrupted": "Onderbroken: het proces stopte midden in de beurt.",
   "work.outside": "Loopt nog buiten de app, de app leest mee",
   "work.waitOutside": "Deze beurt loopt nog buiten de app. Stuur je bericht als ze klaar is.",
