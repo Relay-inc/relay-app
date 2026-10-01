@@ -72,6 +72,12 @@ export interface BoardProvider<K extends string = string> {
     fields: Field<K>[];
     tokenLabel: K;
     help: K;
+    /** The tracker's page that hands out a token, from the secrets typed so far (Trello: its authorize page for the API
+     *  key); undefined while what it needs is missing. Settings shows a button next to the token that opens it. */
+    tokenUrl?(secrets: Record<string, string>): string | undefined;
+    /** What is wrong with the secrets as typed (an empty one keeps the stored value), checked before Save: a key in
+     *  `strings`, or undefined. */
+    check?(secrets: Record<string, string>): K | undefined;
     /** One call that shows token and config work together, resolves with the message to show. */
     test(ctx: Ctx): Promise<string>;
     /** Every board the user can open, when the API gives them in one call: Settings then maps boards to vault projects. */

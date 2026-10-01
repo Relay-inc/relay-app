@@ -69,7 +69,12 @@ export class SettingsBoard extends SettingsElement {
     if (this.wantBoards && !this.boards) emit(this, "boards-load");
   }
 
-  private onField = (id: string) => (e: Event) => emit(this, "board-field", { id, value: inputValue(e) });
+  // kept here too, so what depends on a typed value (the token button) follows while typing
+  private onField = (id: string) => (e: Event) => {
+    const value = inputValue(e);
+    this.form = { ...this.form, [id]: value };
+    emit(this, "board-field", { id, value });
+  };
 
   private renderBoardMapping(row: BoardRow, list: BoardOpt[]) {
     const options = list.map(
@@ -145,6 +150,23 @@ export class SettingsBoard extends SettingsElement {
     />`;
   }
 
+  // the button that opens the tracker's token page, when it has one; until then it says what is missing
+  private renderTokenButton() {
+    const provider = this.provider;
+    const tokenUrl = provider.settings.tokenUrl;
+    if (!tokenUrl) return nothing;
+    const secrets = Object.fromEntries(
+      provider.settings.fields
+        .filter(fieldConfig => fieldConfig.secret)
+        .map(fieldConfig => [fieldConfig.key, formText(this.form, `f-${provider.id}-${fieldConfig.key}`).trim()]),
+    );
+    const url = tokenUrl(secrets);
+    const label = pt(provider, "getToken");
+    // a link: the settings window opens https links in the browser
+    if (url) return html`<a class="${buttonClass()} inline-flex items-center no-underline" href=${url}>${label}</a>`;
+    return html`<button class=${buttonClass()} disabled title=${pt(provider, "needKey")}>${label}</button>`;
+  }
+
   private renderProviderField(fieldConfig: ProviderField) {
     if (fieldConfig.check) return this.renderSwitchField(fieldConfig);
     const id = `f-${this.provider.id}-${fieldConfig.key}`;
@@ -199,10 +221,17 @@ export class SettingsBoard extends SettingsElement {
   override render() {
     const provider = this.provider;
     const tokenId = `tok-${provider.id}`;
+    // the other secrets first: the token is the one you get with them (Trello: the API key, then its token)
+    const fields = provider.settings.fields;
+    const secrets = fields.filter(fieldConfig => fieldConfig.secret && !fieldConfig.check);
+    const rest = fields.filter(fieldConfig => !secrets.includes(fieldConfig));
+    const tokenInput = provider.settings.tokenUrl
+      ? html`<div class="flex items-center gap-2">${this.renderSecretInput(tokenId)}${this.renderTokenButton()}</div>`
+      : this.renderSecretInput(tokenId);
     return html`${this.renderFoundInClaude()}
-      <p class=${HINT_IN_ROW}>${pth(provider, provider.settings.help)}</p>
-      ${field(withoutColon(pt(provider, provider.settings.tokenLabel)), this.renderSecretInput(tokenId), { id: tokenId })}
-      ${provider.settings.fields.map(fieldConfig => this.renderProviderField(fieldConfig))} ${this.renderFooter()}
-      ${this.renderBoards()}`;
+      <p class="${HINT_IN_ROW} [&_a]:underline">${pth(provider, provider.settings.help)}</p>
+      ${secrets.map(fieldConfig => this.renderProviderField(fieldConfig))}
+      ${field(withoutColon(pt(provider, provider.settings.tokenLabel)), tokenInput, { id: tokenId })}
+      ${rest.map(fieldConfig => this.renderProviderField(fieldConfig))} ${this.renderFooter()} ${this.renderBoards()}`;
   }
 }
