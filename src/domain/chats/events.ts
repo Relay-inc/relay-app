@@ -66,6 +66,9 @@ export function onEvent(key: string, agentEvent: AgentEvent) {
     case "draft_saved":
       onDraftSaved(key, agentEvent);
       break;
+    case "reset":
+      chat.messages[key] = [];
+      break;
     case "text":
       pushText((chat.messages[key] ||= []), agentEvent.text, agentEvent.delta);
       break;

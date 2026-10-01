@@ -31,6 +31,7 @@ export type AgentEvent =
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }
   | { type: "time"; at: string }       // history only: when the transcript line after it was written
   | { type: "error"; text: string }
+  | { type: "reset" }                 // the conversation started over (/clear); a new session follows
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills

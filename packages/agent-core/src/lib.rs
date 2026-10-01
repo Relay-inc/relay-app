@@ -132,6 +132,8 @@ pub enum Event {
     /// other event, so the app can tell how long a turn it did not start has been running.
     Time { at: String },
     Error { text: String },
+    /// The conversation started over (`/clear`): what came before is gone; a new Session follows.
+    Reset,
 }
 
 /// Tokens of one turn, as the provider reports them.
