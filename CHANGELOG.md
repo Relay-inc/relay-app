@@ -9,6 +9,9 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Changed
+- Quitting Relay no longer cuts a running conversation loose: each agent runs under a small broker process, and Relay picks the conversation back up when you reopen it within 15 minutes, so you can keep typing instead of seeing "handled outside the app"
+
 ## [0.0.1] - 2026-10-01
 
 First version with a number: everything merged up to and including #15.

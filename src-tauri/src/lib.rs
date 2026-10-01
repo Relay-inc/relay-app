@@ -7,14 +7,16 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use std::process::{Child, ChildStdin, Command, Stdio};
+use std::os::unix::net::UnixStream;
+use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
 mod agents;
+pub mod broker;
 mod mail;
 mod providers;
 mod reminders;
@@ -225,8 +227,9 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
     Menu::with_items(h, &[&app, &chat, &edit, &window])
 }
 
-// opts: the model and effort it runs with. tainted: it holds mail text and runs restricted (see taint)
-struct Proc { child: Child, stdin: ChildStdin, opts: (String, String), provider: &'static str, tainted: bool }
+// A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
+// with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart
+struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String }
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -383,6 +386,7 @@ fn write_taint(p: &mut Proc, vault: &str) {
     for m in taint(&settings, all_read) { writeln!(p.stdin, "{m}").ok(); }
     p.stdin.flush().ok();
     p.tainted = true;
+    if let Some(m) = broker::load_meta(&broker::meta_path(&p.key)) { broker::save_meta(&broker::Meta { tainted: true, ..m }); }
 }
 /// The request that opens the pipe: which in-process MCP servers the app answers for.
 fn pipe_init(mail_on: bool) -> Value {
@@ -397,18 +401,32 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let mut cmd = p.command(&eb.env(), &l)?;
-    cmd.current_dir(&dir).env("PATH", &state.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
-    let mut child = cmd.spawn().map_err(|e| format!("{} start: {e}", p.id()))?;
-    let mut stdin = child.stdin.take().unwrap();
+    cmd.current_dir(&dir).env("PATH", &state.path);
+    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
+    let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
+    let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
     if claude { writeln!(stdin, "{}", pipe_init(eb.opts["mail"] == true)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
+    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into() };
+    read_agent(app, project, p, c);
+    // a chat about a mail, or one that read mail before a restart, starts restricted
+    if claude && from_mail { write_taint(&mut proc, &dir); }
+    Ok(proc)
+}
 
-    let (stdout, stderr) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
-
-    let (a, k, pid, id, pend, mut parse) = (app.clone(), project.to_string(), child.id(), p.id(), eb.pending.clone(), p.parser());
+/// The agent's output, from its broker: each stdout line through the provider's parser to the webview as `agent`
+/// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
+/// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
+/// end, it reads the rest from the transcript.
+fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn) {
+    let (a, k, pid, id, claude, pend, mut parse) = (app.clone(), key.to_string(), c.agent.id(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
+    let (frames, backlog) = (c.frames, c.backlog);
     std::thread::spawn(move || {
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
-        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+        let mut err: Vec<String> = vec![];
+        for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
+            let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => break };
+            let replay = n < backlog;
             // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
             if claude {
                 if let Ok(ev) = serde_json::from_str::<Value>(&line) {
@@ -442,9 +460,11 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
                     }
                     _ => {}
                 }
-                emit(serde_json::to_value(&ev).unwrap_or_default());
+                if !replay || matches!(ev, Event::TurnEnd { .. }) { emit(serde_json::to_value(&ev).unwrap_or_default()); }
             }
         }
+        if !err.is_empty() { emit(json!({"type": "stderr", "text": err.join("\n")})); }
+        broker::forget(&k, pid);
         // a process replaced for a model or effort switch exits quietly, its successor keeps the slot
         {
             let st = a.state::<App>();
@@ -454,15 +474,19 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
         }
         emit(json!({"type": "exit"}));
     });
-    let (a, k) = (app.clone(), project.to_string());
-    std::thread::spawn(move || {
-        let err: Vec<String> = BufReader::new(stderr).lines().map_while(Result::ok).collect();
-        if !err.is_empty() { a.emit("agent", json!({"project": k, "provider": id, "event": {"type": "stderr", "text": err.join("\n")}})).ok(); }
-    });
-    let mut proc = Proc { child, stdin, opts, provider: p.id(), tainted: false };
-    // a chat about a mail, or one that read mail before a restart, starts restricted
-    if claude && from_mail { write_taint(&mut proc, &dir); }
-    Ok(proc)
+}
+
+/// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
+fn reattach(app: &AppHandle) {
+    let Ok(dir) = fs::read_dir(broker::dir()) else { return };
+    for f in dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
+        let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
+        let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
+        let Ok(stdin) = c.stdin.try_clone() else { continue };
+        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone() };
+        app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
+        read_agent(app, &m.key, p, c);
+    }
 }
 
 /// A request from the CLI over the pipe. Only relay-mail's MCP messages are answered, a tool call runs off this
@@ -1122,6 +1146,7 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
+            reattach(app.handle());
             tray::init(app.handle())?;
             Ok(())
         })
