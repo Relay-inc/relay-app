@@ -20,6 +20,7 @@ pub mod broker;
 mod mail;
 pub mod notify;
 mod providers;
+mod related;
 mod relay_config;
 mod reminders;
 mod tray;
@@ -413,6 +414,14 @@ fn read_note(state: State<App>, target: String) -> Result<Value, String> {
 fn vault_notes(state: State<App>) -> Result<Value, String> {
     let (root, notes) = vault::notes(&need_vault(&state)?);
     Ok(json!({"root": root, "notes": notes}))
+}
+
+/// The vault notes closest to what a conversation is about, [{path, title, snippet}], from the full-text index.
+#[tauri::command]
+async fn related_notes(app: AppHandle, state: State<'_, App>, text: String) -> Result<Value, String> {
+    let v = need_vault(&state)?;
+    let db = data_dir(&app).join("related.db");
+    tauri::async_runtime::spawn_blocking(move || related::related(&db, &v, &text, 12)).await.map_err(|e| e.to_string())?.map(Value::from)
 }
 
 /// The configured vault: path, mapping, found per path, ok.
@@ -1375,7 +1384,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

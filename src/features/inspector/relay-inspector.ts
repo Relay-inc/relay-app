@@ -8,9 +8,11 @@ import { mdDefaults } from "../../components/md-defaults";
 import { ui, PRS } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
 import { project } from "../../domain/vault";
-import { selectedProject } from "../../domain/chats/state";
+import { chat, selectedProject } from "../../domain/chats/state";
+import { related, loadRelated } from "../../domain/related";
+import { noteKey } from "../../domain/keys";
 import { select } from "../../domain/navigation";
-import { panel, setTab, cardOf, closeDetail, openPr, cardAct, type CardAct } from "../../domain/panel";
+import { panel, setTab, cardOf, closeDetail, openPr, openDetail, cardAct, type CardAct } from "../../domain/panel";
 import { cardChat } from "../../domain/card-chat";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
@@ -26,6 +28,7 @@ const TABS = [
   ["stand", "tab.stand"],
   ["rem", "nav.reminders"],
   ["prs", "tab.prs"],
+  ["rel", "tab.rel"],
 ] as const;
 
 /** The right panel: the tabs, the "today" list, a project's tabs, and the open PR, mail, note or card. */
@@ -49,6 +52,7 @@ export class RelayInspector extends LitElement {
   protected override willUpdate() {
     this.toggleAttribute("wide", !!panel.open);
     if (ui.tab === "prs" && !ghOn()) ui.tab = "open";
+    if (ui.tab === "rel" && chat.messages[ui.selected]) void loadRelated(ui.selected);
   }
 
   private renderDetail() {
@@ -159,8 +163,28 @@ export class RelayInspector extends LitElement {
     }`;
   }
 
+  // the open conversation's closest vault notes, from the full-text index
+  private renderRelated() {
+    const key = ui.selected;
+    if (!chat.messages[key]) return this.renderNote(th("insp.noChat"));
+    const hits = related[key];
+    if (!hits) return this.renderNote(th("pr.loading"));
+    if (!hits.length) return this.renderNote(th("insp.noRel"));
+    return html`${this.renderHeading(th("insp.rel"), hits.length)}
+      <div class="flex flex-col gap-2.5">
+        ${hits.map(
+          hit =>
+            html`<a class="block cursor-default" title=${hit.path} @click=${() => openDetail(noteKey(hit.path))}>
+              <div class="vlink text-[13px] font-medium truncate">${hit.title}</div>
+              <div class="text-xs text-secondary line-clamp-2">${hit.snippet}</div>
+            </a>`,
+        )}
+      </div>`;
+  }
+
   private renderBody() {
     if (panel.open) return this.renderDetail();
+    if (ui.tab === "rel") return this.renderRelated();
     const info = project(selectedProject());
     if (!info) return this.renderToday();
     switch (ui.tab) {

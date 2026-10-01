@@ -9,7 +9,7 @@ export { boardKey, isTerminal };
 
 export const ui = {
   selected: ls.get<string>("sel", "") || WAIT,
-  tab: "open", // the right panel: open | stand | rem | prs
+  tab: "open", // the right panel: open | stand | rem | prs | rel
   panelHidden: ls.get<boolean>("noinsp", false), // the right panel folded away
   projectPanel: false, // the conversation's project panel under the title
   toast: null as { text: string; undo?: () => void; btn?: string } | null,
