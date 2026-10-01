@@ -297,6 +297,13 @@ export async function answer(request: Pending, choice: CardChoice) {
   else decision = questionAnswers(request, choice);
   if (!decision) return false;
   await invoke("answer", { id: request.id, decision });
+  if (choice === "allow" || choice === "deny") {
+    const { command, file_path } = request.input;
+    push(request.project, {
+      kind: choice === "allow" ? "allowed" : "denied",
+      text: String(command ?? file_path ?? request.tool_name),
+    });
+  }
   chat.pendingList = chat.pendingList.filter(x => x.id !== request.id);
   changed();
   return true;

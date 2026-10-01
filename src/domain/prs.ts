@@ -10,7 +10,7 @@ import { sendMsg } from "./chats/actions";
 import { prKey, panelItem } from "./keys";
 
 // Pull requests from GitHub, fetched by the backend through gh: what isWaiting on the user's review and what
-// he opened. Read-only: a row opens the PR in the right panel (description, checks, conversation), a link
+// he opened. Read-only: a row opens the PR in a window (description, checks, conversation), a link
 // there opens it on GitHub. Anything others see (a review, a merge) does not happen from the app without approval (decided 29/9).
 export type PR = {
   number: number;
@@ -73,7 +73,7 @@ export type PrDetail = {
   files?: Nodes<{ path: string; additions: number; deletions: number }>;
 };
 
-export const prs = { list: null as PRs | null, err: "", busy: false };
+export const prs = { list: null as PRs | null, err: "", busy: false, at: 0 /* when the list arrived, ms */ };
 
 // once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view
 export async function loadPrs() {
@@ -82,6 +82,7 @@ export async function loadPrs() {
   changed();
   try {
     prs.list = await invoke<PRs>("github_prs");
+    prs.at = Date.now();
     prs.err = "";
   } catch (e) {
     prs.err = String(e);
@@ -91,6 +92,7 @@ export async function loadPrs() {
 }
 export const resetPrs = () => {
   prs.list = null;
+  prs.at = 0;
   prs.err = "";
 };
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,

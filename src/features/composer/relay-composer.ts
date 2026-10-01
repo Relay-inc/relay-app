@@ -33,23 +33,26 @@ export class RelayComposer extends LitElement {
         display: block;
         width: 100%;
         min-height: 24px;
-        font-size: 16px;
-        line-height: 1.45;
+        font-size: 15px;
+        line-height: 1.5;
         color: var(--label);
       }
       textarea::placeholder {
-        color: var(--secondary);
+        color: var(--tertiary);
       }
       select {
         all: unset;
         font-size: 12px;
         color: var(--secondary);
-        padding: 2px 4px;
-        border-radius: calc(var(--r) - 2px);
+        height: 26px;
+        line-height: 26px;
+        padding: 0 20px 0 8px;
+        border-radius: 7px;
         cursor: default;
       }
       select:hover:not(:disabled) {
-        background: var(--fill);
+        background: var(--fill-2);
+        color: var(--label);
       }
       select:disabled {
         opacity: 0.5;
@@ -62,6 +65,7 @@ export class RelayComposer extends LitElement {
   // the text Escape closed the list on: it stays closed until the text changes
   @state() private dismissed = "";
   @query("textarea") private field!: HTMLTextAreaElement | null;
+  @query("input[type=file]") private files!: HTMLInputElement | null;
   private grown = "";
 
   focusInput() {
@@ -203,37 +207,72 @@ export class RelayComposer extends LitElement {
     const started = !!(chat.messages[selected] || []).length || !!chat.chats[selected]?.fork;
     if (started) return nothing;
     const agentId = chatAgent(selected);
-    return html`<select
-      title=${t("composer.agent")}
-      aria-label=${t("composer.agent")}
-      @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}
-    >
-      ${agents.map(agent => html`<option value=${agent.id} .selected=${agent.id === agentId}>${agent.name}</option>`)}
-    </select>`;
+    return html`<span class="relative inline-flex items-center rounded-[7px] bg-fill-2 text-label"
+        ><select
+          class="text-label!"
+          title=${t("composer.agent")}
+          aria-label=${t("composer.agent")}
+          @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}
+        >
+          ${agents.map(agent => html`<option value=${agent.id} .selected=${agent.id === agentId}>${agent.name}</option>`)}
+        </select>
+        ${this.chevron()}</span
+      ><span class="w-px h-3.5 bg-separator-strong mx-1"></span>`;
+  }
+
+  private chevron() {
+    return html`<span class="absolute inset-y-0 right-1.5 flex items-center pointer-events-none text-secondary"
+      >${icon("down", "glyph size-2.75 stroke-2")}</span
+    >`;
   }
 
   private renderPick(kind: "model" | "effort", options: Pick[], value: string, defaultLabel: string, show: boolean) {
-    return html`<select
-      ?hidden=${!show}
-      ?disabled=${this.busy}
-      title=${t(`composer.${kind}`)}
-      aria-label=${t(`composer.${kind}`)}
-      @change=${(e: Event) => setPick(kind, (e.target as HTMLSelectElement).value)}
-    >
-      <option value="" .selected=${value === ""}>${defaultLabel}</option>
-      ${options.map(option => html`<option value=${option.id} .selected=${option.id === value}>${option.label}</option>`)}
-    </select>`;
+    return html`<span class="relative items-center ${show ? "inline-flex" : "hidden"}"
+      ><select
+        ?disabled=${this.busy}
+        title=${t(`composer.${kind}`)}
+        aria-label=${t(`composer.${kind}`)}
+        @change=${(e: Event) => setPick(kind, (e.target as HTMLSelectElement).value)}
+      >
+        <option value="" .selected=${value === ""}>${defaultLabel}</option>
+        ${options.map(option => html`<option value=${option.id} .selected=${option.id === value}>${option.label}</option>`)}
+      </select>
+      ${this.chevron()}</span
+    >`;
+  }
+
+  // the + opens the file dialog for images; they join the ones pasted or dropped
+  private renderAttach() {
+    return html`<button
+        class="grid place-items-center size-7 rounded-[7px] border-0 bg-transparent text-secondary hover:bg-fill-2 hover:text-label"
+        title=${t("composer.attach")}
+        aria-label=${t("composer.attach")}
+        @click=${() => this.files?.click()}
+      >
+        ${icon("add", "glyph size-4")}
+      </button>
+      <input
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        @change=${(e: Event) => {
+          const input = e.target as HTMLInputElement;
+          attach([...(input.files ?? [])]);
+          input.value = "";
+        }}
+      />`;
   }
 
   private renderSendButton() {
     const busy = this.busy;
-    const colour = busy ? "bg-label" : "bg-accent";
+    const colour = busy ? "bg-label" : "bg-accent hover:bg-accent-hover";
     return html`<button
-      class="grid place-items-center size-6 rounded-lg border-0 ${colour} text-on-accent"
+      class="grid place-items-center size-7 rounded-full border-0 ${colour} text-on-accent"
       aria-label=${t("composer.send")}
       @click=${sendOrStop}
     >
-      ${icon(busy ? "stop" : "send", "glyph size-3.5 stroke-2")}
+      ${icon(busy ? "stop" : "send", "glyph size-3.75 stroke-2")}
     </button>`;
   }
 
@@ -242,9 +281,9 @@ export class RelayComposer extends LitElement {
     const model = picks("model");
     const effort = picks("effort");
     const showEffort = !agent || (agent.caps.effort && agent.efforts.length > 0);
-    const border = this.dropping ? "border-accent bg-accent/5" : "border-separator";
+    const border = this.dropping ? "border-accent" : "border-separator-strong";
     return html`<div
-      class="relative rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent ${border}"
+      class="relative rounded-[14px] bg-raised border pt-3 pr-3 pb-2 pl-3.5 shadow-md focus-within:border-accent ${border}"
       @dragover=${this.onDragOver}
       @dragleave=${this.onDragLeave}
       @drop=${this.onDrop}
@@ -258,8 +297,8 @@ export class RelayComposer extends LitElement {
         @input=${this.onInput}
         @paste=${this.onPaste}
       ></textarea>
-      <div class="flex items-center gap-2 mt-1.5 text-secondary">
-        ${this.renderAgentPick()}
+      <div class="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
+        ${this.renderAttach()} ${this.renderAgentPick()}
         <!-- a switch restarts the process, so not while a turn runs -->
         ${this.renderPick("model", model.list, model.value, t("composer.defaultModel"), true)}
         ${this.renderPick("effort", effort.list, effort.value, t("composer.defaultEffort"), showEffort)}

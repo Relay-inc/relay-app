@@ -5,7 +5,7 @@ import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { config } from "../../domain/config";
 import { projectLabel } from "../../domain/vault";
-import { panel, openDetail } from "../../domain/panel";
+import { panel, openMail } from "../../domain/panel";
 import {
   mail,
   mailKey,
@@ -23,17 +23,19 @@ import {
 import "./mail-bar";
 import "./mail-row";
 import "./mail-setup";
+import "./relay-mail-detail";
 
-/** The inbox: search, read state and project on top, the mails that pass the filters under one heading with the unread count. */
+/** The inbox, as Mail does it: on the left search, read state and project on top and the mails that pass the filters under
+ * one heading with the unread count; on the right the mail you picked. */
 @customElement("relay-mail")
 export class RelayMail extends LitElement {
   static override styles = [
     tw,
     css`
       :host {
-        display: flex;
-        flex-direction: column;
-        gap: 18px;
+        display: grid;
+        grid-template-columns: 380px minmax(0, 1fr);
+        min-height: 0;
       }
     `,
   ];
@@ -46,8 +48,8 @@ export class RelayMail extends LitElement {
       .mail=${item}
       .sender=${sender(item)}
       .project=${project ? projectLabel(project) : ""}
-      ?selected=${panel.open === key}
-      @open-mail=${() => openDetail(key)}
+      ?selected=${panel.mailOpen === key}
+      @open-mail=${() => openMail(key)}
       @flip-mail=${() => mailSeen(key, unread(item))}
     ></relay-mail-row>`;
   }
@@ -56,15 +58,19 @@ export class RelayMail extends LitElement {
     const shown = filtered(list, mail.filter);
     const unreadCount = list.filter(unread).length;
     const unreadLabel = unreadCount
-      ? html` <span class="font-mono tabular-nums">${th("mail.unread", { n: unreadCount })}</span>`
+      ? html` <span class="tabular-nums">${th("mail.unread", { n: unreadCount })}</span>`
       : nothing;
     const emptyText = list.length ? th("mail.noMatch") : th("mail.none");
     const rows = shown.length
       ? shown.map(item => this.renderMailRow(item))
-      : html`<div class="text-secondary text-sm py-2">${emptyText}</div>`;
-    return html`<section class="mb-6">
-      <h2 class="list-head">${th("mail.inbox")}${unreadLabel}</h2>
-      ${rows}
+      : html`<div class="text-secondary text-sm px-2.5 py-2">${emptyText}</div>`;
+    return html`<section>
+      <h2
+        class="flex items-baseline gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary"
+      >
+        ${th("mail.inbox")}${unreadLabel}
+      </h2>
+      <div class="flex flex-col gap-0.5">${rows}</div>
     </section>`;
   }
 
@@ -95,16 +101,29 @@ export class RelayMail extends LitElement {
   }
 
   override render() {
-    if (!config.value.mail.accounts?.length) return html`<relay-mail-setup @setup=${openMailSetup}></relay-mail-setup>`;
+    if (!config.value.mail.accounts?.length)
+      return html`<div class="col-span-2 max-w-170 w-full mx-auto px-8 pt-7">
+        <relay-mail-setup @setup=${openMailSetup}></relay-mail-setup>
+      </div>`;
     const list = mail.list;
-    return html`<relay-mail-bar
-        .filter=${mail.filter}
-        .projects=${this.projectOptions(list)}
-        ?busy=${mail.busy}
-        @filter=${(e: CustomEvent) => setMailFilter(e.detail)}
-        @reload=${loadMails}
-      ></relay-mail-bar>
-      <div>${this.renderList(list)}${list && !mail.end ? this.renderMore() : nothing}</div>`;
+    return html`<div class="min-h-0 overflow-y-auto border-r border-separator px-2 pt-3 pb-4">
+        <relay-mail-bar
+          class="block px-2"
+          .filter=${mail.filter}
+          .projects=${this.projectOptions(list)}
+          ?busy=${mail.busy}
+          @filter=${(e: CustomEvent) => setMailFilter(e.detail)}
+          @reload=${loadMails}
+        ></relay-mail-bar>
+        ${this.renderList(list)}${list && !mail.end ? this.renderMore() : nothing}
+      </div>
+      <div class="min-h-0 overflow-y-auto">
+        ${
+          panel.mailOpen
+            ? html`<relay-mail-detail class="max-w-200 px-8 pt-5.5 pb-10 select-text cursor-auto"></relay-mail-detail>`
+            : html`<div class="h-full grid place-items-center text-[13px] text-tertiary">${th("mail.pick")}</div>`
+        }
+      </div>`;
   }
 }
 

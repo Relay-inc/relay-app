@@ -9,14 +9,16 @@ import { chat, terminalOf, projectOf, label, aboutProject, waitCount } from "../
 import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
 import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
+import { prs, loadPrs } from "../../domain/prs";
 import { vault, projectLabel } from "../../domain/vault";
+import { contextTint } from "../../domain/sidebar";
 import "./chat-bar";
 import "./project-panel";
 import "../board/relay-board";
 import "../pull-requests/relay-prs";
 import "../usage/relay-usage";
 import "../mail/relay-mail";
-import "../reminders/relay-reminders";
+import { openReminderForm } from "../reminders/relay-reminders";
 import "../waiting/relay-waiting";
 import "../conversation/relay-conversation";
 import "../composer/relay-composer";
@@ -24,7 +26,7 @@ import "../subagents/relay-subagents";
 import type { RelayComposer } from "../composer/relay-composer";
 
 // the strips under the log line up with the messages: the same column, its padding as the gutter
-const column = "block w-full max-w-2xl mx-auto px-7";
+const column = "block w-full max-w-170 mx-auto px-8";
 // a card over the bar's width: toast and move bar share the log's column
 const strip = "flex items-center gap-2 px-3 py-2 rounded-lg text-sm";
 
@@ -151,12 +153,15 @@ export class RelayChat extends LitElement {
   private renderView() {
     const selected = this.selected;
     if (this.board) return keyed(this.board.id, html`<relay-board .provider=${this.board}></relay-board>`);
-    if (selected === PRS) return html`<relay-prs></relay-prs>`;
     if (selected === USAGE) return html`<relay-usage></relay-usage>`;
-    if (selected === MAIL) return html`<relay-mail></relay-mail>`;
     if (selected === REM) return html`<relay-reminders></relay-reminders>`;
     if (selected === WAIT) return html`<relay-waiting></relay-waiting>`;
     return html`<relay-conversation></relay-conversation>`;
+  }
+
+  private get projectTint() {
+    const context = vault.snap.projects.find(project => project.name === this.projectName)?.context;
+    return context ? contextTint(context) : "";
   }
 
   private renderBar() {
@@ -165,6 +170,8 @@ export class RelayChat extends LitElement {
     return html`<relay-chat-bar
       .heading=${this.heading}
       .img=${!this.onView && projectName ? (vault.icons[projectName]?.img ?? "") : ""}
+      .tint=${this.projectTint}
+      .state=${chat.chats[this.selected] ? (chat.status[this.selected] ?? "idle") : ""}
       ?editable=${!this.onView}
       .sub=${this.subheading}
       .value=${session ? session.title : label(this.selected)}
@@ -173,6 +180,12 @@ export class RelayChat extends LitElement {
       ?noTerm=${this.terminalHidden}
       ?locked=${this.terminalLocked}
       ?panelOff=${ui.panelHidden}
+      ?remNew=${this.selected === REM}
+      ?prs=${this.selected === PRS}
+      .prsAt=${prs.at}
+      ?prsBusy=${prs.busy}
+      @new-reminder=${openReminderForm}
+      @reload-prs=${loadPrs}
       @edit-project=${openProjectPanel}
       @rename=${(e: CustomEvent<string>) => rename(e.detail)}
       @open-terminal=${openTerminal}
@@ -215,14 +228,17 @@ export class RelayChat extends LitElement {
 
   override render() {
     const hasSubagents = !this.onView && (chat.subs[this.selected] || []).length > 0;
-    const messagesWidth = this.board ? "px-5" : "max-w-2xl px-7";
+    const messagesWidth = this.board ? "px-5" : this.selected === REM ? "max-w-180 px-8" : "max-w-170 px-8";
+    // the Pull requests and Mail views scroll their list and the open item apart, so it fills the pane instead of the log
+    if (this.selected === PRS) return html`${this.renderBar()}<relay-prs class="flex-1"></relay-prs>`;
+    if (this.selected === MAIL) return html`${this.renderBar()}<relay-mail class="flex-1"></relay-mail>`;
     return html` ${this.renderBar()} ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
-      <div id="log" class="flex-1 overflow-y-auto pt-6 pb-2" @scroll=${this.onScroll}>
-        <div id="msgs" class="mx-auto flex flex-col gap-4 ${messagesWidth}">${this.renderView()}</div>
+      <div id="log" class="flex-1 overflow-y-auto pt-7 pb-3" @scroll=${this.onScroll}>
+        <div id="msgs" class="mx-auto flex flex-col gap-5 ${messagesWidth}">${this.renderView()}</div>
       </div>
       ${hasSubagents ? html`<relay-subagents class="${column} mb-1.5"></relay-subagents>` : nothing}
       ${this.renderToast()} ${this.renderMoveBar()}
-      ${this.onView ? nothing : html`<relay-composer class="${column} mt-2 mb-5"></relay-composer>`}`;
+      ${this.onView ? nothing : html`<relay-composer class="${column} mt-2 mb-4.5"></relay-composer>`}`;
   }
 }
 

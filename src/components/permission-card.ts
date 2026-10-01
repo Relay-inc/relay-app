@@ -2,6 +2,7 @@ import { LitElement, html, css } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { t, th } from "../core/i18n";
 import { emit } from "../core/dom";
+import { icon } from "../core/icons";
 import { tw } from "../core/styles";
 import type { Pending, Question } from "../domain/chats/state";
 
@@ -24,7 +25,7 @@ function describe(request: Pending): string {
 const isQuestion = (request: Pending) => request.kind === "question" || request.tool_name === "AskUserQuestion";
 
 // a long path never widens the card past its border
-const box = "grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3";
+const box = "grid grid-cols-1 gap-2.5 rounded-xl border border-accent bg-raised ring-3 ring-accent-soft px-3.5 py-3";
 
 /** A pending permission or question of an agent, waiting for the user. `where`: the conversation it belongs to when shown outside it.
  *  The container answers and sets `busy` while it does; a card that is not answered stays usable. */
@@ -68,7 +69,7 @@ export class PermissionCard extends LitElement {
         ${(question.options || []).map(
           option =>
             html`<button
-              class=${this.picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"}
+              class=${this.picked[qi]?.has(option.label) ? "btn btn-primary cursor-pointer" : "btn cursor-pointer"}
               title=${option.description || ""}
               ?disabled=${this.busy}
               @click=${() => this.pick(qi, option.label, !!question.multiSelect)}
@@ -89,12 +90,16 @@ export class PermissionCard extends LitElement {
 
   private renderQuestionCard() {
     return html`<div class=${box}>
-      <div class="text-sm text-secondary">${t("card.asks")}</div>
+      <div class="flex items-center gap-2 text-[13px] text-secondary">
+        <span class="grid place-items-center size-5.5 flex-none rounded-md bg-accent-soft text-accent-text"
+          >${icon("chat", "glyph size-3.5")}</span
+        >${t("card.asks")}
+      </div>
       ${(this.request.input.questions || []).map((question: Question, qi: number) => this.renderQuestion(question, qi))}
       <div class="flex justify-end gap-2">
-        <button class="btn" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
+        <button class="btn cursor-pointer" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
           ${t("card.skip")}</button
-        ><button class="btn btn-primary" ?disabled=${this.busy} @click=${() => this.answer()}>
+        ><button class="btn btn-primary cursor-pointer" ?disabled=${this.busy} @click=${() => this.answer()}>
           ${t("card.answer")}
         </button>
       </div>
@@ -105,14 +110,23 @@ export class PermissionCard extends LitElement {
     const request = this.request;
     const where = this.where ? t("card.in", { name: this.where }) : "";
     return html`<div class=${box}>
-      <div class="text-sm text-secondary [&_code]:font-mono [&_code]:text-xs">
-        ${th("card.wants", { tool: request.tool_name, where })}
+      <div class="flex items-center gap-2 text-[13px] text-secondary [&_b]:text-label [&_b]:font-semibold">
+        <span class="grid place-items-center size-5.5 flex-none rounded-md bg-accent-soft text-accent-text"
+          >${icon("term", "glyph size-3.5")}</span
+        ><span>${th("card.wants", { tool: request.tool_name, where })}</span>
       </div>
-      <pre class="font-mono text-sm whitespace-pre-wrap wrap-anywhere text-label">${describe(request)}</pre>
+      <pre
+        class="px-3 py-2.5 rounded-lg bg-well border border-separator font-mono text-[13px] whitespace-pre-wrap wrap-anywhere text-label"
+      >
+${describe(request)}</pre>
       <div class="flex justify-end gap-2">
-        <button class="btn" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
+        <button class="btn cursor-pointer" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
           ${t("card.deny")}</button
-        ><button class="btn btn-primary" ?disabled=${this.busy} @click=${() => emit(this, "answer", "allow")}>
+        ><button
+          class="btn btn-primary cursor-pointer"
+          ?disabled=${this.busy}
+          @click=${() => emit(this, "answer", "allow")}
+        >
           ${t("card.allow")}
         </button>
       </div>
