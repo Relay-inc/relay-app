@@ -7,6 +7,8 @@ import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type Boa
 import { agent, agentsStatus, type AgentsStatus, type AgentStatus } from "./agents";
 import { KEYS, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
 import { iconPaths } from "./icons";
+import { loadIcons, setIcon, iconFrom, iconImg, isSite, type ProjectIcon, type IconKind } from "./project-icons";
+import { listen } from "@tauri-apps/api/event";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
@@ -92,12 +94,41 @@ function general() {
         `<option value="${v}" ${(settings.language || "system") === v ? "selected" : ""}>${esc(name)}</option>`).join("")}</select>`, { id: "language", hint: t("set.languageHelp") })
       + field(t("set.faviconsOn"), sw("favon", settings.favicons?.on !== false), { id: "favon", hint: t("set.faviconsHelp") }));
 }
+// the project icons live in the vault (.relay/config.json, src/project-icons.ts): every project, folded, to override
+let icons: Record<string, ProjectIcon> | null = null, iconNames: string[] = [], iconMsg = "", iconOk = false;
+async function loadIconsPane() {
+  const [i, snap] = await Promise.all([loadIcons(), invoke<any>("snapshot").catch(() => ({ projects: [] }))]);
+  icons = i; iconNames = (snap.projects || []).map((x: any) => String(x.name)).sort((a: string, b: string) => a.localeCompare(b));
+  render();
+}
+listen("icons-changed", () => { if (icons) loadIconsPane(); });
+function iconState(n: string) {
+  const i = icons?.[n];
+  if (!i) return st("off", t("pi.guess"));
+  if (i.img) return st("ok", t("pi.image"));
+  if (i.icon) return st("ok", t("pi.emoji"));
+  if (isSite(i.value)) return st("warn", t("pi.siteSoon", { site: esc(i.value) }));
+  return st("off", t("pi.noIcon"));
+}
 function projects() {
-  const custom = Object.entries(settings.projects).filter(([, c]) => c.icon || c.img || c.label);
-  const rows = custom.map(([n, c]) => `<div class="srow"><span class="srow-i">${c.img && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(c.img) ? `<img src="${c.img}" alt="">` : esc(c.icon || "")}</span>
-    <span class="srow-t"><b>${esc(c.label || n)}</b>${c.label ? `<span>${esc(n)}</span>` : ""}</span>
+  const custom = Object.entries(settings.projects).filter(([, c]) => c.label);
+  const rows = custom.map(([n, c]) => `<div class="srow"><span class="srow-t"><b>${esc(c.label || n)}</b><span>${esc(n)}</span></span>
     <span class="srow-x"><button class="btn ghost" data-set="clear" data-p="${esc(n)}">${t("set.reset")}</button></span></div>`).join("");
-  return sec(t("set.custom"), rows || `<div class="sempty">${t("set.none")}</div>`, { desc: t("set.customHelp"), list: true, foot: msg ? foot(esc(msg), ok, "") : "" });
+  if (!icons) queueMicrotask(loadIconsPane);
+  const preview = (n: string) => iconImg(icons?.[n]?.img, "") || (icons?.[n]?.icon ? `<span class="emo">${esc(icons[n].icon!)}</span>` : icon("folder"));
+  const body = (n: string) => { const i = icons?.[n], id = esc(n);
+    return `${field(t("pi.emoji"), `<input class="field ico" data-piemoji="${id}" value="${esc(i?.icon ?? "")}" maxlength="8" placeholder="–">`)}
+      ${field(t("pi.site"), `<input class="field" data-pisite="${id}" value="${esc(i && isSite(i.value) ? i.value : "")}" placeholder="${t("pi.sitePh")}" spellcheck="false">`, { hint: t("pi.siteHelp") })}
+      <div class="ss-foot"><label class="btn">${t("pi.upload")}<input type="file" data-pifile="${id}" accept="image/*,.ico,.svg" hidden></label>
+        <button class="btn ghost" data-set="piset" data-kind-icon="none" data-id="${id}">${t("pi.none")}</button><span class="sp"></span>
+        <button class="btn ghost" data-set="piset" data-kind-icon="reset" data-id="${id}">${t("pi.reset")}</button></div>`; };
+  return sec(t("set.custom"), rows || `<div class="sempty">${t("set.none")}</div>`, { desc: t("set.customHelp"), list: true, foot: msg ? foot(esc(msg), ok, "") : "" })
+    + sec(t("pi.title"), !icons ? `<div class="st"><span class="spin"></span>${t("pr.loading")}</div>`
+        : iconNames.map(n => foldRow("icon", n, preview(n), esc(n), iconState(n), () => body(n))).join("") || `<div class="sempty">${t("set.none")}</div>`,
+      { desc: t("pi.desc"), list: true, foot: iconMsg ? foot(esc(iconMsg), iconOk, "") : "" });
+}
+async function iconSet(project: string, kind: IconKind, value = "") {
+  try { await setIcon(project, kind, value); iconMsg = ""; iconOk = true; } catch (x) { iconMsg = String(x); iconOk = false; render(); }
 }
 // set up: every secret in the keychain and every field that is not optional
 const setUp = (p: BoardProvider) => tokens[p.id] && p.settings.fields.every(f => f.optional || f.secret || settings.integrations[p.id]?.[f.key]);
@@ -375,10 +406,20 @@ root.addEventListener("click", async e => {
   if (bp && b.dataset.set === "bclear") {
     await invoke("integration_token", { provider: bp.id, token: "" }); tokens[bp.id] = false; delete allBoards[bp.id]; pmsg[bp.id] = { text: t("int.cleared"), ok: true }; render();
   }
+  if (b.dataset.set === "piset") { await iconSet(b.dataset.id!, b.dataset.kindIcon as IconKind); return; }
   if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await save(next, t("set.restored")); }
 });
 // the language applies right away: saved, then this window and the main one redraw in it
 root.addEventListener("change", async e => {
+  const ti = e.target as HTMLInputElement;
+  if (ti.dataset.piemoji !== undefined) { const v = ti.value.trim(); await iconSet(ti.dataset.piemoji, v ? "emoji" : "reset", v); return; }
+  if (ti.dataset.pisite !== undefined) { const v = ti.value.trim(); await iconSet(ti.dataset.pisite, v ? "site" : "reset", v); return; }
+  if (ti.dataset.pifile !== undefined) {
+    const f = ti.files?.[0]; if (!f) return;
+    const u = await iconFrom(f);
+    if (u) await iconSet(ti.dataset.pifile, "img", u); else { iconMsg = t("img.unreadable"); iconOk = false; render(); }
+    return;
+  }
   const bm = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-bmap]"), bp = bm && provider(bm.dataset.bp!);
   if (bm && bp) {
     // a vault project has at most one board: picking one replaces what it had, None only drops this provider's

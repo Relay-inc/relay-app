@@ -16,6 +16,7 @@ import { agentsStatus, type AgentsStatus, type AgentEvent } from "./agents";
 import { mailRef, renderMailSetup, renderMailBar, renderMailTools, renderMailList, renderMailDetail, renderMailLink, mailKey, unread, sender, setSeen, type Mail, type MailBody, type MailFilter } from "./mail";
 import "./mail.css";
 import { icon, fillIcons } from "./icons";
+import { loadIcons, setIcon, iconFrom, iconImg, isSite, type ProjectIcon } from "./project-icons";
 fillIcons();
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
@@ -61,17 +62,9 @@ async function prepImage(f: File): Promise<Img | null> {
   const m = out.match(/^data:(image\/[a-z]+);base64,(.+)$/);
   return m && IMG_OK.includes(m[1]) ? toImg(m[1], m[2]) : null;
 }
-// a project icon from an image file (png, jpg, ico, svg, ...): drawn centered on 64 px, kept as a png data url in the settings
-async function iconFrom(f: File): Promise<string | null> {
-  const img = new Image(); img.src = await readUrl(f);
-  try { await img.decode(); } catch { return null; }
-  const n = Math.max(img.naturalWidth, img.naturalHeight) || 64, w = img.naturalWidth * 64 / n || 64, h = img.naturalHeight * 64 / n || 64;
-  const cv = document.createElement("canvas"); cv.width = cv.height = 64;
-  cv.getContext("2d")!.drawImage(img, (64 - w) / 2, (64 - h) / 2, w, h);
-  return cv.toDataURL("image/png");
-}
-// settings.json is a file on disk: only a plain png data url becomes an <img>
-const pImg = (u?: string) => u && /^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(u) ? `<img class="pimg" src="${u}" alt="">` : "";
+// the project icons, from the vault's .relay/config.json (src/project-icons.ts)
+let icons: Record<string, ProjectIcon> = {};
+const pImg = (u?: string | null) => iconImg(u);
 // into the composer by default, or into the Cmd-K field
 async function attach(files: File[], list = attached, box = "atts") {
   const imgs = (await Promise.all(files.filter(f => f.type.startsWith("image/")).map(f => prepImage(f).catch(() => null)))).filter((x): x is Img => !!x);
@@ -144,7 +137,7 @@ const PLACEHOLDER: Record<string, Key> = { [NEW]: "nav.newChat", Gesprek: "chat.
 const shownTitle = (title: string) => PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title;
 type Settings = { vault: string; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
   integrations: Record<string, any>; boards: Record<string, BoardRef>; github: { on: boolean; owners: string }; mail: { on: boolean; account: string; accounts: { email: string; keychain_service: string; keychain_account: string }[] }; language?: string;
-  favicons?: { on: boolean; last: string; tried: Record<string, string> } };
+  favicons?: { on: boolean; last?: string; tried: Record<string, string> } };
 let settings: Settings = { vault: "", projects: {}, overrides: {}, integrations: {}, boards: {}, github: { on: false, owners: "" }, mail: { on: false, account: "", accounts: [] } };
 // a board row only shows once its integration is switched on and set up, with a token in the keychain
 let boardsReady: string[] = [];
@@ -279,7 +272,7 @@ let tab = "open";
 const $ = (id: string) => document.getElementById(id)!;
 const project = (n: string | null) => n ? snap.projects.find((p: any) => p.name === n) : undefined;
 // how a project is shown: its own icon and name from the settings, else the note name
-const pLabel = (n: string | null) => { if (!n) return t("general"); const c = settings.projects[n] || {}; return `${c.icon ? c.icon + " " : ""}${c.label || n}`; };
+const pLabel = (n: string | null) => { if (!n) return t("general"); const c = settings.projects[n] || {}, e = icons[n]?.icon; return `${e ? e + " " : ""}${c.label || n}`; };
 async function saveSettings(next: Settings) {
   try { settings = await invoke<Settings>("set_settings", { settings: next }); settingsMsg = ""; return true; }
   catch (e) { settingsMsg = String(e); return false; }
@@ -498,7 +491,7 @@ const unfolded = new Set<string>(); // projects whose conversations past the fir
 let secOrder: string[] = store.get("secOrder", ["Algemeen"]);
 let projOrder: Record<string, string[]> = store.get("projOrder", {});
 let convOrder: Record<string, string[]> = store.get("convOrder", {}); // per project (or "" for Algemeen): conversation keys
-const lead = (p: string) => pImg(settings.projects[p]?.img) || (settings.projects[p]?.icon ? `<span class="emo">${esc(settings.projects[p].icon)}</span>` : glyph("folder"));
+const lead = (p: string) => pImg(icons[p]?.img) || (icons[p]?.icon ? `<span class="emo">${esc(icons[p].icon!)}</span>` : glyph("folder"));
 
 function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
@@ -674,7 +667,7 @@ function renderChat() {
   tb.disabled = locked; tb.title = t(locked ? "bar.termMail" : "bar.openTerminal");
   const pn = T ? T.project : projOf(sel), P = project(pn);
   lastP = pn;
-  $("t").innerHTML = pImg(pn ? settings.projects[pn]?.img : "") + esc(pLabel(pn));
+  $("t").innerHTML = pImg(pn ? icons[pn]?.img : "") + esc(pLabel(pn));
   $("t").classList.add("editable"); $("t").title = t("chat.editTitle");
   // the conversation title, edited in place. A terminal session takes its title from the transcript
   const ct = $("ct") as HTMLInputElement;
@@ -729,7 +722,7 @@ function renderSubs() {
 // the title opens a small panel: which project this conversation belongs to, and the project's icon and name
 function openPop() {
   if (isView(sel)) return;
-  const T = isTerm(sel) ? termOf(sel) : undefined, cur = T ? T.project : projOf(sel), c = cur ? settings.projects[cur] || {} : {};
+  const T = isTerm(sel) ? termOf(sel) : undefined, cur = T ? T.project : projOf(sel), c = { ...(cur ? settings.projects[cur] || {} : {}), img: cur ? icons[cur]?.img ?? undefined : undefined, icon: cur ? icons[cur]?.icon : undefined };
   const names = snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
   $("pop").innerHTML = `<label class="plab">${t("pop.project")}
       <select id="popproj"><option value="">${t("general")}</option>${names.map((n: string) => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</select></label>
@@ -761,7 +754,16 @@ async function onPop(e: MouseEvent) {
     else if (chats[sel]) { chats[sel].project = proj; saveChats(); }
     const icon = (document.getElementById("popicon") as HTMLInputElement | null)?.value.trim();
     const lab = (document.getElementById("poplabel") as HTMLInputElement | null)?.value.trim();
-    if (cur && icon !== undefined) next.projects[cur] = { ...(popImg ? { img: popImg } : icon ? { icon } : {}), ...(lab ? { label: lab } : {}) };
+    if (cur && icon !== undefined) {
+      // the label stays in the app's settings, the icon goes to the vault; cleared, the favicon run guesses again
+      if (lab) next.projects[cur] = { label: lab }; else delete next.projects[cur];
+      const was = icons[cur];
+      try {
+        if (popImg && popImg !== was?.img) await setIcon(cur, "img", popImg);
+        else if (!popImg && icon && icon !== was?.icon) await setIcon(cur, "emoji", icon);
+        else if (!popImg && !icon && (was?.img || was?.icon)) await setIcon(cur, "reset");
+      } catch (x) { alertMsg(String(x)); return; }
+    }
     if (!(await saveSettings(next))) { alertMsg(settingsMsg); return; }
   }
   $("pop").hidden = true; render();
@@ -1239,24 +1241,36 @@ $("toggleinsp").addEventListener("click", () => setInsp(!document.body.classList
 window.addEventListener("keydown", e => { if (e.metaKey && e.altKey && e.code === "KeyI") { e.preventDefault(); setInsp(!document.body.classList.contains("noinsp")); } });
 $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (b) { tab = b.dataset.tab!; if (prOpen) closePr(); else renderInsp(); } });
 
-// ---------- favicons: once a day the website icon for projects without an icon. favicon.py guesses the site
-// from the notes and skips a project whose guess is in tried, so a site without a favicon is fetched once
+// ---------- favicons: projects without an icon entry in the vault get one. favicon.py guesses the site from the
+// notes (a website set as the icon wins) and fetches its icon; the icon goes into the vault as a file, a project
+// without a site gets "" (none, not guessed again). `tried` (this Mac) keeps a site that had no favicon from being
+// fetched again and again.
+let favBusy = false;
 async function checkFavicons() {
-  const f = settings.favicons, day = new Date().toLocaleDateString("sv"); // YYYY-MM-DD, local time
-  if (!f?.on || f.last === day || !snap?.projects) return;
-  if (!await saveSettings({ ...settings, favicons: { ...f, last: day } })) return;
-  const bare = (n: string) => !settings.projects[n]?.img && !settings.projects[n]?.icon;
-  let found: Record<string, { site: string; data: string | null }> = {};
-  try { found = await invoke("favicons", { projects: snap.projects.filter((p: any) => bare(p.name)).map((p: any) => ({ name: p.name, aliases: p.aliases || [] })) }); }
-  catch (e) { console.error(e); return; }
-  if (!Object.keys(found).length) return;
-  const next = structuredClone(settings);
-  for (const [n, r] of Object.entries(found)) {
-    next.favicons!.tried[n] = r.site;
-    const img = r.data && bare(n) ? await iconFrom(new File([await (await fetch(r.data)).blob()], "favicon")) : null;
-    if (img) next.projects[n] = { ...next.projects[n], img };
-  }
-  if (await saveSettings(next)) render();
+  const f = settings.favicons;
+  if (!f?.on || !snap?.projects || favBusy) return;
+  const todo = snap.projects.filter((p: any) => !(p.name in icons) || (isSite(icons[p.name].value) && f.tried?.[p.name] !== icons[p.name].value));
+  if (!todo.length) return;
+  favBusy = true;
+  try {
+    const found: Record<string, { site: string; data: string | null }> = await invoke("favicons", { projects: todo.map((p: any) => ({ name: p.name, aliases: p.aliases || [] })) });
+    const tried = { ...f.tried };
+    for (const [n, r] of Object.entries(found)) {
+      tried[n] = r.site;
+      const img = r.data ? await iconFrom(await (await fetch(r.data)).blob()) : null;
+      if (img) await setIcon(n, "img", img);
+      else if (!(n in icons)) await setIcon(n, "none");
+    }
+    await saveSettings({ ...settings, favicons: { ...f, tried } });
+  } catch (e) { console.error(e); }
+  favBusy = false;
+}
+async function refreshIcons() {
+  icons = await loadIcons();
+  // the first load moves icons out of settings.json into the vault: take the settings as they are now
+  try { settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; } catch { /* keep */ }
+  render();
+  checkFavicons();
 }
 
 // ---------- polling: pending questions often, sessions and the vault now and then
@@ -1332,6 +1346,8 @@ await initI18n(); applyStatic();
 const vs = await invoke<VaultStatus>("vault_status");
 if (!vs.ok) { await onboard(vs); settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; }
 await loadSnapshot();
+await refreshIcons();
+listen("icons-changed", async () => { icons = await loadIcons(); render(); checkFavicons(); });
 const oldGens: Record<string, { title: string; at: number }> = store.get("gens", {});
 for (const k of await invoke<string[]>("chats")) {
   if (chats[k]) continue;
@@ -1362,8 +1378,7 @@ setInterval(async () => {
 }, 2000);
 setInterval(loadSnapshot, 30000);
 listen("reminders-changed", loadSnapshot);
-checkFavicons();
-setInterval(checkFavicons, 60 * 60000); // hourly, it acts once a day
+setInterval(checkFavicons, 60 * 60000); // a project new in work-state gets its icon within the hour
 if (sel !== PRS) loadPrs(); // select() already loads it when the view is open
 setInterval(loadPrs, 5 * 60000);
 // usage: plan limits for the sidebar, tokens while the view is open. Settings from the sidebar's foot

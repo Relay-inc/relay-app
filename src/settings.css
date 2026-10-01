@@ -148,6 +148,10 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .prefs .setrow{display:flex;gap:8px;align-items:center}
 .prefs .setrow .field{flex:1;width:auto}
 
+.prefs .field.ico{width:72px;text-align:center}
+.srow-i .emo,.arow-h .srow-i .emo{font-size:15px;line-height:1}
+.srow-i img{width:18px;height:18px;border-radius:4px}
+
 /* Mail: the account steps */
 .mstep{display:grid;gap:8px;justify-items:start}
 .mstep>b{font-weight:500}

@@ -295,13 +295,38 @@ async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, Strin
     let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
         .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
-    // the sites in the vault's .relay/config.json win over a guess; a project without one gets its guess added there
-    let sites = relay_config::load(v).map(|c| c["sites"].clone()).filter(Value::is_object).unwrap_or_else(|| json!({}));
+    // a website set as a project's icon in the vault's .relay/config.json wins over a guess
+    let sites: serde_json::Map<String, Value> = relay_config::icons(v).into_iter()
+        .filter_map(|(n, i)| match relay_config::icon_kind(i["value"].as_str()?) { relay_config::Icon::Site(s) => Some((n, json!(s))), _ => None }).collect();
     child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried, "sites": sites}).to_string().as_bytes()).map_err(|e| e.to_string())?;
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    let found: Value = serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))?;
-    if let Some(f) = found.as_object() { relay_config::add_sites(v, &f.iter().map(|(n, r)| (n.clone(), r["site"].clone())).collect()); }
-    Ok(found)
+    serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
+}
+
+/// The project icons from the vault's .relay/config.json: {project: {value, img | icon}}. The first call for a vault
+/// moves the icons settings.json held before into the vault (files in .relay/icons/) and drops them from settings.
+#[tauri::command]
+fn project_icons(app: AppHandle, state: State<App>) -> Value {
+    let (v, map) = { let s = state.settings.lock().unwrap(); let st = vault_of(&s); (st["vault"].as_str().unwrap_or("").to_string(), st["map"].clone()) };
+    if v.is_empty() { return json!({}); }
+    relay_config::ensure(&v, &map);
+    let projects = state.settings.lock().unwrap()["projects"].as_object().cloned().unwrap_or_default();
+    if let Some(moved) = relay_config::migrate_icons(&v, &projects).filter(|m| !m.is_empty()) {
+        let mut s = state.settings.lock().unwrap();
+        for n in &moved { if let Some(p) = s["projects"][n].as_object_mut() { p.remove("img"); p.remove("icon"); if p.is_empty() { s["projects"].as_object_mut().unwrap().remove(n); } } }
+        fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&*s).unwrap()).ok();
+        app.emit("settings-changed", &*s).ok();
+    }
+    Value::Object(relay_config::icons(&v))
+}
+/// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
+#[tauri::command]
+fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: String, value: String) -> Result<(), String> {
+    let v = need_vault(&state)?;
+    if project.is_empty() || project.len() > 120 { return Err("bad project".into()); }
+    relay_config::set_icon(&v, &project, &kind, &value)?;
+    app.emit("icons-changed", ()).ok();
+    Ok(())
 }
 
 /// The configured vault: path, mapping, found per path, ok.
@@ -1145,7 +1170,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
