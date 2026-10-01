@@ -39,25 +39,25 @@ export class SettingsFold extends SettingsElement {
     // a hairline between the rows, none above the first (the host's own border would lose to the page's `*` reset)
     return html`<div class="border-t border-s-border [:host(:first-child)_&]:border-t-0">
       <button
-        class="group flex w-full items-center gap-3 rounded-sm py-2.5 text-left focus-visible:ring-2 ring-s-ring focus-visible:outline-none"
+        class="group flex w-full items-center gap-3 px-3.5 py-3 text-left hover:bg-fill focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${this.open ? "bg-fill" : ""}"
         @click=${() => emit(this, "fold-toggle")}
         aria-expanded=${ifDefined(this.nav ? undefined : (String(this.open) as "true" | "false"))}
       >
-        <span class="grid w-6 flex-none place-items-center">${this.icon}</span>
+        <span class="grid size-7.5 flex-none place-items-center rounded-lg bg-fill-2">${this.icon}</span>
         <span class="min-w-0 flex-1"
-          ><b class="flex items-center gap-1.5 overflow-hidden font-medium text-ellipsis whitespace-nowrap"
+          ><b class="flex items-center gap-1.5 overflow-hidden text-[13px] font-medium text-ellipsis whitespace-nowrap"
             >${this.name}</b
           >
           <div class="mt-px flex">${this.status}</div></span
         >
         <svg
-          class="size-3.5 flex-none fill-none stroke-s-subtle stroke-2 transition-transform duration-150 ease-in-out glyph group-hover:stroke-s-fg ${this.open ? "rotate-90" : ""}"
+          class="size-3.5 flex-none fill-none stroke-tertiary stroke-2 transition-transform duration-150 ease-in-out glyph group-hover:stroke-s-fg ${this.open ? "rotate-90" : ""}"
           viewBox="0 0 24 24"
         >
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
-      ${this.open && !this.nav ? html`<div class="grid grid-cols-1 gap-3 pb-3.5 pl-9"><slot></slot></div>` : nothing}
+      ${this.open && !this.nav ? html`<div class="grid grid-cols-1 gap-3 px-3.5 pb-3.5 pl-13"><slot></slot></div>` : nothing}
     </div>`;
   }
 }

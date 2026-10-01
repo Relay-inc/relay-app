@@ -3,7 +3,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
-import { appIcon, inputValue } from "./blocks";
+import { appIcon, buttonClass, inputValue } from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 
@@ -45,24 +45,33 @@ export class SettingsPath extends SettingsElement {
   @property() pickTip = "";
 
   override render() {
+    const input = html`<input
+      class="h-6 min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-xs text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:ring-1 ring-s-primary focus-visible:outline-none"
+      .value=${live(this.value)}
+      title=${this.tip}
+      placeholder=${ifDefined(this.placeholder || undefined)}
+      ?readonly=${this.readonly}
+      spellcheck="false"
+      @input=${(e: Event) => emit(this, "path-input", inputValue(e))}
+      @change=${() => emit(this, "path-change")}
+    />`;
+    // the vault folder: the path with a folder glyph, and Choose… beside it
+    if (this.wide)
+      return html`<div class="flex w-full gap-2">
+        <div class="flex h-7.5 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-lg bg-fill-2 px-2.5 text-xs">
+          ${appIcon("folder", "size-3.5 flex-none fill-none stroke-secondary stroke-2 glyph")}${input}
+        </div>
+        <button class=${buttonClass()} @click=${() => emit(this, "path-pick")}>${this.pickTip}</button>
+      </div>`;
     return html`<div
-      class="${this.wide ? "w-auto" : "w-65"} box-content flex h-7 items-center gap-2 overflow-hidden rounded-md border border-s-input py-0.5 pr-1 pl-2 text-xs focus-within:ring-1 ring-s-primary"
+      class="flex h-7 w-62.5 items-center gap-2 overflow-hidden rounded-[7px] bg-fill-2 pr-1 pl-2.5 text-xs focus-within:ring-1 ring-s-primary"
     >
-      ${this.found == null ? nothing : html`<span class="size-1.5 flex-none rounded-full ${this.found ? "bg-s-ok" : "bg-s-warn"}" title=${this.foundTip}></span>`}<input
-        class="h-6 min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-xs text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:ring-1 ring-s-primary focus-visible:outline-none"
-        .value=${live(this.value)}
-        title=${this.tip}
-        placeholder=${ifDefined(this.placeholder || undefined)}
-        ?readonly=${this.readonly}
-        spellcheck="false"
-        @input=${(e: Event) => emit(this, "path-input", inputValue(e))}
-        @change=${() => emit(this, "path-change")}
-      /><button
-        class="box-content grid h-7 w-8 flex-none place-items-center border-l border-s-border text-s-muted hover:bg-s-hover hover:text-s-fg focus-visible:ring-1 ring-inset ring-s-primary"
+      ${input}${this.found == null ? nothing : html`<span class="size-1.5 flex-none rounded-full ${this.found ? "bg-s-ok" : "bg-s-warn"}" title=${this.foundTip}></span>`}<button
+        class="grid size-5 flex-none place-items-center rounded-md text-s-muted hover:bg-s-hover hover:text-s-fg focus-visible:ring-1 ring-s-primary"
         @click=${() => emit(this, "path-pick")}
         title=${this.pickTip}
       >
-        ${appIcon("folder", "size-4 fill-none stroke-current stroke-2 glyph")}
+        ${appIcon("folder", "size-3.5 fill-none stroke-current stroke-2 glyph")}
       </button>
     </div>`;
   }

@@ -7,7 +7,7 @@ import { agent, agentsStatus, type AgentsStatus, type AgentStatus } from "../../
 import {
   buttonClass,
   footer,
-  PILL,
+  DEFAULT_PILL,
   section,
   SELECT,
   EMPTY_LIST,
@@ -137,7 +137,7 @@ export class SettingsAgents extends SettingsElement {
     const id = provider.id;
     const open = this.opened.has(id);
     const defaultBadge =
-      this.settings.agents?.default === id ? html` <span class=${PILL}>${t("ag.isDefault")}</span>` : nothing;
+      this.settings.agents?.default === id ? html` <span class=${DEFAULT_PILL}>${t("ag.isDefault")}</span>` : nothing;
     return html`<relay-settings-fold
       ?open=${open}
       @fold-toggle=${() => this.setOpen(id, !open)}
