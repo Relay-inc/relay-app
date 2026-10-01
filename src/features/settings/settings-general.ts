@@ -160,39 +160,42 @@ export class SettingsGeneral extends SettingsElement {
       ["system", t("set.system")],
       ["light", t("set.themeLight")],
       ["dark", t("set.themeDark")],
-    ];
-    const choices = themes.map(
-      ([value, name]) => html`<option value=${value} ?selected=${current === value}>${name}</option>`,
-    );
-    return field(
-      t("set.theme"),
-      html`<select
-        class=${SELECT}
-        id="theme"
-        @change=${(e: Event) => emit(this, "theme-change", inputValue(e) as Theme)}
-      >
-        ${choices}
-      </select>`,
-      { id: "theme", hint: th("set.themeHelp") },
-    );
+    ] as const;
+    const control = html`<div class="seg" role="radiogroup" aria-label=${t("set.theme")}>
+      ${themes.map(
+        ([value, name]) =>
+          html`<button
+            role="radio"
+            aria-checked=${current === value}
+            class=${current === value ? "on" : ""}
+            @click=${() => emit(this, "theme-change", value as Theme)}
+          >
+            ${name}
+          </button>`,
+      )}
+    </div>`;
+    return field(t("set.theme"), control, { hint: th("set.themeHelp") });
   }
 
   private renderAccent() {
     const current = this.settings.accent || "relay";
-    const choices = (["relay", "graphite"] as const).map(
-      value => html`<option value=${value} ?selected=${current === value}>${t(`set.accent.${value}`)}</option>`,
-    );
-    return field(
-      t("set.accent"),
-      html`<select
-        class=${SELECT}
-        id="accent"
-        @change=${(e: Event) => emit(this, "accent-change", inputValue(e) as Accent)}
-      >
-        ${choices}
-      </select>`,
-      { id: "accent", hint: th("set.accentHelp") },
-    );
+    // Relay blue is the fixed brand colour (it must not follow the current accent); graphite is the text colour
+    const swatch = { relay: "bg-[#3a5ffb]", graphite: "bg-label" };
+    const control = html`<div class="flex gap-2.5" role="radiogroup" aria-label=${t("set.accent")}>
+      ${(["relay", "graphite"] as const).map(
+        value =>
+          html`<button
+            role="radio"
+            aria-checked=${current === value}
+            class="flex h-7 items-center gap-1.5 rounded-lg border bg-transparent pr-2.5 pl-1.5 text-xs font-medium text-s-fg focus-visible:ring-1 ring-s-primary focus-visible:outline-none ${current === value ? "border-accent" : "border-s-input"}"
+            @click=${() => emit(this, "accent-change", value)}
+          >
+            <span class="size-4 rounded-full inset-ring inset-ring-black/10 ${swatch[value]}"></span
+            >${t(`set.accent.${value}`)}
+          </button>`,
+      )}
+    </div>`;
+    return field(t("set.accent"), control, { hint: th("set.accentHelp") });
   }
 
   private renderFavicons() {

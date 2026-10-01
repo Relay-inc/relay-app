@@ -10,19 +10,22 @@ import type { Renderable } from "./types";
 // a <code> in a translated text
 export const CODE =
   "[&_code]:rounded-sm [&_code]:bg-s-mutedbg [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-xs";
-export const HINT = `mt-0.5 text-xs leading-snug text-s-faint ${CODE}`;
+export const HINT = `mt-0.5 text-xs leading-snug text-s-muted ${CODE}`;
 /** A hint straight in a folded-open row, which has its own gap. */
 export const HINT_IN_ROW = `text-xs leading-snug text-s-faint ${CODE}`;
-export const OPTIONAL_TEXT = "text-xs text-s-faint";
+export const OPTIONAL_TEXT = "text-[11px] text-s-faint";
 export const OK_MESSAGE = "text-xs text-s-muted";
 export const ERROR_MESSAGE = "text-xs text-s-err";
 export const STATUS_TEXT = "inline-flex min-w-0 items-center gap-1.5 text-xs text-s-muted";
 export const EMPTY_LIST = "py-2.5 text-xs text-s-faint";
 export const PILL =
   "inline-block rounded-sm border border-s-border bg-s-mutedbg/40 px-1.5 py-0.5 text-xs leading-tight font-normal text-s-subtle";
+/** The "default" tag beside an agent's name */
+export const DEFAULT_PILL =
+  "inline-flex h-4.5 items-center rounded-[5px] bg-accent-soft px-1.5 text-[11px] font-medium text-accent-text";
 
 const BUTTON =
-  "inline-flex h-7 items-center justify-center gap-1.5 rounded-md border text-xs font-medium whitespace-nowrap no-underline transition-colors duration-150 ease-in-out hover:duration-0 focus-visible:ring-1 ring-s-primary focus-visible:outline-none disabled:opacity-50";
+  "inline-flex h-7.5 items-center justify-center gap-1.5 rounded-lg border text-[13px] font-medium whitespace-nowrap no-underline transition-colors duration-150 ease-in-out hover:duration-0 focus-visible:ring-1 ring-s-primary focus-visible:outline-none disabled:opacity-50";
 const BUTTON_KIND = {
   plain: "border-s-input bg-transparent text-s-fg hover:bg-s-hover",
   primary: "border-s-primary bg-s-primary text-on-accent hover:bg-accent-hover",
@@ -30,7 +33,7 @@ const BUTTON_KIND = {
 };
 /** A button; `square` makes it a square holding a glyph. */
 export const buttonClass = (kind: keyof typeof BUTTON_KIND = "plain", square = false) =>
-  `${BUTTON} ${square ? "w-7 p-0" : "px-3"} ${BUTTON_KIND[kind]}`;
+  `${BUTTON} ${square ? "w-7.5 p-0" : "px-3"} ${BUTTON_KIND[kind]}`;
 /** The glyph in an icon button. */
 export const BUTTON_GLYPH = "size-4 fill-none stroke-current stroke-2 glyph";
 /** The glyph on a tile (menu items, rows). */
@@ -52,8 +55,8 @@ export const appIcon = (name: string, classes = "") =>
   glyphSvg(name === "gh" ? GITHUB_MARK : iconPaths(name), classes, "0 0 24 24");
 
 const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-raised [&>*]:min-w-0";
-const LABEL = "block text-sm leading-7 text-s-fg";
-const FIELD_HINT = `-mt-1 text-xs leading-snug text-s-faint ${CODE}`;
+const LABEL = "block text-[13px] leading-7 text-s-fg";
+const FIELD_HINT = `-mt-1 text-xs leading-snug text-s-muted ${CODE}`;
 const FOOTER = "flex flex-wrap items-center gap-2";
 
 type SectionOptions = { desc?: Renderable; action?: Renderable; footer?: Renderable; list?: boolean };
@@ -61,12 +64,12 @@ type SectionOptions = { desc?: Renderable; action?: Renderable; footer?: Rendera
 const isShown = (content: Renderable) => !!content && content !== nothing;
 
 export const section = (title: Renderable, body: Renderable, options: SectionOptions = {}) => {
-  const cardPadding = options.list ? "gap-0 px-4 py-0.5" : "gap-3.5 px-4 py-3";
+  const cardPadding = options.list ? "gap-0 py-0" : "gap-3.5 px-3.5 py-3";
   return html`<section class="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0">
     <header class="flex items-start justify-between gap-4">
       <div class="flex min-w-0 items-start gap-2.5">
         <div>
-          <h2 class="text-sm font-semibold text-s-fg">${title}</h2>
+          <h2 class="text-[13px] font-semibold text-s-fg">${title}</h2>
           ${options.desc ? html`<p class=${HINT}>${options.desc}</p>` : nothing}
         </div>
       </div>
