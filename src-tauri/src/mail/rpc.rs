@@ -1,4 +1,4 @@
-// The `vaultmail` MCP server as the CLI sees it over the stream-json pipe: pure JSON-RPC classification,
+// The `relay-mail` MCP server as the CLI sees it over the stream-json pipe: pure JSON-RPC classification,
 // lib.rs does the I/O and runs Mail::tool for a Call.
 
 use serde_json::{json, Value};
@@ -19,7 +19,7 @@ pub fn rpc(m: &Value) -> Rpc {
         "initialize" => Rpc::Reply(rpc_result(id, json!({
             "protocolVersion": m["params"]["protocolVersion"],
             "capabilities": { "tools": {} },
-            "serverInfo": { "name": "vaultmail", "version": "1" },
+            "serverInfo": { "name": "relay-mail", "version": "1" },
             "instructions": INSTRUCTIONS,
         }))),
         "ping" => Rpc::Reply(rpc_result(id, json!({}))),
@@ -63,7 +63,7 @@ mod tests {
         let Rpc::Reply(r) = rpc(&json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "2025-06-18" } })) else { panic!() };
         assert_eq!(r["id"], 1);
         assert_eq!(r["result"]["protocolVersion"], "2025-06-18");
-        assert_eq!(r["result"]["serverInfo"]["name"], "vaultmail");
+        assert_eq!(r["result"]["serverInfo"]["name"], "relay-mail");
         assert!(r["result"]["capabilities"]["tools"].is_object());
         assert!(r["result"]["instructions"].as_str().unwrap().contains("untrusted"));
 
