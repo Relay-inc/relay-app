@@ -41,19 +41,20 @@ from this checkout, so a build only works on this machine.
 | Part | What it does |
 |---|---|
 | `src-tauri/src/lib.rs` | All Tauri commands. Starts one process per conversation through its agent provider, with the vault as cwd and the login-shell PATH, and passes the provider's normalised events to the webview. See [Agent providers](#agent-providers). |
-| `src-tauri/src/agents.rs`, `src/agents/` | The registry of the agent providers, `settings.agents` and sessions.json. |
+| `src-tauri/src/agents.rs`, `src/domain/agents.ts` | The registry of the agent providers, `settings.agents` and sessions.json. |
 | `packages/agent-claude/perm_server.py` | Stdio MCP server passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
 | `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
-| `src/app/` | The main window's state (`state.ts`), what the user does (`actions.ts`), the agent events and history (`events.ts`), the loaders and polls (`data.ts`) and the start (`boot.ts`). No DOM: the components read the state, `changed()` redraws them. |
-| `src/ui/` | The main window as Lit components, each in its own shadow root: `<relay-app>` (the grid and the window-wide keys), `<relay-nav>` (sidebar), `<relay-chat>` (title bar, the open view, composer), `<relay-inspector>` (right panel), and the views and parts they hold. `src/ui/settings/` is the settings window. |
-| `src/lib/store.ts`, `src/styles/` | `changed()` and `RelayElement`; the design tokens (`base.css`, global) and the rules every component adopts (`shared.css`). |
-| `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
-| `src/board.ts`, `src/providers/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
+| `src/core/` | What every part uses: `store.ts` (`changed()` redraws, `StoreController` connects a container), `dom.ts`, `i18n.ts` + `locales/` (UI strings in English, Dutch, French and German; `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors; the language follows macOS unless set in the settings), `icons.ts`, `markdown.ts`, and `styles/` (`base.css` with the design tokens, `tailwind.css` with the theme and the shared utilities). |
+| `src/domain/` | The state and logic, no DOM: one slice per area (`ui`, `config`, `vault`, `chats/`, `agents`, `sidebar`, `panel`, `prs`, `mail`, `board`, `reminders`, `usage`, `notes`) with its actions and loaders, plus the provider and agent registries and the vault mapping (`vault-setup.ts`). |
+| `src/features/<area>/` | The UI, one folder per area, Lit components in their own shadow roots styled with Tailwind utilities. `relay-<area>.ts` is the area's container (it reads the domain and calls its actions); the other files are presentational (properties in, events out). `shell/` is the window's grid and shortcuts, `settings/` the settings window. |
+| `src/components/` | Presentational components more than one area uses: the permission card, image thumbnails, the tool line. |
+| `src/app/boot.ts` | The main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |
+| `src/domain/reminders.ts`, `src/features/reminders/` | Reminders. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
+| `src/domain/board.ts`, `src/features/board/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
-| `src-tauri/src/vault.rs`, `src/vault-setup.ts` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
-| `src/settings-window.ts`, `src/ui/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
-| `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
+| `src-tauri/src/vault.rs`, `src/domain/vault-setup.ts`, `src/features/onboarding/` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
+| `src/settings.ts`, `src/features/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
 `sessions.json` (conversation to session id, and to its provider when that is not Claude Code) and `pending/`. Board provider tokens sit
@@ -89,13 +90,13 @@ packages/
     src/lib.rs                the backend Provider: base URL, allowlist, headers, errors, secrets
     tests/, tests/fixtures/   the mapping on fixture JSON; the Rust tests sit in lib.rs
     README.md                 setup and what the allowlist permits
-src/providers/index.ts        PROVIDERS, the webview registry
+src/domain/providers.ts       PROVIDERS, the webview registry
 src-tauri/src/providers.rs    PROVIDERS, the backend registry; keychain, curl, settings migration
 ```
 
 Strings: a package's `locales.ts` is typed with `Locales<Key>` (English is the reference), so a missing key in
-any language fails `tsc`, as it does for the app's own `src/locales/`. The app merges them into its dictionaries
-as `<id>.<key>` (`src/i18n.ts`); in the package, `translator<Key>(id)` is its `t`. Its native error strings
+any language fails `tsc`, as it does for the app's own `src/core/locales/`. The app merges them into its dictionaries
+as `<id>.<key>` (`src/core/i18n.ts`); in the package, `translator<Key>(id)` is its `t`. Its native error strings
 are a `Text` table in `lib.rs`.
 
 ### The contract
@@ -118,7 +119,7 @@ The app's commands (all take `provider`): `integration_status` (on, ready and a 
 `integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
 with the token over stdin; the webview never sees it. The keychain, curl and the commands are the app's, not a package's.
 
-**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@relay/board-core`, registered in `PROVIDERS` in `src/providers/index.ts`.
+**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@relay/board-core`, registered in `PROVIDERS` in `src/domain/providers.ts`.
 
 ```ts
 interface BoardProvider {
@@ -159,7 +160,7 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
    languages; the response mapping in a pure module with fixture tests in `tests/`.
 4. A README: how to get the key or token, what the allowlist permits.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
-   `src-tauri/src/providers.rs` and `package.json` + `src/providers/index.ts`, then `pnpm install`.
+   `src-tauri/src/providers.rs` and `package.json` + `src/domain/providers.ts`, then `pnpm install`.
 
 ## Agent providers
 
@@ -228,7 +229,7 @@ constrained window over all providers.
 **Webview**, the package's TypeScript (`src/index.ts`, default export): an `AgentProvider<Key>` from
 `@vault/agent-core` (`id`, `name`, `glyph`, `strings` in en/nl/fr/de, optional `modelName` and `options`: selects shown
 in Settings › Agents and stored next to `on` and `bin`, the first choice the default), registered in `AGENTS` in
-`src/agents/index.ts`. Its strings are merged into the app's as `<id>.<key>`; the app looks up `limits.loading`,
+`src/domain/agents.ts`. Its strings are merged into the app's as `<id>.<key>`; the app looks up `limits.loading`,
 `off.<reason>`, each window's `label`, `tokens.reading` and `set.help`.
 
 **Settings** (Settings › Agents): `settings.agents = { default, providers: { <id>: { on, bin, …options } } }`, Claude Code
@@ -260,7 +261,7 @@ or `t:<provider>:<sid>`.
 4. A README: how to install it, how it runs, where it logs, how it asks for permissions and reports usage, what ran
    live and what did not, known gaps. A column in the table above.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
-   `src-tauri/src/agents.rs` and `package.json` + `src/agents/index.ts`, then `pnpm install`.
+   `src-tauri/src/agents.rs` and `package.json` + `src/domain/agents.ts`, then `pnpm install`.
 6. `pnpm build`, `pnpm test` and `cargo test --workspace`.
 
 ## Other folders
