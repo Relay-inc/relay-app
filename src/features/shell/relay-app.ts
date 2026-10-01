@@ -88,7 +88,7 @@ export class RelayApp extends LitElement {
     return html`
       ${vault.snapErr ? html`<div class="fixed top-0 left-1/2 -translate-x-1/2 z-40 max-w-7/10 px-3 py-1.5 rounded-b-lg bg-bg border border-separator text-late text-xs">${th("vault.snapErr", { e: vault.snapErr })}</div>` : nothing}
       <relay-sidebar class="min-h-0 min-w-0 border-r border-separator"></relay-sidebar>
-      <relay-chat class="@container min-h-0 min-w-0"></relay-chat>
+      <relay-chat class="min-h-0 min-w-0"></relay-chat>
       <relay-inspector class="min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${ui.noinsp ? "opacity-0 border-l-transparent pointer-events-none" : ""}"></relay-inspector>
       ${ui.qk ? html`<relay-quick></relay-quick>` : nothing}
       ${ui.zoom ? html`<div class="fixed inset-0 z-30 grid place-items-center p-10 bg-black/55 cursor-zoom-out" @click=${() => zoom("")}><img class="max-w-full max-h-full rounded-lg shadow-2xl bg-bg" alt="" src=${ui.zoom}></div>` : nothing}`;

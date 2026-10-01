@@ -89,18 +89,19 @@ export class RelayChat extends LitElement {
     const about = !isv && !T && !pn && !chat.dismissed.has(sel) && !busy ? aboutProject(sel) : null;
     const tt = ui.toast, subs = isv ? [] : chat.subs[sel] || [];
     // a card over the bar's width: toast and move bar share the log's column
-    const strip = "mx-7 @3xl:mx-auto max-w-2xl flex items-center gap-2 px-3 py-2 rounded-lg text-sm";
+    // the strips under the log line up with the messages: the same column, its padding as the gutter
+    const col = "block w-full max-w-2xl mx-auto px-7", strip = "flex items-center gap-2 px-3 py-2 rounded-lg text-sm";
     return html`
       <relay-chat-bar .heading=${heading} .img=${!isv && pn ? vault.icons[pn]?.img ?? "" : ""} ?editable=${!isv} .sub=${sub}
         .value=${T ? T.title : label(sel)} ?readonly=${!!T} ?renamable=${!!chat.chats[sel]} ?noTerm=${noTerm} ?locked=${locked} ?panelOff=${ui.noinsp}
         @edit-project=${openPop} @rename=${(e: CustomEvent<string>) => rename(e.detail)} @open-terminal=${openTerminal} @toggle-panel=${() => setInsp(!ui.noinsp)}></relay-chat-bar>
       ${ui.pop ? html`<relay-project-panel></relay-project-panel>` : nothing}
       <div id="log" class="flex-1 overflow-y-auto pt-6 pb-2" @scroll=${this.onScroll}><div id="msgs" class=${"mx-auto flex flex-col gap-4 " + (bp ? "px-5" : "max-w-2xl px-7")}>${this.view(bp)}</div></div>
-      ${subs.length ? html`<relay-subagents class="mx-7 @3xl:mx-auto mb-1.5 max-w-2xl"></relay-subagents>` : nothing}
-      ${tt ? html`<div class="${strip} mb-2 bg-label text-bg select-none"><span>${tt.text}</span><span class="flex-1"></span>${tt.undo ? html`<button class="btn bg-transparent! text-bg border-bg/40!" @click=${tt.undo}>${tt.btn}</button>` : nothing}</div>` : nothing}
-      ${T ? html`<div class="${strip} border border-separator bg-fill"><span>${t("move.term", { busy: T.status === "busy" ? t("move.termBusy") : "" })}</span></div>`
-        : about ? html`<div class="${strip} border border-separator bg-fill"><span>${th("move.about", { name: about })}</span><span class="flex-1"></span>
-          <button class="btn" @click=${() => moveTo(null)}>${t("move.no")}</button><button class="btn btn-primary" @click=${() => moveTo(about)}>${t("move.yes", { name: about })}</button></div>` : nothing}
-      ${isv ? nothing : html`<relay-composer class="mx-7 @3xl:mx-auto mt-2 mb-5 max-w-2xl"></relay-composer>`}`;
+      ${subs.length ? html`<relay-subagents class="${col} mb-1.5"></relay-subagents>` : nothing}
+      ${tt ? html`<div class=${col}><div class="${strip} mb-2 bg-label text-bg select-none"><span>${tt.text}</span><span class="flex-1"></span>${tt.undo ? html`<button class="btn bg-transparent! text-bg border-bg/40!" @click=${tt.undo}>${tt.btn}</button>` : nothing}</div></div>` : nothing}
+      ${T ? html`<div class=${col}><div class="${strip} border border-separator bg-fill"><span>${t("move.term", { busy: T.status === "busy" ? t("move.termBusy") : "" })}</span></div></div>`
+        : about ? html`<div class=${col}><div class="${strip} border border-separator bg-fill"><span>${th("move.about", { name: about })}</span><span class="flex-1"></span>
+          <button class="btn" @click=${() => moveTo(null)}>${t("move.no")}</button><button class="btn btn-primary" @click=${() => moveTo(about)}>${t("move.yes", { name: about })}</button></div></div>` : nothing}
+      ${isv ? nothing : html`<relay-composer class="${col} mt-2 mb-5"></relay-composer>`}`;
   }
 }
