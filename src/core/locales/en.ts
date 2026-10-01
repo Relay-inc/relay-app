@@ -112,6 +112,8 @@ const en = {
   "bar.togglePanel": "Show or hide the panel",
   "bar.togglePanelTitle": "Show or hide the panel (⌥⌘I)",
   "composer.send": "Send",
+  "composer.commands": "Commands and skills",
+  copy: "Copy",
   "tab.open": "Open",
   "tab.stand": "Status",
   "img.remove": "Remove",

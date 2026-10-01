@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t } from "../../core/i18n";
 import { changed } from "../../core/store";
-import type { AgentEvent } from "../agents";
+import { setCommands, type AgentEvent } from "../agents";
 import { ui, WAIT, isTerminal } from "../ui";
 import { loadSnapshot } from "../vault";
 import { termSid } from "../keys";
@@ -60,6 +60,9 @@ export async function notify(key: string, body: string) {
 
 export function onEvent(key: string, agentEvent: AgentEvent) {
   switch (agentEvent.type) {
+    case "commands":
+      setCommands(agentEvent.commands);
+      break;
     case "draft_saved":
       onDraftSaved(key, agentEvent);
       break;

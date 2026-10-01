@@ -115,6 +115,8 @@ export default {
   "bar.togglePanel": "Paneel verbergen of tonen",
   "bar.togglePanelTitle": "Paneel verbergen of tonen (⌥⌘I)",
   "composer.send": "Versturen",
+  "composer.commands": "Commando's en skills",
+  copy: "Kopiëren",
   "tab.open": "Open",
   "tab.stand": "Stand",
   "img.remove": "Verwijderen",

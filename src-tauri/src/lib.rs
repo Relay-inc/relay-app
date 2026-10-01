@@ -549,6 +549,10 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                             }
                             emit(json!({"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}));
                         }
+                        // the slash commands and skills this vault has, for the composer's completion
+                        if ev["response"]["request_id"] == "init" && ev["response"]["response"]["commands"].is_array() {
+                            emit(json!({"type": "commands", "commands": ev["response"]["response"]["commands"]}));
+                        }
                         continue;
                     }
                 }
@@ -861,6 +865,28 @@ async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, S
             "caps": p.caps(), "detect": p.detect(&eb.env()), "models": p.models(), "efforts": p.efforts(), "bin": eb.bin, "defaultBin": p.default_bin(&eb.home)})).collect();
         json!({"default": agents::default_id(&s), "providers": list})
     }).await.map_err(|e| e.to_string())
+}
+
+/// Claude Code's slash commands and skills for the vault, from a Claude that only answers `initialize` (hooks off, no
+/// message, so no session): the composer completes before any conversation has started a process of its own.
+#[tauri::command]
+async fn claude_commands(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
+    let dir = need_vault(&state)?;
+    let eb = env_of(&app, &state, agents::get_or_first(Some("claude")));
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut child = Command::new(&eb.bin)
+            .args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--settings", r#"{"disableAllHooks":true}"#])
+            .current_dir(&dir).env("PATH", &eb.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
+            .spawn().map_err(|e| format!("claude start: {e}"))?;
+        // stdin closes after the request: Claude answers it and exits
+        writeln!(child.stdin.take().unwrap(), "{}", pipe_init(false)).map_err(|e| e.to_string())?;
+        let out = std::io::BufReader::new(child.stdout.take().unwrap());
+        let commands = out.lines().map_while(Result::ok).filter_map(|l| serde_json::from_str::<Value>(&l).ok())
+            .find(|ev| ev["type"] == "control_response").map(|ev| ev["response"]["response"]["commands"].clone());
+        child.kill().ok();
+        child.wait().ok();
+        commands.filter(Value::is_array).ok_or_else(|| "claude: no commands".to_string())
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// Token usage per switched-on provider and over all of them. `today` and `week` are the local starts of the
@@ -1295,7 +1321,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

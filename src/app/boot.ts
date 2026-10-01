@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { initI18n } from "../core/i18n";
 import { changed, ls } from "../core/store";
 import type { AgentEvent } from "../domain/agents";
-import { loadAgents } from "../domain/agents";
+import { loadAgents, loadCommands } from "../domain/agents";
 import type { VaultStatus } from "../domain/vault-setup";
 import { ui, PRS, MAIL, WAIT, isView, isTerminal, boardKey } from "../domain/ui";
 import { opened, chatTime, isLegacyGeneral, isMailKey, LEGACY_BOARD } from "../domain/keys";
@@ -36,6 +36,8 @@ async function settingsChanged(next: Settings) {
   const integrationsChanged = !sameJson(next.integrations, config.value.integrations);
   const githubChanged = !sameJson(next.github, config.value.github);
   const mailChanged = !sameJson(next.mail, config.value.mail);
+  // another vault has other commands and skills
+  const vaultChanged = next.vault !== config.value.vault;
   config.value = { ...config.value, ...next };
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
   if (integrationsChanged || languageChanged) resetBoard();
@@ -57,6 +59,7 @@ async function settingsChanged(next: Settings) {
     loadSnapshot();
   });
   loadAgents().then(reloadUsage);
+  if (vaultChanged) loadCommands();
 }
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
@@ -134,6 +137,7 @@ async function adoptEarlierConversations() {
   await adoptProviders();
   saveChats();
   loadAgents();
+  loadCommands();
   const untitled = Object.values(chat.chats).filter(conversation =>
     ["Gesprek", "Algemeen gesprek"].includes(conversation.title),
   );
