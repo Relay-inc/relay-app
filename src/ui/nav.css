@@ -30,8 +30,8 @@ input{-webkit-user-select:text;user-select:text}
 .sec.ctx-a .prow .g{stroke:var(--ctx-a)} .sec.ctx-m .prow .g{stroke:var(--ctx-m)} .sec.ctx-p .prow .g{stroke:var(--ctx-p)}
 .prow{font-weight:500;margin-top:2px}
 .prow.sel .g{stroke:var(--on-accent)}
-.prow .add{visibility:hidden;margin-left:4px}
-.prow:hover .add{visibility:visible}
+.prow .add{display:none;margin-left:4px}
+.prow:hover .add{display:block}
 .row.sel .add{color:var(--on-accent)}
 .row .emo{width:15px;flex:none;text-align:center;font-size:13px;line-height:1}
 .subrow{margin-left:15px;padding-left:10px;height:26px;color:var(--secondary);border-radius:0 calc(var(--r) - 2px) calc(var(--r) - 2px) 0;box-shadow:inset 1px 0 0 var(--separator);font-weight:400}

@@ -35,9 +35,9 @@ fn rel(root: &Path, p: &Path) -> String {
     r.to_string_lossy().into_owned()
 }
 
-/// Breadth-first search for a file called `name`, shallowest first. Skips hidden folders, archives and
-/// node_modules, does not follow symlinks (no loops), and stops after a few thousand folders.
-fn scan(root: &Path, name: &str) -> Option<PathBuf> {
+/// Breadth-first walk over the files, shallowest first, until `f` returns true. Skips hidden folders,
+/// archives and node_modules, does not follow symlinks (no loops), and stops after a few thousand folders.
+fn walk(root: &Path, mut f: impl FnMut(&Path, &str) -> bool) -> Option<PathBuf> {
     let mut queue = std::collections::VecDeque::from([(root.to_path_buf(), 0)]);
     let mut seen = 0;
     while let Some((dir, depth)) = queue.pop_front() {
@@ -47,13 +47,37 @@ fn scan(root: &Path, name: &str) -> Option<PathBuf> {
         let mut subs = vec![];
         for e in rd.flatten() {
             let (n, Ok(ft)) = (e.file_name().to_string_lossy().into_owned(), e.file_type()) else { continue };
-            if ft.is_file() && n == name { return Some(e.path()); }
+            if ft.is_file() && f(&e.path(), &n) { return Some(e.path()); }
             if ft.is_dir() && depth < 6 && !n.starts_with('.') && !["node_modules", "_archive"].contains(&n.as_str()) { subs.push(e.path()); }
         }
         subs.sort();
         queue.extend(subs.into_iter().map(|p| (p, depth + 1)));
     }
     None
+}
+fn scan(root: &Path, name: &str) -> Option<PathBuf> { walk(root, |_, n| n == name) }
+
+/// Every note in the vault, relative to it, so a conversation only links what is there.
+pub fn notes(vault: &str) -> (String, Vec<String>) {
+    let root = PathBuf::from(canon(vault));
+    let mut out = vec![];
+    walk(&root, |p, n| { if n.ends_with(".md") { out.push(rel(&root, p)); } false });
+    (root.to_string_lossy().into_owned(), out)
+}
+
+/// A note a conversation points at, as (path relative to the vault, its text). `target` is a path,
+/// relative to the vault or absolute, with or without `.md`, or a bare wikilink name found by `scan`.
+/// Only markdown files inside the vault (symlinks resolved) are read, so a link cannot reach ~/.ssh.
+pub fn note(vault: &str, target: &str) -> Option<(String, String)> {
+    let root = PathBuf::from(canon(vault));
+    let t = target.trim();
+    if t.is_empty() { return None; }
+    let md = if t.ends_with(".md") { t.to_string() } else { format!("{t}.md") };
+    let p = [t, md.as_str()].iter().map(|c| root.join(c)).find(|p| p.is_file())
+        .or_else(|| if t.contains('/') { None } else { scan(&root, &md) })?;
+    let real = fs::canonicalize(p).ok()?;
+    if !real.starts_with(&root) || real.extension()? != "md" || fs::metadata(&real).ok()?.len() > 2_000_000 { return None; }
+    Some((rel(&root, &real), fs::read_to_string(&real).ok()?))
 }
 
 /// Guess the mapping of a vault: the known layouts first, then a search for the files by name.
@@ -190,5 +214,25 @@ mod tests {
         assert_eq!(m["workState"], "Contexts/Personal/State/work-state.md");
         assert_eq!(m["reminders"], "Contexts/Personal/State/reminders.md");
         assert_eq!(status(&v, &m)["ok"], true);
+    }
+    #[test]
+    fn note_stays_in_the_vault() {
+        let d = tmp("note");
+        let v = d.to_str().unwrap();
+        fs::create_dir_all(d.join("Contexts/A")).unwrap();
+        fs::write(d.join("Contexts/A/Plan.md"), "# Plan").unwrap();
+        fs::write(d.join("secret.txt"), "x").unwrap();
+        let out = tmp("note-out");
+        fs::write(out.join("Out.md"), "x").unwrap();
+        symlink(out.join("Out.md"), d.join("Link.md")).unwrap();
+        let ok = Some(("Contexts/A/Plan.md".to_string(), "# Plan".to_string()));
+        assert_eq!(note(v, "Contexts/A/Plan.md"), ok);
+        assert_eq!(note(v, "Contexts/A/Plan"), ok);
+        assert_eq!(note(v, &format!("{v}/Contexts/A/Plan.md")), ok);
+        assert_eq!(note(v, "Plan"), ok); // a wikilink name
+        assert_eq!(notes(v).1, vec!["Contexts/A/Plan.md"]); // not the symlink, not secret.txt
+        for bad in ["secret.txt", "../note-out/Out.md", "Link.md", out.join("Out.md").to_str().unwrap(), "Nope", "A/Nope", ""] {
+            assert_eq!(note(v, bad), None, "{bad}");
+        }
     }
 }

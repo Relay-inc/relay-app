@@ -6,7 +6,7 @@
 .att:hover .rm,.att .rm:focus-visible{display:grid}
 .imgph{color:var(--secondary);font-size:13px}
 /* a question or permission card, and the choices in it */
-.perm{border:1px solid var(--accent);border-radius:var(--r);background:var(--fill);padding:12px 14px;display:grid;gap:10px}
+.perm{border:1px solid var(--accent);border-radius:var(--r);background:var(--fill);padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px} /* a long path never widens the card past its border */
 .perm .q{font-size:13px;color:var(--secondary)}
 .perm .acts{display:flex;justify-content:flex-end;gap:8px}
 .opts{display:flex;flex-wrap:wrap;gap:8px}

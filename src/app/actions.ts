@@ -100,7 +100,8 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) 
   // a second process on the same session while the first still writes it would fork the transcript
   if (k in S.outside) { push(k, { kind: "note", text: t("work.waitOutside") }); changed(); return; }
   // first message of a general conversation: if it names one project, it goes under that project
-  if (c && !c.project && !forced && !(S.convo[k] || []).length) {
+  // (also from Cmd-K, which passes `to`; the resend after the route question passes neither and must not ask again)
+  if (c && !c.project && (!forced || to) && !(S.convo[k] || []).length) {
     const hits = findProjects(text);
     if (hits.length === 1) { c.project = hits[0]; push(k, { kind: "note", text: t("note.moved", { name: hits[0] }) }); }
     else if (hits.length > 1) { S.routeChoice = { key: k, text, hits }; changed(); return; }
@@ -222,6 +223,7 @@ export async function openPr(key: string) {
   S.noinsp = false; ls.set("noinsp", false); changed();
   const i = key.lastIndexOf("#");
   try { S.prDetail[key] = card ? await card.d.fetch(ctxOf(card.p, S.settings.integrations), S.cardRefs[key], card.id) : key.startsWith("mail:") ? await invoke<MailBody>("mail_read", mailRef(key))
+    : key.startsWith("note:") ? await invoke("read_note", { target: key.slice(5) })
     : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
   catch (e) { if (key.startsWith("mail:")) delete S.prDetail[key]; if (!S.prDetail[key]) S.prDetailErr = String(e); }
   changed();

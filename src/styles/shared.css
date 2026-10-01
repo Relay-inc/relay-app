@@ -105,3 +105,6 @@ svg.i{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stro
 .ai th,.ai td{border-bottom:1px solid var(--separator);padding:6px 12px 6px 0;text-align:left;vertical-align:top}
 .ai th{font-weight:600}
 .ai a{color:var(--accent)}
+/* a vault note named in the text: opens in the right panel */
+.vlink{color:var(--accent);cursor:pointer;text-decoration:none}
+.vlink:hover{text-decoration:underline}

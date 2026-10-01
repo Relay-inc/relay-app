@@ -6,6 +6,7 @@
 .tool{display:flex;align-items:center;gap:8px;color:var(--secondary);font-size:13px;margin:-6px 0}
 .tool::before{content:"";width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;opacity:.6}
 .tool code,.perm code{font-family:var(--mono);font-size:12.5px}
+.tool.vlink{color:var(--secondary)}
 .tool.run::before{animation:r 1s linear infinite;border:0;width:9px;height:9px;border-radius:50%;border:1.5px solid var(--separator);border-top-color:var(--secondary);opacity:1}
 .tool.err{color:var(--label)}
 /* the end of a turn: a quiet line under the answer, so it is clear Claude stopped */

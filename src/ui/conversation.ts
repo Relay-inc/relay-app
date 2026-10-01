@@ -6,7 +6,8 @@ import { icon } from "../icons";
 import { md } from "../lib/md";
 import { S, isTerm, termOf, projOf, project } from "../app/state";
 import type { Item } from "../app/state";
-import { routeTo } from "../app/actions";
+import { routeTo, openPr } from "../app/actions";
+import { noteOf, noteKnown, isNotePath, noteKey } from "../app/notes";
 import { toolLine, thumbs } from "./parts";
 import parts from "./parts.css?inline";
 import css from "./conversation.css?inline";
@@ -18,7 +19,11 @@ function item(it: Item) {
   switch (it.kind) {
     case "me": return html`${it.imgs?.length ? html`<div class="mimgs">${thumbs(it.imgs)}</div>` : nothing}${it.text ? html`<div class="me">${lines(it.text)}</div>` : nothing}`;
     case "ai": return html`<div class="ai">${md(it.text)}</div>`;
-    case "tool": return html`<div class=${`tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}`}>${it.tool ? toolLine(it.tool.name, it.tool.input) : it.text}</div>`;
+    case "tool": {
+      // a Read or Edit on a note that exists opens it in the right panel
+      const note = it.path && isNotePath(it.path) && noteKnown(noteOf(it.path)) ? it.path : "";
+      return html`<div class=${`tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}${note ? " vlink" : ""}`} @click=${note ? () => openPr(noteKey(note)) : nothing}>${it.tool ? toolLine(it.tool.name, it.tool.input) : it.text}</div>`;
+    }
     case "err": return html`<div class="err">${it.text}</div>`;
     case "done": return html`<div class="done">${icon("check")}${it.text}</div>`;
     default: return html`<div class="note">${it.text}</div>`;

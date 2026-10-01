@@ -11,6 +11,7 @@ import "./prs";
 import "./mail-view";
 import "./pr-detail";
 import "./mail-detail";
+import "./note-detail";
 
 const TABS = [["open", "tab.open"], ["stand", "tab.stand"], ["rem", "nav.reminders"], ["prs", "tab.prs"]] as const;
 
@@ -21,6 +22,7 @@ export class RelayInspector extends RelayElement {
   private detail() {
     const key = S.prOpen, cd = cardOf(key);
     if (cd) return html`<div @detail-close=${closePr}>${cd.d.render(S.prDetail[key] ?? null, S.prDetailErr)}</div>`;
+    if (key.startsWith("note:")) return html`<relay-note-detail></relay-note-detail>`;
     return key.startsWith("mail:") ? html`<relay-mail-detail></relay-mail-detail>` : html`<relay-pr-detail></relay-pr-detail>`;
   }
 

@@ -4,7 +4,8 @@ import { th } from "../i18n";
 import { RelayElement, styles, request, inField, changed } from "../lib/store";
 import { urlOk } from "../lib/md";
 import { S, isView } from "../app/state";
-import { closePr, escStop, ctrlC, setInsp } from "../app/actions";
+import { closePr, escStop, ctrlC, setInsp, openPr } from "../app/actions";
+import { noteKey } from "../app/notes";
 import css from "./app.css?inline";
 import "./nav";
 import "./chat";
@@ -35,6 +36,9 @@ export class RelayApp extends RelayElement {
   private noDrop = (e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); };
   // links in a conversation, a PR or a mail open in the default browser or mail app, a webview window cannot open them itself
   private onLink = (e: MouseEvent) => {
+    // a vault note named in markdown opens in the right panel (src/lib/md.ts)
+    const nl = e.composedPath().find((n): n is HTMLElement => n instanceof HTMLElement && !!n.dataset.note);
+    if (nl) { e.preventDefault(); openPr(noteKey(nl.dataset.note!)); return; }
     const a = e.composedPath().find((n): n is HTMLAnchorElement => n instanceof HTMLAnchorElement && !!n.href);
     if (!a || !urlOk(a.href)) return;
     e.preventDefault(); invoke("plugin:opener|open_url", { url: a.href });

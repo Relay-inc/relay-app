@@ -7,6 +7,8 @@ import type { PRs } from "../github";
 import type { Mail } from "../mail";
 import { loadIcons, setIcon, iconFrom, isSite } from "../project-icons";
 import { reloadUsage } from "../usage";
+import { mdStale } from "../lib/md";
+import { loadNotes } from "./notes";
 import { S, WAIT, USAGE, terms, ghOn, mailOn, type Settings, type Sub } from "./state";
 import { notify, syncBusy } from "./events";
 
@@ -14,7 +16,7 @@ import { notify, syncBusy } from "./events";
 
 // ---------- the vault: an error shows once, in a bar at the top, and goes when a later snapshot works again
 export async function loadSnapshot() {
-  try { S.snap = await invoke("snapshot"); S.snapErr = ""; }
+  try { [S.snap] = await Promise.all([invoke("snapshot"), loadNotes()]); mdStale(); S.snapErr = ""; }
   catch (e) { const err = String(e); if (err !== S.snapErr) console.error(err); S.snapErr = err; }
   changed();
 }
