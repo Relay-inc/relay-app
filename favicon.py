@@ -22,6 +22,11 @@ from collections import Counter
 VAULT = os.environ.get("VAULT") or sys.exit("favicon: VAULT not set")
 NOTES = os.environ.get("VAULT_NOTES") or os.path.join(VAULT, "Contexts")
 NOTES = NOTES if os.path.isdir(NOTES) else VAULT
+try:
+    CONFIG = json.load(open(os.path.join(VAULT, ".relay", "config.json"), encoding="utf-8"))
+except (OSError, ValueError):
+    CONFIG = {}
+SKIP = CONFIG.get("skip") or ["Documents", "Gesprekken", "_archive"]
 SKIP_DIRS = ("/transcripts/", "/_archive/", "/Attachments/")
 DOMAIN = re.compile(r"\b((?:[a-z0-9-]+\.)+(?:be|com|eu|nl|io|app|gent|shop|net|org|fr|de|co|ai|dev|tech))\b", re.I)
 # tools and platforms that show up in any note, never a project's own site
@@ -53,7 +58,7 @@ def domains(files):
 
 def guess(name, aliases):
     notes = [p for p in glob.glob(os.path.join(glob.escape(NOTES), "**", f"{glob.escape(name)}.md"), recursive=True)
-             if "/Projects/" in "/" + os.path.relpath(p, NOTES) and not any(d in "/" + os.path.relpath(p, NOTES) for d in ("/Documents/", "/_archive/"))]
+             if not any(f"/{d}/" in "/" + os.path.relpath(p, NOTES) for d in SKIP)]
     if not notes:
         return ""
     folder = os.path.dirname(notes[0])

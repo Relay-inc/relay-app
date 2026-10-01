@@ -17,6 +17,7 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 mod agents;
 mod mail;
 mod providers;
+mod relay_config;
 mod reminders;
 mod tray;
 mod vault;
@@ -28,10 +29,11 @@ fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
 }
-/// The vault's mapping: the one stored in settings.json, or what detection finds for a vault without one.
-/// set_settings always stores the full mapping, so detection (a folder scan) only runs before that.
+/// The vault's mapping: the paths in its .relay/config.json; for a vault without one, the mapping an older
+/// version stored in settings.json, or what detection finds. set_settings writes it to the config.
 fn vault_map(s: &Value, v: &str) -> Value {
     if v.is_empty() { return vault::merge(&json!({}), &json!({})); }
+    if let Some(p) = relay_config::load(v).map(|c| c["paths"].clone()).filter(Value::is_object) { return vault::merge(&json!({}), &p); }
     let stored = &s["vaults"][v];
     if stored.is_object() { vault::merge(&json!({}), stored) } else { vault::merge(&vault::detect(v).1, stored) }
 }
@@ -263,6 +265,8 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
+    // the first time a vault is used, its .relay/config.json is written from what is detected (snapshot.py reads it)
+    relay_config::ensure(v, &st["map"]);
     let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
         .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
@@ -305,7 +309,8 @@ fn vault_status(state: State<App>) -> Value { vault_of(&state.settings.lock().un
 async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, String> {
     let stored = state.settings.lock().unwrap()["vaults"].clone();
     let (v, m) = vault::detect(&path);
-    Ok(vault::status(&v, &vault::merge(&m, &stored[&v])))
+    let known = relay_config::load(&v).map(|c| c["paths"].clone()).filter(Value::is_object).unwrap_or_else(|| stored[&v].clone());
+    Ok(vault::status(&v, &vault::merge(&m, &known)))
 }
 
 /// Found / missing for a mapping being edited, without detection.
@@ -780,9 +785,11 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     let v = vault::canon(s["vault"].as_str().unwrap());
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     s["vault"] = json!(v);
-    let map = vault_map(&s, &v);
+    // a mapping edited in Settings comes in as vaults[v]; it goes to the vault's .relay/config.json, not here
+    let map = if s["vaults"][&v].is_object() { vault::merge(&json!({}), &s["vaults"][&v]) } else { vault_map(&s, &v) };
     if vault::status(&v, &map)["ok"] != true { return Err(tr_v(lang, "err.no_vault", &v)); }
-    s["vaults"][&v] = map;
+    relay_config::set_paths(&v, &map).map_err(|e| format!(".relay/config.json: {e}"))?;
+    s["vaults"].as_object_mut().unwrap().remove(&v);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
             ("icon", Some(t)) => t.chars().count() <= 4,
@@ -904,9 +911,17 @@ fn gh_repo(dir: &str) -> Option<String> {
     }
     None
 }
-/// repo -> vault project, from the vault's repos.json. An entry is a checkout or a folder of checkouts,
-/// a checkout listed by itself wins over the same one found inside a listed folder.
+/// repo -> vault project: the `repos` of the vault's .relay/config.json, then its brain's index/repos.json.
 fn repo_projects(vault: &str) -> HashMap<String, String> {
+    let mut out: HashMap<String, String> = repo_index(vault).into_iter().collect();
+    if let Some(r) = relay_config::load(vault).and_then(|c| c["repos"].as_object().cloned()) {
+        out.extend(r.into_iter().filter_map(|(k, v)| Some((k, v.as_str()?.to_string()))));
+    }
+    out
+}
+/// repo -> note name, from the brain's index/repos.json. An entry is a checkout or a folder of checkouts,
+/// a checkout listed by itself wins over the same one found inside a listed folder.
+fn repo_index(vault: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     let Some(idx) = brain(vault).and_then(|b| fs::read_to_string(format!("{b}/index/repos.json")).ok())
         .and_then(|s| serde_json::from_str::<serde_json::Map<String, Value>>(&s).ok()) else { return out };

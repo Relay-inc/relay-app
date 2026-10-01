@@ -309,7 +309,8 @@ function aboutProject(key: string): string | null {
   for (const it of convo[key] || []) {
     if (it.kind === "me") for (const p of findProjects(it.text)) score[p] = (score[p] || 0) + 1;
     if (it.kind === "tool" && it.path) for (const p of snap.projects) {
-      if (it.path.endsWith(`/${p.name}.md`) || it.path.includes(`/Portfolio/${p.name}/`)) score[p.name] = (score[p.name] || 0) + 2;
+      // a note or folder named after the project, wherever the vault keeps it
+      if (it.path.split("/").some(seg => seg.replace(/\.md$/, "") === p.name)) score[p.name] = (score[p.name] || 0) + 2;
     }
   }
   const top = Object.entries(score).sort((a, b) => b[1] - a[1]);
@@ -866,7 +867,7 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
   const imgs = to ? toImgs : attached; if (!to) { attached = []; renderAtts(); }
   push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; queued[k] = (queued[k] || 0) + 1; render();
   if (k === sel) $("log").scrollTop = 1e9;
-  const name = `${c?.project || "Algemeen"}: ${c?.title || k}`;
+  const name = `${c?.project || t("general")}: ${shownTitle(c?.title || k)}`;
   const sent = c?.mail ? `${c.mail}\n\n${text}` : text;
   if (c?.mail) { delete c.mail; saveChats(); }
   try { await invoke("send", { project: k, text: sent, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null,
@@ -1228,7 +1229,7 @@ $("movebar").addEventListener("click", e => {
 $("term").addEventListener("click", () => {
   if (sel === WAIT || chats[sel]?.fromMail) return;
   if (isTerm(sel)) { const t = termOf(sel); if (t) invoke("bg", { action: "attach", id: t.id }); return; }
-  invoke("open_terminal", { project: sel, session: null, name: `${projOf(sel) || "Algemeen"}: ${label(sel)}` });
+  invoke("open_terminal", { project: sel, session: null, name: `${projOf(sel) || t("general")}: ${label(sel)}` });
   queued[sel] = 0; status[sel] = "idle"; render();
 });
 // the right panel can be folded away, the choice is remembered

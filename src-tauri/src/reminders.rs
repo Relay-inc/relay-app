@@ -198,7 +198,7 @@ pub fn add(path: &Path, logf: &Path, text: &str, when: &str, project: Option<&st
     let date = parse_when(when, today)?;
     let text = project.map_or(text.clone(), |p| format!("[[{p}]] {text}"));
     let (lines, rows) = load(path);
-    let r = Row { line: 0, date, text, source: "Vault-app".into(), repeat };
+    let r = Row { line: 0, date, text, source: "Relay".into(), repeat };
     log(logf, "add", "", &r);
     save(path, lines.into_iter().map(Some).collect(), Some(&r), rows.iter().map(|r| r.line).max())?;
     Ok(r.id())
@@ -265,12 +265,12 @@ mod tests {
         let (p, lg) = tmp("add");
         let today = d("2026-09-30");
         let id = add(&p, &lg, "Eerste  reminder\nmet | pipe", "morgen", Some("Weemaes"), None, today).unwrap();
-        assert_eq!(fs::read_to_string(&p).unwrap(), format!("{HEADER}| 2026-10-01 | [[Weemaes]] Eerste reminder met \\| pipe | Vault-app |  |\n"));
+        assert_eq!(fs::read_to_string(&p).unwrap(), format!("{HEADER}| 2026-10-01 | [[Weemaes]] Eerste reminder met \\| pipe | Relay |  |\n"));
         assert_eq!(list(&p, today)[0]["id"], id.as_str());
         add(&p, &lg, "Tweede", "+2w", None, Some("14d"), today).unwrap();
         let l = list(&p, today);
         assert_eq!((l[1]["date"].as_str(), l[1]["repeat"].as_str()), (Some("2026-10-14"), Some("14d")));
-        assert!(fs::read_to_string(&p).unwrap().ends_with("| 2026-10-14 | Tweede | Vault-app | 14d |\n"));
+        assert!(fs::read_to_string(&p).unwrap().ends_with("| 2026-10-14 | Tweede | Relay | 14d |\n"));
         assert_eq!(add(&p, &lg, "  ", "morgen", None, None, today), Err("err.rem_text".into()));
         assert_eq!(add(&p, &lg, "x", "ooit", None, None, today), Err("err.rem_date".into()));
         assert_eq!(add(&p, &lg, "x", "morgen", None, Some("vaak"), today), Err("err.rem_repeat".into()));
@@ -283,7 +283,7 @@ mod tests {
         fs::write(&p, "# Mijn reminders\n\nNotities.\n").unwrap();
         add(&p, &lg, "x", "2026-10-01", None, None, d("2026-09-30")).unwrap();
         assert_eq!(fs::read_to_string(&p).unwrap(),
-            "# Mijn reminders\n\nNotities.\n\n| Date | Reminder | Source | Repeat |\n|------|----------|--------|--------|\n| 2026-10-01 | x | Vault-app |  |\n");
+            "# Mijn reminders\n\nNotities.\n\n| Date | Reminder | Source | Repeat |\n|------|----------|--------|--------|\n| 2026-10-01 | x | Relay |  |\n");
     }
 
     #[test]
