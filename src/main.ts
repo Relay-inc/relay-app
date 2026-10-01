@@ -565,7 +565,7 @@ function updateUsageButton() {
   const title = u ? `${t("nav.usage")} — ${u.label}` : t("nav.usage");
   btn.title = title; btn.setAttribute("aria-label", title);
   btn.classList.toggle("sel", sel === USAGE);
-  dot.classList.toggle("on", !!u);
+  dot.classList.toggle("on", !!u?.level);
   dot.classList.toggle("soon", u?.level === "soon");
   dot.classList.toggle("late", u?.level === "late");
 }
