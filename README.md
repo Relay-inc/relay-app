@@ -207,6 +207,13 @@ registered in `PROVIDERS` in `src-tauri/src/agents.rs`:
 `env` is `Env { home, vault, path, bin, pending, opts }`; `opts` is the provider's own settings object
 (`settings.agents.providers.<id>`, read with `env.opt(key)`).
 
+**Accounts** (`caps.accounts`, Claude Code only for now): `opts.accounts` lists extra logins as `{name, dir}`, each its
+own config folder (`CLAUDE_CONFIG_DIR`); `opts.active` is the one new conversations start on ("" is `~/.claude`) and
+`opts.auto` switches. The app sets `opts.account` to the folder a process or a limits call is for, keeps it per
+conversation in `sessions.json` (`{provider, sid, account}`) and reads every account's limits. With `auto` on, a
+conversation whose account is used up (a window at 100%, or a turn refused for its limit) moves to the next account
+with room on its next message, once idle: the process restarts there and the provider takes its transcript along.
+
 **Events** (`agent_core::Event`, JSON with `type` in snake_case), sent as the Tauri event `agent` with
 `{project, provider, event}`: `session {id}`, `text {text, delta}`, `thinking {text, delta}`, `tool_call {id, name, input}`,
 `tool_result {id, error}`, `permission {request}`, `turn_end {ok, error, usage, duration_ms}`, `error {text}`; the app adds

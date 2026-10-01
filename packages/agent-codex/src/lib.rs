@@ -56,7 +56,7 @@ impl AgentProvider for Codex {
     fn name(&self) -> &'static str { "Codex" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: false, subagents: false, fork: false,
-            terminal: true, background: true, effort: true, limits: true, title: false }
+            terminal: true, background: true, effort: true, limits: true, title: false, accounts: false }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = ["/opt/homebrew/bin/codex".to_string(), "/usr/local/bin/codex".into(), format!("{home}/.local/bin/codex"), format!("{home}/.npm-global/bin/codex")];

@@ -44,6 +44,15 @@ export default {
   "ag.cap.effort": "Aufwand",
   "ag.add": "+ Agent hinzufügen",
   "ag.remove": "Entfernen",
+  "ag.accounts": "Konten",
+  "ag.accountsHelp": "Mehr als ein Login: jedes hat einen eigenen Konfigurationsordner. Einmal im Terminal anmelden:",
+  "ag.accountAdd": "Konto hinzufügen…",
+  "ag.accountName": "Name des Kontos",
+  "ag.accountOwn": "Das von Claude Code selbst (~/.claude)",
+  "ag.accountActive": "Neue Unterhaltungen nutzen",
+  "ag.accountAuto": "Konten automatisch wechseln",
+  "ag.accountAutoHelp":
+    "Ist das Planlimit eines Kontos aufgebraucht, verschiebt die nächste Nachricht die Unterhaltung zum nächsten Konto mit Luft.",
   "ag.empty": "Noch keine Agents. Füge einen hinzu, um Gespräche damit zu starten.",
   "ag.listHelp":
     "Nur die Agents in dieser Liste erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",

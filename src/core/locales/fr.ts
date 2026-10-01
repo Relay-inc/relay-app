@@ -44,6 +44,16 @@ export default {
   "ag.cap.effort": "effort",
   "ag.add": "+ Ajouter un agent",
   "ag.remove": "Retirer",
+  "ag.accounts": "Comptes",
+  "ag.accountsHelp":
+    "Plus d’une connexion : chacune a son propre dossier de configuration. Connectez-vous une fois dans le terminal :",
+  "ag.accountAdd": "Ajouter un compte…",
+  "ag.accountName": "Nom du compte",
+  "ag.accountOwn": "Celui de Claude Code (~/.claude)",
+  "ag.accountActive": "Les nouvelles conversations utilisent",
+  "ag.accountAuto": "Changer de compte automatiquement",
+  "ag.accountAutoHelp":
+    "Quand la limite du forfait d’un compte est atteinte, le message suivant déplace la conversation vers le compte suivant qui a de la marge.",
   "ag.empty": "Aucun agent pour l'instant. Ajoutez-en un pour démarrer des conversations.",
   "ag.listHelp":
     "Seuls les agents de cette liste apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",

@@ -18,6 +18,7 @@ import {
 } from "./blocks";
 import { glyphSvg } from "../../core/icons";
 import "./settings-agent";
+import type { Accounts } from "./settings-agent";
 import "./settings-fold";
 import "./settings-menu";
 import { SettingsElement } from "./settings-element";
@@ -129,6 +130,7 @@ export class SettingsAgents extends SettingsElement {
       }}
       @agent-option=${(e: CustomEvent<{ id: string; value: string }>) =>
         this.saveProvider(id, { [e.detail.id]: e.detail.value })}
+      @agent-accounts=${(e: CustomEvent<Accounts>) => this.saveProvider(id, e.detail)}
       @agent-remove=${() => this.switchTo(id, false)}
     ></relay-settings-agent>`;
   }
