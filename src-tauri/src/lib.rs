@@ -174,6 +174,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
+    ("err.icons_no_claude", ["Finding websites needs Claude Code switched on under Agents", "Websites zoeken heeft Claude Code nodig, aangezet onder Agents", "La recherche de sites nécessite Claude Code activé dans Agents", "Websites suchen braucht Claude Code, eingeschaltet unter Agents"]),
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
@@ -318,6 +319,36 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
         app.emit("settings-changed", &*s).ok();
     }
     Value::Object(relay_config::icons(&v))
+}
+/// Websites for projects, found by Claude: one Haiku call for all of them, outside the vault, without settings, MCP
+/// or a transcript, and with web search as its only tool. `projects`: [{name, context, summary}]. Returns
+/// {name: domain} for the ones it is sure about; the favicon run turns those into icons.
+#[tauri::command]
+async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
+    let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
+    let eb = env_of(&app, &state, p);
+    // ponytail: 80 projects per call, the summaries cut to 300 characters; more projects only happen in big vaults
+    let list: Vec<Value> = projects.iter().take(80).map(|x| json!({"name": x["name"], "context": x["context"],
+        "about": x["summary"].as_str().unwrap_or("").chars().take(300).collect::<String>()})).collect();
+    let prompt = format!("For each project below, find the website of the company, organisation, shop or product it is about, \
+        so its favicon can be used as the project's icon. Search the web when you are not sure. Use null when the project is internal, \
+        personal, a tool or document without its own site, or when you cannot confirm the site. Answer with only a JSON object \
+        {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
+    // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
+    let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
+        let mut c = Command::new(&eb.bin).args(["-p", "--model", "haiku", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+                "--tools", "WebSearch", "--allowedTools", "WebSearch"])
+            .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
+        c.wait_with_output()
+    }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+    if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let json = text.find('{').zip(text.rfind('}')).and_then(|(a, b)| serde_json::from_str::<serde_json::Map<String, Value>>(&text[a..=b]).ok()).unwrap_or_default();
+    let names: Vec<&str> = projects.iter().filter_map(|x| x["name"].as_str()).collect();
+    Ok(Value::Object(json.into_iter().filter(|(n, _)| names.contains(&n.as_str()))
+        .filter_map(|(n, d)| Some((n, json!(relay_config::site_of(d.as_str()?)?)))).collect()))
 }
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
@@ -1170,7 +1201,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

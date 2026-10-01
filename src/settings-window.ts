@@ -95,10 +95,12 @@ function general() {
       + field(t("set.faviconsOn"), sw("favon", settings.favicons?.on !== false), { id: "favon", hint: t("set.faviconsHelp") }));
 }
 // the project icons live in the vault (.relay/config.json, src/project-icons.ts): every project, folded, to override
-let icons: Record<string, ProjectIcon> | null = null, iconNames: string[] = [], iconMsg = "", iconOk = false;
+let icons: Record<string, ProjectIcon> | null = null, iconNames: string[] = [], iconMsg = "", iconOk = false, finding = false;
+let iconProjects: { name: string; context?: string; summary?: string }[] = [];
 async function loadIconsPane() {
   const [i, snap] = await Promise.all([loadIcons(), invoke<any>("snapshot").catch(() => ({ projects: [] }))]);
-  icons = i; iconNames = (snap.projects || []).map((x: any) => String(x.name)).sort((a: string, b: string) => a.localeCompare(b));
+  icons = i; iconProjects = snap.projects || [];
+  iconNames = iconProjects.map(x => String(x.name)).sort((a, b) => a.localeCompare(b));
   render();
 }
 listen("icons-changed", () => { if (icons) loadIconsPane(); });
@@ -125,7 +127,21 @@ function projects() {
   return sec(t("set.custom"), rows || `<div class="sempty">${t("set.none")}</div>`, { desc: t("set.customHelp"), list: true, foot: msg ? foot(esc(msg), ok, "") : "" })
     + sec(t("pi.title"), !icons ? `<div class="st"><span class="spin"></span>${t("pr.loading")}</div>`
         : iconNames.map(n => foldRow("icon", n, preview(n), esc(n), iconState(n), () => body(n))).join("") || `<div class="sempty">${t("set.none")}</div>`,
-      { desc: t("pi.desc"), list: true, foot: iconMsg ? foot(esc(iconMsg), iconOk, "") : "" });
+      { desc: t("pi.desc"), list: true, foot: iconMsg ? foot(esc(iconMsg), iconOk, "") : "",
+        action: icons ? `<button class="btn" data-set="pifind" title="${t("pi.findHelp")}" ${finding ? "disabled" : ""}>${finding ? `<span class="spin"></span> ${t("pi.finding")}` : t("pi.find")}</button>` : "" });
+}
+// Find icons: Claude looks up the website of every project without an icon (or set to none), its favicon follows
+async function findIcons() {
+  const targets = iconProjects.filter(p => { const i = icons?.[p.name]; return !i || i.value === ""; });
+  if (!targets.length) { iconMsg = t("pi.findNone"); iconOk = true; render(); return; }
+  finding = true; iconMsg = ""; render();
+  try {
+    const found = await invoke<Record<string, string>>("find_icon_sites", { projects: targets.map(p => ({ name: p.name, context: p.context ?? "", summary: p.summary ?? "" })) });
+    for (const [n, site] of Object.entries(found)) await setIcon(n, "site", site);
+    const n = Object.keys(found).length;
+    iconMsg = n ? t("pi.found", { n, total: targets.length }) : t("pi.findNone"); iconOk = true;
+  } catch (x) { iconMsg = String(x); iconOk = false; }
+  finding = false; render();
 }
 async function iconSet(project: string, kind: IconKind, value = "") {
   try { await setIcon(project, kind, value); iconMsg = ""; iconOk = true; } catch (x) { iconMsg = String(x); iconOk = false; render(); }
@@ -406,6 +422,7 @@ root.addEventListener("click", async e => {
   if (bp && b.dataset.set === "bclear") {
     await invoke("integration_token", { provider: bp.id, token: "" }); tokens[bp.id] = false; delete allBoards[bp.id]; pmsg[bp.id] = { text: t("int.cleared"), ok: true }; render();
   }
+  if (b.dataset.set === "pifind") { await findIcons(); return; }
   if (b.dataset.set === "piset") { await iconSet(b.dataset.id!, b.dataset.kindIcon as IconKind); return; }
   if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await save(next, t("set.restored")); }
 });
