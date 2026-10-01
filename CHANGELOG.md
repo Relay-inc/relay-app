@@ -12,6 +12,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 ## [Unreleased]
 
 ### Added
+- Pi joins Claude Code, Codex and OpenCode as an agent: Settings › Agents › Pi turns it on once `pi` is installed and has a login or key. Pick its models and thinking levels, paste images, resume, fork or continue a session in the terminal, and see its tokens and cost in Usage. Pi never asks before it edits files or runs commands, so there are no permission cards
 - Every version is a GitHub release with the macOS app to download and that version's changes as its notes (#36)
 - Productive's task panel shows a thumbnail of every picture attached to the task or a comment; a click opens the original in your browser. **Discuss** starts a conversation about the task: Claude reads the task and its comments itself and posts nothing in Productive unless you ask (#40)
 - Right-click on Algemeen or a project › Close all conversations closes every conversation and terminal session under it; one undo brings them all back (#38)
