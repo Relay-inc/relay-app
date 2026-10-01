@@ -10,9 +10,8 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
-
-- Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded
-- Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation"
+- Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded (#39)
+- Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation" (#39)
 - Closing a conversation removes the git worktrees it made in your `~/projects` repos; the branches stay, and a worktree with uncommitted changes or unsaved commits is kept. The undo bar says how many went (#37)
 - Settings › General › Appearance picks light or dark mode, or System (the default) to follow macOS; both windows switch right away (#27)
 - Typing `/` in the composer lists Claude Code's slash commands and skills for the vault, with their descriptions; arrows pick, Tab or Enter completes, Escape closes. Relay asks Claude Code for the list when it starts (#26)
@@ -23,13 +22,14 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
 
 ### Changed
-- The right panel follows the redesign: it sits on the main background, the tabs span the full width, open items get round checkboxes, reminder dates colour by urgency, and pull requests show a state-coloured icon with the CI result as a dot
+- The right panel follows the redesign: it sits on the main background, the tabs span the full width, open items get round checkboxes, reminder dates colour by urgency, and pull requests show a state-coloured icon with the CI result as a dot (#39)
 
-- The settings window follows the redesign: a nav with ⌘1 to ⌘4 hints, Appearance as a segmented control, Accent as two swatches, and lists with icon tiles and chevrons
+- The settings window follows the redesign: a nav with ⌘1 to ⌘4 hints, Appearance as a segmented control, Accent as two swatches, and lists with icon tiles and chevrons (#39)
 
-- The conversation follows the new design: tool calls fold into a "N steps" line with icons and small diffs, code blocks get a header with a copy button, permission cards stand out, and the composer has an attach button and round send button.
-- Board cards are redrawn: number, assignee, status ring, folder › task list, labels, due day and last update. Trello and Linear show the fields they have (labels, last update, Linear's state)
-- The redesign's palette: Relay blue for selection, primary buttons and what waits for you, cooler greys, raised cards with a soft shadow and 8px corners on buttons and fields. Settings › General › Accent switches to Graphite (the text colour) instead. The settings window uses the same palette as the main window now
+- The conversation follows the new design: tool calls fold into a "N steps" line with icons and small diffs, code blocks get a header with a copy button, permission cards stand out, and the composer has an attach button and round send button (#39)
+- Board cards are redrawn: number, assignee, status ring, folder › task list, labels, due day and last update. Trello and Linear show the fields they have (labels, last update, Linear's state) (#39)
+- The sidebar follows the redesign: section headers with their context's colour and a chevron, a blue tint on the selected row, conversations nested under their project, and a footer with the Relay mark, usage, a light/dark switch and settings. The title bar shows project / conversation and whether the agent is working (#39)
+- The redesign's palette: Relay blue for selection, primary buttons and what waits for you, cooler greys, raised cards with a soft shadow and 8px corners on buttons and fields. Settings › General › Accent switches to Graphite (the text colour) instead. The settings window uses the same palette as the main window now (#39)
 - Each integration in Settings › Integrations opens a page of its own instead of folding open in the list, with its connection on top and, for board integrations, the boards per vault project below. That part now lists only the vault projects that have a board, suggests boards whose name matches a project (one click, or Link all), and adds one with a project and a board picker instead of a dropdown for every project. Boards are grouped by workspace (#33)
 - Setting up Linear walks you through creating the API key in three steps, with a link to Linear's Security & access page and a Create key button next to the field; a pasted value that isn't a personal API key (lin_api_…) is caught before saving (#35)
 - A conversation in the sidebar shows its agent's own mark (Claude, Codex, OpenCode) in one colour instead of a speech bubble; the composer's agent picker only shows on a new conversation, where you can still switch (#31)
@@ -42,7 +42,6 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like o2o gets its site too (only a domain that is exactly its name, o2o.be)
 
 ### Fixed
-
 - `/clear` in a Claude Code conversation now empties it in Relay too; before, the old messages stayed on screen even though Claude had started over (#34)
 - Connecting Trello no longer sends you looking for OAuth: Settings › Integrations › Trello walks you through it in three steps, with a link to create the Power-Up, the API key field first and a Get token button that opens Trello's allow page for that key. Pasting the Secret or something that isn't a token now says so before saving (#30)
 - The Trello steps name the tab where Trello now keeps the API key, Authorization › Trello Auth, instead of the old API key tab (#32)
@@ -56,7 +55,6 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 First version with a number: everything merged up to and including #15.
 
 ### Added
-
 - Relay: the brand, app name, icon and bundle identifier `be.laurentmeersman.relay` (#13)
 - Agent providers behind one contract: Claude Code, Codex and OpenCode (#7)
 - Board providers behind one contract: Productive, Trello and Linear (#3)
@@ -69,12 +67,10 @@ First version with a number: everything merged up to and including #15.
 - The UI in English, Dutch, French and German, following the macOS language by default (#1)
 
 ### Changed
-
 - Settings after bb: pages in a sidebar, sections in cards, agents and integrations as lists you add to (#15)
 - Usage and Settings are compact icon buttons in the sidebar footer (#9)
 
 ### Fixed
-
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
 [Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...HEAD
