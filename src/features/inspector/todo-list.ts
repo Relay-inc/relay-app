@@ -23,21 +23,23 @@ export class TodoList extends LitElement {
 
   private renderWhen(todo: Todo) {
     if (todo.when === undefined) return nothing;
-    return html`<span class="text-secondary tabular-nums"
+    return html`<span class="block text-xs text-secondary tabular-nums"
       >${todo.project === undefined ? nothing : html`${todo.project} · `}<span class=${DUE[todo.due ?? ""]}
         >${todo.when}</span
       ></span
     >`;
   }
 
+  // reminders carry a date line and no box; an open item is a (read-only, so always empty) checkbox
   override render() {
     return html`<ul class="list-none">
       ${this.items.map(
         todo =>
-          html`<li class="flex items-start gap-2 py-2 border-b border-separator text-sm leading-snug">
-            <input class="mt-0.5 size-4 flex-none accent-accent" type="checkbox" disabled /><span
-              ><span class="line-clamp-3">${md(todo.text)}</span>${this.renderWhen(todo)}</span
-            >
+          html`<li class="flex items-start gap-2.5 py-2.25 border-b border-separator text-[13px] leading-snug">
+            ${todo.when === undefined
+              ? html`<span class="mt-px size-4 flex-none rounded-[5px] border-[1.5px] border-separator-strong"></span>`
+              : nothing}
+            <span class="min-w-0 flex flex-col gap-0.5"><span class="line-clamp-3">${md(todo.text)}</span>${this.renderWhen(todo)}</span>
           </li>`,
       )}
     </ul>`;
