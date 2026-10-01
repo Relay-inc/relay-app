@@ -69,10 +69,10 @@ export class RelayWaiting extends LitElement {
       )}
       ${blockedAgents().map(
         a =>
-          html`${proj(a.name)}
+          html`${proj(a.name ?? "")}
             <div class="grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3">
               <div class="text-sm text-secondary">
-                ${t("wait.bg", { date: new Date(a.startedAt).toLocaleDateString(currentLocale()) })}
+                ${t("wait.bg", { date: a.startedAt ? new Date(a.startedAt).toLocaleDateString(currentLocale()) : "" })}
               </div>
               <div class="flex justify-end gap-2">
                 ${this.btn("hide", a.id, t("wait.hide"))}${this.btn("stop", a.id, t("wait.stop"))}${this.btn("attach", a.id, t("bar.openTerminal"), true)}

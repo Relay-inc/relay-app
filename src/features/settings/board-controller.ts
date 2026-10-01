@@ -3,8 +3,16 @@ import { t } from "../../core/i18n";
 import { ctxOf, PROVIDERS, type BoardOpt, type BoardProvider } from "../../domain/providers";
 import type { IntHost } from "./mail-controller";
 import type { Msg, Settings } from "./types";
+import type { IntegrationConfig } from "../../domain/config";
+import type { Snapshot } from "../../domain/vault";
 
 /** The board providers' state and calls, kept by the integrations page so they survive the row folding shut. */
+/** The vault's project names, sorted, for mapping boards to them. */
+async function loadVaultProjects() {
+  const snap = await invoke<Snapshot>("snapshot");
+  return snap.projects.map(x => x.name).sort((a, b) => a.localeCompare(b));
+}
+
 export class BoardsController {
   // the token sits in the macOS keychain, the backend only says whether there is one
   tokens: Record<string, boolean> = {};
@@ -52,13 +60,11 @@ export class BoardsController {
   async load(p: BoardProvider) {
     this.all[p.id] = { list: null, err: "" };
     try {
-      const [list, snap] = await Promise.all([
+      const [list, names] = await Promise.all([
         p.settings.allBoards!(ctxOf(p, this.h.settings.integrations)),
-        this.vaultProjects ?? invoke<any>("snapshot"),
+        this.vaultProjects ?? loadVaultProjects(),
       ]);
-      this.vaultProjects ??= (snap.projects || [])
-        .map((x: any) => String(x.name))
-        .sort((a: string, b: string) => a.localeCompare(b));
+      this.vaultProjects = names;
       this.all[p.id] = { list, err: "" };
     } catch (e) {
       this.all[p.id] = { list: [], err: String(e) };
@@ -82,7 +88,7 @@ export class BoardsController {
   }
 
   async saveForm(p: BoardProvider) {
-    const cfg: Record<string, any> = { ...this.h.settings.integrations[p.id], on: true };
+    const cfg: IntegrationConfig = { ...this.h.settings.integrations[p.id], on: true };
     const secrets: Record<string, string> = { token: this.str(`tok-${p.id}`).trim() };
     for (const f of p.settings.fields) {
       const fid = `f-${p.id}-${f.key}`;
@@ -102,7 +108,7 @@ export class BoardsController {
     return typeof v === "string" ? v : String(d ?? "");
   }
   // saves the token and the config, then one call to the provider to show they work together
-  private async save(p: BoardProvider, cfg: Record<string, any>, secrets: Record<string, string> = {}) {
+  private async save(p: BoardProvider, cfg: IntegrationConfig, secrets: Record<string, string> = {}) {
     try {
       for (const [account, token] of Object.entries(secrets))
         if (token) await invoke("integration_token", { provider: p.id, token, account });

@@ -5,6 +5,7 @@ import { emit } from "../../core/dom";
 import { md } from "../../core/markdown";
 import { tw } from "../../core/styles";
 import { toolLine } from "../../components/tool-line";
+import type { ToolInput } from "../../domain/chats/state";
 
 declare global {
   interface HTMLElementEventMap {
@@ -28,7 +29,7 @@ export class SubagentRow extends LitElement {
   @property() meta = "";
   // the step a running agent is on: a tool call, else what it said (a template is not a property value, the row draws the call)
   @property() tool = "";
-  @property({ attribute: false }) input: any;
+  @property({ attribute: false }) input?: ToolInput;
   @property() text = "";
   @property() duration = "";
   @property({ type: Boolean }) running = false;

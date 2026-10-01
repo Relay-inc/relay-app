@@ -1,5 +1,6 @@
 import { html } from "lit";
 import { th, raw } from "../core/i18n";
+import type { ToolInput } from "../domain/chats/state";
 
 const esc = (s: unknown) =>
   String(s ?? "").replace(
@@ -9,7 +10,7 @@ const esc = (s: unknown) =>
 const base = (p = "") => p.split("/").pop() || p;
 
 /** One tool call as a short line ("read x.md", a command, "searched for ..."). Its `<code>` is styled by the line that holds it. */
-export function toolLine(name: string, input: any) {
+export function toolLine(name: string, input: ToolInput | undefined) {
   const i = input || {};
   switch (name) {
     case "Read":
@@ -29,7 +30,7 @@ export function toolLine(name: string, input: any) {
       return th("tool.webSearch", { q: i.query ?? "" });
     case "WebFetch":
       try {
-        return th("tool.webFetchHost", { host: new URL(i.url).host });
+        return th("tool.webFetchHost", { host: new URL(i.url ?? "").host }); // no or a bad url: the line without the host
       } catch {
         return th("tool.webFetch");
       }

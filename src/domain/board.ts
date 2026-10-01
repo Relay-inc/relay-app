@@ -179,7 +179,7 @@ const sameRef = (a: BoardRef | undefined, b: BoardRef) =>
   !!a && a.provider === b.provider && a.project === b.project && a.board === b.board;
 export const vaultProjects = (): [string, string][] =>
   vault.snap.projects
-    .map((x: any): [string, string] => [x.name, pLabel(x.name)])
+    .map((x): [string, string] => [x.name, pLabel(x.name)])
     .sort((a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], currentLocale()));
 export const linkedProject = (p: BoardProvider) =>
   Object.entries(config.value.boards || {}).find(([, r]) => sameRef(r, refOf(p, boardState(p))))?.[0] ?? "";

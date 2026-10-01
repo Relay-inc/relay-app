@@ -20,6 +20,7 @@ import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
 import { panel, closeDetail } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
 import { onboard } from "../features/onboarding/onboard";
+import type { AgentSession } from "../domain/chats/state";
 
 // a board the sidebar no longer shows: its integration was switched off or lost its token
 const boardDown = (k: string) => {
@@ -132,7 +133,7 @@ export async function boot() {
     if (!isTerm(ui.sel)) return;
     await Promise.all([
       tailTerm(ui.sel),
-      invoke<any[]>("agents").then(a => {
+      invoke<AgentSession[]>("agents").then(a => {
         chat.agentsList = a;
       }),
     ]);

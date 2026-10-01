@@ -4,16 +4,41 @@ import { changed } from "../core/store";
 import { loadIcons, setIcon, iconFrom, isSite, type ProjectIcon } from "./icons";
 import { config, saveSettings, type Settings } from "./config";
 import { loadNotes } from "./notes";
+import type { Reminder } from "./reminders";
+import type { VaultStatus } from "./vault-setup";
 
 // The vault as snapshot.py reads it (projects with their open items and status, reminders, the terminal sessions),
 // and the project icons from its .relay/config.json.
+/** A project from the vault index (work-state), with what snapshot.py read from its note. */
+export type Project = {
+  name: string;
+  context: string;
+  state: string;
+  last: string; // when the work-state row was last touched
+  summary: string;
+  open: number | null; // the number of open items, null without an Open section
+  open_items: string[];
+  stand: string | null; // the note's status section, markdown
+  aliases: string[];
+};
+/** A Claude Code session in the transcripts, with the project snapshot.py guessed from what was asked in it. */
+export type SessionItem = { sessionId: string; project: string | null; last_user: string; last_at: string };
+/** One read of the vault (snapshot.py, plus the reminders and the vault mapping from lib.rs). */
+export type Snapshot = {
+  today?: string;
+  projects: Project[];
+  sessions: { error?: string | null; items: SessionItem[] };
+  reminders: Reminder[];
+  vault?: VaultStatus;
+};
+
 export const vault = {
-  snap: { projects: [], reminders: [], sessions: { items: [] } } as any,
+  snap: { projects: [], reminders: [], sessions: { items: [] } } as Snapshot,
   snapErr: "", // shown once in a bar at the top, gone when a later snapshot works again
   icons: {} as Record<string, ProjectIcon>,
 };
 
-export const project = (n: string | null) => (n ? vault.snap.projects.find((p: any) => p.name === n) : undefined);
+export const project = (n: string | null) => (n ? vault.snap.projects.find(p => p.name === n) : undefined);
 // how a project is shown: its own icon and name from the settings, else the note name
 export const pLabel = (n: string | null) => {
   if (!n) return t("general");
@@ -24,13 +49,13 @@ export const pLabel = (n: string | null) => {
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>
   vault.snap.projects
-    .map((p: any) => ({ name: p.name as string, label: pLabel(p.name) }))
+    .map(p => ({ name: p.name, label: pLabel(p.name) }))
     .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, locale)) as {
     name: string;
     label: string;
   }[];
 // contexts come from the vault index, in its order
-export const contexts = (): string[] => [...new Set<string>(vault.snap.projects.map((p: any) => p.context))];
+export const contexts = (): string[] => [...new Set<string>(vault.snap.projects.map(p => p.context))];
 
 // ---------- which project a text is about: names plus aliases from the note frontmatter
 const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -46,7 +71,7 @@ export function findProjects(text: string): string[] {
 
 export async function loadSnapshot() {
   try {
-    [vault.snap] = await Promise.all([invoke("snapshot"), loadNotes()]);
+    [vault.snap] = await Promise.all([invoke<Snapshot>("snapshot"), loadNotes()]);
     vault.snapErr = "";
   } catch (e) {
     const err = String(e);
@@ -71,7 +96,7 @@ export async function checkFavicons() {
   }
   if (!f?.on || !vault.snap?.projects) return;
   const todo = vault.snap.projects.filter(
-    (p: any) =>
+    (p: Project) =>
       !(p.name in vault.icons) ||
       (isSite(vault.icons[p.name].value) && f.tried?.[p.name] !== vault.icons[p.name].value),
   );
@@ -79,7 +104,7 @@ export async function checkFavicons() {
   favBusy = true;
   try {
     const found: Record<string, { site: string; data: string | null }> = await invoke("favicons", {
-      projects: todo.map((p: any) => ({ name: p.name, aliases: p.aliases || [] })),
+      projects: todo.map(p => ({ name: p.name, aliases: p.aliases || [] })),
     });
     const tried = { ...f.tried };
     for (const [n, r] of Object.entries(found)) {

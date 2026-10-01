@@ -23,6 +23,7 @@ import {
 } from "./state";
 import { push, IMG_OK, toImg } from "./events";
 import { termSid } from "../keys";
+import type { Decision } from "@relay/agent-core";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
 // to a project, closing and reopening, and Cmd-K.
@@ -247,7 +248,7 @@ export function moveTo(p: string | null) {
 /** "Laurent sloeg de vraag over": a question skipped is answered in the conversation itself. */
 /** A card's answer. `choice`: "allow" or "deny" for a permission; for a question, the picked labels and the typed "other" per question. */
 export async function answer(r: Pending, choice: "allow" | "deny" | { picked: string[][]; other: string[] }) {
-  let decision: any;
+  let decision: Decision;
   if (choice === "allow") decision = { behavior: "allow", updatedInput: r.input };
   else if (choice === "deny")
     decision = {
@@ -258,7 +259,7 @@ export async function answer(r: Pending, choice: "allow" | "deny" | { picked: st
     };
   else {
     const answers: Record<string, string> = {};
-    (r.input.questions || []).forEach((q: any, i: number) => {
+    (r.input.questions || []).forEach((q, i) => {
       const on = [...(choice.picked[i] || [])],
         other = (choice.other[i] || "").trim();
       if (other) on.push(other);

@@ -10,7 +10,7 @@ import { panelItem, cardKey, type PanelItem } from "./keys";
 // ("card:<provider>:<id>"). While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
 export const panel = {
   open: "", // the key of what is shown, "" for the tabs
-  detail: {} as Record<string, any>, // the last answer per key: shown at once, a fresh one follows
+  detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
 };

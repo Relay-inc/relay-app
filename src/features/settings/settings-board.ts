@@ -10,6 +10,7 @@ import "./settings-menu";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 import type { Msg } from "./types";
+import type { IntegrationConfig } from "../../domain/config";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -34,7 +35,7 @@ export class SettingsBoard extends SettingsElement {
   static override styles = [tws];
 
   @property({ attribute: false }) provider!: BoardProvider;
-  @property({ attribute: false }) cfg: Record<string, any> = {};
+  @property({ attribute: false }) cfg: IntegrationConfig = {};
   @property({ type: Boolean }) hasToken = false;
   /** The inputs read on Save, by id (the secrets, the fields); unsaved edits stay until then */
   @property({ attribute: false }) form: Record<string, string | boolean> = {};

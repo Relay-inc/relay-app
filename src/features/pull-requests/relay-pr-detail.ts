@@ -4,7 +4,7 @@ import { t, th } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { panel, closeDetail } from "../../domain/panel";
-import { reviewPr } from "../../domain/prs";
+import { reviewPr, type PrDetail } from "../../domain/prs";
 import "./pr-body";
 
 /** One PR in the right panel: the bar, then the body once github_pr has answered. */
@@ -22,7 +22,7 @@ export class RelayPrDetail extends LitElement {
 
   override render() {
     const key = panel.open,
-      pr = panel.detail[key] ?? null,
+      pr = (panel.detail[key] as PrDetail | undefined) ?? null,
       err = panel.err;
     const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3">
       <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closeDetail}>×</button>

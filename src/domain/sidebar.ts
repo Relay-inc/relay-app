@@ -18,6 +18,7 @@ import { config, ghOn, mailOn } from "./config";
 import { readyBoards } from "./board";
 import { mail, unread } from "./mail";
 import { prs } from "./prs";
+import type { Project } from "./vault";
 
 // The sidebar's own state: the search text, folded sections and projects, and the order the user dragged.
 export const sidebar = {
@@ -168,7 +169,7 @@ const termRow = (tm: Term): ConvRow => ({
   closable: true,
 });
 
-function projectBlock(p: any, T: Term[]): ProjectBlock {
+function projectBlock(p: Project, T: Term[]): ProjectBlock {
   const cs = listed(p.name),
     ts = T.filter(tm => tm.project === p.name),
     keys = [...cs.map(c => c.key), ...ts.map(tm => tm.key)];
@@ -197,14 +198,14 @@ export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
     selP = projOf(ui.sel),
     T = terms();
   const w = waitCount(),
-    due = vault.snap.reminders.filter((r: any) => r.days <= 0).length;
+    due = vault.snap.reminders.filter(r => r.days <= 0).length;
   const views: ViewRow[] = [
     { key: WAIT, icon: "bell", name: t("nav.waiting"), meta: w ? { kind: "badge", n: w } : undefined },
     {
       key: REM,
       icon: "list",
       name: t("nav.reminders"),
-      meta: due ? { kind: vault.snap.reminders.some((r: any) => r.days < 0) ? "late" : "soon", n: due } : undefined,
+      meta: due ? { kind: vault.snap.reminders.some(r => r.days < 0) ? "late" : "soon", n: due } : undefined,
     },
     ...readyBoards().map(p => ({ key: boardKey(p.id), svg: p.glyph, name: p.name })),
     ...(ghOn()
@@ -251,17 +252,17 @@ export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
   };
 
   // an app conversation stays until the user closes it, a terminal session as long as it is open
-  const open = (p: any) => T.some(tm => tm.project === p.name) || chatsOf(p.name).length > 0;
+  const open = (p: Project) => T.some(tm => tm.project === p.name) || chatsOf(p.name).length > 0;
   const lastAt = (n: string) =>
     Math.max(0, ...chatsOf(n).map(c => c.at), ...T.filter(tm => tm.project === n).map(tm => tm.mtime));
-  const match = (p: any) => p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q);
+  const match = (p: Project) => p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q);
   contexts().forEach((ctx, i) => {
     // manual order from dragging comes first, the rest follows by recency
     const shown = ordered(
-      vault.snap.projects.filter((p: any) => p.context === ctx && match(p) && (q || open(p) || p.name === selP)),
-      (p: any) => p.name,
+      vault.snap.projects.filter((p: Project) => p.context === ctx && match(p) && (q || open(p) || p.name === selP)),
+      (p: Project) => p.name,
       sidebar.projOrder[ctx],
-      (a: any, b: any) => lastAt(b.name) - lastAt(a.name),
+      (a: Project, b: Project) => lastAt(b.name) - lastAt(a.name),
     );
     if (shown.length)
       secs[ctx] = sec(ctx, {
@@ -269,7 +270,7 @@ export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
         tint: CTX[i % CTX.length],
         count: shown.length,
         convs: [],
-        projects: shown.map((p: any) => projectBlock(p, T)),
+        projects: shown.map(p => projectBlock(p, T)),
       });
   });
   // sections the user never dragged follow in the index order

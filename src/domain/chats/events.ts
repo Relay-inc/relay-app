@@ -6,7 +6,7 @@ import type { AgentEvent } from "../agents";
 import { ui, WAIT, isTerm } from "../ui";
 import { loadSnapshot } from "../vault";
 import { termSid } from "../keys";
-import { chat, NEW, label, lastAi, saveChats, dur, type Item, type Img } from "./state";
+import { chat, NEW, label, lastAi, saveChats, dur, type Item, type Img, type ToolInput } from "./state";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) and the transcripts behind a conversation.
 
@@ -28,7 +28,7 @@ function pushText(items: Item[], text: string, delta: boolean) {
   if (delta && last?.kind === "ai") last.text += text;
   else items.push({ kind: "ai", text });
 }
-const toolItem = (id: string, name: string, input: any, state: Item["state"]): Item => ({
+const toolItem = (id: string, name: string, input: ToolInput, state: Item["state"]): Item => ({
   kind: "tool",
   id,
   text: name,

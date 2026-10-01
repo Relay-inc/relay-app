@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import { t, th } from "../core/i18n";
 import { emit } from "../core/dom";
 import { tw } from "../core/styles";
-import type { Pending } from "../domain/chats/state";
+import type { Pending, Question } from "../domain/chats/state";
 
 type Answer = "allow" | "deny" | { picked: string[][]; other: string[] };
 declare global {
@@ -48,9 +48,9 @@ export class PermissionCard extends LitElement {
     this.on = { ...this.on, [qi]: s };
   }
   private answer() {
-    const qs: any[] = this.request.input.questions || [];
+    const qs = this.request.input.questions || [];
     emit<Answer>(this, "answer", {
-      picked: qs.map((q, qi) => (q.options || []).map((o: any) => o.label).filter((l: string) => this.on[qi]?.has(l))),
+      picked: qs.map((q, qi) => (q.options || []).map(o => o.label).filter((l: string) => this.on[qi]?.has(l))),
       other: qs.map((_, qi) => this.other[qi] ?? ""),
     });
   }
@@ -63,11 +63,11 @@ export class PermissionCard extends LitElement {
       return html`<div class=${box}>
         <div class="text-sm text-secondary">${t("card.asks")}</div>
         ${(r.input.questions || []).map(
-          (q: any, qi: number) =>
+          (q: Question, qi: number) =>
             html` <div class="text-base font-semibold text-label">${q.question}</div>
               <div class="flex flex-wrap gap-2">
                 ${(q.options || []).map(
-                  (o: any) =>
+                  o =>
                     html`<button
                       class=${this.on[qi]?.has(o.label) ? "btn btn-primary" : "btn"}
                       title=${o.description || ""}

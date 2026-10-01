@@ -63,7 +63,7 @@ export class RelayMailDetail extends LitElement {
   override render() {
     const key = panel.open,
       m: Mail | undefined = mail.list?.find(x => mailKey(x) === key),
-      body: MailBody | undefined = panel.detail[key],
+      body = panel.detail[key] as MailBody | undefined,
       err = panel.err,
       textView = mail.textView.has(key);
     // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group

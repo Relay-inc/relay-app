@@ -28,6 +28,51 @@ export type PR = {
 export type PRs = { mine: PR[]; review: PR[] };
 export { prKey };
 
+/** A GitHub user as the GraphQL answer names them: null for a deleted account ("ghost"). */
+export type GhActor = { login?: string; name?: string } | null;
+type Nodes<T> = { nodes?: T[] } | null;
+export type GhComment = { author: GhActor; createdAt: string; body?: string };
+export type GhReview = GhComment & { state: string };
+export type GhCheck = {
+  name?: string;
+  context?: string;
+  conclusion?: string;
+  state?: string;
+  status?: string;
+  detailsUrl?: string;
+  targetUrl?: string;
+};
+export type GhThread = {
+  path: string;
+  line?: number | null;
+  isResolved: boolean;
+  isOutdated: boolean;
+  comments?: Nodes<GhComment>;
+};
+/** One PR as github_pr returns it: the raw GraphQL answer, as far as the panel reads it. */
+export type PrDetail = {
+  number: number;
+  title: string;
+  url: string;
+  isDraft: boolean;
+  author: GhActor;
+  createdAt: string;
+  headRefName: string;
+  baseRefName: string;
+  additions: number;
+  deletions: number;
+  changedFiles: number;
+  body?: string;
+  mergeable?: string;
+  reviewDecision?: string | null;
+  commits?: Nodes<{ commit: { statusCheckRollup?: { state?: string; contexts?: Nodes<GhCheck> } | null } }>;
+  reviewRequests?: Nodes<{ requestedReviewer?: GhActor }>;
+  comments?: Nodes<GhComment>;
+  reviews?: Nodes<GhReview>;
+  reviewThreads?: Nodes<GhThread>;
+  files?: Nodes<{ path: string; additions: number; deletions: number }>;
+};
+
 export const prs = { list: null as PRs | null, err: "", busy: false };
 
 // once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view
@@ -51,7 +96,7 @@ export const resetPrs = () => {
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
 // posting on GitHub is something others see, so it waits for the user (decided 29/9)
 export async function reviewPr(key: string) {
-  const pr = panel.detail[key],
+  const pr = panel.detail[key] as PrDetail | undefined,
     item = panelItem(key);
   if (!pr || item?.kind !== "pr") return;
   const repo = item.repo,

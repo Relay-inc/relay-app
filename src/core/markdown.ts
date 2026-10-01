@@ -30,6 +30,7 @@ export function setNoteCheck(known: (target: string) => boolean) {
   noteKnown = known;
   cache.clear();
 }
+type WikiToken = { type: "wikilink"; raw: string; target: string; label: string };
 const noteA = (target: string, inner: string) =>
   noteKnown(target) ? `<a class="vlink" data-note="${esc(target)}">${inner}</a>` : inner;
 marked.use({
@@ -43,7 +44,10 @@ marked.use({
         if (m) return { type: "wikilink", raw: m[0], target: noteOf(m[1]), label: m[1].split("|").pop()!.trim() };
         return undefined; // not a wikilink: marked tries its other rules
       },
-      renderer: (tok: any) => noteA(tok.target, esc(tok.label)),
+      renderer: tok => {
+        const { target, label } = tok as unknown as WikiToken;
+        return noteA(target, esc(label));
+      },
     },
   ],
   renderer: {

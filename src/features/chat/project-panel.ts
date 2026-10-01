@@ -70,7 +70,7 @@ export class ProjectPanel extends LitElement {
 
   override render() {
     const cur = selProject(),
-      names = vault.snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
+      names = vault.snap.projects.map(p => p.name).sort((a: string, b: string) => a.localeCompare(b));
     // a long project name in the select or the inputs never pushes past the panel
     const lab = "grid grid-cols-1 gap-1.5 text-sm text-secondary select-none";
     return html`<div class="grid grid-cols-1 gap-3 bg-bg border border-separator rounded-lg shadow-lg p-3.5">

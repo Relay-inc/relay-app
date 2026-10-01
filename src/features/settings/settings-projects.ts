@@ -11,6 +11,7 @@ import "./settings-project";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
 import type { SaveSettings, Settings } from "./types";
+import type { Snapshot } from "../../domain/vault";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -64,7 +65,7 @@ export class SettingsProjects extends SettingsElement {
   private async load() {
     const [i, snap, rp] = await Promise.all([
       loadIcons(),
-      invoke<any>("snapshot").catch(() => ({ projects: [] })),
+      invoke<Snapshot>("snapshot").catch((): Pick<Snapshot, "projects"> => ({ projects: [] })),
       invoke<Record<string, string[]>>("project_repos").catch(() => ({})),
     ]);
     this.icons = i;

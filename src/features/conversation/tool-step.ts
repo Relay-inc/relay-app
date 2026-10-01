@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { tw } from "../../core/styles";
 import { emit } from "../../core/dom";
 import { toolLine } from "../../components/tool-line";
+import type { ToolInput } from "../../domain/chats/state";
 
 declare global {
   interface HTMLElementEventMap {
@@ -21,7 +22,7 @@ export class ToolStep extends LitElement {
       }
     `,
   ];
-  @property({ attribute: false }) tool?: { name: string; input: any };
+  @property({ attribute: false }) tool?: { name: string; input: ToolInput };
   @property() text = "";
   @property() state: "run" | "ok" | "err" | "" = "";
   @property({ type: Boolean }) link = false;

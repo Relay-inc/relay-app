@@ -12,6 +12,33 @@ import { termKey, newChatKey } from "../keys";
 // A conversation has its own key and hangs under a project (or under Algemeen when project is null).
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
+/** What a tool call carries, as far as the app reads it (the tool line, the permission card, the project guess). */
+export type ToolInput = {
+  file_path?: string;
+  content?: string;
+  command?: string;
+  pattern?: string;
+  query?: string;
+  url?: string;
+  description?: string;
+  subagent_type?: string;
+  skill?: string;
+  questions?: Question[];
+  [other: string]: unknown;
+};
+/** A question an agent asks, with its options (AskUserQuestion). */
+export type Question = { question: string; multiSelect?: boolean; options?: { label: string; description?: string }[] };
+/** A session as the agent providers report it (`agents`): in the terminal or in the background. */
+export type AgentSession = {
+  id: string;
+  sessionId: string;
+  provider: string;
+  kind: string; // "interactive" | "background"
+  status: string; // "busy" | "idle"
+  state?: string; // a background session: "blocked" | "done" | …
+  name?: string;
+  startedAt?: string;
+};
 /** A tool line keeps the call, so it is drawn (and translated) when shown. */
 export type Item = {
   kind: "me" | "ai" | "tool" | "err" | "note" | "done";
@@ -20,7 +47,7 @@ export type Item = {
   state?: "run" | "ok" | "err";
   path?: string;
   imgs?: string[];
-  tool?: { name: string; input: any };
+  tool?: { name: string; input: ToolInput };
 };
 export type Chat = {
   key: string;
@@ -45,7 +72,7 @@ export type Sub = {
   started_at: string;
   last_at: string;
   tool?: string;
-  input?: any;
+  input?: ToolInput;
   text?: string;
 };
 /** A session open in the terminal (not started by the app), with the project snapshot.py read from its transcript. */
@@ -61,7 +88,7 @@ export type Term = {
   mtime: number;
 };
 /** A permission request or question waiting in pending/ (packages/agent-core PermissionRequest). */
-export type Pending = { id: string; project: string; kind?: string; tool_name: string; input: any };
+export type Pending = { id: string; project: string; kind?: string; tool_name: string; input: ToolInput };
 
 export const NEW = "Nieuw gesprek";
 
@@ -78,7 +105,7 @@ export const chat = {
   routeChoice: null as { key: string; text: string; hits: string[] } | null,
   pendingList: [] as Pending[],
   pendingPolled: false, // the cards already waiting at start get no banner
-  agentsList: [] as any[], // the providers' sessions (`agents`), terminal and background
+  agentsList: [] as AgentSession[], // the providers' sessions (`agents`), terminal and background
   hidden: ls.get<string[]>("hiddenAgents", []),
   forked: ls.get<string[]>("forkedTerms", []), // terminal sessions continued in the app, no longer listed
   appSids: [] as string[],
@@ -134,29 +161,28 @@ export function aboutProject(key: string): string | null {
 const GENERIC = /^obsidian-context-management-\w+$/;
 export function terms(hiddenOnes = false): Term[] {
   const live = new Map(chat.agentsList.map(a => [a.sessionId, a]));
-  return (vault.snap.sessions?.items || [])
-    .filter(
-      (x: any) =>
-        !chat.appSids.includes(x.sessionId) &&
-        chat.forked.includes(x.sessionId) === hiddenOnes &&
-        live.has(x.sessionId),
-    )
-    .map((x: any) => {
-      const a = live.get(x.sessionId);
-      const ov = config.value.overrides[x.sessionId];
-      return {
-        key: termKey(x.sessionId),
-        sid: x.sessionId,
-        id: a.id,
-        mtime: x.last_at ? Date.parse(x.last_at) : 0,
-        project: ov !== undefined ? ov : (x.project ?? null),
-        kind: a.kind,
-        status: a.status,
-        state: a.state,
-        title: a.name && !GENERIC.test(a.name) ? a.name : (x.last_user || t("chat.terminal")).slice(0, 48),
-      };
-    })
-    .filter((tm: Term) => !(tm.kind === "background" && tm.state === "done"));
+  return vault.snap.sessions.items.flatMap(session => {
+    const sid = session.sessionId,
+      agent = live.get(sid);
+    // only sessions the providers still run, that the app did not start, listed or hidden as asked
+    if (!agent || chat.appSids.includes(sid) || chat.forked.includes(sid) !== hiddenOnes) return [];
+    if (agent.kind === "background" && agent.state === "done") return [];
+    const override = config.value.overrides[sid];
+    const named = agent.name && !GENERIC.test(agent.name);
+    return [
+      {
+        key: termKey(sid),
+        sid,
+        id: agent.id,
+        mtime: session.last_at ? Date.parse(session.last_at) : 0,
+        project: override !== undefined ? override : session.project,
+        kind: agent.kind,
+        status: agent.status,
+        state: agent.state,
+        title: named ? agent.name! : (session.last_user || t("chat.terminal")).slice(0, 48),
+      },
+    ];
+  });
 }
 export const termOf = (k: string) => terms().find(tm => tm.key === k);
 /** The project of the open conversation, terminal or app. */

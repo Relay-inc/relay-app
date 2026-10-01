@@ -7,6 +7,7 @@ import { emit } from "../../core/dom";
 import { tw } from "../../core/styles";
 import { KEYS, pickVault, pickMapped, checkMapping, type VaultMap, type VaultStatus } from "../../domain/vault-setup";
 import mark from "../../relay-mark.svg";
+import type { Settings } from "../../domain/config";
 
 declare global {
   interface HTMLElementEventMap {
@@ -63,7 +64,7 @@ export class RelayOnboard extends LitElement {
   private async use() {
     this.msg = "";
     try {
-      const s = await invoke<any>("get_settings");
+      const s = await invoke<Settings>("get_settings");
       await invoke("set_settings", {
         settings: { ...s, vault: this.st!.vault, vaults: { ...s.vaults, [this.st!.vault]: this.trimmed() } },
       });
