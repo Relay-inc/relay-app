@@ -62,6 +62,7 @@ export default {
   "pi.image": "Image",
   "pi.siteSoon": "Site {site} : le favicon suit",
   "pi.noIcon": "Aucune icône",
+  "pi.siteNoIcon": "{site} n'a pas d'icône : choisissez un emoji ou une image",
   "pi.find": "Chercher les icônes",
   "pi.finding": "Recherche sur le web…",
   "pi.findHelp": "Claude cherche le site de chaque projet sans icône (recherche web uniquement), et Relay récupère son favicon",

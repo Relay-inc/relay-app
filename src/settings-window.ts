@@ -109,7 +109,8 @@ function iconState(n: string) {
   if (!i) return st("off", t("pi.guess"));
   if (i.img) return st("ok", t("pi.image"));
   if (i.icon) return st("ok", t("pi.emoji"));
-  if (isSite(i.value)) return st("warn", t("pi.siteSoon", { site: esc(i.value) }));
+  // fetched before (tried, on this Mac) and still a website: that site has no favicon
+  if (isSite(i.value)) return settings.favicons?.tried?.[n] === i.value ? st("off", t("pi.siteNoIcon", { site: esc(i.value) })) : st("warn", t("pi.siteSoon", { site: esc(i.value) }));
   return st("off", t("pi.noIcon"));
 }
 function projects() {

@@ -335,11 +335,16 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
     let list: Vec<Value> = projects.iter().take(80).map(|x| { let n = x["name"].as_str().unwrap_or("");
         json!({"name": n, "context": x["context"], "about": x["summary"].as_str().unwrap_or("").chars().take(300).collect::<String>(),
             "repos": repos.get(n).cloned().unwrap_or_default()}) }).collect();
-    let prompt = format!("Each project below is work for, or about, a company, organisation, shop or product. Find its official \
-        website, so the site's favicon can be the project's icon. Use the name, the context, what it is about and its GitHub repos as \
-        clues, and search the web for every project you do not know for sure. Give the most likely official site; use null only when \
-        the project is clearly internal or personal (a meeting, a plan, a tool of its own) or when nothing fits. Answer with only a JSON \
-        object {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
+    // the context (Antenna, Freelance, Personal) is the user's own area, not a client: without saying so, every internal
+    // project of an employer got the employer's site
+    let prompt = format!("Pick a website for each project below, so that site's favicon can be the project's icon. The context is the \
+        area of work the project sits under (the user's own employer, their freelance work, personal): it is not the client, so never \
+        pick the context's own website. In this order: 1) the client, another company the work is for; 2) otherwise the project's own product or brand (a repo name like facturio can be \
+        that product's name); 3) otherwise the main tool, platform or service the project is about (a server panel, an automation \
+        tool, a mail server, a SaaS it integrates). Use the name, the context, what it is about and its GitHub repos as clues, and \
+        search the web for every project you do not know for sure. Give the most likely official site; use null only for a purely \
+        personal topic, a meeting or a plan with no company, product or tool behind it. Answer with only a JSON object \
+        {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
     // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
         let mut c = Command::new(&eb.bin).args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",

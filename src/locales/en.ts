@@ -61,6 +61,7 @@ const en = {
   "pi.image": "Image",
   "pi.siteSoon": "Website {site}: favicon follows",
   "pi.noIcon": "No icon",
+  "pi.siteNoIcon": "{site} has no icon: pick an emoji or upload one",
   "pi.find": "Find icons",
   "pi.finding": "Searching the web…",
   "pi.findHelp": "Claude looks up the website of every project without an icon (web search, nothing else), and Relay fetches its favicon",

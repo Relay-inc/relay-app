@@ -95,7 +95,11 @@ def mime(b):
 
 
 def favicon(site):
-    html, base = get(f"https://{site}")
+    # the page's own icons first; a site that blocks scripts or has a bad certificate still gets the fallbacks
+    try:
+        html, base = get(f"https://{site}")
+    except Exception:
+        html, base = b"", f"https://{site}/"
     links = []
     for tag in re.findall(r"<link[^>]+>", html.decode("utf-8", "ignore"), re.I):
         rel, href = re.search(r"rel=[\"']?([^\"'>]+)", tag, re.I), re.search(r"href=[\"']?([^\"' >]+)", tag, re.I)
@@ -105,7 +109,9 @@ def favicon(site):
         # the largest wins: an svg scales, an apple-touch-icon is 180 px
         n = int(size.group(1)) if size else 512 if ".svg" in href.group(1) else 180 if "apple" in rel.group(1).lower() else 16
         links.append((n, urllib.parse.urljoin(base, href.group(1).replace("&amp;", "&"))))
-    for _, url in sorted(links, reverse=True) + [(0, urllib.parse.urljoin(base, "/favicon.ico"))]:
+    # then the usual paths, then DuckDuckGo's favicon service (404 when it has none, so no generic globe)
+    rest = [urllib.parse.urljoin(base, p) for p in ("/favicon.ico", "/apple-touch-icon.png", "/favicon.png")] + [f"https://icons.duckduckgo.com/ip3/{site}.ico"]
+    for _, url in sorted(links, reverse=True) + [(0, u) for u in rest]:
         try:
             b, _ = get(url)
         except Exception:
