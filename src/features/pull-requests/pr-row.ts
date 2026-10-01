@@ -53,9 +53,7 @@ export class PrRow extends LitElement {
           >${th("pr.draft")}</span
         >`
       : nothing;
-    return html`<div
-      class="group-hover:text-accent leading-snug line-clamp-2 text-base"
-    >
+    return html`<div class="group-hover:text-accent leading-snug line-clamp-2 text-base">
       ${draft}${this.pr.title}
     </div>`;
   }
@@ -63,9 +61,7 @@ export class PrRow extends LitElement {
     const pr = this.pr;
     const project = this.project ? html`<span>${this.project}</span>` : nothing;
     const author = this.mine ? nothing : html`<span>${pr.author || ""}</span>`;
-    return html`<div
-      class="flex flex-wrap gap-x-3 gap-y-1 text-secondary mt-0.5 tabular-nums text-sm"
-    >
+    return html`<div class="flex flex-wrap gap-x-3 gap-y-1 text-secondary mt-0.5 tabular-nums text-sm">
       <span>${pr.repo.split("/")[1] || pr.repo} #${pr.number}</span>${project}${author}<span>${age(pr.created)}</span>
     </div>`;
   }
@@ -73,7 +69,13 @@ export class PrRow extends LitElement {
   // the inspector's row: a state-coloured PR glyph, the title, then "#number repo, CI dot and label"
   private renderCompact() {
     const pr = this.pr;
-    const state = pr.draft ? "text-secondary" : pr.review === "CHANGES_REQUESTED" ? "text-bad" : pr.review === "APPROVED" ? "text-ok" : "text-accent";
+    const state = pr.draft
+      ? "text-secondary"
+      : pr.review === "CHANGES_REQUESTED"
+        ? "text-bad"
+        : pr.review === "APPROVED"
+          ? "text-ok"
+          : "text-accent";
     const ci = pr.ci ? CI_DOT[pr.ci] : undefined;
     return html`<div
       class="group flex gap-2.5 py-2.5 border-b border-separator cursor-default ${this.selected ? "bg-fill -mx-2.5 px-2.5 rounded-lg" : ""}"
@@ -85,11 +87,13 @@ export class PrRow extends LitElement {
           >${this.pr.draft ? html`<span class="text-xs font-normal text-secondary mr-1.5">${th("pr.draft")}</span>` : nothing}${pr.title}</span
         >
         <span class="text-xs text-secondary flex flex-wrap items-center gap-x-2 gap-y-0.5"
-          ><span class="font-mono text-[11px]">#${pr.number}</span>${pr.repo.split("/")[1] || pr.repo}${ci
-            ? html`<span class="inline-flex items-center gap-1 ${ci[0]}"
-                ><span class="size-1.5 rounded-full bg-current"></span>${th(ci[1])}</span
-              >`
-            : nothing}</span
+          ><span class="font-mono text-[11px]">#${pr.number}</span>${pr.repo.split("/")[1] || pr.repo}${
+            ci
+              ? html`<span class="inline-flex items-center gap-1 ${ci[0]}"
+                  ><span class="size-1.5 rounded-full bg-current"></span>${th(ci[1])}</span
+                >`
+              : nothing
+          }</span
         >
       </div>
     </div>`;

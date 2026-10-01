@@ -58,8 +58,14 @@ export class RelayInspector extends LitElement {
         // the card's markup comes from its provider package, which tells the panel through an event that its close button was clicked
         const card = cardOf(key);
         return card
-          ? html`<div .inert=${panel.acting} class=${panel.acting ? "opacity-70" : ""} @detail-close=${closeDetail} @detail-act=${(e: CustomEvent<CardAct>) => cardAct(key, e.detail)}>
-              ${panel.actErr ? html`<div class="err-box mb-3">${panel.actErr}</div>` : nothing}${card.detail.render(panel.detail[key] ?? null, panel.err)}</div>`
+          ? html`<div
+              .inert=${panel.acting}
+              class=${panel.acting ? "opacity-70" : ""}
+              @detail-close=${closeDetail}
+              @detail-act=${(e: CustomEvent<CardAct>) => cardAct(key, e.detail)}
+            >
+              ${panel.actErr ? html`<div class="err-box mb-3">${panel.actErr}</div>` : nothing}${card.detail.render(panel.detail[key] ?? null, panel.err)}
+            </div>`
           : nothing;
       }
       case "note":
@@ -127,7 +133,9 @@ export class RelayInspector extends LitElement {
 
   private renderStand(info: ProjectInfo) {
     return html`${this.renderHeading(th("insp.stand"), th("insp.updated", { date: info.last }))}
-      <div class="md-panel text-[13px] leading-[1.55] select-text [&_p+p]:mt-2.5">${md(info.stand || t("insp.noStand"))}</div>`;
+      <div class="md-panel text-[13px] leading-[1.55] select-text [&_p+p]:mt-2.5">
+        ${md(info.stand || t("insp.noStand"))}
+      </div>`;
   }
 
   private renderProjectReminders(projectName: string) {
@@ -184,7 +192,9 @@ export class RelayInspector extends LitElement {
       >
         <div class="seg flex-1 select-none [&>button]:flex-1">${this.renderTabs()}</div>
       </div>
-      <div class="overflow-y-auto pt-4.5 px-4.5 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">${this.renderBody()}</div>
+      <div class="overflow-y-auto pt-4.5 px-4.5 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">
+        ${this.renderBody()}
+      </div>
     </div>`;
   }
 }

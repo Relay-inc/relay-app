@@ -36,10 +36,16 @@ export class TodoList extends LitElement {
       ${this.items.map(
         todo =>
           html`<li class="flex items-start gap-2.5 py-2.25 border-b border-separator text-[13px] leading-snug">
-            ${todo.when === undefined
-              ? html`<span class="mt-px size-4 flex-none rounded-[5px] border-[1.5px] border-separator-strong"></span>`
-              : nothing}
-            <span class="min-w-0 flex flex-col gap-0.5"><span class="line-clamp-3">${md(todo.text)}</span>${this.renderWhen(todo)}</span>
+            ${
+              todo.when === undefined
+                ? html`<span
+                    class="mt-px size-4 flex-none rounded-[5px] border-[1.5px] border-separator-strong"
+                  ></span>`
+                : nothing
+            }
+            <span class="min-w-0 flex flex-col gap-0.5"
+              ><span class="line-clamp-3">${md(todo.text)}</span>${this.renderWhen(todo)}</span
+            >
           </li>`,
       )}
     </ul>`;
