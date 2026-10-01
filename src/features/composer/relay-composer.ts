@@ -195,15 +195,15 @@ export class RelayComposer extends LitElement {
     ></relay-image-thumbs>`;
   }
 
-  // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
+  // the agent is fixed once a conversation has a message, and the sidebar shows it then; with one agent there is nothing to pick
   private renderAgentPick() {
     const agents = onAgents();
     const selected = ui.selected;
     if (agents.length <= 1 || isTerminal(selected) || !chat.chats[selected]) return nothing;
-    const agentId = chatAgent(selected);
     const started = !!(chat.messages[selected] || []).length || !!chat.chats[selected]?.fork;
+    if (started) return nothing;
+    const agentId = chatAgent(selected);
     return html`<select
-      ?disabled=${started}
       title=${t("composer.agent")}
       aria-label=${t("composer.agent")}
       @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}
