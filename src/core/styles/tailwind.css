@@ -192,7 +192,7 @@
 
 /* markdown rendered from text (the agents' answers, PR and note bodies): its elements carry no classes */
 @utility md-chat {
-  @apply text-base leading-normal;
+  @apply text-base leading-normal wrap-anywhere;
   & p + p {
     @apply mt-2.5;
   }
