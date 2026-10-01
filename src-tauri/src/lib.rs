@@ -22,6 +22,8 @@ pub mod notify;
 mod providers;
 mod relay_config;
 mod reminders;
+#[cfg(feature = "selftest")]
+mod selftest;
 mod tray;
 mod vault;
 mod worktrees;
@@ -1419,9 +1421,11 @@ async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, Stri
     let r = tauri::async_runtime::spawn_blocking(move || c.info()).await.map_err(|e| e.to_string())?;
     Ok(match r { Ok(i) => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os}), Err(e) => json!({"ok": false, "error": e}) })
 }
-/// Forget a machine here. Its conversations lose their bind; on the machine `relay-server revoke` unpairs this Mac.
+/// Forget a machine here. Its conversations there stop (nothing would ever reach them again) and lose their bind; on
+/// the machine `relay-server revoke` unpairs this Mac.
 #[tauri::command]
 fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
+    for k in state.machines.keys_on(&id) { if let Some(mut p) = state.procs.lock().unwrap().remove(&k) { p.child.kill().ok(); } }
     let mut s = state.settings.lock().unwrap();
     s["machines"].as_array_mut().unwrap().retain(|m| m["id"] != id.as_str());
     state.machines.forget(&id);
@@ -1535,6 +1539,8 @@ pub fn run() {
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new(), machines });
             reattach(app.handle());
+            #[cfg(feature = "selftest")]
+            selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines)
             let h = app.handle().clone();
             std::thread::spawn(move || {

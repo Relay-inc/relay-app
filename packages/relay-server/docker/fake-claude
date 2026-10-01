@@ -1,0 +1,71 @@
+#!/usr/bin/env python3
+"""A stand-in for `claude -p --input-format stream-json --output-format stream-json`, enough for Relay's work machines.
+
+It answers the initialize request, gives each user turn a session id, an echo and a result, and writes a transcript
+in ~/.claude/projects/<cwd slug>/<session>.jsonl so history works. A turn with "perm" in it calls the real permission
+tool (perm_server.py from --mcp-config, over MCP stdio) for a Write, and writes the file when the card is allowed.
+"slow" waits 6 s before answering, to test a connection that drops mid-turn.
+"""
+import json, os, re, subprocess, sys, time, uuid
+
+args = sys.argv[1:]
+def arg(name):
+    return args[args.index(name) + 1] if name in args else None
+
+mcp = json.loads(arg("--mcp-config") or "{}").get("mcpServers", {})
+sid = arg("--resume") or str(uuid.uuid4())
+cwd = os.getcwd()
+tdir = os.path.expanduser("~/.claude/projects/" + re.sub(r"[^A-Za-z0-9]", "-", cwd))
+os.makedirs(tdir, exist_ok=True)
+transcript = os.path.join(tdir, sid + ".jsonl")
+host = os.uname().nodename
+
+def out(o):
+    print(json.dumps(o), flush=True)
+
+def log(o):
+    with open(transcript, "a") as f:
+        f.write(json.dumps({**o, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())}) + "\n")
+
+def approve(tool, inp):
+    """The permission tool, as Claude Code calls it: initialize, then tools/call approve."""
+    p = mcp["vaultperm"]
+    perm = subprocess.Popen([p["command"], *p["args"]], env={**os.environ, **p["env"]}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    def rpc(i, method, params):
+        perm.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n")
+        perm.stdin.flush()
+        return json.loads(perm.stdout.readline())
+    rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "fake-claude"}})
+    r = rpc(2, "tools/call", {"name": "approve", "arguments": {"tool_name": tool, "input": inp, "tool_use_id": "toolu_fake"}})
+    perm.terminate()
+    return json.loads(r["result"]["content"][0]["text"])
+
+started = False
+for line in sys.stdin:
+    m = json.loads(line)
+    if m.get("type") == "control_request":
+        out({"type": "control_response", "response": {"subtype": "success", "request_id": m.get("request_id"), "response": {"commands": []}}})
+        continue
+    if m.get("type") != "user":
+        continue
+    text = " ".join(c.get("text", "") for c in m["message"]["content"] if c.get("type") == "text")
+    if not started:
+        out({"type": "system", "subtype": "init", "session_id": sid, "cwd": cwd})
+        started = True
+    log({"type": "user", "message": {"role": "user", "content": text}})
+    if "slow" in text:
+        time.sleep(6)
+    reply = f"echo from {host}: {text}"
+    if "perm" in text:
+        inp = {"file_path": os.path.join(cwd, "note.txt"), "content": "relay"}
+        out({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "toolu_fake", "name": "Write", "input": inp}]}, "session_id": sid})
+        d = approve("Write", inp)
+        ok = d.get("behavior") == "allow"
+        if ok:
+            with open(inp["file_path"], "w") as f:
+                f.write("relay")
+        out({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "toolu_fake", "is_error": not ok}]}, "session_id": sid})
+        reply = "wrote note.txt" if ok else "the card was denied"
+    out({"type": "assistant", "message": {"content": [{"type": "text", "text": reply}]}, "session_id": sid})
+    log({"type": "assistant", "message": {"content": [{"type": "text", "text": reply}]}})
+    out({"type": "result", "subtype": "success", "is_error": False, "duration_ms": 5, "session_id": sid, "usage": {"input_tokens": 1, "output_tokens": 1}})

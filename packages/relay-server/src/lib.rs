@@ -167,10 +167,21 @@ impl Server {
             "answer" => reply(&mut w, agent_core::pending::answer(&pending, req["id"].as_str().unwrap_or(""), &req["decision"]).map(|_| json!({}))),
             "history" => reply(&mut w, Ok(self.history(&req))),
             "exists" => reply(&mut w, Ok(json!({"dir": req["path"].as_str().is_some_and(|p| p.starts_with('/') && Path::new(p).is_dir())}))),
-            "launch" => self.launch(ns, &req, r, w),
-            "attach" => attach(&key(&req["key"]), r, w),
+            "launch" => { self.revoked_closes(&fp, &w); self.launch(ns, &req, r, w) }
+            "attach" => { self.revoked_closes(&fp, &w); attach(&key(&req["key"]), r, w) }
             _ => reply(&mut w, Err(format!("unknown request {op:?}"))),
         }
+    }
+
+    /// A conversation's stream lasts as long as the conversation: once its device is revoked, it ends within seconds,
+    /// not at the next connection.
+    fn revoked_closes(&self, fp: &str, w: &tls::Writer) {
+        let (data, fp, w) = (self.data.clone(), fp.to_string(), w.clone());
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_secs(2));
+            if w.is_closed() { return; }
+            if !clients(&data).iter().any(|c| c.fp == fp) { eprintln!("relay-server: closing a revoked device's stream"); w.shutdown(); return; }
+        });
     }
 
     fn pair(&self, fp: &str, req: &Value) -> Result<Value, String> {

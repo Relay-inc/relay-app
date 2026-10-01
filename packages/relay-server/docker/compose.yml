@@ -1,0 +1,20 @@
+# TARGET=test (a stand-in claude) or server (the real one, the default). The data, Claude's login and transcripts, and
+# the repos live in volumes, so a rebuild keeps the pairing and the conversations.
+services:
+  relay-server:
+    build:
+      context: ../../..
+      dockerfile: packages/relay-server/docker/Dockerfile
+      target: ${TARGET:-server}
+    hostname: ${RELAY_HOST:-relay-docker}
+    ports:
+      - "${RELAY_PORT:-47800}:47800"
+    volumes:
+      - data:/home/relay/data
+      - claude:/home/relay/.claude
+      - repos:/home/relay/repos
+    restart: unless-stopped
+volumes:
+  data:
+  claude:
+  repos:

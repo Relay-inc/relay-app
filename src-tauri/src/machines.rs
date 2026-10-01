@@ -79,7 +79,11 @@ impl Machines {
     /// The machine's Info: the poller's, else asked now.
     pub fn info(&self, m: &Value) -> Result<Info, String> {
         let id = m["id"].as_str().unwrap_or("").to_string();
-        if let Some(i) = self.seen.lock().unwrap().get(&id).and_then(|s| s.info.clone()) { return Ok(i); }
+        if let Some(s) = self.seen.lock().unwrap().get(&id) {
+            // the poller asked a moment ago and got nothing: say so now, rather than after a connect timeout
+            if let Some(e) = &s.error { return Err(e.clone()); }
+            if let Some(i) = &s.info { return Ok(i.clone()); }
+        }
         let i = self.client(m).info()?;
         self.seen.lock().unwrap().entry(id).or_default().info = Some(i.clone());
         Ok(i)
@@ -90,6 +94,8 @@ impl Machines {
     pub fn pending_owner(&self, id: &str) -> Option<String> {
         self.seen.lock().unwrap().iter().find(|(_, s)| s.pending.iter().any(|p| p["id"] == id)).map(|(m, _)| m.clone())
     }
+    /// The conversations bound to a machine.
+    pub fn keys_on(&self, id: &str) -> Vec<String> { self.binds.lock().unwrap().iter().filter(|(_, b)| b.machine == id).map(|(k, _)| k.clone()).collect() }
     pub fn forget(&self, id: &str) {
         self.seen.lock().unwrap().remove(id);
         let mut b = self.binds.lock().unwrap();

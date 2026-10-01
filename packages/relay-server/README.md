@@ -35,6 +35,32 @@ tools (`xcode-select --install`).
 **On a Mac:** a LaunchAgent may not read `~/Documents`, `~/Desktop` or `~/Downloads` without Full Disk Access. Keep
 the repos in another folder (for example `~/repos`), or give `relay-server` Full Disk Access in System Settings.
 
+## In Docker (a home server such as Unraid)
+
+`packages/relay-server/docker/` has an image with relay-server and the real Claude Code, and a compose file. From the
+repo root:
+
+1. `docker compose -f packages/relay-server/docker/compose.yml up -d --build`
+2. Log in once: `docker compose -f packages/relay-server/docker/compose.yml exec relay-server claude`, then `/login`
+   (it shows a URL to open on your laptop). The login stays in the `claude` volume.
+3. Clone the repos into the `repos` volume, e.g. `… exec relay-server git clone <url> /home/relay/repos/<name>`.
+   Private repos need a deploy key or a token inside the container.
+4. Pair: `… exec relay-server relay-server pair --host <the server's LAN address>`. Inside a container the server
+   cannot see its LAN address itself, so `--host` is needed.
+5. In Relay, link the project to `/home/relay/repos/<name>`.
+
+Port 47800 is published on the host. The data (certificate, paired devices), Claude's state and the repos are volumes,
+so a rebuild keeps the pairing and the conversations.
+
+## Testing on one Mac
+
+`packages/relay-server/docker/selftest.sh` runs the whole thing without a second computer or a Claude login: the image's
+`test` target (relay-server with a stand-in `claude`, `docker/fake-claude`) in Docker, and a separate build of Relay
+with the `selftest` feature, with its own bundle id, data folder, broker folder and a throwaway vault, so the Relay you
+use is not touched. The app pairs through Settings › Machines and starts a conversation from the main window by driving
+the pages themselves, then answers a permission card, reads the history, survives a dropped connection, quits mid-turn
+and takes the conversation back after a restart. The report is in `/tmp/relay-selftest/report.txt`.
+
 ## Commands
 
 | Command | What it does |
@@ -65,6 +91,7 @@ finishes.
 
 ## Tests
 
-`cargo test -p relay-server` runs the whole path against the real binary with a shell loop as the agent. `cargo test
--p relay-server -- --ignored` also runs one small Claude Haiku turn through the server on this machine's login, with a
-permission card answered over the network.
+- `cargo test -p relay-server`: the whole path against the real binary, with a shell loop as the agent.
+- `cargo test -p relay-server -- --ignored`: also one small Claude Haiku turn through the server on this machine's
+  login, with a permission card answered over the network.
+- `packages/relay-server/docker/selftest.sh`: Relay itself against relay-server in Docker (see above).

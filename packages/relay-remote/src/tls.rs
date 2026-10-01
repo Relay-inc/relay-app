@@ -150,13 +150,14 @@ fn establish(mut conn: Connection, tcp: TcpStream, timeout: Duration) -> io::Res
     conn.set_buffer_limit(None);
     let peer_fp = conn.peer_certificates().and_then(|c| c.first()).map(|c| fingerprint(c)).ok_or_else(|| io::Error::other("peer sent no certificate"))?;
     let out = tcp.try_clone()?;
-    Ok(Duplex { shared: Arc::new(Shared { conn: Mutex::new(conn), out: Mutex::new(out) }), tcp, peer_fp })
+    Ok(Duplex { shared: Arc::new(Shared { conn: Mutex::new(conn), out: Mutex::new(out), closed: Default::default() }), tcp, peer_fp })
 }
 
 // The rustls state and the socket's write half. `conn` is only held for in-memory work, never across a blocking
 // socket call. `out` is taken before `conn` and held while the sealed records go out, so records reach the socket in
 // the order they were sealed.
-struct Shared { conn: Mutex<Connection>, out: Mutex<TcpStream> }
+// closed: shut down from this side, for a watcher that should stop with the stream
+struct Shared { conn: Mutex<Connection>, out: Mutex<TcpStream>, closed: std::sync::atomic::AtomicBool }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 impl Shared {
     fn send(&self, f: impl FnOnce(&mut Connection) -> io::Result<()>) -> io::Result<()> {
@@ -227,9 +228,12 @@ impl Write for Writer {
 impl Writer {
     /// Send close_notify and shut the TCP socket down both ways, so a reader blocked on the other half returns.
     pub fn shutdown(&self) {
+        self.0.closed.store(true, std::sync::atomic::Ordering::SeqCst);
         self.0.send(|c| { c.send_close_notify(); Ok(()) }).ok();
         lock(&self.0.out).shutdown(Shutdown::Both).ok();
     }
+    /// Whether `shutdown` ran on this connection.
+    pub fn is_closed(&self) -> bool { self.0.closed.load(std::sync::atomic::Ordering::SeqCst) }
 }
 
 /// Pairing: hex HMAC-SHA256 over `client_fp` and `server_fp` (lowercased, joined by '\n') keyed with `secret`.

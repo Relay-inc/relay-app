@@ -130,9 +130,14 @@ fn pair_launch_reattach_and_walls() {
     let e = c.launch(&meta("c:2"), &spec("/no/such/dir")).err().unwrap();
     assert!(e.contains("does not exist"), "{e}");
 
-    // revoked: the next connection fails
+    // revoked: an open stream of that device ends within seconds, and the next connection fails
+    let mut open = other.launch(&meta("k:1"), &spec(&tmp)).unwrap();
     let out = bin().args(["revoke", "kristof"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
     assert!(out.status.success());
+    let t = Instant::now();
+    let mut rest = String::new();
+    while open.frames.read_line(&mut rest).map(|n| n > 0).unwrap_or(false) { rest.clear(); }
+    assert!(t.elapsed() < Duration::from_secs(5), "the revoked stream took {:?}", t.elapsed());
     assert!(other.info().is_err());
     assert!(c.info().is_ok());
 }
