@@ -19,10 +19,11 @@ mod tray;
 mod usage;
 mod vault;
 
-// ponytail: REPO and the claude binary are fixed, fine as long as the app runs from its own checkout.
+// ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
-fn claude_bin() -> String { format!("{}/.local/bin/claude", home()) }
+/// claude from the login-shell PATH: every caller passes it with .env("PATH"), which the lookup then uses.
+fn claude_bin() -> &'static str { "claude" }
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
