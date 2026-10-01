@@ -365,6 +365,7 @@ const en = {
   "mail.draft": "Draft a reply",
   "mail.draftTitle": "A new conversation that writes a reply as a draft, nothing is sent",
   "note.mailStarted": "About the mail from {from}: {subject}",
+  "note.cardStarted": "About {name} task {title}",
   "note.draftSaved": "Draft saved in {folder}: to {to}",
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",

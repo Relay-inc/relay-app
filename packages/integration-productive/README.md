@@ -2,7 +2,9 @@
 
 The Productive board: a project is a Productive project (only yours with a user ID), a board is a board
 (`folder` in the API), columns are its task lists, cards its open tasks. A click opens the task in the right
-panel (fields, description, comments and changes), fetched in the background after the board loads.
+panel (fields, description, attachments, comments and changes), fetched in the background after the board loads.
+**Discuss** in the panel starts a conversation about the task: Claude reads it itself through the Productive MCP server
+and posts nothing unless asked.
 
 ## Setup
 
@@ -16,8 +18,15 @@ settings.json, `integrations.productive.{org, user}` (digits only).
 
 ## What the backend allows
 
-`https://api.productive.io/api/v2`, with `X-Auth-Token` and `X-Organization-Id`: GET on any path, and PATCH
-only on one task (`/tasks/<digits>`, with a body): moving a card to another task list. Nothing else.
+`https://api.productive.io/api/v2`, with `X-Auth-Token` and `X-Organization-Id`: GET on any path, PATCH with a body
+on one task, comment or attachment (`/tasks/<digits>` …), POST with a body on `/comments` and `/attachments`. Nothing else.
+Uploads go as a form to Productive's S3 bucket, without the token.
+
+Attachments, measured on the API (1/10): an original (`url`) redirects to the login page, also with the API token, so
+the panel opens it in the browser. The 100×100 `thumb` is public: the backend fetches it (`thumb`, only
+`https://files.productive.io/attachments/…/thumb/…`, no token, no redirects, 2 MB, kept only when its first bytes are a
+PNG, JPEG, GIF or WebP) and the panel shows it as a data URL. `/attachments?filter[task_id]=` also returns the task's
+comments' attachments.
 
 ## Files
 
