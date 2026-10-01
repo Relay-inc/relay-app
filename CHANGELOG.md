@@ -11,6 +11,8 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ### Added
 
+- Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded
+- Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation"
 - Closing a conversation removes the git worktrees it made in your `~/projects` repos; the branches stay, and a worktree with uncommitted changes or unsaved commits is kept. The undo bar says how many went (#37)
 - Settings › General › Appearance picks light or dark mode, or System (the default) to follow macOS; both windows switch right away (#27)
 - Typing `/` in the composer lists Claude Code's slash commands and skills for the vault, with their descriptions; arrows pick, Tab or Enter completes, Escape closes. Relay asks Claude Code for the list when it starts (#26)
@@ -26,6 +28,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - The settings window follows the redesign: a nav with ⌘1 to ⌘4 hints, Appearance as a segmented control, Accent as two swatches, and lists with icon tiles and chevrons
 
 - The conversation follows the new design: tool calls fold into a "N steps" line with icons and small diffs, code blocks get a header with a copy button, permission cards stand out, and the composer has an attach button and round send button.
+- Board cards are redrawn: number, assignee, status ring, folder › task list, labels, due day and last update. Trello and Linear show the fields they have (labels, last update, Linear's state)
 - The redesign's palette: Relay blue for selection, primary buttons and what waits for you, cooler greys, raised cards with a soft shadow and 8px corners on buttons and fields. Settings › General › Accent switches to Graphite (the text colour) instead. The settings window uses the same palette as the main window now
 - Each integration in Settings › Integrations opens a page of its own instead of folding open in the list, with its connection on top and, for board integrations, the boards per vault project below. That part now lists only the vault projects that have a board, suggests boards whose name matches a project (one click, or Link all), and adds one with a project and a board picker instead of a dropdown for every project. Boards are grouped by workspace (#33)
 - Setting up Linear walks you through creating the API key in three steps, with a link to Linear's Security & access page and a Create key button next to the field; a pasted value that isn't a personal API key (lin_api_…) is caught before saving (#35)

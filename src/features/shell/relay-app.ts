@@ -11,7 +11,7 @@ import { vault } from "../../domain/vault";
 import { chat } from "../../domain/chats/state";
 import { escStop, ctrlC } from "../../domain/chats/actions";
 import { setPanelHidden, toggleQuickAsk, zoom } from "../../domain/navigation";
-import { panel, closeDetail, openDetail } from "../../domain/panel";
+import { panel, closeDetail, closeTicket, openDetail } from "../../domain/panel";
 import { noteKey } from "../../domain/keys";
 import "../sidebar/relay-sidebar";
 import "../chat/relay-chat";
@@ -126,6 +126,11 @@ export class RelayApp extends LitElement {
     if (ui.zoom) {
       e.preventDefault();
       zoom("");
+      return;
+    }
+    if (panel.modal) {
+      e.preventDefault();
+      closeTicket();
       return;
     }
     if (panel.open && !ui.projectPanel && !inField(e)) {

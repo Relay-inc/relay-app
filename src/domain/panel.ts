@@ -10,6 +10,7 @@ import { panelItem, cardKey, type PanelItem } from "./keys";
 // ("card:<provider>:<id>"). While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
 export const panel = {
   open: "", // the key of what is shown, "" for the tabs
+  modal: "", // the card key shown in the ticket window over the board, "" for none
   detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
@@ -31,7 +32,8 @@ export async function openCard(boardProvider: BoardProvider, ref: BoardRef, id: 
   const key = cardKey(boardProvider.id, id);
   if (boardProvider.detail) {
     panel.cardRefs[key] = ref;
-    return openDetail(key);
+    // a provider that can describe its card as data gets the ticket window, the others the right panel
+    return boardProvider.detail.view ? openTicket(key) : openDetail(key);
   }
   try {
     const url = await boardProvider.url(ctxOf(boardProvider, config.value.integrations), ref, id);
@@ -77,6 +79,28 @@ export async function openDetail(key: string) {
   }
   changed();
 }
+/** Show a card in the ticket window over the board: what is known at once, then fresh from the tracker. */
+export async function openTicket(key: string) {
+  const item = panelItem(key);
+  const card = cardOf(key);
+  if (item?.kind !== "card" || !card) return;
+  panel.modal = key;
+  panel.err = "";
+  panel.actErr = "";
+  panel.detail[key] ??= card.detail.cached(card.id);
+  changed();
+  try {
+    panel.detail[key] = await fetchDetail(key, item);
+  } catch (e) {
+    if (!panel.detail[key]) panel.err = String(e);
+  }
+  changed();
+}
+export function closeTicket() {
+  if (!panel.modal) return;
+  panel.modal = "";
+  changed();
+}
 /** An action from a card's panel: the provider does it in the tracker and answers with the card as it is now.
  * `done` (the template's) runs on success, e.g. emptying the comment box; on a failure what was typed stays. */
 export async function cardAct(key: string, a: CardAct) {
@@ -86,7 +110,13 @@ export async function cardAct(key: string, a: CardAct) {
   panel.actErr = "";
   changed();
   try {
-    panel.detail[key] = await card.detail.act(ctxOf(card.provider, config.value.integrations), panel.cardRefs[key], card.id, a.action, { value: a.value, files: a.files });
+    panel.detail[key] = await card.detail.act(
+      ctxOf(card.provider, config.value.integrations),
+      panel.cardRefs[key],
+      card.id,
+      a.action,
+      { value: a.value, files: a.files },
+    );
     a.done?.();
   } catch (e) {
     panel.actErr = String(e);

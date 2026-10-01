@@ -9,12 +9,32 @@ import type { Locales } from "./i18n";
 
 export type Opt = { id: string; name: string };
 /** A column: a Productive task list, a Trello list, a Linear workflow state. */
-export type Column = { id: string; name: string; placement: number };
+export type Column = { id: string; name: string; placement: number;
+  /** what the column means when it is a workflow status (Productive statuses, Linear states): draws its ring */
+  state?: State };
+/** The broad kind of a workflow status: not started, in progress, finished. */
+export type State = "todo" | "doing" | "done";
 /** A card in a column. `number` is shown as #number (as it is when not only digits, Linear's ENG-12), `who` is the
  * assignee's first name, `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
 export type Card = { id: string; title: string; number: string; column: string; placement: number; due: string | null; who: string; priority?: number;
   /** its column in each grouping but the first (`column`): Productive's { status: workflow status id } */
-  in?: Record<string, string> };
+  in?: Record<string, string>;
+  /** What the tracker knows beyond the column, all optional (a provider fills what it has; the board hides what no card has):
+   *  its workflow status (name and kind), the folder (Productive board) and task list it sits in, labels, and the last update as an ISO time. */
+  status?: string; state?: State; folder?: string; list?: string; labels?: string[]; updated?: string };
+/** A card for the ticket window, in a shape every provider's detail can fill: the app draws it, the provider only maps. `description` and the feed's `html` are sanitised HTML. */
+export type CardView = {
+  title: string; number: string; closed: boolean; url: string;
+  board: string; list: string; project: string; created: string; creator: string;
+  description: string;
+  status?: { id: string; name: string; state?: State };
+  assignee?: { id: string; name: string };
+  due: string; labels: string[];
+  /** the choices for the status and assignee pickers, once known; without them those two show as text */
+  statuses?: Opt[]; people?: Opt[];
+  files: { id: string; name: string; size: number; url: string }[] | null;
+  feed: { at: string; who: string; html: string; change: string; files: { id: string; name: string; size: number; url: string }[] }[];
+};
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */
 export type Grouping<K extends string = string> = { id: string; label: K };
 /** Which board a vault project maps to, settings.boards[vault project]. */
@@ -30,6 +50,8 @@ export interface CardDetail<D = any> {
   /** what a background load already has, so the panel opens at once */
   cached(id: string): D | undefined;
   fetch(ctx: Ctx, ref: BoardRef, id: string): Promise<D>;
+  /** The same card as data, for the ticket window; a provider without it has no window (its detail shows in the right panel). */
+  view?(d: D): CardView;
   /** A template in the PR detail's classes. Its close button fires a bubbling, composed "detail-close" event (the panel closes on it). */
   render(d: D | null, err: string): TemplateResult;
   /** An action from the panel, resolves with the card as it is now. The template asks for one with a bubbling, composed
