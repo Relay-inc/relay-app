@@ -20,6 +20,7 @@ pub mod broker;
 mod mail;
 pub mod notify;
 mod providers;
+mod relay_config;
 mod reminders;
 mod tray;
 mod vault;
@@ -31,10 +32,11 @@ fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
 }
-/// The vault's mapping: the one stored in settings.json, or what detection finds for a vault without one.
-/// set_settings always stores the full mapping, so detection (a folder scan) only runs before that.
+/// The vault's mapping: the paths in its .relay/config.json; for a vault without one, the mapping an older
+/// version stored in settings.json, or what detection finds. set_settings writes it to the config.
 fn vault_map(s: &Value, v: &str) -> Value {
     if v.is_empty() { return vault::merge(&json!({}), &json!({})); }
+    if let Some(p) = relay_config::load(v).map(|c| c["paths"].clone()).filter(Value::is_object) { return vault::merge(&json!({}), &p); }
     let stored = &s["vaults"][v];
     if stored.is_object() { vault::merge(&json!({}), stored) } else { vault::merge(&vault::detect(v).1, stored) }
 }
@@ -175,6 +177,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
+    ("err.icons_no_claude", ["Finding websites needs Claude Code switched on under Agents", "Websites zoeken heeft Claude Code nodig, aangezet onder Agents", "La recherche de sites nécessite Claude Code activé dans Agents", "Websites suchen braucht Claude Code, eingeschaltet unter Agents"]),
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
@@ -268,6 +271,8 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
+    // the first time a vault is used, its .relay/config.json is written from what is detected (snapshot.py reads it)
+    relay_config::ensure(v, &st["map"]);
     let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
     let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
         .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
@@ -296,9 +301,93 @@ async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, Strin
     let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
         .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
-    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried}).to_string().as_bytes()).map_err(|e| e.to_string())?;
+    // a website set as a project's icon in the vault's .relay/config.json wins over a guess
+    let sites: serde_json::Map<String, Value> = relay_config::icons(v).into_iter()
+        .filter_map(|(n, i)| match relay_config::icon_kind(i["value"].as_str()?) { relay_config::Icon::Site(s) => Some((n, json!(s))), _ => None }).collect();
+    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried, "sites": sites}).to_string().as_bytes()).map_err(|e| e.to_string())?;
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
     serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
+}
+
+/// The project icons from the vault's .relay/config.json: {project: {value, img | icon}}. The first call for a vault
+/// moves the icons settings.json held before into the vault (files in .relay/icons/) and drops them from settings.
+#[tauri::command]
+fn project_icons(app: AppHandle, state: State<App>) -> Value {
+    let (v, map) = { let s = state.settings.lock().unwrap(); let st = vault_of(&s); (st["vault"].as_str().unwrap_or("").to_string(), st["map"].clone()) };
+    if v.is_empty() { return json!({}); }
+    relay_config::ensure(&v, &map);
+    let projects = state.settings.lock().unwrap()["projects"].as_object().cloned().unwrap_or_default();
+    if let Some(moved) = relay_config::migrate_icons(&v, &projects).filter(|m| !m.is_empty()) {
+        let mut s = state.settings.lock().unwrap();
+        for n in &moved { if let Some(p) = s["projects"][n].as_object_mut() { p.remove("img"); p.remove("icon"); if p.is_empty() { s["projects"].as_object_mut().unwrap().remove(n); } } }
+        fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&*s).unwrap()).ok();
+        app.emit("settings-changed", &*s).ok();
+    }
+    Value::Object(relay_config::icons(&v))
+}
+/// Websites for projects, found by Claude: one Sonnet call for all of them, outside the vault, without settings, MCP
+/// or a transcript, and with web search as its only tool. (Haiku searched too rarely: the same input gave a site
+/// one run and null the next; Sonnet answered the same twice, in about 11 s.) `projects`: [{name, context, summary}]. Returns
+/// {name: domain} for the ones it is sure about; the favicon run turns those into icons.
+#[tauri::command]
+async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
+    let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
+    let eb = env_of(&app, &state, p);
+    // the repos linked to a project say a lot about what it is (lemahieu-shopware: a shop)
+    let mut repos: HashMap<String, Vec<String>> = HashMap::new();
+    for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
+    // ponytail: 80 projects per call, the summaries cut to 300 characters; more projects only happen in big vaults
+    let list: Vec<Value> = projects.iter().take(80).map(|x| { let n = x["name"].as_str().unwrap_or("");
+        json!({"name": n, "context": x["context"], "about": x["summary"].as_str().unwrap_or("").chars().take(300).collect::<String>(),
+            "repos": repos.get(n).cloned().unwrap_or_default()}) }).collect();
+    // the context (Antenna, Freelance, Personal) is the user's own area, not a client: without saying so, every internal
+    // project of an employer got the employer's site
+    let prompt = format!("Pick a website for each project below, so that site's favicon can be the project's icon. The context is the \
+        area of work the project sits under (the user's own employer, their freelance work, personal): it is not the client, so never \
+        pick the context's own website. In this order: 1) the client, another company the work is for; 2) otherwise the project's own product or brand (a repo name like facturio can be \
+        that product's name); 3) otherwise the main tool, platform or service the project is about (a server panel, an automation \
+        tool, a mail server, a SaaS it integrates). Use the name, the context, what it is about and its GitHub repos as clues, and \
+        search the web for every project you do not know for sure. Give the most likely official site; use null only for a purely \
+        personal topic, a meeting or a plan with no company, product or tool behind it. Answer with only a JSON object \
+        {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
+    // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
+    let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
+        let mut c = Command::new(&eb.bin).args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+                "--tools", "WebSearch", "--allowedTools", "WebSearch"])
+            .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+        c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
+        c.wait_with_output()
+    }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+    if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let json = text.find('{').zip(text.rfind('}')).and_then(|(a, b)| serde_json::from_str::<serde_json::Map<String, Value>>(&text[a..=b]).ok()).unwrap_or_default();
+    let names: Vec<&str> = projects.iter().filter_map(|x| x["name"].as_str()).collect();
+    Ok(Value::Object(json.into_iter().filter(|(n, _)| names.contains(&n.as_str()))
+        .filter_map(|(n, d)| Some((n, json!(relay_config::site_of(d.as_str()?)?)))).collect()))
+}
+/// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
+#[tauri::command]
+fn project_repos(state: State<App>) -> Value {
+    let v = state.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    let mut out: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for (r, p) in repo_projects(&v) { out.entry(p).or_default().push(r); }
+    for list in out.values_mut() { list.sort(); }
+    json!(out)
+}
+/// A project's repos in the vault's .relay/config.json.
+#[tauri::command]
+fn set_project_repos(state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
+    relay_config::set_repos(&need_vault(&state)?, &project, &repos)
+}
+/// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
+#[tauri::command]
+fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: String, value: String) -> Result<(), String> {
+    let v = need_vault(&state)?;
+    if project.is_empty() || project.len() > 120 { return Err("bad project".into()); }
+    relay_config::set_icon(&v, &project, &kind, &value)?;
+    app.emit("icons-changed", ()).ok();
+    Ok(())
 }
 
 /// The configured vault: path, mapping, found per path, ok.
@@ -310,7 +399,8 @@ fn vault_status(state: State<App>) -> Value { vault_of(&state.settings.lock().un
 async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, String> {
     let stored = state.settings.lock().unwrap()["vaults"].clone();
     let (v, m) = vault::detect(&path);
-    Ok(vault::status(&v, &vault::merge(&m, &stored[&v])))
+    let known = relay_config::load(&v).map(|c| c["paths"].clone()).filter(Value::is_object).unwrap_or_else(|| stored[&v].clone());
+    Ok(vault::status(&v, &vault::merge(&m, &known)))
 }
 
 /// Found / missing for a mapping being edited, without detection.
@@ -817,9 +907,11 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     let v = vault::canon(s["vault"].as_str().unwrap());
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     s["vault"] = json!(v);
-    let map = vault_map(&s, &v);
+    // a mapping edited in Settings comes in as vaults[v]; it goes to the vault's .relay/config.json, not here
+    let map = if s["vaults"][&v].is_object() { vault::merge(&json!({}), &s["vaults"][&v]) } else { vault_map(&s, &v) };
     if vault::status(&v, &map)["ok"] != true { return Err(tr_v(lang, "err.no_vault", &v)); }
-    s["vaults"][&v] = map;
+    relay_config::set_paths(&v, &map).map_err(|e| format!(".relay/config.json: {e}"))?;
+    s["vaults"].as_object_mut().unwrap().remove(&v);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
             ("icon", Some(t)) => t.chars().count() <= 4,
@@ -941,9 +1033,19 @@ fn gh_repo(dir: &str) -> Option<String> {
     }
     None
 }
-/// repo -> vault project, from the vault's repos.json. An entry is a checkout or a folder of checkouts,
-/// a checkout listed by itself wins over the same one found inside a listed folder.
+/// repo -> vault project: the `repos` of the vault's .relay/config.json, then its brain's index/repos.json.
 fn repo_projects(vault: &str) -> HashMap<String, String> {
+    let mut out: HashMap<String, String> = repo_index(vault).into_iter().collect();
+    if let Some(r) = relay_config::load(vault).and_then(|c| c["repos"].as_object().cloned()) {
+        // GitHub names are case-insensitive and the PRs are looked up lowercased: "o2o-Bicycle-leasing/x" matches too
+        out.extend(r.into_iter().filter_map(|(k, v)| Some((k.to_lowercase(), v.as_str()?.to_string()))));
+    }
+    out.retain(|_, p| !p.is_empty()); // "" in the config: unlinked on purpose
+    out
+}
+/// repo -> note name, from the brain's index/repos.json. An entry is a checkout or a folder of checkouts,
+/// a checkout listed by itself wins over the same one found inside a listed folder.
+fn repo_index(vault: &str) -> HashMap<String, String> {
     let mut out = HashMap::new();
     let Some(idx) = brain(vault).and_then(|b| fs::read_to_string(format!("{b}/index/repos.json")).ok())
         .and_then(|s| serde_json::from_str::<serde_json::Map<String, Value>>(&s).ok()) else { return out };
@@ -1163,7 +1265,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

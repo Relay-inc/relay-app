@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """One JSON snapshot of everything the control room shows.
 
-Reads the vault (work-state.md, each project's ## Open) and `claude agents --json`. Reminders are
+Reads the vault (work-state.md, each project's open items and status) and `claude agents --json`. What a vault
+calls things (headings in its own language, contexts, folders to skip) comes from its .relay/config.json, which the
+app writes the first time it uses the vault (src-tauri/src/relay_config.rs). Reminders are
 read by the app itself (src-tauri/src/reminders.rs).
 Read-only. The app calls this and renders the result, so the parsing lives in one place. The app
 passes the vault's mapped paths (VAULT_WORK_STATE, VAULT_NOTES; "" when missing);
@@ -22,7 +24,16 @@ WORK_STATE = os.environ.get("VAULT_WORK_STATE", os.path.join(META, "rules/core/w
 NOTES = os.environ.get("VAULT_NOTES", os.path.join(VAULT, "Contexts"))
 NOTES = NOTES if os.path.isdir(NOTES) else VAULT
 # a context is a heading in work-state named after a folder of the notes (Contexts/Antenna…), or a known one
-CONTEXTS = {"Antenna", "Meersman", "Personal"} | {d for d in os.listdir(NOTES) if os.path.isdir(os.path.join(NOTES, d)) and not d.startswith(".")}
+try:
+    CONFIG = json.load(open(os.path.join(VAULT, ".relay", "config.json"), encoding="utf-8"))
+except (OSError, ValueError):
+    CONFIG = {}
+SKIP = CONFIG.get("skip") or ["Documents", "Gesprekken", "_archive"]
+# a heading in the vault's own language: any of the configured names for that role, case-insensitive
+heading = lambda role, dflt: "(?:" + "|".join(re.escape(h) for h in (CONFIG.get("headings", {}).get(role) or dflt)) + ")"
+OPEN_H, STATUS_H = heading("open", ["Open"]), heading("status", ["Status", "Stand van zaken"])
+# a context is a work-state heading the config names, or one named after a folder of the notes (Contexts/Antenna…)
+CONTEXTS = set(CONFIG.get("contexts") or []) | {d for d in os.listdir(NOTES) if os.path.isdir(os.path.join(NOTES, d)) and not d.startswith(".")}
 TODAY = dt.date.fromisoformat(os.environ["TODAY"]) if os.environ.get("TODAY") else dt.date.today()
 
 
@@ -45,14 +56,14 @@ def projects():
 def note_state(name):
     hits = [p for n in dict.fromkeys([name, re.sub(r"\s*\(.*\)$", "", name)])  # "Brutsaert (ERP op maat)": Brutsaert.md too
             for p in glob.glob(os.path.join(glob.escape(NOTES), "**", f"{glob.escape(n)}.md"), recursive=True)
-            if not any(d in "/" + os.path.relpath(p, NOTES) for d in ("/Documents/", "/Gesprekken/", "/_archive/"))]
+            if not any(f"/{d}/" in "/" + os.path.relpath(p, NOTES) for d in SKIP)]
     if not hits:
         return {"open": None, "open_items": [], "stand": None, "aliases": []}
     s = open(hits[0], encoding="utf-8").read()
-    op = re.search(r"^## Open\n(.*?)(?=^## |\Z)", s, re.S | re.M)
+    op = re.search(rf"^## {OPEN_H}[ \t]*\n(.*?)(?=^## |\Z)", s, re.S | re.M | re.I)
     items = [unlink(i) for i in re.findall(r"^\s*- \[ \] (.+)$", op.group(1), re.M)] if op else []
-    st = re.search(r"^## Stand van zaken\n(.*?)(?=^## |\Z)", s, re.S | re.M)
-    stand = unlink(re.sub(r"^\*Stand van zaken[^\n]*\n", "", st.group(1).strip())).strip() if st else None
+    st = re.search(rf"^## {STATUS_H}[ \t]*\n(.*?)(?=^## |\Z)", s, re.S | re.M | re.I)
+    stand = unlink(re.sub(rf"^\*{STATUS_H}[^\n]*\n", "", st.group(1).strip(), flags=re.I)).strip() if st else None
     fm = re.match(r"^---\n(.*?)\n---", s, re.S)
     aliases = re.findall(r"^\s*-\s*\"?([^\"\n]+?)\"?\s*$", re.search(r"^aliases:\n((?:\s+-.*\n?)*)", fm.group(1), re.M).group(1), re.M) \
         if fm and re.search(r"^aliases:\n\s+-", fm.group(1), re.M) else []
@@ -120,9 +131,11 @@ def topics(items, projs):
                 elif e.get("type") == "assistant" and isinstance(content, list):
                     for x in content:
                         path = (x.get("input") or {}).get("file_path", "") if x.get("type") == "tool_use" else ""
-                        m = re.search(r"/Contexts/[^/]+/(?:Portfolio|Projects|Documents)/([^/]+?)(?:\.md)?(?:/|$)", path)
-                        if m and m.group(1) in names:
-                            c["hits"] += [m.group(1)] * 2
+                        # a note or folder inside the notes named after a project, wherever the vault keeps it
+                        rel = os.path.relpath(path, NOTES) if path.startswith(NOTES + "/") else ""
+                        hit = next((seg for seg in (re.sub(r"\.md$", "", x) for x in rel.split("/")) if seg in names), None)
+                        if hit:
+                            c["hits"] += [hit] * 2
             c["offset"] = fh.tell()
         c["hits"] = c["hits"][-40:]
         cache[sid] = c

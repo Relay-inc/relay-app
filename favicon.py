@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Guess each project's website from its notes and fetch the site's favicon. No AI, stdlib only.
 
-stdin: {"projects": [{"name", "aliases"}], "tried": {name: site}}. The site is a domain named in the
-project folder that holds the project's name or an alias (resolvus.be for Resolvus), else the domain
-named most often on the project note itself (at least twice). A project whose guess equals its entry
-in "tried" is skipped, so a site without a favicon is only fetched once.
+stdin: {"projects": [{"name", "aliases"}], "tried": {name: site}, "sites": {name: site}}. A project's site comes
+from "sites" (a website set as its icon in the vault's .relay/config.json) when it is there, else it is guessed: a domain named in the project
+folder that holds the project's name or an alias (resolvus.be for Resolvus), else the domain named most often on
+the project note itself (at least twice). A project whose site equals its entry in "tried" is skipped, so a site
+without a favicon is only fetched once.
 stdout: {name: {"site": "" when no guess, "data": data url of the raw icon or null}} for the rest.
 """
 import base64
@@ -22,6 +23,11 @@ from collections import Counter
 VAULT = os.environ.get("VAULT") or sys.exit("favicon: VAULT not set")
 NOTES = os.environ.get("VAULT_NOTES") or os.path.join(VAULT, "Contexts")
 NOTES = NOTES if os.path.isdir(NOTES) else VAULT
+try:
+    CONFIG = json.load(open(os.path.join(VAULT, ".relay", "config.json"), encoding="utf-8"))
+except (OSError, ValueError):
+    CONFIG = {}
+SKIP = CONFIG.get("skip") or ["Documents", "Gesprekken", "_archive"]
 SKIP_DIRS = ("/transcripts/", "/_archive/", "/Attachments/")
 DOMAIN = re.compile(r"\b((?:[a-z0-9-]+\.)+(?:be|com|eu|nl|io|app|gent|shop|net|org|fr|de|co|ai|dev|tech))\b", re.I)
 # tools and platforms that show up in any note, never a project's own site
@@ -53,15 +59,18 @@ def domains(files):
 
 def guess(name, aliases):
     notes = [p for p in glob.glob(os.path.join(glob.escape(NOTES), "**", f"{glob.escape(name)}.md"), recursive=True)
-             if "/Projects/" in "/" + os.path.relpath(p, NOTES) and not any(d in "/" + os.path.relpath(p, NOTES) for d in ("/Documents/", "/_archive/"))]
+             if not any(f"/{d}/" in "/" + os.path.relpath(p, NOTES) for d in SKIP)]
     if not notes:
         return ""
     folder = os.path.dirname(notes[0])
     everything = domains(f for f in glob.glob(os.path.join(glob.escape(folder), "**", "*.md"), recursive=True)
                          if not any(d in f[len(folder):] + "/" for d in SKIP_DIRS))
     keys = {k for n in [name, *aliases] for k in [compact(n), *(compact(w) for w in re.split(r"[\s/-]+", n))] if len(k) >= 4}
+    # a short name (o2o) only as the whole domain name: o2o.be, never o2oshop.be or a word that starts with it
+    short = {compact(n) for n in [name, *aliases] if 2 <= len(compact(n)) < 4}
     # the domain starts with the name: weemaesglas.be for Weemaes, not filmfestival.be for Trefpunt Festival
-    named = [(n, d) for d, n in everything.items() if d not in NOISE and any(compact(d.split(".")[0]).startswith(k) for k in keys)]
+    label = lambda d: compact(d.split(".")[0])
+    named = [(n, d) for d, n in everything.items() if d not in NOISE and (label(d) in short or any(label(d).startswith(k) for k in keys))]
     if named:
         return max(named)[1]
     common = [(n, d) for d, n in domains(notes[:1]).items() if d not in NOISE and n >= 2]
@@ -86,7 +95,11 @@ def mime(b):
 
 
 def favicon(site):
-    html, base = get(f"https://{site}")
+    # the page's own icons first; a site that blocks scripts or has a bad certificate still gets the fallbacks
+    try:
+        html, base = get(f"https://{site}")
+    except Exception:
+        html, base = b"", f"https://{site}/"
     links = []
     for tag in re.findall(r"<link[^>]+>", html.decode("utf-8", "ignore"), re.I):
         rel, href = re.search(r"rel=[\"']?([^\"'>]+)", tag, re.I), re.search(r"href=[\"']?([^\"' >]+)", tag, re.I)
@@ -96,7 +109,9 @@ def favicon(site):
         # the largest wins: an svg scales, an apple-touch-icon is 180 px
         n = int(size.group(1)) if size else 512 if ".svg" in href.group(1) else 180 if "apple" in rel.group(1).lower() else 16
         links.append((n, urllib.parse.urljoin(base, href.group(1).replace("&amp;", "&"))))
-    for _, url in sorted(links, reverse=True) + [(0, urllib.parse.urljoin(base, "/favicon.ico"))]:
+    # then the usual paths, then DuckDuckGo's favicon service (404 when it has none, so no generic globe)
+    rest = [urllib.parse.urljoin(base, p) for p in ("/favicon.ico", "/apple-touch-icon.png", "/favicon.png")] + [f"https://icons.duckduckgo.com/ip3/{site}.ico"]
+    for _, url in sorted(links, reverse=True) + [(0, u) for u in rest]:
         try:
             b, _ = get(url)
         except Exception:
@@ -106,8 +121,8 @@ def favicon(site):
     return None
 
 
-def check(p, tried):
-    site = guess(p["name"], p.get("aliases") or [])
+def check(p, tried, sites):
+    site = sites[p["name"]] if p["name"] in sites else guess(p["name"], p.get("aliases") or [])
     if site == tried.get(p["name"]):
         return None
     try:
@@ -120,5 +135,5 @@ def check(p, tried):
 if __name__ == "__main__":
     job = json.load(sys.stdin)
     with concurrent.futures.ThreadPoolExecutor(8) as ex:
-        done = ex.map(lambda p: check(p, job.get("tried") or {}), job["projects"])
+        done = ex.map(lambda p: check(p, job.get("tried") or {}, job.get("sites") or {}), job["projects"])
     json.dump(dict(r for r in done if r), sys.stdout)
