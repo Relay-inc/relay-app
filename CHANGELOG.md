@@ -4,14 +4,17 @@ Every PR adds a line under **Unreleased**, in the group that fits (Added, Change
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
-`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Versions follow [semver](https://semver.org);
-the format follows [Keep a Changelog](https://keepachangelog.com).
+`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
+builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes; run
+the workflow by hand (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+[semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
 ### Added
 - Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded (#39)
 - Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation" (#39)
+- Every version is a GitHub release with the macOS app to download and that version's changes as its notes (#36)
 - Productive's task panel shows a thumbnail of every picture attached to the task or a comment; a click opens the original in your browser. **Discuss** starts a conversation about the task: Claude reads the task and its comments itself and posts nothing in Productive unless you ask (#40)
 - Right-click on Algemeen or a project › Close all conversations closes every conversation and terminal session under it; one undo brings them all back (#38)
 - Closing a conversation removes the git worktrees it made in your `~/projects` repos; the branches stay, and a worktree with uncommitted changes or unsaved commits is kept. The undo bar says how many went (#37)
