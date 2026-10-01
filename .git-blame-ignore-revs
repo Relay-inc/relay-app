@@ -1,0 +1,2 @@
+# Prettier reformat of src/: skip it in git blame (git config blame.ignoreRevsFile .git-blame-ignore-revs)
+44f1d961c94fd90dcc4906c0c60b0e5d92668793
