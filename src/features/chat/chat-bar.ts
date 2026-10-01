@@ -13,6 +13,7 @@ declare global {
     rename: CustomEvent<string>;
     "open-terminal": CustomEvent<void>;
     "toggle-panel": CustomEvent<void>;
+    "new-reminder": CustomEvent<void>;
   }
 }
 
@@ -41,6 +42,7 @@ export class ChatBar extends LitElement {
   @property({ type: Boolean }) renamable = false;
   @property({ type: Boolean }) noTerm = false;
   @property({ type: Boolean }) locked = false; // the terminal would resume a conversation that touched mail without the app's restrictions
+  @property({ type: Boolean }) remNew = false; // the reminders view: a button opens the new-reminder form
   @property({ type: Boolean }) panelOff = false;
   // the conversation title while it is edited: a redraw must not take the text away from under the caret
   private draft: string | null = null;
@@ -127,6 +129,16 @@ export class ChatBar extends LitElement {
       }
       <span class="text-secondary whitespace-nowrap overflow-hidden text-ellipsis">${this.sub}</span
       >${this.renderState()}<span class="flex-1" data-tauri-drag-region></span>
+      ${
+        this.remNew
+          ? html`<button
+              class="btn h-7 px-2.5 rounded-[7px] text-xs inline-flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+              @click=${() => emit(this, "new-reminder")}
+            >
+              ${icon("add", "glyph size-3.5")}${t("rem.new")}
+            </button>`
+          : nothing
+      }
       <button
         class="btn-icon disabled:opacity-40"
         ?hidden=${this.noTerm}

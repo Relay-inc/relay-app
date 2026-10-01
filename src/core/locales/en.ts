@@ -230,7 +230,11 @@ const en = {
   "rem.cancel": "Cancel",
   "rem.add": "Add",
   "rem.noFile": "No reminders yet. The first one you add creates {path}.",
-  "rem.new": "+ New reminder",
+  "rem.new": "New reminder",
+  "rem.toastDone": "Done: {text}",
+  "rem.toastTomorrow": "Moved to tomorrow: {text}",
+  "rem.toastWeek": "Moved a week: {text}",
+  "rem.toastMoved": "Moved: {text}",
   "rem.none": "No reminders.",
   "set.title": "Settings",
   "set.vaultHelp":

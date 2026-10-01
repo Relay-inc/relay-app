@@ -233,7 +233,11 @@ export default {
   "rem.cancel": "Annuleren",
   "rem.add": "Toevoegen",
   "rem.noFile": "Nog geen reminders. De eerste die je toevoegt maakt {path} aan.",
-  "rem.new": "+ Nieuwe reminder",
+  "rem.new": "Nieuwe reminder",
+  "rem.toastDone": "Klaar: {text}",
+  "rem.toastTomorrow": "Naar morgen verplaatst: {text}",
+  "rem.toastWeek": "Een week verplaatst: {text}",
+  "rem.toastMoved": "Verplaatst: {text}",
   "rem.none": "Geen reminders.",
   "set.title": "Instellingen",
   "set.vaultHelp":

@@ -5,23 +5,32 @@ import type { Key } from "../../core/locales/en";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { reminders, urgency, remAct, remAdd, remChat } from "../../domain/reminders";
+import { toast } from "../../domain/navigation";
+import { todayIso } from "./reminder-calendar";
 import { vault, projectLabel, projectsByLabel } from "../../domain/vault";
 import type { Reminder } from "../../domain/reminders";
 import type { Draft } from "./reminder-form";
 import "./reminder-form";
 import "./reminder-row";
 
-const GROUPS: [Key, (days: number) => boolean][] = [
-  ["rem.late", days => days < 0],
-  ["rem.today", days => days === 0],
-  ["rem.tomorrow", days => days === 1],
-  ["rem.week", days => days >= 2 && days <= 7],
-  ["rem.later", days => days > 7],
+const GROUPS: [Key, (days: number) => boolean, string][] = [
+  ["rem.late", days => days < 0, "text-late"],
+  ["rem.today", days => days === 0, "text-soon"],
+  ["rem.tomorrow", days => days === 1, "text-tertiary"],
+  ["rem.week", days => days >= 2 && days <= 7, "text-tertiary"],
+  ["rem.later", days => days > 7, "text-tertiary"],
 ];
 const escapeHtml = (text: string) => text.replace(/[&<>"']/g, char => `&#${char.charCodeAt(0)};`);
 
 // the new-reminder form is kept outside the element too, so a half-typed reminder survives switching views
 let savedDraft: Draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
+
+const FORM_OPENED = "reminder-form-opened";
+/** Opens the new-reminder form (the title bar's button); the draft lives here, outside the element, so the view need not be mounted yet. */
+export function openReminderForm() {
+  savedDraft = { ...savedDraft, open: true, date: savedDraft.date || todayIso(1) };
+  document.dispatchEvent(new Event(FORM_OPENED));
+}
 
 /** The reminders view: the new-reminder form, then the reminders grouped by when they are due. */
 @customElement("relay-reminders")
@@ -32,7 +41,7 @@ export class RelayReminders extends LitElement {
       :host {
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 24px;
       }
     `,
   ];
@@ -40,6 +49,20 @@ export class RelayReminders extends LitElement {
   @state() private calendarRow: string | null = null; // the row whose date picker is open
   @state() private busyRow: string | null = null; // the row whose action is running
   @state() private draft: Draft = savedDraft;
+
+  override connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener(FORM_OPENED, this.onFormOpened);
+  }
+
+  override disconnectedCallback() {
+    document.removeEventListener(FORM_OPENED, this.onFormOpened);
+    super.disconnectedCallback();
+  }
+
+  private onFormOpened = () => {
+    this.draft = savedDraft;
+  };
 
   private setDraft(changes: Partial<Draft>) {
     this.draft = savedDraft = { ...savedDraft, ...changes };
@@ -60,7 +83,8 @@ export class RelayReminders extends LitElement {
     this.setDraft({ busy: false });
   }
 
-  private async runAction(id: string, action: "done" | "push", date?: string) {
+  private async runAction(reminder: Reminder, action: "done" | "push", date?: string) {
+    const id = reminder.id;
     this.busyRow = id;
     this.calendarRow = null;
     try {
@@ -68,6 +92,23 @@ export class RelayReminders extends LitElement {
     } finally {
       this.busyRow = null;
     }
+    const text =
+      action === "done"
+        ? "rem.toastDone"
+        : date === "morgen"
+          ? "rem.toastTomorrow"
+          : date === "+1w"
+            ? "rem.toastWeek"
+            : "rem.toastMoved";
+    toast(t(text, { text: reminder.title }), () => this.undo(reminder));
+  }
+
+  // back to the date it had: a repeating reminder is pushed back, a finished one is written again
+  private async undo(reminder: Reminder) {
+    const moved = reminders().find(x => x.text === reminder.text && x.date !== reminder.date);
+    if (moved) await remAct("push", moved.id, reminder.date);
+    else if (!reminders().some(x => x.id === reminder.id))
+      await remAdd(reminder.text, reminder.date, null, reminder.repeat);
   }
 
   private toggleCalendar(id: string) {
@@ -83,25 +124,29 @@ export class RelayReminders extends LitElement {
       ?busy=${this.busyRow === id}
       ?cal=${this.calendarRow === id}
       @reminder-chat=${() => remChat(id)}
-      @reminder-done=${() => this.runAction(id, "done")}
-      @reminder-push=${(e: CustomEvent<{ id: string; date: string }>) => this.runAction(e.detail.id, "push", e.detail.date)}
+      @reminder-done=${() => this.runAction(reminder, "done")}
+      @reminder-push=${(e: CustomEvent<{ id: string; date: string }>) => this.runAction(reminder, "push", e.detail.date)}
       @reminder-cal=${() => this.toggleCalendar(id)}
     ></relay-reminder-row>`;
   }
 
-  private renderGroup(name: Key, dueReminders: Reminder[]) {
+  private renderGroup(name: Key, tint: string, dueReminders: Reminder[]) {
     if (!dueReminders.length) return nothing;
-    return html`<section class="mb-6">
-      <h2 class="list-head">${t(name)} <span class="font-mono tabular-nums">${dueReminders.length}</span></h2>
+    return html`<section>
+      <h2
+        class="flex items-baseline gap-1.5 pb-2 border-b border-separator text-[11px] font-semibold tracking-[0.06em] ${tint}"
+      >
+        ${t(name)} <span class="text-tertiary tabular-nums">${dueReminders.length}</span>
+      </h2>
       ${dueReminders.map(reminder => this.renderRow(reminder))}
     </section>`;
   }
 
   private renderGroups(all: Reminder[]) {
     if (!all.length) return html`<div class="text-secondary text-center py-6">${t("rem.none")}</div>`;
-    return GROUPS.map(([name, inGroup]) => {
+    return GROUPS.map(([name, inGroup, tint]) => {
       const due = all.filter(reminder => inGroup(reminder.days)).sort((a, b) => a.days - b.days);
-      return this.renderGroup(name, due);
+      return this.renderGroup(name, tint, due);
     });
   }
 

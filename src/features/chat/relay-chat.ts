@@ -17,7 +17,7 @@ import "../board/relay-board";
 import "../pull-requests/relay-prs";
 import "../usage/relay-usage";
 import "../mail/relay-mail";
-import "../reminders/relay-reminders";
+import { openReminderForm } from "../reminders/relay-reminders";
 import "../waiting/relay-waiting";
 import "../conversation/relay-conversation";
 import "../composer/relay-composer";
@@ -181,6 +181,8 @@ export class RelayChat extends LitElement {
       ?noTerm=${this.terminalHidden}
       ?locked=${this.terminalLocked}
       ?panelOff=${ui.panelHidden}
+      ?remNew=${this.selected === REM}
+      @new-reminder=${openReminderForm}
       @edit-project=${openProjectPanel}
       @rename=${(e: CustomEvent<string>) => rename(e.detail)}
       @open-terminal=${openTerminal}
@@ -223,7 +225,7 @@ export class RelayChat extends LitElement {
 
   override render() {
     const hasSubagents = !this.onView && (chat.subs[this.selected] || []).length > 0;
-    const messagesWidth = this.board ? "px-5" : "max-w-170 px-8";
+    const messagesWidth = this.board ? "px-5" : this.selected === REM ? "max-w-180 px-8" : "max-w-170 px-8";
     return html` ${this.renderBar()} ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
       <div id="log" class="flex-1 overflow-y-auto pt-7 pb-3" @scroll=${this.onScroll}>
         <div id="msgs" class="mx-auto flex flex-col gap-5 ${messagesWidth}">${this.renderView()}</div>
