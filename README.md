@@ -52,7 +52,7 @@ from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on 
 | `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 
-State lives in `~/Library/Application Support/be.laurentmeersman.vault/`: `settings.json`,
+State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
 `sessions.json` (conversation to session id) and `pending/`. Board provider tokens sit
 in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
 
