@@ -236,7 +236,11 @@ export default {
   "rem.cancel": "Annuler",
   "rem.add": "Ajouter",
   "rem.noFile": "Pas encore de rappels. Le premier que vous ajoutez crée {path}.",
-  "rem.new": "+ Nouveau rappel",
+  "rem.new": "Nouveau rappel",
+  "rem.toastDone": "Terminé : {text}",
+  "rem.toastTomorrow": "Reporté à demain : {text}",
+  "rem.toastWeek": "Reporté d’une semaine : {text}",
+  "rem.toastMoved": "Reporté : {text}",
   "rem.none": "Aucun rappel.",
   "set.title": "Réglages",
   "set.vaultHelp":

@@ -4,7 +4,9 @@ import { live } from "lit/directives/live.js";
 import { t } from "../../core/i18n";
 import { emit } from "../../core/dom";
 import { tw } from "../../core/styles";
+import { icon } from "../../core/icons";
 import { todayIso } from "./reminder-calendar";
+import { projectTint } from "./reminder-row";
 
 export type Draft = {
   open: boolean;
@@ -23,8 +25,13 @@ declare global {
 }
 
 const REPEATS = ["", "1w", "14d", "1m", "3m"];
-const FIELD =
-  "border border-separator rounded-lg bg-bg text-label px-2 min-w-0 focus-visible:outline-2 focus-visible:outline-accent/45";
+// a pill: the control inside is bare, the icons sit on top of it
+const PILL =
+  "relative inline-flex items-center h-7 rounded-[7px] bg-fill-2 text-xs focus-within:outline-2 focus-within:outline-accent/45";
+const BARE = "h-7 bg-transparent border-0 outline-0 text-xs cursor-pointer min-w-0";
+const SELECT = `${BARE} appearance-none pl-7 pr-6`;
+const PILL_ICON = "glyph absolute left-2.5 size-3.25 pointer-events-none";
+const CHEVRON = "glyph absolute right-2 size-2.75 text-tertiary pointer-events-none [stroke-width:2]";
 
 type DraftField = "text" | "date" | "project" | "repeat";
 
@@ -35,22 +42,14 @@ export class ReminderForm extends LitElement {
   @property({ attribute: false }) draft!: Draft;
   @property({ attribute: false }) projects: { name: string; label: string }[] = [];
   @query('[data-rem-f="text"]') private textField?: HTMLInputElement;
-  private focusText = false; // opening the form: focus the text field once it is drawn
 
-  override updated() {
-    if (this.focusText) {
-      this.focusText = false;
-      this.textField?.focus();
-    }
+  override updated(changed: Map<string, Draft | undefined>) {
+    // the form was opened (from the title bar's button): focus the text field once it is drawn
+    if (this.draft.open && !changed.get("draft")?.open) this.textField?.focus();
   }
 
   private patch(changes: Partial<Draft>) {
     emit(this, "reminder-draft", changes);
-  }
-
-  private open() {
-    this.focusText = true;
-    this.patch({ open: true, date: this.draft.date || todayIso(1) });
   }
 
   private close() {
@@ -87,42 +86,48 @@ export class ReminderForm extends LitElement {
     return html`<option value=${value} ?selected=${value === current}>${label}</option>`;
   }
 
-  private renderClosed() {
-    return html`<div class="mb-4">
-      <button class="btn" @click=${() => this.open()}>${t("rem.new")}</button>
-    </div>`;
-  }
-
   private renderFilters(draft: Draft) {
     return html`<div class="flex flex-wrap items-center gap-2">
-      <input
-        type="date"
-        class="${FIELD} h-7 text-sm"
-        data-rem-f="date"
-        .value=${live(draft.date)}
-        @change=${this.onField("date")}
-        min=${todayIso()}
-        aria-label=${t("rem.newDate")}
-      />
-      <select
-        class="${FIELD} h-7 text-sm"
-        data-rem-f="project"
-        @change=${this.onField("project")}
-        aria-label=${t("rem.newProject")}
-      >
-        ${this.renderOption("", t("rem.noProject"), draft.project)}${this.projects.map(project => this.renderOption(project.name, project.label, draft.project))}
-      </select>
-      <select
-        class="${FIELD} h-7 text-sm"
-        data-rem-f="repeat"
-        @change=${this.onField("repeat")}
-        aria-label=${t("rem.newRepeat")}
-      >
-        ${REPEATS.map(repeat => this.renderOption(repeat, repeat ? t("rem.every", { n: repeat }) : t("rem.noRepeat"), draft.repeat))}
-      </select>
-      <span class="ml-auto flex gap-1.5"
-        ><button class="btn" @click=${() => this.close()}>${t("rem.cancel")}</button>
-        <button class="btn btn-primary disabled:opacity-50" ?disabled=${draft.busy} @click=${() => this.submit()}>
+      <label class=${PILL}>
+        ${icon("cal", `${PILL_ICON} text-secondary`)}
+        <input
+          type="date"
+          class="${BARE} pl-7 pr-2.5"
+          data-rem-f="date"
+          .value=${live(draft.date)}
+          @change=${this.onField("date")}
+          min=${todayIso()}
+          aria-label=${t("rem.newDate")}
+        />
+      </label>
+      <label class=${PILL}>
+        ${icon("folder", `${PILL_ICON} ${projectTint(draft.project)}`)}
+        <select
+          class=${SELECT}
+          data-rem-f="project"
+          @change=${this.onField("project")}
+          aria-label=${t("rem.newProject")}
+        >
+          ${this.renderOption("", t("rem.noProject"), draft.project)}${this.projects.map(project => this.renderOption(project.name, project.label, draft.project))}
+        </select>
+        ${icon("chevron", CHEVRON)}
+      </label>
+      <label class="${PILL} ${draft.repeat ? "" : "text-secondary"}">
+        ${icon("refresh", `${PILL_ICON} text-secondary`)}
+        <select class=${SELECT} data-rem-f="repeat" @change=${this.onField("repeat")} aria-label=${t("rem.newRepeat")}>
+          ${REPEATS.map(repeat => this.renderOption(repeat, repeat ? t("rem.every", { n: repeat }) : t("rem.noRepeat"), draft.repeat))}
+        </select>
+        ${icon("chevron", CHEVRON)}
+      </label>
+      <span class="ml-auto flex gap-2"
+        ><button class="btn h-7.5 px-3 rounded-lg text-[13px] cursor-pointer" @click=${() => this.close()}>
+          ${t("rem.cancel")}
+        </button>
+        <button
+          class="btn btn-primary h-7.5 px-3 rounded-lg text-[13px] cursor-pointer disabled:opacity-50"
+          ?disabled=${draft.busy}
+          @click=${() => this.submit()}
+        >
           ${t("rem.add")}
         </button></span
       >
@@ -131,13 +136,13 @@ export class ReminderForm extends LitElement {
 
   override render() {
     const draft = this.draft;
-    if (!draft.open) return this.renderClosed();
+    if (!draft.open) return nothing;
     return html`<div
-      class="mb-4 flex flex-col gap-2 p-3 border border-separator rounded-xl bg-fill"
+      class="flex flex-col gap-2.5 p-3.5 border border-separator-strong rounded-xl bg-raised shadow-md"
       @keydown=${this.onKey}
     >
       <input
-        class="${FIELD} h-8 text-base"
+        class="h-8.5 px-0.5 border-0 outline-0 bg-transparent text-[15px] text-label placeholder:text-tertiary"
         data-rem-f="text"
         .value=${live(draft.text)}
         @input=${this.onField("text")}

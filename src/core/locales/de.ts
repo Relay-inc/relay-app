@@ -235,7 +235,11 @@ export default {
   "rem.cancel": "Abbrechen",
   "rem.add": "Hinzufügen",
   "rem.noFile": "Noch keine Erinnerungen. Die erste, die du hinzufügst, legt {path} an.",
-  "rem.new": "+ Neue Erinnerung",
+  "rem.new": "Neue Erinnerung",
+  "rem.toastDone": "Erledigt: {text}",
+  "rem.toastTomorrow": "Auf morgen verschoben: {text}",
+  "rem.toastWeek": "Um eine Woche verschoben: {text}",
+  "rem.toastMoved": "Verschoben: {text}",
   "rem.none": "Keine Erinnerungen.",
   "set.title": "Einstellungen",
   "set.vaultHelp":
