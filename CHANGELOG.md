@@ -10,7 +10,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
-- The right panel has a **Related** tab: the vault notes closest to what the open conversation is about, from a full-text index of the vault that Relay keeps up to date on its own. A click opens the note in the panel
+- The right panel has a **Related** tab: the vault notes closest to what the open conversation is about, from a full-text index of the vault that Relay keeps up to date on its own. A click opens the note in the panel (#49)
 - Pi joins Claude Code, Codex and OpenCode as an agent: Settings › Agents › Pi turns it on once `pi` is installed and has a login or key. Pick its models and thinking levels, paste images, resume, fork or continue a session in the terminal, and see its tokens and cost in Usage. Pi never asks before it edits files or runs commands, so there are no permission cards (#46)
 
 ## [0.0.2] - 2026-10-01
