@@ -44,13 +44,15 @@ from this checkout, so a build only works on this machine.
 | `src-tauri/src/agents.rs`, `src/agents/` | The registry of the agent providers, `settings.agents` and sessions.json. |
 | `packages/agent-claude/perm_server.py` | Stdio MCP server passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
 | `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
-| `src/main.ts` | Main window: sidebar, conversations, permission cards, inspector, agents strip. |
+| `src/app/` | The main window's state (`state.ts`), what the user does (`actions.ts`), the agent events and history (`events.ts`), the loaders and polls (`data.ts`) and the start (`boot.ts`). No DOM: the components read the state, `changed()` redraws them. |
+| `src/ui/` | The main window as Lit components, each in its own shadow root: `<relay-app>` (the grid and the window-wide keys), `<relay-nav>` (sidebar), `<relay-chat>` (title bar, the open view, composer), `<relay-inspector>` (right panel), and the views and parts they hold. `src/ui/settings/` is the settings window. |
+| `src/lib/store.ts`, `src/styles/` | `changed()` and `RelayElement`; the design tokens (`base.css`, global) and the rules every component adopts (`shared.css`). |
 | `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
 | `src/board.ts`, `src/providers/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
 | `src-tauri/src/vault.rs`, `src/vault-setup.ts` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
-| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
+| `src/settings-window.ts`, `src/ui/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
