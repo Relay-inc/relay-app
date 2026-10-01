@@ -1245,10 +1245,12 @@ $("seg").addEventListener("click", e => { const b = (e.target as HTMLElement).cl
 // notes (a website set as the icon wins) and fetches its icon; the icon goes into the vault as a file, a project
 // without a site gets "" (none, not guessed again). `tried` (this Mac) keeps a site that had no favicon from being
 // fetched again and again.
-let favBusy = false;
+let favBusy = false, favAgain = false;
 async function checkFavicons() {
   const f = settings.favicons;
-  if (!f?.on || !snap?.projects || favBusy) return;
+  // a change while a run is busy (Find icons during the first run) is not lost: one more run right after
+  if (favBusy) { favAgain = true; return; }
+  if (!f?.on || !snap?.projects) return;
   const todo = snap.projects.filter((p: any) => !(p.name in icons) || (isSite(icons[p.name].value) && f.tried?.[p.name] !== icons[p.name].value));
   if (!todo.length) return;
   favBusy = true;
@@ -1264,6 +1266,7 @@ async function checkFavicons() {
     await saveSettings({ ...settings, favicons: { ...f, tried } });
   } catch (e) { console.error(e); }
   favBusy = false;
+  if (favAgain) { favAgain = false; checkFavicons(); }
 }
 async function refreshIcons() {
   icons = await loadIcons();

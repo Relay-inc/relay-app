@@ -320,23 +320,29 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
     }
     Value::Object(relay_config::icons(&v))
 }
-/// Websites for projects, found by Claude: one Haiku call for all of them, outside the vault, without settings, MCP
-/// or a transcript, and with web search as its only tool. `projects`: [{name, context, summary}]. Returns
+/// Websites for projects, found by Claude: one Sonnet call for all of them, outside the vault, without settings, MCP
+/// or a transcript, and with web search as its only tool. (Haiku searched too rarely: the same input gave a site
+/// one run and null the next; Sonnet answered the same twice, in about 11 s.) `projects`: [{name, context, summary}]. Returns
 /// {name: domain} for the ones it is sure about; the favicon run turns those into icons.
 #[tauri::command]
 async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
     let eb = env_of(&app, &state, p);
+    // the repos linked to a project say a lot about what it is (lemahieu-shopware: a shop)
+    let mut repos: HashMap<String, Vec<String>> = HashMap::new();
+    for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
     // ponytail: 80 projects per call, the summaries cut to 300 characters; more projects only happen in big vaults
-    let list: Vec<Value> = projects.iter().take(80).map(|x| json!({"name": x["name"], "context": x["context"],
-        "about": x["summary"].as_str().unwrap_or("").chars().take(300).collect::<String>()})).collect();
-    let prompt = format!("For each project below, find the website of the company, organisation, shop or product it is about, \
-        so its favicon can be used as the project's icon. Search the web when you are not sure. Use null when the project is internal, \
-        personal, a tool or document without its own site, or when you cannot confirm the site. Answer with only a JSON object \
-        {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
+    let list: Vec<Value> = projects.iter().take(80).map(|x| { let n = x["name"].as_str().unwrap_or("");
+        json!({"name": n, "context": x["context"], "about": x["summary"].as_str().unwrap_or("").chars().take(300).collect::<String>(),
+            "repos": repos.get(n).cloned().unwrap_or_default()}) }).collect();
+    let prompt = format!("Each project below is work for, or about, a company, organisation, shop or product. Find its official \
+        website, so the site's favicon can be the project's icon. Use the name, the context, what it is about and its GitHub repos as \
+        clues, and search the web for every project you do not know for sure. Give the most likely official site; use null only when \
+        the project is clearly internal or personal (a meeting, a plan, a tool of its own) or when nothing fits. Answer with only a JSON \
+        object {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
     // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
-        let mut c = Command::new(&eb.bin).args(["-p", "--model", "haiku", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+        let mut c = Command::new(&eb.bin).args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
                 "--tools", "WebSearch", "--allowedTools", "WebSearch"])
             .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
