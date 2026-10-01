@@ -2,7 +2,14 @@
 // backend), but nothing outside this module parses them: it asks `opened()` or `panelItem()` what a key is.
 
 // ---------- what the middle column shows: a view, a provider's board, a terminal session, or an app conversation
-export const VIEW = { wait: "__wait", reminders: "__rem", prs: "__prs", mail: "__mail", usage: "__usage" } as const;
+export const VIEW = {
+  wait: "__wait",
+  reminders: "__rem",
+  prs: "__prs",
+  mail: "__mail",
+  brain: "__brain",
+  usage: "__usage",
+} as const;
 export type ViewKey = (typeof VIEW)[keyof typeof VIEW];
 const VIEWS: readonly string[] = Object.values(VIEW);
 /** The one board before the providers: an old selection is read as Productive's board. */

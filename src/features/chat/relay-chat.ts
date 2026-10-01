@@ -4,7 +4,7 @@ import { keyed } from "lit/directives/keyed.js";
 import { t, th } from "../../core/i18n";
 import { StoreController, ui as bus } from "../../core/store";
 import { tw } from "../../core/styles";
-import { ui, WAIT, REM, PRS, MAIL, USAGE, isView, isTerminal, boardOf } from "../../domain/ui";
+import { ui, WAIT, REM, PRS, MAIL, BRAIN, USAGE, isView, isTerminal, boardOf } from "../../domain/ui";
 import { chat, terminalOf, projectOf, label, aboutProject, waitCount } from "../../domain/chats/state";
 import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
 import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
@@ -18,6 +18,7 @@ import "../board/relay-board";
 import "../pull-requests/relay-prs";
 import "../usage/relay-usage";
 import "../mail/relay-mail";
+import "../brain/relay-brain";
 import { openReminderForm } from "../reminders/relay-reminders";
 import "../waiting/relay-waiting";
 import "../conversation/relay-conversation";
@@ -122,6 +123,8 @@ export class RelayChat extends LitElement {
         return t("nav.usage");
       case MAIL:
         return t("nav.mail");
+      case BRAIN:
+        return t("nav.brain");
       case REM:
         return t("nav.reminders");
       case WAIT:
@@ -232,6 +235,7 @@ export class RelayChat extends LitElement {
     // the Pull requests and Mail views scroll their list and the open item apart, so it fills the pane instead of the log
     if (this.selected === PRS) return html`${this.renderBar()}<relay-prs class="flex-1"></relay-prs>`;
     if (this.selected === MAIL) return html`${this.renderBar()}<relay-mail class="flex-1"></relay-mail>`;
+    if (this.selected === BRAIN) return html`${this.renderBar()}<relay-brain class="flex-1"></relay-brain>`;
     return html` ${this.renderBar()} ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
       <div id="log" class="flex-1 overflow-y-auto pt-7 pb-3" @scroll=${this.onScroll}>
         <div id="msgs" class="mx-auto flex flex-col gap-5 ${messagesWidth}">${this.renderView()}</div>

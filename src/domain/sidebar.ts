@@ -1,6 +1,6 @@
 import { t, tn } from "../core/i18n";
 import { changed, ls } from "../core/store";
-import { ui, WAIT, REM, PRS, MAIL, boardKey } from "./ui";
+import { ui, WAIT, REM, PRS, MAIL, BRAIN, boardKey } from "./ui";
 import {
   chat,
   chatsOf,
@@ -18,6 +18,7 @@ import { config, ghOn, mailOn } from "./config";
 import { readyBoards } from "./board";
 import { agent, chatAgent } from "./agents";
 import { mail, unread } from "./mail";
+import { brain, brainOn } from "./brain";
 import { prs } from "./prs";
 import type { Project } from "./vault";
 
@@ -260,12 +261,22 @@ const mailRow = (): ViewRow => {
     meta: unreadCount ? { kind: "count", n: unreadCount } : undefined,
   };
 };
+const brainRow = (): ViewRow => {
+  const pending = brain.notes?.length ?? 0;
+  return {
+    key: BRAIN,
+    icon: "brain",
+    name: t("nav.brain"),
+    meta: pending ? { kind: "count", n: pending, title: t("nav.brainPending") } : undefined,
+  };
+};
 const viewRows = (): ViewRow[] => [
   waitingRow(),
   remindersRow(),
   ...boardRows(),
   ...(ghOn() ? [prsRow()] : []),
   ...(mailOn() ? [mailRow()] : []),
+  ...(brainOn() ? [brainRow()] : []),
 ];
 
 // ---------- the sections

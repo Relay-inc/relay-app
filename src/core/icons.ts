@@ -5,6 +5,7 @@ import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 // stroke and its width are left to the CSS, so a row can colour its glyph the way it did with the hand-drawn ones
 import {
   Notification01Icon,
+  Brain02Icon,
   LeftToRightListBulletIcon,
   Message01Icon,
   ComputerTerminal01Icon,
@@ -70,6 +71,7 @@ const ICONS: Record<string, Icon> = {
   right: ArrowRight01Icon,
   pr: GitPullRequestIcon,
   mail: Mail01Icon,
+  brain: Brain02Icon,
   close: Cancel01Icon,
   read: MailOpen01Icon,
   text: TextAlignLeftIcon,

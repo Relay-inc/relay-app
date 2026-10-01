@@ -4,7 +4,7 @@ import { VIEW, opened, boardKey, isTerminal } from "./keys";
 
 // What the main window shows: the open conversation or view (`sel`), the right panel's tab, and the overlays.
 
-export const { wait: WAIT, reminders: REM, prs: PRS, mail: MAIL, usage: USAGE } = VIEW;
+export const { wait: WAIT, reminders: REM, prs: PRS, mail: MAIL, brain: BRAIN, usage: USAGE } = VIEW;
 export { boardKey, isTerminal };
 
 export const ui = {

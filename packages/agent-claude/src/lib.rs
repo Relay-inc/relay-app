@@ -23,6 +23,10 @@ pub const DENIED: [&str; 2] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"];
 /// The mail tools run without a card, also once the session holds mail text: none can send, a draft only lands in Drafts.
 pub const MAIL_TOOLS: [&str; 5] = ["mcp__relay-mail__search", "mcp__relay-mail__read", "mcp__relay-mail__thread", "mcp__relay-mail__attachment", "mcp__relay-mail__save_draft"];
 
+/// The Commonwealth plugin's tools run without a card in a session the app routed to a brain (opts.commonwealth_brain):
+/// reading is harmless and `remember` only stages a note for review, nothing reaches the brain's canon without a promote.
+pub const COMMONWEALTH_TOOLS: [&str; 6] = ["mcp__plugin_commonwealth_commonwealth__ask", "mcp__plugin_commonwealth_commonwealth__search", "mcp__plugin_commonwealth_commonwealth__read", "mcp__plugin_commonwealth_commonwealth__remember", "mcp__plugin_commonwealth_commonwealth__list-work-state", "mcp__plugin_commonwealth_commonwealth__who-is"];
+
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
@@ -66,7 +70,12 @@ impl AgentProvider for Claude {
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-            .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg("--disallowedTools").args(DENIED).args(["-n", l.name]);
+            .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS);
+        // opts.commonwealth_brain, set by the app for a project whose repos the Commonwealth registry routes: the hooks and the
+        // MCP server treat this vault session as in scope of that brain (COMMONWEALTH_BRAIN_DIR), without the app's own tools
+        let brain = env.opt("commonwealth_brain");
+        if !brain.is_empty() { cmd.args(COMMONWEALTH_TOOLS).env("COMMONWEALTH_BRAIN_DIR", brain); }
+        cmd.arg("--disallowedTools").args(DENIED).args(["-n", l.name]);
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { cmd.args(["--resume", sid]); }
@@ -160,6 +169,20 @@ mod tests {
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[9].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
+    }
+    #[test]
+    fn a_routed_project_gets_its_brain_and_the_commonwealth_tools() {
+        let p = PathBuf::from("/tmp/pending");
+        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
+        let none = PROVIDER.command(&env(&p), &l).unwrap();
+        assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_BRAIN_DIR"));
+        assert!(!none.get_args().any(|a| a.to_string_lossy().contains("mcp__plugin_commonwealth")));
+        let opts = json!({"commonwealth_brain": "/b/antenna"});
+        let cmd = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap();
+        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_BRAIN_DIR" && v.is_some_and(|v| v == "/b/antenna")));
+        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let (allowed, denied) = (args.iter().position(|a| a == "--allowedTools").unwrap(), args.iter().position(|a| a == "--disallowedTools").unwrap());
+        assert!(args[allowed..denied].contains(&"mcp__plugin_commonwealth_commonwealth__remember".to_string()));
     }
     #[test]
     fn terminal_commands() {

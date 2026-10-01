@@ -1,11 +1,12 @@
 import { t } from "../core/i18n";
 import { changed, ls, request } from "../core/store";
-import { ui, WAIT, PRS, MAIL, isView, isTerminal } from "./ui";
+import { ui, WAIT, PRS, MAIL, BRAIN, isView, isTerminal } from "./ui";
 import { chat, chatsOf, newChat, selectedProject } from "./chats/state";
 import { ensureHistory } from "./chats/events";
 import { panel } from "./panel";
 import { loadPrs } from "./prs";
 import { loadMails } from "./mail";
+import { loadBrain } from "./brain";
 
 // Moving around the main window: which conversation or view is open, the toast, the right panel and the overlays.
 
@@ -28,6 +29,7 @@ export async function select(key: string) {
   if (!isView(key) && !chat.chats[key]?.draft) await ensureHistory(key, isTerminal(key));
   if (key === PRS) loadPrs();
   if (key === MAIL) loadMails();
+  if (key === BRAIN) loadBrain();
   changed();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");

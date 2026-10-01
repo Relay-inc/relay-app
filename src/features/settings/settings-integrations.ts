@@ -6,7 +6,19 @@ import { glyphSvg } from "../../core/icons";
 import { t, th } from "../../core/i18n";
 import { PROVIDERS, provider as providerById, type BoardProvider } from "../../domain/providers";
 import { BoardsController } from "./board-controller";
-import { buttonClass, BUTTON_GLYPH, footer, appIcon, EMPTY_LIST, formText, section, statusLine, TILE } from "./blocks";
+import {
+  buttonClass,
+  BUTTON_GLYPH,
+  footer,
+  appIcon,
+  EMPTY_LIST,
+  field,
+  formText,
+  HINT_IN_ROW,
+  section,
+  statusLine,
+  TILE,
+} from "./blocks";
 import { MailController } from "./mail-controller";
 import "./settings-board";
 import "./settings-fold";
@@ -58,6 +70,15 @@ export class SettingsIntegrations extends SettingsElement {
   @state() private githubError = "";
   @state() private githubMessage = "";
   @state() private githubOk = false;
+  // Commonwealth: nothing to configure, only detected. On in the list once its Claude Code plugin is installed
+  @state() private cw: {
+    plugin: boolean;
+    cli: string | null;
+    hint: string;
+    projects: { project: string; name: string | null }[];
+  } | null = null;
+  @state() private cwBusy = false;
+  @state() private cwMessage = "";
   @state() private listMessage = "";
   @state() private listOk = false;
   // the integration whose page is open, or null for the list
@@ -70,6 +91,7 @@ export class SettingsIntegrations extends SettingsElement {
       this.loaded = true;
     });
     this.checkGithub();
+    this.checkCommonwealth();
   }
   override willUpdate() {
     if (this.active) this.boards.askMcp();
@@ -118,6 +140,7 @@ export class SettingsIntegrations extends SettingsElement {
   // an integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain
   private async switchTo(id: string, on: boolean) {
     this.setOpen(id, on);
+    if (id === "commonwealth") return; // not a setting: it is in the list when the plugin is installed
     try {
       this.commit(await invoke<Settings>("set_settings", { settings: this.settingsWithOn(id, on) }));
       if (id === "mail") this.mail.edit.on = on;
@@ -150,6 +173,46 @@ export class SettingsIntegrations extends SettingsElement {
     } catch (error) {
       this.githubError = String(error);
     }
+  }
+
+  private async checkCommonwealth() {
+    try {
+      this.cw = await invoke("commonwealth_status");
+    } catch (error) {
+      this.cwMessage = String(error);
+    }
+  }
+  private async installCommonwealth() {
+    this.cwBusy = true;
+    this.cwMessage = "";
+    try {
+      await invoke("commonwealth_install");
+    } catch (error) {
+      this.cwMessage = String(error);
+    }
+    this.cwBusy = false;
+    await this.checkCommonwealth();
+  }
+  private commonwealthStatus() {
+    return this.cw?.plugin ? statusLine("ok", t("cw.installed")) : statusLine("off", t("cw.missing"));
+  }
+  private commonwealthBody() {
+    const cw = this.cw;
+    const install = cw?.plugin
+      ? nothing
+      : html`<button
+          class=${buttonClass("primary")}
+          ?disabled=${this.cwBusy}
+          @click=${() => this.installCommonwealth()}
+        >
+          ${this.cwBusy ? t("cw.installing") : t("cw.install")}
+        </button>`;
+    const routed = (cw?.projects || []).filter(row => row.name);
+    return html`<p class=${HINT_IN_ROW}>${t("cw.help")}</p>
+      ${field(t("cw.plugin"), html`${this.commonwealthStatus()}${install}`)}
+      ${field(t("cw.cli"), cw?.cli ? statusLine("ok", t("cw.cliFound", { path: cw.cli })) : statusLine("warn", th("cw.cliMissing", { hint: cw?.hint ?? "" })))}
+      ${field(t("cw.projects"), routed.length ? html`<span class="grid justify-items-end gap-0.5 text-xs text-s-muted">${routed.map(row => html`<span>${row.project} · ${row.name}</span>`)}</span>` : html`<span class="text-xs text-s-faint">${t("cw.noProjects")}</span>`)}
+      ${this.cwMessage ? html`<div class="text-xs text-s-err whitespace-pre-wrap">${this.cwMessage}</div>` : nothing}`;
   }
 
   // each vault project with the board of this provider it is on; a vault project has at most one board
@@ -251,6 +314,14 @@ export class SettingsIntegrations extends SettingsElement {
         status: this.mailStatus(),
         on: !!this.settings.mail?.on,
         page: () => section(t("int.connection"), this.mailBody()),
+      },
+      {
+        id: "commonwealth",
+        icon: appIcon("brain", TILE),
+        name: "Commonwealth",
+        status: this.commonwealthStatus(),
+        on: !!this.cw?.plugin || this.detail === "commonwealth",
+        page: () => section(t("int.connection"), this.commonwealthBody()),
       },
     ];
   }

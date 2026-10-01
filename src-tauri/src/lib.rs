@@ -17,6 +17,7 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 
 mod agents;
 pub mod broker;
+mod commonwealth;
 mod mail;
 pub mod notify;
 mod providers;
@@ -511,9 +512,13 @@ fn pipe_init(mail_on: bool) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, about: Option<&str>) -> Result<Proc, String> {
     let dir = need_vault(state)?;
-    let eb = env_of(app, state, p);
+    let mut eb = env_of(app, state, p);
+    // the brain of the project this conversation is about, when Commonwealth's registry routes it (see commonwealth.rs)
+    if p.id() == "claude" && eb.opts.is_object() {
+        if let Some(b) = about.and_then(|a| commonwealth::brains(&home(), &repo_projects(&dir)).get(a).cloned().flatten()) { eb.opts["commonwealth_brain"] = json!(b); }
+    }
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
@@ -680,7 +685,7 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, about: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
@@ -698,7 +703,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, about.as_deref())?;
         procs.insert(project, x);
         return Ok(());
     }
@@ -706,7 +711,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let mut was_tainted = false;
     if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id()) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, about.as_deref())?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -1172,6 +1177,45 @@ fn repo_index(vault: &str) -> HashMap<String, String> {
     out
 }
 
+// ---------- Commonwealth (commonwealth.rs): detected, never configured; on when the Claude Code plugin is installed
+
+fn claude_bin(app: &AppHandle, state: &App) -> String { env_of(app, state, agents::get_or_first(Some("claude"))).bin }
+/// The brains the vault's projects resolve to, by project; the only ones the review queue touches.
+fn cw_brains(state: &App) -> std::collections::BTreeMap<String, Option<String>> {
+    commonwealth::brains(&home(), &repo_projects(&vault(state)))
+}
+/// Plugin installed and on, the CLI if found, the install hint, and the brain per project.
+#[tauri::command]
+async fn commonwealth_status(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
+    let (bin, path) = (claude_bin(&app, &state), state.path.clone());
+    let plugin = tauri::async_runtime::spawn_blocking(move || commonwealth::plugin_on(&bin, &path)).await.map_err(|e| e.to_string())?;
+    let projects: Vec<Value> = cw_brains(&state).into_iter().map(|(p, b)| json!({"project": p, "brain": b, "name": b.as_deref().map(commonwealth::brain_name)})).collect();
+    Ok(json!({"plugin": plugin, "cli": in_path(&state, "commonwealth"), "hint": commonwealth::CLI_HINT, "projects": projects}))
+}
+/// Add the marketplace and install the plugin; the CLI's own error text on a failure.
+#[tauri::command]
+async fn commonwealth_install(app: AppHandle, state: State<'_, App>) -> Result<(), String> {
+    let (bin, path) = (claude_bin(&app, &state), state.path.clone());
+    tauri::async_runtime::spawn_blocking(move || commonwealth::install(&bin, &path)).await.map_err(|e| e.to_string())?
+}
+/// The staged notes of every brain a project resolves to, each with its brain.
+#[tauri::command]
+fn commonwealth_notes(state: State<App>) -> Value {
+    let mut brains: Vec<String> = cw_brains(&state).into_values().flatten().collect();
+    brains.sort();
+    brains.dedup();
+    json!(brains.iter().flat_map(|b| commonwealth::staged(b)).collect::<Vec<_>>())
+}
+/// Promote or reject staged notes of a brain, through the CLI. Only for a brain the vault's projects resolve to.
+#[tauri::command]
+async fn commonwealth_act(state: State<'_, App>, brain: String, verb: String, ids: Vec<String>) -> Result<(), String> {
+    if !["promote", "reject"].contains(&verb.as_str()) || ids.is_empty() || !ids.iter().all(|i| !i.starts_with('-') && i.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')) { return Err("bad request".into()); }
+    if !cw_brains(&state).values().flatten().any(|b| *b == brain) { return Err("not a brain of this vault".into()); }
+    let cli = in_path(&state, "commonwealth").ok_or_else(|| format!("commonwealth not found: {}", commonwealth::CLI_HINT))?;
+    let path = state.path.clone();
+    tauri::async_runtime::spawn_blocking(move || commonwealth::act(&cli, &path, &brain, &verb, &ids)).await.map_err(|e| e.to_string())?
+}
+
 /// The GitHub login gh is signed in with, the settings window shows it.
 #[tauri::command]
 async fn github_status(state: State<'_, App>) -> Result<String, String> {
@@ -1375,7 +1419,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

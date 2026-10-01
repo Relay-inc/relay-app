@@ -5,7 +5,7 @@ import { changed, ls } from "../core/store";
 import type { AgentEvent } from "../domain/agents";
 import { loadAgents, loadCommands } from "../domain/agents";
 import type { VaultStatus } from "../domain/vault-setup";
-import { ui, PRS, MAIL, WAIT, isView, isTerminal, boardKey } from "../domain/ui";
+import { ui, PRS, MAIL, BRAIN, WAIT, isView, isTerminal, boardKey } from "../domain/ui";
 import { opened, chatTime, isLegacyGeneral, isMailKey, LEGACY_BOARD } from "../domain/keys";
 import { config, ghOn, mailOn, type Settings } from "../domain/config";
 import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "../domain/vault";
@@ -17,6 +17,7 @@ import { select, newHere } from "../domain/navigation";
 import { boards, checkBoards, resetBoard } from "../domain/board";
 import { loadPrs, resetPrs } from "../domain/prs";
 import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
+import { loadBrain } from "../domain/brain";
 import { panel, closeDetail } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
 import { onboard } from "../features/onboarding/onboard";
@@ -198,4 +199,7 @@ function startPolls() {
   startUsage(); // plan limits for the sidebar, tokens while the view is open
   if (ui.selected !== MAIL) loadMails();
   setInterval(loadMails, 5 * 60000);
+  if (ui.selected !== BRAIN) loadBrain();
+  setInterval(loadBrain, 5 * 60000);
+  window.addEventListener("focus", loadBrain);
 }
