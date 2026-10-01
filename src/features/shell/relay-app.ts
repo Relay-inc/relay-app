@@ -91,7 +91,7 @@ export class RelayApp extends LitElement {
       (target): target is HTMLElement => target instanceof HTMLElement && target.hasAttribute("data-copy"),
     );
     if (copyButton) {
-      copyText(copyButton.parentElement?.querySelector("pre")?.innerText ?? "", copyButton);
+      copyText(copyButton.closest(".codeblock")?.querySelector("pre")?.innerText ?? "", copyButton);
       return;
     }
     const anchor = path.find(

@@ -238,6 +238,9 @@
   & pre code {
     @apply bg-transparent p-0 text-sm;
   }
+  & .codeblock pre {
+    @apply bg-transparent border-0 rounded-none my-0;
+  }
   & table {
     @apply border-collapse my-2.5 text-sm block overflow-x-auto;
   }
@@ -262,6 +265,9 @@
   }
   & code {
     @apply font-mono text-xs;
+  }
+  & .codeblock pre {
+    @apply bg-transparent;
   }
   & :first-child {
     @apply mt-0;

@@ -24,7 +24,7 @@ import "../subagents/relay-subagents";
 import type { RelayComposer } from "../composer/relay-composer";
 
 // the strips under the log line up with the messages: the same column, its padding as the gutter
-const column = "block w-full max-w-2xl mx-auto px-7";
+const column = "block w-full max-w-170 mx-auto px-8";
 // a card over the bar's width: toast and move bar share the log's column
 const strip = "flex items-center gap-2 px-3 py-2 rounded-lg text-sm";
 
@@ -215,14 +215,14 @@ export class RelayChat extends LitElement {
 
   override render() {
     const hasSubagents = !this.onView && (chat.subs[this.selected] || []).length > 0;
-    const messagesWidth = this.board ? "px-5" : "max-w-2xl px-7";
+    const messagesWidth = this.board ? "px-5" : "max-w-170 px-8";
     return html` ${this.renderBar()} ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
-      <div id="log" class="flex-1 overflow-y-auto pt-6 pb-2" @scroll=${this.onScroll}>
-        <div id="msgs" class="mx-auto flex flex-col gap-4 ${messagesWidth}">${this.renderView()}</div>
+      <div id="log" class="flex-1 overflow-y-auto pt-7 pb-3" @scroll=${this.onScroll}>
+        <div id="msgs" class="mx-auto flex flex-col gap-5 ${messagesWidth}">${this.renderView()}</div>
       </div>
       ${hasSubagents ? html`<relay-subagents class="${column} mb-1.5"></relay-subagents>` : nothing}
       ${this.renderToast()} ${this.renderMoveBar()}
-      ${this.onView ? nothing : html`<relay-composer class="${column} mt-2 mb-5"></relay-composer>`}`;
+      ${this.onView ? nothing : html`<relay-composer class="${column} mt-2 mb-4.5"></relay-composer>`}`;
   }
 }
 
