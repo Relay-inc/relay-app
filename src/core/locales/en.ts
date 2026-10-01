@@ -503,6 +503,7 @@ const en = {
   "kb.presetName": "Name",
   "kb.presetDelete": "Delete preset",
   "kb.noPresets": "No presets yet",
+  "kb.viewUnsupported": "Uses a filter Relay can't apply here (or a task list on another board)",
   "kb.save": "Save",
   "kb.filters": "Filters",
   "kb.clearAll": "Clear all filters",

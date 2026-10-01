@@ -3,6 +3,7 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { currentLocale, translator, type BoardProvider, type BoardRef, type CardView, type Ctx, type Opt, type State } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 import { toHtml, uploadFile } from "./write";
+import { toFilters, toGroup, toLayout } from "./views";
 
 const t = translator<Key>("productive");
 
@@ -58,14 +59,14 @@ async function ready(c: Ctx) {
   })]);
 }
 // per project: its workflow's statuses (the status columns, in Productive's order) and its people, for the panel's pickers
-type Opts = { statuses: (Opt & { placement: number; state: State })[]; people: Opt[] };
+type Opts = { statuses: (Opt & { placement: number; state: State })[]; people: (Opt & { first: string })[] };
 const opts = new Map<string, Promise<Opts>>(), optsDone = new Map<string, Opts>();
 function optsOf(c: Ctx, project: string) {
   if (!opts.has(project)) opts.set(project, (async () => {
     const pr = await c.call("GET", `/projects/${project}?include=workflow`), wf = pr.data?.relationships?.workflow?.data?.id;
     const [st, pp] = await Promise.all([wf ? all(c, `/workflow_statuses?filter[workflow_id]=${wf}`) : { data: [] }, all(c, `/people?filter[project_id]=${project}&filter[status]=1`)]);
     const o: Opts = { statuses: st.data.map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.position ?? 0, state: stateOf(x.attributes.category_id) })).sort((a: any, b: any) => a.placement - b.placement),
-      people: pp.data.map((x: any) => ({ id: x.id, name: person(x) })).sort(byName) };
+      people: pp.data.map((x: any) => ({ id: x.id, name: person(x), first: x.attributes.first_name || "" })).sort(byName) };
     optsDone.set(project, o);
     return o;
   })().catch(e => { opts.delete(project); throw e; }));
@@ -171,6 +172,19 @@ const productive: BoardProvider<Key> = {
     const rel = group === "status" ? { workflow_status: { data: { type: "workflow_statuses", id: to } } } : { task_list: { data: { type: "task_lists", id: to } } };
     const r = await c.call("PATCH", `/tasks/${card.id}`, { data: { type: "tasks", id: card.id, relationships: rel } });
     return r?.data?.attributes?.placement ?? undefined;
+  },
+  // the project's saved task views (Productive keeps them per project, not per board), as its tabs order them
+  views: async (c, ref) => {
+    const [vs, o, pr] = await Promise.all([all(c, `/filters?filter[filterable_id]=${ref.project}&filter[filterable_type]=project`), optsOf(c, ref.project),
+      c.call("GET", `/projects/${ref.project}`)]);
+    const tasks = vs.data.filter((v: any) => v.attributes.filterable_collection === "tasks" && !v.attributes.hidden);
+    const lists = tasks.some((v: any) => JSON.stringify(v.attributes.params || {}).includes('"task_list_id"'))
+      ? new Map<string, string>((await all(c, `/task_lists?filter[folder_id]=${ref.board}`)).data.map((x: any) => [x.id, x.attributes.name])) : new Map<string, string>();
+    const names = { status: new Map(o.statuses.map(s => [s.id, s.name])), who: new Map(o.people.map(p => [p.id, p.first])), list: lists, me: String(c.config.user || "") };
+    const order: string[] = pr.data?.attributes?.preferences?.navigation_order || [];
+    const at = (id: string) => (order.indexOf(id) + 1 || order.length + 1);
+    return tasks.sort((a: any, b: any) => at(a.id) - at(b.id))
+      .map((v: any) => ({ id: v.id, name: v.attributes.name, filters: toFilters(v.attributes.params, names), group: toGroup(v.attributes.group_by), layout: toLayout(v.attributes.layout_id) }));
   },
   url: async (c, ref, id) => { await ready(c); return taskUrl(ref, id); },
   reset: () => { orgSlug = ""; fields = null; details.clear(); opts.clear(); optsDone.clear(); },

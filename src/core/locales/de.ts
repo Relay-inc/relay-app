@@ -507,6 +507,7 @@ export default {
   "kb.presetName": "Name",
   "kb.presetDelete": "Voreinstellung löschen",
   "kb.noPresets": "Noch keine Voreinstellungen",
+  "kb.viewUnsupported": "Nutzt einen Filter, den Relay hier nicht anwenden kann (oder eine Aufgabenliste auf einem anderen Board)",
   "kb.save": "Speichern",
   "kb.filters": "Filter",
   "kb.clearAll": "Alle Filter löschen",

@@ -505,6 +505,7 @@ export default {
   "kb.presetName": "Naam",
   "kb.presetDelete": "Preset verwijderen",
   "kb.noPresets": "Nog geen presets",
+  "kb.viewUnsupported": "Gebruikt een filter dat Relay hier niet kan toepassen (of een takenlijst op een ander bord)",
   "kb.save": "Bewaren",
   "kb.filters": "Filters",
   "kb.clearAll": "Alle filters wissen",
