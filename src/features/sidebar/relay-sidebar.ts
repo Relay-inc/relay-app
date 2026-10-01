@@ -8,6 +8,8 @@ import { icon } from "../../core/icons";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { ui, USAGE } from "../../domain/ui";
+import { config, saveSettings } from "../../domain/config";
+import { applyTheme } from "../../core/theme";
 import {
   sidebar,
   sidebarModel,
@@ -287,7 +289,7 @@ export class RelaySidebar extends LitElement {
     const { dragging, drop } = this.dropzone("sec", section.id);
     const dropLineAfter = drop === "after" ? SECTION_DROP_AFTER : "";
     const onMenu = section.id === GENERAL ? this.openMenu({ chatKey: "", project: null, kind: "proj" }) : nothing;
-    return html`<div class="mt-1.5 ${dragging ? "opacity-40" : ""} ${dropLineAfter}" data-drop=${section.id}>
+    return html`<div class="mt-3 ${dragging ? "opacity-40" : ""} ${dropLineAfter}" data-drop=${section.id}>
       <relay-sidebar-head
         .label=${section.label}
         .tint=${section.tint}
@@ -309,23 +311,36 @@ export class RelaySidebar extends LitElement {
     )}`;
   }
   private renderSearch() {
-    return html`<label class="flex items-center gap-1.5 mx-3 mb-2.5 h-7 px-2 rounded-lg bg-fill text-secondary"
+    return html`<label class="flex items-center gap-2 mx-3 mb-1.5 h-7.5 px-2.5 rounded-lg bg-fill-2 text-tertiary"
       >${icon("search", "glyph size-3.5 flex-none stroke-2")}
       <input
-        class="min-w-0 flex-1 text-sm text-label outline-none select-text placeholder:text-secondary"
+        class="min-w-0 flex-1 text-sm text-label outline-none select-text placeholder:text-tertiary"
         .value=${sidebar.find}
         placeholder=${t("nav.search")}
         @input=${(e: Event) => setFind((e.target as HTMLInputElement).value)}
       />
     </label>`;
   }
+  // the toggle flips light and dark; system counts as whatever macOS shows now
+  private get dark() {
+    const theme = config.value.theme ?? "system";
+    return theme === "dark" || (theme === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  private toggleTheme = () => {
+    const settings = config.value;
+    const theme = this.dark ? "light" : "dark";
+    applyTheme(theme, settings.accent);
+    saveSettings({ ...settings, theme }).then(() => this.requestUpdate());
+  };
   private renderFooter() {
     const usage = usageSummary();
     return html`<relay-sidebar-footer
       .selected=${ui.selected === USAGE}
       .level=${usage?.level ?? ""}
+      .dark=${this.dark}
       .tip=${usage ? `${t("nav.usage")} — ${usage.label}` : t("nav.usage")}
       @usage=${() => select(USAGE)}
+      @theme=${this.toggleTheme}
       @settings=${() => invoke("open_settings_window")}
     ></relay-sidebar-footer>`;
   }
@@ -333,9 +348,18 @@ export class RelaySidebar extends LitElement {
   override render() {
     const { views, sections } = sidebarModel();
     const menu = this.menuTarget;
-    return html` <div class="h-11 flex-none" data-tauri-drag-region></div>
+    return html` <div class="h-12 flex-none flex items-center justify-end pr-2.5" data-tauri-drag-region>
+        <button
+          class="btn-icon"
+          title=${t("nav.newChat")}
+          aria-label=${t("nav.newChat")}
+          @click=${() => select(newChat(null))}
+        >
+          ${icon("compose", "glyph size-4")}
+        </button>
+      </div>
       ${this.renderSearch()}
-      <nav class="flex-1 overflow-y-auto px-2.5 pb-4">
+      <nav class="flex-1 overflow-y-auto px-2 pt-1.5 pb-4 flex flex-col gap-px">
         ${views.map(view => this.renderView(view))}${sections.map(section => this.renderSection(section))}
       </nav>
       ${this.renderFooter()}
