@@ -33,32 +33,33 @@ Paths are relative to the vault (absolute ones work too). Picking a folder detec
 `System/` layout, the old `Resources/Meta/Claude/` one, else a search by file name; symlinks are
 resolved. Only `workState` is required; a missing `reminders` file is created by the first reminder you add (default `reminders.md` in the vault root).
 
-`pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py` and `perm_server.py`
-from this checkout (`REPO` in `src-tauri/src/lib.rs`), so a build only works on this machine.
+`pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py` and `packages/agent-claude/perm_server.py`
+from this checkout, so a build only works on this machine.
 
 ## How it works
 
 | Part | What it does |
 |---|---|
-| `src-tauri/src/lib.rs` | All Tauri commands. Starts one `claude -p` per conversation in stream-json mode, with the vault as cwd, the login-shell PATH and `ANTHROPIC_API_KEY` removed. Reads terminal sessions and subagents from `~/.claude/projects/<vault-slug>/`. |
-| `perm_server.py` | Stdio MCP server passed as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
+| `src-tauri/src/lib.rs` | All Tauri commands. Starts one process per conversation through its agent provider, with the vault as cwd and the login-shell PATH, and passes the provider's normalised events to the webview. See [Agent providers](#agent-providers). |
+| `src-tauri/src/agents.rs`, `src/agents/` | The registry of the agent providers, `settings.agents` and sessions.json. |
+| `packages/agent-claude/perm_server.py` | Stdio MCP server passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
 | `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
 | `src/main.ts` | Main window: sidebar, conversations, permission cards, inspector, agents strip. |
 | `src/reminders.ts` | Reminders view. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
 | `src/board.ts`, `src/providers/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
-| `packages/` | The integrations, one package each (TypeScript + Rust + strings + tests), and `board-core`, the contract. |
+| `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
 | `src-tauri/src/vault.rs`, `src/vault-setup.ts` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
-| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), language. |
+| `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
-`sessions.json` (conversation to session id) and `pending/`. Board provider tokens sit
+`sessions.json` (conversation to session id, and to its provider when that is not Claude Code) and `pending/`. Board provider tokens sit
 in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
 
 ## Integrations
 
-The sidebar board shows one of these per vault project. Set them up under Vault › Settings… › Integrations; every
+The sidebar board shows one of these per vault project. (The agents that answer in the conversations are the other kind of package: [Agent providers](#agent-providers).) Set them up under Vault › Settings… › Integrations; every
 secret goes to the macOS keychain (service `vault-app.<id>`), never to settings.json or the webview. How to get a
 key and what the backend lets through is in each package's README.
 
@@ -158,6 +159,108 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
    `src-tauri/src/providers.rs` and `package.json` + `src/providers/index.ts`, then `pnpm install`.
 
+## Agent providers
+
+The conversations run on a coding-agent CLI: Claude Code, Codex or OpenCode. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
+[`packages/agent-core`](packages/agent-core/README.md). The app owns the processes, `sessions.json`, the pending folder,
+the settings and the commands; a provider builds its command line, turns its output into normalised events, reads its
+own transcripts and logs, and reports its limits and tokens.
+
+| | Claude Code | Codex | OpenCode |
+|---|---|---|---|
+| Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) |
+| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` |
+| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) |
+| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) |
+| Thinking, images | –, yes | yes, yes | yes, yes |
+| Resume, fork | yes, yes | yes, – | yes, yes |
+| Subagents, titles | yes, yes | –, – | –, – |
+| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants |
+| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` |
+| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded |
+| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) |
+| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price |
+
+**Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
+registered in `PROVIDERS` in `src-tauri/src/agents.rs`:
+
+| Method | What |
+|---|---|
+| `id`, `name`, `caps()` | `Caps`: persistent, images, thinking, permissions, questions, subagents, fork, terminal, background, effort, limits, title. The webview hides what is false. |
+| `default_bin(home)`, `detect(env)` | Where the CLI installs itself (the settings can override it), and `Detect { installed, bin, version, logged_in, note }`. |
+| `models()`, `efforts()` | `Choice { id, label }` for the composer's picks; "" is the CLI's default. |
+| `command(env, launch)` | The `Command` for a conversation: args and provider env. The app sets cwd (the vault), PATH (login shell) and stdio. `Launch { key, name, model, effort, resume, fork, turn }`. |
+| `input(turn)` | Persistent providers: the stdin line for a turn (`Turn { text, images }`). Per-turn providers get the turn in `launch.turn` and exit after it. |
+| `parser()` | A stateful stdout-line → `Vec<Event>` function, one per process. |
+| `respond(request, decision)` | The stdin line that answers a permission the provider raised as an event. |
+| `history(env, sid, from)` | A session's messages as events from a byte offset, and the next offset. |
+| `sessions`, `subagents`, `agent_log`, `terminal`, `stop_background`, `title` | Terminal and background sessions, subagents, "open in terminal" (`Terminal::Resume/New/Attach` → a shell command), the conversation title. All optional. |
+| `limits(env)`, `usage(env, since)` | Usage, below. |
+
+`env` is `Env { home, vault, path, bin, pending, opts }`; `opts` is the provider's own settings object
+(`settings.agents.providers.<id>`, read with `env.opt(key)`).
+
+**Events** (`agent_core::Event`, JSON with `type` in snake_case), sent as the Tauri event `agent` with
+`{project, provider, event}`: `session {id}`, `text {text, delta}`, `thinking {text, delta}`, `tool_call {id, name, input}`,
+`tool_result {id, error}`, `permission {request}`, `turn_end {ok, error, usage, duration_ms}`, `error {text}`; the app adds
+`stderr {text}` and `exit`. History uses the same events plus `user {text, images}` and `time {at}` (before the events of each
+transcript line, so the app can time a turn it follows from the transcript). Tool calls use the canonical names
+where they match (Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, Agent, Skill, TodoWrite, with input keys
+file_path, command, pattern, query, url, description), so the webview words them well.
+
+**Permissions** go through one folder for every provider (`agent_core::pending`): a request is `pending/<id>.json`
+(`{id, project, provider, kind: "tool" | "question", tool_name, input, relay, at}`), the answer `<id>.answer.json`
+(`{behavior: "allow", updatedInput}` or `{behavior: "deny", message}`; a question has `input.questions` and is answered with
+`updatedInput.answers`). A provider either writes and polls the files itself (Claude's `perm_server.py`, `relay: false`),
+or raises `Event::Permission`: the app writes the file with `relay: true` and passes the user's decision to `respond`,
+writing its line to the process's stdin. Files from before the providers read as Claude's.
+
+**Usage**: `limits(env)` gives `Limits::On { plan, windows: [Window { id, label, name, pct, resets }] }` or
+`Limits::Off(reason)`; `label` and `off.<reason>` are keys in the provider's own strings. The app asks at most once a
+minute per provider. `usage(env, since)` gives `Record { at, model, session, vault, input, output, cache_read,
+cache_write, cost }`, read incrementally (`agent_core::usage::Tail` keeps an offset per log file). The app aggregates
+per provider (today, this week, by model, the vault's conversations) and over all of them (`usage_tokens`,
+`usage_limits`). The Usage view shows a section per switched-on provider and the total; the sidebar count is the most
+constrained window over all providers.
+
+**Webview**, the package's TypeScript (`src/index.ts`, default export): an `AgentProvider<Key>` from
+`@vault/agent-core` (`id`, `name`, `glyph`, `strings` in en/nl/fr/de, optional `modelName` and `options`: selects shown
+in Settings › Agents and stored next to `on` and `bin`, the first choice the default), registered in `AGENTS` in
+`src/agents/index.ts`. Its strings are merged into the app's as `<id>.<key>`; the app looks up `limits.loading`,
+`off.<reason>`, each window's `label`, `tokens.reading` and `set.help`.
+
+**Settings** (Settings › Agents): `settings.agents = { default, providers: { <id>: { on, bin, …options } } }`, Claude Code
+on by default, the others off. The composer shows an agent pick next to model and effort when more than one is on; a conversation keeps its
+agent once it has a message. `sessions.json` maps a conversation key to a session id string (Claude Code, as before the
+providers, so old files and old builds keep working) or to `{provider, sid}`. Terminal keys are `t:<sid>` (Claude Code)
+or `t:<provider>:<sid>`.
+
+### Adding an agent provider
+
+1. `packages/agent-<id>/` with a `package.json` (`@vault/agent-<id>`, depending on `@vault/agent-core`) and a `Cargo.toml`
+   (crate `agent-<id>`, depending on `agent-core`).
+2. `src/lib.rs`: `pub static PROVIDER` implementing `AgentProvider`. Set `caps` honestly: the webview hides what is false.
+   - `default_bin` and `detect`: where the CLI installs itself; not installed, `installed: false` and a `note` with the
+     install command (Settings shows it next to the status); `logged_in` only when the provider can really tell.
+   - `command` (+ `input` for persistent providers): remove API keys from the environment when it should run on the
+     user's subscription; check every id that goes on a command line (`valid_session`, `safe_model`).
+   - `parser`: the output as `Event`s, in its own module, tested on fixture files in `tests/fixtures/` (live runs,
+     trimmed, where you can; say which were written from docs). One `turn_end` per turn, also when it fails.
+   - Permissions: raise `Event::Permission` and answer in `respond`, or use the pending folder directly. A request the
+     app has no card for must be declined, never left waiting.
+   - `history`, `sessions`, `terminal` from the CLI's own storage, read-only.
+   - Usage: `usage(env, since)` as `Record`s (`cost` None when there is no price), `limits(env)` only where the CLI
+     reports them, else `caps.limits` false.
+3. `src/index.ts` with its glyph, `strings` and optional `options` (settings selects, read back as `env.opt(key)`);
+   `src/locales.ts` in all four languages with `limits.loading`, `off.<reason>`, each window's `label`,
+   `tokens.reading` and `set.help` (which should say how to install it); tests in `tests/` (at least the keys of every
+   language and `modelName`).
+4. A README: how to install it, how it runs, where it logs, how it asks for permissions and reports usage, what ran
+   live and what did not, known gaps. A column in the table above.
+5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
+   `src-tauri/src/agents.rs` and `package.json` + `src/agents/index.ts`, then `pnpm install`.
+6. `pnpm build`, `pnpm test` and `cargo test --workspace`.
+
 ## Other folders
 
 - `design/`: mockups and screenshots per iteration, most of it gitignored.
@@ -168,7 +271,7 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 ```sh
 cd src-tauri && cargo test   # the app
 cargo test --workspace        # the app and every integration crate, from the repo root
-pnpm test                     # the integrations' response mapping on fixture JSON
+pnpm test                     # the packages' pure TypeScript on fixtures
 ```
 
 The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and

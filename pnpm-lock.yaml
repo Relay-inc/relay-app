@@ -8,6 +8,21 @@ importers:
 
   .:
     dependencies:
+      '@hugeicons/core-free-icons':
+        specifier: ^4.3.5
+        version: 4.3.5
+      '@relay/agent-claude':
+        specifier: workspace:*
+        version: link:packages/agent-claude
+      '@relay/agent-codex':
+        specifier: workspace:*
+        version: link:packages/agent-codex
+      '@relay/agent-core':
+        specifier: workspace:*
+        version: link:packages/agent-core
+      '@relay/agent-opencode':
+        specifier: workspace:*
+        version: link:packages/agent-opencode
       '@relay/board-core':
         specifier: workspace:*
         version: link:packages/board-core
@@ -37,6 +52,26 @@ importers:
         specifier: ^8.0.16
         version: 8.3.1
 
+  packages/agent-claude:
+    dependencies:
+      '@relay/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+
+  packages/agent-codex:
+    dependencies:
+      '@relay/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+
+  packages/agent-core: {}
+
+  packages/agent-opencode:
+    dependencies:
+      '@relay/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+
   packages/board-core: {}
 
   packages/integration-linear:
@@ -61,6 +96,9 @@ importers:
         version: link:../board-core
 
 packages:
+
+  '@hugeicons/core-free-icons@4.3.5':
+    resolution: {integrity: sha512-Sv+NjHRPnQk+yZsGCMcGznCHdTfJR9PMMOEKcJYAQU4gy90dmlc9PwdtvYOImBZIjiheMsTLL5eMn2DmHxUiUg==}
 
   '@oxc-project/types@0.151.0':
     resolution: {integrity: sha512-J1yXrIlNDZVzE3ada310xeAw7nH8yCAyLPuUIsjKatFPmfn5bS1oW+cM+QsGOtVWd5nhSpbwZWx/rue+r5Z+PA==}
@@ -418,6 +456,8 @@ packages:
         optional: true
 
 snapshots:
+
+  '@hugeicons/core-free-icons@4.3.5': {}
 
   '@oxc-project/types@0.151.0': {}
 

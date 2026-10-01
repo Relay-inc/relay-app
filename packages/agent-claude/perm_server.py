@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Permission tool for Claude Code sessions started by the Vault app (stdio MCP server).
 
+Claude's side of the provider-agnostic pending folder (packages/agent-core/src/pending.rs): it writes the
+requests and reads the answers itself, so its requests have relay false.
+
 Claude calls `approve` for every tool call that needs the user, and for AskUserQuestion. The request
 is written to $PENDING/<id>.json, the app shows it, and writes $PENDING/<id>.answer.json. We wait for
 that file, pass the decision back to Claude, and remove both. Files, not a socket: nothing listens on
@@ -26,7 +29,8 @@ def ask(args):
     req = os.path.join(PENDING, f"{rid}.json")
     ans = os.path.join(PENDING, f"{rid}.answer.json")
     with open(req + ".tmp", "w") as f:
-        json.dump({"id": rid, "project": PROJECT, "at": time.time(), **args}, f)
+        kind = "question" if args.get("tool_name") == "AskUserQuestion" else "tool"
+        json.dump({"id": rid, "project": PROJECT, "provider": "claude", "kind": kind, "relay": False, "at": time.time(), **args}, f)
     os.replace(req + ".tmp", req)
     while not os.path.exists(ans):
         time.sleep(0.25)

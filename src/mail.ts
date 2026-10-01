@@ -2,6 +2,7 @@
 // and from there a button starts a conversation about it. Opening leaves a mail unread, read/unread only changes
 // on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
 import { t, currentLocale } from "./i18n";
+import { icon as glyph } from "./icons";
 
 export type Mail = { id: string; account: string; subject: string; date: string; unread: boolean;
   from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; attachments: boolean };
@@ -24,17 +25,8 @@ function when(iso: string) {
 }
 const esc_ = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 // 16px line icons in the app's glyph style, every icon button carries its label as tooltip and for VoiceOver
-const ICON: Record<string, string> = {
-  close: '<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>',
-  read: '<path d="M2.5 6.5 8 3l5.5 3.5v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/><path d="m2.5 6.5 5.5 3.5 5.5-3.5"/>',
-  unread: '<rect x="2" y="4" width="10" height="8.5" rx="1"/><path d="m2 5 5 3.5L12 5"/><circle cx="13" cy="3.5" r="1.8" fill="currentColor" stroke="none"/>',
-  text: '<path d="M3 4h10M3 7h10M3 10h7M3 13h4.5"/>',
-  html: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="m4.5 11 2.5-3 2 2 1.5-1.5 1.5 2.5"/><circle cx="6" cy="6" r=".9"/>',
-  reply: '<path d="M6.5 4 2.5 8l4 4"/><path d="M2.5 8h6.5a4.5 4.5 0 0 1 4.5 4.5v.5"/>',
-  talk: '<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7.5L4.5 13.5V11A1.5 1.5 0 0 1 3 9.5z"/>',
-};
 const ib = (icon: string, label: string, attrs: string, cls = "btn ib", tip = label) =>
-  `<button class="${cls}" ${attrs} title="${esc_(tip)}" aria-label="${esc_(label)}"><svg class="g" viewBox="0 0 16 16">${ICON[icon]}</svg></button>`;
+  `<button class="${cls}" ${attrs} title="${esc_(tip)}" aria-label="${esc_(label)}">${glyph(icon)}</button>`;
 const seenBtn = (m: Mail, cls = "btn ib") => ib(unread(m) ? "read" : "unread", unread(m) ? t("mail.markRead") : t("mail.markUnread"),
   `data-mail-seen="${unread(m) ? 1 : 0}" data-key="${esc_(mailKey(m))}"`, cls);
 
