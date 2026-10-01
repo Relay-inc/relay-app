@@ -12,7 +12,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 ## [Unreleased]
 
 ### Added
-- Every version is a GitHub release with the macOS app to download and that version's changes as its notes
+- Every version is a GitHub release with the macOS app to download and that version's changes as its notes (#36)
 - Settings › General › Appearance picks light or dark mode, or System (the default) to follow macOS; both windows switch right away (#27)
 - Typing `/` in the composer lists Claude Code's slash commands and skills for the vault, with their descriptions; arrows pick, Tab or Enter completes, Escape closes. Relay asks Claude Code for the list when it starts (#26)
 - A copy button on an answer when you hover it, and on each code block, in conversations and in the right panel (#26)
