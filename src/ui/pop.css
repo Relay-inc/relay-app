@@ -1,0 +1,9 @@
+/* the panel under the title: the conversation's project, and that project's icon and name */
+:host{position:absolute;z-index:5;top:56px;right:16px;width:340px;background:var(--bg);border:1px solid var(--separator);border-radius:var(--r);
+  box-shadow:0 8px 24px rgba(0,0,0,.12);padding:14px;display:grid;gap:12px}
+.plab{display:grid;gap:6px;font-size:13px;color:var(--secondary);-webkit-user-select:none;user-select:none}
+select{height:28px;border:1px solid var(--separator);border-radius:var(--r);background:var(--bg);color:var(--label);font:13px var(--sans);padding:0 8px}
+.field.ico{width:64px;text-align:center}
+.field:not(.ico){flex:1;min-width:0}
+.picon{display:inline-flex;align-items:center;flex:none}
+.picon .pimg{width:18px;height:18px;margin:0}

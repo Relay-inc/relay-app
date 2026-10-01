@@ -1,0 +1,12 @@
+:host{display:block;flex:none;max-width:720px;width:calc(100% - 56px);margin:8px auto 20px}
+.composer{border-radius:var(--r);background:var(--bg);box-shadow:0 0 0 .5px var(--separator),0 1px 2px rgba(0,0,0,.06);border:1px solid var(--separator);padding:10px 12px 8px}
+.composer:focus-within{border-color:var(--accent)}
+.composer.drop{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 6%,var(--bg))}
+.composer textarea{all:unset;display:block;width:100%;min-height:24px;font-size:16px;line-height:1.45;color:var(--label)}
+.composer textarea::placeholder{color:var(--secondary)}
+.cfoot{display:flex;align-items:center;gap:8px;margin-top:6px;color:var(--secondary)}
+.pick{all:unset;font-size:12px;color:var(--secondary);padding:2px 4px;border-radius:calc(var(--r) - 2px);cursor:default}
+.pick:hover:not(:disabled){background:var(--fill)}
+.pick:disabled{opacity:.5}
+.send{width:26px;height:26px;border-radius:var(--r);border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center}
+.send.stop{background:var(--label)}

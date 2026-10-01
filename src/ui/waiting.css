@@ -1,0 +1,3 @@
+:host{display:block}
+.waitlist{display:flex;flex-direction:column;gap:14px}
+.proj{font-size:13px;font-weight:600;color:var(--secondary);margin-bottom:-6px}

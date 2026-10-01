@@ -1,0 +1,13 @@
+/* images: thumbnails in the composer, the Cmd-K field and the user's messages, larger in an overlay (src/ui/app.ts) */
+.atts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.att{position:relative;display:block;flex:none}
+.att img{display:block;height:60px;max-width:180px;object-fit:cover;border-radius:var(--r);box-shadow:0 0 0 .5px var(--separator);cursor:zoom-in}
+.att .rm{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;padding:0;background:var(--label);color:var(--bg);font-size:13px;line-height:1;display:none;place-items:center;cursor:default}
+.att:hover .rm,.att .rm:focus-visible{display:grid}
+.imgph{color:var(--secondary);font-size:13px}
+/* a question or permission card, and the choices in it */
+.perm{border:1px solid var(--accent);border-radius:var(--r);background:var(--fill);padding:12px 14px;display:grid;gap:10px}
+.perm .q{font-size:13px;color:var(--secondary)}
+.perm .acts{display:flex;justify-content:flex-end;gap:8px}
+.opts{display:flex;flex-wrap:wrap;gap:8px}
+.opts .btn.on{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
