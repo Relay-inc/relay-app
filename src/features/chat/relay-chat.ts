@@ -33,6 +33,7 @@ export class RelayChat extends LitElement {
   private ro?: ResizeObserver;
   @query("#log") private log!: HTMLElement;
   @query("relay-composer") private composer!: RelayComposer | null;
+  @query("#msgs") private msgs!: HTMLElement;
 
   connectedCallback() {
     super.connectedCallback();
@@ -50,7 +51,7 @@ export class RelayChat extends LitElement {
   firstUpdated() {
     // the content grows when a child component redraws, not only when this one does
     this.ro = new ResizeObserver(() => { if (this.stick) this.log.scrollTop = this.log.scrollHeight; });
-    this.ro.observe(this.renderRoot.querySelector("#msgs")!);
+    this.ro.observe(this.msgs);
   }
   // called from a keydown: focus at once so the key lands in the field. A composer that is not there yet (coming from a view) follows its render
   private onFocus = () => {

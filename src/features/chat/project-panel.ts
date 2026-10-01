@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement, state } from "lit/decorators.js";
+import { customElement, query, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { t } from "../../core/i18n";
 import { iconImg, isImg } from "../../core/icons";
@@ -32,7 +32,8 @@ export class ProjectPanel extends LitElement {
     this.emoji = this.img || !cur ? "" : vault.icons[cur]?.icon || "";
     this.lab = cur ? config.value.projects[cur]?.label || "" : "";
   }
-  firstUpdated() { this.renderRoot.querySelector("select")?.focus(); }
+  @query("select") private projectSelect?: HTMLSelectElement;
+  firstUpdated() { this.projectSelect?.focus(); }
 
   private async pickFile(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0]; if (!f) return;
