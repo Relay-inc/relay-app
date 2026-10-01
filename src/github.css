@@ -19,7 +19,11 @@
 /* the PR panel: the right panel grows while a PR is open */
 body.prwide{grid-template-columns:240px minmax(0,1fr) 460px}
 body.prwide aside.insp>.ibody{min-width:460px}
-.prd-bar{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.prd-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+/* a narrow panel wraps the buttons to a new row, a label never breaks inside its button */
+.prd-bar .btn{white-space:nowrap;flex:none}
+.prd-grp{display:flex;align-items:center;gap:8px}
+.prd-grp.end{margin-left:auto}
 .prd-bar .sp{flex:1}
 .prd-bar a.btn{display:inline-flex;align-items:center;color:inherit;text-decoration:none}
 .prd-t{font-size:16px;line-height:1.35;margin:0 0 6px}
