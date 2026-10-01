@@ -25,7 +25,7 @@ const BUTTON =
   "inline-flex h-7 items-center justify-center gap-1.5 rounded-md border text-xs font-medium whitespace-nowrap no-underline transition-colors duration-150 ease-in-out hover:duration-0 focus-visible:ring-1 ring-s-primary focus-visible:outline-none disabled:opacity-50";
 const BUTTON_KIND = {
   plain: "border-s-input bg-transparent text-s-fg hover:bg-s-hover",
-  primary: "border-s-primary bg-s-primary text-s-bg hover:bg-s-primary/90",
+  primary: "border-s-primary bg-s-primary text-on-accent hover:bg-accent-hover",
   ghost: "border-transparent bg-transparent text-s-muted hover:bg-s-hover hover:text-s-fg",
 };
 /** A button; `square` makes it a square holding a glyph. */
@@ -51,7 +51,7 @@ const GITHUB_MARK =
 export const appIcon = (name: string, classes = "") =>
   glyphSvg(name === "gh" ? GITHUB_MARK : iconPaths(name), classes, "0 0 24 24");
 
-const CARD = "grid min-w-0 grid-cols-1 rounded-lg border border-s-border bg-s-bg [&>*]:min-w-0";
+const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-raised [&>*]:min-w-0";
 const LABEL = "block text-sm leading-7 text-s-fg";
 const FIELD_HINT = `-mt-1 text-xs leading-snug text-s-faint ${CODE}`;
 const FOOTER = "flex flex-wrap items-center gap-2";
@@ -97,7 +97,7 @@ export const toggleSwitch = (id: string, on: boolean, change: (e: Event) => void
     id=${id}
     .checked=${on}
     @change=${change}
-    class="relative m-0 h-4 w-7 flex-none cursor-default appearance-none rounded-full border border-s-input bg-s-mutedbg transition-colors duration-150 ease-in-out after:absolute after:top-px after:left-px after:size-3 after:rounded-full after:bg-s-fg after:transition-transform after:duration-150 after:ease-in-out checked:border-transparent checked:bg-s-fg checked:after:translate-x-3 checked:after:bg-s-bg focus-visible:ring-2 ring-s-ring ring-offset-2 ring-offset-s-bg focus-visible:outline-none"
+    class="relative m-0 h-5 w-8 flex-none cursor-default appearance-none rounded-full bg-fill-2 transition-colors duration-150 ease-out after:absolute after:top-0.5 after:left-0.5 after:size-4 after:rounded-full after:bg-white after:shadow-[0_1px_2px_rgba(0,0,0,.25)] after:transition-transform after:duration-150 after:ease-out checked:bg-accent checked:after:translate-x-3 focus-visible:ring-3 ring-s-ring focus-visible:outline-none"
   />`;
 
 const STATUS_DOT = { ok: "bg-s-ok", warn: "bg-s-warn", off: "bg-s-muted/50" };

@@ -13,9 +13,22 @@
   --color-inspector: var(--inspector);
   --color-label: var(--label);
   --color-secondary: var(--secondary);
+  --color-raised: var(--raised);
+  --color-well: var(--well);
+  --color-tertiary: var(--tertiary);
   --color-separator: var(--separator);
+  --color-separator-strong: var(--separator-strong);
   --color-fill: var(--fill);
+  --color-fill-2: var(--fill-2);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-text: var(--accent-text);
+  --color-focus: var(--focus);
+  --color-add-bg: var(--add-bg);
+  --color-add-fg: var(--add-fg);
+  --color-del-bg: var(--del-bg);
+  --color-del-fg: var(--del-fg);
   --color-on-accent: var(--on-accent);
   --color-late: var(--late);
   --color-soon: var(--soon);
@@ -32,12 +45,13 @@
   --font-mono: var(--mono);
   /* one ultra-diffuse shadow for every step: floating menus keep their border, the shadow only lifts them */
   --shadow-*: initial;
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.03);
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.045);
-  --shadow-xl: 0 4px 16px rgba(0, 0, 0, 0.045);
-  --shadow-2xl: 0 8px 24px rgba(0, 0, 0, 0.05);
+  /* the design's two steps, from base.css so dark mode deepens them */
+  --shadow-xs: var(--shadow-sm);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow);
+  --shadow-lg: var(--shadow);
+  --shadow-xl: var(--shadow);
+  --shadow-2xl: var(--shadow);
   --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
   --animate-skel: skel 1.4s ease-in-out infinite;
   @keyframes pulse-dot {
@@ -111,7 +125,7 @@
 
 /* buttons */
 @utility btn {
-  @apply h-7 px-3.5 rounded-md border border-separator bg-bg cursor-default transition hover:brightness-95 active:scale-98 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-accent/45;
+  @apply h-7.5 px-3.5 rounded-lg border border-separator-strong bg-transparent text-label font-medium cursor-default transition hover:bg-fill active:scale-98 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-focus;
   & svg {
     @apply size-4 fill-none stroke-current;
     stroke-width: 1.5;
@@ -120,29 +134,29 @@
   }
 }
 @utility btn-primary {
-  @apply bg-accent border-accent text-on-accent hover:brightness-100 hover:opacity-85;
+  @apply bg-accent border-accent text-on-accent hover:bg-accent-hover hover:border-accent-hover;
 }
 /* a square icon button. !important: the compiled order puts btn-icon before btn, whose padding would win */
 @utility btn-icon {
-  @apply w-7 px-0! inline-grid place-items-center;
+  @apply size-7 px-0! inline-grid place-items-center rounded-[7px] border-0 text-secondary hover:bg-fill-2 hover:text-label;
 }
 /* a text field or select in the app's look */
 @utility field {
-  @apply h-7 px-2 rounded-md border border-separator bg-bg text-label text-sm font-sans;
+  @apply h-7.5 px-2.5 rounded-lg border border-transparent bg-fill-2 text-label text-sm font-sans outline-none focus:border-accent focus:ring-3 focus:ring-accent-soft placeholder:text-tertiary;
 }
 /* the segmented control (the right panel's tabs, the mail filter) */
 @utility seg {
-  @apply flex bg-fill rounded-lg p-0.5;
+  @apply flex bg-fill-2 rounded-lg p-0.5;
   & button {
-    @apply h-6 px-3 rounded-md bg-transparent text-secondary;
+    @apply h-6 px-3 rounded-md bg-transparent text-secondary text-xs font-medium;
   }
   & button.on {
-    @apply bg-bg text-label shadow-xs ring-1 ring-separator;
+    @apply bg-raised text-label shadow-xs ring-[0.5px] ring-separator-strong;
   }
 }
 /* small parts */
 @utility spinner {
-  @apply size-3 flex-none rounded-full border-2 border-separator border-t-secondary animate-spin;
+  @apply size-[11px] flex-none rounded-full border-[1.5px] border-separator-strong border-t-secondary animate-spin;
 }
 @utility pulse-dots {
   @apply inline-flex gap-1;
@@ -192,7 +206,7 @@
 
 /* markdown rendered from text (the agents' answers, PR and note bodies): its elements carry no classes */
 @utility md-chat {
-  @apply text-base leading-normal wrap-anywhere;
+  @apply text-[15px] leading-[1.6] wrap-anywhere;
   & p + p {
     @apply mt-2.5;
   }
@@ -216,10 +230,10 @@
     @apply mt-1;
   }
   & code {
-    @apply font-mono text-sm bg-fill px-1 py-px rounded-sm;
+    @apply font-mono text-[13px] bg-fill-2 px-1.25 py-px rounded-sm;
   }
   & pre {
-    @apply bg-fill rounded-lg px-3 py-2.5 overflow-x-auto my-2;
+    @apply bg-well border border-separator rounded-[10px] px-3.5 py-3 overflow-x-auto my-2 text-[12.5px] leading-[1.65];
   }
   & pre code {
     @apply bg-transparent p-0 text-sm;
@@ -235,10 +249,10 @@
     @apply font-semibold;
   }
   & a {
-    @apply text-accent;
+    @apply text-accent-text;
   }
   & a:not(.vlink) {
-    @apply underline decoration-secondary underline-offset-2;
+    @apply underline decoration-focus underline-offset-2;
   }
 }
 @utility md-panel {
@@ -261,10 +275,10 @@
     list-style: revert;
   }
   & a {
-    @apply text-accent;
+    @apply text-accent-text;
   }
 }
 /* a vault note named in the text: opens in the right panel */
 @utility vlink {
-  @apply text-accent cursor-pointer underline decoration-separator underline-offset-2 hover:decoration-current;
+  @apply text-accent-text cursor-pointer underline decoration-focus underline-offset-2 hover:decoration-current;
 }

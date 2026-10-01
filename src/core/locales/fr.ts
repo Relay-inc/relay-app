@@ -245,6 +245,10 @@ export default {
   "set.themeHelp": "Clair ou sombre. Système suit macOS.",
   "set.themeLight": "Clair",
   "set.themeDark": "Sombre",
+  "set.accent": "Couleur d’accent",
+  "set.accentHelp": "La sélection, les boutons principaux et ce qui vous attend.",
+  "set.accent.relay": "Bleu Relay",
+  "set.accent.graphite": "Graphite",
   "set.favicons": "Icônes de projet",
   "set.faviconsOn": "Utiliser le favicon du site comme icône",
   "set.faviconsHelp":

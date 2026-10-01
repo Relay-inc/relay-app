@@ -1,65 +1,152 @@
 /* The page itself, for both windows: the design tokens (custom properties reach into every shadow root) and the body.
    Everything a component draws is styled in its own shadow root, from shared.css and its own file. */
+/* Light is the default, dark follows macOS unless the settings pin a theme. The accent is Relay blue; graphite
+   (data-accent on the page) swaps the accent tokens only. */
 :root {
   --bg: #ffffff;
-  --sidebar: #f7f6f3;
-  --inspector: #fbfbfa;
-  --label: #2f3437;
-  --secondary: #787774;
-  --separator: rgba(0, 0, 0, 0.08);
-  --fill: rgba(55, 53, 47, 0.06);
-  --accent: #111111;
+  --sidebar: #f6f6f5;
+  --inspector: var(--bg);
+  --raised: #ffffff;
+  --well: #f6f6f5;
+  --label: #1c1c1e;
+  --secondary: #636369;
+  --tertiary: #8e8e93;
+  --separator: rgba(0, 0, 0, 0.07);
+  --separator-strong: rgba(0, 0, 0, 0.11);
+  --fill: rgba(0, 0, 0, 0.04);
+  --fill-2: rgba(0, 0, 0, 0.065);
+  --accent: #3a5ffb;
+  --accent-hover: #2f52ec;
   --on-accent: #ffffff;
+  --accent-soft: rgba(58, 95, 251, 0.09);
+  --accent-text: #2d4fe0;
+  --focus: rgba(58, 95, 251, 0.35);
+  --ctx-a: oklch(0.55 0.16 264);
+  --ctx-m: oklch(0.6 0.14 66);
+  --ctx-p: oklch(0.56 0.13 155);
+  --late: oklch(0.55 0.19 27);
+  --soon: oklch(0.6 0.15 60);
+  --ok: oklch(0.58 0.14 152);
+  --bad: var(--late);
+  --add-bg: oklch(0.95 0.05 152);
+  --add-fg: oklch(0.45 0.12 152);
+  --del-bg: oklch(0.95 0.04 25);
+  --del-fg: oklch(0.5 0.16 25);
+  --syn-kw: oklch(0.52 0.17 300);
+  --syn-str: oklch(0.52 0.13 150);
+  --syn-num: oklch(0.56 0.15 50);
+  --syn-fn: oklch(0.5 0.17 264);
+  --syn-com: #8e8e93;
+  --syn-prop: oklch(0.52 0.12 210);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
   --r: 8px;
   --ease: ease-out;
   --d: 150ms;
-  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, sans-serif;
   --mono: "SF Mono", ui-monospace, Menlo, monospace;
-  --ctx-a: #1f6c9f;
-  --ctx-m: #956400;
-  --ctx-p: #346538;
-  --late: #9f2f2d;
-  --soon: #956400;
-  --ok: #346538;
-  --bad: #9f2f2d;
+}
+:root[data-accent="graphite"] {
+  --accent: #1c1c1e;
+  --accent-hover: #38383c;
+  --accent-soft: rgba(0, 0, 0, 0.06);
+  --accent-text: #1c1c1e;
+  --focus: rgba(0, 0, 0, 0.25);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #191919;
-    --sidebar: #202020;
-    --inspector: #1c1c1c;
-    --label: #e6e5e3;
-    --secondary: #9b9a97;
-    --separator: rgba(255, 255, 255, 0.08);
-    --fill: rgba(255, 255, 255, 0.06);
-    --accent: #ebebea;
-    --on-accent: #111111;
-    --ctx-a: #529cca;
-    --ctx-m: #ca9849;
-    --ctx-p: #4dab9a;
-    --late: #df5452;
-    --soon: #ca9849;
-    --ok: #4dab9a;
-    --bad: #df5452;
+    --bg: #161618;
+    --sidebar: #1c1c1f;
+    --raised: #222226;
+    --well: #1c1c1f;
+    --label: #ededef;
+    --secondary: #a1a1a8;
+    --tertiary: #76767d;
+    --separator: rgba(255, 255, 255, 0.07);
+    --separator-strong: rgba(255, 255, 255, 0.11);
+    --fill: rgba(255, 255, 255, 0.045);
+    --fill-2: rgba(255, 255, 255, 0.08);
+    --accent: #5a77ff;
+    --accent-hover: #6d87ff;
+    --on-accent: #ffffff;
+    --accent-soft: rgba(90, 119, 255, 0.16);
+    --accent-text: #8ea2ff;
+    --focus: rgba(90, 119, 255, 0.45);
+    --ctx-a: oklch(0.74 0.12 264);
+    --ctx-m: oklch(0.78 0.12 72);
+    --ctx-p: oklch(0.75 0.12 155);
+    --late: oklch(0.71 0.16 25);
+    --soon: oklch(0.79 0.13 70);
+    --ok: oklch(0.75 0.13 152);
+    --add-bg: oklch(0.3 0.05 152);
+    --add-fg: oklch(0.82 0.11 152);
+    --del-bg: oklch(0.3 0.05 25);
+    --del-fg: oklch(0.8 0.1 25);
+    --syn-kw: oklch(0.78 0.12 300);
+    --syn-str: oklch(0.8 0.11 150);
+    --syn-num: oklch(0.8 0.11 55);
+    --syn-fn: oklch(0.78 0.11 264);
+    --syn-com: #76767d;
+    --syn-prop: oklch(0.8 0.09 210);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+  :root:not([data-theme="light"])[data-accent="graphite"] {
+    --accent: #ededef;
+    --accent-hover: #ffffff;
+    --on-accent: #111113;
+    --accent-soft: rgba(255, 255, 255, 0.09);
+    --accent-text: #ededef;
+    --focus: rgba(255, 255, 255, 0.3);
   }
 }
 :root[data-theme="dark"] {
-  --bg: #191919;
-  --sidebar: #202020;
-  --inspector: #1c1c1c;
-  --label: #e6e5e3;
-  --secondary: #9b9a97;
-  --separator: rgba(255, 255, 255, 0.08);
-  --fill: rgba(255, 255, 255, 0.06);
-  --accent: #ebebea;
-  --on-accent: #111111;
-  --ctx-a: #529cca;
-  --ctx-m: #ca9849;
-  --ctx-p: #4dab9a;
-  --late: #df5452;
-  --soon: #ca9849;
-  --ok: #4dab9a;
-  --bad: #df5452;
+  --bg: #161618;
+  --sidebar: #1c1c1f;
+  --raised: #222226;
+  --well: #1c1c1f;
+  --label: #ededef;
+  --secondary: #a1a1a8;
+  --tertiary: #76767d;
+  --separator: rgba(255, 255, 255, 0.07);
+  --separator-strong: rgba(255, 255, 255, 0.11);
+  --fill: rgba(255, 255, 255, 0.045);
+  --fill-2: rgba(255, 255, 255, 0.08);
+  --accent: #5a77ff;
+  --accent-hover: #6d87ff;
+  --on-accent: #ffffff;
+  --accent-soft: rgba(90, 119, 255, 0.16);
+  --accent-text: #8ea2ff;
+  --focus: rgba(90, 119, 255, 0.45);
+  --ctx-a: oklch(0.74 0.12 264);
+  --ctx-m: oklch(0.78 0.12 72);
+  --ctx-p: oklch(0.75 0.12 155);
+  --late: oklch(0.71 0.16 25);
+  --soon: oklch(0.79 0.13 70);
+  --ok: oklch(0.75 0.13 152);
+  --add-bg: oklch(0.3 0.05 152);
+  --add-fg: oklch(0.82 0.11 152);
+  --del-bg: oklch(0.3 0.05 25);
+  --del-fg: oklch(0.8 0.1 25);
+  --syn-kw: oklch(0.78 0.12 300);
+  --syn-str: oklch(0.8 0.11 150);
+  --syn-num: oklch(0.8 0.11 55);
+  --syn-fn: oklch(0.78 0.11 264);
+  --syn-com: #76767d;
+  --syn-prop: oklch(0.8 0.09 210);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+:root[data-theme="dark"][data-accent="graphite"] {
+  --accent: #ededef;
+  --accent-hover: #ffffff;
+  --on-accent: #111113;
+  --accent-soft: rgba(255, 255, 255, 0.09);
+  --accent-text: #ededef;
+  --focus: rgba(255, 255, 255, 0.3);
+}
+::selection {
+  background: var(--accent-soft);
 }
 * {
   box-sizing: border-box;
@@ -71,7 +158,7 @@ body {
   overflow: hidden;
 }
 body {
-  font: 13px/1.5 var(--sans);
+  font: 13px/1.45 var(--sans);
   color: var(--label);
   background: var(--bg);
   -webkit-font-smoothing: antialiased;

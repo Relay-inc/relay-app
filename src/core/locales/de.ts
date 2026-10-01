@@ -245,6 +245,10 @@ export default {
   "set.themeHelp": "Hell oder dunkel. System folgt macOS.",
   "set.themeLight": "Hell",
   "set.themeDark": "Dunkel",
+  "set.accent": "Akzentfarbe",
+  "set.accentHelp": "Auswahl, Hauptschaltflächen und was auf dich wartet.",
+  "set.accent.relay": "Relay-Blau",
+  "set.accent.graphite": "Graphit",
   "set.favicons": "Projektsymbole",
   "set.faviconsOn": "Favicon der Website als Symbol",
   "set.faviconsHelp":

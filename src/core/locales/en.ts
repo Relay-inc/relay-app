@@ -242,6 +242,10 @@ const en = {
   "set.themeHelp": "Light or dark. System follows macOS.",
   "set.themeLight": "Light",
   "set.themeDark": "Dark",
+  "set.accent": "Accent",
+  "set.accentHelp": "Selection, primary buttons and what is waiting for you.",
+  "set.accent.relay": "Relay blue",
+  "set.accent.graphite": "Graphite",
   "set.favicons": "Project icons",
   "set.faviconsOn": "Use the website favicon as icon",
   "set.faviconsHelp":

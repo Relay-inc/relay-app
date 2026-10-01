@@ -244,6 +244,10 @@ export default {
   "set.themeHelp": "Licht of donker. Systeem volgt macOS.",
   "set.themeLight": "Licht",
   "set.themeDark": "Donker",
+  "set.accent": "Accentkleur",
+  "set.accentHelp": "Selectie, hoofdknoppen en wat op je wacht.",
+  "set.accent.relay": "Relay-blauw",
+  "set.accent.graphite": "Grafiet",
   "set.favicons": "Projecticonen",
   "set.faviconsOn": "Favicon van de website als icoon",
   "set.faviconsHelp":

@@ -11,6 +11,8 @@ export type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
 export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 /** The colour scheme: macOS's, or always light or dark. */
 export type Theme = "system" | "light" | "dark";
+/** The accent: Relay blue, or graphite (the text colour). */
+export type Accent = "relay" | "graphite";
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
@@ -22,6 +24,7 @@ export type Settings = {
   mail: MailCfg;
   language?: string;
   theme?: Theme;
+  accent?: Accent;
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
 };

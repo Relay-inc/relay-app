@@ -19,7 +19,7 @@ import "./settings-path";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
 import type { Settings } from "./types";
-import type { Theme } from "../../domain/config";
+import type { Accent, Theme } from "../../domain/config";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -32,6 +32,7 @@ declare global {
     "folders-save": CustomEvent<VaultMap>;
     "language-change": CustomEvent<string>;
     "theme-change": CustomEvent<Theme>;
+    "accent-change": CustomEvent<Accent>;
     "favicons-change": CustomEvent<boolean>;
   }
 }
@@ -176,6 +177,24 @@ export class SettingsGeneral extends SettingsElement {
     );
   }
 
+  private renderAccent() {
+    const current = this.settings.accent || "relay";
+    const choices = (["relay", "graphite"] as const).map(
+      value => html`<option value=${value} ?selected=${current === value}>${t(`set.accent.${value}`)}</option>`,
+    );
+    return field(
+      t("set.accent"),
+      html`<select
+        class=${SELECT}
+        id="accent"
+        @change=${(e: Event) => emit(this, "accent-change", inputValue(e) as Accent)}
+      >
+        ${choices}
+      </select>`,
+      { id: "accent", hint: th("set.accentHelp") },
+    );
+  }
+
   private renderFavicons() {
     const toggle = toggleSwitch("favon", this.settings.favicons?.on !== false, e =>
       emit(this, "favicons-change", (e.target as HTMLInputElement).checked),
@@ -185,6 +204,6 @@ export class SettingsGeneral extends SettingsElement {
 
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
-    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderFavicons()}`)}`;
+    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()}`)}`;
   }
 }
