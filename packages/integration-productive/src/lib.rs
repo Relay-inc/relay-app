@@ -43,6 +43,8 @@ pub const PROVIDER: Provider = Provider {
     },
     upload: |url| url.strip_prefix("https://").map(|r| r.split('/').next().unwrap_or(""))
         .is_some_and(|h| h.starts_with("productive-") && h.ends_with(".amazonaws.com") && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')),
+    // an attachment's thumb (100×100) is public; the original wants a browser login, the API token gets the login page
+    thumb: |url| url.strip_prefix("https://files.productive.io/attachments/").is_some_and(|r| r.contains("/thumb/")) && url.len() < 2000 && !url.chars().any(char::is_control),
     headers: |c, s| vec![format!("X-Auth-Token: {}", s[0]), format!("X-Organization-Id: {}", c["org"].as_str().unwrap_or("")),
         "Content-Type: application/vnd.api+json".into()],
     ok: |_| true,
@@ -85,6 +87,9 @@ mod tests {
         assert!((p.url)(&c, "PATCH", "/people/7", &Some(json!({}))).is_none() && (p.url)(&c, "DELETE", "/comments/7", &None).is_none());
         assert!((p.upload)("https://productive-files-production.s3.eu-west-1.amazonaws.com") && (p.upload)("https://productive-files.s3.amazonaws.com/k"));
         for bad in ["https://attacker.s3.amazonaws.com", "http://productive-files.s3.amazonaws.com", "https://evil.com/.amazonaws.com", "https://a@b.amazonaws.com", "https://amazonaws.com.evil.com"] { assert!(!(p.upload)(bad), "{bad}"); }
+        assert!((p.thumb)("https://files.productive.io/attachments/files/009/675/225/thumb/Scherm%C2%ADafbeelding.png?1790771917"));
+        for bad in ["https://files.productive.io/attachments/files/009/675/225/original/a.png", "http://files.productive.io/attachments/x/thumb/a.png",
+            "https://files.productive.io.evil.com/attachments/x/thumb/a.png", "https://files.productive.io/attachments/x/thumb/a\n.png"] { assert!(!(p.thumb)(bad), "{bad}"); }
         assert!((p.url)(&c, "DELETE", "/tasks/42", &None).is_none());
         assert!((p.url)(&c, "GET", "/../x", &None).is_none());
         assert!((p.ready)(&c) && !(p.ready)(&json!({ "org": "" })));
