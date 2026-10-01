@@ -1,7 +1,7 @@
 import type { Key } from "./en";
 
 export default {
-  "general": "Général",
+  general: "Général",
   "nav.search": "Rechercher un projet",
   "nav.waiting": "En attente de vous",
   "nav.reminders": "Rappels",
@@ -20,7 +20,8 @@ export default {
   "composer.agent": "Agent",
   "set.tab.agents": "Agents",
   "ag.default": "Agent par défaut",
-  "ag.defaultHelp": "Les nouvelles conversations démarrent avec cet agent. La zone de saisie permet d'en choisir un autre avant le premier message.",
+  "ag.defaultHelp":
+    "Les nouvelles conversations démarrent avec cet agent. La zone de saisie permet d'en choisir un autre avant le premier message.",
   "ag.on": "Utiliser",
   "ag.onLabel": "Afficher dans la zone de saisie",
   "ag.status": "État",
@@ -44,11 +45,14 @@ export default {
   "ag.add": "+ Ajouter un agent",
   "ag.remove": "Retirer",
   "ag.empty": "Aucun agent pour l'instant. Ajoutez-en un pour démarrer des conversations.",
-  "ag.listHelp": "Seuls les agents de cette liste apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
+  "ag.listHelp":
+    "Seuls les agents de cette liste apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
   "ag.isDefault": "par défaut",
   "int.add": "+ Ajouter une intégration",
-  "int.empty": "Aucune intégration pour l'instant. Ajoutez-en une pour voir son tableau, ses pull requests ou vos mails dans la barre latérale.",
-  "int.listHelp": "Les intégrations de cette liste apparaissent dans la barre latérale. Cliquez sur l'une d'elles pour la configurer ou la modifier.",
+  "int.empty":
+    "Aucune intégration pour l'instant. Ajoutez-en une pour voir son tableau, ses pull requests ou vos mails dans la barre latérale.",
+  "int.listHelp":
+    "Les intégrations de cette liste apparaissent dans la barre latérale. Cliquez sur l'une d'elles pour la configurer ou la modifier.",
   "int.foundClaude": "Trouvé dans Claude Code",
   "int.foundClaudeLong": "Claude Code a des identifiants {name} dans sa config MCP. Les utiliser ici ?",
   "int.import": "Importer",
@@ -57,7 +61,8 @@ export default {
   "int.importNone": "Aucun serveur MCP avec identifiants trouvé",
   "int.more": "Plus",
   "pi.title": "Icônes des projets",
-  "pi.desc": "L'icône de chaque projet, conservée dans le vault (.relay/), pour qu'elle suive le vault sur chaque Mac. Un projet sans icône reçoit le favicon de son site. Ouvrez un projet pour la modifier.",
+  "pi.desc":
+    "L'icône de chaque projet, conservée dans le vault (.relay/), pour qu'elle suive le vault sur chaque Mac. Un projet sans icône reçoit le favicon de son site. Ouvrez un projet pour la modifier.",
   "pi.emoji": "Emoji",
   "pi.site": "Site web",
   "pi.sitePh": "exemple.fr",
@@ -70,7 +75,8 @@ export default {
   "pi.siteSoon": "Site {site} : le favicon suit",
   "pi.noIcon": "Aucune icône",
   "pi.siteNoIcon": "{site} n'a pas d'icône : choisissez un emoji ou une image",
-  "pc.desc": "Les réglages de chaque projet. Son icône et ses dépôts sont gardés dans le vault (.relay/) et le suivent sur chaque Mac ; le nom dans Relay vaut pour ce Mac.",
+  "pc.desc":
+    "Les réglages de chaque projet. Son icône et ses dépôts sont gardés dans le vault (.relay/) et le suivent sur chaque Mac ; le nom dans Relay vaut pour ce Mac.",
   "pc.name": "Nom dans Relay",
   "pc.icon": "Icône",
   "pc.iconPh": "Emoji ou site web",
@@ -80,8 +86,10 @@ export default {
   "pc.repoCount_other": "{n} dépôts",
   "pi.find": "Chercher les icônes",
   "pi.finding": "Recherche sur le web…",
-  "pi.findHelp": "Claude cherche le site de chaque projet sans icône (recherche web uniquement), et Relay récupère son favicon",
-  "pi.found": "Site trouvé pour {n} projets sur {total}. Leurs icônes suivent ; ouvrez un projet pour corriger une icône erronée.",
+  "pi.findHelp":
+    "Claude cherche le site de chaque projet sans icône (recherche web uniquement), et Relay récupère son favicon",
+  "pi.found":
+    "Site trouvé pour {n} projets sur {total}. Leurs icônes suivent ; ouvrez un projet pour corriger une icône erronée.",
   "pi.findNone": "Aucun nouveau site trouvé.",
   "nav.settingsTooltip": "Réglages (⌘,)",
   "nav.settingsLabel": "Ouvrir les réglages",
@@ -100,9 +108,11 @@ export default {
   "usage.otherSession": "Session Terminal {id}",
   "usage.split": "Entrée {input} · sortie {output} · cache lu {read} · cache écrit {write}",
   "usage.unpriced": "{n} tokens viennent de modèles sans prix connu.",
-  "usage.estimate": "Montants estimés aux tarifs de l’API : l’abonnement lui-même est forfaitaire. Les tokens incluent le cache.",
+  "usage.estimate":
+    "Montants estimés aux tarifs de l’API : l’abonnement lui-même est forfaitaire. Les tokens incluent le cache.",
   "bar.openTerminal": "Ouvrir dans Terminal",
-  "bar.termMail": "Indisponible pour une conversation qui a touché au mail : le terminal la reprendrait sans les restrictions de l'app.",
+  "bar.termMail":
+    "Indisponible pour une conversation qui a touché au mail : le terminal la reprendrait sans les restrictions de l'app.",
   "bar.togglePanel": "Afficher ou masquer le panneau",
   "bar.togglePanelTitle": "Afficher ou masquer le panneau (⌥⌘I)",
   "composer.send": "Envoyer",
@@ -148,7 +158,8 @@ export default {
   "route.question": "De quel projet s'agit-il ?",
   "route.keep": "Laisser ici",
   "term.writing": "Claude écrit dans le terminal. Le texte s'affiche ici dès qu'un bloc est terminé.",
-  "move.term": "Cette conversation est ouverte dans le terminal{busy}. Si vous écrivez ici, elle continue sous forme de copie dans l'app. Le terminal reste tel quel.",
+  "move.term":
+    "Cette conversation est ouverte dans le terminal{busy}. Si vous écrivez ici, elle continue sous forme de copie dans l'app. Le terminal reste tel quel.",
   "move.termBusy": " et travaille encore",
   "move.about": "Cette conversation porte sur <b>{name}</b>.",
   "move.no": "Non",
@@ -211,11 +222,13 @@ export default {
   "rem.new": "+ Nouveau rappel",
   "rem.none": "Aucun rappel.",
   "set.title": "Réglages",
-  "set.vaultHelp": "Le dossier de votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",
+  "set.vaultHelp":
+    "Le dossier de votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",
   "set.pick": "Choisir un dossier…",
   "set.save": "Enregistrer",
   "set.custom": "Projets personnalisés",
-  "set.customHelp": "L'icône et le nom d'un projet se règlent dans la fenêtre principale : cliquez sur le nom du projet, avec la flèche, en haut d'une conversation.",
+  "set.customHelp":
+    "L'icône et le nom d'un projet se règlent dans la fenêtre principale : cliquez sur le nom du projet, avec la flèche, en haut d'une conversation.",
   "set.reset": "Réinitialiser",
   "set.none": "Aucun pour l'instant.",
   "set.saved": "Enregistré.",
@@ -224,18 +237,21 @@ export default {
   "set.languageHelp": "La langue de l'app. Système suit la langue de macOS, ou l'anglais si l'app ne la propose pas.",
   "set.favicons": "Icônes de projet",
   "set.faviconsOn": "Utiliser le favicon du site comme icône",
-  "set.faviconsHelp": "Une fois par jour, l'app cherche un site web dans les notes de chaque projet sans icône et utilise son favicon. Chaque site n'est essayé qu'une fois par projet, une icône réinitialisée ne revient pas.",
+  "set.faviconsHelp":
+    "Une fois par jour, l'app cherche un site web dans les notes de chaque projet sans icône et utilise son favicon. Chaque site n'est essayé qu'une fois par projet, une icône réinitialisée ne revient pas.",
   "set.system": "Système (par défaut)",
   "set.sec.folders": "Dossiers",
   "set.sec.interface": "Affichage",
   "vault.welcome": "Bienvenue dans Relay",
-  "vault.intro": "Choisissez le dossier de votre coffre Obsidian. Relay y cherche votre work-state, vos rappels et les autres fichiers qu'il lit ; vérifiez ci-dessous ce qu'il a trouvé.",
+  "vault.intro":
+    "Choisissez le dossier de votre coffre Obsidian. Relay y cherche votre work-state, vos rappels et les autres fichiers qu'il lit ; vérifiez ci-dessous ce qu'il a trouvé.",
   "vault.none": "Aucun dossier choisi",
   "vault.choose": "Choisir le dossier du coffre…",
   "vault.use": "Utiliser ce coffre",
   "vault.invalid": "Aucun work-state.md trouvé : indiquez-le dans État du travail pour continuer.",
   "vault.map": "Fichiers de ce coffre",
-  "vault.mapHelp": "Les chemins sont relatifs au dossier du coffre. Les facultatifs peuvent rester vides : la fonction est alors désactivée.",
+  "vault.mapHelp":
+    "Les chemins sont relatifs au dossier du coffre. Les facultatifs peuvent rester vides : la fonction est alors désactivée.",
   "vault.optional": "facultatif",
   "vault.pickPath": "Choisir…",
   "vault.found": "trouvé",
@@ -283,7 +299,8 @@ export default {
   "gh.show": "Afficher les pull requests",
   "gh.owners": "Propriétaires :",
   "gh.ownersPh": "Vide = partout, p. ex. weareantenna",
-  "gh.help": "Affiche vos PR ouvertes et celles où votre revue est demandée, reliées à chaque projet via les dépôts de la fiche projet. Lecture seule, un clic ouvre la PR sur GitHub. L'app utilise la connexion de la GitHub CLI, aucun jeton n'est stocké dans l'app. Pas connecté : lancez <code>gh auth login</code> dans le terminal.",
+  "gh.help":
+    "Affiche vos PR ouvertes et celles où votre revue est demandée, reliées à chaque projet via les dépôts de la fiche projet. Lecture seule, un clic ouvre la PR sur GitHub. L'app utilise la connexion de la GitHub CLI, aucun jeton n'est stocké dans l'app. Pas connecté : lancez <code>gh auth login</code> dans le terminal.",
   "gh.recheck": "Vérifier à nouveau",
   "int.tokenStored": "Enregistré dans le trousseau",
   "int.tokenPaste": "Collez votre jeton",
@@ -292,7 +309,8 @@ export default {
   "kb.prio3": "Moyenne",
   "kb.prio4": "Basse",
   "int.boards": "Tableaux par projet du vault",
-  "int.boardsHelp": "Ouvrir le tableau depuis une conversation de ce projet du vault affiche ce tableau. Un projet du vault a au plus un tableau.",
+  "int.boardsHelp":
+    "Ouvrir le tableau depuis une conversation de ce projet du vault affiche ce tableau. Un projet du vault a au plus un tableau.",
   "int.clear": "Effacer le jeton",
   "int.save": "Enregistrer et tester",
   "int.busy": "En cours…",
@@ -336,7 +354,8 @@ export default {
   "mail.account": "La barre latérale affiche :",
   "mail.testOk": "Fonctionne : {n} mails dans la boîte",
   "mail.accounts": "{n} comptes",
-  "mail.help": "Affiche les 50 mails les plus récents de votre boîte. Ouvrir un mail le laisse non lu, lu et non lu se changent avec le bouton. L'app n'envoie, ne déplace et ne supprime jamais rien : depuis un mail vous lancez une conversation, une réponse devient seulement un brouillon.",
+  "mail.help":
+    "Affiche les 50 mails les plus récents de votre boîte. Ouvrir un mail le laisse non lu, lu et non lu se changent avec le bouton. L'app n'envoie, ne déplace et ne supprime jamais rien : depuis un mail vous lancez une conversation, une réponse devient seulement un brouillon.",
   "mail.search": "Chercher expéditeur ou objet",
   "mail.fAll": "Tous",
   "mail.fUnread": "Non lus",
@@ -364,33 +383,44 @@ export default {
   "mail.setupIntro": "Aucun compte mail pour l'instant. La connexion prend une minute.",
   "mail.setupStep1": "Cliquez ci-dessous sur Ouvrir les réglages, vous arrivez directement sur Mail.",
   "mail.setupStep2": "Créez un mot de passe d'application chez Google, le bouton se trouve à l'étape 1 de cet écran.",
-  "mail.setupStep3": "Collez votre adresse e-mail et le code puis cliquez sur Connecter. L'app teste la connexion et enregistre tout.",
-  "mail.setupPw": "Votre mot de passe est déjà dans le trousseau, par exemple via himalaya ? Utilisez alors Avancé en bas du même écran.",
+  "mail.setupStep3":
+    "Collez votre adresse e-mail et le code puis cliquez sur Connecter. L'app teste la connexion et enregistre tout.",
+  "mail.setupPw":
+    "Votre mot de passe est déjà dans le trousseau, par exemple via himalaya ? Utilisez alors Avancé en bas du même écran.",
   "mail.setupOpen": "Ouvrir les réglages",
   "mail.guideH": "Connecter votre Gmail en deux étapes",
   "mail.guideMore": "Connecter un autre compte",
   "mail.step1H": "Étape 1. Créez un mot de passe d'application chez Google",
-  "mail.step1": "Gmail n'accepte une app qu'avec un mot de passe d'application : un code de 16 lettres, distinct de votre mot de passe habituel. Vous en créez un par app et pouvez le révoquer à tout moment.",
+  "mail.step1":
+    "Gmail n'accepte une app qu'avec un mot de passe d'application : un code de 16 lettres, distinct de votre mot de passe habituel. Vous en créez un par app et pouvez le révoquer à tout moment.",
   "mail.step1Btn": "Ouvrir les mots de passe d'application Google",
-  "mail.step1Hint": "Connectez-vous avec le compte à relier, tapez un nom comme Relay et cliquez sur Créer. Copiez le code affiché. Si la page n'existe pas, activez d'abord la validation en deux étapes dans votre compte Google. Pour un compte professionnel (Google Workspace), l'administrateur doit autoriser les mots de passe d'application.",
+  "mail.step1Hint":
+    "Connectez-vous avec le compte à relier, tapez un nom comme Relay et cliquez sur Créer. Copiez le code affiché. Si la page n'existe pas, activez d'abord la validation en deux étapes dans votre compte Google. Pour un compte professionnel (Google Workspace), l'administrateur doit autoriser les mots de passe d'application.",
   "mail.step2H": "Étape 2. Collez ici votre adresse e-mail et le code",
   "mail.emailL": "Adresse e-mail",
   "mail.pwL": "Mot de passe d'application",
   "mail.pwPh": "les 16 lettres, espaces acceptés",
   "mail.connect": "Connecter",
   "mail.connecting": "Enregistrement du code dans le trousseau et connexion à Gmail…",
-  "mail.connected": "Connecté à {email} : {n} mails dans la boîte. Enregistré, vous les trouvez sous Mail dans la barre latérale.",
-  "mail.step2Hint": "Le code va directement dans le trousseau macOS, sous le service relay-mail. L'app ne le stocke nulle part ailleurs et ne l'affiche plus. S'il est faux, il est supprimé aussitôt.",
+  "mail.connected":
+    "Connecté à {email} : {n} mails dans la boîte. Enregistré, vous les trouvez sous Mail dans la barre latérale.",
+  "mail.step2Hint":
+    "Le code va directement dans le trousseau macOS, sous le service relay-mail. L'app ne le stocke nulle part ailleurs et ne l'affiche plus. S'il est faux, il est supprimé aussitôt.",
   "mail.advH": "Avancé : le mot de passe est déjà dans le trousseau (par exemple via himalaya)",
-  "mail.adv": "Ouvrez l'app Trousseaux d'accès et cherchez l'élément. Son nom est le service, son champ Compte est le compte du trousseau. Pour himalaya, le service est himalaya-&lt;nom&gt;-imap et le compte &lt;nom&gt;, avec le nom de compte de votre configuration himalaya. Par exemple le service himalaya-weareantenna-imap et le compte weareantenna. Si macOS demande l'autorisation de le lire, choisissez Toujours autoriser.",
+  "mail.adv":
+    "Ouvrez l'app Trousseaux d'accès et cherchez l'élément. Son nom est le service, son champ Compte est le compte du trousseau. Pour himalaya, le service est himalaya-&lt;nom&gt;-imap et le compte &lt;nom&gt;, avec le nom de compte de votre configuration himalaya. Par exemple le service himalaya-weareantenna-imap et le compte weareantenna. Si macOS demande l'autorisation de le lire, choisissez Toujours autoriser.",
   "mail.svcL": "Service",
   "mail.kaccL": "Compte du trousseau",
   "mail.addTest": "Tester et ajouter",
   "mail.inKeychain": "mot de passe dans le trousseau : {svc}",
-  "mail.errLogin": "Gmail a refusé la connexion. Vérifiez que le mot de passe d'application appartient à cette adresse et que vous avez copié tout le code. Sinon, créez un nouveau code à l'étape 1 et réessayez.",
-  "mail.errNoPw": "Aucun mot de passe dans le trousseau sous ce service et ce compte. Vérifiez les noms dans Trousseaux d'accès, ils doivent correspondre exactement, ou utilisez les étapes 1 et 2 avec un nouveau mot de passe d'application.",
-  "mail.errKeychain": "macOS a demandé l'autorisation de lire le trousseau sans obtenir de réponse. Réessayez et choisissez Toujours autoriser.",
-  "mail.errGmail": "Cette adresse n'est pas un compte Gmail ou Google Workspace. L'app ne prend en charge que Gmail pour l'instant.",
+  "mail.errLogin":
+    "Gmail a refusé la connexion. Vérifiez que le mot de passe d'application appartient à cette adresse et que vous avez copié tout le code. Sinon, créez un nouveau code à l'étape 1 et réessayez.",
+  "mail.errNoPw":
+    "Aucun mot de passe dans le trousseau sous ce service et ce compte. Vérifiez les noms dans Trousseaux d'accès, ils doivent correspondre exactement, ou utilisez les étapes 1 et 2 avec un nouveau mot de passe d'application.",
+  "mail.errKeychain":
+    "macOS a demandé l'autorisation de lire le trousseau sans obtenir de réponse. Réessayez et choisissez Toujours autoriser.",
+  "mail.errGmail":
+    "Cette adresse n'est pas un compte Gmail ou Google Workspace. L'app ne prend en charge que Gmail pour l'instant.",
   "mail.errNet": "Gmail est injoignable. Vérifiez votre connexion internet et réessayez.",
   "mail.test": "Tester",
   "mail.remove": "Supprimer",

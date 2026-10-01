@@ -3,7 +3,12 @@ import { provider } from "./providers";
 
 // What the main window shows: the open conversation or view (`sel`), the right panel's tab, and the overlays.
 
-export const USAGE = "__usage", WAIT = "__wait", REM = "__rem", BOARD = "__board", PRS = "__prs", MAIL = "__mail";
+export const USAGE = "__usage",
+  WAIT = "__wait",
+  REM = "__rem",
+  BOARD = "__board",
+  PRS = "__prs",
+  MAIL = "__mail";
 export const VIEWS = [WAIT, REM, PRS, MAIL, USAGE];
 
 export const ui = {
@@ -19,6 +24,6 @@ export const ui = {
 
 // ---------- views and boards: a provider's board is the view "__board:<provider id>"
 export const boardKey = (id: string) => `${BOARD}:${id}`;
-export const boardOf = (k: string) => k.startsWith(`${BOARD}:`) ? provider(k.slice(BOARD.length + 1)) : undefined;
+export const boardOf = (k: string) => (k.startsWith(`${BOARD}:`) ? provider(k.slice(BOARD.length + 1)) : undefined);
 export const isView = (k: string) => VIEWS.includes(k) || !!boardOf(k);
 export const isTerm = (k: string) => k.startsWith("t:");

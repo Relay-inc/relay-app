@@ -1,7 +1,7 @@
 import type { Key } from "./en";
 
 export default {
-  "general": "Algemeen",
+  general: "Algemeen",
   "nav.search": "Zoek project",
   "nav.waiting": "Wacht op jou",
   "nav.reminders": "Reminders",
@@ -20,7 +20,8 @@ export default {
   "composer.agent": "Agent",
   "set.tab.agents": "Agents",
   "ag.default": "Standaardagent",
-  "ag.defaultHelp": "Nieuwe gesprekken starten met deze agent. In het invoerveld kies je een andere vóór het eerste bericht.",
+  "ag.defaultHelp":
+    "Nieuwe gesprekken starten met deze agent. In het invoerveld kies je een andere vóór het eerste bericht.",
   "ag.on": "Gebruik",
   "ag.onLabel": "Toon in het invoerveld",
   "ag.status": "Status",
@@ -44,11 +45,13 @@ export default {
   "ag.add": "+ Agent toevoegen",
   "ag.remove": "Verwijderen",
   "ag.empty": "Nog geen agents. Voeg er een toe om er gesprekken mee te starten.",
-  "ag.listHelp": "Enkel de agents in deze lijst verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
+  "ag.listHelp":
+    "Enkel de agents in deze lijst verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
   "ag.isDefault": "standaard",
   "int.add": "+ Integratie toevoegen",
   "int.empty": "Nog geen integraties. Voeg er een toe om het bord, de pull requests of de mail in de zijbalk te zien.",
-  "int.listHelp": "De integraties in deze lijst verschijnen in de zijbalk. Klik er een aan om ze in te stellen of te wijzigen.",
+  "int.listHelp":
+    "De integraties in deze lijst verschijnen in de zijbalk. Klik er een aan om ze in te stellen of te wijzigen.",
   "int.foundClaude": "Gevonden in Claude Code",
   "int.foundClaudeLong": "Claude Code heeft inloggegevens voor {name} in zijn MCP-config. Hier gebruiken?",
   "int.import": "Overnemen",
@@ -57,7 +60,8 @@ export default {
   "int.importNone": "Geen MCP-server met inloggegevens gevonden",
   "int.more": "Meer",
   "pi.title": "Projecticonen",
-  "pi.desc": "Het icoon van elk project, bewaard in de vault (.relay/), zodat het met de vault meegaat naar elke Mac. Een project zonder icoon krijgt de favicon van zijn website. Open een project om het te wijzigen.",
+  "pi.desc":
+    "Het icoon van elk project, bewaard in de vault (.relay/), zodat het met de vault meegaat naar elke Mac. Een project zonder icoon krijgt de favicon van zijn website. Open een project om het te wijzigen.",
   "pi.emoji": "Emoji",
   "pi.site": "Website",
   "pi.sitePh": "voorbeeld.be",
@@ -70,7 +74,8 @@ export default {
   "pi.siteSoon": "Website {site}: favicon volgt",
   "pi.noIcon": "Geen icoon",
   "pi.siteNoIcon": "{site} heeft geen icoon: kies een emoji of een afbeelding",
-  "pc.desc": "De instellingen van elk project. Icoon en repositories staan in de vault (.relay/), zodat ze naar elke Mac meegaan; de naam in Relay geldt voor deze Mac.",
+  "pc.desc":
+    "De instellingen van elk project. Icoon en repositories staan in de vault (.relay/), zodat ze naar elke Mac meegaan; de naam in Relay geldt voor deze Mac.",
   "pc.name": "Naam in Relay",
   "pc.icon": "Icoon",
   "pc.iconPh": "Emoji of website",
@@ -80,8 +85,10 @@ export default {
   "pc.repoCount_other": "{n} repo's",
   "pi.find": "Iconen zoeken",
   "pi.finding": "Zoekt op het web…",
-  "pi.findHelp": "Claude zoekt de website van elk project zonder icoon op (enkel webzoeken), en Relay haalt de favicon op",
-  "pi.found": "Website gevonden voor {n} van {total} projecten. Hun iconen volgen; open een project om een fout icoon te corrigeren.",
+  "pi.findHelp":
+    "Claude zoekt de website van elk project zonder icoon op (enkel webzoeken), en Relay haalt de favicon op",
+  "pi.found":
+    "Website gevonden voor {n} van {total} projecten. Hun iconen volgen; open een project om een fout icoon te corrigeren.",
   "pi.findNone": "Geen nieuwe websites gevonden.",
   "nav.settingsTooltip": "Instellingen (⌘,)",
   "nav.settingsLabel": "Open instellingen",
@@ -100,9 +107,11 @@ export default {
   "usage.otherSession": "Terminalsessie {id}",
   "usage.split": "Input {input} · output {output} · cache gelezen {read} · cache geschreven {write}",
   "usage.unpriced": "{n} tokens komen van modellen zonder bekende prijs.",
-  "usage.estimate": "Bedragen zijn schattingen tegen API-prijzen: het abonnement zelf is een vast bedrag. Tokens tellen cache mee.",
+  "usage.estimate":
+    "Bedragen zijn schattingen tegen API-prijzen: het abonnement zelf is een vast bedrag. Tokens tellen cache mee.",
   "bar.openTerminal": "Openen in Terminal",
-  "bar.termMail": "Niet beschikbaar voor een gesprek dat mail raakte: de terminal zou het hervatten zonder de beperkingen van de app.",
+  "bar.termMail":
+    "Niet beschikbaar voor een gesprek dat mail raakte: de terminal zou het hervatten zonder de beperkingen van de app.",
   "bar.togglePanel": "Paneel verbergen of tonen",
   "bar.togglePanelTitle": "Paneel verbergen of tonen (⌥⌘I)",
   "composer.send": "Versturen",
@@ -148,7 +157,8 @@ export default {
   "route.question": "Over welk project gaat dit?",
   "route.keep": "Hier houden",
   "term.writing": "Claude schrijft in de terminal. Tekst verschijnt hier zodra een blok af is.",
-  "move.term": "Dit gesprek staat open in de terminal{busy}. Typ je hier, dan gaat het verder als kopie in de app. De terminal blijft zoals hij is.",
+  "move.term":
+    "Dit gesprek staat open in de terminal{busy}. Typ je hier, dan gaat het verder als kopie in de app. De terminal blijft zoals hij is.",
   "move.termBusy": " en werkt nog",
   "move.about": "Dit gesprek gaat over <b>{name}</b>.",
   "move.no": "Nee",
@@ -211,11 +221,13 @@ export default {
   "rem.new": "+ Nieuwe reminder",
   "rem.none": "Geen reminders.",
   "set.title": "Instellingen",
-  "set.vaultHelp": "De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",
+  "set.vaultHelp":
+    "De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",
   "set.pick": "Kies map…",
   "set.save": "Opslaan",
   "set.custom": "Aangepaste projecten",
-  "set.customHelp": "Icoon en naam zet je per project in het hoofdvenster: klik bovenaan een gesprek op de projectnaam met het pijltje.",
+  "set.customHelp":
+    "Icoon en naam zet je per project in het hoofdvenster: klik bovenaan een gesprek op de projectnaam met het pijltje.",
   "set.reset": "Herstellen",
   "set.none": "Nog geen.",
   "set.saved": "Opgeslagen.",
@@ -224,18 +236,21 @@ export default {
   "set.languageHelp": "De taal van de app. Systeem volgt de taal van macOS, of Engels als de app die taal niet heeft.",
   "set.favicons": "Projecticonen",
   "set.faviconsOn": "Favicon van de website als icoon",
-  "set.faviconsHelp": "Eén keer per dag zoekt de app in de notities van elk project zonder icoon een website en gebruikt de favicon. Per website wordt een project één keer geprobeerd, een hersteld icoon komt niet terug.",
+  "set.faviconsHelp":
+    "Eén keer per dag zoekt de app in de notities van elk project zonder icoon een website en gebruikt de favicon. Per website wordt een project één keer geprobeerd, een hersteld icoon komt niet terug.",
   "set.system": "Systeem (standaard)",
   "set.sec.folders": "Mappen",
   "set.sec.interface": "Weergave",
   "vault.welcome": "Welkom bij Relay",
-  "vault.intro": "Kies de map van je Obsidian-vault. Relay zoekt je work-state, reminders en de andere bestanden die het leest; controleer hieronder wat het vond.",
+  "vault.intro":
+    "Kies de map van je Obsidian-vault. Relay zoekt je work-state, reminders en de andere bestanden die het leest; controleer hieronder wat het vond.",
   "vault.none": "Geen map gekozen",
   "vault.choose": "Kies vault-map…",
   "vault.use": "Gebruik deze vault",
   "vault.invalid": "Geen work-state.md gevonden: wijs Work-state ernaar om verder te gaan.",
   "vault.map": "Bestanden in deze vault",
-  "vault.mapHelp": "Paden zijn relatief tegenover de vault-map. Optionele mogen leeg blijven: die functie staat dan uit.",
+  "vault.mapHelp":
+    "Paden zijn relatief tegenover de vault-map. Optionele mogen leeg blijven: die functie staat dan uit.",
   "vault.optional": "optioneel",
   "vault.pickPath": "Kies…",
   "vault.found": "gevonden",
@@ -283,7 +298,8 @@ export default {
   "gh.show": "Pull requests tonen",
   "gh.owners": "Owners:",
   "gh.ownersPh": "Leeg is overal, bv. weareantenna",
-  "gh.help": "Toont je open PR's en die waar je review gevraagd wordt, per project gekoppeld via de repos op de projectkaart. Enkel lezen, een klik opent de PR op GitHub. De app gebruikt de login van de GitHub CLI, er staat geen token in de app. Niet ingelogd: voer <code>gh auth login</code> uit in de terminal.",
+  "gh.help":
+    "Toont je open PR's en die waar je review gevraagd wordt, per project gekoppeld via de repos op de projectkaart. Enkel lezen, een klik opent de PR op GitHub. De app gebruikt de login van de GitHub CLI, er staat geen token in de app. Niet ingelogd: voer <code>gh auth login</code> uit in de terminal.",
   "gh.recheck": "Opnieuw nakijken",
   "int.tokenStored": "Opgeslagen in de sleutelhanger",
   "int.tokenPaste": "Plak je token",
@@ -292,7 +308,8 @@ export default {
   "kb.prio3": "Gemiddeld",
   "kb.prio4": "Laag",
   "int.boards": "Borden per vaultproject",
-  "int.boardsHelp": "Het bord openen vanuit een gesprek in dat vaultproject toont dit bord. Een vaultproject heeft hoogstens één bord.",
+  "int.boardsHelp":
+    "Het bord openen vanuit een gesprek in dat vaultproject toont dit bord. Een vaultproject heeft hoogstens één bord.",
   "int.clear": "Token wissen",
   "int.save": "Opslaan en testen",
   "int.busy": "Bezig…",
@@ -336,7 +353,8 @@ export default {
   "mail.account": "Zijbalk toont:",
   "mail.testOk": "Werkt: {n} mails in de inbox",
   "mail.accounts": "{n} accounts",
-  "mail.help": "Toont de 50 nieuwste mails van je inbox. Een mail openen laat hem ongelezen, gelezen en ongelezen wijzig je met de knop. De app verstuurt, verplaatst of verwijdert nooit iets: vanuit een mail start je een gesprek, een antwoord wordt enkel een draft.",
+  "mail.help":
+    "Toont de 50 nieuwste mails van je inbox. Een mail openen laat hem ongelezen, gelezen en ongelezen wijzig je met de knop. De app verstuurt, verplaatst of verwijdert nooit iets: vanuit een mail start je een gesprek, een antwoord wordt enkel een draft.",
   "mail.search": "Zoek afzender of onderwerp",
   "mail.fAll": "Alle",
   "mail.fUnread": "Ongelezen",
@@ -365,14 +383,17 @@ export default {
   "mail.setupStep1": "Klik hieronder op Open de instellingen, je komt meteen bij Mail.",
   "mail.setupStep2": "Maak bij Google een app-wachtwoord aan, de knop daarvoor staat in stap 1 van het scherm.",
   "mail.setupStep3": "Plak je e-mailadres en de code en klik op Verbind. De app test de verbinding en slaat alles op.",
-  "mail.setupPw": "Staat je wachtwoord al in de sleutelhanger, bijvoorbeeld van himalaya? Gebruik dan Geavanceerd onderaan hetzelfde scherm.",
+  "mail.setupPw":
+    "Staat je wachtwoord al in de sleutelhanger, bijvoorbeeld van himalaya? Gebruik dan Geavanceerd onderaan hetzelfde scherm.",
   "mail.setupOpen": "Open de instellingen",
   "mail.guideH": "Je Gmail koppelen, in twee stappen",
   "mail.guideMore": "Nog een account koppelen",
   "mail.step1H": "Stap 1. Maak een app-wachtwoord bij Google",
-  "mail.step1": "Gmail laat een app enkel binnen met een app-wachtwoord: een code van 16 letters, los van je gewone wachtwoord. Je maakt er één per app en kan ze altijd weer intrekken.",
+  "mail.step1":
+    "Gmail laat een app enkel binnen met een app-wachtwoord: een code van 16 letters, los van je gewone wachtwoord. Je maakt er één per app en kan ze altijd weer intrekken.",
   "mail.step1Btn": "Open Google app-wachtwoorden",
-  "mail.step1Hint": "Log in met het account dat je wil koppelen, typ een naam zoals Relay en klik op Maken. Kopieer de code die verschijnt. Zie je de pagina niet, zet dan eerst 2-stapsverificatie aan in je Google-account. Bij een werkaccount (Google Workspace) moet de beheerder app-wachtwoorden toelaten.",
+  "mail.step1Hint":
+    "Log in met het account dat je wil koppelen, typ een naam zoals Relay en klik op Maken. Kopieer de code die verschijnt. Zie je de pagina niet, zet dan eerst 2-stapsverificatie aan in je Google-account. Bij een werkaccount (Google Workspace) moet de beheerder app-wachtwoorden toelaten.",
   "mail.step2H": "Stap 2. Plak hier je e-mailadres en de code",
   "mail.emailL": "E-mailadres",
   "mail.pwL": "App-wachtwoord",
@@ -380,16 +401,21 @@ export default {
   "mail.connect": "Verbind",
   "mail.connecting": "Code in de sleutelhanger zetten en inloggen bij Gmail…",
   "mail.connected": "Verbonden met {email}: {n} mails in de inbox. Opgeslagen, je ziet ze in Mail in de zijbalk.",
-  "mail.step2Hint": "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
+  "mail.step2Hint":
+    "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
   "mail.advH": "Geavanceerd: het wachtwoord staat al in de sleutelhanger (bijvoorbeeld van himalaya)",
-  "mail.adv": "Open de app Sleutelhangertoegang en zoek het item. De naam van het item is de dienst, het veld Account is het sleutelhanger-account. Voor himalaya is de dienst himalaya-&lt;naam&gt;-imap en het account &lt;naam&gt;, met de accountnaam uit je himalaya-config. Bijvoorbeeld dienst himalaya-weareantenna-imap en account weareantenna. Vraagt macOS toestemming om het te lezen, kies dan Altijd toestaan.",
+  "mail.adv":
+    "Open de app Sleutelhangertoegang en zoek het item. De naam van het item is de dienst, het veld Account is het sleutelhanger-account. Voor himalaya is de dienst himalaya-&lt;naam&gt;-imap en het account &lt;naam&gt;, met de accountnaam uit je himalaya-config. Bijvoorbeeld dienst himalaya-weareantenna-imap en account weareantenna. Vraagt macOS toestemming om het te lezen, kies dan Altijd toestaan.",
   "mail.svcL": "Dienst",
   "mail.kaccL": "Sleutelhanger-account",
   "mail.addTest": "Test en voeg toe",
   "mail.inKeychain": "wachtwoord in sleutelhanger: {svc}",
-  "mail.errLogin": "Gmail weigerde de login. Kijk na of het app-wachtwoord bij dit e-mailadres hoort en of je de hele code kopieerde. Lukt het niet, maak dan in stap 1 een nieuwe code aan en probeer opnieuw.",
-  "mail.errNoPw": "Onder die dienst en dat account staat geen wachtwoord in de sleutelhanger. Kijk de namen na in Sleutelhangertoegang, ze moeten exact kloppen, of gebruik stap 1 en 2 met een nieuw app-wachtwoord.",
-  "mail.errKeychain": "macOS vroeg toestemming om de sleutelhanger te lezen en kreeg geen antwoord. Probeer opnieuw en kies Altijd toestaan.",
+  "mail.errLogin":
+    "Gmail weigerde de login. Kijk na of het app-wachtwoord bij dit e-mailadres hoort en of je de hele code kopieerde. Lukt het niet, maak dan in stap 1 een nieuwe code aan en probeer opnieuw.",
+  "mail.errNoPw":
+    "Onder die dienst en dat account staat geen wachtwoord in de sleutelhanger. Kijk de namen na in Sleutelhangertoegang, ze moeten exact kloppen, of gebruik stap 1 en 2 met een nieuw app-wachtwoord.",
+  "mail.errKeychain":
+    "macOS vroeg toestemming om de sleutelhanger te lezen en kreeg geen antwoord. Probeer opnieuw en kies Altijd toestaan.",
   "mail.errGmail": "Dit adres is geen Gmail- of Google Workspace-account. De app ondersteunt voorlopig enkel Gmail.",
   "mail.errNet": "Gmail is niet bereikbaar. Kijk je internetverbinding na en probeer opnieuw.",
   "mail.test": "Test",

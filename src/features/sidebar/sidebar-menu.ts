@@ -21,9 +21,20 @@ export class SidebarMenu extends LitElement {
   @property({ attribute: false }) items: MenuItem[] = [];
 
   render() {
-    return html`<div class="fixed z-20 min-w-45 grid p-1 bg-bg border border-separator rounded-lg shadow-lg" style="left:${this.x}px;top:${this.y}px">
-      ${this.items.map(i => i.head ? html`<div class="px-2.5 pt-1.5 pb-0.5 text-xs font-semibold text-secondary">${i.label}</div>`
-        : html`<button class="max-w-2xs px-2.5 py-1 rounded-sm text-sm text-left text-label truncate hover:bg-accent hover:text-on-accent" @click=${() => emit(this, "pick", i.id)}>${i.label}</button>`)}
+    return html`<div
+      class="fixed z-20 min-w-45 grid p-1 bg-bg border border-separator rounded-lg shadow-lg"
+      style="left:${this.x}px;top:${this.y}px"
+    >
+      ${this.items.map(i =>
+        i.head
+          ? html`<div class="px-2.5 pt-1.5 pb-0.5 text-xs font-semibold text-secondary">${i.label}</div>`
+          : html`<button
+              class="max-w-2xs px-2.5 py-1 rounded-sm text-sm text-left text-label truncate hover:bg-accent hover:text-on-accent"
+              @click=${() => emit(this, "pick", i.id)}
+            >
+              ${i.label}
+            </button>`,
+      )}
     </div>`;
   }
 }

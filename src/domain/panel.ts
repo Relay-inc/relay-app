@@ -14,23 +14,54 @@ export const panel = {
   cardRefs: {} as Record<string, BoardRef>,
 };
 
-export const cardOf = (key: string) => { const m = /^card:([^:]+):(.+)$/.exec(key), p = m ? provider(m[1]) : undefined; return p?.detail ? { p, d: p.detail, id: m![2] } : undefined; };
+export const cardOf = (key: string) => {
+  const m = /^card:([^:]+):(.+)$/.exec(key),
+    p = m ? provider(m[1]) : undefined;
+  return p?.detail ? { p, d: p.detail, id: m![2] } : undefined;
+};
 // a card opens in the right panel when its provider has one, else in the browser
 export async function openCard(p: BoardProvider, ref: BoardRef, id: string) {
-  if (p.detail) { panel.cardRefs[`card:${p.id}:${id}`] = ref; return openPr(`card:${p.id}:${id}`); }
-  try { invoke("plugin:opener|open_url", { url: await p.url(ctxOf(p, config.value.integrations), ref, id) }); } catch (e) { console.error(e); }
+  if (p.detail) {
+    panel.cardRefs[`card:${p.id}:${id}`] = ref;
+    return openPr(`card:${p.id}:${id}`);
+  }
+  try {
+    invoke("plugin:opener|open_url", { url: await p.url(ctxOf(p, config.value.integrations), ref, id) });
+  } catch (e) {
+    console.error(e);
+  }
 }
 export async function openPr(key: string) {
-  panel.open = key; panel.err = ""; mail.link = "";
+  panel.open = key;
+  panel.err = "";
+  mail.link = "";
   const card = cardOf(key);
   if (card) panel.detail[key] ??= card.d.cached(card.id);
-  ui.noinsp = false; ls.set("noinsp", false); changed();
+  ui.noinsp = false;
+  ls.set("noinsp", false);
+  changed();
   const i = key.lastIndexOf("#");
-  try { panel.detail[key] = card ? await card.d.fetch(ctxOf(card.p, config.value.integrations), panel.cardRefs[key], card.id) : key.startsWith("mail:") ? await invoke<MailBody>("mail_read", mailRef(key))
-    : key.startsWith("note:") ? await invoke("read_note", { target: key.slice(5) })
-    : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
-  catch (e) { if (key.startsWith("mail:")) delete panel.detail[key]; if (!panel.detail[key]) panel.err = String(e); }
+  try {
+    panel.detail[key] = card
+      ? await card.d.fetch(ctxOf(card.p, config.value.integrations), panel.cardRefs[key], card.id)
+      : key.startsWith("mail:")
+        ? await invoke<MailBody>("mail_read", mailRef(key))
+        : key.startsWith("note:")
+          ? await invoke("read_note", { target: key.slice(5) })
+          : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) });
+  } catch (e) {
+    if (key.startsWith("mail:")) delete panel.detail[key];
+    if (!panel.detail[key]) panel.err = String(e);
+  }
   changed();
 }
-export function closePr() { if (!panel.open) return; panel.open = ""; changed(); }
-export function setTab(tab: string) { ui.tab = tab; if (panel.open) closePr(); else changed(); }
+export function closePr() {
+  if (!panel.open) return;
+  panel.open = "";
+  changed();
+}
+export function setTab(tab: string) {
+  ui.tab = tab;
+  if (panel.open) closePr();
+  else changed();
+}

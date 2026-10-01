@@ -10,15 +10,30 @@ import "./pr-body";
 /** One PR in the right panel: the bar, then the body once github_pr has answered. */
 @customElement("relay-pr-detail")
 export class RelayPrDetail extends LitElement {
-  static styles = [tw, css`:host { display: block; }`];
+  static styles = [
+    tw,
+    css`
+      :host {
+        display: block;
+      }
+    `,
+  ];
   protected store = new StoreController(this);
 
   render() {
-    const key = panel.open, pr = panel.detail[key] ?? null, err = panel.err;
-    const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3"><button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closePr}>×</button>
-      ${pr ? html`<span class="flex-1"></span><button class="btn btn-primary whitespace-nowrap flex-none" title=${t("pr.reviewTitle")} @click=${() => reviewPr(key)}>${th("pr.review")}</button><a class="btn whitespace-nowrap flex-none inline-flex items-center" href=${pr.url}>${th("pr.openGh")}</a>` : nothing}</div>`;
-    if (err) return html`${bar}<div class="err-box">${err}</div>`;
-    if (!pr) return html`${bar}<div class="text-secondary mb-3">${th("pr.loading")}</div>`;
+    const key = panel.open,
+      pr = panel.detail[key] ?? null,
+      err = panel.err;
+    const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3">
+      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closePr}>×</button>
+      ${pr ? html`<span class="flex-1"></span><button class="btn btn-primary whitespace-nowrap flex-none" title=${t("pr.reviewTitle")} @click=${() => reviewPr(key)}>${th("pr.review")}</button><a class="btn whitespace-nowrap flex-none inline-flex items-center" href=${pr.url}>${th("pr.openGh")}</a>` : nothing}
+    </div>`;
+    if (err)
+      return html`${bar}
+        <div class="err-box">${err}</div>`;
+    if (!pr)
+      return html`${bar}
+        <div class="text-secondary mb-3">${th("pr.loading")}</div>`;
     return html`${bar}<relay-pr-body .pr=${pr}></relay-pr-body>`;
   }
 }

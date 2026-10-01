@@ -1,7 +1,7 @@
 import type { Key } from "./en";
 
 export default {
-  "general": "Allgemein",
+  general: "Allgemein",
   "nav.search": "Projekt suchen",
   "nav.waiting": "Wartet auf dich",
   "nav.reminders": "Erinnerungen",
@@ -20,7 +20,8 @@ export default {
   "composer.agent": "Agent",
   "set.tab.agents": "Agenten",
   "ag.default": "Standard-Agent",
-  "ag.defaultHelp": "Neue Gespräche starten mit diesem Agenten. Im Eingabefeld lässt sich vor der ersten Nachricht ein anderer wählen.",
+  "ag.defaultHelp":
+    "Neue Gespräche starten mit diesem Agenten. Im Eingabefeld lässt sich vor der ersten Nachricht ein anderer wählen.",
   "ag.on": "Verwenden",
   "ag.onLabel": "Im Eingabefeld anzeigen",
   "ag.status": "Status",
@@ -44,11 +45,14 @@ export default {
   "ag.add": "+ Agent hinzufügen",
   "ag.remove": "Entfernen",
   "ag.empty": "Noch keine Agents. Füge einen hinzu, um Gespräche damit zu starten.",
-  "ag.listHelp": "Nur die Agents in dieser Liste erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
+  "ag.listHelp":
+    "Nur die Agents in dieser Liste erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
   "ag.isDefault": "Standard",
   "int.add": "+ Integration hinzufügen",
-  "int.empty": "Noch keine Integrationen. Füge eine hinzu, um ihr Board, Pull Requests oder Mail in der Seitenleiste zu sehen.",
-  "int.listHelp": "Die Integrationen in dieser Liste erscheinen in der Seitenleiste. Klicke auf eine, um sie einzurichten oder zu ändern.",
+  "int.empty":
+    "Noch keine Integrationen. Füge eine hinzu, um ihr Board, Pull Requests oder Mail in der Seitenleiste zu sehen.",
+  "int.listHelp":
+    "Die Integrationen in dieser Liste erscheinen in der Seitenleiste. Klicke auf eine, um sie einzurichten oder zu ändern.",
   "int.foundClaude": "In Claude Code gefunden",
   "int.foundClaudeLong": "Claude Code hat {name}-Zugangsdaten in seiner MCP-Konfiguration. Hier verwenden?",
   "int.import": "Übernehmen",
@@ -57,7 +61,8 @@ export default {
   "int.importNone": "Kein MCP-Server mit Zugangsdaten gefunden",
   "int.more": "Mehr",
   "pi.title": "Projektsymbole",
-  "pi.desc": "Das Symbol jedes Projekts, im Vault gespeichert (.relay/), damit es mit dem Vault auf jeden Mac mitkommt. Ein Projekt ohne Symbol bekommt das Favicon seiner Website. Öffne ein Projekt, um es zu ändern.",
+  "pi.desc":
+    "Das Symbol jedes Projekts, im Vault gespeichert (.relay/), damit es mit dem Vault auf jeden Mac mitkommt. Ein Projekt ohne Symbol bekommt das Favicon seiner Website. Öffne ein Projekt, um es zu ändern.",
   "pi.emoji": "Emoji",
   "pi.site": "Website",
   "pi.sitePh": "beispiel.de",
@@ -70,7 +75,8 @@ export default {
   "pi.siteSoon": "Website {site}: Favicon folgt",
   "pi.noIcon": "Kein Symbol",
   "pi.siteNoIcon": "{site} hat kein Symbol: wähle ein Emoji oder ein Bild",
-  "pc.desc": "Die Einstellungen jedes Projekts. Symbol und Repositories liegen im Vault (.relay/) und kommen mit auf jeden Mac; der Name in Relay gilt für diesen Mac.",
+  "pc.desc":
+    "Die Einstellungen jedes Projekts. Symbol und Repositories liegen im Vault (.relay/) und kommen mit auf jeden Mac; der Name in Relay gilt für diesen Mac.",
   "pc.name": "Name in Relay",
   "pc.icon": "Symbol",
   "pc.iconPh": "Emoji oder Website",
@@ -81,7 +87,8 @@ export default {
   "pi.find": "Symbole suchen",
   "pi.finding": "Sucht im Web…",
   "pi.findHelp": "Claude sucht die Website jedes Projekts ohne Symbol (nur Websuche), und Relay holt das Favicon",
-  "pi.found": "Website für {n} von {total} Projekten gefunden. Ihre Symbole folgen; öffne ein Projekt, um ein falsches zu korrigieren.",
+  "pi.found":
+    "Website für {n} von {total} Projekten gefunden. Ihre Symbole folgen; öffne ein Projekt, um ein falsches zu korrigieren.",
   "pi.findNone": "Keine neuen Websites gefunden.",
   "nav.settingsTooltip": "Einstellungen (⌘,)",
   "nav.settingsLabel": "Einstellungen öffnen",
@@ -100,9 +107,11 @@ export default {
   "usage.otherSession": "Terminal-Sitzung {id}",
   "usage.split": "Eingabe {input} · Ausgabe {output} · Cache gelesen {read} · Cache geschrieben {write}",
   "usage.unpriced": "{n} Tokens stammen von Modellen ohne bekannten Preis.",
-  "usage.estimate": "Beträge sind Schätzungen zu API-Listenpreisen: das Abo selbst ist pauschal. Tokens enthalten den Cache.",
+  "usage.estimate":
+    "Beträge sind Schätzungen zu API-Listenpreisen: das Abo selbst ist pauschal. Tokens enthalten den Cache.",
   "bar.openTerminal": "Im Terminal öffnen",
-  "bar.termMail": "Nicht verfügbar für ein Gespräch, das Mail berührt hat: das Terminal würde es ohne die Einschränkungen der App fortsetzen.",
+  "bar.termMail":
+    "Nicht verfügbar für ein Gespräch, das Mail berührt hat: das Terminal würde es ohne die Einschränkungen der App fortsetzen.",
   "bar.togglePanel": "Seitenbereich ein- oder ausblenden",
   "bar.togglePanelTitle": "Seitenbereich ein- oder ausblenden (⌥⌘I)",
   "composer.send": "Senden",
@@ -148,7 +157,8 @@ export default {
   "route.question": "Um welches Projekt geht es?",
   "route.keep": "Hier lassen",
   "term.writing": "Claude schreibt im Terminal. Der Text erscheint hier, sobald ein Block fertig ist.",
-  "move.term": "Dieses Gespräch ist im Terminal geöffnet{busy}. Schreibst du hier, geht es als Kopie in der App weiter. Das Terminal bleibt, wie es ist.",
+  "move.term":
+    "Dieses Gespräch ist im Terminal geöffnet{busy}. Schreibst du hier, geht es als Kopie in der App weiter. Das Terminal bleibt, wie es ist.",
   "move.termBusy": " und arbeitet noch",
   "move.about": "In diesem Gespräch geht es um <b>{name}</b>.",
   "move.no": "Nein",
@@ -211,25 +221,30 @@ export default {
   "rem.new": "+ Neue Erinnerung",
   "rem.none": "Keine Erinnerungen.",
   "set.title": "Einstellungen",
-  "set.vaultHelp": "Der Ordner mit deinem Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",
+  "set.vaultHelp":
+    "Der Ordner mit deinem Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",
   "set.pick": "Ordner wählen…",
   "set.save": "Speichern",
   "set.custom": "Angepasste Projekte",
-  "set.customHelp": "Symbol und Namen eines Projekts legst du im Hauptfenster fest: Klick oben in einem Gespräch auf den Projektnamen mit dem Pfeil.",
+  "set.customHelp":
+    "Symbol und Namen eines Projekts legst du im Hauptfenster fest: Klick oben in einem Gespräch auf den Projektnamen mit dem Pfeil.",
   "set.reset": "Zurücksetzen",
   "set.none": "Noch keine.",
   "set.saved": "Gespeichert.",
   "set.restored": "Zurückgesetzt.",
   "set.language": "Sprache",
-  "set.languageHelp": "Die Sprache der App. System folgt der macOS-Sprache, oder Englisch, wenn die App diese Sprache nicht hat.",
+  "set.languageHelp":
+    "Die Sprache der App. System folgt der macOS-Sprache, oder Englisch, wenn die App diese Sprache nicht hat.",
   "set.favicons": "Projektsymbole",
   "set.faviconsOn": "Favicon der Website als Symbol",
-  "set.faviconsHelp": "Einmal am Tag sucht die App in den Notizen jedes Projekts ohne Symbol eine Website und nutzt deren Favicon. Pro Website wird ein Projekt einmal versucht, ein zurückgesetztes Symbol kommt nicht wieder.",
+  "set.faviconsHelp":
+    "Einmal am Tag sucht die App in den Notizen jedes Projekts ohne Symbol eine Website und nutzt deren Favicon. Pro Website wird ein Projekt einmal versucht, ein zurückgesetztes Symbol kommt nicht wieder.",
   "set.system": "System (Standard)",
   "set.sec.folders": "Ordner",
   "set.sec.interface": "Darstellung",
   "vault.welcome": "Willkommen bei Relay",
-  "vault.intro": "Wähle den Ordner deines Obsidian-Vaults. Relay sucht darin work-state, Erinnerungen und die anderen Dateien, die es liest; prüfe unten, was gefunden wurde.",
+  "vault.intro":
+    "Wähle den Ordner deines Obsidian-Vaults. Relay sucht darin work-state, Erinnerungen und die anderen Dateien, die es liest; prüfe unten, was gefunden wurde.",
   "vault.none": "Kein Ordner gewählt",
   "vault.choose": "Vault-Ordner wählen…",
   "vault.use": "Diesen Vault verwenden",
@@ -283,7 +298,8 @@ export default {
   "gh.show": "Pull Requests anzeigen",
   "gh.owners": "Owner:",
   "gh.ownersPh": "Leer = überall, z. B. weareantenna",
-  "gh.help": "Zeigt deine offenen PRs und die, bei denen dein Review angefragt ist, pro Projekt über die Repos auf der Projektkarte verknüpft. Nur lesend, ein Klick öffnet den PR auf GitHub. Die App nutzt die Anmeldung der GitHub CLI, in der App ist kein Token gespeichert. Nicht angemeldet: <code>gh auth login</code> im Terminal ausführen.",
+  "gh.help":
+    "Zeigt deine offenen PRs und die, bei denen dein Review angefragt ist, pro Projekt über die Repos auf der Projektkarte verknüpft. Nur lesend, ein Klick öffnet den PR auf GitHub. Die App nutzt die Anmeldung der GitHub CLI, in der App ist kein Token gespeichert. Nicht angemeldet: <code>gh auth login</code> im Terminal ausführen.",
   "gh.recheck": "Erneut prüfen",
   "int.tokenStored": "Im Schlüsselbund gespeichert",
   "int.tokenPaste": "Token einfügen",
@@ -292,7 +308,8 @@ export default {
   "kb.prio3": "Mittel",
   "kb.prio4": "Niedrig",
   "int.boards": "Boards pro Vault-Projekt",
-  "int.boardsHelp": "Wird das Board aus einer Unterhaltung in diesem Vault-Projekt geöffnet, zeigt es dieses Board. Ein Vault-Projekt hat höchstens ein Board.",
+  "int.boardsHelp":
+    "Wird das Board aus einer Unterhaltung in diesem Vault-Projekt geöffnet, zeigt es dieses Board. Ein Vault-Projekt hat höchstens ein Board.",
   "int.clear": "Token löschen",
   "int.save": "Speichern und testen",
   "int.busy": "Läuft…",
@@ -336,7 +353,8 @@ export default {
   "mail.account": "Seitenleiste zeigt:",
   "mail.testOk": "Funktioniert: {n} Mails im Posteingang",
   "mail.accounts": "{n} Konten",
-  "mail.help": "Zeigt die 50 neuesten Mails deines Posteingangs. Eine Mail öffnen lässt sie ungelesen, gelesen und ungelesen änderst du mit dem Knopf. Die App sendet, verschiebt oder löscht nie etwas: aus einer Mail startest du ein Gespräch, eine Antwort wird nur ein Entwurf.",
+  "mail.help":
+    "Zeigt die 50 neuesten Mails deines Posteingangs. Eine Mail öffnen lässt sie ungelesen, gelesen und ungelesen änderst du mit dem Knopf. Die App sendet, verschiebt oder löscht nie etwas: aus einer Mail startest du ein Gespräch, eine Antwort wird nur ein Entwurf.",
   "mail.search": "Absender oder Betreff suchen",
   "mail.fAll": "Alle",
   "mail.fUnread": "Ungelesen",
@@ -364,32 +382,42 @@ export default {
   "mail.setupIntro": "Noch kein Mailkonto. Das Verbinden dauert eine Minute.",
   "mail.setupStep1": "Klick unten auf Einstellungen öffnen, du landest direkt bei Mail.",
   "mail.setupStep2": "Leg bei Google ein App-Passwort an, der Knopf dafür ist in Schritt 1 dieser Seite.",
-  "mail.setupStep3": "Füg deine E-Mail-Adresse und den Code ein und klick auf Verbinden. Die App testet die Verbindung und speichert alles.",
-  "mail.setupPw": "Liegt dein Passwort schon im Schlüsselbund, zum Beispiel von himalaya? Dann nimm Erweitert unten auf derselben Seite.",
+  "mail.setupStep3":
+    "Füg deine E-Mail-Adresse und den Code ein und klick auf Verbinden. Die App testet die Verbindung und speichert alles.",
+  "mail.setupPw":
+    "Liegt dein Passwort schon im Schlüsselbund, zum Beispiel von himalaya? Dann nimm Erweitert unten auf derselben Seite.",
   "mail.setupOpen": "Einstellungen öffnen",
   "mail.guideH": "Gmail in zwei Schritten verbinden",
   "mail.guideMore": "Ein weiteres Konto verbinden",
   "mail.step1H": "Schritt 1. Leg bei Google ein App-Passwort an",
-  "mail.step1": "Gmail lässt eine App nur mit einem App-Passwort herein: einem 16-stelligen Code, getrennt von deinem normalen Passwort. Du legst eins pro App an und kannst es jederzeit widerrufen.",
+  "mail.step1":
+    "Gmail lässt eine App nur mit einem App-Passwort herein: einem 16-stelligen Code, getrennt von deinem normalen Passwort. Du legst eins pro App an und kannst es jederzeit widerrufen.",
   "mail.step1Btn": "Google App-Passwörter öffnen",
-  "mail.step1Hint": "Melde dich mit dem Konto an, das du verbinden willst, gib einen Namen wie Relay ein und klick auf Erstellen. Kopier den angezeigten Code. Fehlt die Seite, schalte zuerst die Bestätigung in zwei Schritten in deinem Google-Konto ein. Bei einem Arbeitskonto (Google Workspace) muss der Admin App-Passwörter erlauben.",
+  "mail.step1Hint":
+    "Melde dich mit dem Konto an, das du verbinden willst, gib einen Namen wie Relay ein und klick auf Erstellen. Kopier den angezeigten Code. Fehlt die Seite, schalte zuerst die Bestätigung in zwei Schritten in deinem Google-Konto ein. Bei einem Arbeitskonto (Google Workspace) muss der Admin App-Passwörter erlauben.",
   "mail.step2H": "Schritt 2. Füg hier deine E-Mail-Adresse und den Code ein",
   "mail.emailL": "E-Mail-Adresse",
   "mail.pwL": "App-Passwort",
   "mail.pwPh": "die 16 Zeichen, Leerzeichen sind ok",
   "mail.connect": "Verbinden",
   "mail.connecting": "Code im Schlüsselbund speichern und bei Gmail anmelden…",
-  "mail.connected": "Verbunden mit {email}: {n} Mails im Posteingang. Gespeichert, du findest sie unter Mail in der Seitenleiste.",
-  "mail.step2Hint": "Der Code geht direkt in den macOS-Schlüsselbund, unter dem Dienst relay-mail. Die App speichert ihn nirgends sonst und zeigt ihn nicht mehr an. Stimmt er nicht, wird er sofort wieder entfernt.",
+  "mail.connected":
+    "Verbunden mit {email}: {n} Mails im Posteingang. Gespeichert, du findest sie unter Mail in der Seitenleiste.",
+  "mail.step2Hint":
+    "Der Code geht direkt in den macOS-Schlüsselbund, unter dem Dienst relay-mail. Die App speichert ihn nirgends sonst und zeigt ihn nicht mehr an. Stimmt er nicht, wird er sofort wieder entfernt.",
   "mail.advH": "Erweitert: das Passwort liegt schon im Schlüsselbund (zum Beispiel von himalaya)",
-  "mail.adv": "Öffne die App Schlüsselbundverwaltung und such den Eintrag. Sein Name ist der Dienst, sein Feld Account ist das Schlüsselbund-Konto. Für himalaya ist der Dienst himalaya-&lt;name&gt;-imap und das Konto &lt;name&gt;, mit dem Kontonamen aus deiner himalaya-Konfiguration. Zum Beispiel Dienst himalaya-weareantenna-imap und Konto weareantenna. Fragt macOS nach der Erlaubnis zum Lesen, wähl Immer erlauben.",
+  "mail.adv":
+    "Öffne die App Schlüsselbundverwaltung und such den Eintrag. Sein Name ist der Dienst, sein Feld Account ist das Schlüsselbund-Konto. Für himalaya ist der Dienst himalaya-&lt;name&gt;-imap und das Konto &lt;name&gt;, mit dem Kontonamen aus deiner himalaya-Konfiguration. Zum Beispiel Dienst himalaya-weareantenna-imap und Konto weareantenna. Fragt macOS nach der Erlaubnis zum Lesen, wähl Immer erlauben.",
   "mail.svcL": "Dienst",
   "mail.kaccL": "Schlüsselbund-Konto",
   "mail.addTest": "Testen und hinzufügen",
   "mail.inKeychain": "Passwort im Schlüsselbund: {svc}",
-  "mail.errLogin": "Gmail hat die Anmeldung abgelehnt. Prüf, ob das App-Passwort zu dieser Adresse gehört und ob du den ganzen Code kopiert hast. Klappt es nicht, leg in Schritt 1 einen neuen Code an und versuch es noch einmal.",
-  "mail.errNoPw": "Unter diesem Dienst und Konto liegt kein Passwort im Schlüsselbund. Prüf die Namen in der Schlüsselbundverwaltung, sie müssen genau stimmen, oder nimm Schritt 1 und 2 mit einem neuen App-Passwort.",
-  "mail.errKeychain": "macOS hat um Erlaubnis zum Lesen des Schlüsselbunds gefragt und keine Antwort bekommen. Versuch es noch einmal und wähl Immer erlauben.",
+  "mail.errLogin":
+    "Gmail hat die Anmeldung abgelehnt. Prüf, ob das App-Passwort zu dieser Adresse gehört und ob du den ganzen Code kopiert hast. Klappt es nicht, leg in Schritt 1 einen neuen Code an und versuch es noch einmal.",
+  "mail.errNoPw":
+    "Unter diesem Dienst und Konto liegt kein Passwort im Schlüsselbund. Prüf die Namen in der Schlüsselbundverwaltung, sie müssen genau stimmen, oder nimm Schritt 1 und 2 mit einem neuen App-Passwort.",
+  "mail.errKeychain":
+    "macOS hat um Erlaubnis zum Lesen des Schlüsselbunds gefragt und keine Antwort bekommen. Versuch es noch einmal und wähl Immer erlauben.",
   "mail.errGmail": "Diese Adresse ist kein Gmail- oder Google-Workspace-Konto. Die App unterstützt vorerst nur Gmail.",
   "mail.errNet": "Gmail ist nicht erreichbar. Prüf deine Internetverbindung und versuch es noch einmal.",
   "mail.test": "Testen",

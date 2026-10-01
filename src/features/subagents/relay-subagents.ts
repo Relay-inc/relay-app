@@ -12,21 +12,50 @@ import "./subagent-row";
 /** The agents of the open conversation above the composer, like the terminal lists them under the prompt: the running ones, and the finished ones folded away. */
 @customElement("relay-subagents")
 export class RelaySubagents extends LitElement {
-  static styles = [tw, css`:host{display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow-y:auto}`];
+  static styles = [
+    tw,
+    css`
+      :host {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-height: 40vh;
+        overflow-y: auto;
+      }
+    `,
+  ];
   protected store = new StoreController(this);
   private tick = 0;
   @state() private now = Date.now(); // the running agents' durations count up every second
   // the running time of a working agent counts up every second
-  connectedCallback() { super.connectedCallback(); this.tick = window.setInterval(() => { this.now = Date.now(); }, 1000); }
-  disconnectedCallback() { super.disconnectedCallback(); clearInterval(this.tick); }
+  connectedCallback() {
+    super.connectedCallback();
+    this.tick = window.setInterval(() => {
+      this.now = Date.now();
+    }, 1000);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this.tick);
+  }
 
-  private row = (a: Sub) => html`<relay-subagent-row ?running=${a.running} .description=${a.description} .meta=${[a.agentType, a.model].filter(Boolean).join(" · ")}
-    .tool=${a.tool ?? ""} .input=${a.input} .text=${a.text ?? ""} .log=${chat.subLog[a.id]}
-    .duration=${a.running ? dur((this.now - Date.parse(a.started_at)) / 1000) : dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}
-    @toggle=${() => toggleSubLog(a.id)}></relay-subagent-row>`;
+  private row = (a: Sub) =>
+    html`<relay-subagent-row
+      ?running=${a.running}
+      .description=${a.description}
+      .meta=${[a.agentType, a.model].filter(Boolean).join(" · ")}
+      .tool=${a.tool ?? ""}
+      .input=${a.input}
+      .text=${a.text ?? ""}
+      .log=${chat.subLog[a.id]}
+      .duration=${a.running ? dur((this.now - Date.parse(a.started_at)) / 1000) : dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}
+      @toggle=${() => toggleSubLog(a.id)}
+    ></relay-subagent-row>`;
 
   render() {
-    const list = chat.subs[ui.sel] || [], run = list.filter(a => a.running), done = list.filter(a => !a.running);
+    const list = chat.subs[ui.sel] || [],
+      run = list.filter(a => a.running),
+      done = list.filter(a => !a.running);
     return html`${run.map(this.row)}${done.length ? html`<button class="self-start px-1.5 py-0.5 rounded-md text-xs text-secondary hover:bg-fill hover:text-label" @click=${toggleSubsDone}>${tn("subs.done", done.length)}</button>${chat.subsOpen.has(ui.sel) ? done.map(this.row) : nothing}` : nothing}`;
   }
 }

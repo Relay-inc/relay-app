@@ -1,6 +1,6 @@
 // English, the reference dictionary: every other locale has exactly these keys.
 const en = {
-  "general": "General",
+  general: "General",
   "nav.search": "Search projects",
   "nav.waiting": "Waiting for you",
   "nav.reminders": "Reminders",
@@ -19,7 +19,8 @@ const en = {
   "composer.agent": "Agent",
   "set.tab.agents": "Agents",
   "ag.default": "Default agent",
-  "ag.defaultHelp": "New conversations start with this agent. The composer can pick another one before the first message.",
+  "ag.defaultHelp":
+    "New conversations start with this agent. The composer can pick another one before the first message.",
   "ag.on": "Use",
   "ag.onLabel": "Show in the composer",
   "ag.status": "Status",
@@ -56,7 +57,8 @@ const en = {
   "int.importNone": "No MCP server with credentials found",
   "int.more": "More",
   "pi.title": "Project icons",
-  "pi.desc": "Each project's icon, kept in the vault (.relay/), so it follows the vault to every Mac. A project without one gets its website's favicon. Open a project to change it.",
+  "pi.desc":
+    "Each project's icon, kept in the vault (.relay/), so it follows the vault to every Mac. A project without one gets its website's favicon. Open a project to change it.",
   "pi.emoji": "Emoji",
   "pi.site": "Website",
   "pi.sitePh": "example.com",
@@ -69,7 +71,8 @@ const en = {
   "pi.siteSoon": "Website {site}: favicon follows",
   "pi.noIcon": "No icon",
   "pi.siteNoIcon": "{site} has no icon: pick an emoji or upload one",
-  "pc.desc": "Each project's settings. Its icon and repositories are kept in the vault (.relay/), so they follow it to every Mac; the name in Relay is for this Mac.",
+  "pc.desc":
+    "Each project's settings. Its icon and repositories are kept in the vault (.relay/), so they follow it to every Mac; the name in Relay is for this Mac.",
   "pc.name": "Name in Relay",
   "pc.icon": "Icon",
   "pc.iconPh": "Emoji or website",
@@ -79,8 +82,10 @@ const en = {
   "pc.repoCount_other": "{n} repos",
   "pi.find": "Find icons",
   "pi.finding": "Searching the web…",
-  "pi.findHelp": "Claude looks up the website of every project without an icon (web search, nothing else), and Relay fetches its favicon",
-  "pi.found": "Found a website for {n} of {total} projects. Their icons follow; fix a wrong one by opening the project.",
+  "pi.findHelp":
+    "Claude looks up the website of every project without an icon (web search, nothing else), and Relay fetches its favicon",
+  "pi.found":
+    "Found a website for {n} of {total} projects. Their icons follow; fix a wrong one by opening the project.",
   "pi.findNone": "No new websites found.",
   "nav.settingsTooltip": "Settings (⌘,)",
   "nav.settingsLabel": "Open settings",
@@ -99,9 +104,11 @@ const en = {
   "usage.otherSession": "Terminal session {id}",
   "usage.split": "Input {input} · output {output} · cache read {read} · cache write {write}",
   "usage.unpriced": "{n} tokens are from models without a known price.",
-  "usage.estimate": "Amounts are estimates at API list prices: the plan itself is a subscription. Tokens include cache reads and writes.",
+  "usage.estimate":
+    "Amounts are estimates at API list prices: the plan itself is a subscription. Tokens include cache reads and writes.",
   "bar.openTerminal": "Open in Terminal",
-  "bar.termMail": "Not available for a conversation that touched mail: the terminal would resume it without the app's restrictions.",
+  "bar.termMail":
+    "Not available for a conversation that touched mail: the terminal would resume it without the app's restrictions.",
   "bar.togglePanel": "Show or hide the panel",
   "bar.togglePanelTitle": "Show or hide the panel (⌥⌘I)",
   "composer.send": "Send",
@@ -147,7 +154,8 @@ const en = {
   "route.question": "Which project is this about?",
   "route.keep": "Keep it here",
   "term.writing": "Claude is writing in the terminal. Text shows up here once a block is done.",
-  "move.term": "This conversation is open in the terminal{busy}. Type here and it carries on as a copy in the app. The terminal stays as it is.",
+  "move.term":
+    "This conversation is open in the terminal{busy}. Type here and it carries on as a copy in the app. The terminal stays as it is.",
   "move.termBusy": " and still working",
   "move.about": "This conversation is about <b>{name}</b>.",
   "move.no": "No",
@@ -210,25 +218,30 @@ const en = {
   "rem.new": "+ New reminder",
   "rem.none": "No reminders.",
   "set.title": "Settings",
-  "set.vaultHelp": "The folder with your Obsidian vault. Conversations start in it, and the sidebar reads work-state and reminders from it.",
+  "set.vaultHelp":
+    "The folder with your Obsidian vault. Conversations start in it, and the sidebar reads work-state and reminders from it.",
   "set.pick": "Choose folder…",
   "set.save": "Save",
   "set.custom": "Customised projects",
-  "set.customHelp": "You set a project's icon and name in the main window: click the project name with the arrow at the top of a conversation.",
+  "set.customHelp":
+    "You set a project's icon and name in the main window: click the project name with the arrow at the top of a conversation.",
   "set.reset": "Reset",
   "set.none": "None yet.",
   "set.saved": "Saved.",
   "set.restored": "Reset.",
   "set.language": "Language",
-  "set.languageHelp": "The language of the app. System follows the macOS language, or English when the app doesn't have it.",
+  "set.languageHelp":
+    "The language of the app. System follows the macOS language, or English when the app doesn't have it.",
   "set.favicons": "Project icons",
   "set.faviconsOn": "Use the website favicon as icon",
-  "set.faviconsHelp": "Once a day the app looks for a website in the notes of each project without an icon and uses its favicon. A project is tried once per website, a reset icon does not come back.",
+  "set.faviconsHelp":
+    "Once a day the app looks for a website in the notes of each project without an icon and uses its favicon. A project is tried once per website, a reset icon does not come back.",
   "set.system": "System (default)",
   "set.sec.folders": "Folders",
   "set.sec.interface": "Interface",
   "vault.welcome": "Welcome to Relay",
-  "vault.intro": "Choose the folder of your Obsidian vault. Relay looks for your work-state, reminders and the other files it reads; check what it found below.",
+  "vault.intro":
+    "Choose the folder of your Obsidian vault. Relay looks for your work-state, reminders and the other files it reads; check what it found below.",
   "vault.none": "No folder chosen",
   "vault.choose": "Choose vault folder…",
   "vault.use": "Use this vault",
@@ -282,7 +295,8 @@ const en = {
   "gh.show": "Show pull requests",
   "gh.owners": "Owners:",
   "gh.ownersPh": "Empty is everywhere, e.g. weareantenna",
-  "gh.help": "Shows your open PRs and the ones where your review is requested, linked per project through the repos on the project card. Read-only, a click opens the PR on GitHub. The app uses the GitHub CLI login, no token is stored in the app. Not signed in: run <code>gh auth login</code> in the terminal.",
+  "gh.help":
+    "Shows your open PRs and the ones where your review is requested, linked per project through the repos on the project card. Read-only, a click opens the PR on GitHub. The app uses the GitHub CLI login, no token is stored in the app. Not signed in: run <code>gh auth login</code> in the terminal.",
   "gh.recheck": "Check again",
   "int.tokenStored": "Stored in the keychain",
   "int.tokenPaste": "Paste your token",
@@ -291,7 +305,8 @@ const en = {
   "kb.prio3": "Medium",
   "kb.prio4": "Low",
   "int.boards": "Boards per vault project",
-  "int.boardsHelp": "Opening the board from a conversation in that vault project shows this board. A vault project has at most one board.",
+  "int.boardsHelp":
+    "Opening the board from a conversation in that vault project shows this board. A vault project has at most one board.",
   "int.clear": "Clear token",
   "int.save": "Save and test",
   "int.busy": "Working…",
@@ -335,7 +350,8 @@ const en = {
   "mail.account": "Sidebar shows:",
   "mail.testOk": "Works: {n} mails in the inbox",
   "mail.accounts": "{n} accounts",
-  "mail.help": "Shows the 50 newest mails of your inbox. Opening a mail leaves it unread, you change read and unread with the button. The app never sends, moves or deletes anything: from a mail you start a conversation, a reply only becomes a draft.",
+  "mail.help":
+    "Shows the 50 newest mails of your inbox. Opening a mail leaves it unread, you change read and unread with the button. The app never sends, moves or deletes anything: from a mail you start a conversation, a reply only becomes a draft.",
   "mail.search": "Search sender or subject",
   "mail.fAll": "All",
   "mail.fUnread": "Unread",
@@ -363,15 +379,19 @@ const en = {
   "mail.setupIntro": "There is no mail account yet. Connecting one takes a minute.",
   "mail.setupStep1": "Click Open the settings below, it takes you straight to Mail.",
   "mail.setupStep2": "Create an app password at Google, the button for it is in step 1 of that screen.",
-  "mail.setupStep3": "Paste your email address and the code and click Connect. The app tests the connection and saves everything.",
-  "mail.setupPw": "Is your password already in the keychain, for example from himalaya? Then use Advanced at the bottom of the same screen.",
+  "mail.setupStep3":
+    "Paste your email address and the code and click Connect. The app tests the connection and saves everything.",
+  "mail.setupPw":
+    "Is your password already in the keychain, for example from himalaya? Then use Advanced at the bottom of the same screen.",
   "mail.setupOpen": "Open the settings",
   "mail.guideH": "Connect your Gmail in two steps",
   "mail.guideMore": "Connect another account",
   "mail.step1H": "Step 1. Create an app password at Google",
-  "mail.step1": "Gmail only lets an app in with an app password: a 16-letter code, separate from your normal password. You make one per app and can revoke it at any time.",
+  "mail.step1":
+    "Gmail only lets an app in with an app password: a 16-letter code, separate from your normal password. You make one per app and can revoke it at any time.",
   "mail.step1Btn": "Open Google app passwords",
-  "mail.step1Hint": "Sign in with the account you want to connect, type a name like Relay and click Create. Copy the code that appears. If the page is not there, first turn on 2-Step Verification in your Google account. For a work account (Google Workspace) the admin has to allow app passwords.",
+  "mail.step1Hint":
+    "Sign in with the account you want to connect, type a name like Relay and click Create. Copy the code that appears. If the page is not there, first turn on 2-Step Verification in your Google account. For a work account (Google Workspace) the admin has to allow app passwords.",
   "mail.step2H": "Step 2. Paste your email address and the code here",
   "mail.emailL": "Email address",
   "mail.pwL": "App password",
@@ -379,16 +399,21 @@ const en = {
   "mail.connect": "Connect",
   "mail.connecting": "Storing the code in the keychain and signing in to Gmail…",
   "mail.connected": "Connected to {email}: {n} mails in the inbox. Saved, you find them under Mail in the sidebar.",
-  "mail.step2Hint": "The code goes straight into the macOS keychain, under the service relay-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
+  "mail.step2Hint":
+    "The code goes straight into the macOS keychain, under the service relay-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
   "mail.advH": "Advanced: the password is already in the keychain (for example from himalaya)",
-  "mail.adv": "Open the Keychain Access app and find the item. The item's name is the service, its Account field is the keychain account. For himalaya the service is himalaya-&lt;name&gt;-imap and the account &lt;name&gt;, with the account name from your himalaya config. For example service himalaya-weareantenna-imap and account weareantenna. If macOS asks to allow reading it, choose Always Allow.",
+  "mail.adv":
+    "Open the Keychain Access app and find the item. The item's name is the service, its Account field is the keychain account. For himalaya the service is himalaya-&lt;name&gt;-imap and the account &lt;name&gt;, with the account name from your himalaya config. For example service himalaya-weareantenna-imap and account weareantenna. If macOS asks to allow reading it, choose Always Allow.",
   "mail.svcL": "Service",
   "mail.kaccL": "Keychain account",
   "mail.addTest": "Test and add",
   "mail.inKeychain": "password in keychain: {svc}",
-  "mail.errLogin": "Gmail refused the sign-in. Check that the app password belongs to this email address and that you copied the whole code. If it still fails, create a new code in step 1 and try again.",
-  "mail.errNoPw": "There is no password in the keychain under that service and account. Check the names in Keychain Access, they must match exactly, or use steps 1 and 2 with a new app password.",
-  "mail.errKeychain": "macOS asked for permission to read the keychain and got no answer. Try again and choose Always Allow.",
+  "mail.errLogin":
+    "Gmail refused the sign-in. Check that the app password belongs to this email address and that you copied the whole code. If it still fails, create a new code in step 1 and try again.",
+  "mail.errNoPw":
+    "There is no password in the keychain under that service and account. Check the names in Keychain Access, they must match exactly, or use steps 1 and 2 with a new app password.",
+  "mail.errKeychain":
+    "macOS asked for permission to read the keychain and got no answer. Try again and choose Always Allow.",
   "mail.errGmail": "This address is not a Gmail or Google Workspace account. The app only supports Gmail for now.",
   "mail.errNet": "Gmail cannot be reached. Check your internet connection and try again.",
   "mail.test": "Test",

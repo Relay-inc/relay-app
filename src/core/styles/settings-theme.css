@@ -2,23 +2,69 @@
    title and hint above a card with a hairline border; in the card a field is its label and hint on the left, the
    control on the right. Monochrome: the primary button and a switch that is on are the text colour, not the accent.
    The palette hangs off body.prefs, so it is plain global css; settings-tailwind.css maps it to utilities (bg-s-bg …). */
-body.prefs{
-  --s-bg:#fff; --s-fg:#333; --s-muted:#525252; --s-subtle:#636363; --s-faint:rgba(99,99,99,.75);
-  --s-border:#dfdfdf; --s-seam:#e9e9e9; --s-input:#bdbdbd; --s-mutedbg:#e6e6e6; --s-side:#fafafa; --s-sel:#ededed;
-  --s-hover:rgba(51,51,51,.059); --s-primary:#262626;
-  --s-ok:oklch(70% .15 155); --s-warn:oklch(70% .16 50); --s-err:oklch(45% .19 25.9);
-  --s-ring:color-mix(in srgb,var(--s-primary) 35%,transparent);
+body.prefs {
+  --s-bg: #fff;
+  --s-fg: #333;
+  --s-muted: #525252;
+  --s-subtle: #636363;
+  --s-faint: rgba(99, 99, 99, 0.75);
+  --s-border: #dfdfdf;
+  --s-seam: #e9e9e9;
+  --s-input: #bdbdbd;
+  --s-mutedbg: #e6e6e6;
+  --s-side: #fafafa;
+  --s-sel: #ededed;
+  --s-hover: rgba(51, 51, 51, 0.059);
+  --s-primary: #262626;
+  --s-ok: oklch(70% 0.15 155);
+  --s-warn: oklch(70% 0.16 50);
+  --s-err: oklch(45% 0.19 25.9);
+  --s-ring: color-mix(in srgb, var(--s-primary) 35%, transparent);
 }
-@media (prefers-color-scheme:dark){body.prefs{
-  --s-bg:#151515; --s-fg:#c1c1c1; --s-muted:#b7b7b7; --s-subtle:#989898; --s-faint:rgba(152,152,152,.75);
-  --s-border:#313131; --s-seam:#252525; --s-input:#464646; --s-mutedbg:#2c2c2c; --s-side:#1b1b1b; --s-sel:#262626;
-  --s-hover:rgba(193,193,193,.138); --s-primary:#c4c4c4;
-  --s-ok:oklch(74% .15 155); --s-warn:oklch(75% .16 50); --s-err:oklch(56% .19 22.2);
-}}
-:root[data-theme=dark] body.prefs{
-  --s-bg:#151515; --s-fg:#c1c1c1; --s-muted:#b7b7b7; --s-subtle:#989898; --s-faint:rgba(152,152,152,.75);
-  --s-border:#313131; --s-seam:#252525; --s-input:#464646; --s-mutedbg:#2c2c2c; --s-side:#1b1b1b; --s-sel:#262626;
-  --s-hover:rgba(193,193,193,.138); --s-primary:#c4c4c4;
-  --s-ok:oklch(74% .15 155); --s-warn:oklch(75% .16 50); --s-err:oklch(56% .19 22.2);
+@media (prefers-color-scheme: dark) {
+  body.prefs {
+    --s-bg: #151515;
+    --s-fg: #c1c1c1;
+    --s-muted: #b7b7b7;
+    --s-subtle: #989898;
+    --s-faint: rgba(152, 152, 152, 0.75);
+    --s-border: #313131;
+    --s-seam: #252525;
+    --s-input: #464646;
+    --s-mutedbg: #2c2c2c;
+    --s-side: #1b1b1b;
+    --s-sel: #262626;
+    --s-hover: rgba(193, 193, 193, 0.138);
+    --s-primary: #c4c4c4;
+    --s-ok: oklch(74% 0.15 155);
+    --s-warn: oklch(75% 0.16 50);
+    --s-err: oklch(56% 0.19 22.2);
+  }
 }
-body.prefs{display:flex;min-width:0;height:100%;overflow:hidden;background:var(--s-bg);color:var(--s-fg);font-size:13px} /* not the main window's 900px */
+:root[data-theme="dark"] body.prefs {
+  --s-bg: #151515;
+  --s-fg: #c1c1c1;
+  --s-muted: #b7b7b7;
+  --s-subtle: #989898;
+  --s-faint: rgba(152, 152, 152, 0.75);
+  --s-border: #313131;
+  --s-seam: #252525;
+  --s-input: #464646;
+  --s-mutedbg: #2c2c2c;
+  --s-side: #1b1b1b;
+  --s-sel: #262626;
+  --s-hover: rgba(193, 193, 193, 0.138);
+  --s-primary: #c4c4c4;
+  --s-ok: oklch(74% 0.15 155);
+  --s-warn: oklch(75% 0.16 50);
+  --s-err: oklch(56% 0.19 22.2);
+}
+body.prefs {
+  display: flex;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--s-bg);
+  color: var(--s-fg);
+  font-size: 13px;
+} /* not the main window's 900px */

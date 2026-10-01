@@ -8,7 +8,9 @@ import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 
 declare global {
-  interface HTMLElementTagNameMap { "relay-settings-github": SettingsGithub }
+  interface HTMLElementTagNameMap {
+    "relay-settings-github": SettingsGithub;
+  }
   interface HTMLElementEventMap {
     "owners-input": CustomEvent<string>;
     "gh-recheck": CustomEvent<void>;
@@ -30,7 +32,10 @@ export class SettingsGithub extends SettingsElement {
 
   render() {
     return html`<p class=${HINT0}>${th("gh.help")}</p>
-      ${field(nc(t("gh.owners")), html`<input class=${FIELD} id="ghowners" .value=${live(this.owners)} @input=${(e: Event) => emit(this, "owners-input", val(e))} spellcheck="false" placeholder=${t("gh.ownersPh")}>`, { id: "ghowners" })}
-      <div class=${FOOT_ROW}><button class=${btn("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button>${foot(this.msg, this.ok, html`<button class=${btn()} @click=${() => emit(this, "gh-recheck")}>${t("gh.recheck")}</button><button class=${btn("primary")} @click=${() => emit(this, "gh-save")}>${t("set.save")}</button>`)}</div>`;
+      ${field(nc(t("gh.owners")), html`<input class=${FIELD} id="ghowners" .value=${live(this.owners)} @input=${(e: Event) => emit(this, "owners-input", val(e))} spellcheck="false" placeholder=${t("gh.ownersPh")} />`, { id: "ghowners" })}
+      <div class=${FOOT_ROW}>
+        <button class=${btn("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button
+        >${foot(this.msg, this.ok, html`<button class=${btn()} @click=${() => emit(this, "gh-recheck")}>${t("gh.recheck")}</button><button class=${btn("primary")} @click=${() => emit(this, "gh-save")}>${t("set.save")}</button>`)}
+      </div>`;
   }
 }

@@ -5,8 +5,17 @@ import { tw } from "../../core/styles";
 /** A quiet centred line: "stopped", "moved to …", the empty conversation. */
 @customElement("relay-note-line")
 export class NoteLine extends LitElement {
-  static styles = [tw, css`:host{display:block}`];
+  static styles = [
+    tw,
+    css`
+      :host {
+        display: block;
+      }
+    `,
+  ];
   @property() text = "";
 
-  render() { return html`<div class="text-center text-sm text-secondary">${this.text}</div>`; }
+  render() {
+    return html`<div class="text-center text-sm text-secondary">${this.text}</div>`;
+  }
 }

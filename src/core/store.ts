@@ -8,15 +8,24 @@ let queued = false;
 export function changed() {
   if (queued) return;
   queued = true;
-  queueMicrotask(() => { queued = false; listeners.forEach(f => f()); });
+  queueMicrotask(() => {
+    queued = false;
+    listeners.forEach(f => f());
+  });
 }
 
 /** Redraws its host whenever the store changed: `private store = new StoreController(this);` in a container. */
 export class StoreController implements ReactiveController {
   private f = () => this.host.requestUpdate();
-  constructor(private host: ReactiveControllerHost) { host.addController(this); }
-  hostConnected() { listeners.add(this.f); }
-  hostDisconnected() { listeners.delete(this.f); }
+  constructor(private host: ReactiveControllerHost) {
+    host.addController(this);
+  }
+  hostConnected() {
+    listeners.add(this.f);
+  }
+  hostDisconnected() {
+    listeners.delete(this.f);
+  }
 }
 
 /** Requests from the logic to the views that only the DOM can do: focus the composer, scroll the conversation. */
@@ -26,6 +35,18 @@ export const request = (r: UiRequest) => ui.dispatchEvent(new Event(r));
 
 /** localStorage as JSON, quiet when storage is unavailable. */
 export const ls = {
-  get: <T>(k: string, d: T): T => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
-  set: (k: string, v: unknown) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
+  get: <T>(k: string, d: T): T => {
+    try {
+      return JSON.parse(localStorage.getItem(k) || "") ?? d;
+    } catch {
+      return d;
+    }
+  },
+  set: (k: string, v: unknown) => {
+    try {
+      localStorage.setItem(k, JSON.stringify(v));
+    } catch {
+      /* storage unavailable */
+    }
+  },
 };

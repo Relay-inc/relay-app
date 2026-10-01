@@ -26,10 +26,24 @@ export class SidebarFooter extends LitElement {
 
   render() {
     return html`<div class="flex justify-center gap-1.5 px-2.5 pt-1.5 pb-2.5 border-t border-separator">
-      <button class="${BTN} ${this.selected ? "bg-accent text-on-accent" : "text-secondary hover:bg-fill hover:text-label"}" title=${this.tip} aria-label=${this.tip} @click=${() => emit(this, "usage")}>
-        ${icon("gauge", GLYPH)}<span class="absolute bottom-0.5 right-0.5 size-2 rounded-full ${this.level ? "opacity-100" : "opacity-0"} ${this.level === "soon" ? "bg-soon" : this.level === "late" ? "bg-late" : "bg-secondary"}"></span>
+      <button
+        class="${BTN} ${this.selected ? "bg-accent text-on-accent" : "text-secondary hover:bg-fill hover:text-label"}"
+        title=${this.tip}
+        aria-label=${this.tip}
+        @click=${() => emit(this, "usage")}
+      >
+        ${icon("gauge", GLYPH)}<span
+          class="absolute bottom-0.5 right-0.5 size-2 rounded-full ${this.level ? "opacity-100" : "opacity-0"} ${this.level === "soon" ? "bg-soon" : this.level === "late" ? "bg-late" : "bg-secondary"}"
+        ></span>
       </button>
-      <button class="${BTN} text-secondary hover:bg-fill hover:text-label" title=${t("nav.settingsTooltip")} aria-label=${t("nav.settingsLabel")} @click=${() => emit(this, "settings")}>${icon("gear", GLYPH)}</button>
+      <button
+        class="${BTN} text-secondary hover:bg-fill hover:text-label"
+        title=${t("nav.settingsTooltip")}
+        aria-label=${t("nav.settingsLabel")}
+        @click=${() => emit(this, "settings")}
+      >
+        ${icon("gear", GLYPH)}
+      </button>
     </div>`;
   }
 }

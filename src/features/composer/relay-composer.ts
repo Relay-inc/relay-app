@@ -20,13 +20,41 @@ type Pick = { id: string; label: string };
 @customElement("relay-composer")
 export class RelayComposer extends LitElement {
   // the field and the picks drop the browser's look entirely (`all:unset`), which a utility can't say
-  static styles = [tw, css`
-    :host{display:block;flex:none}
-    textarea{all:unset;display:block;width:100%;min-height:24px;font-size:16px;line-height:1.45;color:var(--label)}
-    textarea::placeholder{color:var(--secondary)}
-    select{all:unset;font-size:12px;color:var(--secondary);padding:2px 4px;border-radius:calc(var(--r) - 2px);cursor:default}
-    select:hover:not(:disabled){background:var(--fill)}
-    select:disabled{opacity:.5}`];
+  static styles = [
+    tw,
+    css`
+      :host {
+        display: block;
+        flex: none;
+      }
+      textarea {
+        all: unset;
+        display: block;
+        width: 100%;
+        min-height: 24px;
+        font-size: 16px;
+        line-height: 1.45;
+        color: var(--label);
+      }
+      textarea::placeholder {
+        color: var(--secondary);
+      }
+      select {
+        all: unset;
+        font-size: 12px;
+        color: var(--secondary);
+        padding: 2px 4px;
+        border-radius: calc(var(--r) - 2px);
+        cursor: default;
+      }
+      select:hover:not(:disabled) {
+        background: var(--fill);
+      }
+      select:disabled {
+        opacity: 0.5;
+      }
+    `,
+  ];
   protected store = new StoreController(this);
   @state() private dropping = false;
   @query("textarea") private ta!: HTMLTextAreaElement | null;
@@ -34,44 +62,126 @@ export class RelayComposer extends LitElement {
 
   focusInput() {
     const ta = this.ta;
-    if (ta) ta.focus(); else this.updateComplete.then(() => this.ta?.focus());
+    if (ta) ta.focus();
+    else this.updateComplete.then(() => this.ta?.focus());
   }
-  private grow() { const ta = this.ta; if (!ta) return; ta.style.height = "auto"; ta.style.height = ta.scrollHeight + "px"; this.grown = ta.value; }
+  private grow() {
+    const ta = this.ta;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = ta.scrollHeight + "px";
+    this.grown = ta.value;
+  }
   // switching to another conversation puts other text in the field
-  updated() { if (this.ta && this.ta.value !== this.grown) this.grow(); }
+  updated() {
+    if (this.ta && this.ta.value !== this.grown) this.grow();
+  }
 
-  private onKey(e: KeyboardEvent) { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendMsg(); } }
-  private onInput(e: Event) { setTyped((e.target as HTMLTextAreaElement).value); this.grow(); }
+  private onKey(e: KeyboardEvent) {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      sendMsg();
+    }
+  }
+  private onInput(e: Event) {
+    setTyped((e.target as HTMLTextAreaElement).value);
+    this.grow();
+  }
   private onDrop(e: DragEvent) {
     this.dropping = false;
     if (!hasFiles(e)) return;
-    e.preventDefault(); attach([...e.dataTransfer!.files]);
+    e.preventDefault();
+    attach([...e.dataTransfer!.files]);
   }
   private select(kind: "model" | "effort", list: Pick[], value: string, def: string, show: boolean, busy: boolean) {
-    return html`<select ?hidden=${!show} ?disabled=${busy} title=${t(`composer.${kind}`)} aria-label=${t(`composer.${kind}`)} @change=${(e: Event) => setPick(kind, (e.target as HTMLSelectElement).value)}>
-      <option value="" .selected=${value === ""}>${def}</option>${list.map(c => html`<option value=${c.id} .selected=${c.id === value}>${c.label}</option>`)}</select>`;
+    return html`<select
+      ?hidden=${!show}
+      ?disabled=${busy}
+      title=${t(`composer.${kind}`)}
+      aria-label=${t(`composer.${kind}`)}
+      @change=${(e: Event) => setPick(kind, (e.target as HTMLSelectElement).value)}
+    >
+      <option value="" .selected=${value === ""}>${def}</option>
+      ${list.map(c => html`<option value=${c.id} .selected=${c.id === value}>${c.label}</option>`)}
+    </select>`;
   }
 
   render() {
-    const sel = ui.sel, T = isTerm(sel) ? termOf(sel) : undefined, pn = T ? T.project : projOf(sel), P = project(pn);
-    const busy = chat.status[sel] === "busy", id = chatAgent(sel), st = agentOf(id), on = onAgents();
+    const sel = ui.sel,
+      T = isTerm(sel) ? termOf(sel) : undefined,
+      pn = T ? T.project : projOf(sel),
+      P = project(pn);
+    const busy = chat.status[sel] === "busy",
+      id = chatAgent(sel),
+      st = agentOf(id),
+      on = onAgents();
     // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
     const showAgent = on.length > 1 && !isTerm(sel) && !!chat.chats[sel];
-    const model = picks("model"), effort = picks("effort");
+    const model = picks("model"),
+      effort = picks("effort");
     const box = "rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent";
-    return html`<div class=${this.dropping ? `${box} border-accent bg-accent/5` : `${box} border-separator`}
-        @dragover=${(e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); this.dropping = true; }} @dragleave=${() => { this.dropping = false; }} @drop=${this.onDrop}>
-      ${chat.attached.length ? html`<relay-image-thumbs class="mb-2" removable .urls=${chat.attached.map(a => a.url)}
-        @remove=${(e: CustomEvent<number>) => { unattach(e.detail); this.focusInput(); }} @open=${(e: CustomEvent<string>) => zoom(e.detail)}></relay-image-thumbs>` : nothing}
-      <textarea rows="1" .value=${live(chat.typed[sel] ?? "")} placeholder=${T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general")}
-        @keydown=${this.onKey} @input=${this.onInput} @paste=${(e: ClipboardEvent) => { const f = pastedImages(e); if (f.length) attach(f); }}></textarea>
+    return html`<div
+      class=${this.dropping ? `${box} border-accent bg-accent/5` : `${box} border-separator`}
+      @dragover=${(e: DragEvent) => {
+        if (!hasFiles(e)) return;
+        e.preventDefault();
+        this.dropping = true;
+      }}
+      @dragleave=${() => {
+        this.dropping = false;
+      }}
+      @drop=${this.onDrop}
+    >
+      ${
+        chat.attached.length
+          ? html`<relay-image-thumbs
+              class="mb-2"
+              removable
+              .urls=${chat.attached.map(a => a.url)}
+              @remove=${(e: CustomEvent<number>) => {
+                unattach(e.detail);
+                this.focusInput();
+              }}
+              @open=${(e: CustomEvent<string>) => zoom(e.detail)}
+            ></relay-image-thumbs>`
+          : nothing
+      }
+      <textarea
+        rows="1"
+        .value=${live(chat.typed[sel] ?? "")}
+        placeholder=${T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general")}
+        @keydown=${this.onKey}
+        @input=${this.onInput}
+        @paste=${(e: ClipboardEvent) => {
+          const f = pastedImages(e);
+          if (f.length) attach(f);
+        }}
+      ></textarea>
       <div class="flex items-center gap-2 mt-1.5 text-secondary">
-        ${showAgent ? html`<select ?disabled=${!!(chat.convo[sel] || []).length || !!chat.chats[sel]?.fork} title=${t("composer.agent")} aria-label=${t("composer.agent")}
-          @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}>${on.map(p => html`<option value=${p.id} .selected=${p.id === id}>${p.name}</option>`)}</select>` : nothing}
+        ${
+          showAgent
+            ? html`<select
+                ?disabled=${!!(chat.convo[sel] || []).length || !!chat.chats[sel]?.fork}
+                title=${t("composer.agent")}
+                aria-label=${t("composer.agent")}
+                @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}
+              >
+                ${on.map(p => html`<option value=${p.id} .selected=${p.id === id}>${p.name}</option>`)}
+              </select>`
+            : nothing
+        }
         <!-- a switch restarts the process, so not while a turn runs -->
         ${this.select("model", model.list, model.value, t("composer.defaultModel"), true, busy)}
         ${this.select("effort", effort.list, effort.value, t("composer.defaultEffort"), !st || (st.caps.effort && st.efforts.length > 0), busy)}
         <span class="flex-1"></span>
-        <button class=${busy ? "grid place-items-center size-6 rounded-lg border-0 bg-label text-on-accent" : "grid place-items-center size-6 rounded-lg border-0 bg-accent text-on-accent"} aria-label=${t("composer.send")} @click=${sendOrStop}>${icon(busy ? "stop" : "send", "glyph size-3.5 stroke-2")}</button></div></div>`;
+        <button
+          class=${busy ? "grid place-items-center size-6 rounded-lg border-0 bg-label text-on-accent" : "grid place-items-center size-6 rounded-lg border-0 bg-accent text-on-accent"}
+          aria-label=${t("composer.send")}
+          @click=${sendOrStop}
+        >
+          ${icon(busy ? "stop" : "send", "glyph size-3.5 stroke-2")}
+        </button>
+      </div>
+    </div>`;
   }
 }
