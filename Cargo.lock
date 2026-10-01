@@ -9,6 +9,38 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 
 [[package]]
+name = "agent-claude"
+version = "0.1.0"
+dependencies = [
+ "agent-core",
+ "serde_json",
+]
+
+[[package]]
+name = "agent-codex"
+version = "0.1.0"
+dependencies = [
+ "agent-core",
+ "serde_json",
+]
+
+[[package]]
+name = "agent-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "agent-opencode"
+version = "0.1.0"
+dependencies = [
+ "agent-core",
+ "serde_json",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3143,6 +3175,10 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 name = "relay"
 version = "0.1.0"
 dependencies = [
+ "agent-claude",
+ "agent-codex",
+ "agent-core",
+ "agent-opencode",
  "ammonia",
  "async-imap",
  "async-native-tls",

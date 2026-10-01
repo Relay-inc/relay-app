@@ -1,21 +1,23 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./settings.css";
-import { currentLocale, initI18n, pt, t } from "./i18n";
+import { currentLocale, initI18n, pt, t, at } from "./i18n";
 import type { Key } from "./locales/en";
 import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type BoardRef } from "./providers";
+import { agent, agentsStatus, type AgentsStatus, type AgentStatus } from "./agents";
 import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
 import { iconPaths } from "./icons";
 
 // The settings window, laid out like Mail's: a toolbar of icon tabs, the window title follows the tab.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
-// Integrations the external services (the board providers from src/providers/, GitHub, Mail) as a list on the left with the details on the right,
+// Agents the coding-agent CLIs (src/agents/: switched on, the default, the program), Integrations the external services (the board providers from src/providers/, GitHub, Mail) as a list on the left with the details on the right,
 // like Mail's Accounts. Saving emits "settings-changed" from the backend, the main window follows it.
 type MailAcct = { email: string; keychain_service: string; keychain_account: string };
 type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
 type Settings = { vault: string; vaults?: Record<string, VaultMap>; projects: Record<string, { icon?: string; img?: string; label?: string }>; overrides: Record<string, string | null>;
   integrations: Record<string, Record<string, any>>; boards: Record<string, BoardRef>; github: { on: boolean; owners: string }; mail: MailCfg; language?: string;
-  favicons?: { on: boolean; last: string; tried: Record<string, string> } };
+  favicons?: { on: boolean; last: string; tried: Record<string, string> };
+  agents: { default: string; providers: Record<string, { on: boolean; bin: string; [opt: string]: unknown }> } };
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 const root = document.getElementById("set")!;
 let settings: Settings = await invoke<Settings>("get_settings");
@@ -33,6 +35,8 @@ let mailEdit: MailCfg = { ...settings.mail, accounts: settings.mail?.accounts ??
 const mailNew = { email: "", keychain_service: "", keychain_account: "", pw: "" }; // what sits in the add fields, survives a redraw
 let mailBusy = ""; // "connect" or "advanced" while that step runs
 const mailTest: Record<string, { text: string; ok: boolean } | "busy"> = {};
+// agents: what the backend detects per provider (installed, version, login), checked when the window opens
+let agSt: AgentsStatus | null = null, agMsg = "", agOk = false;
 let acct = localStorage.getItem("prefsAcct") || "";
 if (acct !== "github" && acct !== "mail" && !provider(acct)) acct = PROVIDERS[0].id;
 
@@ -43,7 +47,7 @@ const G: Record<string, string> = {
 const icon = (n: string) => `<svg viewBox="0 0 24 24">${G[n] ?? iconPaths(n)}</svg>`;
 // a provider's 16×16 glyph on the 24×24 tile
 const pIcon = (p: BoardProvider) => `<svg viewBox="0 0 24 24"><g transform="scale(1.5)">${p.glyph}</g></svg>`;
-const TABS = [["general", "set.tab.general", "gear"], ["projects", "set.tab.projects", "folder"], ["integrations", "set.tab.integrations", "plug"]] as const satisfies readonly (readonly [string, Key, string])[];
+const TABS = [["general", "set.tab.general", "gear"], ["projects", "set.tab.projects", "folder"], ["integrations", "set.tab.integrations", "plug"], ["agents", "set.tab.agents", "agent"]] as const satisfies readonly (readonly [string, Key, string])[];
 type Tab = typeof TABS[number][0];
 let tab: Tab = (TABS.find(x => x[0] === localStorage.getItem("prefsTab"))?.[0]) ?? "general";
 
@@ -188,6 +192,38 @@ function boardPane(p: BoardProvider) {
       ${boardMap(p)}
     </div>`;
 }
+// the agents: the default for new conversations, and per provider its status, switch and program
+function agents() {
+  if (!agSt) return `<div class="hint">${agMsg ? esc(agMsg) : t("ag.checking")}</div>`;
+  const on = agSt.providers.filter(p => settings.agents?.providers[p.id]?.on);
+  return `<div class="form">
+      <label class="fl" for="agdefault">${t("ag.default")}</label><select class="field" id="agdefault">${(on.length ? on : agSt.providers).map(p =>
+        `<option value="${esc(p.id)}" ${settings.agents?.default === p.id ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
+      <span></span><div class="hint">${t("ag.defaultHelp")}</div>
+    </div>
+    ${agSt.providers.map(agentPane).join("")}
+    <div class="setrow end">${agMsg ? `<span class="${agOk ? "okmsg" : "errmsg"}">${esc(agMsg)}</span>` : ""}<button class="btn" data-set="agcheck">${t("ag.recheck")}</button><button class="btn primary" data-set="agsave">${t("set.save")}</button></div>`;
+}
+function agentPane(p: AgentStatus) {
+  const cfg = settings.agents?.providers[p.id] ?? { on: false, bin: "" }, d = p.detect, ap = agent(p.id), id = esc(p.id);
+  const found = d.installed ? (d.version ? t("ag.installed", { version: esc(d.version) }) : t("ag.installedNoVersion")) : t("ag.missing", { bin: esc(d.bin) });
+  const login = d.loggedIn == null ? "" : ` · ${d.loggedIn ? t("ag.loggedIn") : t("ag.loggedOut")}`;
+  const caps = (["images", "permissions", "questions", "subagents", "terminal", "limits", "effort"] as const).filter(c => p.caps[c]).map(c => t(`ag.cap.${c}`)).join(", ");
+  return `<h3 class="ahead">${ap ? `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">${ap.glyph}</svg> ` : ""}${esc(p.name)}</h3><div class="form">
+      <span class="fl">${t("ag.status")}</span><span class="status"><span class="sdot ${d.installed && d.loggedIn !== false ? "on" : ""}"></span>${found}${login}${d.note ? ` · <code>${esc(d.note)}</code>` : ""}</span>
+      <span class="fl">${t("ag.on")}</span><label class="chk"><input type="checkbox" id="agon-${id}" ${cfg.on ? "checked" : ""}> ${t("ag.onLabel")}</label>
+      <label class="fl" for="agbin-${id}">${t("ag.bin")}</label><input class="field" id="agbin-${id}" value="${esc(cfg.bin)}" placeholder="${t("ag.binPh", { bin: esc(p.defaultBin) })}" spellcheck="false">
+      ${(ap?.options ?? []).map(o => `<label class="fl" for="agopt-${id}-${esc(o.id)}">${at(ap!, o.label)}</label><select class="field" id="agopt-${id}-${esc(o.id)}">${o.choices.map(c =>
+        `<option value="${esc(c.id)}" ${(cfg[o.id] ?? o.choices[0].id) === c.id ? "selected" : ""}>${at(ap!, c.label)}</option>`).join("")}</select>`).join("")}
+      <span class="fl">${t("ag.caps")}</span><span class="hint">${caps}</span>
+      ${ap ? `<span></span><div class="hint">${at(ap, "set.help")}</div>` : ""}
+    </div>`;
+}
+async function agCheck() {
+  agSt = null; render();
+  try { agSt = await agentsStatus(); } catch (e) { agMsg = String(e); agOk = false; }
+  render();
+}
 async function ghCheck() {
   ghLogin = ""; ghErr = ""; render();
   try { ghLogin = await invoke<string>("github_status"); } catch (e) { ghErr = String(e); }
@@ -199,7 +235,7 @@ const LANG_OPTS = () => [["system", t("set.system")], ["en", "English"], ["nl", 
 function render() {
   const cur = TABS.find(x => x[0] === tab)!;
   root.innerHTML = `<nav class="ptabs">${TABS.map(([id, name, g]) => `<button class="ptab${id === tab ? " on" : ""}" data-tab="${id}">${icon(g)}<span>${t(name)}</span></button>`).join("")}</nav>
-    <section class="ppane">${tab === "general" ? general() : tab === "projects" ? projects() : integrations()}</section>`;
+    <section class="ppane">${tab === "general" ? general() : tab === "projects" ? projects() : tab === "agents" ? agents() : integrations()}</section>`;
   getCurrentWindow().setTitle(t(cur[1])).catch(() => {});
   document.title = t(cur[1]);
 }
@@ -234,6 +270,16 @@ root.addEventListener("click", async e => {
   if (b.dataset.set === "pickmap") { vs = await pickMapped(vs, b.dataset.k as MapKey, readMapping(root, vs)); render(); }
   if (b.dataset.set === "save") await save({ ...settings, vault: vs.vault, vaults: { ...settings.vaults, [vs.vault]: readMapping(root, vs) } }, t("set.saved"));
   if (b.dataset.set === "ghcheck") ghCheck();
+  if (b.dataset.set === "agcheck") { agMsg = ""; agCheck(); }
+  if (b.dataset.set === "agsave" && agSt) {
+    // a provider's options (packages/agent-<id>, `options`) are stored next to on and bin
+    const opts = (id: string) => Object.fromEntries((agent(id)?.options ?? []).map(o => [o.id, val(`agopt-${id}-${o.id}`)]));
+    const providers = Object.fromEntries(agSt.providers.map(p => [p.id, { ...settings.agents?.providers[p.id], ...opts(p.id),
+      on: (document.getElementById(`agon-${p.id}`) as HTMLInputElement).checked, bin: val(`agbin-${p.id}`) }]));
+    const next = { ...settings, agents: { default: (document.getElementById("agdefault") as HTMLSelectElement).value, providers } };
+    try { settings = await invoke<Settings>("set_settings", { settings: next }); agMsg = t("set.saved"); agOk = true; await agCheck(); }
+    catch (x) { agMsg = String(x); agOk = false; render(); }
+  }
   if (b.dataset.set === "ghsave") {
     const next = { ...settings, github: { on: (document.getElementById("ghon") as HTMLInputElement).checked, owners: val("ghowners") } };
     try { settings = await invoke<Settings>("set_settings", { settings: next }); ghMsg = t("set.saved"); ghOk = true; }
@@ -327,3 +373,4 @@ window.addEventListener("keydown", e => {
 });
 render();
 ghCheck();
+agCheck();

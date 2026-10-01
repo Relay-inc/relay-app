@@ -17,6 +17,14 @@
     "@relay/integration-productive": "workspace:*",
     "@relay/integration-trello": "workspace:*",
     "@tauri-apps/api": "^2",
+    "@relay/agent-claude": "workspace:*",
+    "@relay/agent-codex": "workspace:*",
+    "@relay/agent-core": "workspace:*",
+    "@relay/agent-opencode": "workspace:*",
+    "@relay/board-core": "workspace:*",
+    "@relay/integration-linear": "workspace:*",
+    "@relay/integration-productive": "workspace:*",
+    "@relay/integration-trello": "workspace:*",
     "marked": "^18.0.14"
   },
   "devDependencies": {

@@ -11,7 +11,8 @@ import { PROVIDERS, provider, ctxOf, ready as providerReady, type BoardProvider,
 import "./productive.css";
 import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
 import "./github.css";
-import { startUsage, openUsage, renderUsage, usageSummary } from "./usage";
+import { startUsage, openUsage, renderUsage, usageSummary, reloadUsage } from "./usage";
+import { agentsStatus, type AgentsStatus, type AgentEvent } from "./agents";
 import { mailRef, renderMailSetup, renderMailBar, renderMailTools, renderMailList, renderMailDetail, renderMailLink, mailKey, unread, sender, setSeen, type Mail, type MailBody, type MailFilter } from "./mail";
 import "./mail.css";
 import { icon, fillIcons } from "./icons";
@@ -91,7 +92,9 @@ function renderAtts(id = "atts", list = attached) {
 // The key never changes, so moving a conversation to a project is only a label: the running
 // process and its session are untouched. Metadata is kept locally, the session lives in Claude Code.
 type Item = { kind: "me" | "ai" | "tool" | "err" | "note" | "done"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string; imgs?: string[] };
-type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number; mail?: string; fromMail?: boolean /* about a mail or has read mail */ };
+type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number; mail?: string;
+  provider?: string; // its agent, set at the first message
+  fromMail?: boolean /* about a mail or has read mail */ };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
@@ -107,17 +110,19 @@ let hidden: string[] = store.get("hiddenAgents", []);
 let forked: string[] = store.get("forkedTerms", []); // terminal sessions continued in the app, no longer listed
 let snap: any = { projects: [], reminders: [], sessions: { items: [] } };
 let appSids: string[] = [];
-let sidOf: Record<string, string> = {}; // app conversation key: its Claude session id
+let sidOf: Record<string, { provider: string; sid: string }> = {}; // app conversation key: its provider and session id
 // app conversations whose turn runs in a process this page gets no events from (it outlived an app restart):
-// the transcript offset read so far. The page follows the transcript until `claude agents` says the turn ended
+// the transcript offset read so far. The page follows the transcript until the provider's sessions say the turn ended
 const outside: Record<string, number> = {};
 // when that turn's prompt came in and the last line after it, from the transcript timestamps, for "Klaar · duur"
 const outsideAt: Record<string, { from: number; to: number }> = {};
-const isPrompt = (e: any) => { const c = e.message?.content;
-  return e.type === "user" && (typeof c === "string" ? !c.startsWith("<") : Array.isArray(c) && c.every((x: any) => x.type !== "tool_result") && c.some((x: any) => x.type === "text" && !x.text.startsWith("<"))); };
-function trackTimes(k: string, rows: any[]) {
-  for (const e of rows) { const at = Date.parse(e.at); if (!at) continue;
-    if (isPrompt(e)) outsideAt[k] = { from: at, to: at }; else if (outsideAt[k]) outsideAt[k].to = at; }
+// history gives a "time" event before each transcript line's events: a user message is a new prompt, any later line moves the end
+function trackTimes(k: string, rows: AgentEvent[]) {
+  let at = 0;
+  for (const e of rows) {
+    if (e.type === "time") { at = Date.parse(e.at) || 0; if (at && outsideAt[k]) outsideAt[k].to = at; }
+    else if (e.type === "user" && at) outsideAt[k] = { from: at, to: at };
+  }
 }
 // subagents a session spawned (Agent tool, background agents), per conversation key, polled every 2 s
 type Sub = { id: string; description: string; agentType?: string; model?: string; running: boolean; started_at: string; last_at: string; tool?: string; input?: any; text?: string };
@@ -332,39 +337,39 @@ function toolLine(name: string, input: any): string {
   return m ? `${esc(m[1].replace(/^claude_ai_|^plugin_/g, ""))}: ${esc(m[2])}` : esc(name);
 }
 
-// ---------- incoming events from the claude processes
+// ---------- incoming events from the agent processes, normalised by their provider (packages/agent-core)
 function push(k: string, it: Item) { (convo[k] ||= []).push(it); }
-// messages sent but not answered yet: Claude Code answers queued messages one by one, one result each
+// assistant text: a whole block, or a delta appended to the block before it
+function pushText(items: Item[], text: string, delta: boolean) {
+  const last = items[items.length - 1];
+  if (delta && last?.kind === "ai") last.text += text; else items.push({ kind: "ai", text });
+}
+// messages sent but not answered yet: a persistent agent answers queued messages one by one, one turn end each
 const queued: Record<string, number> = {};
-function onEvent(k: string, ev: any) {
+function onEvent(k: string, ev: AgentEvent) {
   if (ev.type === "draft_saved") { // the real recipients, independent of what Claude writes about it
     const cc: string[] = ev.cc || [], bcc: string[] = ev.bcc || [];
     push(k, { kind: "note", text: t("note.draftSaved", { folder: ev.folder, to: (ev.to || []).join(", ") }) + (cc.length ? t("note.draftCc", { cc: cc.join(", ") }) : "")
       + (bcc.length ? t("note.draftBcc", { bcc: bcc.join(", ") }) : "") });
     if (k === sel) renderChat(); return;
   }
-  if (ev.type === "assistant") {
-    for (const c of ev.message?.content || []) {
-      if (c.type === "text" && c.text.trim()) push(k, { kind: "ai", text: c.text });
-      // a chat that touched mail stays restricted: every later spawn of it starts with the mail limits
-      if (c.type === "tool_use" && String(c.name).startsWith("mcp__relay-mail__") && chats[k] && !chats[k].fromMail) { chats[k].fromMail = true; saveChats(); }
-      if (c.type === "tool_use") push(k, { kind: "tool", id: c.id, text: toolLine(c.name, c.input), state: "run", path: c.input?.file_path });
-    }
-  } else if (ev.type === "user") {
-    for (const c of ev.message?.content || []) {
-      if (c.type !== "tool_result") continue;
-      const t = convo[k]?.find(x => x.id === c.tool_use_id);
-      if (t) t.state = c.is_error ? "err" : "ok";
-    }
-  } else if (ev.type === "result") {
+  if (ev.type === "text") pushText(convo[k] ||= [], ev.text, ev.delta);
+  else if (ev.type === "tool_call") {
+    // a chat that touched mail stays restricted: every later spawn of it starts with the mail limits
+    if (ev.name.startsWith("mcp__relay-mail__") && chats[k] && !chats[k].fromMail) { chats[k].fromMail = true; saveChats(); }
+    push(k, { kind: "tool", id: ev.id, text: toolLine(ev.name, ev.input), state: "run", path: ev.input?.file_path });
+  } else if (ev.type === "tool_result") {
+    const t = convo[k]?.find(x => x.id === ev.id);
+    if (t) t.state = ev.error ? "err" : "ok";
+  } else if (ev.type === "turn_end") {
     queued[k] = Math.max(0, (queued[k] || 1) - 1);
     status[k] = queued[k] ? "busy" : "idle";
-    if (ev.is_error || ev.subtype !== "success") push(k, { kind: "err", text: ev.result || ev.subtype || t("err.unknown") });
+    if (!ev.ok) push(k, { kind: "err", text: ev.error || t("err.unknown") });
     else if (!queued[k]) push(k, { kind: "done", text: ev.duration_ms ? t("work.doneIn", { d: dur(ev.duration_ms / 1000) }) : t("work.done") });
     if (k !== sel) unseen.add(k);
     if (chats[k]) { chats[k].at = Date.now(); saveChats(); }
     loadSnapshot();
-  } else if (ev.type === "stderr") {
+  } else if (ev.type === "error" || ev.type === "stderr") {
     if (ev.text.trim()) push(k, { kind: "err", text: ev.text.slice(0, 2000) });
   } else if (ev.type === "exit") {
     // the process stopped while a turn ran: say so, the dots alone would just disappear
@@ -376,31 +381,21 @@ function onEvent(k: string, ev: any) {
 
 // ---------- history from the transcript, when a conversation opens for the first time
 const termOffset: Record<string, number> = {};
-function toItems(hist: any[]): Item[] {
+function toItems(hist: AgentEvent[]): Item[] {
   const items: Item[] = [];
   for (const e of hist) {
-    const c = e.message?.content;
     if (e.type === "user") {
-      if (typeof c === "string" && !c.startsWith("<")) items.push({ kind: "me", text: c });
-      else if (Array.isArray(c)) {
-        const texts = c.filter((x: any) => x.type === "text" && !x.text.startsWith("<")).map((x: any) => x.text);
-        // an image from the transcript as a thumbnail, or "" (a placeholder) when it is not inline base64
-        const imgs = c.filter((x: any) => x.type === "image").map((x: any) => {
-          const s = x.source || {};
-          return s.type === "base64" && IMG_OK.includes(s.media_type) && typeof s.data === "string" ? toImg(s.media_type, s.data).url : "";
-        });
-        if (texts.length || imgs.length) items.push({ kind: "me", text: texts.join("\n\n"), ...(imgs.length ? { imgs } : {}) });
-      }
-    } else for (const x of c || []) {
-      if (x.type === "text" && x.text.trim()) items.push({ kind: "ai", text: x.text });
-      if (x.type === "tool_use") items.push({ kind: "tool", id: x.id, text: toolLine(x.name, x.input), state: "ok", path: x.input?.file_path });
-    }
+      // an image from the transcript as a thumbnail, or "" (a placeholder) when it is not inline
+      const imgs = e.images.map(i => i && IMG_OK.includes(i.media_type) ? toImg(i.media_type, i.data).url : "");
+      items.push({ kind: "me", text: e.text, ...(imgs.length ? { imgs } : {}) });
+    } else if (e.type === "text") pushText(items, e.text, e.delta);
+    else if (e.type === "tool_call") items.push({ kind: "tool", id: e.id, text: toolLine(e.name, e.input), state: "ok", path: e.input?.file_path });
   }
   return items;
 }
 // a terminal conversation: first the whole transcript, then only what was added since the last read
 async function tailTerm(k: string): Promise<boolean> {
-  const r = await invoke<{ items: any[]; next: number }>("history_sid", { sid: k.slice(2), from: termOffset[k] ?? 0 });
+  const r = await invoke<{ items: AgentEvent[]; next: number }>("history_sid", { sid: k.slice(2), from: termOffset[k] ?? 0 });
   const fresh = termOffset[k] === undefined;
   termOffset[k] = r.next;
   const add = toItems(r.items);
@@ -410,7 +405,7 @@ async function tailTerm(k: string): Promise<boolean> {
 async function ensureHistory(k: string, fresh = false) {
   if (isTerm(k)) { if (!convo[k] || fresh) await tailTerm(k); return; }
   if (convo[k] && !fresh) return;
-  const items = toItems(await invoke<any[]>("history", { project: k }));
+  const items = toItems(await invoke<AgentEvent[]>("history", { project: k }));
   convo[k] = items;
   if (isTerm(k)) return;
   const first = items.find(i => i.kind === "me");
@@ -424,8 +419,10 @@ function describe(r: any): string {
   if (i.file_path) return esc(i.file_path) + (i.content ? `\n\n${esc(String(i.content).slice(0, 600))}` : "");
   return esc(JSON.stringify(i, null, 2).slice(0, 900));
 }
+// a question with options (kind "question"; files from before the providers only have Claude's tool name)
+const isQuestion = (r: any) => r.kind === "question" || r.tool_name === "AskUserQuestion";
 function card(r: any): string {
-  if (r.tool_name === "AskUserQuestion") {
+  if (isQuestion(r)) {
     return `<div class="perm" data-id="${esc(r.id)}"><div class="q">${t("card.asks")}</div>${(r.input.questions || []).map((q: any, qi: number) => `
       <div class="qh">${esc(q.question)}</div>
       <div class="opts" data-q="${qi}" data-multi="${q.multiSelect ? 1 : 0}">${(q.options || []).map((o: any) =>
@@ -448,7 +445,7 @@ async function onCard(e: MouseEvent) {
   }
   let decision: any;
   if (b.dataset.act === "allow") decision = { behavior: "allow", updatedInput: r.input };
-  else if (b.dataset.act === "deny") decision = { behavior: "deny", message: r.tool_name === "AskUserQuestion" ? "Laurent sloeg de vraag over en antwoordt zelf in het gesprek. Wacht op zijn bericht." : "Geweigerd in de app." };
+  else if (b.dataset.act === "deny") decision = { behavior: "deny", message: isQuestion(r) ? "Laurent sloeg de vraag over en antwoordt zelf in het gesprek. Wacht op zijn bericht." : "Geweigerd in de app." };
   else if (b.dataset.act === "answer") {
     const answers: Record<string, string> = {};
     box.querySelectorAll<HTMLElement>(".opts").forEach(g => {
@@ -570,6 +567,35 @@ function updateUsageButton() {
   dot.classList.toggle("late", u?.level === "late");
 }
 const usageChanged = () => { renderNav(); updateUsageButton(); if (sel === USAGE) renderChat(); };
+const usageAgents = () => agentsLoaded ? onAgents().map(p => ({ id: p.id, limits: p.caps.limits })) : [{ id: "claude", limits: true }];
+
+// ---------- agent providers: the composer's agent, model and effort picks follow the open conversation
+let agentsSt: AgentsStatus = { default: "claude", providers: [] }, agentsLoaded = false, picksFor = "";
+const onAgents = () => agentsSt.providers.filter(p => p.on);
+const agentOf = (id: string) => agentsSt.providers.find(p => p.id === id);
+const chatAgent = (k: string) => isTerm(k) ? "claude" : chats[k]?.provider || agentsSt.default || "claude";
+// the last pick per provider; Claude's under the keys from before the providers
+const pickKey = (kind: "model" | "effort", id: string) => id === "claude" ? kind : `${kind}.${id}`;
+function syncPicks() {
+  const id = chatAgent(sel), st = agentOf(id), ag = $("agent") as HTMLSelectElement, on = onAgents();
+  // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
+  const show = on.length > 1 && !isTerm(sel) && !!chats[sel];
+  ag.style.display = show ? "" : "none";
+  if (show) {
+    ag.innerHTML = on.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join("");
+    ag.value = id; ag.disabled = !!(convo[sel] || []).length || !!chats[sel]?.fork;
+  }
+  if (!st || picksFor === id) return;
+  picksFor = id;
+  const fill = (kind: "model" | "effort", def: Key, list: { id: string; label: string }[]) => {
+    const el = $(kind) as HTMLSelectElement, want = store.get(pickKey(kind, id), "");
+    el.innerHTML = `<option value="">${esc(t(def))}</option>` + list.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join("");
+    el.value = list.some(c => c.id === want) ? want : "";
+  };
+  fill("model", "composer.defaultModel", st.models);
+  fill("effort", "composer.defaultEffort", st.efforts);
+  ($("effort") as HTMLSelectElement).style.display = st.caps.effort && st.efforts.length ? "" : "none";
+}
 
 function renderChat() {
   const msgs = $("msgs"), log = $("log");
@@ -601,7 +627,7 @@ function renderChat() {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("term").style.display = "none";
     $("t").textContent = t("nav.usage"); $("ts").textContent = "";
-    msgs.innerHTML = renderUsage({ esc, session: usageSession });
+    msgs.innerHTML = renderUsage({ esc, session: usageSession, agents: usageAgents });
     openUsage(usageChanged);
     return;
   }
@@ -642,7 +668,7 @@ function renderChat() {
   }
   const T = isTerm(sel) ? termOf(sel) : undefined;
   $("composer").style.display = "";
-  $("term").style.display = T && T.kind !== "background" ? "none" : "";
+  $("term").style.display = (T && T.kind !== "background") || (!T && agentOf(chatAgent(sel))?.caps.terminal === false) ? "none" : "";
   const locked = !!chats[sel]?.fromMail, tb = $("term") as HTMLButtonElement; // the terminal would resume it without the app's restrictions
   tb.disabled = locked; tb.title = t(locked ? "bar.termMail" : "bar.openTerminal");
   const pn = T ? T.project : projOf(sel), P = project(pn);
@@ -678,6 +704,7 @@ function renderChat() {
   $("send").classList.toggle("stop", busy);
   $("send").innerHTML = icon(busy ? "stop" : "send", "i");
   // a switch restarts the process, so not while a turn runs
+  syncPicks();
   for (const id of ["model", "effort"]) ($(id) as HTMLSelectElement).disabled = busy;
   ($("c") as HTMLTextAreaElement).placeholder = T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general");
   if (atBottom) log.scrollTop = log.scrollHeight;
@@ -814,7 +841,7 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
     // typing in a terminal conversation: fork it into an app conversation under the same project
     const tm = termOf(sel); if (!tm) return;
     const k = newChat(tm.project);
-    Object.assign(chats[k], { title: tm.title, fork: tm.sid, draft: false });
+    Object.assign(chats[k], { title: tm.title, fork: tm.sid, draft: false, provider: "claude" }); // terminal sessions are Claude Code's
     forked.push(tm.sid); store.set("forkedTerms", forked);
     convo[k] = [...(convo[sel] || []), { kind: "note", text: t("note.forked") }];
     await select(k);
@@ -830,11 +857,11 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
     if (hits.length === 1) { c.project = hits[0]; push(k, { kind: "note", text: t("note.moved", { name: hits[0] }) }); }
     else if (hits.length > 1) { routeChoice = { key: k, text, hits }; renderChat(); return; }
   }
-  if (c) { if (c.title === NEW) c.title = (text || t("chat.image")).slice(0, 48); c.draft = false; c.at = Date.now(); saveChats(); }
+  if (c) { if (c.title === NEW) c.title = (text || t("chat.image")).slice(0, 48); c.draft = false; c.at = Date.now(); c.provider ||= chatAgent(k); saveChats(); }
   // first message: a short generated title replaces the typed start, unless the user renamed it meanwhile
   if (c && text && !(convo[k] || []).length) {
     const auto = c.title;
-    invoke<string>("ai_title", { text }).then(title => { if (chats[k]?.title === auto) { chats[k].title = title; saveChats(); render(); } }).catch(() => {});
+    invoke<string>("ai_title", { text, provider: chatAgent(k) }).then(title => { if (chats[k]?.title === auto) { chats[k].title = title; saveChats(); render(); } }).catch(() => {});
   }
   const imgs = to ? toImgs : attached; if (!to) { attached = []; renderAtts(); }
   push(k, { kind: "me", text, ...(imgs.length ? { imgs: imgs.map(i => i.url) } : {}) }); status[k] = "busy"; queued[k] = (queued[k] || 0) + 1; render();
@@ -843,7 +870,7 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
   const sent = c?.mail ? `${c.mail}\n\n${text}` : text;
   if (c?.mail) { delete c.mail; saveChats(); }
   try { await invoke("send", { project: k, text: sent, images: imgs.map(i => ({ media_type: i.mt, data: i.data })), name, fork: c?.fork ?? null,
-    mail: !!c?.fromMail, model: ($("model") as HTMLSelectElement).value, effort: ($("effort") as HTMLSelectElement).value }); }
+    mail: !!c?.fromMail, model: ($("model") as HTMLSelectElement).value, effort: ($("effort") as HTMLSelectElement).value, provider: chatAgent(k) }); }
   catch (e) { push(k, { kind: "err", text: String(e) }); queued[k] = Math.max(0, (queued[k] || 1) - 1); status[k] = queued[k] ? "busy" : "idle"; renderChat(); }
 }
 
@@ -1152,11 +1179,16 @@ document.addEventListener("click", e => {
   if (r && !el.closest("a[href]")) openPr(r.dataset.prOpen!);
 });
 const stopChat = () => { invoke("stop", { project: sel }); queued[sel] = 0; status[sel] = "idle"; push(sel, { kind: "note", text: t("note.stopped") }); render(); };
-for (const id of ["model", "effort"]) {
+for (const id of ["model", "effort"] as const) {
   const el = $(id) as HTMLSelectElement;
   el.value = store.get(id, "");
-  el.addEventListener("change", () => store.set(id, el.value));
+  el.addEventListener("change", () => store.set(pickKey(id, picksFor || "claude"), el.value));
 }
+// the agent of a conversation that has not started yet
+($("agent") as HTMLSelectElement).addEventListener("change", e => {
+  const c = chats[sel]; if (!c) return;
+  c.provider = (e.target as HTMLSelectElement).value; saveChats(); renderChat();
+});
 $("send").addEventListener("click", () => { if (status[sel] === "busy") stopChat(); else sendMsg(); });
 // typing anywhere in an open conversation goes to the composer, focused or not
 window.addEventListener("keydown", e => {
@@ -1250,7 +1282,7 @@ async function pollSubs() {
 let agentsAt = 0;
 async function pollAgents() {
   agentsAt = Date.now();
-  [agentsList, appSids, sidOf] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids"), invoke<Record<string, string>>("app_sessions").catch(() => sidOf)]);
+  [agentsList, appSids, sidOf] = await Promise.all([invoke<any[]>("agents"), invoke<string[]>("app_sids"), invoke<typeof sidOf>("app_sessions").catch(() => sidOf)]);
   await syncBusy();
   renderNav(); if (sel === WAIT || isTerm(sel) || status[sel] === "busy" || sel in outside) renderChat();
 }
@@ -1258,15 +1290,15 @@ async function pollAgents() {
 // the dots are missing) or after an app restart (the process lives on without the app, the transcript is followed).
 // Only for a conversation the page knows nothing about yet, so a late "busy" never brings back the dots of a finished turn.
 async function syncBusy() {
-  const live = new Map(agentsList.map(a => [a.sessionId, a]));
+  const live = new Map(agentsList.map(a => [`${a.provider}:${a.sessionId}`, a]));
   const owned = new Set(await invoke<string[]>("running").catch(() => []));
-  for (const [k, sid] of Object.entries(sidOf)) {
+  for (const [k, { provider, sid }] of Object.entries(sidOf)) {
     if (!chats[k] || chats[k].closed) continue;
-    const busy = live.get(sid)?.status === "busy";
+    const busy = live.get(`${provider}:${sid}`)?.status === "busy";
     if (busy && status[k] === undefined) {
       status[k] = "busy";
       if (owned.has(k)) { if (!convo[k]) await ensureHistory(k); } // the events that follow land on top of the transcript
-      else { const r = await invoke<{ items: any[]; next: number }>("history_sid", { sid, from: 0 }); convo[k] = toItems(r.items); outside[k] = r.next; trackTimes(k, r.items); }
+      else { const r = await invoke<{ items: AgentEvent[]; next: number }>("history_sid", { sid, from: 0, provider }); convo[k] = toItems(r.items); outside[k] = r.next; trackTimes(k, r.items); }
     } else if (!busy && k in outside) {
       await tailOutside(k); delete outside[k]; status[k] = "idle";
       const span = outsideAt[k]; delete outsideAt[k];
@@ -1276,12 +1308,12 @@ async function syncBusy() {
   }
 }
 async function tailOutside(k: string) {
-  const r = await invoke<{ items: any[]; next: number }>("history_sid", { sid: sidOf[k], from: outside[k] });
+  const r = await invoke<{ items: AgentEvent[]; next: number }>("history_sid", { sid: sidOf[k].sid, from: outside[k], provider: sidOf[k].provider });
   outside[k] = r.next; trackTimes(k, r.items);
   const add = toItems(r.items);
   if (add.length) { convo[k].push(...add); if (k === sel) renderChat(); }
 }
-// while one runs outside: its transcript every 2 s, and `claude agents` every 4 s to see the turn end
+// while one runs outside: its transcript every 2 s, and the providers' sessions every 4 s to see the turn end
 setInterval(async () => {
   const ks = Object.keys(outside); if (!ks.length) return;
   for (const k of ks) await tailOutside(k).catch(() => {});
@@ -1289,7 +1321,10 @@ setInterval(async () => {
 }, 2000);
 
 // ---------- start: adopt conversations from earlier versions (general:<id>, plain project names)
-listen<any>("claude", e => onEvent(e.payload.project, e.payload.event));
+listen<{ project: string; provider: string; event: AgentEvent }>("agent", e => onEvent(e.payload.project, e.payload.event));
+// the agents: switched on, detected, their capabilities and picks. Not awaited: detection runs each CLI once
+const loadAgents = () => agentsStatus().then(a => { agentsSt = a; agentsLoaded = true; picksFor = ""; render(); }).catch(e => console.error(e));
+listen("settings-changed", () => loadAgents().then(() => reloadUsage(usageChanged, sel === USAGE)));
 try { settings = { ...settings, ...(await invoke<Settings>("get_settings")) }; } catch { /* older backend */ }
 await initI18n(); applyStatic();
 // no vault yet, or the configured one is gone: choose one before anything reads it
@@ -1303,7 +1338,10 @@ for (const k of await invoke<string[]>("chats")) {
   else if (project(k)) chats[k] = { key: k, project: k, title: "Gesprek", at: 0 };
   else chats[k] = { key: k, project: null, title: "Gesprek", at: parseInt(k.slice(2), 36) || 0 };
 }
+// the agent of each conversation with a session, from sessions.json (entries from before the providers are Claude's)
+for (const [k, p] of Object.entries(await invoke<Record<string, string>>("chat_providers").catch(() => ({} as Record<string, string>)))) if (chats[k]) chats[k].provider = p;
 saveChats();
+loadAgents();
 await Promise.all(Object.values(chats).filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title)).map(c => ensureHistory(c.key)));
 await pollAgents();
 await checkBoards();

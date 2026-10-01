@@ -3,7 +3,7 @@
 import {
   Notification01Icon, LeftToRightListBulletIcon, Message01Icon, ComputerTerminal01Icon, Settings01Icon, Folder01Icon,
   DashboardSpeed01Icon, Tick02Icon, Calendar03Icon, ArrowLeft01Icon, ArrowRight01Icon, GitPullRequestIcon, Mail01Icon,
-  Cancel01Icon, MailOpen01Icon, TextAlignLeftIcon, Image01Icon, MailReply01Icon, Plug01Icon, Search01Icon, ArrowUp02Icon,
+  Cancel01Icon, MailOpen01Icon, TextAlignLeftIcon, Image01Icon, MailReply01Icon, Plug01Icon, Search01Icon, ArrowUp02Icon, BotIcon,
 } from "@hugeicons/core-free-icons";
 
 type Icon = readonly (readonly [string, Readonly<Record<string, string | number>>])[];
@@ -16,7 +16,7 @@ const ICONS: Record<string, Icon> = {
   gear: Settings01Icon, folder: Folder01Icon, gauge: DashboardSpeed01Icon, check: Tick02Icon, cal: Calendar03Icon,
   left: ArrowLeft01Icon, right: ArrowRight01Icon, pr: GitPullRequestIcon, mail: Mail01Icon, close: Cancel01Icon,
   read: MailOpen01Icon, text: TextAlignLeftIcon, html: Image01Icon, reply: MailReply01Icon, talk: Message01Icon,
-  plug: Plug01Icon, search: Search01Icon, send: ArrowUp02Icon,
+  plug: Plug01Icon, search: Search01Icon, send: ArrowUp02Icon, agent: BotIcon,
 };
 const extra: Record<string, string> = {
   // unread: the envelope with a solid dot in its corner

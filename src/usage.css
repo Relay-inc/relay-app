@@ -31,3 +31,4 @@
 .u-open{color:inherit;text-decoration:none;cursor:default}
 .u-open:hover{color:var(--accent)}
 .u-note{font-size:13px;color:var(--secondary);margin:10px 0 0}
+.usage h2 .g{width:16px;height:16px;align-self:center;fill:none;stroke:currentColor;stroke-width:1.3}

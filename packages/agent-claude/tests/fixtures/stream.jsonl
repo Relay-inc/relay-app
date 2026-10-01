@@ -1,0 +1,8 @@
+{"type":"system","subtype":"init","session_id":"36099ce4-d17c-482a-8907-23790cc0e8db","model":"claude-opus-5-5","tools":["Read"]}
+{"type":"assistant","message":{"id":"m1","role":"assistant","content":[{"type":"text","text":"Ik kijk even."},{"type":"tool_use","id":"toolu_1","name":"Read","input":{"file_path":"/v/a.md"}}]},"session_id":"36099ce4-d17c-482a-8907-23790cc0e8db"}
+{"type":"assistant","message":{"id":"m2","role":"assistant","content":[{"type":"text","text":"  \n"}]}}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"# a"},{"type":"tool_result","tool_use_id":"toolu_2","content":"nope","is_error":true}]}}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}
+{"type":"result","subtype":"success","is_error":false,"duration_ms":4200,"result":"Klaar.","total_cost_usd":0.25,"usage":{"input_tokens":12,"output_tokens":34,"cache_read_input_tokens":300,"cache_creation_input_tokens":40}}
+{"type":"result","subtype":"error_max_turns","is_error":true}
+not json
