@@ -15,6 +15,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
+mod actions;
 mod agents;
 pub mod broker;
 mod mail;
@@ -518,7 +519,9 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let mut cmd = p.command(&eb.env(), &l)?;
-    cmd.current_dir(&dir).env("PATH", &state.path);
+    // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
+    let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+    cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
     let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
@@ -1335,6 +1338,9 @@ fn nav_internal(url: &tauri::Url) -> bool {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// `relay --cli …`, see actions.rs.
+pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
+
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
@@ -1372,6 +1378,7 @@ pub fn run() {
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
             reattach(app.handle());
+            actions::start(app.handle());
             tray::init(app.handle())?;
             Ok(())
         })

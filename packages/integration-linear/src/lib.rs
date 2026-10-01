@@ -2,7 +2,7 @@
 //! Authorization header as it is. One endpoint, POST /graphql. Any query goes (a query cannot change anything);
 //! the only mutation allowed is MOVE, the one in src/map.ts, with nothing but an issue id and a state id.
 
-use board_core::{t, Provider, Text};
+use board_core::{arg, arg_ok, read, t, write, Action, Provider, Req, Text};
 use serde_json::{json, Value};
 
 const TEXT: Text = &[
@@ -53,10 +53,35 @@ pub const PROVIDER: Provider = Provider {
     },
     // the official Linear MCP server signs in in the browser: nothing to take over; a key-based one has LINEAR_API_KEY
     mcp: Some(board_core::Mcp { server: "linear", secrets: &[("token", &["LINEAR_API_KEY", "LINEAR_API_TOKEN"])], fields: &[] }),
+    actions: ACTIONS,
 };
+
+// ---------- agent actions (`relay linear.<id>`): fixed queries, the arguments only ever go in as variables
+
+fn gql(query: &str, variables: Value) -> Result<Req, String> {
+    Ok(Req { method: "POST", url: "https://api.linear.app/graphql".into(), body: Some(json!({ "query": query, "variables": variables })) })
+}
+fn uuid(s: &str) -> bool { linear_id(&json!(s)) }
+
+const ACTIONS: &[Action] = &[
+    read("teams", "Your teams; a new issue goes to one.", &[], |_, _| gql("{ teams { nodes { id key name } } }", json!({})), |v| v["data"]["teams"]["nodes"].clone()),
+    write("create_issue", "Create an issue in a team.", &[("team", "team id"), ("title", "issue title"), ("description?", "body, Markdown")],
+        |_, a| gql("mutation Create($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }",
+            json!({ "input": { "teamId": arg_ok(a, "team", uuid)?, "title": arg(a, "title"), "description": arg(a, "description").unwrap_or_default() } })),
+        |v| v["data"]["issueCreate"]["issue"].clone()),
+];
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn actions_send_their_text_as_variables() {
+        let act = |id: &str| PROVIDER.actions.iter().find(|a| a.id == id).unwrap();
+        let r = (act("create_issue").build)(&json!({}), &json!({ "team": "9b1c-22", "title": "\" } mutation {" })).unwrap();
+        let b = r.body.unwrap();
+        assert!(!b["query"].as_str().unwrap().contains("mutation {"));
+        assert_eq!(b["variables"]["input"]["teamId"], "9b1c-22");
+        assert!((act("create_issue").build)(&json!({}), &json!({ "team": "x y", "title": "t" })).is_err());
+    }
     #[test]
     fn allows_queries_and_only_the_move_mutation() {
         let p = &PROVIDER;

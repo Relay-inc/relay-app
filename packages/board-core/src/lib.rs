@@ -58,6 +58,7 @@ impl Policy {
 }
 
 /// One call an action makes: the full URL (built from checked arguments only) and the JSON body.
+#[derive(Debug)]
 pub struct Req { pub method: &'static str, pub url: String, pub body: Option<Value> }
 
 pub struct Action {

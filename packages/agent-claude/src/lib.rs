@@ -23,6 +23,11 @@ pub const DENIED: [&str; 2] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"];
 /// The mail tools run without a card, also once the session holds mail text: none can send, a draft only lands in Drafts.
 pub const MAIL_TOOLS: [&str; 5] = ["mcp__relay-mail__search", "mcp__relay-mail__read", "mcp__relay-mail__thread", "mcp__relay-mail__attachment", "mcp__relay-mail__save_draft"];
 
+/// The app's `relay` command (src-tauri/src/actions.rs) runs without a Bash card: each action has its own policy,
+/// and the app asks on a card for the ones that need it.
+pub const RELAY_TOOL: &str = "Bash(relay *)";
+const RELAY_HINT: &str = "The Relay app gives you its extensions as a shell command: `relay help` lists the actions available in this conversation (creating tickets in Productive, Trello or Linear, booking time in Productive, vault reminders, mail drafts), `relay <action> key=value ...` runs one. Use it instead of other tools for these when an action fits. Some actions ask the user first; a denied one stays denied, do not work around it.";
+
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
@@ -66,7 +71,8 @@ impl AgentProvider for Claude {
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-            .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg("--disallowedTools").args(DENIED).args(["-n", l.name]);
+            .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg(RELAY_TOOL).arg("--disallowedTools").args(DENIED)
+            .args(["--append-system-prompt", RELAY_HINT, "-n", l.name]);
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { cmd.args(["--resume", sid]); }
@@ -151,12 +157,12 @@ mod tests {
         assert!(args[9].contains("perm_server.py") && args[9].contains("\"PROJECT\":\"c:1\""));
         assert!(!args[9].contains("relay-mail"));
         assert_eq!(args[10], "--allowedTools");
-        assert_eq!(args[16], "--disallowedTools");
-        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        assert_eq!((args[16].as_str(), args[17].as_str(), args[20].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
+        assert_eq!(&args[22..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[22..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[9].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
