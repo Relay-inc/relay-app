@@ -40,7 +40,7 @@ async function settingsChanged(next: Settings) {
   // another vault has other commands and skills
   const vaultChanged = next.vault !== config.value.vault;
   config.value = { ...config.value, ...next };
-  applyTheme(next.theme);
+  applyTheme(next.theme, next.accent);
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
   if (integrationsChanged || languageChanged) resetBoard();
   if (languageChanged) await initI18n();
@@ -98,7 +98,7 @@ async function loadSettingsAndVault() {
     /* older backend */
   }
   await initI18n();
-  applyTheme(config.value.theme);
+  applyTheme(config.value.theme, config.value.accent);
   // no vault yet, or the configured one is gone: choose one before anything reads it
   const vaultStatus = await invoke<VaultStatus>("vault_status");
   if (!vaultStatus.ok) {

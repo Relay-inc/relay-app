@@ -6,17 +6,36 @@ const escapes: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;"
 const escapeHtml = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, char => escapes[char]);
 const fileName = (path = "") => path.split("/").pop() || path;
 
-/** One tool call as a short line ("read x.md", a command, "searched for ..."). Its `<code>` is styled by the line that holds it. */
-export function toolLine(name: string, input: ToolInput | undefined) {
+/** What an edit removed and added, as lines, when the call carries the old and new text (Edit, MultiEdit) or the content (Write). */
+export function changeOf(name: string, input: ToolInput | undefined) {
   const args = input || {};
+  const split = (text: unknown) => (typeof text === "string" && text ? text.split("\n") : []);
+  if (name === "Write") return args.content === undefined ? null : { del: [], add: split(args.content) };
+  const edits = name === "MultiEdit" && Array.isArray(args.edits) ? args.edits : [args];
+  const pairs = edits.filter(edit => typeof edit?.old_string === "string" && typeof edit?.new_string === "string");
+  if (!pairs.length || (name !== "Edit" && name !== "MultiEdit")) return null;
+  return {
+    del: pairs.flatMap(edit => split(edit.old_string)),
+    add: pairs.flatMap(edit => split(edit.new_string)),
+  };
+}
+
+/** One tool call as a short line ("read x.md", a command, "searched for ..."). Its `<code>` is styled by the line that holds it.
+ *  `linked`: the file is a note that opens, so its name is drawn as a link. */
+export function toolLine(name: string, input: ToolInput | undefined, linked = false) {
+  const args = input || {};
+  const file = () =>
+    linked
+      ? raw(`<span class="text-accent-text">${escapeHtml(fileName(args.file_path))}</span>`)
+      : fileName(args.file_path);
   switch (name) {
     case "Read":
-      return th("tool.read", { file: fileName(args.file_path) });
+      return th("tool.read", { file: file() });
     case "Write":
-      return th("tool.write", { file: fileName(args.file_path) });
+      return th("tool.write", { file: file() });
     case "Edit":
     case "MultiEdit":
-      return th("tool.edit", { file: fileName(args.file_path) });
+      return th("tool.edit", { file: file() });
     case "Bash":
       return html`<code>${String(args.command || "").slice(0, 90)}</code>`;
     case "Grep":

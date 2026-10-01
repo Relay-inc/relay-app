@@ -1,6 +1,6 @@
 import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
+import { currentLocale, translator, type BoardProvider, type BoardRef, type CardView, type Ctx, type Opt, type State } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 import { toHtml, uploadFile } from "./write";
 
@@ -19,6 +19,8 @@ async function all(c: Ctx, path: string) {
   }
   return { data, included };
 }
+// a workflow status' category: 1 not started, 2 started, 3 closed
+const stateOf = (category: unknown): State => (category === 3 ? "done" : category === 2 ? "doing" : "todo");
 const byName = (a: Opt, b: Opt) => a.name.localeCompare(b.name, currentLocale());
 const boardNames = new Map<string, string>();
 
@@ -56,13 +58,13 @@ async function ready(c: Ctx) {
   })]);
 }
 // per project: its workflow's statuses (the status columns, in Productive's order) and its people, for the panel's pickers
-type Opts = { statuses: (Opt & { placement: number })[]; people: Opt[] };
+type Opts = { statuses: (Opt & { placement: number; state: State })[]; people: Opt[] };
 const opts = new Map<string, Promise<Opts>>(), optsDone = new Map<string, Opts>();
 function optsOf(c: Ctx, project: string) {
   if (!opts.has(project)) opts.set(project, (async () => {
     const pr = await c.call("GET", `/projects/${project}?include=workflow`), wf = pr.data?.relationships?.workflow?.data?.id;
     const [st, pp] = await Promise.all([wf ? all(c, `/workflow_statuses?filter[workflow_id]=${wf}`) : { data: [] }, all(c, `/people?filter[project_id]=${project}&filter[status]=1`)]);
-    const o: Opts = { statuses: st.data.map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.position ?? 0 })).sort((a: any, b: any) => a.placement - b.placement),
+    const o: Opts = { statuses: st.data.map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.position ?? 0, state: stateOf(x.attributes.category_id) })).sort((a: any, b: any) => a.placement - b.placement),
       people: pp.data.map((x: any) => ({ id: x.id, name: person(x) })).sort(byName) };
     optsDone.set(project, o);
     return o;
@@ -103,6 +105,8 @@ function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], ac
   return { title: a.title, number: a.number, closed: a.closed, description: clean(a.description), created: a.created_at, creator: person(pick(inc, "people", rel.creator)),
     board: boardNames.get(ref.board) || "", list, url: taskUrl(ref, id), project: ref.project,
     statusId: rel.workflow_status?.data?.id ?? "", assigneeId: rel.assignee?.data?.id ?? "",
+    statusName: pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || "", state: a.closed ? "done" as State : stateOf(pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.category_id),
+    assignee: person(pick(inc, "people", rel.assignee)), due: a.due_date || "", labels: (a.tag_list || []) as string[],
     // the task's own attachments; null until fetched (the background load skips them)
     files: atts && atts.filter(x => live(x) && !onComment(x)).map(fileOf),
     fields: ([[t("status"), pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || "", "status"], [t("taskList"), list],
@@ -155,9 +159,13 @@ const productive: BoardProvider<Key> = {
     // include=task_list is required: without it the relationship comes back without an id
     const tk = await all(c, `/tasks?filter[folder_id]=${ref.board}&filter[status]=1&include=task_list,assignee,workflow_status,creator`);
     const people = new Map<string, string>(tk.included.filter((i: any) => i.type === "people").map((i: any) => [i.id, i.attributes.first_name || ""]));
+    const named = (type: string) => new Map<string, any>(tk.included.filter((i: any) => i.type === type).map((i: any) => [i.id, i.attributes]));
+    const lists = named("task_lists"), statuses = named("workflow_statuses");
     prefetch(c, ref, tk);
     return tk.data.map((x: any) => ({ id: x.id, title: x.attributes.title, number: x.attributes.number, placement: x.attributes.placement ?? 0, due: x.attributes.due_date,
-      column: x.relationships.task_list?.data?.id ?? "", in: { status: x.relationships.workflow_status?.data?.id ?? "" }, who: people.get(x.relationships.assignee?.data?.id) || "" }));
+      column: x.relationships.task_list?.data?.id ?? "", in: { status: x.relationships.workflow_status?.data?.id ?? "" }, who: people.get(x.relationships.assignee?.data?.id) || "",
+      status: statuses.get(x.relationships.workflow_status?.data?.id)?.name, state: x.attributes.closed ? "done" : stateOf(statuses.get(x.relationships.workflow_status?.data?.id)?.category_id),
+      folder: boardNames.get(ref.board), list: lists.get(x.relationships.task_list?.data?.id)?.name, labels: x.attributes.tag_list || [], updated: x.attributes.last_activity_at || x.attributes.updated_at }));
   },
   move: async (c, _ref, card, to, group) => {
     const rel = group === "status" ? { workflow_status: { data: { type: "workflow_statuses", id: to } } } : { task_list: { data: { type: "task_lists", id: to } } };
@@ -178,6 +186,14 @@ const productive: BoardProvider<Key> = {
       await loadThumbs(c, task);
       details.set(id, task);
       return task;
+    },
+    /** The ticket window's data: what the task has, and the pickers' choices once the project's are known. */
+    view(tk: Task): CardView {
+      const o = optsDone.get(tk.project);
+      return { title: tk.title, number: tk.number, closed: tk.closed, url: tk.url, board: tk.board, list: tk.list, project: tk.project, created: tk.created, creator: tk.creator,
+        description: tk.description, status: tk.statusId ? { id: tk.statusId, name: tk.statusName, state: tk.state } : undefined,
+        assignee: tk.assigneeId ? { id: tk.assigneeId, name: tk.assignee } : undefined, due: tk.due, labels: tk.labels,
+        statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed };
     },
     /** The panel, in the same Tailwind utilities as the PR detail so both look alike (Tailwind scans the packages). */
     // Description and feed are Productive's HTML, which the original trusted the same way (unsafeHTML); everything else is escaped by Lit.

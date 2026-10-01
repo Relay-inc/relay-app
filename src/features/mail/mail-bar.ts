@@ -61,7 +61,7 @@ export class MailBar extends LitElement {
     // the search field stays one element across redraws, so it keeps its focus and caret while the list changes
     return html`<div class="flex flex-wrap items-center gap-2 mb-3.5">
       <input
-        class="field w-50 placeholder:text-secondary"
+        class="field basis-full min-w-0 placeholder:text-tertiary"
         type="search"
         placeholder=${t("mail.search")}
         .value=${this.filter.q}

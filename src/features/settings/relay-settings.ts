@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initI18n, t } from "../../core/i18n";
 import { applyTheme } from "../../core/theme";
-import type { Theme } from "../../domain/config";
+import type { Accent, Theme } from "../../domain/config";
 import type { Key } from "../../core/locales/en";
 import {
   KEYS,
@@ -87,7 +87,7 @@ export class RelaySettings extends SettingsElement {
     const settings = await invoke<Settings>("get_settings");
     this.vaultStatus = await invoke<VaultStatus>("vault_status");
     await initI18n();
-    applyTheme(settings.theme);
+    applyTheme(settings.theme, settings.accent);
     this.settings = settings;
   }
 
@@ -134,8 +134,13 @@ export class RelaySettings extends SettingsElement {
   }
 
   private async changeTheme(theme: Theme) {
-    applyTheme(theme);
+    applyTheme(theme, this.settings!.accent);
     await this.save({ settings: { ...this.settings!, theme }, done: "" });
+  }
+
+  private async changeAccent(accent: Accent) {
+    applyTheme(this.settings!.theme, accent);
+    await this.save({ settings: { ...this.settings!, accent }, done: "" });
   }
 
   private async pickVaultFolder(current: VaultStatus) {
@@ -161,19 +166,19 @@ export class RelaySettings extends SettingsElement {
   };
 
   private renderTabs(current: Tab) {
-    return html`<nav class="w-50 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 py-3 select-none">
-      <div class="mt-1 grid gap-0.5 first:mt-0">
+    return html`<nav class="w-52 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 pt-12 select-none">
+      <div class="grid gap-px py-1">
         ${TABS.map(
-          ([id, name, glyph]) =>
+          ([id, name, glyph], index) =>
             html`<button
-              class="flex h-7 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-s-fg hover:bg-s-sel focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${current === id ? "bg-s-sel" : ""}"
+              class="flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg hover:bg-s-hover focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${current === id ? "bg-s-sel font-medium" : ""}"
               @click=${() => this.go(id)}
               aria-current=${ifDefined(current === id ? "page" : undefined)}
             >
-              ${appIcon(glyph, "size-4 flex-none fill-none stroke-current stroke-2 glyph")}<span
+              ${appIcon(glyph, `size-4 flex-none fill-none stroke-current stroke-2 glyph ${current === id ? "text-accent-text" : ""}`)}<span
                 class="min-w-0 flex-1 truncate text-left"
                 >${t(name)}</span
-              >
+              ><span class="text-[11px] font-normal text-tertiary">⌘${index + 1}</span>
             </button>`,
         )}
       </div>
@@ -194,6 +199,7 @@ export class RelaySettings extends SettingsElement {
       @folders-save=${(e: CustomEvent<VaultMap>) => this.saveFolders(settings, vaultStatus.vault, e.detail)}
       @language-change=${(e: CustomEvent<string>) => this.changeLanguage(e.detail)}
       @theme-change=${(e: CustomEvent<Theme>) => this.changeTheme(e.detail)}
+      @accent-change=${(e: CustomEvent<Accent>) => this.changeAccent(e.detail)}
       @favicons-change=${(e: CustomEvent<boolean>) => this.saveFavicons(settings, e.detail)}
     ></relay-settings-general>`;
   }
@@ -203,8 +209,11 @@ export class RelaySettings extends SettingsElement {
     if (!settings || !vaultStatus) return nothing;
     return html`<div class="flex h-full min-h-0" @click=${this.onClick}>
       ${this.renderTabs(tab)}
-      <section class="min-w-0 flex-1 min-h-0 overflow-y-auto px-6 pt-5 pb-6">
-        <div class="mx-auto grid max-w-2xl grid-cols-1 content-start gap-8 [&>*]:min-w-0">
+      <section class="min-w-0 flex-1 min-h-0 overflow-y-auto">
+        <div class="flex h-12 items-center border-b border-s-seam px-8 text-[13px] font-semibold">
+          ${t(TABS.find(x => x[0] === tab)![1])}
+        </div>
+        <div class="mx-auto grid max-w-150 grid-cols-1 content-start gap-7 px-8 pt-6 pb-10 [&>*]:min-w-0">
           ${this.renderGeneral(settings, vaultStatus)}
           <relay-settings-projects
             ?active=${tab === "projects"}

@@ -45,15 +45,18 @@ pub fn parse(line: &str) -> Vec<Event> {
     out
 }
 
-/// One transcript line as history: the user's messages (not the harness's `<…>` ones) and Claude's blocks.
+/// Text the harness put in the user's turn: `<…>` lines, and a subagent's or teammate's message.
+fn harness(t: &str) -> bool { t.starts_with('<') || t.starts_with("Another Claude session sent a message") }
+
+/// One transcript line as history: the user's messages (not the harness's ones) and Claude's blocks.
 pub fn history_line(e: &Value, out: &mut Vec<Event>) {
-    if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true { return; }
+    if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true || e["isMeta"] == true { return; }
     if let Some(at) = e["timestamp"].as_str() { out.push(Event::Time { at: at.into() }); }
     let c = &e["message"]["content"];
     if e["type"] == "assistant" { return assistant(c, out); }
-    if let Some(s) = c.as_str() { if !s.starts_with('<') { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
+    if let Some(s) = c.as_str() { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
-    let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).filter(|t| !t.starts_with('<')).collect();
+    let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).filter(|t| !harness(t)).collect();
     // an image not inline as base64 is None: a placeholder
     let images: Vec<Option<Image>> = blocks.iter().filter(|x| x["type"] == "image").map(|x| {
         let s = &x["source"];
@@ -118,7 +121,7 @@ mod tests {
         assert_eq!(ev[1], Event::User { text: "en dit".into(), images: vec![Some(Image { media_type: "image/png".into(), data: "AA==".into() }), None] });
         assert_eq!(ev[2], Event::Text { text: "Drie dingen.".into(), delta: false });
         assert!(matches!(&ev[3], Event::ToolCall { name, .. } if name == "Bash"));
-        assert_eq!(ev.len(), 4); // no <command> lines, tool results, sidechains or other types
+        assert_eq!(ev.len(), 4); // no <command>, meta or teammate lines, tool results, sidechains or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_file(p).ok();
     }

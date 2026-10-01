@@ -1,7 +1,7 @@
 import { LitElement, html, css, nothing } from "lit";
 import { customElement } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
-import { t } from "../../core/i18n";
+import { t, th, raw } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { ui, isTerminal } from "../../domain/ui";
@@ -15,6 +15,8 @@ import { noteKey } from "../../domain/keys";
 import "./user-message";
 import "./answer";
 import "./tool-step";
+import "./tool-group";
+import { icon } from "../../core/icons";
 import "./error-line";
 import "./note-line";
 import "./done-line";
@@ -32,7 +34,7 @@ export class RelayConversation extends LitElement {
       :host {
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 20px;
       }
     `,
   ];
@@ -58,13 +60,22 @@ export class RelayConversation extends LitElement {
         // a Read or Edit on a note that exists opens it in the right panel
         const note = notePath(item.path);
         return html`<relay-tool-step
-          class="-my-1.5"
           .tool=${item.tool}
           .text=${item.text}
           .state=${item.state ?? ""}
           ?link=${!!note}
           @open-note=${() => openDetail(noteKey(note))}
         ></relay-tool-step>`;
+      }
+      case "allowed":
+      case "denied": {
+        const ok = item.kind === "allowed";
+        const command = raw(`<code>${item.text.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)}</code>`);
+        return html`<div
+          class="flex items-center gap-2 text-[13px] text-secondary -my-1 [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill-2 [&_code]:text-label [&_code]:px-1.25 [&_code]:py-px [&_code]:rounded-sm [&_code]:truncate"
+        >
+          ${icon(ok ? "check" : "close", `glyph size-3.5 flex-none stroke-2 ${ok ? "text-ok" : "text-late"}`)}${th(ok ? "card.allowed" : "card.denied", { c: command })}
+        </div>`;
       }
       case "err":
         return html`<relay-error-line .text=${item.text}></relay-error-line>`;
@@ -82,9 +93,32 @@ export class RelayConversation extends LitElement {
     return this.terminalSession ? this.terminalSession.project : projectOf(ui.selected);
   }
 
+  // the tool calls between two messages fold into one group
+  private groupSteps(items: Item[]) {
+    const out: (Item | Item[])[] = [];
+    for (const item of items) {
+      const last = out[out.length - 1];
+      if (item.kind !== "tool") out.push(item);
+      else if (Array.isArray(last)) last.push(item);
+      else out.push([item]);
+    }
+    return out;
+  }
+  private renderSteps(steps: Item[]) {
+    return html`<relay-tool-group
+      class="-my-1"
+      .count=${steps.length}
+      ?active=${steps.some(step => step.state === "run" || step.state === "err")}
+      >${steps.map(step => this.renderItem(step))}</relay-tool-group
+    >`;
+  }
+
   private renderItems() {
     const items = chat.messages[ui.selected] || [];
-    if (items.length) return items.map(item => this.renderItem(item));
+    if (items.length)
+      return this.groupSteps(items).map(entry =>
+        Array.isArray(entry) ? this.renderSteps(entry) : this.renderItem(entry),
+      );
     const projectName = this.projectName;
     const empty = project(projectName) ? t("chat.emptyProject", { name: projectName ?? "" }) : t("chat.emptyGeneral");
     return html`<relay-note-line .text=${empty}></relay-note-line>`;

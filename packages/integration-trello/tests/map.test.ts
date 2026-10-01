@@ -29,3 +29,8 @@ test("assigned to me keeps only my cards", () => {
   assert.deepEqual(mapCards(fx("cards"), "600000000000000000000e01").map(c => c.id), ["600000000000000000000d01"]);
   assert.equal(mapCards(fx("cards"), "600000000000000000000eff").length, 0);
 });
+
+test("labels and the last activity come along when Trello sends them", () => {
+  const [c] = mapCards([{ id: "c", name: "t", idList: "l", pos: 1, labels: [{ name: "bug" }, { name: "" }], dateLastActivity: "2026-09-30T10:00:00.000Z" }]);
+  assert.deepEqual([c.labels, c.updated], [["bug"], "2026-09-30T10:00:00.000Z"]);
+});

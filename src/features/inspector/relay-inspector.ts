@@ -5,19 +5,18 @@ import { md } from "../../core/markdown";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
-import { ui } from "../../domain/ui";
+import { ui, PRS } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
-import { project, projectLabel } from "../../domain/vault";
+import { project } from "../../domain/vault";
 import { selectedProject } from "../../domain/chats/state";
-import { panel, setTab, cardOf, closeDetail, openDetail, cardAct, type CardAct } from "../../domain/panel";
+import { select } from "../../domain/navigation";
+import { panel, setTab, cardOf, closeDetail, openPr, cardAct, type CardAct } from "../../domain/panel";
 import { cardChat } from "../../domain/card-chat";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
 import "./todo-list";
 import "../pull-requests/pr-row";
-import "../pull-requests/relay-pr-detail";
-import "../mail/relay-mail-detail";
 import "../notes/relay-note-detail";
 
 type ProjectInfo = NonNullable<ReturnType<typeof project>>;
@@ -41,7 +40,7 @@ export class RelayInspector extends LitElement {
         display: flex;
         flex-direction: column;
         min-height: 0;
-        background: var(--inspector);
+        background: var(--bg);
       }
     `,
   ];
@@ -60,7 +59,7 @@ export class RelayInspector extends LitElement {
         const card = cardOf(key);
         return card
           ? html`<div
-              ?inert=${panel.acting}
+              .inert=${panel.acting}
               class=${panel.acting ? "opacity-70" : ""}
               @detail-close=${closeDetail}
               @detail-act=${(e: CustomEvent<CardAct>) => cardAct(key, e.detail)}
@@ -72,20 +71,19 @@ export class RelayInspector extends LitElement {
       }
       case "note":
         return html`<relay-note-detail></relay-note-detail>`;
-      case "mail":
-        return html`<relay-mail-detail></relay-mail-detail>`;
       default:
-        return html`<relay-pr-detail></relay-pr-detail>`;
+        return nothing;
     }
   }
 
-  private renderHeading(title: unknown, count?: number) {
-    return html`<h2 class="text-sm font-semibold mb-2">
-      ${title}${count === undefined ? "" : html` <span class="text-secondary tabular-nums">${count}</span>`}
-    </h2>`;
+  private renderHeading(title: unknown, meta?: unknown) {
+    return html`<div class="flex items-baseline gap-1.5 mb-2.5">
+      <h2 class="text-[13px] font-semibold">${title}</h2>
+      ${meta === undefined ? nothing : html`<span class="text-xs text-tertiary tabular-nums">${meta}</span>`}
+    </div>`;
   }
   private renderNote(text: unknown) {
-    return html`<div class="text-secondary mb-3">${text}</div>`;
+    return html`<div class="text-[13px] text-secondary mb-3">${text}</div>`;
   }
 
   private renderPrRow(pr: PR, mine: boolean) {
@@ -94,9 +92,11 @@ export class RelayInspector extends LitElement {
       compact
       .pr=${pr}
       ?mine=${mine}
-      .project=${pr.project ? projectLabel(pr.project) : ""}
-      ?selected=${panel.open === key}
-      @open-pr=${() => openDetail(key)}
+      ?selected=${panel.prOpen === key}
+      @open-pr=${() => {
+        openPr(key);
+        select(PRS);
+      }}
     ></relay-pr-row>`;
   }
 
@@ -133,8 +133,10 @@ export class RelayInspector extends LitElement {
   }
 
   private renderStand(info: ProjectInfo) {
-    return html`${this.renderHeading(th("insp.stand"))}${this.renderNote(th("insp.updated", { date: info.last }))}
-      <div class="md-panel [&_p+p]:mt-2">${md(info.stand || t("insp.noStand"))}</div>`;
+    return html`${this.renderHeading(th("insp.stand"), th("insp.updated", { date: info.last }))}
+      <div class="md-panel text-[13px] leading-[1.55] select-text [&_p+p]:mt-2.5">
+        ${md(info.stand || t("insp.noStand"))}
+      </div>`;
   }
 
   private renderProjectReminders(projectName: string) {
@@ -186,12 +188,14 @@ export class RelayInspector extends LitElement {
     // app chrome is not text: no selection in the bar and the tabs, like a native Mac app
     return html`<div class="flex flex-col flex-1 min-h-0 border-l border-separator">
       <div
-        class="h-13 flex-none flex items-center gap-2.5 px-5 border-b border-separator min-w-75 select-none"
+        class="h-12 flex-none flex items-center px-3.5 border-b border-separator min-w-75 select-none"
         data-tauri-drag-region
       >
-        <div class="seg select-none">${this.renderTabs()}</div>
+        <div class="seg flex-1 select-none [&>button]:flex-1">${this.renderTabs()}</div>
       </div>
-      <div class="overflow-y-auto pt-4 px-4 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">${this.renderBody()}</div>
+      <div class="overflow-y-auto pt-4.5 px-4.5 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">
+        ${this.renderBody()}
+      </div>
     </div>`;
   }
 }

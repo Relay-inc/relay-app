@@ -137,6 +137,9 @@ export type Section = {
 
 // contexts come from the vault index, in its order, each takes the next of three colours
 const CONTEXT_TINTS = ["ctx-a", "ctx-m", "ctx-p"] as const;
+/** The colour of a vault context, the same in the sidebar and the title bar. */
+export const contextTint = (context: string) =>
+  CONTEXT_TINTS[Math.max(0, contexts().indexOf(context)) % CONTEXT_TINTS.length];
 export const GENERAL = "Algemeen";
 const SHOWN_CONVERSATIONS = 5;
 
