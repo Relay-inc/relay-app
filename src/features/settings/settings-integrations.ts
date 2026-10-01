@@ -3,12 +3,13 @@ import { customElement, property, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "../../core/dom";
 import { glyphSvg } from "../../core/icons";
-import { t, th } from "../../core/i18n";
+import { t, th, tn } from "../../core/i18n";
 import { PROVIDERS, provider as providerById, type BoardProvider } from "../../domain/providers";
 import { BoardsController } from "./board-controller";
 import { buttonClass, BUTTON_GLYPH, footer, appIcon, EMPTY_LIST, formText, section, statusLine, TILE } from "./blocks";
 import { MailController } from "./mail-controller";
 import "./settings-board";
+import "./settings-calendar";
 import "./settings-fold";
 import "./settings-github";
 import "./settings-mail";
@@ -40,7 +41,7 @@ type Entry = {
 };
 
 /** Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on), the others
- *  are in the Add menu. In the list means in the sidebar; a row opens the integration's own page, Remove switches it off
+ *  are in the Add menu (Calendar too: it shows under Waiting). In the list means in the sidebar; a row opens the integration's own page, Remove switches it off
  *  and keeps the token. The state of every integration lives here, so it survives going back to the list. */
 @customElement("relay-settings-integrations")
 export class SettingsIntegrations extends SettingsElement {
@@ -58,6 +59,10 @@ export class SettingsIntegrations extends SettingsElement {
   @state() private githubError = "";
   @state() private githubMessage = "";
   @state() private githubOk = false;
+  // Calendar: the feeds are saved as soon as one connects, the address itself only goes to the keychain
+  @state() private calendarBusy = false;
+  @state() private calendarMessage = "";
+  @state() private calendarOk = false;
   @state() private listMessage = "";
   @state() private listOk = false;
   // the integration whose page is open, or null for the list
@@ -93,6 +98,40 @@ export class SettingsIntegrations extends SettingsElement {
     const count = this.mail.edit.accounts.length;
     return statusLine(count ? "ok" : "off", t("mail.accounts", { n: count }));
   }
+  private calendarStatus() {
+    const count = this.settings.calendar?.feeds.length ?? 0;
+    return statusLine(count ? "ok" : "off", tn("cal.feeds", count));
+  }
+  private async saveCalendarFeeds(feeds: { email: string }[]) {
+    const calendar = { on: true, feeds };
+    this.commit(await invoke<Settings>("set_settings", { settings: { ...this.settings, calendar } }));
+  }
+  // the backend keeps the address in the keychain and loads it once; only then the email goes in the settings
+  private async connectCalendar({ email, url }: { email: string; url: string }) {
+    this.calendarBusy = true;
+    this.calendarMessage = "";
+    try {
+      const count = await invoke<number>("calendar_connect", { email, url });
+      const others = (this.settings.calendar?.feeds ?? []).filter(f => f.email.toLowerCase() !== email.toLowerCase());
+      await this.saveCalendarFeeds([...others, { email }]);
+      this.calendarMessage = tn("cal.connected", count, { email });
+      this.calendarOk = true;
+    } catch (error) {
+      this.calendarMessage = String(error);
+      this.calendarOk = false;
+    }
+    this.calendarBusy = false;
+  }
+  private async dropCalendar(email: string) {
+    try {
+      await invoke("calendar_connect", { email, url: "" }); // an empty address removes it from the keychain
+      await this.saveCalendarFeeds((this.settings.calendar?.feeds ?? []).filter(f => f.email !== email));
+      this.calendarMessage = "";
+    } catch (error) {
+      this.calendarMessage = String(error);
+      this.calendarOk = false;
+    }
+  }
   private boardStatus(provider: BoardProvider) {
     const isSetUp = this.boards.setUp(provider);
     if (!isSetUp && this.boards.mcp[provider.id]?.found) return statusLine("warn", t("int.foundClaude"));
@@ -111,6 +150,7 @@ export class SettingsIntegrations extends SettingsElement {
     const next = structuredClone(this.settings);
     if (id === "github") next.github.on = on;
     else if (id === "mail") next.mail = { ...next.mail, on };
+    else if (id === "calendar") next.calendar = { ...next.calendar, on };
     else next.integrations[id] = { ...next.integrations[id], on };
     return next;
   }
@@ -225,6 +265,17 @@ export class SettingsIntegrations extends SettingsElement {
     ></relay-settings-mail>`;
   }
 
+  private calendarBody() {
+    return html`<relay-settings-calendar
+      .config=${this.settings.calendar ?? { on: false, feeds: [] }}
+      ?busy=${this.calendarBusy}
+      .message=${this.calendarMessage}
+      ?ok=${this.calendarOk}
+      @cal-connect=${(e: CustomEvent<{ email: string; url: string }>) => this.connectCalendar(e.detail)}
+      @cal-drop=${(e: CustomEvent<string>) => this.dropCalendar(e.detail)}
+    ></relay-settings-calendar>`;
+  }
+
   private entries(): Entry[] {
     const boardEntries = PROVIDERS.map(provider => ({
       id: provider.id,
@@ -251,6 +302,14 @@ export class SettingsIntegrations extends SettingsElement {
         status: this.mailStatus(),
         on: !!this.settings.mail?.on,
         page: () => section(t("int.connection"), this.mailBody()),
+      },
+      {
+        id: "calendar",
+        icon: appIcon("cal", TILE),
+        name: t("cal.name"),
+        status: this.calendarStatus(),
+        on: !!this.settings.calendar?.on,
+        page: () => section(t("int.connection"), this.calendarBody()),
       },
     ];
   }
@@ -281,7 +340,7 @@ export class SettingsIntegrations extends SettingsElement {
           </div>
         </div>
       </header>
-      ${entry.page()}`;
+      <div class="contents" @int-remove=${() => this.switchTo(entry.id, false)}>${entry.page()}</div>`;
   }
 
   private renderAddMenu(unused: Entry[]) {

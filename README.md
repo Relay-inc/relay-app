@@ -50,6 +50,7 @@ from this checkout, so a build only works on this machine.
 | `src/components/` | Presentational components more than one area uses: the permission card, image thumbnails, the tool line. |
 | `src/app/boot.ts` | The main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |
 | `src/domain/reminders.ts`, `src/features/reminders/` | Reminders. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
+| `src-tauri/src/calendar.rs`, `src/domain/calendar.ts`, `src/domain/meetings.ts` | Google calendars, read through each one's secret iCal address (kept in the keychain, service `relay-calendar`, never in settings.json or the webview). The meetings of the next 12 hours, recurring ones expanded; the ones about to start sit at the top of Waiting with a banner 5 minutes before, and `calendar-chat.ts` starts a meeting note or a briefing about one (restricted, like a conversation about a mail). |
 | `src/domain/board.ts`, `src/features/board/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |

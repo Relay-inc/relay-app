@@ -7,6 +7,8 @@ import type { VaultMap } from "./vault-setup";
 export type IntegrationConfig = { on?: boolean; [field: string]: string | boolean | undefined };
 export type MailAcct = { email: string; keychain_service: string; keychain_account: string };
 export type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
+/** Google calendars read through their secret iCal address; the address itself sits in the keychain, never here. */
+export type CalendarCfg = { on: boolean; feeds: { email: string }[] };
 /** An agent provider's settings: switched on, the program, and its own options (Codex' sandbox, …). */
 export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 /** The colour scheme: macOS's, or always light or dark. */
@@ -22,6 +24,7 @@ export type Settings = {
   boards: Record<string, BoardRef>; // the board linked to a vault project
   github: { on: boolean; owners: string };
   mail: MailCfg;
+  calendar: CalendarCfg;
   language?: string;
   theme?: Theme;
   accent?: Accent;
@@ -38,12 +41,14 @@ export const config = {
     boards: {},
     github: { on: false, owners: "" },
     mail: { on: false, account: "", accounts: [] },
+    calendar: { on: false, feeds: [] },
     agents: { default: "claude", providers: {} },
   } as Settings,
   msg: "", // why the last save failed
 };
 export const ghOn = () => !!config.value.github?.on;
 export const mailOn = () => !!config.value.mail?.on;
+export const calendarOn = () => !!config.value.calendar?.on && !!config.value.calendar.feeds?.length;
 
 export async function saveSettings(next: Settings) {
   try {

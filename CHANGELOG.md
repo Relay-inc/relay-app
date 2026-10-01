@@ -12,6 +12,8 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 ## [Unreleased]
 - Pi joins Claude Code, Codex and OpenCode as an agent: Settings › Agents › Pi turns it on once `pi` is installed and has a login or key. Pick its models and thinking levels, paste images, resume, fork or continue a session in the terminal, and see its tokens and cost in Usage. Pi never asks before it edits files or runs commands, so there are no permission cards (#46)
 - A conversation you close greys out and pulses in the sidebar until it is gone, so a slow close (stopping the agent, removing its worktrees) shows that it is working. Close all greys out every conversation it closes at once (#48)
+- Meetings from Google Calendar show at the top of Waiting from half an hour before they start, with a banner 5 minutes before. Each has **Join**, **Meeting note** (a conversation that makes the meeting's note in the vault) and **Prepare** (a briefing from what the vault knows about the people and the topic). Add a calendar under Settings › Integrations › Calendar with its secret iCal address, which stays in the keychain. Meetings you declined, marked free or are alone in are left out
+- The Remove button on an integration's page works again
 
 ## [0.0.2] - 2026-10-01
 

@@ -19,6 +19,7 @@ import { loadPrs, resetPrs } from "../domain/prs";
 import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
 import { panel, closeDetail } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
+import { loadMeetings, tick } from "../domain/calendar";
 import { onboard } from "../features/onboarding/onboard";
 import { applyTheme } from "../core/theme";
 import type { AgentSession } from "../domain/chats/state";
@@ -37,6 +38,7 @@ async function settingsChanged(next: Settings) {
   const integrationsChanged = !sameJson(next.integrations, config.value.integrations);
   const githubChanged = !sameJson(next.github, config.value.github);
   const mailChanged = !sameJson(next.mail, config.value.mail);
+  const calendarChanged = !sameJson(next.calendar, config.value.calendar);
   // another vault has other commands and skills
   const vaultChanged = next.vault !== config.value.vault;
   config.value = { ...config.value, ...next };
@@ -55,6 +57,7 @@ async function settingsChanged(next: Settings) {
     if (!mailOn() && ui.selected === MAIL) select(WAIT);
     loadMails();
   }
+  if (calendarChanged) loadMeetings();
   changed();
   checkBoards().then(() => {
     if (boardDown(ui.selected)) select(WAIT);
@@ -198,4 +201,7 @@ function startPolls() {
   startUsage(); // plan limits for the sidebar, tokens while the view is open
   if (ui.selected !== MAIL) loadMails();
   setInterval(loadMails, 5 * 60000);
+  loadMeetings(); // the meetings about to start, under Waiting, with a banner 5 minutes before
+  setInterval(loadMeetings, 5 * 60000);
+  setInterval(tick, 30000);
 }

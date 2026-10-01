@@ -5,6 +5,7 @@ import { ui, isTerminal } from "../ui";
 import { vault, findProjects } from "../vault";
 import { config } from "../config";
 import { termKey, newChatKey } from "../keys";
+import { soonMeetings } from "../calendar";
 
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
 // what isWaiting for the user (permission cards, questions, background sessions that block).
@@ -203,7 +204,8 @@ export const blockedAgents = () =>
   chat.agentsList.filter(
     agent => agent.kind === "background" && agent.state === "blocked" && !chat.hidden.includes(agent.id),
   );
-export const waitCount = () => chat.pendingList.length + blockedAgents().length;
+// meetings about to start count too: they sit at the top of Waiting (src/domain/calendar.ts)
+export const waitCount = () => chat.pendingList.length + blockedAgents().length + soonMeetings().length;
 export const isWaiting = (key: string) => chat.pendingList.some(request => request.project === key);
 export const runningSubs = (key: string) => (chat.subs[key] || []).filter(sub => sub.running).length;
 // what was closed under a project (or under Algemeen when project is null), newest first
