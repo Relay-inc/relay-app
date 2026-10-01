@@ -16,6 +16,7 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 
 mod agents;
 mod mail;
+pub mod notify;
 mod providers;
 mod reminders;
 mod tray;
@@ -1125,7 +1126,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

@@ -9,6 +9,9 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Added
+- A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
+
 ## [0.0.1] - 2026-10-01
 
 First version with a number: everything merged up to and including #15.
