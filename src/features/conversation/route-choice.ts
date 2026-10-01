@@ -13,7 +13,7 @@ declare global {
 /** A general message names several projects: pick one, or keep it general (`route`, the project or ""). */
 @customElement("relay-route-choice")
 export class RouteChoice extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -23,7 +23,7 @@ export class RouteChoice extends LitElement {
   ];
   @property({ attribute: false }) hits: string[] = [];
 
-  render() {
+  override render() {
     return html`<div class="grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3">
       <div class="text-sm text-secondary">${t("route.question")}</div>
       <div class="flex flex-wrap gap-2">
@@ -35,5 +35,11 @@ export class RouteChoice extends LitElement {
         </button>
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-route-choice": RouteChoice;
   }
 }

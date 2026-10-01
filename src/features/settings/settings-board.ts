@@ -1,4 +1,5 @@
 import { html, nothing, type PropertyValues } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
@@ -30,7 +31,7 @@ export type BoardRow = { vp: string; none: string; board?: string };
 /** A board provider's body in the integrations list: the token, the fields of its config, its boards per vault project. */
 @customElement("relay-settings-board")
 export class SettingsBoard extends SettingsElement {
-  static styles = [tws];
+  static override styles = [tws];
 
   @property({ attribute: false }) provider!: BoardProvider;
   @property({ attribute: false }) cfg: Record<string, any> = {};
@@ -46,7 +47,7 @@ export class SettingsBoard extends SettingsElement {
   @property({ attribute: false }) boards?: { list: BoardOpt[] | null; err: string };
   @property({ attribute: false }) rows: BoardRow[] = [];
 
-  updated(_: PropertyValues) {
+  override updated(_: PropertyValues) {
     if (this.wantBoards && !this.boards) emit(this, "boards-load");
   }
 
@@ -81,7 +82,7 @@ export class SettingsBoard extends SettingsElement {
       )}`;
   }
 
-  render() {
+  override render() {
     const p = this.provider,
       { cfg, mcp, msg } = this,
       id = p.id;
@@ -115,7 +116,7 @@ export class SettingsBoard extends SettingsElement {
                   inputmode=${f.numeric ? "numeric" : nothing}
                   .value=${live(this.fstr(fid, cfg[f.key]))}
                   @input=${this.inp(fid)}
-                  placeholder=${f.placeholder ? pt(p, f.placeholder) : nothing}
+                  placeholder=${ifDefined(f.placeholder ? pt(p, f.placeholder) : undefined)}
                   spellcheck="false"
                 />`,
             { id: fid },

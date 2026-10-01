@@ -35,7 +35,7 @@ const SUB = "mt-2 grid gap-0.5 border-t border-s-border pt-3";
  *  the app reads the app password from the macOS keychain. Edits stay local until Save. */
 @customElement("relay-settings-mail")
 export class SettingsMail extends SettingsElement {
-  static styles = [tws];
+  static override styles = [tws];
 
   @property({ attribute: false }) cfg!: MailCfg;
   /** What sits in the add fields */
@@ -66,7 +66,7 @@ export class SettingsMail extends SettingsElement {
   }
   private input = (key: keyof MailNew) => (e: Event) => emit(this, "mail-new", { key, value: val(e) });
 
-  render() {
+  override render() {
     const c = this.cfg,
       mn = this.fresh;
     const tr = (a: MailAcct) => {

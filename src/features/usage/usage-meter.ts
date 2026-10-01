@@ -9,7 +9,7 @@ const FILL = { "": "bg-secondary", soon: "bg-soon", late: "bg-late" };
 /** One limit window: its name (slot), the share used, a thin bar and when it resets. */
 @customElement("relay-usage-meter")
 export class UsageMeter extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -21,7 +21,7 @@ export class UsageMeter extends LitElement {
   @property() level: "" | "soon" | "late" = "";
   @property() resets = "";
 
-  render() {
+  override render() {
     return html`<div class="pt-2 pb-2.5 border-b border-separator">
       <div class="flex items-baseline gap-3 text-sm">
         <span class="flex-1 min-w-0 truncate"><slot></slot></span
@@ -35,5 +35,11 @@ export class UsageMeter extends LitElement {
       </div>
       <div class="text-sm text-secondary">${this.resets}</div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-usage-meter": UsageMeter;
   }
 }

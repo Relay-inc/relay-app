@@ -26,7 +26,7 @@ let saved: Draft = { open: false, text: "", date: "", project: "", repeat: "", e
 /** The reminders view: the new-reminder form, then the reminders grouped by when they are due. */
 @customElement("relay-reminders")
 export class RelayReminders extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -85,7 +85,7 @@ export class RelayReminders extends LitElement {
     ></relay-reminder-row>`;
   }
 
-  render() {
+  override render() {
     const all = reminders();
     const groups = GROUPS.map(([name, f]) => {
       const items = all.filter(r => f(r.days)).sort((a, b) => a.days - b.days);
@@ -104,5 +104,11 @@ export class RelayReminders extends LitElement {
       ></relay-reminder-form>
       ${vault.snap.vault?.found?.reminders === false ? html`<div class="text-secondary mb-2.5">${th("rem.noFile", { path: raw(`<code class="font-mono">${esc(vault.snap.vault?.map?.reminders ?? "")}</code>`) })}</div>` : nothing}
       ${all.length ? groups : html`<div class="text-secondary text-center py-6">${t("rem.none")}</div>`}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-reminders": RelayReminders;
   }
 }

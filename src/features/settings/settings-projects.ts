@@ -25,7 +25,7 @@ declare global {
  *  icon and the repos live in the vault's .relay/config.json (src/domain/icons.ts). */
 @customElement("relay-settings-projects")
 export class SettingsProjects extends SettingsElement {
-  static styles = [tws, page];
+  static override styles = [tws, page];
 
   @property({ type: Boolean, reflect: true }) active = false;
   @property({ attribute: false }) settings!: Settings;
@@ -44,17 +44,17 @@ export class SettingsProjects extends SettingsElement {
   private loading = false;
   private unlisten?: () => void;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     listen("icons-changed", () => {
       if (this.icons) this.load();
     }).then(f => (this.unlisten = f));
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     this.unlisten?.();
   }
-  willUpdate() {
+  override willUpdate() {
     if (this.active && !this.icons && !this.loading) {
       this.loading = true;
       this.load();
@@ -188,7 +188,7 @@ export class SettingsProjects extends SettingsElement {
     </relay-settings-fold>`;
   }
 
-  render() {
+  override render() {
     if (!this.icons)
       return sec(t("set.tab.projects"), html`<div class=${ST}><span class="spinner"></span>${t("pr.loading")}</div>`);
     const m = this.iconMsg || this.msg;

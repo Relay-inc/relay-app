@@ -36,7 +36,7 @@ const LANG_OPTS = () => [
 /** General: the vault folder with its mapping, and the interface (language, favicons). */
 @customElement("relay-settings-general")
 export class SettingsGeneral extends SettingsElement {
-  static styles = [tws, page];
+  static override styles = [tws, page];
 
   @property({ type: Boolean, reflect: true }) active = false;
   @property({ attribute: false }) settings!: Settings;
@@ -49,7 +49,7 @@ export class SettingsGeneral extends SettingsElement {
   // the vault mapping as it is being edited, bound to the inputs
   private map!: VaultMap;
 
-  willUpdate(changed: Map<string, unknown>) {
+  override willUpdate(changed: Map<string, unknown>) {
     if (changed.has("vs")) this.map = { ...this.vs.map };
   }
 
@@ -84,7 +84,7 @@ export class SettingsGeneral extends SettingsElement {
     ></relay-settings-path>`;
   }
 
-  render() {
+  override render() {
     const { vs, settings } = this;
     const maps = this.keys.map(([k, , req]) =>
       field(

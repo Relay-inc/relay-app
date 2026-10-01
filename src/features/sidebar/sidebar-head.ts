@@ -9,7 +9,7 @@ const TINT = { "": "", "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m", "ctx-p": "t
 /** A section header: the fold chevron, the name in its context colour, the count while folded, and the "+" for a new conversation. */
 @customElement("relay-sidebar-head")
 export class SidebarHead extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -25,7 +25,7 @@ export class SidebarHead extends LitElement {
   @property({ type: Boolean }) addable = false;
   @property({ type: Boolean }) dropBefore = false;
 
-  render() {
+  override render() {
     return html`<div
       class="flex items-center gap-1.5 px-2 pt-3 pb-1 text-xs font-semibold text-secondary tracking-wide cursor-default ${this.dropBefore ? "relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent" : ""}"
     >
@@ -49,5 +49,11 @@ export class SidebarHead extends LitElement {
           : nothing
       }
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-sidebar-head": SidebarHead;
   }
 }

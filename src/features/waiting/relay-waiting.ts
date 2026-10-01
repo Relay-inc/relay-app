@@ -13,7 +13,7 @@ import type { PermissionCard } from "../../components/permission-card";
 /** The Waiting view: what agents ask, grouped per conversation, and background sessions that are blocked. */
 @customElement("relay-waiting")
 export class RelayWaiting extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -47,7 +47,7 @@ export class RelayWaiting extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     if (!waitCount()) return html`<div class="text-center text-sm text-secondary">${t("wait.none")}</div>`;
     const byK: Record<string, Pending[]> = {};
     for (const r of chat.pendingList) (byK[r.project] ||= []).push(r);
@@ -80,5 +80,11 @@ export class RelayWaiting extends LitElement {
             </div>`,
       )}
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-waiting": RelayWaiting;
   }
 }

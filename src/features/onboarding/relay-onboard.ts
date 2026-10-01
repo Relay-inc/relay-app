@@ -17,7 +17,7 @@ declare global {
 /** First launch, or a vault that is gone: a welcome screen over the main window until a vault is saved (then it removes itself and emits `saved`). */
 @customElement("relay-onboard")
 export class RelayOnboard extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -37,7 +37,7 @@ export class RelayOnboard extends LitElement {
   @state() private map: VaultMap | null = null; // the paths as typed, checked on change
   @state() private msg = "";
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.set(this.start?.vault ? this.start : null);
   }
@@ -103,7 +103,7 @@ export class RelayOnboard extends LitElement {
     </div>`;
   }
 
-  render() {
+  override render() {
     const st = this.st,
       h2 = "text-base font-semibold mt-2.5";
     return html`<main class="grid gap-2.5 max-w-2xl mx-auto my-10">
@@ -127,5 +127,11 @@ export class RelayOnboard extends LitElement {
         <button class="btn btn-primary" ?disabled=${!st?.ok} @click=${() => this.use()}>${t("vault.use")}</button>
       </div>
     </main>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-onboard": RelayOnboard;
   }
 }

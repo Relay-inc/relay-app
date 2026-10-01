@@ -1,4 +1,5 @@
 import { css, html, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -43,7 +44,7 @@ type Tab = (typeof TABS)[number][0];
 /** The window: the sidebar, the title, the keys, links, and the settings as saved, which the pages show and change. */
 @customElement("relay-settings")
 export class RelaySettings extends SettingsElement {
-  static styles = [
+  static override styles = [
     tws,
     css`
       :host {
@@ -71,12 +72,12 @@ export class RelaySettings extends SettingsElement {
     }
   };
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener("keydown", this.keys);
     this.init();
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.keys);
   }
@@ -87,7 +88,7 @@ export class RelaySettings extends SettingsElement {
     this.settings = settings;
   }
 
-  updated() {
+  override updated() {
     if (!this.settings) return;
     const title = t(TABS.find(x => x[0] === this.tab)![1]);
     getCurrentWindow()
@@ -129,7 +130,7 @@ export class RelaySettings extends SettingsElement {
     window.dispatchEvent(new Event("settings-lang"));
   }
 
-  render() {
+  override render() {
     const { settings, vs, tab } = this;
     if (!settings || !vs) return nothing;
     return html`<div class="flex h-full min-h-0" @click=${this.onClick}>
@@ -140,7 +141,7 @@ export class RelaySettings extends SettingsElement {
               html`<button
                 class="flex h-7 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-s-fg hover:bg-s-sel focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel" : ""}"
                 @click=${() => this.go(id)}
-                aria-current=${tab === id ? "page" : nothing}
+                aria-current=${ifDefined(tab === id ? "page" : undefined)}
               >
                 ${ic(g, "size-4 flex-none fill-none stroke-current stroke-2 glyph")}<span
                   class="min-w-0 flex-1 truncate text-left"

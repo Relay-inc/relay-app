@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement } from "lit/decorators.js";
 import { t, th, ath } from "../../core/i18n";
 import { glyphSvg } from "../../core/icons";
@@ -25,7 +26,7 @@ const pair = (label: unknown, a: Tally, b: Tally, title = "") =>
     todayCost=${cost(a)}
     week=${tok(b)}
     weekCost=${cost(b)}
-    title=${title || nothing}
+    title=${ifDefined(title || undefined)}
     >${label}</relay-usage-row
   >`;
 const headRow = () => html`<relay-usage-row head today=${t("usage.today")} week=${t("usage.week")}></relay-usage-row>`;
@@ -45,7 +46,7 @@ const meter = (label: unknown, w: LimitWindow) => {
 /** The usage view: per switched-on agent provider its plan or rate limits and the tokens in its local logs, today and this week, then the total over all of them. */
 @customElement("relay-usage")
 export class RelayUsage extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -55,7 +56,7 @@ export class RelayUsage extends LitElement {
   ];
   protected store = new StoreController(this);
   // shown: tokens right away when the last read is older than a minute (renderChat did this on every draw)
-  updated() {
+  override updated() {
     openUsage();
   }
 
@@ -111,7 +112,7 @@ export class RelayUsage extends LitElement {
     return out;
   }
 
-  render() {
+  override render() {
     const on = usageAgents();
     if (!on.length) return html`<div class="max-w-2xl"><p class=${NOTE}>${th("usage.none")}</p></div>`;
     // one provider: the view as it always was; several: a section per provider, then the total
@@ -142,5 +143,11 @@ export class RelayUsage extends LitElement {
       body.push(html`<p class=${NOTE}>${th("usage.estimate")}${unpriced}</p>`);
     }
     return html`<div class="max-w-2xl">${body}</div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-usage": RelayUsage;
   }
 }

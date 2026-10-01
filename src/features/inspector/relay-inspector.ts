@@ -30,7 +30,7 @@ const TABS = [
 @customElement("relay-inspector")
 export class RelayInspector extends LitElement {
   // the border sits on an inner wrapper: the grid's `* { border: 0 }` reset (outer context) would beat one on the host
-  static styles = [
+  static override styles = [
     tw,
     mdDefaults,
     css`
@@ -128,7 +128,7 @@ export class RelayInspector extends LitElement {
     return html`${this.heading(th("tab.open"), items.length)}${items.length ? html`<relay-todo-list .items=${items.map(text => ({ text }))}></relay-todo-list>` : this.meta(th("insp.noOpen"))}`;
   }
 
-  render() {
+  override render() {
     this.toggleAttribute("wide", !!panel.open);
     if (ui.tab === "prs" && !ghOn()) ui.tab = "open";
     // app chrome is not text: no selection in the bar and the tabs, like a native Mac app
@@ -152,5 +152,11 @@ export class RelayInspector extends LitElement {
       </div>
       <div class="overflow-y-auto pt-4 px-4 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">${this.body()}</div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-inspector": RelayInspector;
   }
 }

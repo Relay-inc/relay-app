@@ -16,7 +16,7 @@ declare global {
  *  Its two children sit in the list's column. */
 @customElement("relay-subagent-row")
 export class SubagentRow extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -35,7 +35,7 @@ export class SubagentRow extends LitElement {
   /** The last messages while unfolded, else undefined. */
   @property({ attribute: false }) log?: string[];
 
-  render() {
+  override render() {
     return html`<div
         class="flex items-center gap-2 min-h-6 px-1.5 rounded-md text-sm text-secondary cursor-default select-none hover:bg-fill"
         title=${t("subs.show")}
@@ -75,5 +75,11 @@ export class SubagentRow extends LitElement {
             </div>`
           : nothing
       }`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-subagent-row": SubagentRow;
   }
 }

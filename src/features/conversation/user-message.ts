@@ -8,7 +8,7 @@ const lines = (text: string) => text.split("\n").map((l, i) => html`${i ? html`<
 /** What the user sent: its images over a bubble with the text. Its children sit in the conversation's column. */
 @customElement("relay-user-message")
 export class UserMessage extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -19,7 +19,7 @@ export class UserMessage extends LitElement {
   @property() text = "";
   @property({ attribute: false }) imgs: string[] = [];
 
-  render() {
+  override render() {
     return html`${this.imgs.length ? html`<relay-image-thumbs class="self-end max-w-4/5 -mb-2.5" size="message" .urls=${this.imgs}></relay-image-thumbs>` : nothing}${
       this.text
         ? html`<div class="self-end max-w-4/5 bg-fill rounded-lg px-3.5 py-2 text-base leading-normal">
@@ -27,5 +27,11 @@ export class UserMessage extends LitElement {
           </div>`
         : nothing
     }`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-user-message": UserMessage;
   }
 }

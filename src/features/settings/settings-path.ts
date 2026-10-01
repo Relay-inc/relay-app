@@ -1,4 +1,5 @@
 import { css, html, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
@@ -23,7 +24,7 @@ declare global {
 // padding and border come on top.
 @customElement("relay-settings-path")
 export class SettingsPath extends SettingsElement {
-  static styles = [
+  static override styles = [
     tws,
     css`
       :host {
@@ -43,7 +44,7 @@ export class SettingsPath extends SettingsElement {
   @property() foundTip = "";
   @property() pickTip = "";
 
-  render() {
+  override render() {
     return html`<div
       class="${this.wide ? "w-auto" : "w-65"} box-content flex h-7 items-center gap-2 overflow-hidden rounded-md border border-s-input py-0.5 pr-1 pl-2 text-xs focus-within:ring-1 ring-s-primary"
     >
@@ -51,7 +52,7 @@ export class SettingsPath extends SettingsElement {
         class="h-6 min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-xs text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:ring-1 ring-s-primary focus-visible:outline-none"
         .value=${live(this.value)}
         title=${this.tip}
-        placeholder=${this.placeholder || nothing}
+        placeholder=${ifDefined(this.placeholder || undefined)}
         ?readonly=${this.readonly}
         spellcheck="false"
         @input=${(e: Event) => emit(this, "path-input", val(e))}

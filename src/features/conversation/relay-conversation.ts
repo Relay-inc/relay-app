@@ -26,7 +26,7 @@ import type { PermissionCard } from "../../components/permission-card";
 /** The open conversation: what was said and done, a question about the project, the cards waiting, and the working indicator. */
 @customElement("relay-conversation")
 export class RelayConversation extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -75,7 +75,7 @@ export class RelayConversation extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     const sel = ui.sel,
       items = chat.convo[sel] || [],
       T = isTerm(sel) ? termOf(sel) : undefined,
@@ -104,5 +104,11 @@ export class RelayConversation extends LitElement {
         : nothing
     }
     ${T && T.status === "busy" ? html`<relay-working .text=${t("term.writing")}></relay-working>` : nothing}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-conversation": RelayConversation;
   }
 }

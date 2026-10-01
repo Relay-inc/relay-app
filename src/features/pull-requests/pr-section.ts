@@ -5,7 +5,7 @@ import { tw } from "../../core/styles";
 /** A titled block of the PR detail, the title (slot "heading", a directive cannot be a property) with its count. */
 @customElement("relay-pr-section")
 export class PrSection extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -14,7 +14,7 @@ export class PrSection extends LitElement {
     `,
   ];
   @property() count: number | string = "";
-  render() {
+  override render() {
     return html`<h3
         class="text-xs font-semibold text-secondary uppercase tracking-wide mb-1.5 pb-1 border-b border-separator"
       >
@@ -22,5 +22,11 @@ export class PrSection extends LitElement {
         >${this.count !== "" ? html` <span class="text-secondary tabular-nums">${this.count}</span>` : nothing}
       </h3>
       <slot></slot>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-pr-section": PrSection;
   }
 }

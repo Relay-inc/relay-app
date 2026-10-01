@@ -15,7 +15,7 @@ declare global {
  *  A click opens one larger (`open`), `removable` adds the × button (`remove`, the index). */
 @customElement("relay-image-thumbs")
 export class ImageThumbs extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -32,7 +32,7 @@ export class ImageThumbs extends LitElement {
   @property({ type: Boolean }) removable = false;
   @property({ reflect: true }) size: "composer" | "message" = "composer";
 
-  render() {
+  override render() {
     const img = this.size === "message" ? "h-16 max-w-50" : "h-15 max-w-45";
     return this.urls.map((u, i) =>
       u
@@ -60,5 +60,11 @@ export class ImageThumbs extends LitElement {
           >`
         : html`<span class="text-sm text-secondary">${t("img.placeholder")}</span>`,
     );
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-image-thumbs": ImageThumbs;
   }
 }

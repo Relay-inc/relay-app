@@ -18,7 +18,10 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "plugins": [{ "name": "ts-lit-plugin", "strict": true }]
   },
   "include": ["src", "packages/*/src"],
   "exclude": ["src/**/*.test.ts"]

@@ -18,13 +18,13 @@ const GLYPH = "glyph size-4 flex-none";
 /** The footer bar: the usage button with its warning dot, and the settings button. */
 @customElement("relay-sidebar-footer")
 export class SidebarFooter extends LitElement {
-  static styles = [tw];
+  static override styles = [tw];
 
   @property({ type: Boolean }) selected = false; // the usage view is open
   @property() tip = ""; // the usage button's tooltip
   @property() level: "" | "soon" | "late" = ""; // "" shows no dot
 
-  render() {
+  override render() {
     return html`<div class="flex justify-center gap-1.5 px-2.5 pt-1.5 pb-2.5 border-t border-separator">
       <button
         class="${BTN} ${this.selected ? "bg-accent text-on-accent" : "text-secondary hover:bg-fill hover:text-label"}"
@@ -45,5 +45,11 @@ export class SidebarFooter extends LitElement {
         ${icon("gear", GLYPH)}
       </button>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-sidebar-footer": SidebarFooter;
   }
 }

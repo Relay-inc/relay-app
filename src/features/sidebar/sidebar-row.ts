@@ -19,7 +19,7 @@ const TINT = { "": "text-secondary", "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m
  * context menu belong to the container (they bubble out of the host); only the two buttons are events of their own. */
 @customElement("relay-sidebar-row")
 export class SidebarRow extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -56,7 +56,7 @@ export class SidebarRow extends LitElement {
     emit(this, name);
   }
 
-  render() {
+  override render() {
     const sel = this.selected,
       sub = this.indent,
       proj = this.kind === "proj",
@@ -129,5 +129,11 @@ export class SidebarRow extends LitElement {
           : nothing
       }
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-sidebar-row": SidebarRow;
   }
 }

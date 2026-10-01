@@ -76,7 +76,7 @@ function body(text: string, depth = 0): TemplateResult {
 /** The text of a plain-text mail. */
 @customElement("relay-mail-text")
 export class MailText extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -85,7 +85,13 @@ export class MailText extends LitElement {
     `,
   ];
   @property() text = "";
-  render() {
+  override render() {
     return body(this.text);
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-mail-text": MailText;
   }
 }

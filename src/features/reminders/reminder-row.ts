@@ -42,7 +42,7 @@ const G = "glyph w-4! h-4! stroke-secondary! group-hover:stroke-accent!";
 /** One reminder: title, project, due date, repeat and the actions. `urgency` is the domain's "late" | "soon" | "". */
 @customElement("relay-reminder-row")
 export class ReminderRow extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -56,7 +56,7 @@ export class ReminderRow extends LitElement {
   @property({ type: Boolean }) busy = false; // an action of this row is running
   @property({ type: Boolean }) cal = false; // its date picker is open
 
-  render() {
+  override render() {
     const r = this.reminder,
       off = this.busy,
       id = r.id;
@@ -110,5 +110,11 @@ export class ReminderRow extends LitElement {
         ${this.cal ? html`<relay-reminder-calendar @date-pick=${(e: CustomEvent<string>) => emit(this, "reminder-push", { id, date: e.detail })}></relay-reminder-calendar>` : nothing}
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-reminder-row": ReminderRow;
   }
 }

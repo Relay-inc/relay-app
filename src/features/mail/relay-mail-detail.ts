@@ -30,7 +30,7 @@ const ib = (name: string, label: string, click: () => void, cls = "btn btn-icon"
  *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
 @customElement("relay-mail-detail")
 export class RelayMailDetail extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -40,20 +40,27 @@ export class RelayMailDetail extends LitElement {
   ];
   protected store = new StoreController(this);
 
-  private main(b: MailBody, textView: boolean) {
-    // the srcdoc is a plain attribute binding: while the html is the same string the frame is not touched, so it does not reload
-    // the html of a mail: sandboxed frame that scrolls itself, white because mails are designed for white
-    return b.html && !textView
-      ? html`<iframe
-          class="block w-full h-140 mt-3 border border-separator rounded-lg bg-white"
-          sandbox=""
-          referrerpolicy="no-referrer"
-          srcdoc=${b.html}
-        ></iframe>`
-      : html`<relay-mail-text .text=${b.text}></relay-mail-text>`;
+  private frame?: { html: string; el: HTMLIFrameElement };
+  // the html of a mail: a frame sandboxed with no allowances at all (no scripts, no same origin), built in code so the
+  // empty sandbox is set before its content; kept while the html is the same, so a redraw does not reload it.
+  // White because mails are designed for white
+  private mailFrame(mailHtml: string) {
+    if (this.frame?.html !== mailHtml) {
+      const el = document.createElement("iframe");
+      el.setAttribute("sandbox", "");
+      el.referrerPolicy = "no-referrer";
+      el.className = "block w-full h-140 mt-3 border border-separator rounded-lg bg-white";
+      el.srcdoc = mailHtml;
+      this.frame = { html: mailHtml, el };
+    }
+    return this.frame.el;
   }
 
-  render() {
+  private main(b: MailBody, textView: boolean) {
+    return b.html && !textView ? this.mailFrame(b.html) : html`<relay-mail-text .text=${b.text}></relay-mail-text>`;
+  }
+
+  override render() {
     const key = panel.open,
       m: Mail | undefined = mail.list?.find(x => mailKey(x) === key),
       body: MailBody | undefined = panel.detail[key],
@@ -111,5 +118,11 @@ export class RelayMailDetail extends LitElement {
         </div>
       </div>
       ${err ? html`<div class="err-box">${err}</div>` : body === undefined ? loading : html`${atts}${this.main(body, textView)}`}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-mail-detail": RelayMailDetail;
   }
 }

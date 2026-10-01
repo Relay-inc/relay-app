@@ -41,6 +41,7 @@ marked.use({
       tokenizer(src: string) {
         const m = /^\[\[([^\]\n]+)\]\]/.exec(src);
         if (m) return { type: "wikilink", raw: m[0], target: noteOf(m[1]), label: m[1].split("|").pop()!.trim() };
+        return undefined; // not a wikilink: marked tries its other rules
       },
       renderer: (tok: any) => noteA(tok.target, esc(tok.label)),
     },

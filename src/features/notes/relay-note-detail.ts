@@ -27,7 +27,7 @@ const noteTarget = (key: string) => {
 
 @customElement("relay-note-detail")
 export class RelayNoteDetail extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     mdDefaults,
     css`
@@ -38,7 +38,7 @@ export class RelayNoteDetail extends LitElement {
   ];
   protected store = new StoreController(this);
 
-  render() {
+  override render() {
     const n = panel.detail[panel.open] as { path: string; text: string } | undefined,
       err = panel.err;
     const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3">
@@ -57,5 +57,11 @@ export class RelayNoteDetail extends LitElement {
       fm = m ? m[1] : "";
     return html`${bar}${fm ? html`<div class="text-secondary mb-3 font-mono text-xs whitespace-pre-wrap">${frontmatter(fm)}</div>` : nothing}
       <div class="md-panel [&_p+p]:mt-2">${md(n.text.slice(m ? m[0].length : 0))}</div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-note-detail": RelayNoteDetail;
   }
 }

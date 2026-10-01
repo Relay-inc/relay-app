@@ -22,7 +22,7 @@ const chip = (m: typeof CI, k: string | null) =>
 /** The CI and review chips of a PR, then whatever else is slotted in (the detail adds conflicts and requested reviewers). */
 @customElement("relay-pr-status")
 export class PrStatus extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -34,9 +34,15 @@ export class PrStatus extends LitElement {
   @property() review: string | null = null;
   /** the detail lets the chips wrap and puts them under the title */
   @property({ type: Boolean }) wrap = false;
-  render() {
+  override render() {
     return html`<div class="flex gap-1.5 ${this.wrap ? "flex-wrap mt-2" : ""}">
       ${chip(CI, this.ci)}${chip(REVIEW, this.review)}<slot></slot>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-pr-status": PrStatus;
   }
 }

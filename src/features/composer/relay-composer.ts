@@ -20,7 +20,7 @@ type Pick = { id: string; label: string };
 @customElement("relay-composer")
 export class RelayComposer extends LitElement {
   // the field and the picks drop the browser's look entirely (`all:unset`), which a utility can't say
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -73,7 +73,7 @@ export class RelayComposer extends LitElement {
     this.grown = ta.value;
   }
   // switching to another conversation puts other text in the field
-  updated() {
+  override updated() {
     if (this.ta && this.ta.value !== this.grown) this.grow();
   }
 
@@ -106,7 +106,7 @@ export class RelayComposer extends LitElement {
     </select>`;
   }
 
-  render() {
+  override render() {
     const sel = ui.sel,
       T = isTerm(sel) ? termOf(sel) : undefined,
       pn = T ? T.project : projOf(sel),
@@ -183,5 +183,11 @@ export class RelayComposer extends LitElement {
         </button>
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-composer": RelayComposer;
   }
 }

@@ -27,7 +27,7 @@ import "./mail-setup";
 /** The inbox: search, read state and project on top, the mails that pass the filters under one heading with the unread count. */
 @customElement("relay-mail")
 export class RelayMail extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -70,7 +70,7 @@ export class RelayMail extends LitElement {
       </section>`;
   }
 
-  render() {
+  override render() {
     if (!config.value.mail.accounts?.length) return html`<relay-mail-setup @setup=${openMailSetup}></relay-mail-setup>`;
     const f = mail.filter,
       list = mail.list;
@@ -78,7 +78,7 @@ export class RelayMail extends LitElement {
     const opts = [...new Set([...ps, ...(f.project && f.project !== "-" ? [f.project] : [])])];
     return html`<relay-mail-bar
         .filter=${f}
-        .projects=${opts.map(p => [p, pLabel(p)])}
+        .projects=${opts.map((p): [string, string] => [p, pLabel(p)])}
         ?busy=${mail.busy}
         @filter=${(e: CustomEvent) => setMailFilter(e.detail)}
         @reload=${loadMails}
@@ -86,5 +86,11 @@ export class RelayMail extends LitElement {
       <div>
         ${this.list(list)}${list && !mail.end ? html`<div class="flex justify-center py-3.5"><button class="btn inline-flex items-center gap-2" ?disabled=${mail.more} @click=${moreMails}>${mail.more ? html`<span class="spinner"></span>` : nothing}${th("mail.more")}</button></div>` : nothing}
       </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-mail": RelayMail;
   }
 }

@@ -22,14 +22,14 @@ declare global {
 /** One coding agent's settings, in its folded-open row: help, the program, its options and what it can do. */
 @customElement("relay-settings-agent")
 export class SettingsAgent extends SettingsElement {
-  static styles = [tws];
+  static override styles = [tws];
 
   @property({ attribute: false }) status!: AgentStatus;
   @property({ attribute: false }) cfg!: { on: boolean; bin: string; [opt: string]: unknown };
   /** The agent's own package: its help and options */
   @property({ attribute: false }) agent?: AgentProvider;
 
-  render() {
+  override render() {
     const { status: p, cfg, agent: ap } = this,
       d = p.detect,
       id = p.id;

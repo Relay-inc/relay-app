@@ -8,7 +8,7 @@ import "./board-card";
 /** One column with its cards; `over` while a dragged card hovers it. */
 @customElement("relay-board-column")
 export class BoardColumn extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -21,7 +21,7 @@ export class BoardColumn extends LitElement {
   @property({ attribute: false }) cards: Card[] = [];
   @property({ type: Boolean }) over = false;
 
-  render() {
+  override render() {
     return html`<div
       class="flex flex-col max-h-160 bg-fill rounded-lg p-2 transition-shadow duration-150 ease-out ${this.over ? "ring-2 ring-inset ring-accent" : ""}"
     >
@@ -36,5 +36,11 @@ export class BoardColumn extends LitElement {
         )}
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-board-column": BoardColumn;
   }
 }

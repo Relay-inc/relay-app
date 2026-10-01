@@ -1,11 +1,12 @@
 import { LitElement, html, css, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property } from "lit/decorators.js";
 import { tw } from "../../core/styles";
 
 /** The agent is busy: pulsing dots, and what it is doing. `label` is read out by assistive technology. */
 @customElement("relay-working")
 export class Working extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -16,10 +17,10 @@ export class Working extends LitElement {
   @property() text = "";
   @property() label = "";
 
-  render() {
+  override render() {
     return html`<div
       class="flex items-center gap-2.5 text-secondary text-sm py-1"
-      role=${this.label ? "status" : nothing}
+      role=${ifDefined(this.label ? "status" : undefined)}
       aria-label=${this.label || nothing}
     >
       <span class="pulse-dots"><i></i><i></i><i></i></span>${
@@ -31,5 +32,11 @@ export class Working extends LitElement {
           : nothing
       }
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-working": Working;
   }
 }

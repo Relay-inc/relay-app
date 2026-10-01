@@ -26,7 +26,7 @@ const isQuestion = (r: Pending) => r.kind === "question" || r.tool_name === "Ask
  *  The container answers and sets `busy` while it does; a card that is not answered stays usable. */
 @customElement("relay-permission-card")
 export class PermissionCard extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -55,7 +55,7 @@ export class PermissionCard extends LitElement {
     });
   }
 
-  render() {
+  override render() {
     const r = this.request,
       busy = this.busy;
     const box = "grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3"; // a long path never widens the card past its border
@@ -104,5 +104,11 @@ export class PermissionCard extends LitElement {
         </button>
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-permission-card": PermissionCard;
   }
 }

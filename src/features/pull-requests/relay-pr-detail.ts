@@ -10,7 +10,7 @@ import "./pr-body";
 /** One PR in the right panel: the bar, then the body once github_pr has answered. */
 @customElement("relay-pr-detail")
 export class RelayPrDetail extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -20,7 +20,7 @@ export class RelayPrDetail extends LitElement {
   ];
   protected store = new StoreController(this);
 
-  render() {
+  override render() {
     const key = panel.open,
       pr = panel.detail[key] ?? null,
       err = panel.err;
@@ -35,5 +35,11 @@ export class RelayPrDetail extends LitElement {
       return html`${bar}
         <div class="text-secondary mb-3">${th("pr.loading")}</div>`;
     return html`${bar}<relay-pr-body .pr=${pr}></relay-pr-body>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-pr-detail": RelayPrDetail;
   }
 }

@@ -4,7 +4,7 @@ import { tw } from "../../core/styles";
 
 @customElement("relay-error-line")
 export class ErrorLine extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -14,7 +14,13 @@ export class ErrorLine extends LitElement {
   ];
   @property() text = "";
 
-  render() {
+  override render() {
     return html`<div class="err-box">${this.text}</div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-error-line": ErrorLine;
   }
 }

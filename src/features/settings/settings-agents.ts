@@ -31,7 +31,7 @@ const agGlyph = (id: string) => {
  *  options. Every change saves at once. */
 @customElement("relay-settings-agents")
 export class SettingsAgents extends SettingsElement {
-  static styles = [tws, page];
+  static override styles = [tws, page];
 
   @property({ type: Boolean, reflect: true }) active = false;
   @property({ attribute: false }) settings!: Settings;
@@ -42,7 +42,7 @@ export class SettingsAgents extends SettingsElement {
   // which rows are folded open
   @state() private opened = new Set<string>();
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.check();
   }
@@ -133,7 +133,7 @@ export class SettingsAgents extends SettingsElement {
     </relay-settings-fold>`;
   }
 
-  render() {
+  override render() {
     const { agSt, settings } = this;
     if (!agSt)
       return sec(

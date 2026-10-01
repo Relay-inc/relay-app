@@ -15,7 +15,7 @@ import { closePop } from "../../domain/navigation";
 /** Which project this conversation belongs to, and the project's icon and name. Opens under the title; a second container, it saves on its own. */
 @customElement("relay-project-panel")
 export class ProjectPanel extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -36,7 +36,7 @@ export class ProjectPanel extends LitElement {
   @state() private emoji = "";
   @state() private err = "";
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     const cur = selProject();
     this.proj = cur;
@@ -45,7 +45,7 @@ export class ProjectPanel extends LitElement {
     this.lab = cur ? config.value.projects[cur]?.label || "" : "";
   }
   @query("select") private projectSelect?: HTMLSelectElement;
-  firstUpdated() {
+  override firstUpdated() {
     this.projectSelect?.focus();
   }
 
@@ -68,7 +68,7 @@ export class ProjectPanel extends LitElement {
     );
   }
 
-  render() {
+  override render() {
     const cur = selProject(),
       names = vault.snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
     // a long project name in the select or the inputs never pushes past the panel
@@ -126,5 +126,11 @@ export class ProjectPanel extends LitElement {
         ><button class="btn btn-primary" @click=${() => this.save()}>${t("pop.save")}</button>
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-project-panel": ProjectPanel;
   }
 }

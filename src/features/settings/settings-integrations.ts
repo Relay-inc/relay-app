@@ -34,7 +34,7 @@ type Entry = { id: string; ico: unknown; name: unknown; state: unknown; on: bool
  *  integration lives here, not in its row, so it survives the row folding shut. */
 @customElement("relay-settings-integrations")
 export class SettingsIntegrations extends SettingsElement {
-  static styles = [tws, page];
+  static override styles = [tws, page];
 
   @property({ type: Boolean, reflect: true }) active = false;
   @property({ attribute: false }) settings!: Settings;
@@ -53,7 +53,7 @@ export class SettingsIntegrations extends SettingsElement {
   // which rows are folded open
   @state() private opened = new Set<string>();
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.mail.load();
     this.boards.loadTokens().then(() => {
@@ -61,7 +61,7 @@ export class SettingsIntegrations extends SettingsElement {
     });
     this.ghCheck();
   }
-  willUpdate() {
+  override willUpdate() {
     if (this.active) this.boards.askMcp();
   }
 
@@ -213,7 +213,7 @@ export class SettingsIntegrations extends SettingsElement {
     ></relay-settings-mail>`;
   }
 
-  render() {
+  override render() {
     if (!this.loaded) return nothing;
     const all: Entry[] = [
       ...PROVIDERS.map(p => ({

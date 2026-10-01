@@ -23,14 +23,14 @@ declare global {
 /** GitHub's body in the integrations list: the owners to show PRs of. No token of our own, the app uses gh's login. */
 @customElement("relay-settings-github")
 export class SettingsGithub extends SettingsElement {
-  static styles = [tws];
+  static override styles = [tws];
 
   /** The owners as typed (unsaved edits stay until Save) */
   @property() owners = "";
   @property() msg = "";
   @property({ type: Boolean }) ok = false;
 
-  render() {
+  override render() {
     return html`<p class=${HINT0}>${th("gh.help")}</p>
       ${field(nc(t("gh.owners")), html`<input class=${FIELD} id="ghowners" .value=${live(this.owners)} @input=${(e: Event) => emit(this, "owners-input", val(e))} spellcheck="false" placeholder=${t("gh.ownersPh")} />`, { id: "ghowners" })}
       <div class=${FOOT_ROW}>

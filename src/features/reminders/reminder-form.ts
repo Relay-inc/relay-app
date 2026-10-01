@@ -29,13 +29,13 @@ const FIELD =
 /** The new-reminder form. It shows the draft it is given and reports every change; the container keeps the draft (it survives switching views) and does the adding. */
 @customElement("relay-reminder-form")
 export class ReminderForm extends LitElement {
-  static styles = [tw];
+  static override styles = [tw];
   @property({ attribute: false }) draft!: Draft;
   @property({ attribute: false }) projects: { name: string; label: string }[] = [];
   @query('[data-rem-f="text"]') private textField?: HTMLInputElement;
   private focusText = false; // opening the form: focus the text field once it is drawn
 
-  updated() {
+  override updated() {
     if (this.focusText) {
       this.focusText = false;
       this.textField?.focus();
@@ -66,7 +66,7 @@ export class ReminderForm extends LitElement {
     } else if (e.key === "Escape") this.patch({ open: false, err: "" });
   };
 
-  render() {
+  override render() {
     const d = this.draft;
     if (!d.open)
       return html`<div class="mb-4">
@@ -131,5 +131,11 @@ export class ReminderForm extends LitElement {
       </div>
       ${d.err ? html`<div class="text-sm text-late" role="alert">${d.err}</div>` : nothing}
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-reminder-form": ReminderForm;
   }
 }

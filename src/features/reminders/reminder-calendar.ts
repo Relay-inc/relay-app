@@ -34,7 +34,7 @@ function scrollingAncestor(start: Node): HTMLElement | null {
 @customElement("relay-reminder-calendar")
 export class ReminderCalendar extends LitElement {
   // the host takes no box, the picker is positioned against the row's actions
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -46,12 +46,12 @@ export class ReminderCalendar extends LitElement {
   @state() private m = new Date().getMonth();
   @query("[data-pop]") private pop!: HTMLElement;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     document.addEventListener("pointerdown", this.onOutside);
     document.addEventListener("keydown", this.onOutside);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener("pointerdown", this.onOutside);
     document.removeEventListener("keydown", this.onOutside);
@@ -72,7 +72,7 @@ export class ReminderCalendar extends LitElement {
     return scrollingAncestor(this);
   }
 
-  updated() {
+  override updated() {
     // near the bottom of the view the picker opens upwards
     this.pop.removeAttribute("data-up");
     if (this.pop.getBoundingClientRect().bottom > (this.scroller()?.getBoundingClientRect().bottom ?? innerHeight))
@@ -85,7 +85,7 @@ export class ReminderCalendar extends LitElement {
     this.m = d.getMonth();
   }
 
-  render() {
+  override render() {
     const { y, m } = this,
       now = new Date(),
       today = iso(now.getFullYear(), now.getMonth(), now.getDate());
@@ -129,5 +129,11 @@ export class ReminderCalendar extends LitElement {
         })}
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-reminder-calendar": ReminderCalendar;
   }
 }

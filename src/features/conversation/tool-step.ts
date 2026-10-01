@@ -13,7 +13,7 @@ declare global {
 /** One tool call, a quiet line between the messages. A step on a note that exists is a link (`open-note`). */
 @customElement("relay-tool-step")
 export class ToolStep extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -26,7 +26,7 @@ export class ToolStep extends LitElement {
   @property() state: "run" | "ok" | "err" | "" = "";
   @property({ type: Boolean }) link = false;
 
-  render() {
+  override render() {
     // the arrow before the line; a running step has a spinner instead
     const lead =
       this.state === "run"
@@ -36,5 +36,11 @@ export class ToolStep extends LitElement {
     return html`<div class=${cls} @click=${this.link ? () => emit(this, "open-note") : null}>
       ${this.tool ? toolLine(this.tool.name, this.tool.input) : this.text}
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-tool-step": ToolStep;
   }
 }

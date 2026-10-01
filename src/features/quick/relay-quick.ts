@@ -13,7 +13,7 @@ import "../../components/image-thumbs";
 /** Cmd-K: one question that becomes a new general conversation in the background, the open screen stays. Mounted while `ui.qk`. */
 @customElement("relay-quick")
 export class RelayQuick extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -26,10 +26,10 @@ export class RelayQuick extends LitElement {
   private sent = false;
   @query("textarea") private ta!: HTMLTextAreaElement;
 
-  firstUpdated() {
+  override firstUpdated() {
     this.ta.focus();
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     if (!this.sent) this.imgs.forEach(i => URL.revokeObjectURL(i.url));
   }
@@ -64,7 +64,7 @@ export class RelayQuick extends LitElement {
   }
 
   // the textarea keeps the browser's own 2px padding and grey placeholder, as it always had
-  render() {
+  override render() {
     return html`<div
       class="fixed inset-0 z-25 flex justify-center items-start px-10 pt-36 bg-black/20"
       @click=${(e: Event) => {
@@ -110,5 +110,11 @@ export class RelayQuick extends LitElement {
         <div class="text-xs text-secondary mt-1.5">${t("qk.hint")}</div>
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-quick": RelayQuick;
   }
 }

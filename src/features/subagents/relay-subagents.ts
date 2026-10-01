@@ -12,7 +12,7 @@ import "./subagent-row";
 /** The agents of the open conversation above the composer, like the terminal lists them under the prompt: the running ones, and the finished ones folded away. */
 @customElement("relay-subagents")
 export class RelaySubagents extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -28,13 +28,13 @@ export class RelaySubagents extends LitElement {
   private tick = 0;
   @state() private now = Date.now(); // the running agents' durations count up every second
   // the running time of a working agent counts up every second
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     this.tick = window.setInterval(() => {
       this.now = Date.now();
     }, 1000);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     clearInterval(this.tick);
   }
@@ -52,10 +52,16 @@ export class RelaySubagents extends LitElement {
       @toggle=${() => toggleSubLog(a.id)}
     ></relay-subagent-row>`;
 
-  render() {
+  override render() {
     const list = chat.subs[ui.sel] || [],
       run = list.filter(a => a.running),
       done = list.filter(a => !a.running);
     return html`${run.map(this.row)}${done.length ? html`<button class="self-start px-1.5 py-0.5 rounded-md text-xs text-secondary hover:bg-fill hover:text-label" @click=${toggleSubsDone}>${tn("subs.done", done.length)}</button>${chat.subsOpen.has(ui.sel) ? done.map(this.row) : nothing}` : nothing}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-subagents": RelaySubagents;
   }
 }

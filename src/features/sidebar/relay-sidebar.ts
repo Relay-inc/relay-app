@@ -1,4 +1,5 @@
 import { LitElement, css, html, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, query, state } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../../core/i18n";
@@ -46,7 +47,7 @@ const dropSel = (kind: Kind, ctx: string) =>
  * The rows come from the domain (sidebarModel); the drag to reorder and the menu live here. */
 @customElement("relay-sidebar")
 export class RelaySidebar extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       /* the frosted sidebar: the window is transparent with the macOS sidebar material behind it, only this lets it through */
@@ -74,13 +75,13 @@ export class RelaySidebar extends LitElement {
   @state() private drag: Drag | null = null;
   private justDragged = false;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
     window.addEventListener("click", this.onOutside);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
@@ -212,7 +213,7 @@ export class RelaySidebar extends LitElement {
       kind="conv"
       data-k=${r.key}
       data-parent=${r.parent}
-      title=${r.term ? t("nav.inTerminal") : nothing}
+      title=${ifDefined(r.term ? t("nav.inTerminal") : undefined)}
       .icon=${r.term ? "term" : "chat"}
       .name=${r.title}
       .selected=${r.selected}
@@ -244,7 +245,7 @@ export class RelaySidebar extends LitElement {
         data-ctx=${p.context}
         .tint=${tint}
         .name=${p.label}
-        .img=${p.img}
+        .img=${p.img ?? null}
         .emoji=${p.emoji ?? ""}
         .unseen=${p.unseen}
         .trail=${p.trail}
@@ -281,7 +282,7 @@ export class RelaySidebar extends LitElement {
     </div>`;
   }
 
-  render() {
+  override render() {
     const { views, sections } = sidebarModel(),
       u = usageSummary(),
       m = this.ctx;
@@ -306,5 +307,11 @@ export class RelaySidebar extends LitElement {
         @settings=${() => invoke("open_settings_window")}
       ></relay-sidebar-footer>
       ${m ? html`<relay-sidebar-menu .x=${m.x} .y=${m.y} .items=${this.items(m)} @pick=${this.pick}></relay-sidebar-menu>` : nothing}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-sidebar": RelaySidebar;
   }
 }

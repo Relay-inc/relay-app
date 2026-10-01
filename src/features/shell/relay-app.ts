@@ -23,7 +23,7 @@ const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
 /** The main window: sidebar, the open conversation or view, the right panel. The shortcuts that work anywhere live here. */
 @customElement("relay-app")
 export class RelayApp extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -53,7 +53,7 @@ export class RelayApp extends LitElement {
 
   protected store = new StoreController(this);
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener("keydown", this.onKey);
     document.addEventListener("click", this.onLink);
@@ -61,7 +61,7 @@ export class RelayApp extends LitElement {
     window.addEventListener("dragover", this.noDrop);
     window.addEventListener("drop", this.noDrop);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("keydown", this.onKey);
     document.removeEventListener("click", this.onLink);
@@ -125,12 +125,12 @@ export class RelayApp extends LitElement {
     request("focus-composer");
   };
 
-  willUpdate() {
+  override willUpdate() {
     this.toggleAttribute("noinsp", ui.noinsp);
     this.toggleAttribute("wide", !!panel.open);
   }
 
-  render() {
+  override render() {
     return html` ${vault.snapErr ? html`<div class="fixed top-0 left-1/2 -translate-x-1/2 z-40 max-w-7/10 px-3 py-1.5 rounded-b-lg bg-bg border border-separator text-late text-xs">${th("vault.snapErr", { e: vault.snapErr })}</div>` : nothing}
       <relay-sidebar class="min-h-0 min-w-0 border-r border-separator"></relay-sidebar>
       <relay-chat class="min-h-0 min-w-0"></relay-chat>
@@ -139,5 +139,11 @@ export class RelayApp extends LitElement {
       ></relay-inspector>
       ${ui.qk ? html`<relay-quick></relay-quick>` : nothing}
       ${ui.zoom ? html`<div class="fixed inset-0 z-30 grid place-items-center p-10 bg-black/55 cursor-zoom-out" @click=${() => zoom("")}><img class="max-w-full max-h-full rounded-lg shadow-2xl bg-bg" alt="" src=${ui.zoom} /></div>` : nothing}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-app": RelayApp;
   }
 }

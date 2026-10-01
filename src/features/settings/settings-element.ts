@@ -4,11 +4,11 @@ import { LitElement } from "lit";
  *  properties did not change would keep the old ones. */
 export class SettingsElement extends LitElement {
   private relang = () => this.requestUpdate();
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener("settings-lang", this.relang);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("settings-lang", this.relang);
   }

@@ -11,7 +11,7 @@ const DUE = { late: "due-late", soon: "due-soon", "": "" };
 /** The right panel's read-only checklist: reminders and a project's open items. */
 @customElement("relay-todo-list")
 export class TodoList extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -21,7 +21,7 @@ export class TodoList extends LitElement {
   ];
   @property({ attribute: false }) items: Todo[] = [];
 
-  render() {
+  override render() {
     return html`<ul class="list-none">
       ${this.items.map(
         i =>
@@ -40,5 +40,11 @@ export class TodoList extends LitElement {
           </li>`,
       )}
     </ul>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-todo-list": TodoList;
   }
 }

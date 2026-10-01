@@ -35,7 +35,7 @@ type Drag = {
 /** A provider's board as a kanban: the head row (pickers, link to a vault project, reload) and the columns. Dragging a card to another column moves it in the tracker. */
 @customElement("relay-board")
 export class RelayBoard extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -48,12 +48,12 @@ export class RelayBoard extends LitElement {
   // dragging a card: pointer events, the Mac webview does not deliver HTML drag and drop reliably
   @state() private drag: Drag | null = null;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener("pointermove", this.onMove);
     window.addEventListener("pointerup", this.onUp);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("pointermove", this.onMove);
     window.removeEventListener("pointerup", this.onUp);
@@ -62,7 +62,7 @@ export class RelayBoard extends LitElement {
   }
 
   // load when shown, and again once resetBoard (new credentials, a new language) has cleared what was known
-  willUpdate(ch: PropertyValues) {
+  override willUpdate(ch: PropertyValues) {
     if (this.provider && (ch.has("provider") || !boards.states.has(this.provider.id))) showBoard(this.provider);
   }
 
@@ -104,7 +104,7 @@ export class RelayBoard extends LitElement {
     </select>`;
   }
 
-  render() {
+  override render() {
     const p = this.provider;
     if (!p) return nothing;
     const s = boardState(p),
@@ -153,5 +153,11 @@ export class RelayBoard extends LitElement {
             : nothing
       }
       ${ghost && d ? html`<relay-board-card .card=${ghost} .ghost=${{ x: d.px - d.dx, y: d.py - d.dy, w: d.w }}></relay-board-card>` : nothing}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-board": RelayBoard;
   }
 }

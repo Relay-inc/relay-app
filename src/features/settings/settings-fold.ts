@@ -18,7 +18,7 @@ declare global {
  *  which rows are open and flips it on `fold-toggle`. */
 @customElement("relay-settings-fold")
 export class SettingsFold extends SettingsElement {
-  static styles = [
+  static override styles = [
     tws,
     css`
       :host {
@@ -32,7 +32,7 @@ export class SettingsFold extends SettingsElement {
   @property({ attribute: false }) name: Tpl = nothing;
   @property({ attribute: false }) state: Tpl = nothing;
 
-  render() {
+  override render() {
     // a hairline between the rows, none above the first (the host's own border would lose to the page's `*` reset)
     return html`<div class="border-t border-s-border [:host(:first-child)_&]:border-t-0">
       <button

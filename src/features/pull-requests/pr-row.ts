@@ -20,7 +20,7 @@ const age = (iso: string) => {
 /** One PR row, in the list and (compact, chips under the title) in a project's PR tab. */
 @customElement("relay-pr-row")
 export class PrRow extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -35,7 +35,7 @@ export class PrRow extends LitElement {
   /** the project's display label, "" when the PR has none */
   @property() project = "";
 
-  render() {
+  override render() {
     const p = this.pr,
       c = this.compact;
     return html`<div
@@ -56,5 +56,11 @@ export class PrRow extends LitElement {
       </div>
       <relay-pr-status .ci=${p.ci} .review=${p.review}></relay-pr-status>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-pr-row": PrRow;
   }
 }

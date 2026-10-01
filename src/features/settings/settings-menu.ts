@@ -1,4 +1,5 @@
 import { css, html, nothing } from "lit";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { emit } from "../../core/dom";
 import { btn, IB, ic } from "./blocks";
@@ -21,7 +22,7 @@ declare global {
  *  and an integration's "…" menu with its rarer actions. */
 @customElement("relay-settings-menu")
 export class SettingsMenu extends SettingsElement {
-  static styles = [
+  static override styles = [
     tws,
     css`
       :host {
@@ -44,27 +45,27 @@ export class SettingsMenu extends SettingsElement {
   private away = (e: MouseEvent) => {
     if (this.shown && !e.composedPath().includes(this)) this.shown = false;
   };
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener("click", this.away);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("click", this.away);
   }
 
   // nothing to offer: not even a flex gap for the host
-  willUpdate() {
+  override willUpdate() {
     this.toggleAttribute("hidden", !this.items.length);
   }
-  render() {
+  override render() {
     if (!this.items.length) return nothing;
     return html`<button
         class=${this.label ? btn() : btn("plain", true)}
         @click=${() => {
           this.shown = !this.shown;
         }}
-        title=${this.tip || nothing}
+        title=${ifDefined(this.tip || undefined)}
         aria-expanded=${this.shown}
       >
         ${this.label || ic("more", IB)}

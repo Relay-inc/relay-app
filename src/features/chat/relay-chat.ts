@@ -26,7 +26,7 @@ import type { RelayComposer } from "../composer/relay-composer";
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 @customElement("relay-chat")
 export class RelayChat extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -47,20 +47,20 @@ export class RelayChat extends LitElement {
   @query("relay-composer") private composer!: RelayComposer | null;
   @query("#msgs") private msgs!: HTMLElement;
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     bus.addEventListener("focus-composer", this.onFocus);
     bus.addEventListener("scroll-bottom", this.onBottom);
     bus.addEventListener("scroll-top", this.onTop);
   }
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     bus.removeEventListener("focus-composer", this.onFocus);
     bus.removeEventListener("scroll-bottom", this.onBottom);
     bus.removeEventListener("scroll-top", this.onTop);
     this.ro?.disconnect();
   }
-  firstUpdated() {
+  override firstUpdated() {
     // the content grows when a child component redraws, not only when this one does
     this.ro = new ResizeObserver(() => {
       if (this.stick) this.log.scrollTop = this.log.scrollHeight;
@@ -101,7 +101,7 @@ export class RelayChat extends LitElement {
     return html`<relay-conversation></relay-conversation>`;
   }
 
-  render() {
+  override render() {
     const sel = ui.sel,
       bp = boardOf(sel),
       isv = isView(sel),
@@ -184,5 +184,11 @@ export class RelayChat extends LitElement {
             : nothing
       }
       ${isv ? nothing : html`<relay-composer class="${col} mt-2 mb-5"></relay-composer>`}`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-chat": RelayChat;
   }
 }

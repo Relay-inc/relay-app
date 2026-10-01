@@ -26,7 +26,7 @@ declare global {
  *  small buttons) and its repos as removable chips. */
 @customElement("relay-settings-project")
 export class SettingsProject extends SettingsElement {
-  static styles = [tws];
+  static override styles = [tws];
 
   /** The name in the vault, which the field falls back to */
   @property() name = "";
@@ -37,7 +37,7 @@ export class SettingsProject extends SettingsElement {
   @property() iconHint = "";
   @property({ attribute: false }) repos: string[] = [];
 
-  render() {
+  override render() {
     const { repos } = this;
     return html`${field(t("pc.name"), html`<input class=${FIELD} .value=${live(this.label)} placeholder=${this.name} spellcheck="false" @change=${(e: Event) => emit(this, "label-change", val(e).trim())} />`)}
     ${field(

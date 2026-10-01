@@ -15,7 +15,7 @@ declare global {
 /** The inbox's filter bar: search, read state, project, reload. */
 @customElement("relay-mail-bar")
 export class MailBar extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -28,7 +28,7 @@ export class MailBar extends LitElement {
   @property({ attribute: false }) projects: [string, string][] = [];
   @property({ type: Boolean }) busy = false;
 
-  render() {
+  override render() {
     const f = this.filter,
       set = (p: Partial<MailFilter>) => emit(this, "filter", p);
     // the search field stays one element across redraws, so it keeps its focus and caret while the list changes
@@ -61,5 +61,11 @@ export class MailBar extends LitElement {
         ${th("pr.reload")}
       </button>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-mail-bar": MailBar;
   }
 }

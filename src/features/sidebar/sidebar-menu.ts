@@ -14,13 +14,13 @@ declare global {
 /** The right-click menu at the pointer: buttons, and small headings between them. Emits `pick` with the item's id. */
 @customElement("relay-sidebar-menu")
 export class SidebarMenu extends LitElement {
-  static styles = [tw];
+  static override styles = [tw];
 
   @property({ type: Number }) x = 0;
   @property({ type: Number }) y = 0;
   @property({ attribute: false }) items: MenuItem[] = [];
 
-  render() {
+  override render() {
     return html`<div
       class="fixed z-20 min-w-45 grid p-1 bg-bg border border-separator rounded-lg shadow-lg"
       style="left:${this.x}px;top:${this.y}px"
@@ -36,5 +36,11 @@ export class SidebarMenu extends LitElement {
             </button>`,
       )}
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-sidebar-menu": SidebarMenu;
   }
 }

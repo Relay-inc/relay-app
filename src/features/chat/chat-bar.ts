@@ -22,7 +22,7 @@ const tb =
 /** The title bar of the centre column: the project (or the view) and the conversation's title, the terminal and the right panel buttons. */
 @customElement("relay-chat-bar")
 export class ChatBar extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -70,7 +70,7 @@ export class ChatBar extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     const shown = this.draft ?? this.value;
     return html`<div
       class="h-13 flex items-center gap-2.5 px-5 border-b border-separator select-none"
@@ -130,5 +130,11 @@ export class ChatBar extends LitElement {
         ${glyphSvg('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/>', "glyph size-4")}
       </button>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-chat-bar": ChatBar;
   }
 }

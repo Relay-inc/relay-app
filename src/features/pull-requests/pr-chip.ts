@@ -7,7 +7,7 @@ const TONE = { ok: "text-ok", bad: "text-bad", "": "text-secondary" };
 /** A small status pill: grey, green or red. */
 @customElement("relay-pr-chip")
 export class PrChip extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -16,9 +16,15 @@ export class PrChip extends LitElement {
     `,
   ];
   @property() tone: "ok" | "bad" | "" = "";
-  render() {
+  override render() {
     return html`<span class="text-xs px-2 py-0.5 rounded-lg bg-fill whitespace-nowrap block ${TONE[this.tone]}"
       ><slot></slot
     ></span>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-pr-chip": PrChip;
   }
 }

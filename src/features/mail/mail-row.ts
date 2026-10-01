@@ -29,7 +29,7 @@ function when(iso: string) {
 /** One mail in the inbox: unread in bold with a dot like Mail.app; the date, and on hover the read/unread button in its place. */
 @customElement("relay-mail-row")
 export class MailRow extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -44,7 +44,7 @@ export class MailRow extends LitElement {
   @property() project = "";
   @property({ type: Boolean }) selected = false;
 
-  render() {
+  override render() {
     const m = this.mail,
       label = m.unread ? t("mail.markRead") : t("mail.markUnread");
     return html`<div
@@ -79,5 +79,11 @@ export class MailRow extends LitElement {
         </button>
       </div>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-mail-row": MailRow;
   }
 }

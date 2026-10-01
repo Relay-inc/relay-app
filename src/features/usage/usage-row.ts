@@ -5,7 +5,7 @@ import { tw } from "../../core/styles";
 /** A token row: the name (slot), then tokens and cost for today and for the week. `head` is the column headings. */
 @customElement("relay-usage-row")
 export class UsageRow extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     css`
       :host {
@@ -19,7 +19,7 @@ export class UsageRow extends LitElement {
   @property() weekCost = "";
   @property({ type: Boolean }) head = false;
 
-  render() {
+  override render() {
     const v = "w-16 text-right tabular-nums",
       c = "w-16 text-right text-secondary tabular-nums";
     return html`<div
@@ -29,5 +29,11 @@ export class UsageRow extends LitElement {
       ><span class=${c}>${this.todayCost}</span><span class=${v}>${this.week}</span
       ><span class=${c}>${this.weekCost}</span>
     </div>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-usage-row": UsageRow;
   }
 }

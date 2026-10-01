@@ -51,7 +51,7 @@ const comment = (head: unknown, at: string, body?: string) =>
 /** The content of one PR in the right panel, from the raw GraphQL answer: title, meta, chips, description, checks, conversation, threads, files. */
 @customElement("relay-pr-body")
 export class PrBody extends LitElement {
-  static styles = [
+  static override styles = [
     tw,
     mdDefaults,
     css`
@@ -62,7 +62,7 @@ export class PrBody extends LitElement {
   ];
   @property({ attribute: false }) pr: any;
 
-  render() {
+  override render() {
     const pr = this.pr,
       roll = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
     // failing checks first, then the rest by name
@@ -154,5 +154,11 @@ export class PrBody extends LitElement {
             >`
           : nothing
       }`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "relay-pr-body": PrBody;
   }
 }
