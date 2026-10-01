@@ -23,22 +23,24 @@ import { onboard } from "../features/onboarding/onboard";
 import type { AgentSession } from "../domain/chats/state";
 
 // a board the sidebar no longer shows: its integration was switched off or lost its token
-const boardDown = (k: string) => {
-  const o = opened(k);
-  return o.kind === "board" && !boards.ready.includes(o.provider);
+const boardDown = (key: string) => {
+  const view = opened(key);
+  return view.kind === "board" && !boards.ready.includes(view.provider);
 };
+
+const sameJson = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 
 // the settings window saved: follow it here
 async function settingsChanged(next: Settings) {
-  const relang = next.language !== config.value.language;
-  const intChanged = JSON.stringify(next.integrations) !== JSON.stringify(config.value.integrations);
-  const ghChanged = JSON.stringify(next.github) !== JSON.stringify(config.value.github);
-  const mailChanged = JSON.stringify(next.mail) !== JSON.stringify(config.value.mail);
+  const languageChanged = next.language !== config.value.language;
+  const integrationsChanged = !sameJson(next.integrations, config.value.integrations);
+  const githubChanged = !sameJson(next.github, config.value.github);
+  const mailChanged = !sameJson(next.mail, config.value.mail);
   config.value = { ...config.value, ...next };
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
-  if (intChanged || relang) resetBoard();
-  if (relang) await initI18n();
-  if (ghChanged) {
+  if (integrationsChanged || languageChanged) resetBoard();
+  if (languageChanged) await initI18n();
+  if (githubChanged) {
     resetPrs();
     if (!ghOn() && ui.selected === PRS) select(WAIT);
     loadPrs();
@@ -57,21 +59,34 @@ async function settingsChanged(next: Settings) {
   loadAgents().then(reloadUsage);
 }
 
-// The main window's start: settings, language and vault first, then the conversations from earlier versions, then the polls.
+// The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
+// versions, then the polls.
 export async function boot() {
+  listenToBackend();
+  await loadSettingsAndVault();
+  await adoptEarlierConversations();
+  await pickStartView();
+  startPolls();
+}
+
+function listenToBackend() {
   listen<{ project: string; provider: string; event: AgentEvent }>("agent", e =>
     onEvent(e.payload.project, e.payload.event),
   );
   listen<string>("open-chat", e => select(e.payload));
   listen<string>("mail-link", e => mailLinkClicked(e.payload));
   listen<Settings>("settings-changed", e => settingsChanged(e.payload));
-  // the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation
-  listen<string>("menu", e => {
-    if (e.payload === "new-general") select(newChat(null));
-    else if (e.payload === "new-project") newHere();
-    else if (e.payload === "close-chat" && !isView(ui.selected) && !chat.chats[ui.selected]?.draft)
-      closeChat(ui.selected);
-  });
+  listen<string>("menu", e => onMenu(e.payload));
+}
+
+// the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation
+function onMenu(item: string) {
+  if (item === "new-general") select(newChat(null));
+  else if (item === "new-project") newHere();
+  else if (item === "close-chat" && !isView(ui.selected) && !chat.chats[ui.selected]?.draft) closeChat(ui.selected);
+}
+
+async function loadSettingsAndVault() {
   try {
     config.value = { ...config.value, ...(await invoke<Settings>("get_settings")) };
   } catch {
@@ -79,74 +94,95 @@ export async function boot() {
   }
   await initI18n();
   // no vault yet, or the configured one is gone: choose one before anything reads it
-  const vs = await invoke<VaultStatus>("vault_status");
-  if (!vs.ok) {
-    await onboard(vs);
+  const vaultStatus = await invoke<VaultStatus>("vault_status");
+  if (!vaultStatus.ok) {
+    await onboard(vaultStatus);
     config.value = { ...config.value, ...(await invoke<Settings>("get_settings")) };
   }
   await loadSnapshot();
   await refreshIcons();
   listen("icons-changed", reloadIcons);
-  // conversations from earlier versions: general:<id>, plain project names
-  const oldGens = ls.get<Record<string, { title: string; at: number }>>("gens", {});
-  for (const k of await invoke<string[]>("chats")) {
-    if (chat.chats[k]) continue;
-    if (isLegacyGeneral(k))
-      chat.chats[k] = {
-        key: k,
+}
+
+// conversations from earlier versions: general:<id>, plain project names
+async function adoptLegacyKeys() {
+  const oldGenerals = ls.get<Record<string, { title: string; at: number }>>("gens", {});
+  for (const key of await invoke<string[]>("chats")) {
+    if (chat.chats[key]) continue;
+    if (isLegacyGeneral(key)) {
+      chat.chats[key] = {
+        key,
         project: null,
-        title: oldGens[k]?.title || "Algemeen gesprek",
-        at: oldGens[k]?.at || chatTime(k),
+        title: oldGenerals[key]?.title || "Algemeen gesprek",
+        at: oldGenerals[key]?.at || chatTime(key),
       };
-    else if (project(k)) chat.chats[k] = { key: k, project: k, title: "Gesprek", at: 0 };
-    else chat.chats[k] = { key: k, project: null, title: "Gesprek", at: chatTime(k) };
+    } else if (project(key)) chat.chats[key] = { key, project: key, title: "Gesprek", at: 0 };
+    else chat.chats[key] = { key, project: null, title: "Gesprek", at: chatTime(key) };
   }
-  // the agent of each conversation with a session, from sessions.json (entries from before the providers are Claude's)
-  for (const [k, p] of Object.entries(
-    await invoke<Record<string, string>>("chat_providers").catch(() => ({}) as Record<string, string>),
-  ))
-    if (chat.chats[k]) chat.chats[k].provider = p;
+}
+
+// the agent of each conversation with a session, from sessions.json (entries from before the providers are Claude's)
+async function adoptProviders() {
+  const providers = await invoke<Record<string, string>>("chat_providers").catch(() => ({}) as Record<string, string>);
+  for (const [key, provider] of Object.entries(providers)) {
+    if (chat.chats[key]) chat.chats[key].provider = provider;
+  }
+}
+
+async function adoptEarlierConversations() {
+  await adoptLegacyKeys();
+  await adoptProviders();
   saveChats();
   loadAgents();
-  await Promise.all(
-    Object.values(chat.chats)
-      .filter(c => ["Gesprek", "Algemeen gesprek"].includes(c.title))
-      .map(c => ensureHistory(c.key)),
+  const untitled = Object.values(chat.chats).filter(conversation =>
+    ["Gesprek", "Algemeen gesprek"].includes(conversation.title),
   );
+  await Promise.all(untitled.map(conversation => ensureHistory(conversation.key)));
   await pollAgents();
   await checkBoards();
+}
+
+// the open view is gone (conversation removed, board or integration switched off): start on the waiting view
+const selectedIsGone = () =>
+  (!isView(ui.selected) && !chat.chats[ui.selected] && !terminalOf(ui.selected)) ||
+  boardDown(ui.selected) ||
+  (ui.selected === PRS && !ghOn()) ||
+  (ui.selected === MAIL && !mailOn());
+
+async function pickStartView() {
   if (ui.selected === LEGACY_BOARD) ui.selected = boardKey("productive"); // the one board before the providers
-  if (
-    (!isView(ui.selected) && !chat.chats[ui.selected] && !terminalOf(ui.selected)) ||
-    boardDown(ui.selected) ||
-    (ui.selected === PRS && !ghOn()) ||
-    (ui.selected === MAIL && !mailOn())
-  )
-    ui.selected = WAIT;
+  if (selectedIsGone()) ui.selected = WAIT;
   await select(ui.selected);
+}
+
+// a terminal conversation that is open in the app: new transcript lines and its busy state every 2 s
+async function followOpenTerminal() {
+  if (!isTerminal(ui.selected)) return;
+  await Promise.all([
+    tailTerm(ui.selected),
+    invoke<AgentSession[]>("agents").then(agents => {
+      chat.agentsList = agents;
+    }),
+  ]);
+  changed();
+}
+
+// while one runs outside: its transcript every 2 s, and the providers' sessions every 4 s to see the turn end
+async function followOutsideTurns() {
+  const keys = Object.keys(chat.outside);
+  if (!keys.length) return;
+  for (const key of keys) await tailOutside(key).catch(() => {});
+  if (agentsStale()) pollAgents();
+}
+
+function startPolls() {
   pollPending();
   setInterval(pollPending, 700);
   setInterval(pollAgents, 10000);
   pollSubs();
   setInterval(pollSubs, 2000);
-  // a terminal conversation that is open in the app: new transcript lines and its busy state every 2 s
-  setInterval(async () => {
-    if (!isTerminal(ui.selected)) return;
-    await Promise.all([
-      tailTerm(ui.selected),
-      invoke<AgentSession[]>("agents").then(a => {
-        chat.agentsList = a;
-      }),
-    ]);
-    changed();
-  }, 2000);
-  // while one runs outside: its transcript every 2 s, and the providers' sessions every 4 s to see the turn end
-  setInterval(async () => {
-    const ks = Object.keys(chat.outside);
-    if (!ks.length) return;
-    for (const k of ks) await tailOutside(k).catch(() => {});
-    if (agentsStale()) pollAgents();
-  }, 2000);
+  setInterval(followOpenTerminal, 2000);
+  setInterval(followOutsideTurns, 2000);
   setInterval(loadSnapshot, 30000);
   listen("reminders-changed", loadSnapshot);
   setInterval(checkFavicons, 60 * 60000); // a project new in work-state gets its icon within the hour

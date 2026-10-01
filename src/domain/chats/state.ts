@@ -131,39 +131,48 @@ const PLACEHOLDER: Record<string, Key> = {
 export const displayTitle = (title: string) => (PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title);
 export const projectOf = (key: string) => chat.chats[key]?.project ?? null;
 export const label = (key: string) => displayTitle(chat.chats[key]?.title || key);
-export const chatsOf = (p: string | null) =>
+export const chatsOf = (project: string | null) =>
   Object.values(chat.chats)
-    .filter(c => c.project === p && !c.draft && !c.closed)
-    .sort((a, b) => b.at - a.at);
+    .filter(conversation => conversation.project === project && !conversation.draft && !conversation.closed)
+    .sort((newer, older) => older.at - newer.at);
 export const saveChats = () =>
-  ls.set("chats", Object.fromEntries(Object.entries(chat.chats).filter(([k, c]) => !c.draft || chat.typed[k])));
-export function newChat(p: string | null): string {
+  ls.set(
+    "chats",
+    Object.fromEntries(
+      Object.entries(chat.chats).filter(([key, conversation]) => !conversation.draft || chat.typed[key]),
+    ),
+  );
+export function newChat(project: string | null): string {
   const key = newChatKey();
-  chat.chats[key] = { key, project: p, title: NEW, at: Date.now(), draft: true };
+  chat.chats[key] = { key, project, title: NEW, at: Date.now(), draft: true };
   return key;
 }
 export function aboutProject(key: string): string | null {
   const score: Record<string, number> = {};
-  for (const it of chat.messages[key] || []) {
-    if (it.kind === "me") for (const p of findProjects(it.text)) score[p] = (score[p] || 0) + 1;
-    if (it.kind === "tool" && it.path)
-      for (const p of vault.snap.projects) {
+  for (const item of chat.messages[key] || []) {
+    if (item.kind === "me") {
+      for (const name of findProjects(item.text)) score[name] = (score[name] || 0) + 1;
+    }
+    if (item.kind === "tool" && item.path) {
+      const segments = item.path.split("/").map(segment => segment.replace(/\.md$/, ""));
+      for (const project of vault.snap.projects) {
         // a note or folder named after the project, wherever the vault keeps it
-        if (it.path.split("/").some(seg => seg.replace(/\.md$/, "") === p.name))
-          score[p.name] = (score[p.name] || 0) + 2;
+        if (segments.includes(project.name)) score[project.name] = (score[project.name] || 0) + 2;
       }
+    }
   }
-  const top = Object.entries(score).sort((a, b) => b[1] - a[1]);
-  return top.length && (top.length === 1 || top[0][1] >= 2 * top[1][1]) ? top[0][0] : null;
+  const ranked = Object.entries(score).sort((first, second) => second[1] - first[1]);
+  const [best, runnerUp] = ranked;
+  return best && (!runnerUp || best[1] >= 2 * runnerUp[1]) ? best[0] : null;
 }
 
 // ---------- terminal sessions (not started by the app)
 const GENERIC = /^obsidian-context-management-\w+$/;
 export function terminalSessions(hiddenOnes = false): TerminalSession[] {
-  const live = new Map(chat.agentsList.map(a => [a.sessionId, a]));
+  const liveBySid = new Map(chat.agentsList.map(agent => [agent.sessionId, agent]));
   return vault.snap.sessions.items.flatMap(session => {
-    const sid = session.sessionId,
-      agent = live.get(sid);
+    const sid = session.sessionId;
+    const agent = liveBySid.get(sid);
     // only sessions the providers still run, that the app did not start, listed or hidden as asked
     if (!agent || chat.appSids.includes(sid) || chat.forked.includes(sid) !== hiddenOnes) return [];
     if (agent.kind === "background" && agent.state === "done") return [];
@@ -184,33 +193,35 @@ export function terminalSessions(hiddenOnes = false): TerminalSession[] {
     ];
   });
 }
-export const terminalOf = (k: string) => terminalSessions().find(tm => tm.key === k);
+export const terminalOf = (key: string) => terminalSessions().find(session => session.key === key);
 /** The project of the open conversation, terminal or app. */
 export const selectedProject = () =>
   isTerminal(ui.selected) ? (terminalOf(ui.selected)?.project ?? null) : projectOf(ui.selected);
 // background terminal sessions that wait
 export const blockedAgents = () =>
-  chat.agentsList.filter(a => a.kind === "background" && a.state === "blocked" && !chat.hidden.includes(a.id));
+  chat.agentsList.filter(
+    agent => agent.kind === "background" && agent.state === "blocked" && !chat.hidden.includes(agent.id),
+  );
 export const waitCount = () => chat.pendingList.length + blockedAgents().length;
-export const isWaiting = (k: string) => chat.pendingList.some(r => r.project === k);
-export const runningSubs = (k: string) => (chat.subs[k] || []).filter(a => a.running).length;
-// what was closed under a project (or under Algemeen when p is null), newest first
-export function closedOf(p: string | null): { key: string; title: string }[] {
-  const cs = Object.values(chat.chats)
-    .filter(c => c.closed && c.project === p)
-    .sort((a, b) => b.closed! - a.closed!)
-    .map(c => ({ key: c.key, title: displayTitle(c.title) }));
-  const ts = terminalSessions(true)
-    .filter(tm => tm.project === p)
-    .map(tm => ({ key: tm.key, title: tm.title }));
-  return [...cs, ...ts].slice(0, 8);
+export const isWaiting = (key: string) => chat.pendingList.some(request => request.project === key);
+export const runningSubs = (key: string) => (chat.subs[key] || []).filter(sub => sub.running).length;
+// what was closed under a project (or under Algemeen when project is null), newest first
+export function closedOf(project: string | null): { key: string; title: string }[] {
+  const closedChats = Object.values(chat.chats)
+    .filter(conversation => conversation.closed && conversation.project === project)
+    .sort((newer, older) => older.closed! - newer.closed!)
+    .map(conversation => ({ key: conversation.key, title: displayTitle(conversation.title) }));
+  const closedTerminals = terminalSessions(true)
+    .filter(session => session.project === project)
+    .map(session => ({ key: session.key, title: session.title }));
+  return [...closedChats, ...closedTerminals].slice(0, 8);
 }
 /** A question with options (kind "question"; files from before the providers only have Claude's tool name). */
-export const isQuestion = (r: Pending) => r.kind === "question" || r.tool_name === "AskUserQuestion";
+export const isQuestion = (request: Pending) => request.kind === "question" || request.tool_name === "AskUserQuestion";
 
-export const formatDuration = (sec: number) => {
-  const s = Math.max(0, Math.round(sec));
-  return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
+export const formatDuration = (seconds: number) => {
+  const total = Math.max(0, Math.round(seconds));
+  return total < 60 ? `${total} s` : `${Math.floor(total / 60)} min ${total % 60} s`;
 };
-export const lastAi = (k: string) =>
-  [...(chat.messages[k] || [])].reverse().find(i => i.kind === "ai")?.text || t("work.done");
+export const lastAi = (key: string) =>
+  [...(chat.messages[key] || [])].reverse().find(item => item.kind === "ai")?.text || t("work.done");

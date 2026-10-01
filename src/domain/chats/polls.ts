@@ -10,13 +10,14 @@ export async function pollPending() {
   const next = await invoke<Pending[]>("pending");
   if (JSON.stringify(next.map(x => x.id)) === JSON.stringify(chat.pendingList.map(x => x.id))) return;
   const known = new Set(chat.pendingList.map(x => x.id));
-  if (chat.pendingPolled)
-    for (const r of next)
-      if (!known.has(r.id))
-        notify(
-          chat.chats[r.project] ? r.project : WAIT,
-          r.input?.questions?.[0]?.question || t("notify.isWaiting", { tool: r.tool_name }),
-        );
+  if (chat.pendingPolled) {
+    for (const request of next.filter(x => !known.has(x.id))) {
+      notify(
+        chat.chats[request.project] ? request.project : WAIT,
+        request.input?.questions?.[0]?.question || t("notify.isWaiting", { tool: request.tool_name }),
+      );
+    }
+  }
   chat.pendingList = next;
   chat.pendingPolled = true;
   changed();
@@ -24,9 +25,9 @@ export async function pollPending() {
 export async function pollSubs() {
   const keys = [
     ...Object.values(chat.chats)
-      .filter(c => !c.draft && !c.closed)
-      .map(c => c.key),
-    ...terminalSessions().map(tm => tm.key),
+      .filter(conversation => !conversation.draft && !conversation.closed)
+      .map(conversation => conversation.key),
+    ...terminalSessions().map(session => session.key),
   ];
   const next = await invoke<Record<string, Sub[]>>("subagents", { keys }).catch(() => chat.subs);
   if (JSON.stringify(next) === JSON.stringify(chat.subs)) return;
