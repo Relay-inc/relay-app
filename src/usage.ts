@@ -1,7 +1,13 @@
+import { html, nothing, type TemplateResult } from "lit";
 import { invoke } from "@tauri-apps/api/core";
-import { t, at, currentLocale } from "./i18n";
+import { t, th, at, ath, currentLocale } from "./i18n";
 import { agent, type AgentProvider, type Limits, type LimitWindow, type Tally, type Tokens } from "./agents";
-import "./usage.css";
+import { RelayElement, changed, styles } from "./lib/store";
+import { glyphSvg } from "./icons";
+import { S, pLabel, shownTitle, terms } from "./app/state";
+import { select } from "./app/actions";
+import { usageAgents } from "./app/data";
+import css from "./usage.css?inline";
 
 // The usage view: per switched-on agent provider its plan or rate limits (the backend asks each provider, at
 // most once a minute) and the tokens in its local logs, today and this week, then the total over all of them.
@@ -11,12 +17,6 @@ type ProvLimits = { provider: string; limits: Limits };
 type AllTokens = { providers: (Tokens & { provider: string })[]; today: Tally; week: Tally };
 
 let limits: ProvLimits[] | null = null, tokens: AllTokens | null = null, tokErr = "", tokAt = 0, reading = false;
-
-export type UsageHelpers = { esc: (s: string) => string;
-  // the switched-on providers, in the order of the settings
-  agents: () => { id: string; limits: boolean }[];
-  // an app conversation (by key) or a terminal session (by sid): its label, and the key to open it
-  session: (key: string | undefined, sid: string) => { label: string; key: string } | null };
 
 async function loadLimits(changed: () => void) {
   try { limits = await invoke<ProvLimits[]>("usage_limits"); } catch { limits = []; }
@@ -43,15 +43,15 @@ export function openUsage(changed: () => void) { if (Date.now() - tokAt > 60000)
 export function reloadUsage(changed: () => void, visible: boolean) { loadLimits(changed); if (visible) loadTokens(changed); else tokAt = 0; }
 
 const level = (p: number): "" | "soon" | "late" => p >= 95 ? "late" : p >= 80 ? "soon" : "";
-const winLabel = (p: AgentProvider | undefined, w: LimitWindow, esc: (s: string) => string) =>
-  p ? at(p, w.label, { name: esc(w.name ?? "") }) : esc(w.label);
+const winText = (p: AgentProvider | undefined, w: LimitWindow) => p ? at(p, w.label, { name: w.name ?? "" }) : w.label;
+const winTpl = (p: AgentProvider | undefined, w: LimitWindow) => p ? ath(p, w.label, { name: w.name ?? "" }) : w.label;
 // sidebar: the most constrained limit over every provider, for the Usage button's dot (in the reminders' urgency colours) and tooltip
 export function usageSummary(): { pct: number; level: "" | "soon" | "late"; label: string } | null {
   let top: { w: LimitWindow; p: AgentProvider | undefined; id: string } | null = null;
   for (const l of limits || []) if (l.limits.ok) for (const w of l.limits.windows)
     if (!top || w.pct > top.w.pct) top = { w, p: agent(l.provider), id: l.provider };
   if (!top) return null;
-  const { w, p } = top, label = t("usage.limitTop", { name: p?.name ?? top.id, label: winLabel(p, w, s => s) }), pct = Math.round(w.pct), when = resetWhen(w.resets);
+  const { w, p } = top, label = t("usage.limitTop", { name: p?.name ?? top.id, label: winText(p, w) }), pct = Math.round(w.pct), when = resetWhen(w.resets);
   return { pct: w.pct, level: level(w.pct), label: when ? t("usage.summaryResets", { label, pct, when }) : t("usage.summary", { label, pct }) };
 }
 
@@ -66,61 +66,74 @@ function resetWhen(iso: string | null) {
 }
 const resets = (iso: string | null) => { const when = resetWhen(iso); return when ? t("usage.resets", { when }) : ""; };
 
-function meter(label: string, w: LimitWindow) {
-  const p = Math.min(100, Math.max(0, w.pct));
-  return `<div class="u-lim"><div class="u-row"><span class="u-nm">${label}</span><span class="u-v">${t("usage.used", { pct: Math.round(w.pct) })}</span></div>`
-    + `<div class="u-bar ${level(w.pct)}"><span style="width:${p}%"></span></div><div class="u-sub">${resets(w.resets)}</div></div>`;
-}
+const meter = (label: unknown, w: LimitWindow) => html`<div class="u-lim"><div class="u-row"><span class="u-nm">${label}</span><span class="u-v">${t("usage.used", { pct: Math.round(w.pct) })}</span></div>
+  <div class="u-bar ${level(w.pct)}"><span style=${`width:${Math.min(100, Math.max(0, w.pct))}%`}></span></div><div class="u-sub">${resets(w.resets)}</div></div>`;
 const cost = (x: Tally) => x.cost > 0 ? usd(x.cost) : x.total ? "–" : "";
-const pair = (label: string, a: Tally, b: Tally, title = "") =>
-  `<div class="u-row u-tok"${title ? ` title="${title}"` : ""}><span class="u-nm">${label}</span><span class="u-v">${a.total ? num(a.total) : "–"}</span><span class="u-c">${cost(a)}</span><span class="u-v">${b.total ? num(b.total) : "–"}</span><span class="u-c">${cost(b)}</span></div>`;
+const pair = (label: unknown, a: Tally, b: Tally, title = "") =>
+  html`<div class="u-row u-tok" title=${title || nothing}><span class="u-nm">${label}</span><span class="u-v">${a.total ? num(a.total) : "–"}</span><span class="u-c">${cost(a)}</span><span class="u-v">${b.total ? num(b.total) : "–"}</span><span class="u-c">${cost(b)}</span></div>`;
 const split = (x: Tally) => t("usage.split", { input: num(x.input), output: num(x.output), read: num(x.cacheRead), write: num(x.cacheWrite) });
-const headRow = (label: string) => `<div class="u-row u-tok u-head"><span class="u-nm">${label}</span><span class="u-v">${t("usage.today")}</span><span class="u-c"></span><span class="u-v">${t("usage.week")}</span><span class="u-c"></span></div>`;
-const plan = (l: Limits | undefined, esc: (s: string) => string) => l?.ok && l.plan ? `<span class="u-plan">${esc(l.plan[0].toUpperCase() + l.plan.slice(1))}</span>` : "";
+const headRow = () => html`<div class="u-row u-tok u-head"><span class="u-nm"></span><span class="u-v">${t("usage.today")}</span><span class="u-c"></span><span class="u-v">${t("usage.week")}</span><span class="u-c"></span></div>`;
+const plan = (l: Limits | undefined) => l?.ok && l.plan ? html`<span class="u-plan">${l.plan[0].toUpperCase() + l.plan.slice(1)}</span>` : nothing;
+const head = (hd: "h2" | "h3", c: unknown) => hd === "h2" ? html`<h2>${c}</h2>` : html`<h3>${c}</h3>`;
 
-// one provider's limits and tokens. `h`: the heading level, h2 alone (as before the providers), h3 under its name
-function section(id: string, hasLimits: boolean, hd: "h2" | "h3", h: UsageHelpers) {
+// the usage view names the conversations it lists and opens them on a click
+const usageSession = (k: string | undefined, sid: string) => {
+  const c = k ? S.chats[k] : undefined;
+  if (c) return { label: `${pLabel(c.project)} › ${shownTitle(c.title)}`, key: c.key };
+  const tm = terms().find(x => x.sid === sid);
+  return tm ? { label: `${pLabel(tm.project)} › ${tm.title}`, key: tm.key } : null;
+};
+
+// one provider's limits and tokens. `hd`: the heading level, h2 alone (as before the providers), h3 under its name
+function section(id: string, hasLimits: boolean, hd: "h2" | "h3"): TemplateResult[] {
   const p = agent(id), lim = limits?.find(l => l.provider === id)?.limits, tok = tokens?.providers.find(x => x.provider === id);
-  const name = h.esc(p?.name ?? id), pt = (k: string, x?: Record<string, string | number>) => p ? at(p, k, x) : k;
-  let s = "";
+  const name = p?.name ?? id, pt = (k: string, x?: Record<string, string | number>) => p ? ath(p, k, x) : k;
+  const out: TemplateResult[] = [];
   // plan limits, or why there are none: never guessed
   if (hasLimits) {
-    s += `<${hd}>${t("usage.limits")}${hd === "h2" ? plan(lim, h.esc) : ""}</${hd}>`;
-    if (!limits) s += `<p class="u-note">${pt("limits.loading")}</p>`;
-    else if (!lim) s += `<p class="u-note">${pt("off.unavailable")}</p>`;
-    else if (!lim.ok) s += `<p class="u-note">${pt(`off.${lim.reason}`)}</p>`;
-    else for (const w of lim.windows) s += meter(winLabel(p, w, h.esc), w);
+    out.push(head(hd, html`${t("usage.limits")}${hd === "h2" ? plan(lim) : nothing}`));
+    if (!limits) out.push(html`<p class="u-note">${pt("limits.loading")}</p>`);
+    else if (!lim) out.push(html`<p class="u-note">${pt("off.unavailable")}</p>`);
+    else if (!lim.ok) out.push(html`<p class="u-note">${pt(`off.${lim.reason}`)}</p>`);
+    else for (const w of lim.windows) out.push(meter(winTpl(p, w), w));
   }
-  s += `<${hd}>${t("usage.tokens")}</${hd}>`;
-  if (!tok) return s + `<p class="u-note">${tokErr ? h.esc(tokErr) : pt("tokens.reading")}</p>`;
-  s += headRow("") + pair(t("usage.all", { name }), tok.today, tok.week, split(tok.week)) + pair(t("usage.vault"), tok.vaultToday, tok.vaultWeek, split(tok.vaultWeek));
+  out.push(head(hd, t("usage.tokens")));
+  if (!tok) return [...out, html`<p class="u-note">${tokErr || pt("tokens.reading")}</p>`];
+  out.push(headRow(), pair(t("usage.all", { name }), tok.today, tok.week, split(tok.week)), pair(t("usage.vault"), tok.vaultToday, tok.vaultWeek, split(tok.vaultWeek)));
   const mn = (m: string) => p?.modelName ? p.modelName(m) : m;
-  if (tok.models.length) s += `<h3>${t("usage.byModel")}</h3>` + tok.models.map(m => pair(h.esc(mn(m.model)), m.today, m.week, split(m.week))).join("");
+  if (tok.models.length) out.push(html`<h3>${t("usage.byModel")}</h3>`, ...tok.models.map(m => pair(mn(m.model), m.today, m.week, split(m.week))));
   const conv = tok.sessions.filter(x => x.week.total).slice(0, 12);
-  if (conv.length) s += `<h3>${t("usage.byConversation")}</h3>` + conv.map(x => {
-    const c = h.session(x.key, x.sid);
-    const label = c ? h.esc(c.label) : t("usage.otherSession", { id: h.esc(x.sid.slice(0, 8)) });
-    return pair(c ? `<a class="u-open" data-usage-open="${h.esc(c.key)}">${label}</a>` : label, x.today, x.week, split(x.week));
-  }).join("");
-  return s;
+  if (conv.length) out.push(html`<h3>${t("usage.byConversation")}</h3>`, ...conv.map(x => {
+    const c = usageSession(x.key, x.sid);
+    const label = c ? c.label : t("usage.otherSession", { id: x.sid.slice(0, 8) });
+    return pair(c ? html`<a class="u-open" @click=${() => select(c.key)}>${label}</a>` : label, x.today, x.week, split(x.week));
+  }));
+  return out;
 }
 
-export function renderUsage(h: UsageHelpers) {
-  const on = h.agents();
-  let s = `<div class="usage">`;
-  if (!on.length) return s + `<p class="u-note">${t("usage.none")}</p></div>`;
-  // one provider: the view as it always was; several: a section per provider, then the total
-  if (on.length === 1) s += section(on[0].id, on[0].limits, "h2", h);
-  else {
-    for (const a of on) {
-      const p = agent(a.id), lim = limits?.find(l => l.provider === a.id)?.limits;
-      s += `<h2>${p ? `<svg class="g" viewBox="0 0 16 16">${p.glyph}</svg>` : ""}${h.esc(p?.name ?? a.id)}${plan(lim, h.esc)}</h2>` + section(a.id, a.limits, "h3", h);
+export class RelayUsage extends RelayElement {
+  static styles = styles(css);
+  // shown: tokens right away when the last read is older than a minute (renderChat did this on every draw)
+  updated() { openUsage(changed); }
+
+  render() {
+    const on = usageAgents();
+    if (!on.length) return html`<div class="usage"><p class="u-note">${th("usage.none")}</p></div>`;
+    // one provider: the view as it always was; several: a section per provider, then the total
+    const body: unknown[] = [];
+    if (on.length === 1) body.push(...section(on[0].id, on[0].limits, "h2"));
+    else {
+      for (const a of on) {
+        const p = agent(a.id), lim = limits?.find(l => l.provider === a.id)?.limits;
+        body.push(html`<h2>${p ? glyphSvg(p.glyph) : nothing}${p?.name ?? a.id}${plan(lim)}</h2>`, ...section(a.id, a.limits, "h3"));
+      }
+      if (tokens) body.push(html`<h2>${t("usage.combined")}</h2>`, headRow(), pair(t("usage.combined"), tokens.today, tokens.week, split(tokens.week)));
     }
-    if (tokens) s += `<h2>${t("usage.combined")}</h2>` + headRow("") + pair(t("usage.combined"), tokens.today, tokens.week, split(tokens.week));
+    if (tokens) {
+      const unpricedN = tokens.week.unpriced, unpriced = unpricedN ? " " + t("usage.unpriced", { n: num(unpricedN) }) : "";
+      body.push(html`<p class="u-note">${th("usage.estimate")}${unpriced}</p>`);
+    }
+    return html`<div class="usage">${body}</div>`;
   }
-  if (tokens) {
-    const unpricedN = tokens.week.unpriced, unpriced = unpricedN ? " " + t("usage.unpriced", { n: num(unpricedN) }) : "";
-    s += `<p class="u-note">${t("usage.estimate")}${unpriced}</p>`;
-  }
-  return s + `</div>`;
 }
+customElements.define("relay-usage", RelayUsage);

@@ -1,9 +1,6 @@
-/* Productive board: columns side by side, the full width of the conversation pane */
-.msgs.wide{max-width:none;padding:0 20px}
-.kbhead{display:flex;align-items:center;gap:8px;margin-bottom:14px}
-.kbhead .sp{flex:1}
+:host{display:block}
+.err{margin-bottom:12px}
 .kbsel{height:28px;max-width:280px;border:1px solid var(--separator);border-radius:var(--r);background:var(--bg);color:var(--label);font:13px var(--sans);padding:0 8px}
-#kb .err{margin-bottom:12px}
 .kb{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:8px}
 .kcol{flex:0 0 264px;display:flex;flex-direction:column;max-height:calc(100vh - 160px);background:var(--fill);border-radius:var(--r);padding:8px;transition:box-shadow var(--d) var(--ease)}
 .kcol.over{box-shadow:inset 0 0 0 2px var(--accent)}
@@ -14,7 +11,4 @@
 .km .kprio.p1{color:#e5484d}.km .kprio.p2{color:#f76b15}
 .km{display:flex;gap:10px;margin-top:4px;font-size:12px;color:var(--secondary);font-variant-numeric:tabular-nums}
 .kghost{position:fixed;left:0;top:0;z-index:40;pointer-events:none;opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.18)}
-.pvf{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:12px 0 0;font-size:13px}
-.pvf dt{color:var(--secondary)}
-.pvf dd{margin:0;overflow-wrap:anywhere}
 .kblink{font-size:12px;color:var(--secondary-label,var(--label));opacity:.75}
