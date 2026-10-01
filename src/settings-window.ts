@@ -40,7 +40,7 @@ const mailTest: Record<string, { text: string; ok: boolean } | "busy"> = {};
 // agents: what the backend detects per provider (installed, version, login), checked when the window opens
 let agSt: AgentsStatus | null = null, agMsg = "", agOk = false;
 // the lists of agents and integrations: which Add menu is open, which rows are folded open ("ag:claude", "int:github")
-let menu: "" | "ag" | "int" = "";
+let menu = ""; // "ag" / "int": an Add menu; "b:<provider>": an integration's "…" menu
 const opened = new Set<string>();
 let intMsg = "", intOk = false;
 
@@ -187,9 +187,17 @@ function boardMap(p: BoardProvider) {
 // others are in the Add menu. In the list means in the sidebar; Remove switches it off and keeps the token.
 const ghState = () => st(ghLogin ? "ok" : ghErr ? "warn" : "off", ghLogin ? t("gh.connected", { login: esc(ghLogin) }) : esc(ghErr || t("gh.checking")));
 const mailState = () => st(mailEdit.accounts.length ? "ok" : "off", t("mail.accounts", { n: mailEdit.accounts.length }));
-const boardState = (p: BoardProvider) => st(setUp(p) ? "ok" : "off", setUp(p) ? t("int.set") : t("int.notSet"));
+// per board provider: can it take its credentials from Claude Code, and does Claude Code have them (asked once)
+const mcp: Record<string, { supported: boolean; found: boolean }> = {};
+let mcpAsked = false;
+function askMcp() {
+  if (mcpAsked) return; mcpAsked = true;
+  Promise.all(PROVIDERS.map(async p => { mcp[p.id] = await invoke<{ supported: boolean; found: boolean }>("integration_mcp", { provider: p.id }).catch(() => ({ supported: false, found: false })); })).then(render);
+}
+const boardState = (p: BoardProvider) => !setUp(p) && mcp[p.id]?.found ? st("warn", t("int.foundClaude")) : st(setUp(p) ? "ok" : "off", setUp(p) ? t("int.set") : t("int.notSet"));
 const boardOn = (p: BoardProvider) => { const on = settings.integrations[p.id]?.on; return on === true || (on === undefined && setUp(p)); };
 function integrations() {
+  askMcp();
   const all = [
     ...PROVIDERS.map(p => ({ id: p.id, ico: pIcon(p), name: esc(p.name), state: boardState(p), on: boardOn(p), body: () => boardBody(p) })),
     { id: "github", ico: icon("gh"), name: "GitHub", state: ghState(), on: !!settings.github.on, body: github },
@@ -251,11 +259,15 @@ function boardBody(p: BoardProvider) {
     return f.check ? field(f.placeholder ? pt(p, f.placeholder) : pt(p, f.label), sw(fid, !!cfg[f.key]), { id: fid })
       : field(nc(pt(p, f.label)), `<input class="field" id="${fid}"${f.numeric ? ' inputmode="numeric"' : ""} ${f.secret ? secretPh
         : `value="${esc(cfg[f.key] ?? "")}"${f.placeholder ? ` placeholder="${pt(p, f.placeholder)}"` : ""}`} spellcheck="false">`, { id: fid }); }).join("");
-  const extra = (p.settings.import ? `<button class="btn" data-set="bimport" data-id="${id}">${pt(p, p.settings.import.label)}</button>` : "") + (has ? `<button class="btn ghost" data-set="bclear" data-id="${id}">${t("int.clear")}</button>` : "");
-  return `<p class="hint">${pt(p, p.settings.help)}</p>
+  // the rarer actions behind "…": take the credentials from Claude Code, clear the token
+  const items = [mcp[p.id]?.supported ? `<button class="menu-i" data-set="bimport" data-id="${id}"><span class="menu-t"><b>${t("int.importClaude")}</b><span class="st">${t(mcp[p.id]?.found ? "int.importFound" : "int.importNone")}</span></span></button>` : "",
+    has ? `<button class="menu-i" data-set="bclear" data-id="${id}"><span class="menu-t"><b>${t("int.clear")}</b></span></button>` : ""].filter(Boolean);
+  const more = items.length ? `<div class="menu-w"><button class="btn ib" data-set="menu" data-menu="b:${id}" title="${t("int.more")}" aria-expanded="${menu === `b:${p.id}`}">${icon("more")}</button>${menu === `b:${p.id}` ? `<div class="menu up">${items.join("")}</div>` : ""}</div>` : "";
+  const found = !setUp(p) && mcp[p.id]?.found ? `<div class="notice"><span>${t("int.foundClaudeLong", { name: esc(p.name) })}</span><button class="btn primary" data-set="bimport" data-id="${id}">${t("int.import")}</button></div>` : "";
+  return `${found}<p class="hint">${pt(p, p.settings.help)}</p>
     ${field(nc(pt(p, p.settings.tokenLabel)), `<input class="field" id="tok-${id}" ${secretPh} spellcheck="false">`, { id: `tok-${id}` })}
     ${fields}
-    <div class="ss-foot">${removeBtn("int", p.id)}${extra}${foot(m ? esc(m.text) : "", !!m?.ok, `<button class="btn primary" data-set="bsave" data-id="${id}">${t("int.save")}</button>`)}</div>
+    <div class="ss-foot">${removeBtn("int", p.id)}${more}${foot(m ? esc(m.text) : "", !!m?.ok, `<button class="btn primary" data-set="bsave" data-id="${id}">${t("int.save")}</button>`)}</div>
     ${boardMap(p)}`;
 }
 // the agents: only the ones switched on are listed, the others are in the Add menu. A row folds open to its
@@ -362,7 +374,7 @@ root.addEventListener("click", async e => {
   // the lists: fold a row, the Add menu, add (folded open, to set it up) and remove
   const aid = b.dataset.id ?? "", kind = b.dataset.kind as "ag" | "int" | undefined, key = `${kind}:${aid}`;
   if (b.dataset.set === "fold") { if (!opened.delete(key)) opened.add(key); render(); }
-  if (b.dataset.set === "menu") { menu = menu === kind ? "" : kind!; render(); }
+  if (b.dataset.set === "menu") { const k = b.dataset.menu ?? kind!; menu = menu === k ? "" : k; render(); }
   if (b.dataset.set === "add" || b.dataset.set === "remove") {
     const on = b.dataset.set === "add";
     menu = ""; if (on) opened.add(key); else opened.delete(key);
@@ -426,8 +438,9 @@ root.addEventListener("click", async e => {
     pmsg[bp.id] = { text: t("int.busy"), ok: true }; render();
     await boardSave(bp, cfg, secrets);
   }
-  if (bp?.settings.import && b.dataset.set === "bimport") {
-    try { const r = await bp.settings.import.run(); await boardSave(bp, { ...settings.integrations[bp.id], ...r }); }
+  if (bp && b.dataset.set === "bimport") {
+    menu = "";
+    try { const r = await invoke<Record<string, string>>("integration_import", { provider: bp.id }); await boardSave(bp, { ...settings.integrations[bp.id], ...r }); }
     catch (e) { pmsg[bp.id] = { text: String(e), ok: false }; render(); }
   }
   if (bp && b.dataset.set === "bclear") {

@@ -10,6 +10,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
+- Trello and Linear can take their credentials from Claude Code's MCP config too, like Productive. When Claude Code has them for an integration that is not set up yet, Relay says so and offers to import them; otherwise the import sits under the integration's "…" menu, next to Clear token
 - A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
 
 ### Changed
@@ -21,6 +22,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like o2o gets its site too (only a domain that is exactly its name, o2o.be)
 
 ### Fixed
+- Productive's "Import from Claude Code" finds the Productive MCP server wherever Claude Code keeps it: for the user, for the vault as a project, or in the vault's `.mcp.json` (it only looked at the first)
 - Reminders added in Relay say `Relay` as their source instead of the old name
 - Chats without a project are no longer named "Algemeen" in the terminal when the app is in another language
 
