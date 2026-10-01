@@ -1,0 +1,6 @@
+# the frontend only: the Rust side and the packages keep their own style
+dist
+src-tauri
+packages
+node_modules
+pnpm-lock.yaml

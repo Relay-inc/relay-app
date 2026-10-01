@@ -8,7 +8,10 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test": "node --test --experimental-strip-types \"packages/*/tests/*.test.ts\""
+    "test": "node --test --experimental-strip-types \"packages/*/tests/*.test.ts\"",
+    "lint": "eslint src",
+    "format": "prettier --write src index.html settings.html",
+    "format:check": "prettier --check src index.html settings.html"
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.3.5",
@@ -25,10 +28,17 @@
     "marked": "^18.0.14"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2",
+    "eslint": "^10.11.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-lit": "^2.3.1",
+    "globals": "^17.13.0",
+    "prettier": "^3.9.9",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
+    "typescript-eslint": "^8.71.0",
     "vite": "^8.0.16"
   }
 }
