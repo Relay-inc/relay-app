@@ -33,6 +33,7 @@ pub const PROVIDER: Provider = Provider {
     },
     headers: |_, s| vec![format!("Authorization: OAuth oauth_consumer_key=\"{}\", oauth_token=\"{}\"", s[0], s[1]),
         "Content-Type: application/json".into(), "Accept: application/json".into()],
+    upload: |_| false,
     ok: |_| true,
     error: |code, v| match code {
         "401" | "403" => t(TEXT, "auth"),

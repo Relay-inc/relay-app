@@ -1,5 +1,6 @@
 //! Productive on the backend: org and user id in the config, the API token in the keychain
-//! (vault-app.productive/token). GET on any path, PATCH only on a single task (a card moved to another column).
+//! (vault-app.productive/token). GET on any path; PATCH on a single task, comment or attachment; POST a comment or
+//! an attachment record. The file itself goes to Productive's S3 bucket as a form, without the token.
 
 use board_core::{path_ok, t, t_v, Provider, Text};
 use serde_json::json;
@@ -32,10 +33,16 @@ pub const PROVIDER: Provider = Provider {
     not_ready: "no_org",
     secrets: &["token"],
     url: |_, method, path, body| {
-        let one_task = path.strip_prefix("/tasks/").is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
-        (path_ok(path) && (method == "GET" || (method == "PATCH" && one_task && body.is_some())))
-            .then(|| format!("https://api.productive.io/api/v2{path}"))
+        let one = |kind: &str| path.strip_prefix(kind).is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
+        let write = body.is_some() && match method {
+            "PATCH" => one("/tasks/") || one("/comments/") || one("/attachments/"),
+            "POST" => path == "/comments" || path == "/attachments",
+            _ => false,
+        };
+        (path_ok(path) && (method == "GET" || write)).then(|| format!("https://api.productive.io/api/v2{path}"))
     },
+    upload: |url| url.strip_prefix("https://").map(|r| r.split('/').next().unwrap_or(""))
+        .is_some_and(|h| h.starts_with("productive-") && h.ends_with(".amazonaws.com") && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')),
     headers: |c, s| vec![format!("X-Auth-Token: {}", s[0]), format!("X-Organization-Id: {}", c["org"].as_str().unwrap_or("")),
         "Content-Type: application/vnd.api+json".into()],
     ok: |_| true,
@@ -66,12 +73,18 @@ mod tests {
         assert_eq!(import(json!({"mcpServers": {"productive-dev": dev, "productive": env}}), "/v", Value::Null).unwrap().0[0].1, "t");
     }
     #[test]
-    fn allows_reads_and_moving_one_task() {
+    fn allows_reads_moving_a_task_comments_and_attachments() {
         let p = &PROVIDER;
         let c = json!({ "org": "1" });
         assert!((p.url)(&c, "GET", "/tasks?filter[folder_id]=3&page[size]=200", &None).is_some());
         assert!((p.url)(&c, "PATCH", "/tasks/42", &Some(json!({}))).is_some());
         assert!((p.url)(&c, "PATCH", "/tasks", &Some(json!({}))).is_none());
+        assert!((p.url)(&c, "PATCH", "/comments/7", &Some(json!({}))).is_some() && (p.url)(&c, "PATCH", "/attachments/7", &Some(json!({}))).is_some());
+        assert!((p.url)(&c, "POST", "/comments", &Some(json!({}))).is_some() && (p.url)(&c, "POST", "/attachments", &Some(json!({}))).is_some());
+        assert!((p.url)(&c, "POST", "/comments", &None).is_none() && (p.url)(&c, "POST", "/tasks", &Some(json!({}))).is_none());
+        assert!((p.url)(&c, "PATCH", "/people/7", &Some(json!({}))).is_none() && (p.url)(&c, "DELETE", "/comments/7", &None).is_none());
+        assert!((p.upload)("https://productive-files-production.s3.eu-west-1.amazonaws.com") && (p.upload)("https://productive-files.s3.amazonaws.com/k"));
+        for bad in ["https://attacker.s3.amazonaws.com", "http://productive-files.s3.amazonaws.com", "https://evil.com/.amazonaws.com", "https://a@b.amazonaws.com", "https://amazonaws.com.evil.com"] { assert!(!(p.upload)(bad), "{bad}"); }
         assert!((p.url)(&c, "DELETE", "/tasks/42", &None).is_none());
         assert!((p.url)(&c, "GET", "/../x", &None).is_none());
         assert!((p.ready)(&c) && !(p.ready)(&json!({ "org": "" })));

@@ -20,6 +20,16 @@ export const ctxOf = (
   config: integrations?.[boardProvider.id] ?? {},
   call: (method, path, body) =>
     invoke<unknown>("integration_call", { provider: boardProvider.id, method, path, body: body ?? null }),
+  upload: async (url, fields, file) => {
+    if (file.size > 50e6) throw new Error(`${file.name}: > 50 MB`);
+    const data = await new Promise<string>((ok, no) => {
+      const r = new FileReader();
+      r.onload = () => ok(String(r.result).split(",")[1] || "");
+      r.onerror = () => no(r.error);
+      r.readAsDataURL(file);
+    });
+    return invoke<string>("integration_upload", { provider: boardProvider.id, url, fields, name: file.name, mime: file.type || "application/octet-stream", data });
+  },
 });
 /** Switched on, config complete and a token in the keychain: the board shows in the sidebar. */
 export const ready = (boardProvider: BoardProvider) =>

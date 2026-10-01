@@ -16,6 +16,13 @@ import {
   vaultProjects,
   linkedProject,
   linkBoard,
+  colOf,
+  filtered,
+  setFilter,
+  folded,
+  toggleFold,
+  pickGroup,
+  NOBODY,
 } from "../../domain/board";
 import type { CardGrab } from "./board-card";
 import "./board-column";
@@ -99,7 +106,7 @@ export class RelayBoard extends LitElement {
 
   private dropCard(drag: Drag) {
     const card = boardState(this.provider).cards.find(x => x.id === drag.id);
-    if (card && drag.overColumn && drag.overColumn !== card.column) moveCard(this.provider, card, drag.overColumn);
+    if (card && drag.overColumn && drag.overColumn !== colOf(this.provider, boardState(this.provider), card)) moveCard(this.provider, card, drag.overColumn);
   }
 
   private renderSelect(
@@ -139,6 +146,7 @@ export class RelayBoard extends LitElement {
     return html`<div class="flex items-center gap-2 mb-3.5">
       ${this.renderSelect(boardData.projects || [], boardData.project, projectEmptyLabel, projectId => pickProject(provider, projectId))}
       ${boardData.project ? this.renderSelect(boardData.boards, boardData.board, t("kb.noBoards"), boardId => pickBoard(provider, boardId)) : nothing}
+      ${boardData.board ? this.renderFilters(provider) : nothing}
       <span class="flex-1"></span
       >${this.renderLink(provider)}${boardData.busy ? html`<span class="spinner"></span>` : nothing}<button
         class="btn"
@@ -149,14 +157,30 @@ export class RelayBoard extends LitElement {
     </div>`;
   }
 
+  // the filters: text in the title or number, who it is assigned to, and how the columns are laid out
+  private renderFilters(provider: BoardProvider) {
+    const boardData = boardState(provider);
+    const { people } = filtered(boardData);
+    const groups = provider.groupings ?? [];
+    return html`<input class="field w-44" type="search" placeholder=${t("kb.search")} .value=${boardData.q}
+        @input=${(e: Event) => setFilter(provider, { q: (e.target as HTMLInputElement).value })}>
+      ${people.length ? html`<select class="field max-w-2xs" @change=${(e: Event) => setFilter(provider, { who: (e.target as HTMLSelectElement).value })}>
+        <option value="" ?selected=${!boardData.who}>${t("kb.everyone")}</option>
+        ${[...people.map(p => [p, p]), [NOBODY, t("kb.unassigned")]].map(([v, n]) => html`<option value=${v} ?selected=${v === boardData.who}>${n}</option>`)}
+      </select>` : nothing}
+      ${groups.length > 1 ? this.renderSelect(groups.map(g => ({ id: g.id, name: t(`${provider.id}.${g.label}` as never) })), boardData.group, "", g => pickGroup(provider, g)) : nothing}`;
+  }
+
   private renderColumn(column: Column, cards: Card[]) {
-    const columnCards = cards.filter(card => card.column === column.id).sort((a, b) => a.placement - b.placement);
+    const state = boardState(this.provider);
+    const columnCards = cards.filter(card => colOf(this.provider, state, card) === column.id).sort((a, b) => a.placement - b.placement);
     const hovered = !!this.drag?.moving && this.drag.overColumn === column.id;
     return html`<relay-board-column
       data-list=${column.id}
       .column=${column}
       .cards=${columnCards}
       ?over=${hovered}
+      ?folded=${folded(this.provider).has(column.id)}
     ></relay-board-column>`;
   }
 
@@ -167,11 +191,12 @@ export class RelayBoard extends LitElement {
       if (boardData.busy || boardData.err) return nothing;
       return html`<div class="text-secondary text-sm text-center">${t("kb.noCols")}</div>`;
     }
-    return html`<div class="flex gap-3 items-start overflow-x-auto pb-2" @board-card-grab=${this.onGrab}>
+    const { cards } = filtered(boardData);
+    return html`<div class="flex gap-3 items-start overflow-x-auto pb-2" @board-card-grab=${this.onGrab} @column-fold=${(e: CustomEvent<string>) => toggleFold(provider, e.detail)}>
       ${repeat(
         boardData.columns,
         column => column.id,
-        column => this.renderColumn(column, boardData.cards),
+        column => this.renderColumn(column, cards),
       )}
     </div>`;
   }

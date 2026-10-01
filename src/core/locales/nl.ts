@@ -446,6 +446,9 @@ export default {
   "kb.linkNone": "Geen",
   "kb.linkHelp": "Wie het bord opent vanuit dit vaultproject, krijgt dit bord",
   "kb.noBoards": "Geen borden",
+  "kb.search": "Kaarten zoeken",
+  "kb.everyone": "Iedereen",
+  "kb.unassigned": "Niet toegewezen",
   "kb.noCols": "Dit bord heeft geen kolommen.",
   "kb.moveFailed": "Verplaatsen mislukt: {e}",
 } satisfies Record<Key, string>;

@@ -107,9 +107,65 @@ pub fn call(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Va
     if code.starts_with('2') && (p.ok)(&v) { Ok(v) } else { Err((p.error)(code, &v)) }
 }
 
+/// A file posted as a form to a URL the provider's `upload` allows (an S3 policy: `fields` first, the file last, as S3
+/// wants it). No secrets go along. Resolves with where the file now is: the Location header, or the one in S3's XML answer.
+pub fn upload(p: &Provider, url: &str, fields: &serde_json::Map<String, Value>, name: &str, mime: &str, data: &[u8]) -> Result<String, String> {
+    // the URL and the fields come from the API's answer: a control character would start a new curl config line
+    let clean = |s: &str| !s.chars().any(char::is_control);
+    if !(p.upload)(url) || !clean(url) || !fields.iter().all(|(k, v)| clean(k) && v.as_str().map_or(true, clean)) { return Err(trc_v("err.call", p.name)); }
+    let tmp = std::env::temp_dir().join(format!("relay-upload-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())));
+    std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
+    // form-string: a value starting with @ or < stays text. The file name loses what would break curl's field syntax
+    let mut conf = format!("url = {}\n", curl_quote(url));
+    for (k, v) in fields { conf += &format!("form-string = {}\n", curl_quote(&format!("{k}={}", v.as_str().map_or_else(|| v.to_string(), str::to_string)))); }
+    let safe = |s: &str| s.chars().map(|c| if c.is_control() || "\";\\".contains(c) { '_' } else { c }).collect::<String>();
+    conf += &format!("form = {}\n", curl_quote(&format!("File=@\"{}\";type={};filename=\"{}\"", tmp.display(), safe(mime), safe(name))));
+    let out = (|| {
+        let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "120", "-K", "-", "-w", "\n%{http_code} %header{location}"])
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+        ch.stdin.take().unwrap().write_all(conf.as_bytes()).map_err(|e| e.to_string())?;
+        ch.wait_with_output().map_err(|e| e.to_string())
+    })();
+    std::fs::remove_file(&tmp).ok();
+    let o = out?;
+    if !o.status.success() { return Err(trc_v("err.down", String::from_utf8_lossy(&o.stderr).trim()).replace("{p}", p.name)); }
+    let out = String::from_utf8_lossy(&o.stdout);
+    let (body, tail) = out.rsplit_once('\n').unwrap_or(("", &out));
+    let (code, location) = tail.split_once(' ').unwrap_or((tail, ""));
+    if !(code.starts_with('2') || code.starts_with('3')) { return Err(format!("{} upload {code}: {}", p.name, body.trim().chars().take(200).collect::<String>())); }
+    let xml = body.split_once("<Location>").and_then(|(_, r)| r.split_once("</Location>")).map(|(l, _)| l.replace("&amp;", "&"));
+    Ok(if location.trim().is_empty() { xml.unwrap_or_default() } else { location.trim().to_string() })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn upload_posts_the_fields_then_the_file_and_reads_location() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", l.local_addr().unwrap());
+        let srv = std::thread::spawn(move || {
+            let (mut c, _) = l.accept().unwrap();
+            c.set_read_timeout(Some(std::time::Duration::from_millis(500))).unwrap();
+            let (mut got, mut buf) = (vec![], [0u8; 4096]);
+            while let Ok(n) = c.read(&mut buf) { if n == 0 { break; } got.extend_from_slice(&buf[..n]); if String::from_utf8_lossy(&got).contains("PNGDATA\r\n--") { break; } }
+            c.write_all(b"HTTP/1.1 204 No Content\r\nLocation: https://b.s3.amazonaws.com/up/9\r\nContent-Length: 0\r\n\r\n").unwrap();
+            String::from_utf8_lossy(&got).into_owned()
+        });
+        let mut p = integration_productive::PROVIDER;
+        p.upload = |_| true;
+        let fields: serde_json::Map<String, Value> = serde_json::from_value(json!({ "key": "up/9/x.png", "policy": "@/etc/passwd" })).unwrap();
+        let bad: serde_json::Map<String, Value> = serde_json::from_value(json!({ "key": "x\noutput = /tmp/pwned" })).unwrap();
+        assert!(upload(&p, &url, &bad, "x", "text/plain", b"x").is_err() && upload(&p, &format!("{url}\nurl = x"), &fields, "x", "text/plain", b"x").is_err());
+        let at = upload(&p, &url, &fields, "a\"b;.png", "image/png", b"PNGDATA").unwrap();
+        let req = srv.join().unwrap();
+        assert_eq!(at, "https://b.s3.amazonaws.com/up/9");
+        assert!(req.contains("name=\"policy\"\r\n\r\n@/etc/passwd\r\n"), "a value starting with @ stays text");
+        let (k, f) = (req.find("name=\"key\"").unwrap(), req.find("name=\"File\"").unwrap());
+        assert!(k < f && req.contains("filename=\"a_b_.png\"") && req.contains("Content-Type: image/png"));
+        assert!(!(integration_productive::PROVIDER.upload)(&url), "the real allowlist refuses it");
+    }
     #[test]
     fn old_productive_settings_move_to_integrations() {
         let mut v = json!({ "productive": { "org": "123", "user": "45" } });

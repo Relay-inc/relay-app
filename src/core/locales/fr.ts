@@ -450,6 +450,9 @@ export default {
   "kb.linkNone": "Aucun",
   "kb.linkHelp": "Ouvrir le tableau depuis ce projet du vault affiche ce tableau",
   "kb.noBoards": "Aucun tableau",
+  "kb.search": "Rechercher des cartes",
+  "kb.everyone": "Tout le monde",
+  "kb.unassigned": "Non assigné",
   "kb.noCols": "Ce tableau n'a pas de colonnes.",
   "kb.moveFailed": "Échec du déplacement : {e}",
 } satisfies Record<Key, string>;

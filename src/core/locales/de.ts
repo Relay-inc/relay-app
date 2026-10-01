@@ -448,6 +448,9 @@ export default {
   "kb.linkNone": "Keins",
   "kb.linkHelp": "Wird das Board aus diesem Vault-Projekt geöffnet, erscheint dieses Board",
   "kb.noBoards": "Keine Boards",
+  "kb.search": "Karten suchen",
+  "kb.everyone": "Alle",
+  "kb.unassigned": "Nicht zugewiesen",
   "kb.noCols": "Dieses Board hat keine Spalten.",
   "kb.moveFailed": "Verschieben fehlgeschlagen: {e}",
 } satisfies Record<Key, string>;
