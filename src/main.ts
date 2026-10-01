@@ -88,7 +88,8 @@ function renderAtts(id = "atts", list = attached) {
 type Item = { kind: "me" | "ai" | "tool" | "err" | "note" | "done"; text: string; id?: string; state?: "run" | "ok" | "err"; path?: string; imgs?: string[] };
 type Chat = { key: string; project: string | null; title: string; at: number; draft?: boolean; fork?: string; closed?: number; mail?: string;
   provider?: string; // its agent, set at the first message
-  fromMail?: boolean /* about a mail or has read mail */ };
+  fromMail?: boolean /* about a mail or has read mail */;
+  parent?: string /* linked under another chat (Set parent chat): shown nested below it */ };
 const store = { get: (k: string, d: any) => { try { return JSON.parse(localStorage.getItem(k) || "") ?? d; } catch { return d; } },
   set: (k: string, v: any) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } } };
 const convo: Record<string, Item[]> = {};
@@ -282,6 +283,11 @@ async function saveSettings(next: Settings) {
 const saveChats = () => store.set("chats", Object.fromEntries(Object.entries(chats).filter(([k, c]) => !c.draft || typed[k])));
 const projOf = (key: string) => chats[key]?.project ?? null;
 const label = (key: string) => shownTitle(chats[key]?.title || key);
+// every chat that hangs under `k`, however deep: a chat cannot get one of these as its parent (no cycles)
+function below(k: string): Set<string> {
+  const out = new Set<string>(), go = (x: string) => { for (const c of Object.values(chats)) if (c.parent === x && !out.has(c.key)) { out.add(c.key); go(c.key); } };
+  go(k); return out;
+}
 const chatsOf = (p: string | null) => Object.values(chats).filter(c => c.project === p && !c.draft && !c.closed).sort((a, b) => b.at - a.at);
 function newChat(p: string | null): string {
   const key = `c:${Date.now().toString(36)}`;
@@ -506,7 +512,7 @@ function renderNav() {
   const q = ($("find") as HTMLInputElement).value.toLowerCase();
   const selP = projOf(sel), T = terms();
   const x = (k: string) => `<button class="x" data-close="${esc(k)}" title="${t("nav.close")}">×</button>`;
-  const sub = (c: Chat, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}" data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(shownTitle(c.title))}</span>${subBadge(c.key)}${trailOf([c.key])}${c.draft && !typed[c.key] ? "" : x(c.key)}</div>`;
+  const sub = (c: Chat, indent = true, depth = 0) => `<div class="row conv ${indent ? "subrow" : ""} ${depth ? "kid" : ""} ${sel === c.key ? "sel" : ""} ${unseen.has(c.key) ? "new" : ""}"${depth ? ` style="--kid:${depth}"` : ""} data-k="${esc(c.key)}" data-parent="${esc(c.project ?? "")}">${glyph("chat")}<span class="nm">${esc(shownTitle(c.title))}</span>${subBadge(c.key)}${trailOf([c.key])}${c.draft && !typed[c.key] ? "" : x(c.key)}</div>`;
   // the open draft shows as "Nieuw gesprek" under its project, its title follows what is typed
   const listed = (p: string | null) => [...Object.values(chats).filter(c => c.draft && !c.closed && c.project === p && (c.key === sel || typed[c.key])), ...chatsOf(p)];
   const tsub = (tm: Term, indent = true) => `<div class="row conv ${indent ? "subrow" : ""} term ${sel === tm.key ? "sel" : ""}" data-k="${esc(tm.key)}" data-parent="${esc(tm.project ?? "")}" title="${t("nav.inTerminal")}">${glyph("term")}<span class="nm">${esc(tm.title)}</span>${subBadge(tm.key)}${tm.status === "busy" ? '<span class="spin"></span>' : tm.state === "blocked" ? '<span class="dot"></span>' : ""}${x(tm.key)}</div>`;
@@ -525,8 +531,15 @@ function renderNav() {
   const byConv = (parent: string, rows: { key: string; html: string }[]) => { const o = convOrder[parent] || [];
     return rows.map((r, i) => ({ ...r, i })).sort((a, b) => { const ia = o.indexOf(a.key), ib = o.indexOf(b.key);
       return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : a.i - b.i; }).map(r => r.html).join(""); };
+  // a chat linked under another one in the same list shows nested right below it, its own children below that
+  const nest = (rows: Chat[], indent: boolean) => {
+    const keys = new Set(rows.map(c => c.key));
+    const tree = (c: Chat, d: number, seen: Set<string>): string => sub(c, indent, d)
+      + rows.filter(x => x.parent === c.key && !seen.has(x.key)).map(x => tree(x, d + 1, new Set([...seen, x.key]))).join("");
+    return rows.filter(c => !c.parent || !keys.has(c.parent)).map(c => ({ key: c.key, html: tree(c, 0, new Set([c.key])) }));
+  };
   const general = `<div class="sec" data-drop="Algemeen">${head("Algemeen", t("general").toUpperCase(), gc.length + gt.length, "", "")}`
-    + (collapsed.Algemeen && !q ? "" : byConv("", [...gc.map(c => ({ key: c.key, html: sub(c, false) })), ...gt.map(t => ({ key: t.key, html: tsub(t, false) }))])) + `</div>`;
+    + (collapsed.Algemeen && !q ? "" : byConv("", [...nest(gc, false), ...gt.map(t => ({ key: t.key, html: tsub(t, false) }))])) + `</div>`;
 
   // an app conversation stays until the user closes it, a terminal session as long as it is open
   const open = (p: any) => T.some(t => t.project === p.name) || chatsOf(p.name).length > 0;
@@ -538,10 +551,10 @@ function renderNav() {
     return [...list].sort((a, b) => { const ia = o.indexOf(a.name), ib = o.indexOf(b.name);
       return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : byRecent(a, b); }); };
   const projRows = (list: any[]) => { let body = ""; for (const p of list) {
-      const cs = listed(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)];
+      const cs = listed(p.name), ts = T.filter(t => t.project === p.name), keys = [...cs.map(c => c.key), ...ts.map(t => t.key)], fam = nest(cs, true);
       body += `<div class="row prow ${keys.some(k => unseen.has(k)) ? "new" : ""}" data-p="${esc(p.name)}" data-ctx="${esc(p.context)}">${lead(p.name)}<span class="nm">${esc(pLabel(p.name).replace(/^\S+ (?=.)/, s => settings.projects[p.name]?.icon ? "" : s))}</span>${trailOf(keys)}<button class="add" data-add="${esc(p.name)}" title="${t("nav.newChatAbout", { name: esc(p.name) })}">+</button></div>`
-        + byConv(p.name, [...ts.map(t => ({ key: t.key, html: tsub(t) })), ...cs.slice(0, unfolded.has(p.name) ? cs.length : 5).map(c => ({ key: c.key, html: sub(c) }))])
-        + (cs.length > 5 ? `<div class="row subrow fold" data-fold="${esc(p.name)}"><span class="nm">${unfolded.has(p.name) ? t("nav.less") : t("nav.more", { n: cs.length - 5 })}</span></div>` : "");
+        + byConv(p.name, [...ts.map(t => ({ key: t.key, html: tsub(t) })), ...fam.slice(0, unfolded.has(p.name) ? fam.length : 5)])
+        + (fam.length > 5 ? `<div class="row subrow fold" data-fold="${esc(p.name)}"><span class="nm">${unfolded.has(p.name) ? t("nav.less") : t("nav.more", { n: fam.length - 5 })}</span></div>` : "");
   } return body; };
   const secs: Record<string, string> = { Algemeen: general };
   contexts().forEach((ctx, i) => {
@@ -699,10 +712,12 @@ function renderChat() {
     + (status[sel] === "busy" && !pendingList.some(r => r.project === sel) ? workingHtml(sel in outside) : "")
     + (T && T.status === "busy" ? `<div class="working"><span class="pulse"><i></i><i></i><i></i></span><span class="wt">${t("term.writing")}</span></div>` : "");
   const about = !T && !pn && !dismissed.has(sel) && status[sel] !== "busy" ? aboutProject(sel) : null;
+  const par = !T && chats[sel]?.parent ? chats[chats[sel].parent!] : undefined, up = par && !par.closed ? par : undefined;
   $("movebar").innerHTML = T ? `<span>${t("move.term", { busy: T.status === "busy" ? t("move.termBusy") : "" })}</span>`
+    : up && !about ? `<span>${t("link.childOf", { name: `<a class="lnkto" data-open-parent="${esc(up.key)}">${esc(shownTitle(up.title))}</a>` })}</span>`
     : about ? `<span>${t("move.about", { name: esc(about) })}</span><span class="sp"></span>
     <button class="btn" data-move-no="1">${t("move.no")}</button><button class="btn primary" data-move="${esc(about)}">${t("move.yes", { name: esc(about) })}</button>` : "";
-  $("movebar").style.display = T || about ? "" : "none";
+  $("movebar").style.display = T || about || up ? "" : "none";
   const busy = status[sel] === "busy";
   $("send").classList.toggle("stop", busy);
   $("send").innerHTML = icon(busy ? "stop" : "send", "i");
@@ -753,7 +768,27 @@ function openPop() {
   });
 }
 let popImg: string | undefined; // the image chosen in the open panel
+// Set parent chat: pick another chat to link this one under; its own descendants and itself are left out (no cycles),
+// chats of the same project first
+let parentFor = ""; // the chat the open Set parent chat panel is for (the right-clicked one, not necessarily the open one)
+function openParentPop(k: string) {
+  if (!chats[k]) return;
+  parentFor = k;
+  const no = below(k).add(k), proj = chats[k].project;
+  const list = Object.values(chats).filter(c => !c.closed && !c.draft && !no.has(c.key))
+    .sort((a, b) => Number(b.project === proj) - Number(a.project === proj) || b.at - a.at);
+  const items = (q: string) => list.filter(c => !q || shownTitle(c.title).toLowerCase().includes(q) || pLabel(c.project).toLowerCase().includes(q)).slice(0, 30)
+    .map(c => `<button class="lnk" data-parent-pick="${esc(c.key)}"><span class="nm">${esc(shownTitle(c.title))}</span><span class="count">${esc(pLabel(c.project))}</span></button>`).join("")
+    || `<div class="meta">${t("link.none")}</div>`;
+  $("pop").innerHTML = `<label class="plab">${t("link.title")} <span class="count">${esc(shownTitle(chats[k].title))}</span><input class="field" id="popfind" placeholder="${t("link.search")}" autocomplete="off"></label>
+    <div class="lnks">${items("")}</div><div class="acts"><button class="btn" data-pop="cancel">${t("pop.cancel")}</button></div>`;
+  $("pop").hidden = false;
+  const f = $("popfind") as HTMLInputElement; f.focus();
+  f.addEventListener("input", () => { $("pop").querySelector(".lnks")!.innerHTML = items(f.value.trim().toLowerCase()); });
+}
 async function onPop(e: MouseEvent) {
+  const pick = (e.target as HTMLElement).closest<HTMLElement>("[data-parent-pick]");
+  if (pick && chats[parentFor]) { chats[parentFor].parent = pick.dataset.parentPick; saveChats(); $("pop").hidden = true; render(); return; }
   const b = (e.target as HTMLElement).closest<HTMLElement>("[data-pop]"); if (!b) return;
   if (b.dataset.pop === "save") {
     const proj = ($("popproj") as HTMLSelectElement).value || null;
@@ -1000,7 +1035,8 @@ $("nav").addEventListener("contextmenu", e => {
   const r = el.closest<HTMLElement>(".row[data-k]"), pr = el.closest<HTMLElement>(".prow"), gh = el.closest<HTMLElement>('.grp[data-sec="Algemeen"]');
   if (r && !isView(r.dataset.k!)) {
     m.dataset.k = r.dataset.k!;
-    m.innerHTML = `<button data-ctx="assign">${t("ctx.assign")}</button><button data-ctx="close">${t("nav.close")}</button>`;
+    const k = r.dataset.k!, link = isTerm(k) ? "" : `<button data-ctx="parent">${t("link.set")}</button>${chats[k]?.parent ? `<button data-ctx="unparent">${t("link.clear")}</button>` : ""}`;
+    m.innerHTML = `<button data-ctx="assign">${t("ctx.assign")}</button>${link}<button data-ctx="close">${t("nav.close")}</button>`;
   } else if (pr || gh) {
     const p = pr ? pr.dataset.p! : null, closed = closedOf(p);
     m.dataset.k = ""; m.dataset.p = p ?? "";
@@ -1022,6 +1058,8 @@ $("ctx").addEventListener("click", async e => {
   if (b.dataset.ctx === "close") closeChat(k);
   else if (b.dataset.ctx === "reopen") reopen(b.dataset.k!);
   else if (b.dataset.ctx === "new") select(newChat(p));
+  else if (b.dataset.ctx === "parent") openParentPop(k);
+  else if (b.dataset.ctx === "unparent") { if (chats[k]) { delete chats[k].parent; saveChats(); render(); } }
   else { await select(k); openPop(); }
 });
 window.addEventListener("click", e => { if (!(e.target as HTMLElement).closest("#ctx")) $("ctx").hidden = true; });
@@ -1234,6 +1272,8 @@ listen<string>("menu", e => {
   else if (e.payload === "close-chat" && !isView(sel) && !chats[sel]?.draft) closeChat(sel);
 });
 $("movebar").addEventListener("click", e => {
+  const op = (e.target as HTMLElement).closest<HTMLElement>("[data-open-parent]");
+  if (op) { select(op.dataset.openParent!); return; }
   const b = (e.target as HTMLElement).closest<HTMLElement>("button"); if (!b) return;
   if (b.dataset.move) { setProject(sel, b.dataset.move, t("note.moved", { name: b.dataset.move })); render(); } else { dismissed.add(sel); renderChat(); }
 });

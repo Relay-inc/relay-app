@@ -198,6 +198,16 @@ section.chat{position:relative}
 .subrow{margin-left:15px;padding-left:10px;border-radius:0 calc(var(--r) - 2px) calc(var(--r) - 2px) 0;box-shadow:inset 1px 0 0 var(--separator);font-weight:400}
 .subrow.sel{box-shadow:none;border-radius:calc(var(--r) - 2px)}
 .subrow .g{width:13px;height:13px}
+/* a chat linked under another one: indented per level below its parent */
+.row.conv.kid{margin-left:calc(15px + var(--kid) * 14px)}
+.row.conv.kid:not(.subrow){margin-left:calc(var(--kid) * 14px)}
+/* Set parent chat: the list to pick from */
+.lnks{display:grid;gap:2px;max-height:260px;overflow-y:auto;margin:8px 0}
+.lnk{all:unset;display:flex;align-items:baseline;gap:8px;padding:6px 8px;border-radius:calc(var(--r) - 2px);cursor:default}
+.lnk:hover,.lnk:focus-visible{background:var(--fill)}
+.lnk .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lnkto{color:var(--accent);cursor:pointer;text-decoration:none}
+.lnkto:hover{text-decoration:underline}
 :root{--late:#FF3B30;--soon:#FF9500}
 @media (prefers-color-scheme:dark){:root{--late:#FF453A;--soon:#FF9F0A}}
 .due-late{color:var(--late)!important;font-weight:600}

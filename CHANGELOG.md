@@ -10,6 +10,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
+- Link a chat under another one: right-click it › Set parent chat… (Clear parent chat to undo). It shows nested below its parent in the sidebar, and says "Child of …" with a link to the parent
 - A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
 
 ### Changed
