@@ -23,6 +23,9 @@ importers:
       '@relay/agent-opencode':
         specifier: workspace:*
         version: link:packages/agent-opencode
+      '@relay/agent-pi':
+        specifier: workspace:*
+        version: link:packages/agent-pi
       '@relay/board-core':
         specifier: workspace:*
         version: link:packages/board-core
@@ -103,6 +106,12 @@ importers:
   packages/agent-core: {}
 
   packages/agent-opencode:
+    dependencies:
+      '@relay/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+
+  packages/agent-pi:
     dependencies:
       '@relay/agent-core':
         specifier: workspace:*
