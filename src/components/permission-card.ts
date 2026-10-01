@@ -90,7 +90,11 @@ export class PermissionCard extends LitElement {
 
   private renderQuestionCard() {
     return html`<div class=${box}>
-      <div class="text-sm text-secondary">${t("card.asks")}</div>
+      <div class="flex items-center gap-2 text-[13px] text-secondary">
+        <span class="grid place-items-center size-5.5 flex-none rounded-md bg-accent-soft text-accent-text"
+          >${icon("chat", "glyph size-3.5")}</span
+        >${t("card.asks")}
+      </div>
       ${(this.request.input.questions || []).map((question: Question, qi: number) => this.renderQuestion(question, qi))}
       <div class="flex justify-end gap-2">
         <button class="btn cursor-pointer" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
