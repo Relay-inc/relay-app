@@ -14,6 +14,7 @@ declare global {
     "open-terminal": CustomEvent<void>;
     "toggle-panel": CustomEvent<void>;
     "new-reminder": CustomEvent<void>;
+    "reload-prs": CustomEvent<void>;
   }
 }
 
@@ -43,6 +44,9 @@ export class ChatBar extends LitElement {
   @property({ type: Boolean }) noTerm = false;
   @property({ type: Boolean }) locked = false; // the terminal would resume a conversation that touched mail without the app's restrictions
   @property({ type: Boolean }) remNew = false; // the reminders view: a button opens the new-reminder form
+  @property({ type: Boolean }) prs = false; // the pull requests view: when the list arrived, and a reload button
+  @property({ type: Number }) prsAt = 0;
+  @property({ type: Boolean }) prsBusy = false;
   @property({ type: Boolean }) panelOff = false;
   // the conversation title while it is edited: a redraw must not take the text away from under the caret
   private draft: string | null = null;
@@ -87,6 +91,28 @@ export class ChatBar extends LitElement {
       ><span class="size-1.5 rounded-full ${busy ? "bg-soon" : "bg-ok"}"></span
       >${t(busy ? "bar.working" : "bar.ready")}</span
     >`;
+  }
+
+  private renderPrs() {
+    if (!this.prs) return nothing;
+    const minutes = Math.floor((Date.now() - this.prsAt) / 6e4);
+    const updated = !this.prsAt
+      ? nothing
+      : minutes < 1
+        ? t("pr.updatedNow")
+        : minutes < 60
+          ? t("pr.updatedMin", { n: minutes })
+          : t("pr.updatedHour", { n: Math.floor(minutes / 60) });
+    return html`<span class="text-xs text-tertiary mr-1">${updated}</span
+      ><button
+        class="btn-icon disabled:opacity-40 cursor-pointer"
+        ?disabled=${this.prsBusy}
+        title=${t("pr.reload")}
+        aria-label=${t("pr.reload")}
+        @click=${() => emit(this, "reload-prs")}
+      >
+        ${icon("refresh", `glyph size-4 ${this.prsBusy ? "animate-spin" : ""}`)}
+      </button>`;
   }
 
   override render() {
@@ -138,7 +164,7 @@ export class ChatBar extends LitElement {
               ${icon("add", "glyph size-3.5")}${t("rem.new")}
             </button>`
           : nothing
-      }
+      }${this.renderPrs()}
       <button
         class="btn-icon disabled:opacity-40"
         ?hidden=${this.noTerm}

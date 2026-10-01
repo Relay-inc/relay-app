@@ -7,15 +7,14 @@ import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
 import { ui } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
-import { project, projectLabel } from "../../domain/vault";
+import { project } from "../../domain/vault";
 import { selectedProject } from "../../domain/chats/state";
-import { panel, setTab, cardOf, closeDetail, openDetail, cardAct, type CardAct } from "../../domain/panel";
+import { panel, setTab, cardOf, closeDetail, openPrModal, cardAct, type CardAct } from "../../domain/panel";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
 import "./todo-list";
 import "../pull-requests/pr-row";
-import "../pull-requests/relay-pr-detail";
 import "../mail/relay-mail-detail";
 import "../notes/relay-note-detail";
 
@@ -73,7 +72,7 @@ export class RelayInspector extends LitElement {
       case "mail":
         return html`<relay-mail-detail></relay-mail-detail>`;
       default:
-        return html`<relay-pr-detail></relay-pr-detail>`;
+        return nothing;
     }
   }
 
@@ -93,9 +92,8 @@ export class RelayInspector extends LitElement {
       compact
       .pr=${pr}
       ?mine=${mine}
-      .project=${pr.project ? projectLabel(pr.project) : ""}
-      ?selected=${panel.open === key}
-      @open-pr=${() => openDetail(key)}
+      ?selected=${panel.prModal === key}
+      @open-pr=${() => openPrModal(key)}
     ></relay-pr-row>`;
   }
 

@@ -6,11 +6,12 @@ import { ctxOf, provider, type BoardProvider, type BoardRef } from "./providers"
 import { mail, type MailBody } from "./mail";
 import { panelItem, cardKey, type PanelItem } from "./keys";
 
-// The right panel's detail: a PR ("owner/repo#12"), a mail ("mail:…"), a vault note ("note:…") or a board card
-// ("card:<provider>:<id>"). While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
+// The right panel's detail: a mail ("mail:…"), a vault note ("note:…") or a board card ("card:<provider>:<id>"); a PR
+// ("owner/repo#12") opens in its own window. While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
 export const panel = {
   open: "", // the key of what is shown, "" for the tabs
   modal: "", // the card key shown in the ticket window over the board, "" for none
+  prModal: "", // the PR key shown in the pull request window, "" for none
   detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
@@ -94,6 +95,25 @@ export async function openTicket(key: string) {
   } catch (e) {
     if (!panel.detail[key]) panel.err = String(e);
   }
+  changed();
+}
+/** Show a PR in its window: what is known at once, then fresh from GitHub. */
+export async function openPrModal(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "pr") return;
+  panel.prModal = key;
+  panel.err = "";
+  changed();
+  try {
+    panel.detail[key] = await fetchDetail(key, item);
+  } catch (e) {
+    if (!panel.detail[key]) panel.err = String(e);
+  }
+  changed();
+}
+export function closePrModal() {
+  if (!panel.prModal) return;
+  panel.prModal = "";
   changed();
 }
 export function closeTicket() {

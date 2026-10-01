@@ -3,13 +3,12 @@ import { customElement } from "lit/decorators.js";
 import { th } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { projectLabel } from "../../domain/vault";
-import { panel, openDetail } from "../../domain/panel";
-import { prs, loadPrs, type PR } from "../../domain/prs";
+import { openPrModal } from "../../domain/panel";
+import { prs, type PR } from "../../domain/prs";
 import { prKey } from "../../domain/keys";
 import "./pr-row";
 
-/** The Pull requests view: both lists, with a reload button. */
+/** The Pull requests view: what waits for your review and what you opened. A row opens the PR in its window; reloading is the title bar's button. */
 @customElement("relay-prs")
 export class RelayPrs extends LitElement {
   static override styles = [
@@ -18,29 +17,28 @@ export class RelayPrs extends LitElement {
       :host {
         display: flex;
         flex-direction: column;
-        gap: 18px;
+        gap: 24px;
       }
     `,
   ];
   protected store = new StoreController(this);
 
-  private renderRow(pr: PR, mine: boolean) {
-    const key = prKey(pr.repo, pr.number);
-    return html`<relay-pr-row
-      .pr=${pr}
-      ?mine=${mine}
-      .project=${pr.project ? projectLabel(pr.project) : ""}
-      ?selected=${panel.open === key}
-      @open-pr=${() => openDetail(key)}
-    ></relay-pr-row>`;
-  }
   private renderGroup(name: unknown, list: PR[], mine: boolean) {
     const rows = list.length
-      ? list.map(pr => this.renderRow(pr, mine))
+      ? list.map(
+          pr =>
+            html`<relay-pr-row
+              .pr=${pr}
+              ?mine=${mine}
+              @open-pr=${() => openPrModal(prKey(pr.repo, pr.number))}
+            ></relay-pr-row>`,
+        )
       : html`<div class="text-secondary text-sm py-2">${th("pr.none")}</div>`;
-    return html`<section class="mb-6">
-      <h2 class="list-head">${name} <span class="font-mono tabular-nums">${list.length}</span></h2>
-      ${rows}
+    return html`<section>
+      <h2 class="flex items-baseline gap-1.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary">
+        ${name} <span class="tabular-nums">${list.length}</span>
+      </h2>
+      <div class="flex flex-col gap-0.5">${rows}</div>
     </section>`;
   }
   private renderLists() {
@@ -52,16 +50,8 @@ export class RelayPrs extends LitElement {
   }
 
   override render() {
-    const { err, busy } = prs;
-    return html`<div class="flex items-center gap-2 mb-3.5">
-        <span class="flex-1"></span>${busy ? html`<span class="spinner"></span>` : nothing}<button
-          class="btn"
-          @click=${loadPrs}
-        >
-          ${th("pr.reload")}
-        </button>
-      </div>
-      ${err ? html`<div class="err-box">${err}</div>` : nothing}${this.renderLists()}`;
+    const { err } = prs;
+    return html`${err ? html`<div class="err-box">${err}</div>` : nothing}${this.renderLists()}`;
   }
 }
 
