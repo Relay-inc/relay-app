@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./settings.css";
-import { initI18n, pt, t } from "./i18n";
+import { currentLocale, initI18n, pt, t } from "./i18n";
 import type { Key } from "./locales/en";
 import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type BoardRef } from "./providers";
 import { renderMapping, readMapping, pickVault, pickMapped, checkMapping, type VaultStatus, type VaultMap, type MapKey } from "./vault-setup";
@@ -136,15 +136,15 @@ function mailErr(e: string) {
   return k ? `${t(k)}<div class="hint">${esc(e)}</div>` : esc(e);
 }
 function mail() {
-  const c = mailEdit, tr = (a: MailAcct) => { const r = mailTest[a.email]; return r === "busy" ? '<span class="spin"></span>' : r ? `<span class="${r.ok ? "okmsg" : "errmsg"}">${r.ok ? esc(r.text) : mailErr(r.text)}</span>` : ""; };
+  const c = mailEdit, tr = (a: MailAcct) => { const r = mailTest[a.email]; return r === "busy" ? '<span class="spin"></span>' : r ? `<span class="${r.ok ? "okmsg" : "errmsg"}">${r.ok ? t("mail.testOk", { n: Number((r.text.match(/\d+/) || ["0"])[0]).toLocaleString(currentLocale()) }) : mailErr(r.text)}</span>` : ""; };
   const busy = (k: string) => mailBusy === k ? `<span class="spin"></span> ${t("mail.connecting")}` : "";
   return `<div class="apane">
       <div class="form">
         <span class="fl">${t("int.status")}</span><span class="status"><span class="sdot ${c.accounts.length ? "on" : ""}"></span>${t("mail.accounts", { n: c.accounts.length })}</span>
         <span class="fl">${t("gh.sidebar")}</span><label class="chk"><input type="checkbox" id="mailon" ${c.on ? "checked" : ""}> ${t("int.mailSidebar")}</label>
         ${c.accounts.length ? `<span class="fl">${t("mail.accountsH")}</span><div>${c.accounts.map(a => `<div class="mail-acct"><span>${esc(a.email)}</span><span class="hint">${t("mail.inKeychain", { svc: esc(a.keychain_service) })}</span>${tr(a)}<span class="sp"></span><button class="btn" data-set="mailtest" data-email="${esc(a.email)}">${t("mail.test")}</button><button class="btn" data-set="mailrm" data-email="${esc(a.email)}">${t("mail.remove")}</button></div>`).join("")}</div>
-        <label class="fl" for="mailacct">${t("mail.account")}</label><select class="field" id="mailacct"><option value="">${t("mail.default")}</option>${[...new Set([...c.accounts.map(a => a.email), ...(c.account ? [c.account] : [])])].map(n =>
-          `<option value="${esc(n)}" ${n === c.account ? "selected" : ""}>${esc(n)}</option>`).join("")}</select>` : ""}
+        ${c.accounts.length > 1 ? `<label class="fl" for="mailacct">${t("mail.account")}</label><select class="field" id="mailacct">${c.accounts.map(a =>
+          `<option value="${esc(a.email)}" ${a.email === (c.account || c.accounts[0].email) ? "selected" : ""}>${esc(a.email)}</option>`).join("")}</select>` : ""}` : ""}
         <span></span><div class="hint">${t("mail.help")}</div>
       </div>
       <div class="setrow end">${mailMsg ? `<span class="${mailOk ? "okmsg" : "errmsg"}">${mailOk ? esc(mailMsg) : mailErr(mailMsg)}</span>` : ""}<button class="btn primary" data-set="mailsave">${t("set.save")}</button></div>
