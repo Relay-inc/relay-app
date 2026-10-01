@@ -361,6 +361,20 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
     Ok(Value::Object(json.into_iter().filter(|(n, _)| names.contains(&n.as_str()))
         .filter_map(|(n, d)| Some((n, json!(relay_config::site_of(d.as_str()?)?)))).collect()))
 }
+/// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
+#[tauri::command]
+fn project_repos(state: State<App>) -> Value {
+    let v = state.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    let mut out: std::collections::BTreeMap<String, Vec<String>> = Default::default();
+    for (r, p) in repo_projects(&v) { out.entry(p).or_default().push(r); }
+    for list in out.values_mut() { list.sort(); }
+    json!(out)
+}
+/// A project's repos in the vault's .relay/config.json.
+#[tauri::command]
+fn set_project_repos(state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
+    relay_config::set_repos(&need_vault(&state)?, &project, &repos)
+}
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
 fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: String, value: String) -> Result<(), String> {
@@ -989,6 +1003,7 @@ fn repo_projects(vault: &str) -> HashMap<String, String> {
         // GitHub names are case-insensitive and the PRs are looked up lowercased: "o2o-Bicycle-leasing/x" matches too
         out.extend(r.into_iter().filter_map(|(k, v)| Some((k.to_lowercase(), v.as_str()?.to_string()))));
     }
+    out.retain(|_, p| !p.is_empty()); // "" in the config: unlinked on purpose
     out
 }
 /// repo -> note name, from the brain's index/repos.json. An entry is a checkout or a folder of checkouts,
@@ -1212,7 +1227,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

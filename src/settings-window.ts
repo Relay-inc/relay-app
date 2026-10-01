@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./settings.css";
-import { currentLocale, initI18n, pt, t, at } from "./i18n";
+import { currentLocale, initI18n, pt, t, tn, at } from "./i18n";
 import type { Key } from "./locales/en";
 import { PROVIDERS, provider, ctxOf, type BoardOpt, type BoardProvider, type BoardRef } from "./providers";
 import { agent, agentsStatus, type AgentsStatus, type AgentStatus } from "./agents";
@@ -96,40 +96,50 @@ function general() {
 }
 // the project icons live in the vault (.relay/config.json, src/project-icons.ts): every project, folded, to override
 let icons: Record<string, ProjectIcon> | null = null, iconNames: string[] = [], iconMsg = "", iconOk = false, finding = false;
+let repos: Record<string, string[]> = {};
 let iconProjects: { name: string; context?: string; summary?: string }[] = [];
 async function loadIconsPane() {
-  const [i, snap] = await Promise.all([loadIcons(), invoke<any>("snapshot").catch(() => ({ projects: [] }))]);
-  icons = i; iconProjects = snap.projects || [];
+  const [i, snap, rp] = await Promise.all([loadIcons(), invoke<any>("snapshot").catch(() => ({ projects: [] })), invoke<Record<string, string[]>>("project_repos").catch(() => ({}))]);
+  icons = i; repos = rp; iconProjects = snap.projects || [];
   iconNames = iconProjects.map(x => String(x.name)).sort((a, b) => a.localeCompare(b));
   render();
 }
 listen("icons-changed", () => { if (icons) loadIconsPane(); });
-function iconState(n: string) {
-  const i = icons?.[n];
-  if (!i) return st("off", t("pi.guess"));
-  if (i.img) return st("ok", t("pi.image"));
-  if (i.icon) return st("ok", t("pi.emoji"));
-  // fetched before (tried, on this Mac) and still a website: that site has no favicon
-  if (isSite(i.value)) return settings.favicons?.tried?.[n] === i.value ? st("off", t("pi.siteNoIcon", { site: esc(i.value) })) : st("warn", t("pi.siteSoon", { site: esc(i.value) }));
-  return st("off", t("pi.noIcon"));
-}
+// the Projects page: every project, a row folds open to its configuration. The name in Relay stays in the app's
+// settings; the icon and the repos live in the vault's .relay/config.json.
 function projects() {
-  const custom = Object.entries(settings.projects).filter(([, c]) => c.label);
-  const rows = custom.map(([n, c]) => `<div class="srow"><span class="srow-t"><b>${esc(c.label || n)}</b><span>${esc(n)}</span></span>
-    <span class="srow-x"><button class="btn ghost" data-set="clear" data-p="${esc(n)}">${t("set.reset")}</button></span></div>`).join("");
-  if (!icons) queueMicrotask(loadIconsPane);
+  if (!icons) { queueMicrotask(loadIconsPane); return sec(t("set.tab.projects"), `<div class="st"><span class="spin"></span>${t("pr.loading")}</div>`); }
   const preview = (n: string) => iconImg(icons?.[n]?.img, "") || (icons?.[n]?.icon ? `<span class="emo">${esc(icons[n].icon!)}</span>` : icon("folder"));
+  const ctx = (n: string) => iconProjects.find(p => p.name === n)?.context ?? "";
+  const title = (n: string) => { const l = settings.projects[n]?.label; return l ? `${esc(l)} <span class="opt">${esc(n)}</span>` : esc(n); };
+  const state = (n: string) => `<span class="st">${[ctx(n), repos[n]?.length ? tn("pc.repoCount", repos[n].length) : ""].filter(Boolean).map(esc).join(" · ")}</span>`;
   const body = (n: string) => { const i = icons?.[n], id = esc(n);
-    return `${field(t("pi.emoji"), `<input class="field ico" data-piemoji="${id}" value="${esc(i?.icon ?? "")}" maxlength="8" placeholder="–">`)}
-      ${field(t("pi.site"), `<input class="field" data-pisite="${id}" value="${esc(i && isSite(i.value) ? i.value : "")}" placeholder="${t("pi.sitePh")}" spellcheck="false">`, { hint: t("pi.siteHelp") })}
-      <div class="ss-foot"><label class="btn">${t("pi.upload")}<input type="file" data-pifile="${id}" accept="image/*,.ico,.svg" hidden></label>
-        <button class="btn ghost" data-set="piset" data-kind-icon="none" data-id="${id}">${t("pi.none")}</button><span class="sp"></span>
-        <button class="btn ghost" data-set="piset" data-kind-icon="reset" data-id="${id}">${t("pi.reset")}</button></div>`; };
-  return sec(t("set.custom"), rows || `<div class="sempty">${t("set.none")}</div>`, { desc: t("set.customHelp"), list: true, foot: msg ? foot(esc(msg), ok, "") : "" })
-    + sec(t("pi.title"), !icons ? `<div class="st"><span class="spin"></span>${t("pr.loading")}</div>`
-        : iconNames.map(n => foldRow("icon", n, preview(n), esc(n), iconState(n), () => body(n))).join("") || `<div class="sempty">${t("set.none")}</div>`,
-      { desc: t("pi.desc"), list: true, foot: iconMsg ? foot(esc(iconMsg), iconOk, "") : "",
-        action: icons ? `<button class="btn" data-set="pifind" title="${t("pi.findHelp")}" ${finding ? "disabled" : ""}>${finding ? `<span class="spin"></span> ${t("pi.finding")}` : t("pi.find")}</button>` : "" });
+    // one input for an emoji or a website; the buttons for an image, none and guessing again
+    const val = i?.icon ?? (i && isSite(i.value) ? i.value : "");
+    return `${field(t("pc.name"), `<input class="field" data-plabel="${id}" value="${esc(settings.projects[n]?.label ?? "")}" placeholder="${id}" spellcheck="false">`)}
+      ${field(t("pc.icon"), `<span class="iconctl"><span class="itile">${preview(n)}</span><input class="field" data-picon="${id}" value="${esc(val)}" placeholder="${t("pc.iconPh")}" spellcheck="false">
+        <label class="btn ib" title="${t("pi.upload")}">${icon("upload")}<input type="file" data-pifile="${id}" accept="image/*,.ico,.svg" hidden></label>
+        <button class="btn ib" data-set="piset" data-kind-icon="none" data-id="${id}" title="${t("pi.none")}">${icon("none")}</button>
+        <button class="btn ib" data-set="piset" data-kind-icon="reset" data-id="${id}" title="${t("pi.reset")}">${icon("refresh")}</button></span>`, { hint: iconHint(n) })}
+      ${field(t("pc.repos"), `<span class="chips">${(repos[n] ?? []).map(r => `<span class="chip">${esc(r)}<button data-set="repodel" data-id="${id}" data-repo="${esc(r)}" title="${t("ag.remove")}">×</button></span>`).join("")}
+        <input class="field" data-repoadd="${id}" placeholder="owner/repo" spellcheck="false"></span>`, { hint: t("pc.reposHelp") })}`; };
+  return sec(t("set.tab.projects"), iconNames.map(n => foldRow("proj", n, preview(n), title(n), state(n), () => body(n))).join("") || `<div class="sempty">${t("set.none")}</div>`,
+    { desc: t("pc.desc"), list: true, foot: iconMsg || msg ? foot(esc(iconMsg || msg), iconMsg ? iconOk : ok, "") : "",
+      action: `<button class="btn" data-set="pifind" title="${t("pi.findHelp")}" ${finding ? "disabled" : ""}>${finding ? `<span class="spin"></span> ${t("pi.finding")}` : t("pi.find")}</button>` });
+}
+// what the icon is now, under the icon line
+function iconHint(n: string) {
+  const i = icons?.[n];
+  if (!i) return t("pi.guess");
+  if (i.img) return t("pi.image");
+  if (i.icon) return t("pi.emoji");
+  if (isSite(i.value)) return settings.favicons?.tried?.[n] === i.value ? t("pi.siteNoIcon", { site: esc(i.value) }) : t("pi.siteSoon", { site: esc(i.value) });
+  return t("pi.noIcon");
+}
+async function setRepos(project: string, list: string[]) {
+  try { await invoke("set_project_repos", { project, repos: list }); iconMsg = ""; iconOk = true; repos = await invoke<Record<string, string[]>>("project_repos"); }
+  catch (x) { iconMsg = String(x); iconOk = false; }
+  render();
 }
 // Find icons: Claude looks up the website of every project without an icon (or set to none), its favicon follows
 async function findIcons() {
@@ -425,13 +435,20 @@ root.addEventListener("click", async e => {
   }
   if (b.dataset.set === "pifind") { await findIcons(); return; }
   if (b.dataset.set === "piset") { await iconSet(b.dataset.id!, b.dataset.kindIcon as IconKind); return; }
+  if (b.dataset.set === "repodel") { await setRepos(b.dataset.id!, (repos[b.dataset.id!] ?? []).filter(r => r !== b.dataset.repo)); return; }
   if (b.dataset.set === "clear") { const next = structuredClone(settings); delete next.projects[b.dataset.p!]; await save(next, t("set.restored")); }
 });
 // the language applies right away: saved, then this window and the main one redraw in it
 root.addEventListener("change", async e => {
   const ti = e.target as HTMLInputElement;
-  if (ti.dataset.piemoji !== undefined) { const v = ti.value.trim(); await iconSet(ti.dataset.piemoji, v ? "emoji" : "reset", v); return; }
-  if (ti.dataset.pisite !== undefined) { const v = ti.value.trim(); await iconSet(ti.dataset.pisite, v ? "site" : "reset", v); return; }
+  // one field for an emoji or a website: a dot makes it a website
+  if (ti.dataset.picon !== undefined) { const v = ti.value.trim(); await iconSet(ti.dataset.picon, !v ? "reset" : isSite(v) ? "site" : "emoji", v); return; }
+  if (ti.dataset.repoadd !== undefined) { const v = ti.value.trim(); if (v) await setRepos(ti.dataset.repoadd, [...(repos[ti.dataset.repoadd] ?? []), v]); return; }
+  if (ti.dataset.plabel !== undefined) {
+    const next = structuredClone(settings), n = ti.dataset.plabel, v = ti.value.trim();
+    if (v) next.projects[n] = { ...next.projects[n], label: v }; else delete next.projects[n];
+    await save(next, ""); return;
+  }
   if (ti.dataset.pifile !== undefined) {
     const f = ti.files?.[0]; if (!f) return;
     const u = await iconFrom(f);

@@ -67,6 +67,26 @@ fn seed(vault: &str, map: &Value) -> Value {
     })
 }
 
+// ---------- repos
+
+/// A project's GitHub repos ("owner/repo", lowercased) replace the ones it had. One that came from the brain's
+/// index/repos.json and is taken off stays in `repos` as "" (unlinked), or it would come back from the index.
+pub fn set_repos(vault: &str, project: &str, repos: &[String]) -> Result<(), String> {
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["repos"].is_object() { c["repos"] = json!({}); }
+    let indexed: Vec<String> = crate::repo_index(vault).into_iter().filter(|(_, n)| n == project).map(|(r, _)| r).collect();
+    let m = c["repos"].as_object_mut().unwrap();
+    m.retain(|_, p| p != project);
+    for r in indexed { m.insert(r, json!("")); }
+    for r in repos {
+        let r = r.trim().trim_start_matches("https://github.com/").trim_end_matches(".git").trim_end_matches('/').to_lowercase();
+        let ok = r.split('/').count() == 2 && r.split('/').all(|w| !w.is_empty() && w.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c)));
+        if !ok { return Err(format!("not owner/repo: {r}")); }
+        m.insert(r, json!(project));
+    }
+    save(vault, &c)
+}
+
 // ---------- icons
 
 /// What an `icons` value is.

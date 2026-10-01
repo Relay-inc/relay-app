@@ -152,6 +152,21 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .srow-i .emo,.arow-h .srow-i .emo{font-size:15px;line-height:1}
 .srow-i img{width:18px;height:18px;border-radius:4px}
 
+/* a project's icon on one line: its tile, emoji-or-website, and small buttons; its repos as removable chips */
+.iconctl{display:flex;align-items:center;gap:6px}
+.iconctl .field{width:170px}
+.itile{width:28px;height:28px;flex:none;display:grid;place-items:center;border:1px solid var(--s-border);border-radius:6px}
+.itile img{width:18px;height:18px;border-radius:4px}
+.itile svg{width:16px;height:16px;fill:none;stroke:var(--s-subtle);stroke-width:1.75}
+.prefs .btn.ib{width:28px;padding:0}
+.prefs .btn.ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:340px}
+.chips .field{width:150px;height:26px;font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 8px;border:1px solid var(--s-border);border-radius:999px;font:12px var(--mono);color:var(--s-muted)}
+.chip button{all:unset;width:16px;height:16px;display:grid;place-items:center;border-radius:50%;color:var(--s-subtle);cursor:default}
+.chip button:hover{background:var(--s-hover);color:var(--s-fg)}
+.arow-h .srow-t b .opt{font-weight:400;margin-left:4px}
+
 /* Mail: the account steps */
 .mstep{display:grid;gap:8px;justify-items:start}
 .mstep>b{font-weight:500}
