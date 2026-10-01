@@ -1,14 +1,13 @@
 // The inbox, fetched by the backend over IMAP (Gmail): the newest mails. A row opens the mail in the right panel,
 // and from there a button starts a conversation about it. Opening leaves a mail unread, read/unread only changes
 // on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
-import { t, currentLocale } from "./i18n";
-import { icon as glyph } from "./icons";
+import { html, nothing, type TemplateResult } from "lit";
+import { th, currentLocale } from "./i18n";
 
 export type Mail = { id: string; account: string; subject: string; date: string; unread: boolean;
   from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; attachments: boolean };
 export type MailBody = { text: string; html: string | null; attachments: { index: number; name: string; size: number; mime: string }[] };
 export type MailFilter = { q: string; state: "all" | "unread" | "read"; project: string };
-type H = { esc: (s: unknown) => string; projectOf: (m: Mail) => string | null; projectLabel: (p: string | null) => string; open: string };
 export const mailKey = (m: { account: string; id: string }) => `mail:${m.account}:${m.id}`;
 /** The account and id back out of a key (an email has no colon). */
 export const mailRef = (key: string) => { const i = key.lastIndexOf(":"); return { account: key.slice(5, i), id: key.slice(i + 1) }; };
@@ -18,58 +17,10 @@ export const sender = (m: Mail) => m.from[0]?.name || m.from[0]?.email || "";
 export const setSeen = (m: Mail, seen: boolean) => { m.unread = !seen; };
 
 // today a time, this year a day and month, before that with the year
-function when(iso: string) {
+export function when(iso: string) {
   const d = new Date(iso), now = new Date();
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
-}
-const esc_ = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-// 16px line icons in the app's glyph style, every icon button carries its label as tooltip and for VoiceOver
-const ib = (icon: string, label: string, attrs: string, cls = "btn ib", tip = label) =>
-  `<button class="${cls}" ${attrs} title="${esc_(tip)}" aria-label="${esc_(label)}">${glyph(icon)}</button>`;
-const seenBtn = (m: Mail, cls = "btn ib") => ib(unread(m) ? "read" : "unread", unread(m) ? t("mail.markRead") : t("mail.markUnread"),
-  `data-mail-seen="${unread(m) ? 1 : 0}" data-key="${esc_(mailKey(m))}"`, cls);
-
-function row(m: Mail, h: H) {
-  const e = h.esc, p = h.projectOf(m);
-  return `<div class="pr-row mail-row${unread(m) ? " unread" : ""}${h.open === mailKey(m) ? " sel" : ""}" data-mail-open="${e(mailKey(m))}">
-    <div class="pr-main"><div class="pr-t">${e(m.subject || t("mail.noSubject"))}</div>
-      <div class="pr-meta"><span>${e(sender(m))}</span>${p ? `<span>${e(h.projectLabel(p))}</span>` : ""}</div></div>
-    <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn ib mail-flip")}</div></div>`;
-}
-
-/** No account yet: what to do in three steps, and the way into the settings. The texts are the app's own. */
-export const renderMailSetup = () => `<div class="mail-setup">
-  <h2>${t("mail.setupTitle")}</h2><p>${t("mail.setupIntro")}</p>
-  <ol><li>${t("mail.setupStep1")}</li><li>${t("mail.setupStep2")}</li><li>${t("mail.setupStep3")}</li></ol>
-  <p class="mail-dim">${t("mail.setupPw")}</p>
-  <button class="btn primary" data-mail="setup">${t("mail.setupOpen")}</button></div>`;
-
-/** Search, read state and project, mounted once so typing in the search field keeps its focus. */
-export const renderMailBar = (f: MailFilter, esc: (s: unknown) => string) =>
-  `<div class="kbhead mail-bar"><input class="field" id="mailq" type="search" placeholder="${t("mail.search")}" value="${esc(f.q)}" spellcheck="false"><span id="mailtools"></span></div>`;
-
-/** What next to the search field changes with the list: the state buttons, the projects in the list, reload. */
-export function renderMailTools(list: Mail[] | null, f: MailFilter, busy: boolean, h: H): string {
-  const ps = [...new Set((list || []).map(h.projectOf).filter((p): p is string => !!p))].sort();
-  const seg = (["all", "unread", "read"] as const).map(s => `<button class="${f.state === s ? "on" : ""}" data-mail-state="${s}">${t(s === "all" ? "mail.fAll" : s === "unread" ? "mail.fUnread" : "mail.fRead")}</button>`).join("");
-  return `<span class="seg mail-seg">${seg}</span>
-    <select class="field" id="mailproj"><option value="">${t("mail.allProjects")}</option><option value="-" ${f.project === "-" ? "selected" : ""}>${t("mail.noProject")}</option>${[...new Set([...ps, ...(f.project && f.project !== "-" ? [f.project] : [])])].map(p =>
-      `<option value="${h.esc(p)}" ${f.project === p ? "selected" : ""}>${h.esc(h.projectLabel(p))}</option>`).join("")}</select>
-    <span class="sp"></span>${busy ? '<span class="spin"></span>' : ""}<button class="btn" data-mail="reload">${t("pr.reload")}</button>`;
-}
-
-/** The mails that pass the filters, under one heading with the unread count. */
-export function renderMailList(list: Mail[] | null, f: MailFilter, err: string, busy: boolean, h: H): string {
-  if (!list) return (err ? `<div class="err">${h.esc(err)}</div>` : "") + (busy ? "" : `<div class="note">${t("pr.notLoaded")}</div>`);
-  const q = f.q.trim().toLowerCase();
-  const shown = list.filter(m => (f.state === "all" || unread(m) === (f.state === "unread"))
-    && (!f.project || (f.project === "-" ? !h.projectOf(m) : h.projectOf(m) === f.project))
-    && (!q || `${m.subject} ${sender(m)} ${m.from[0]?.email ?? ""}`.toLowerCase().includes(q)));
-  const n = list.filter(unread).length;
-  return (err ? `<div class="err">${h.esc(err)}</div>` : "")
-    + `<section class="rem-grp"><h2 class="rem-h">${t("mail.inbox")}${n ? ` <span class="rem-n">${t("mail.unread", { n })}</span>` : ""}</h2>`
-    + (shown.length ? shown.map(m => row(m, h)).join("") : `<div class="pr-none">${list.length ? t("mail.noMatch") : t("mail.none")}</div>`) + `</section>`;
 }
 
 // ---------- the text of a plain-text mail: what is new on top, the earlier mails of the thread folded away below it
@@ -79,21 +30,29 @@ const ATTRIB = /(wrote|schreef|a écrit|schrieb)\s*:\s*$/i;
 // Outlook without ">": a header block that starts the earlier mail
 const OUTLOOK = /^(-{2,}\s*(Original Message|Oorspronkelijk bericht|Forwarded message|Doorgestuurd bericht)|(From|Van|De|Von)\s*:\s*\S)/i;
 const tidy = (l: string[]) => l.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-function prose(text: string, esc: (s: unknown) => string) {
-  return esc(text)
-    .replace(/(https?:\/\/[^\s<>"']+?)(?=&gt;|[\s),.]*(?:\s|$))/g, '<a href="$1">$1</a>')
-    .replace(/\[image: ([^\]]*)\]/g, '<span class="mail-dim">[$1]</span>');
+// links in the text and the "[image: …]" placeholders. A link ends before a ">" or at the end of a word, so "<https://x>" and "(see https://x)." lose their brackets
+const PROSE = /(https?:\/\/[^\s<>"']+?)(?=>|[\s),.]*(?:\s|$))|\[image: ([^\]]*)\]/g;
+function prose(text: string) {
+  const out: unknown[] = []; let at = 0;
+  for (const m of text.matchAll(PROSE)) {
+    out.push(text.slice(at, m.index));
+    out.push(m[1] ? html`<a href=${m[1]}>${m[1]}</a>` : html`<span class="mail-dim">[${m[2]}]</span>`);
+    at = m.index! + m[0].length;
+  }
+  out.push(text.slice(at));
+  return out;
 }
-/** A mail text as html: the new part, then the quoted mail as a fold whose label is its "On … wrote:" line, recursively per level. */
-export function renderBody(body: string, esc: (s: unknown) => string, depth = 0): string {
+// no whitespace inside: the text is pre-wrap
+const block = (text: string) => html`<div class="mail-body">${prose(text)}</div>`;
+/** A mail text: the new part, then the quoted mail as a fold whose label is its "On … wrote:" line, recursively per level. */
+export function renderBody(body: string, depth = 0): TemplateResult {
   const lines = body.replace(/\r/g, "").split("\n");
   let q = lines.findIndex(l => QUOTED.test(l));
   // Outlook: the earlier mail starts at its From/Van header, it is not quoted line by line
   const o = lines.findIndex((l, i) => OUTLOOK.test(l) && lines.slice(i + 1, i + 5).some(n => /^(Sent|Verzonden|Date|Datum|Envoyé|Gesendet)\s*:/i.test(n)));
-  if (q < 0 && o < 0) return `<div class="mail-body">${prose(tidy(lines), esc)}</div>`;
+  if (q < 0 && o < 0) return block(tidy(lines));
   if (q < 0 || (o >= 0 && o < q)) {
-    return `<div class="mail-body">${prose(tidy(lines.slice(0, o)), esc)}</div>`
-      + `<details class="mail-quote"><summary>${t("mail.earlier")}</summary><blockquote><div class="mail-body">${prose(tidy(lines.slice(o)), esc)}</div></blockquote></details>`;
+    return html`${block(tidy(lines.slice(0, o)))}<details class="mail-quote"><summary>${th("mail.earlier")}</summary><blockquote>${block(tidy(lines.slice(o)))}</blockquote></details>`;
   }
   // the attribution: the few non-empty lines above the first quote (a blank line may sit between), when they end in "wrote:"
   let b = q; while (b > 0 && !lines[b - 1].trim()) b--;
@@ -103,36 +62,6 @@ export function renderBody(body: string, esc: (s: unknown) => string, depth = 0)
   const inner = lines.slice(q, end).map(l => l.replace(QUOTED, "").replace(/^ /, ""));
   const head = tidy(lines.slice(0, hasLabel ? a : q)), after = tidy(lines.slice(end));
   // ponytail: nesting stops at 6 levels, deeper threads show flat inside the last fold
-  const quoted = depth < 6 ? renderBody(inner.join("\n"), esc, depth + 1) : `<div class="mail-body">${prose(tidy(inner), esc)}</div>`;
-  return (head ? `<div class="mail-body">${prose(head, esc)}</div>` : "")
-    + `<details class="mail-quote"${head ? "" : " open"}><summary>${hasLabel ? esc(label) : t("mail.earlier")}</summary><blockquote>${quoted}</blockquote></details>`
-    + (after ? `<div class="mail-body">${prose(after, esc)}</div>` : "");
-}
-
-// the escaped srcdoc per body object: a streaming conversation redraws the panel often, a big mail is escaped once
-const built = new WeakMap<MailBody, { frame?: string }>();
-const main = (b: MailBody, textView: boolean, esc: (s: unknown) => string) => { const c = built.get(b) ?? {}; built.set(b, c);
-  return b.html && !textView ? (c.frame ??= `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(b.html)}"></iframe>`) : renderBody(b.text, esc); };
-const kb = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`;
-/** The confirm bar for a link clicked inside a mail. Lives in its own element (#maillink) so the frame below is not redrawn. */
-export const renderMailLink = (url: string, esc: (s: unknown) => string) => url
-  ? `<div class="mail-link"><div class="mail-url">${esc(url)}</div><div class="mail-link-btns"><button class="btn primary" data-mail-link="open">${t("mail.linkOpen")}</button><button class="btn" data-mail-link="cancel">${t("mail.linkCancel")}</button></div></div>` : "";
-
-/** One mail in the right panel: who, when, the mail, and the ways into a conversation. Headers show at once, the body loads.
- *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
-export function renderMailDetail(m: Mail | undefined, body: MailBody | undefined, err: string, esc: (s: unknown) => string, textView = false): string {
-  // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
-  const bar = `<div class="prd-bar"><span class="prd-grp">${ib("close", t("pr.close"), "data-pr-close")}${m ? seenBtn(m) : ""}`
-    + (body?.html ? (textView ? ib("html", t("mail.showMail"), "data-mail-view") : ib("text", t("mail.showText"), "data-mail-view")) : "") + `</span>`
-    + (m ? `<span class="prd-grp end">${ib("reply", t("mail.draft"), 'data-mail-chat="draft"', "btn ib", `${t("mail.draft")}: ${t("mail.draftTitle")}`)}`
-      + `${ib("talk", t("mail.talk"), 'data-mail-chat="talk"', "btn ib primary", `${t("mail.talk")}: ${t("mail.talkTitle")}`)}</span>` : "") + `</div>`;
-  if (!m) return bar + `<div class="meta">${t("mail.gone")}</div>`;
-  const who = (l: Mail["from"]) => l.map(a => a.name ? `${esc(a.name)} <span class="count">${esc(a.email)}</span>` : esc(a.email)).join(", ");
-  const loading = `<div class="mail-load"><span class="spin"></span>${t("mail.loadingBody")}</div><div class="skel">${[92, 100, 84, 96, 60, 0, 88, 72].map(w => `<i style="width:${w}%"></i>`).join("")}</div>`;
-  const atts = body?.attachments.length ? `<div class="mail-atts">${body.attachments.map(a => `<span class="count">${esc(a.name)} (${kb(a.size)})</span>`).join("")}</div>` : "";
-  return bar + `<div id="maillink"></div><div class="prd">
-    <h2 class="prd-t">${esc(m.subject || t("mail.noSubject"))}</h2>
-    <div class="mail-hd"><div>${who(m.from)}</div><div class="count">${t("mail.to")} ${who(m.to)}</div><div class="count">${esc(new Date(m.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" }))}</div></div>`
-    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : atts + main(body, textView, esc))
-    + `</div>`;
+  const quoted = depth < 6 ? renderBody(inner.join("\n"), depth + 1) : block(tidy(inner));
+  return html`${head ? block(head) : nothing}<details class="mail-quote" ?open=${!head}><summary>${hasLabel ? label : th("mail.earlier")}</summary><blockquote>${quoted}</blockquote></details>${after ? block(after) : nothing}`;
 }

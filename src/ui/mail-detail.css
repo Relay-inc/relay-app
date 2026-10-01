@@ -1,24 +1,6 @@
-/* Mail: the PR rows, unread in bold with a dot like Mail.app */
-.mail-row{margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:var(--r);transition:background-color var(--d) var(--ease)}
-.mail-row:hover{background:var(--fill)}
-.mail-row.sel{background:color-mix(in srgb,var(--accent) 14%,transparent)}
-.mail-row .pr-t{-webkit-line-clamp:1}
-.mail-row.unread .pr-t{font-weight:600}
-.mail-row.unread .pr-t::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-right:7px;vertical-align:2px}
-/* the date, and on hover the read/unread button in its place */
-.mail-side{display:grid;justify-items:end}
-.mail-side>*{grid-area:1/1}
-.mail-flip{width:24px;height:24px;visibility:hidden}
-.mail-row:hover .mail-flip{visibility:visible}
-.mail-row:hover .mail-side .pr-meta{visibility:hidden}
-/* "more mails" under the list */
-.mail-more{display:flex;justify-content:center;padding:14px 0}
-.mail-more .btn{display:inline-flex;align-items:center;gap:8px}
-/* the filter bar */
-.mail-bar{flex-wrap:wrap}
-.mail-bar .field{height:28px;border:1px solid var(--separator);border-radius:var(--r);background:var(--bg);color:var(--label);font:13px var(--sans);padding:0 8px}
-#mailq{width:200px}
-#mailtools{display:contents}
+:host{display:block}
+/* the title keeps the panel's heading size (the original's ".ibody h2" outranked .prd-t) */
+.prd-t{font-size:13px;font-weight:600;margin:0 0 8px}
 /* the right panel: headers at once, a spinner and grey lines while the text loads */
 .mail-hd{font-size:13px;line-height:1.5;padding-bottom:10px;border-bottom:1px solid var(--separator)}
 .mail-body{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;line-height:1.5;margin-top:12px}
@@ -33,7 +15,7 @@
 .mail-load{display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:var(--secondary)}
 .skel{margin-top:12px}
 .skel i{display:block;height:10px;margin-bottom:9px;border-radius:4px;background:var(--fill);animation:skel 1.4s ease-in-out infinite}
-.skel i[style="width:0%"]{height:6px;background:none}
+.skel i.gap{height:6px;background:none}
 @keyframes skel{50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.skel i{animation:none}}
 /* the html of a mail: sandboxed frame that scrolls itself, white because mails are designed for white */
@@ -43,10 +25,3 @@
 .mail-link{margin:8px 0;padding:8px 10px;border:1px solid var(--separator);border-radius:var(--r);background:var(--fill)}
 .mail-url{font-size:12px;word-break:break-all;user-select:text}
 .mail-link-btns{display:flex;gap:8px;margin-top:8px}
-.mail-acct{display:flex;align-items:center;gap:8px;margin-bottom:6px}
-.mail-setup{max-width:540px;margin:32px auto;padding:22px 26px;border:1px solid var(--separator);border-radius:12px;background:var(--fill)}
-.mail-setup h2{font-size:16px;font-weight:600;margin:0 0 6px}
-.mail-setup p{margin:0 0 12px;font-size:13px;line-height:1.5}
-.mail-setup ol{margin:0 0 14px;padding-left:20px;font-size:13px;line-height:1.6}
-.mail-setup li{margin-bottom:6px}
-.mail-setup code{font-family:var(--mono);font-size:12px;background:var(--fill);padding:1px 5px;border-radius:4px}
