@@ -1,4 +1,4 @@
-import type { Locales } from "@vault/board-core";
+import type { Locales } from "@relay/board-core";
 
 // Linear's UI strings. The app keeps them as linear.<key> (src/i18n.ts). English is the reference: every
 // other language has exactly its keys, or tsc fails.

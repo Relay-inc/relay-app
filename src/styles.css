@@ -286,6 +286,7 @@ aside.side input{-webkit-user-select:text;user-select:text}
 /* first launch: choose the vault, over the main window */
 .onboard{position:fixed;inset:0;z-index:50;overflow:auto;background:var(--inspector);padding:28px 32px}
 .onboard .set{max-width:640px;margin:40px auto}
+.onboard .logo{display:block;height:44px;margin-bottom:16px}
 .vmap{display:grid;gap:10px}
 .vrow{display:grid;gap:4px}
 .vlabel{font-weight:500}

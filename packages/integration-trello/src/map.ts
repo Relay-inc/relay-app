@@ -1,4 +1,4 @@
-import type { BoardOpt, Card, Column, Opt } from "@vault/board-core";
+import type { BoardOpt, Card, Column, Opt } from "@relay/board-core";
 
 // Trello's answers turned into the board's shapes. No imports with side effects, so the tests
 // (tests/map.test.ts) run it in plain Node on fixture JSON.

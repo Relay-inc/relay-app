@@ -1,5 +1,5 @@
 {
-  "name": "vault",
+  "name": "relay",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -12,10 +12,10 @@
   },
   "dependencies": {
     "@tauri-apps/api": "^2",
-    "@vault/board-core": "workspace:*",
-    "@vault/integration-linear": "workspace:*",
-    "@vault/integration-productive": "workspace:*",
-    "@vault/integration-trello": "workspace:*",
+    "@relay/board-core": "workspace:*",
+    "@relay/integration-linear": "workspace:*",
+    "@relay/integration-productive": "workspace:*",
+    "@relay/integration-trello": "workspace:*",
     "marked": "^18.0.14"
   },
   "devDependencies": {

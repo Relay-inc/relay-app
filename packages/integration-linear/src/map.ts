@@ -1,4 +1,4 @@
-import type { BoardOpt, BoardRef, Card, Column, Opt } from "@vault/board-core";
+import type { BoardOpt, BoardRef, Card, Column, Opt } from "@relay/board-core";
 
 // Linear's GraphQL answers turned into the board's shapes, and the queries that ask for them. No imports
 // with side effects, so the tests (tests/map.test.ts) run it in plain Node on fixture JSON.

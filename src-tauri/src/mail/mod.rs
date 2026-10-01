@@ -352,7 +352,7 @@ fn save(dir: &Path, name: &str, data: &[u8]) -> Result<PathBuf, String> {
 /// The quarantine flag Mail sets on a download, so Gatekeeper checks the file before it opens.
 fn quarantine(p: &Path) -> Result<(), String> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
-    let ok = std::process::Command::new("/usr/bin/xattr").arg("-w").arg("com.apple.quarantine").arg(format!("0081;{now:x};Vault;")).arg(p)
+    let ok = std::process::Command::new("/usr/bin/xattr").arg("-w").arg("com.apple.quarantine").arg(format!("0081;{now:x};Relay;")).arg(p)
         .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
     if ok { Ok(()) } else { Err("Could not set the quarantine flag, the attachment was not saved".into()) }
 }
@@ -561,7 +561,7 @@ mod tests {
         let p = save(&dir, "../x", b"y").unwrap();
         assert_eq!(p.parent().unwrap(), dir);
         let q = std::process::Command::new("/usr/bin/xattr").args(["-p", "com.apple.quarantine"]).arg(&p).output().unwrap();
-        assert!(String::from_utf8_lossy(&q.stdout).starts_with("0081;") && String::from_utf8_lossy(&q.stdout).contains(";Vault;"));
+        assert!(String::from_utf8_lossy(&q.stdout).starts_with("0081;") && String::from_utf8_lossy(&q.stdout).contains(";Relay;"));
         for bad in ["run.command", "x.APP", "a.terminal", "b.webloc", "c.jar", "x.tar.pkg"] {
             assert!(save(&dir, bad, b"z").unwrap_err().contains("double-click"), "{bad}");
         }
