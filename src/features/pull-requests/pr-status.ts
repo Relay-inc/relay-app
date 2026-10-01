@@ -16,8 +16,10 @@ const REVIEW: Record<string, ["ok" | "bad" | "", Key]> = {
   APPROVED: ["ok", "rv.approved"],
   CHANGES_REQUESTED: ["bad", "rv.changes"],
 };
-const chip = (m: typeof CI, k: string | null) =>
-  k && m[k] ? html`<relay-pr-chip tone=${m[k][0]}>${th(m[k][1])}</relay-pr-chip>` : nothing;
+const chip = (labels: typeof CI, status: string | null) => {
+  const label = status ? labels[status] : undefined;
+  return label ? html`<relay-pr-chip tone=${label[0]}>${th(label[1])}</relay-pr-chip>` : nothing;
+};
 
 /** The CI and review chips of a PR, then whatever else is slotted in (the detail adds conflicts and requested reviewers). */
 @customElement("relay-pr-status")

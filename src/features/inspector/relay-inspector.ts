@@ -19,6 +19,8 @@ import "../pull-requests/relay-pr-detail";
 import "../mail/relay-mail-detail";
 import "../notes/relay-note-detail";
 
+type ProjectInfo = NonNullable<ReturnType<typeof project>>;
+
 const TABS = [
   ["open", "tab.open"],
   ["stand", "tab.stand"],
@@ -44,14 +46,19 @@ export class RelayInspector extends LitElement {
   ];
   protected store = new StoreController(this);
 
-  private detail() {
+  protected override willUpdate() {
+    this.toggleAttribute("wide", !!panel.open);
+    if (ui.tab === "prs" && !ghOn()) ui.tab = "open";
+  }
+
+  private renderDetail() {
     const key = panel.open;
     switch (panelItem(key)?.kind) {
       case "card": {
         // the card's markup comes from its provider package, which tells the panel through an event that its close button was clicked
         const card = cardOf(key);
         return card
-          ? html`<div @detail-close=${closeDetail}>${card.d.render(panel.detail[key] ?? null, panel.err)}</div>`
+          ? html`<div @detail-close=${closeDetail}>${card.detail.render(panel.detail[key] ?? null, panel.err)}</div>`
           : nothing;
       }
       case "note":
@@ -63,94 +70,119 @@ export class RelayInspector extends LitElement {
     }
   }
 
-  private heading(title: unknown, n?: number) {
+  private renderHeading(title: unknown, count?: number) {
     return html`<h2 class="text-sm font-semibold mb-2">
-      ${title}${n === undefined ? "" : html` <span class="text-secondary tabular-nums">${n}</span>`}
+      ${title}${count === undefined ? "" : html` <span class="text-secondary tabular-nums">${count}</span>`}
     </h2>`;
   }
-  private meta(text: unknown) {
+  private renderNote(text: unknown) {
     return html`<div class="text-secondary mb-3">${text}</div>`;
   }
 
-  private prRow(p: PR, mine: boolean) {
-    const key = prKey(p.repo, p.number);
+  private renderPrRow(pr: PR, mine: boolean) {
+    const key = prKey(pr.repo, pr.number);
     return html`<relay-pr-row
       compact
-      .pr=${p}
+      .pr=${pr}
       ?mine=${mine}
-      .project=${p.project ? projectLabel(p.project) : ""}
+      .project=${pr.project ? projectLabel(pr.project) : ""}
       ?selected=${panel.open === key}
       @open-pr=${() => openDetail(key)}
     ></relay-pr-row>`;
   }
 
-  private body() {
-    if (panel.open) return this.detail();
-    const P = project(selectedProject());
-    if (!P) {
-      const due = reminders().filter(r => r.days <= 0);
-      return html`${this.heading(th("insp.today"), due.length)}${
-        due.length
-          ? html`<relay-todo-list
-              .items=${due.map(r => ({
-                text: r.title,
-                project: r.project || "",
-                due: urgency(r.days),
-                when: r.days < 0 ? th("due.overdue", { n: -r.days }) : th("due.today"),
-              }))}
-            ></relay-todo-list>`
-          : this.meta(th("insp.nothingDue"))
-      }`;
+  private dueLabel(reminder: Reminder) {
+    if (reminder.days < 0) return th("due.overdue", { n: -reminder.days });
+    if (reminder.days === 0) return th("due.today");
+    return th("due.in", { n: reminder.days });
+  }
+
+  // no project selected: what is due today or overdue, across all projects
+  private renderToday() {
+    const due = reminders().filter(reminder => reminder.days <= 0);
+    const items = due.map(reminder => ({
+      text: reminder.title,
+      project: reminder.project || "",
+      due: urgency(reminder.days),
+      when: this.dueLabel(reminder),
+    }));
+    return html`${this.renderHeading(th("insp.today"), due.length)}${
+      due.length ? html`<relay-todo-list .items=${items}></relay-todo-list>` : this.renderNote(th("insp.nothingDue"))
+    }`;
+  }
+
+  private renderProjectPrs(projectName: string) {
+    if (!prs.list) return this.renderNote(th("pr.loading"));
+    const review = prs.list.review.filter(pr => pr.project === projectName);
+    const mine = prs.list.mine.filter(pr => pr.project === projectName);
+    const count = review.length + mine.length;
+    return html`${this.renderHeading(th("nav.prs"), count)}${
+      count
+        ? html`<div>${review.map(pr => this.renderPrRow(pr, false))}${mine.map(pr => this.renderPrRow(pr, true))}</div>`
+        : this.renderNote(th("pr.noneProject"))
+    }`;
+  }
+
+  private renderStand(info: ProjectInfo) {
+    return html`${this.renderHeading(th("insp.stand"))}${this.renderNote(th("insp.updated", { date: info.last }))}
+      <div class="md-panel [&_p+p]:mt-2">${md(info.stand || t("insp.noStand"))}</div>`;
+  }
+
+  private renderProjectReminders(projectName: string) {
+    const own = reminders().filter(reminder => reminder.project === projectName);
+    if (!own.length) return this.renderNote(th("insp.noRem"));
+    const items = own.map(reminder => ({
+      text: reminder.title,
+      when: this.dueLabel(reminder),
+      due: urgency(reminder.days),
+    }));
+    return html`${this.renderHeading(th("nav.reminders"))}<relay-todo-list .items=${items}></relay-todo-list>`;
+  }
+
+  private renderOpenItems(info: ProjectInfo) {
+    const openItems: string[] = info.open_items || [];
+    return html`${this.renderHeading(th("tab.open"), openItems.length)}${
+      openItems.length
+        ? html`<relay-todo-list .items=${openItems.map(text => ({ text }))}></relay-todo-list>`
+        : this.renderNote(th("insp.noOpen"))
+    }`;
+  }
+
+  private renderBody() {
+    if (panel.open) return this.renderDetail();
+    const info = project(selectedProject());
+    if (!info) return this.renderToday();
+    switch (ui.tab) {
+      case "prs":
+        return this.renderProjectPrs(info.name);
+      case "stand":
+        return this.renderStand(info);
+      case "rem":
+        return this.renderProjectReminders(info.name);
+      default:
+        return this.renderOpenItems(info);
     }
-    const rem = reminders().filter(r => r.project === P.name);
-    const when = (r: Reminder) =>
-      r.days < 0 ? th("due.overdue", { n: -r.days }) : r.days === 0 ? th("due.today") : th("due.in", { n: r.days });
-    const items: string[] = P.open_items || [];
-    if (ui.tab === "prs") {
-      if (!prs.list) return this.meta(th("pr.loading"));
-      const review = prs.list.review.filter(p => p.project === P.name),
-        mine = prs.list.mine.filter(p => p.project === P.name);
-      return html`${this.heading(th("nav.prs"), review.length + mine.length)}${
-        review.length + mine.length
-          ? html`<div>${review.map(p => this.prRow(p, false))}${mine.map(p => this.prRow(p, true))}</div>`
-          : this.meta(th("pr.noneProject"))
-      }`;
-    }
-    if (ui.tab === "stand")
-      return html`${this.heading(th("insp.stand"))}${this.meta(th("insp.updated", { date: P.last }))}
-        <div class="md-panel [&_p+p]:mt-2">${md(P.stand || t("insp.noStand"))}</div>`;
-    if (ui.tab === "rem")
-      return rem.length
-        ? html`${this.heading(th("nav.reminders"))}<relay-todo-list
-              .items=${rem.map(r => ({ text: r.title, when: when(r), due: urgency(r.days) }))}
-            ></relay-todo-list>`
-        : this.meta(th("insp.noRem"));
-    return html`${this.heading(th("tab.open"), items.length)}${items.length ? html`<relay-todo-list .items=${items.map(text => ({ text }))}></relay-todo-list>` : this.meta(th("insp.noOpen"))}`;
+  }
+
+  private renderTabs() {
+    return TABS.map(
+      ([id, key]) =>
+        html`<button class=${ui.tab === id ? "on" : ""} ?hidden=${id === "prs" && !ghOn()} @click=${() => setTab(id)}>
+          ${th(key)}
+        </button>`,
+    );
   }
 
   override render() {
-    this.toggleAttribute("wide", !!panel.open);
-    if (ui.tab === "prs" && !ghOn()) ui.tab = "open";
     // app chrome is not text: no selection in the bar and the tabs, like a native Mac app
     return html`<div class="flex flex-col flex-1 min-h-0 border-l border-separator">
       <div
         class="h-13 flex-none flex items-center gap-2.5 px-5 border-b border-separator min-w-75 select-none"
         data-tauri-drag-region
       >
-        <div class="seg select-none">
-          ${TABS.map(
-            ([id, key]) =>
-              html`<button
-                class=${ui.tab === id ? "on" : ""}
-                ?hidden=${id === "prs" && !ghOn()}
-                @click=${() => setTab(id)}
-              >
-                ${th(key)}
-              </button>`,
-          )}
-        </div>
+        <div class="seg select-none">${this.renderTabs()}</div>
       </div>
-      <div class="overflow-y-auto pt-4 px-4 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">${this.body()}</div>
+      <div class="overflow-y-auto pt-4 px-4 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">${this.renderBody()}</div>
     </div>`;
   }
 }

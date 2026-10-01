@@ -21,21 +21,22 @@ export class TodoList extends LitElement {
   ];
   @property({ attribute: false }) items: Todo[] = [];
 
+  private renderWhen(todo: Todo) {
+    if (todo.when === undefined) return nothing;
+    return html`<span class="text-secondary tabular-nums"
+      >${todo.project === undefined ? nothing : html`${todo.project} · `}<span class=${DUE[todo.due ?? ""]}
+        >${todo.when}</span
+      ></span
+    >`;
+  }
+
   override render() {
     return html`<ul class="list-none">
       ${this.items.map(
-        i =>
+        todo =>
           html`<li class="flex items-start gap-2 py-2 border-b border-separator text-sm leading-snug">
             <input class="mt-0.5 size-4 flex-none accent-accent" type="checkbox" disabled /><span
-              ><span class="line-clamp-3">${md(i.text)}</span>${
-                i.when === undefined
-                  ? nothing
-                  : html`<span class="text-secondary tabular-nums"
-                      >${i.project === undefined ? nothing : html`${i.project} · `}<span class=${DUE[i.due ?? ""]}
-                        >${i.when}</span
-                      ></span
-                    >`
-              }</span
+              ><span class="line-clamp-3">${md(todo.text)}</span>${this.renderWhen(todo)}</span
             >
           </li>`,
       )}

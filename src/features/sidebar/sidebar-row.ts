@@ -48,86 +48,106 @@ export class SidebarRow extends LitElement {
   @property({ type: Boolean }) dragging = false;
   @property() drop: "" | "before" | "after" = "";
 
-  private glyph(cls: string) {
-    return this.svg ? glyphSvg(this.svg, cls) : icon(this.icon, cls);
+  private glyph(classes: string) {
+    return this.svg ? glyphSvg(this.svg, classes) : icon(this.icon, classes);
   }
-  private btn(e: Event, name: "closechat" | "addchat") {
+  private emitFromButton(e: Event, name: "closechat" | "addchat") {
     e.stopPropagation();
     emit(this, name);
   }
 
+  // the drop line wins over the subrow's guide line, which a selected row drops
+  private get dropLineClass() {
+    if (this.drop === "before")
+      return "relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent";
+    if (this.drop === "after")
+      return "relative before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-accent";
+    if (this.indent && !this.selected) return "border-l border-separator";
+    return "";
+  }
+  private get rowClass() {
+    if (this.selected) return "bg-accent text-on-accent";
+    const subrowText = this.unseen ? "text-label" : "text-secondary";
+    return `hover:bg-fill ${this.indent ? subrowText : ""}`;
+  }
+  private get glyphColor() {
+    if (this.selected) return "text-on-accent";
+    return this.kind === "proj" ? TINT[this.tint] : "text-secondary";
+  }
+  private metaClass(meta: Meta) {
+    if (meta.kind === "badge")
+      return "min-w-4 h-4 px-1 rounded-lg bg-accent text-on-accent text-xs font-semibold grid place-items-center";
+    const due = meta.kind === "late" || meta.kind === "soon";
+    if (!due) return "tabular-nums text-secondary";
+    if (this.selected) return "tabular-nums text-on-accent font-semibold";
+    return `tabular-nums ${meta.kind === "late" ? "due-late" : "due-soon"}`;
+  }
+
+  private renderLead() {
+    const glyphClass = `glyph ${this.indent ? "size-3" : "size-4"} flex-none ${this.glyphColor}`;
+    if (this.kind !== "proj") return this.glyph(glyphClass);
+    if (isImg(this.img)) return iconImg(this.img, "size-4 flex-none object-contain rounded-xs");
+    if (this.emoji) return html`<span class="w-4 flex-none text-center text-sm leading-none">${this.emoji}</span>`;
+    return icon("folder", glyphClass);
+  }
+  private renderMeta() {
+    const meta = this.meta;
+    if (!meta) return nothing;
+    return html`<span title=${meta.title ?? ""} class=${this.metaClass(meta)}>${meta.n}</span>`;
+  }
+  private renderSubs() {
+    if (!this.subs) return nothing;
+    const colors = this.selected ? "bg-on-accent/25 text-on-accent" : "bg-fill text-secondary";
+    return html`<span
+      class="min-w-4 h-4 px-1 flex-none rounded-lg text-xs font-semibold grid place-items-center tabular-nums ${colors}"
+      title=${this.subsTitle}
+      >${this.subs}</span
+    >`;
+  }
+  private renderTrail() {
+    if (this.trail === "dot")
+      return html`<span
+        class="size-2 rounded-full group-hover:hidden ${this.selected ? "bg-on-accent" : "bg-accent"}"
+      ></span>`;
+    if (this.trail === "spin") return html`<span class="spinner group-hover:hidden"></span>`;
+    return nothing;
+  }
+  private renderClose() {
+    if (!this.closable) return nothing;
+    const color = this.selected ? "text-on-accent" : "text-secondary hover:text-label";
+    return html`<button
+      class="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default hover:bg-fill ${color}"
+      title=${t("nav.close")}
+      @click=${(e: Event) => this.emitFromButton(e, "closechat")}
+    >
+      ×
+    </button>`;
+  }
+  private renderAdd() {
+    if (!this.addTitle) return nothing;
+    const color = this.selected ? "text-on-accent" : "text-secondary hover:text-label";
+    return html`<button
+      class="hidden group-hover:block ml-1 w-5 h-4 rounded-md text-base leading-none cursor-default hover:bg-fill ${color}"
+      title=${this.addTitle}
+      @click=${(e: Event) => this.emitFromButton(e, "addchat")}
+    >
+      +
+    </button>`;
+  }
+
   override render() {
-    const sel = this.selected,
-      sub = this.indent,
-      proj = this.kind === "proj",
-      fold = this.kind === "fold";
-    // the drop line wins over the subrow's guide line, which a selected row drops
-    const shadow =
-      this.drop === "before"
-        ? "relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent"
-        : this.drop === "after"
-          ? "relative before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-accent"
-          : sub && !sel
-            ? "border-l border-separator"
-            : "";
-    const row = sel
-      ? "bg-accent text-on-accent"
-      : `hover:bg-fill ${sub ? (this.unseen ? "text-label" : "text-secondary") : ""}`;
-    const sz = sub ? "size-3" : "size-4";
-    const gl = `glyph ${sz} flex-none ${sel ? "text-on-accent" : proj ? TINT[this.tint] : "text-secondary"}`;
-    const lead = !proj
-      ? this.glyph(gl)
-      : isImg(this.img)
-        ? iconImg(this.img, "size-4 flex-none object-contain rounded-xs")
-        : this.emoji
-          ? html`<span class="w-4 flex-none text-center text-sm leading-none">${this.emoji}</span>`
-          : icon("folder", gl);
-    const m = this.meta;
+    const sub = this.indent;
+    const projectClass = this.kind === "proj" ? "mt-0.5 font-medium" : "";
+    const subClass = sub ? `ml-4 pl-2.5 ${this.selected ? "" : "rounded-l-none"}` : "";
     return html`<div
       class="group flex ${sub ? "h-6" : "h-7"} items-center gap-2 px-2 rounded-md cursor-default transition-colors duration-150 ease-out
-      ${row} ${proj ? "mt-0.5 font-medium" : ""} ${sub ? `ml-4 pl-2.5 ${sel ? "" : "rounded-l-none"}` : ""} ${shadow} ${this.dragging ? "opacity-40" : ""}"
+      ${this.rowClass} ${projectClass} ${subClass} ${this.dropLineClass} ${this.dragging ? "opacity-40" : ""}"
     >
-      ${fold ? nothing : lead}
+      ${this.kind === "fold" ? nothing : this.renderLead()}
       <span class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${this.unseen ? "font-semibold" : ""}"
         >${this.name}</span
       >
-      ${
-        m
-          ? html`<span
-              title=${m.title ?? ""}
-              class=${
-                m.kind === "badge"
-                  ? "min-w-4 h-4 px-1 rounded-lg bg-accent text-on-accent text-xs font-semibold grid place-items-center"
-                  : `tabular-nums ${m.kind === "late" || m.kind === "soon" ? (sel ? "text-on-accent font-semibold" : m.kind === "late" ? "due-late" : "due-soon") : "text-secondary"}`
-              }
-              >${m.n}</span
-            >`
-          : nothing
-      }
-      ${this.subs ? html`<span class="min-w-4 h-4 px-1 flex-none rounded-lg text-xs font-semibold grid place-items-center tabular-nums ${sel ? "bg-on-accent/25 text-on-accent" : "bg-fill text-secondary"}" title=${this.subsTitle}>${this.subs}</span>` : nothing}
-      ${this.trail === "dot" ? html`<span class="size-2 rounded-full group-hover:hidden ${sel ? "bg-on-accent" : "bg-accent"}"></span>` : this.trail === "spin" ? html`<span class="spinner group-hover:hidden"></span>` : nothing}
-      ${
-        this.closable
-          ? html`<button
-              class="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default hover:bg-fill ${sel ? "text-on-accent" : "text-secondary hover:text-label"}"
-              title=${t("nav.close")}
-              @click=${(e: Event) => this.btn(e, "closechat")}
-            >
-              ×
-            </button>`
-          : nothing
-      }
-      ${
-        this.addTitle
-          ? html`<button
-              class="hidden group-hover:block ml-1 w-5 h-4 rounded-md text-base leading-none cursor-default hover:bg-fill ${sel ? "text-on-accent" : "text-secondary hover:text-label"}"
-              title=${this.addTitle}
-              @click=${(e: Event) => this.btn(e, "addchat")}
-            >
-              +
-            </button>`
-          : nothing
-      }
+      ${this.renderMeta()}${this.renderSubs()}${this.renderTrail()}${this.renderClose()}${this.renderAdd()}
     </div>`;
   }
 }

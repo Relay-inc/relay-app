@@ -10,27 +10,28 @@ const ATTRIB = /(wrote|schreef|a écrit|schrieb)\s*:\s*$/i;
 // Outlook without ">": a header block that starts the earlier mail
 const OUTLOOK =
   /^(-{2,}\s*(Original Message|Oorspronkelijk bericht|Forwarded message|Doorgestuurd bericht)|(From|Van|De|Von)\s*:\s*\S)/i;
-const tidy = (l: string[]) =>
-  l
+const tidy = (lines: string[]) =>
+  lines
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 // links in the text and the "[image: …]" placeholders. A link ends before a ">" or at the end of a word, so "<https://x>" and "(see https://x)." lose their brackets
 const PROSE = /(https?:\/\/[^\s<>"']+?)(?=>|[\s),.]*(?:\s|$))|\[image: ([^\]]*)\]/g;
 function prose(text: string) {
-  const out: unknown[] = [];
-  let at = 0;
-  for (const m of text.matchAll(PROSE)) {
-    out.push(text.slice(at, m.index));
-    out.push(
-      m[1]
-        ? html`<a class="text-accent no-underline" href=${m[1]}>${m[1]}</a>`
-        : html`<span class="text-secondary text-xs">[${m[2]}]</span>`,
+  const parts: unknown[] = [];
+  let position = 0;
+  for (const match of text.matchAll(PROSE)) {
+    const [whole, link, imageLabel] = match;
+    parts.push(text.slice(position, match.index));
+    parts.push(
+      link
+        ? html`<a class="text-accent no-underline" href=${link}>${link}</a>`
+        : html`<span class="text-secondary text-xs">[${imageLabel}]</span>`,
     );
-    at = m.index! + m[0].length;
+    position = match.index! + whole.length;
   }
-  out.push(text.slice(at));
-  return out;
+  parts.push(text.slice(position));
+  return parts;
 }
 // no whitespace inside: the text is pre-wrap. Inside a quote the gap above is smaller
 const block = (text: string, quoted: boolean) =>
@@ -43,34 +44,54 @@ const fold = (label: unknown, quote: unknown, open = false) =>
     <blockquote class="mt-1.5 pl-3 border-l-2 border-separator text-secondary">${quote}</blockquote>
   </details>`;
 
+const firstQuotedLine = (lines: string[]) => lines.findIndex(line => QUOTED.test(line));
+// just past the last quoted line
+const quotesEnd = (lines: string[]) => lines.length - [...lines].reverse().findIndex(line => QUOTED.test(line));
+// Outlook: the earlier mail starts at its From/Van header, it is not quoted line by line
+const outlookHeaderLine = (lines: string[]) =>
+  lines.findIndex(
+    (line, i) =>
+      OUTLOOK.test(line) &&
+      lines.slice(i + 1, i + 5).some(next => /^(Sent|Verzonden|Date|Datum|Envoyé|Gesendet)\s*:/i.test(next)),
+  );
+
+// the attribution: the few non-empty lines above the first quote (a blank line may sit between), when they end in "wrote:"
+function attributionAbove(lines: string[], quoteStart: number) {
+  let end = quoteStart;
+  while (end > 0 && !lines[end - 1].trim()) end--;
+  let start = end;
+  for (let i = end - 1; i >= Math.max(0, end - 4) && lines[i].trim(); i--) start = i;
+  const label = lines.slice(start, end).join(" ").replace(/\s+/g, " ").trim();
+  return ATTRIB.test(label) ? { start, label } : null;
+}
+
+// Outlook style: what is new, then everything from the header block on as one fold
+function foldFromOutlookHeader(lines: string[], headerLine: number, nested: boolean) {
+  return html`${block(tidy(lines.slice(0, headerLine)), nested)}${fold(th("mail.earlier"), block(tidy(lines.slice(headerLine)), true))}`;
+}
+
+// ">" style: what is new, the quoted lines as a fold (their ">" taken off), and what was written below them
+function foldQuotedLines(lines: string[], quoteStart: number, depth: number) {
+  const nested = depth > 0;
+  const attribution = attributionAbove(lines, quoteStart);
+  const end = quotesEnd(lines);
+  const quotedLines = lines.slice(quoteStart, end).map(line => line.replace(QUOTED, "").replace(/^ /, ""));
+  const head = tidy(lines.slice(0, attribution ? attribution.start : quoteStart));
+  const after = tidy(lines.slice(end));
+  // ponytail: nesting stops at 6 levels, deeper threads show flat inside the last fold
+  const quote = depth < 6 ? body(quotedLines.join("\n"), depth + 1) : block(tidy(quotedLines), true);
+  return html`${head ? block(head, nested) : nothing}${fold(attribution?.label ?? th("mail.earlier"), quote, !head)}${after ? block(after, nested) : nothing}`;
+}
+
 /** A mail text: the new part, then the quoted mail as a fold whose label is its "On … wrote:" line, recursively per level. */
 function body(text: string, depth = 0): TemplateResult {
-  const lines = text.replace(/\r/g, "").split("\n"),
-    nested = depth > 0;
-  const q = lines.findIndex(l => QUOTED.test(l));
-  // Outlook: the earlier mail starts at its From/Van header, it is not quoted line by line
-  const o = lines.findIndex(
-    (l, i) =>
-      OUTLOOK.test(l) &&
-      lines.slice(i + 1, i + 5).some(n => /^(Sent|Verzonden|Date|Datum|Envoyé|Gesendet)\s*:/i.test(n)),
-  );
-  if (q < 0 && o < 0) return block(tidy(lines), nested);
-  if (q < 0 || (o >= 0 && o < q))
-    return html`${block(tidy(lines.slice(0, o)), nested)}${fold(th("mail.earlier"), block(tidy(lines.slice(o)), true))}`;
-  // the attribution: the few non-empty lines above the first quote (a blank line may sit between), when they end in "wrote:"
-  let b = q;
-  while (b > 0 && !lines[b - 1].trim()) b--;
-  let a = b;
-  for (let i = b - 1; i >= Math.max(0, b - 4) && lines[i].trim(); i--) a = i;
-  const label = lines.slice(a, b).join(" ").replace(/\s+/g, " ").trim(),
-    hasLabel = ATTRIB.test(label);
-  const end = lines.length - [...lines].reverse().findIndex(l => QUOTED.test(l)); // just past the last quoted line
-  const inner = lines.slice(q, end).map(l => l.replace(QUOTED, "").replace(/^ /, ""));
-  const head = tidy(lines.slice(0, hasLabel ? a : q)),
-    after = tidy(lines.slice(end));
-  // ponytail: nesting stops at 6 levels, deeper threads show flat inside the last fold
-  const quoted = depth < 6 ? body(inner.join("\n"), depth + 1) : block(tidy(inner), true);
-  return html`${head ? block(head, nested) : nothing}${fold(hasLabel ? label : th("mail.earlier"), quoted, !head)}${after ? block(after, nested) : nothing}`;
+  const lines = text.replace(/\r/g, "").split("\n");
+  const quoteStart = firstQuotedLine(lines);
+  const outlookStart = outlookHeaderLine(lines);
+  if (quoteStart < 0 && outlookStart < 0) return block(tidy(lines), depth > 0);
+  if (quoteStart < 0 || (outlookStart >= 0 && outlookStart < quoteStart))
+    return foldFromOutlookHeader(lines, outlookStart, depth > 0);
+  return foldQuotedLines(lines, quoteStart, depth);
 }
 
 /** The text of a plain-text mail. */

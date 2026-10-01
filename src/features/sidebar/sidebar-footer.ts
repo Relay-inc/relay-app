@@ -24,6 +24,12 @@ export class SidebarFooter extends LitElement {
   @property() tip = ""; // the usage button's tooltip
   @property() level: "" | "soon" | "late" = ""; // "" shows no dot
 
+  private get dotColor() {
+    if (this.level === "soon") return "bg-soon";
+    if (this.level === "late") return "bg-late";
+    return "bg-secondary";
+  }
+
   override render() {
     return html`<div class="flex justify-center gap-1.5 px-2.5 pt-1.5 pb-2.5 border-t border-separator">
       <button
@@ -33,7 +39,7 @@ export class SidebarFooter extends LitElement {
         @click=${() => emit(this, "usage")}
       >
         ${icon("gauge", GLYPH)}<span
-          class="absolute bottom-0.5 right-0.5 size-2 rounded-full ${this.level ? "opacity-100" : "opacity-0"} ${this.level === "soon" ? "bg-soon" : this.level === "late" ? "bg-late" : "bg-secondary"}"
+          class="absolute bottom-0.5 right-0.5 size-2 rounded-full ${this.level ? "opacity-100" : "opacity-0"} ${this.dotColor}"
         ></span>
       </button>
       <button

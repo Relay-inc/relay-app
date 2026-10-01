@@ -39,53 +39,72 @@ export class RelayMail extends LitElement {
   ];
   protected store = new StoreController(this);
 
-  private list(list: Mail[] | null) {
-    const err = mail.err,
-      errEl = err ? html`<div class="err-box">${err}</div>` : nothing;
-    if (!list)
-      return html`${errEl}${mail.busy ? nothing : html`<div class="text-secondary text-sm text-center">${th("pr.notLoaded")}</div>`}`;
-    const shown = filtered(list, mail.filter),
-      n = list.filter(unread).length;
-    return html`${errEl}
-      <section class="mb-6">
-        <h2 class="list-head">
-          ${th("mail.inbox")}${n ? html` <span class="font-mono tabular-nums">${th("mail.unread", { n })}</span>` : nothing}
-        </h2>
-        ${
-          shown.length
-            ? shown.map(m => {
-                const p = mailProject(m),
-                  key = mailKey(m);
-                return html`<relay-mail-row
-                  .mail=${m}
-                  .sender=${sender(m)}
-                  .project=${p ? projectLabel(p) : ""}
-                  ?selected=${panel.open === key}
-                  @open-mail=${() => openDetail(key)}
-                  @flip-mail=${() => mailSeen(key, unread(m))}
-                ></relay-mail-row>`;
-              })
-            : html`<div class="text-secondary text-sm py-2">${list.length ? th("mail.noMatch") : th("mail.none")}</div>`
-        }
-      </section>`;
+  private renderMailRow(item: Mail) {
+    const project = mailProject(item);
+    const key = mailKey(item);
+    return html`<relay-mail-row
+      .mail=${item}
+      .sender=${sender(item)}
+      .project=${project ? projectLabel(project) : ""}
+      ?selected=${panel.open === key}
+      @open-mail=${() => openDetail(key)}
+      @flip-mail=${() => mailSeen(key, unread(item))}
+    ></relay-mail-row>`;
+  }
+
+  private renderInbox(list: Mail[]) {
+    const shown = filtered(list, mail.filter);
+    const unreadCount = list.filter(unread).length;
+    const unreadLabel = unreadCount
+      ? html` <span class="font-mono tabular-nums">${th("mail.unread", { n: unreadCount })}</span>`
+      : nothing;
+    const emptyText = list.length ? th("mail.noMatch") : th("mail.none");
+    const rows = shown.length
+      ? shown.map(item => this.renderMailRow(item))
+      : html`<div class="text-secondary text-sm py-2">${emptyText}</div>`;
+    return html`<section class="mb-6">
+      <h2 class="list-head">${th("mail.inbox")}${unreadLabel}</h2>
+      ${rows}
+    </section>`;
+  }
+
+  private renderList(list: Mail[] | null) {
+    const error = mail.err ? html`<div class="err-box">${mail.err}</div>` : nothing;
+    if (list) return html`${error}${this.renderInbox(list)}`;
+    const notLoaded = mail.busy
+      ? nothing
+      : html`<div class="text-secondary text-sm text-center">${th("pr.notLoaded")}</div>`;
+    return html`${error}${notLoaded}`;
+  }
+
+  private renderMore() {
+    return html`<div class="flex justify-center py-3.5">
+      <button class="btn inline-flex items-center gap-2" ?disabled=${mail.more} @click=${moreMails}>
+        ${mail.more ? html`<span class="spinner"></span>` : nothing}${th("mail.more")}
+      </button>
+    </div>`;
+  }
+
+  // the projects the mails belong to, plus the one filtered on (also when no mail has it any more)
+  private projectOptions(list: Mail[] | null): [string, string][] {
+    const projects = [...new Set((list || []).map(mailProject).filter((name): name is string => !!name))].sort();
+    const selected = mail.filter.project;
+    const names = new Set(projects);
+    if (selected && selected !== "-") names.add(selected);
+    return [...names].map((name): [string, string] => [name, projectLabel(name)]);
   }
 
   override render() {
     if (!config.value.mail.accounts?.length) return html`<relay-mail-setup @setup=${openMailSetup}></relay-mail-setup>`;
-    const f = mail.filter,
-      list = mail.list;
-    const ps = [...new Set((list || []).map(mailProject).filter((p): p is string => !!p))].sort();
-    const opts = [...new Set([...ps, ...(f.project && f.project !== "-" ? [f.project] : [])])];
+    const list = mail.list;
     return html`<relay-mail-bar
-        .filter=${f}
-        .projects=${opts.map((p): [string, string] => [p, projectLabel(p)])}
+        .filter=${mail.filter}
+        .projects=${this.projectOptions(list)}
         ?busy=${mail.busy}
         @filter=${(e: CustomEvent) => setMailFilter(e.detail)}
         @reload=${loadMails}
       ></relay-mail-bar>
-      <div>
-        ${this.list(list)}${list && !mail.end ? html`<div class="flex justify-center py-3.5"><button class="btn inline-flex items-center gap-2" ?disabled=${mail.more} @click=${moreMails}>${mail.more ? html`<span class="spinner"></span>` : nothing}${th("mail.more")}</button></div>` : nothing}
-      </div>`;
+      <div>${this.renderList(list)}${list && !mail.end ? this.renderMore() : nothing}</div>`;
   }
 }
 
