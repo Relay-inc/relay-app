@@ -6,6 +6,7 @@
 //   contexts  the work-state headings that hold project tables
 //   skip      folder names project-note lookups pass over
 //   repos     GitHub "owner/repo" -> project, for the PRs per project
+//   sites     project -> its website, for its favicon ("" when none was found)
 //
 // Written once from what the app detects, the first time a vault is used; after that the file is the truth,
 // edited by hand or in Settings. snapshot.py and favicon.py read the same file.
@@ -54,6 +55,7 @@ fn seed(vault: &str, map: &Value) -> Value {
     let skip: Vec<String> = SKIP.iter().map(|s| s.to_string()).collect();
     let (projects, contexts) = abs("workState").map(|w| work_state(&w)).unwrap_or_default();
     let counts = headings(&notes, &skip);
+    let sites = guess_sites(vault, &notes, &projects);
     json!({
         "version": 1,
         "paths": map,
@@ -61,7 +63,31 @@ fn seed(vault: &str, map: &Value) -> Value {
         "contexts": contexts,
         "skip": skip,
         "repos": repos(vault, &projects),
+        "sites": sites,
     })
+}
+
+/// Each project's website, guessed from its notes by favicon.py (no AI, nothing fetched); "" when none was found.
+fn guess_sites(vault: &str, notes: &Path, projects: &[String]) -> Value {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let job = json!({"projects": projects.iter().map(|p| json!({"name": p})).collect::<Vec<_>>()});
+    let run = || -> Option<Value> {
+        let mut c = Command::new("/usr/bin/python3").arg(format!("{}/favicon.py", crate::REPO)).arg("--guess")
+            .env("VAULT", vault).env("VAULT_NOTES", notes).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+        c.stdin.take()?.write_all(job.to_string().as_bytes()).ok()?;
+        serde_json::from_slice(&c.wait_with_output().ok()?.stdout).ok()
+    };
+    run().filter(Value::is_object).unwrap_or_else(|| json!({}))
+}
+/// New guesses for projects the config has no site for yet (added to work-state later); what is there stays.
+pub fn add_sites(vault: &str, found: &Map<String, Value>) {
+    let Some(mut c) = load(vault) else { return };
+    if !c["sites"].is_object() { c["sites"] = json!({}); }
+    let sites = c["sites"].as_object_mut().unwrap();
+    let mut changed = false;
+    for (name, site) in found { if !sites.contains_key(name) { sites.insert(name.clone(), site.clone()); changed = true; } }
+    if changed { save(vault, &c).ok(); }
 }
 
 /// The candidates the notes use, most used first; all of them when the notes use none (nothing to go on).

@@ -12,6 +12,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ### Changed
 - Each vault keeps its own Relay settings in `.relay/config.json`: the folder mapping (moved out of the app's settings), the headings it uses for open items and status in its own language, its contexts, the folders to skip and which GitHub repo belongs to which project. Relay creates the file from what it detects the first time it opens a vault, so English, Dutch, French and German vaults all work
 - PRs per project now find their repos: checkouts in the usual code folders are matched to projects by name
+- Each project's website lives in `.relay/config.json` (`sites`), guessed for every project when Relay first sets up the vault; fix a wrong or missing one there and its favicon follows
 - Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like o2o gets its site too (only a domain that is exactly its name, o2o.be)
 
 ### Fixed

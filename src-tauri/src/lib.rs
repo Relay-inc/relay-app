@@ -295,9 +295,13 @@ async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, Strin
     let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
         .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
-    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried}).to_string().as_bytes()).map_err(|e| e.to_string())?;
+    // the sites in the vault's .relay/config.json win over a guess; a project without one gets its guess added there
+    let sites = relay_config::load(v).map(|c| c["sites"].clone()).filter(Value::is_object).unwrap_or_else(|| json!({}));
+    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried, "sites": sites}).to_string().as_bytes()).map_err(|e| e.to_string())?;
     let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
+    let found: Value = serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))?;
+    if let Some(f) = found.as_object() { relay_config::add_sites(v, &f.iter().map(|(n, r)| (n.clone(), r["site"].clone())).collect()); }
+    Ok(found)
 }
 
 /// The configured vault: path, mapping, found per path, ok.

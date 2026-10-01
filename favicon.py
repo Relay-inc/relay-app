@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Guess each project's website from its notes and fetch the site's favicon. No AI, stdlib only.
 
-stdin: {"projects": [{"name", "aliases"}], "tried": {name: site}}. The site is a domain named in the
-project folder that holds the project's name or an alias (resolvus.be for Resolvus), else the domain
-named most often on the project note itself (at least twice). A project whose guess equals its entry
-in "tried" is skipped, so a site without a favicon is only fetched once.
+stdin: {"projects": [{"name", "aliases"}], "tried": {name: site}, "sites": {name: site}}. A project's site comes
+from "sites" (the vault's .relay/config.json) when it is there, else it is guessed: a domain named in the project
+folder that holds the project's name or an alias (resolvus.be for Resolvus), else the domain named most often on
+the project note itself (at least twice). A project whose site equals its entry in "tried" is skipped, so a site
+without a favicon is only fetched once.
 stdout: {name: {"site": "" when no guess, "data": data url of the raw icon or null}} for the rest.
+
+`favicon.py --guess`: only the guesses, nothing fetched. stdin {"projects": [...]}, stdout {name: site}. The app
+uses it to fill "sites" when it writes a vault's .relay/config.json.
 """
 import base64
 import concurrent.futures
@@ -114,8 +118,8 @@ def favicon(site):
     return None
 
 
-def check(p, tried):
-    site = guess(p["name"], p.get("aliases") or [])
+def check(p, tried, sites):
+    site = sites[p["name"]] if p["name"] in sites else guess(p["name"], p.get("aliases") or [])
     if site == tried.get(p["name"]):
         return None
     try:
@@ -127,6 +131,9 @@ def check(p, tried):
 
 if __name__ == "__main__":
     job = json.load(sys.stdin)
+    if "--guess" in sys.argv:
+        json.dump({p["name"]: guess(p["name"], p.get("aliases") or []) for p in job["projects"]}, sys.stdout)
+        sys.exit()
     with concurrent.futures.ThreadPoolExecutor(8) as ex:
-        done = ex.map(lambda p: check(p, job.get("tried") or {}), job["projects"])
+        done = ex.map(lambda p: check(p, job.get("tried") or {}, job.get("sites") or {}), job["projects"])
     json.dump(dict(r for r in done if r), sys.stdout)
