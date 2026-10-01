@@ -14,16 +14,16 @@ export const KEYS: [MapKey, boolean, boolean][] = [
 
 /** Pick a folder and detect its mapping (stored overrides on top). Null when cancelled. */
 export async function pickVault(): Promise<VaultStatus | null> {
-  const f = await invoke<string | null>("pick_folder");
-  return f ? invoke<VaultStatus>("detect_vault", { path: f }) : null;
+  const folder = await invoke<string | null>("pick_folder");
+  return folder ? invoke<VaultStatus>("detect_vault", { path: folder }) : null;
 }
 
 /** Pick one mapped path, stored relative when it lies in the vault. Returns the new status. */
-export async function pickMapped(st: VaultStatus, key: MapKey, map: VaultMap): Promise<VaultStatus> {
-  const folder = KEYS.find(([k]) => k === key)![1];
-  const p = await invoke<string | null>("pick_path", { folder, start: st.vault });
-  if (!p) return st;
-  const rel = p.startsWith(st.vault + "/") ? p.slice(st.vault.length + 1) : p;
-  return checkMapping(st.vault, { ...map, [key]: rel });
+export async function pickMapped(status: VaultStatus, key: MapKey, map: VaultMap): Promise<VaultStatus> {
+  const folder = KEYS.find(([mapKey]) => mapKey === key)![1];
+  const picked = await invoke<string | null>("pick_path", { folder, start: status.vault });
+  if (!picked) return status;
+  const relative = picked.startsWith(status.vault + "/") ? picked.slice(status.vault.length + 1) : picked;
+  return checkMapping(status.vault, { ...map, [key]: relative });
 }
 export const checkMapping = (vault: string, map: VaultMap) => invoke<VaultStatus>("check_vault", { path: vault, map });

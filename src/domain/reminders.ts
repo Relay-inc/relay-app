@@ -34,8 +34,8 @@ export async function remAdd(text: string, date: string, project: string | null,
 }
 // a new conversation with the whole reminder in the composer, one Enter away from sending
 export async function remChat(id: string) {
-  const r = reminders().find(x => x.id === id);
-  if (!r) return;
-  await select(newChat(project(r.project) ? r.project : null));
-  setTyped(t("rem.chatText", { date: r.date, text: r.text }));
+  const reminder = reminders().find(x => x.id === id);
+  if (!reminder) return;
+  await select(newChat(project(reminder.project) ? reminder.project : null));
+  setTyped(t("rem.chatText", { date: reminder.date, text: reminder.text }));
 }

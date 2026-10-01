@@ -12,7 +12,7 @@ export type * from "@relay/agent-core";
 /** Every agent provider (packages/agent-*), in the order of the settings and the composer. A new one is one line
  * here and one in src-tauri/src/agents.rs. */
 export const AGENTS: AgentProvider[] = [claude, codex, opencode];
-export const agent = (id: string | undefined) => AGENTS.find(p => p.id === id);
+export const agent = (id: string | undefined) => AGENTS.find(x => x.id === id);
 
 /** What the backend knows about each provider: switched on, detected, capabilities, models and efforts. */
 export type AgentsStatus = { default: string; providers: AgentStatus[] };
@@ -24,19 +24,19 @@ export const agents = { status: { default: "claude", providers: [] } as AgentsSt
 /** Detection runs each CLI once: not awaited at the start. */
 export const loadAgents = () =>
   agentsStatus()
-    .then(a => {
-      agents.status = a;
+    .then(status => {
+      agents.status = status;
       agents.loaded = true;
       changed();
     })
     .catch(e => console.error(e));
-export const onAgents = () => agents.status.providers.filter(p => p.on);
-export const agentOf = (id: string) => agents.status.providers.find(p => p.id === id);
-export const chatAgent = (k: string) =>
-  isTerminal(k) ? "claude" : chat.chats[k]?.provider || agents.status.default || "claude";
+export const onAgents = () => agents.status.providers.filter(x => x.on);
+export const agentOf = (id: string) => agents.status.providers.find(x => x.id === id);
+export const chatAgent = (chatKey: string) =>
+  isTerminal(chatKey) ? "claude" : chat.chats[chatKey]?.provider || agents.status.default || "claude";
 /** The providers whose limits and tokens the usage view lists; Claude's alone until they are known. */
 export const usageAgents = () =>
-  agents.loaded ? onAgents().map(p => ({ id: p.id, limits: p.caps.limits })) : [{ id: "claude", limits: true }];
+  agents.loaded ? onAgents().map(x => ({ id: x.id, limits: x.caps.limits })) : [{ id: "claude", limits: true }];
 // the last pick per provider; Claude's under the keys from before the providers
 export const pickKey = (kind: "model" | "effort", id: string) => (id === "claude" ? kind : `${kind}.${id}`);
 // before the providers have answered, the composer offers Claude's models as it always did
@@ -57,13 +57,14 @@ const FALLBACK: Record<"model" | "effort", { id: string; label: string }[]> = {
 };
 /** The model or effort choices of the open conversation's agent, and the one picked (a stale pick reads as the default). */
 export function picks(kind: "model" | "effort") {
-  const id = chatAgent(ui.selected),
-    st = agentOf(id);
-  const list = st ? (kind === "model" ? st.models : st.efforts) : FALLBACK[kind],
-    want = ls.get(pickKey(kind, id), "");
-  return { list, value: list.some(c => c.id === want) ? want : "", key: pickKey(kind, id) };
+  const id = chatAgent(ui.selected);
+  const status = agentOf(id);
+  const own = kind === "model" ? status?.models : status?.efforts;
+  const list = status ? own! : FALLBACK[kind];
+  const wanted = ls.get(pickKey(kind, id), "");
+  return { list, value: list.some(choice => choice.id === wanted) ? wanted : "", key: pickKey(kind, id) };
 }
-export function setPick(kind: "model" | "effort", v: string) {
-  ls.set(picks(kind).key, v);
+export function setPick(kind: "model" | "effort", value: string) {
+  ls.set(picks(kind).key, value);
   changed();
 }

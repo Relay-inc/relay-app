@@ -18,17 +18,21 @@ export const panel = {
 /** The provider and card id of a card key, when that provider draws its cards in the panel. */
 export const cardOf = (key: string) => {
   const item = panelItem(key);
-  const p = item?.kind === "card" ? provider(item.provider) : undefined;
-  return item?.kind === "card" && p?.detail ? { p, d: p.detail, id: item.id } : undefined;
+  const cardProvider = item?.kind === "card" ? provider(item.provider) : undefined;
+  return item?.kind === "card" && cardProvider?.detail
+    ? { provider: cardProvider, detail: cardProvider.detail, id: item.id }
+    : undefined;
 };
 // a card opens in the right panel when its provider has one, else in the browser
-export async function openCard(p: BoardProvider, ref: BoardRef, id: string) {
-  if (p.detail) {
-    panel.cardRefs[cardKey(p.id, id)] = ref;
-    return openDetail(cardKey(p.id, id));
+export async function openCard(boardProvider: BoardProvider, ref: BoardRef, id: string) {
+  const key = cardKey(boardProvider.id, id);
+  if (boardProvider.detail) {
+    panel.cardRefs[key] = ref;
+    return openDetail(key);
   }
   try {
-    invoke("plugin:opener|open_url", { url: await p.url(ctxOf(p, config.value.integrations), ref, id) });
+    const url = await boardProvider.url(ctxOf(boardProvider, config.value.integrations), ref, id);
+    invoke("plugin:opener|open_url", { url });
   } catch (e) {
     console.error(e);
   }
@@ -38,7 +42,7 @@ function fetchDetail(key: string, item: PanelItem): Promise<unknown> {
   switch (item.kind) {
     case "card": {
       const card = cardOf(key)!;
-      return card.d.fetch(ctxOf(card.p, config.value.integrations), panel.cardRefs[key], card.id);
+      return card.detail.fetch(ctxOf(card.provider, config.value.integrations), panel.cardRefs[key], card.id);
     }
     case "mail":
       return invoke<MailBody>("mail_read", { account: item.account, id: item.id });
@@ -56,7 +60,7 @@ export async function openDetail(key: string) {
   panel.err = "";
   mail.link = "";
   const card = cardOf(key);
-  if (card) panel.detail[key] ??= card.d.cached(card.id);
+  if (card) panel.detail[key] ??= card.detail.cached(card.id);
   ui.panelHidden = false;
   ls.set("noinsp", false);
   changed();

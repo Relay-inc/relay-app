@@ -10,41 +10,41 @@ export function changed() {
   queued = true;
   queueMicrotask(() => {
     queued = false;
-    listeners.forEach(f => f());
+    listeners.forEach(listener => listener());
   });
 }
 
 /** Redraws its host whenever the store changed: `private store = new StoreController(this);` in a container. */
 export class StoreController implements ReactiveController {
-  private f = () => this.host.requestUpdate();
+  private redraw = () => this.host.requestUpdate();
   constructor(private host: ReactiveControllerHost) {
     host.addController(this);
   }
   hostConnected() {
-    listeners.add(this.f);
+    listeners.add(this.redraw);
   }
   hostDisconnected() {
-    listeners.delete(this.f);
+    listeners.delete(this.redraw);
   }
 }
 
 /** Requests from the logic to the views that only the DOM can do: focus the composer, scroll the conversation. */
 export type UiRequest = "focus-composer" | "scroll-bottom" | "scroll-top";
 export const ui = new EventTarget();
-export const request = (r: UiRequest) => ui.dispatchEvent(new Event(r));
+export const request = (what: UiRequest) => ui.dispatchEvent(new Event(what));
 
 /** localStorage as JSON, quiet when storage is unavailable. */
 export const ls = {
-  get: <T>(k: string, d: T): T => {
+  get: <T>(key: string, fallback: T): T => {
     try {
-      return JSON.parse(localStorage.getItem(k) || "") ?? d;
+      return JSON.parse(localStorage.getItem(key) || "") ?? fallback;
     } catch {
-      return d;
+      return fallback;
     }
   },
-  set: (k: string, v: unknown) => {
+  set: (key: string, value: unknown) => {
     try {
-      localStorage.setItem(k, JSON.stringify(v));
+      localStorage.setItem(key, JSON.stringify(value));
     } catch {
       /* storage unavailable */
     }

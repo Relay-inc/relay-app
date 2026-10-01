@@ -12,29 +12,31 @@ export const loadIcons = () =>
 export const setIcon = (project: string, kind: IconKind, value = "") =>
   invoke("set_project_icon", { project, kind, value });
 /** A website value: the favicon run fetches it and replaces it with the file. */
-export const isSite = (v: string) => v.includes(".") && !/\s/.test(v) && !v.startsWith("icons/");
+export const isSite = (value: string) => value.includes(".") && !/\s/.test(value) && !value.startsWith("icons/");
 
-const readUrl = (f: Blob) =>
-  new Promise<string>((ok, no) => {
-    const r = new FileReader();
-    r.onload = () => ok(String(r.result));
-    r.onerror = () => no(r.error);
-    r.readAsDataURL(f);
+const readUrl = (file: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
   });
+const ICON_SIZE = 64;
 /** An image file (png, jpg, ico, svg, ...) drawn centered on 64 px, as a png data url. */
-export async function iconFrom(f: Blob): Promise<string | null> {
+export async function iconFrom(file: Blob): Promise<string | null> {
   const img = new Image();
-  img.src = await readUrl(f);
+  img.src = await readUrl(file);
   try {
     await img.decode();
   } catch {
     return null;
   }
-  const n = Math.max(img.naturalWidth, img.naturalHeight) || 64,
-    w = (img.naturalWidth * 64) / n || 64,
-    h = (img.naturalHeight * 64) / n || 64;
-  const cv = document.createElement("canvas");
-  cv.width = cv.height = 64;
-  cv.getContext("2d")!.drawImage(img, (64 - w) / 2, (64 - h) / 2, w, h);
-  return cv.toDataURL("image/png");
+  const longest = Math.max(img.naturalWidth, img.naturalHeight) || ICON_SIZE;
+  const width = (img.naturalWidth * ICON_SIZE) / longest || ICON_SIZE;
+  const height = (img.naturalHeight * ICON_SIZE) / longest || ICON_SIZE;
+  const canvas = document.createElement("canvas");
+  canvas.width = ICON_SIZE;
+  canvas.height = ICON_SIZE;
+  canvas.getContext("2d")!.drawImage(img, (ICON_SIZE - width) / 2, (ICON_SIZE - height) / 2, width, height);
+  return canvas.toDataURL("image/png");
 }

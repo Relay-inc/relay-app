@@ -38,33 +38,35 @@ export const vault = {
   icons: {} as Record<string, ProjectIcon>,
 };
 
-export const project = (n: string | null) => (n ? vault.snap.projects.find(p => p.name === n) : undefined);
+export const project = (name: string | null) => (name ? vault.snap.projects.find(x => x.name === name) : undefined);
 // how a project is shown: its own icon and name from the settings, else the note name
-export const projectLabel = (n: string | null) => {
-  if (!n) return t("general");
-  const c = config.value.projects[n] || {},
-    e = vault.icons[n]?.icon;
-  return `${e ? e + " " : ""}${c.label || n}`;
+export const projectLabel = (name: string | null) => {
+  if (!name) return t("general");
+  const settings = config.value.projects[name] || {};
+  const emoji = vault.icons[name]?.icon;
+  return `${emoji ? emoji + " " : ""}${settings.label || name}`;
 };
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>
   vault.snap.projects
-    .map(p => ({ name: p.name, label: projectLabel(p.name) }))
+    .map(x => ({ name: x.name, label: projectLabel(x.name) }))
     .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, locale)) as {
     name: string;
     label: string;
   }[];
 // contexts come from the vault index, in its order
-export const contexts = (): string[] => [...new Set<string>(vault.snap.projects.map(p => p.context))];
+export const contexts = (): string[] => [...new Set<string>(vault.snap.projects.map(x => x.context))];
 
 // ---------- which project a text is about: names plus aliases from the note frontmatter
-const reEsc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const namesText = (name: string, text: string) =>
+  new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(name)}([^\\p{L}\\p{N}]|$)`, "iu").test(text);
 export function findProjects(text: string): string[] {
   const hits = new Set<string>();
-  for (const p of vault.snap.projects)
-    for (const n of [p.name, ...(p.aliases || [])]) {
-      if (n.length < 3) continue;
-      if (new RegExp(`(^|[^\\p{L}\\p{N}])${reEsc(n)}([^\\p{L}\\p{N}]|$)`, "iu").test(text)) hits.add(p.name);
+  for (const candidate of vault.snap.projects)
+    for (const name of [candidate.name, ...(candidate.aliases || [])]) {
+      if (name.length < 3) continue;
+      if (namesText(name, text)) hits.add(candidate.name);
     }
   return [...hits];
 }
@@ -85,35 +87,41 @@ export async function loadSnapshot() {
 // notes (a website set as the icon wins) and fetches its icon; the icon goes into the vault as a file, a project
 // without a site gets "" (none, not guessed again). `tried` (this Mac) keeps a site that had no favicon from being
 // fetched again and again.
-let favBusy = false,
-  favAgain = false;
+let favBusy = false;
+let favAgain = false;
+// a project without an icon entry, or whose site was not tried yet (or changed since)
+const needsFavicon = (candidate: Project, tried: Record<string, string> | undefined) => {
+  const icon = vault.icons[candidate.name];
+  return !icon || (isSite(icon.value) && tried?.[candidate.name] !== icon.value);
+};
+type Found = Record<string, { site: string; data: string | null }>;
+// store what favicon.py found: an icon file per project, "none" for a project without one, and the sites tried
+async function storeFound(found: Found, tried: Record<string, string>) {
+  for (const [name, result] of Object.entries(found)) {
+    tried[name] = result.site;
+    const img = result.data ? await iconFrom(await (await fetch(result.data)).blob()) : null;
+    if (img) await setIcon(name, "img", img);
+    else if (!(name in vault.icons)) await setIcon(name, "none");
+  }
+}
 export async function checkFavicons() {
-  const f = config.value.favicons;
+  const favicons = config.value.favicons;
   // a change while a run is busy (Find icons during the first run) is not lost: one more run right after
   if (favBusy) {
     favAgain = true;
     return;
   }
-  if (!f?.on || !vault.snap?.projects) return;
-  const todo = vault.snap.projects.filter(
-    (p: Project) =>
-      !(p.name in vault.icons) ||
-      (isSite(vault.icons[p.name].value) && f.tried?.[p.name] !== vault.icons[p.name].value),
-  );
+  if (!favicons?.on || !vault.snap?.projects) return;
+  const todo = vault.snap.projects.filter((candidate: Project) => needsFavicon(candidate, favicons.tried));
   if (!todo.length) return;
   favBusy = true;
   try {
-    const found: Record<string, { site: string; data: string | null }> = await invoke("favicons", {
-      projects: todo.map(p => ({ name: p.name, aliases: p.aliases || [] })),
+    const found: Found = await invoke("favicons", {
+      projects: todo.map(x => ({ name: x.name, aliases: x.aliases || [] })),
     });
-    const tried = { ...f.tried };
-    for (const [n, r] of Object.entries(found)) {
-      tried[n] = r.site;
-      const img = r.data ? await iconFrom(await (await fetch(r.data)).blob()) : null;
-      if (img) await setIcon(n, "img", img);
-      else if (!(n in vault.icons)) await setIcon(n, "none");
-    }
-    await saveSettings({ ...config.value, favicons: { ...f, tried } });
+    const tried = { ...favicons.tried };
+    await storeFound(found, tried);
+    await saveSettings({ ...config.value, favicons: { ...favicons, tried } });
   } catch (e) {
     console.error(e);
   }

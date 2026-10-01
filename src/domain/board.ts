@@ -37,160 +37,177 @@ export const boards = {
   states: new Map<string, Board>(), // per provider: what it shows, kept while switching views
 };
 export const checkBoards = async () => {
-  boards.ready = (await Promise.all(PROVIDERS.map(async p => ((await providerReady(p)) ? p.id : "")))).filter(Boolean);
+  const ids = await Promise.all(PROVIDERS.map(async x => ((await providerReady(x)) ? x.id : "")));
+  boards.ready = ids.filter(Boolean);
 };
-export const readyBoards = () => PROVIDERS.filter(p => boards.ready.includes(p.id));
+export const readyBoards = () => PROVIDERS.filter(x => boards.ready.includes(x.id));
 
-const lsGet = (k: string) => localStorage.getItem(k) || "";
-const lsSet = (k: string, v: string) => {
+const lsGet = (key: string) => localStorage.getItem(key) || "";
+const lsSet = (key: string, value: string) => {
   try {
-    localStorage.setItem(k, v);
+    localStorage.setItem(key, value);
   } catch {
     /* storage unavailable */
   }
 };
 // the Productive keys of before the providers, so the board opens where it was
-const lsKey = (p: BoardProvider) => (p.id === "productive" ? "pv" : p.id);
-const ctx = (p: BoardProvider) => ctxOf(p, config.value.integrations);
-export const refOf = (p: BoardProvider, s: Board): BoardRef => ({ provider: p.id, project: s.project, board: s.board });
+const lsKey = (provider: BoardProvider) => (provider.id === "productive" ? "pv" : provider.id);
+const ctx = (provider: BoardProvider) => ctxOf(provider, config.value.integrations);
+export const refOf = (provider: BoardProvider, state: Board): BoardRef => ({
+  provider: provider.id,
+  project: state.project,
+  board: state.board,
+});
 
 /** new credentials or a new language: start over */
 export function resetBoard() {
   boards.states.clear();
-  PROVIDERS.forEach(p => p.reset?.());
+  PROVIDERS.forEach(provider => provider.reset?.());
   changed();
 }
 /** The provider's board, from what is known right away. */
-export function boardState(p: BoardProvider): Board {
-  if (!boards.states.has(p.id))
-    boards.states.set(p.id, {
+export function boardState(provider: BoardProvider): Board {
+  if (!boards.states.has(provider.id))
+    boards.states.set(provider.id, {
       projects: null,
       boards: [],
       columns: [],
       cards: [],
-      project: lsGet(`${lsKey(p)}Project`),
-      board: lsGet(`${lsKey(p)}Board`),
+      project: lsGet(`${lsKey(provider)}Project`),
+      board: lsGet(`${lsKey(provider)}Board`),
       err: "",
       busy: false,
       gen: 0,
     });
-  return boards.states.get(p.id)!;
+  return boards.states.get(provider.id)!;
 }
 
 // one load at a time: a newer choice makes the answer of an older one irrelevant
-async function run(s: Board, fn: (live: () => boolean) => Promise<void>) {
-  const g = ++s.gen,
-    live = () => g === s.gen;
-  s.busy = true;
-  s.err = "";
+async function run(state: Board, load: (live: () => boolean) => Promise<void>) {
+  const generation = ++state.gen;
+  const live = () => generation === state.gen;
+  state.busy = true;
+  state.err = "";
   changed();
   try {
-    await fn(live);
-  } catch (x) {
-    if (live()) s.err = String(x);
+    await load(live);
+  } catch (e) {
+    if (live()) state.err = String(e);
   }
   if (live()) {
-    s.busy = false;
+    state.busy = false;
     changed();
   }
 }
-async function loadCards(p: BoardProvider, s: Board, live: () => boolean, b: string) {
-  const r = { ...refOf(p, s), board: b };
-  const [cols, cs] = b ? await Promise.all([p.columns(ctx(p), r), p.cards(ctx(p), r)]) : [[], []];
+async function loadCards(provider: BoardProvider, state: Board, live: () => boolean, boardId: string) {
+  const ref = { ...refOf(provider, state), board: boardId };
+  const [columns, cards] = boardId
+    ? await Promise.all([provider.columns(ctx(provider), ref), provider.cards(ctx(provider), ref)])
+    : [[], []];
   if (!live()) return;
-  s.board = b;
-  s.columns = cols;
-  s.cards = cs;
-  lsSet(`${lsKey(p)}Project`, s.project);
-  lsSet(`${lsKey(p)}Board`, s.board);
+  state.board = boardId;
+  state.columns = columns;
+  state.cards = cards;
+  lsSet(`${lsKey(provider)}Project`, state.project);
+  lsSet(`${lsKey(provider)}Board`, state.board);
+}
+
+// the board linked to the vault project last shown, when it is another one than what the state shows: switch to it
+function followLinkedBoard(provider: BoardProvider, state: Board) {
+  const linked = ui.lastProject ? config.value.boards?.[ui.lastProject] : undefined;
+  if (linked?.provider !== provider.id) return;
+  if (linked.project === state.project && linked.board === state.board) return;
+  state.project = linked.project;
+  state.board = linked.board;
+  state.boards = [];
+  state.columns = [];
+  state.cards = [];
 }
 
 /** Show the provider's board fresh from the tracker: the board linked to the vault project last shown when there is one. */
-export function showBoard(p: BoardProvider, reload = false) {
-  const s = boardState(p),
-    prefer = ui.lastProject ? config.value.boards?.[ui.lastProject] : undefined;
-  if (reload) s.projects = null;
-  if (prefer?.provider === p.id && (prefer.project !== s.project || prefer.board !== s.board)) {
-    s.project = prefer.project;
-    s.board = prefer.board;
-    s.boards = [];
-    s.columns = [];
-    s.cards = [];
-  }
-  run(s, async live => {
-    const ps = s.projects ?? (await p.projects(ctx(p)));
+export function showBoard(provider: BoardProvider, reload = false) {
+  const state = boardState(provider);
+  if (reload) state.projects = null;
+  followLinkedBoard(provider, state);
+  run(state, async live => {
+    const projects = state.projects ?? (await provider.projects(ctx(provider)));
     if (!live()) return;
-    s.projects = ps;
-    if (!ps.some(x => x.id === s.project)) {
-      s.project = "";
-      s.board = "";
+    state.projects = projects;
+    if (!projects.some(project => project.id === state.project)) {
+      state.project = "";
+      state.board = "";
     }
-    const bs = s.project ? await p.boards(ctx(p), s.project) : [];
+    const boardList = state.project ? await provider.boards(ctx(provider), state.project) : [];
     if (!live()) return;
-    s.boards = bs;
-    await loadCards(p, s, live, bs.some(b => b.id === s.board) ? s.board : bs[0]?.id || "");
+    state.boards = boardList;
+    const keepBoard = boardList.some(board => board.id === state.board);
+    await loadCards(provider, state, live, keepBoard ? state.board : boardList[0]?.id || "");
   });
 }
-export function pickProject(p: BoardProvider, id: string) {
-  const s = boardState(p);
-  run(s, async live => {
-    const bs = id ? await p.boards(ctx(p), id) : [];
+export function pickProject(provider: BoardProvider, projectId: string) {
+  const state = boardState(provider);
+  run(state, async live => {
+    const boardList = projectId ? await provider.boards(ctx(provider), projectId) : [];
     if (!live()) return;
-    s.project = id;
-    s.boards = bs;
-    s.columns = [];
-    s.cards = [];
-    await loadCards(p, s, live, bs[0]?.id || "");
+    state.project = projectId;
+    state.boards = boardList;
+    state.columns = [];
+    state.cards = [];
+    await loadCards(provider, state, live, boardList[0]?.id || "");
   });
 }
-export const pickBoard = (p: BoardProvider, id: string) => {
-  const s = boardState(p);
-  run(s, live => loadCards(p, s, live, id));
+export const pickBoard = (provider: BoardProvider, boardId: string) => {
+  const state = boardState(provider);
+  run(state, live => loadCards(provider, state, live, boardId));
 };
+// a card goes to the end of its new column
+const endOf = (cards: Card[], column: string, except: string) =>
+  Math.max(0, ...cards.filter(x => x.column === column && x.id !== except).map(x => x.placement)) + 1;
 // shown in the new column at once, back where it was when the tracker refuses
 // (a card is replaced, not changed: the components only redraw for a new object)
-export async function moveCard(p: BoardProvider, c: Card, to: string) {
-  const s = boardState(p);
-  if (to === c.column) return;
-  const put = (next: Card) => {
-    s.cards = s.cards.map(x => (x.id === c.id ? next : x));
+export async function moveCard(provider: BoardProvider, card: Card, column: string) {
+  const state = boardState(provider);
+  if (column === card.column) return;
+  const replace = (next: Card) => {
+    state.cards = state.cards.map(x => (x.id === card.id ? next : x));
   };
-  const moved = {
-    ...c,
-    column: to,
-    placement: Math.max(0, ...s.cards.filter(x => x.column === to && x.id !== c.id).map(x => x.placement)) + 1,
-  };
-  put(moved);
-  s.err = "";
+  const moved = { ...card, column, placement: endOf(state.cards, column, card.id) };
+  replace(moved);
+  state.err = "";
   changed();
   try {
-    const placed = await p.move(ctx(p), refOf(p, s), moved, to);
-    if (placed != null) put({ ...moved, placement: placed });
-  } catch (x) {
-    put(c);
-    s.err = t("kb.moveFailed", { e: String(x) });
+    const placement = await provider.move(ctx(provider), refOf(provider, state), moved, column);
+    if (placement != null) replace({ ...moved, placement });
+  } catch (e) {
+    replace(card);
+    state.err = t("kb.moveFailed", { e: String(e) });
   }
   changed();
 }
-export const openBoardCard = (p: BoardProvider, id: string) => openCard(p, refOf(p, boardState(p)), id);
+export const openBoardCard = (provider: BoardProvider, id: string) =>
+  openCard(provider, refOf(provider, boardState(provider)), id);
 
 // ---------- which vault project a board belongs to: a vault project has at most one board
 const sameRef = (a: BoardRef | undefined, b: BoardRef) =>
   !!a && a.provider === b.provider && a.project === b.project && a.board === b.board;
 export const vaultProjects = (): [string, string][] =>
   vault.snap.projects
-    .map((x): [string, string] => [x.name, projectLabel(x.name)])
+    .map((project): [string, string] => [project.name, projectLabel(project.name)])
     .sort((a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], currentLocale()));
-export const linkedProject = (p: BoardProvider) =>
-  Object.entries(config.value.boards || {}).find(([, r]) => sameRef(r, refOf(p, boardState(p))))?.[0] ?? "";
+export const linkedProject = (provider: BoardProvider) =>
+  Object.entries(config.value.boards || {}).find(([, ref]) =>
+    sameRef(ref, refOf(provider, boardState(provider))),
+  )?.[0] ?? "";
 // one board per vault project, and the board shown under one vault project
-export function linkBoard(p: BoardProvider, vp: string) {
-  const ref = refOf(p, boardState(p));
-  const linked = Object.fromEntries(Object.entries(config.value.boards || {}).filter(([, r]) => !sameRef(r, ref)));
-  if (vp) linked[vp] = ref;
+export function linkBoard(provider: BoardProvider, vaultProject: string) {
+  const ref = refOf(provider, boardState(provider));
+  const linked = Object.fromEntries(
+    Object.entries(config.value.boards || {}).filter(([, other]) => !sameRef(other, ref)),
+  );
+  if (vaultProject) linked[vaultProject] = ref;
   invoke<Settings>("set_settings", { settings: { ...config.value, boards: linked } })
-    .then(s => {
-      config.value = s;
+    .then(settings => {
+      config.value = settings;
       changed();
     })
     .catch(e => console.error(e));

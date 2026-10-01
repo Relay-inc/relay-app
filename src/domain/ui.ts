@@ -20,8 +20,8 @@ export const ui = {
 
 /** The provider whose board a selection key opens. */
 export const boardOf = (key: string) => {
-  const o = opened(key);
-  return o.kind === "board" ? provider(o.provider) : undefined;
+  const view = opened(key);
+  return view.kind === "board" ? provider(view.provider) : undefined;
 };
 export const isView = (key: string) => {
   const kind = opened(key).kind;

@@ -30,15 +30,19 @@ async function loadLimits() {
   }
   changed();
 }
+const DAY = 86400000;
+// the start of today and of this week, which starts on Monday
+function periodStarts() {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const today = midnight.getTime();
+  return { today, week: today - ((midnight.getDay() + 6) % 7) * DAY };
+}
 async function loadTokens() {
   if (usage.reading) return;
   usage.reading = true;
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  const today = d.getTime(),
-    week = today - ((d.getDay() + 6) % 7) * 86400000; // the week starts on Monday
   try {
-    usage.tokens = await invoke<AllTokens>("usage_tokens", { today, week });
+    usage.tokens = await invoke<AllTokens>("usage_tokens", periodStarts());
     usage.tokErr = "";
   } catch (e) {
     usage.tokErr = String(e);
@@ -65,50 +69,62 @@ export function reloadUsage() {
   else usage.tokAt = 0;
 }
 
-export const level = (p: number): "" | "soon" | "late" => (p >= 95 ? "late" : p >= 80 ? "soon" : "");
-export const winText = (p: AgentProvider | undefined, w: LimitWindow) =>
-  p ? at(p, w.label, { name: w.name ?? "" }) : w.label;
+export const level = (pct: number): "" | "soon" | "late" => {
+  if (pct >= 95) return "late";
+  return pct >= 80 ? "soon" : "";
+};
+export const winText = (provider: AgentProvider | undefined, limitWindow: LimitWindow) =>
+  provider ? at(provider, limitWindow.label, { name: limitWindow.name ?? "" }) : limitWindow.label;
 export function resetWhen(iso: string | null) {
   const ms = iso ? Date.parse(iso) : NaN;
   if (isNaN(ms)) return "";
-  const min = Math.max(1, Math.round((ms - Date.now()) / 60000)),
-    rtf = new Intl.RelativeTimeFormat(currentLocale(), { numeric: "auto" });
-  return min < 60
-    ? rtf.format(min, "minute")
-    : min < 24 * 60
-      ? rtf.format(Math.round(min / 60), "hour")
-      : new Intl.DateTimeFormat(currentLocale(), { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(ms);
+  const minutes = Math.max(1, Math.round((ms - Date.now()) / 60000));
+  const relative = new Intl.RelativeTimeFormat(currentLocale(), { numeric: "auto" });
+  if (minutes < 60) return relative.format(minutes, "minute");
+  if (minutes < 24 * 60) return relative.format(Math.round(minutes / 60), "hour");
+  return new Intl.DateTimeFormat(currentLocale(), { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(ms);
+}
+type TopLimit = { limitWindow: LimitWindow; provider: AgentProvider | undefined; id: string };
+// the limitWindow closest to its limit, over every provider that answered
+function mostConstrained(): TopLimit | null {
+  let top: TopLimit | null = null;
+  for (const entry of usage.limits || [])
+    if (entry.limits.ok)
+      for (const limitWindow of entry.limits.windows)
+        if (!top || limitWindow.pct > top.limitWindow.pct)
+          top = { limitWindow, provider: agent(entry.provider), id: entry.provider };
+  return top;
 }
 // sidebar: the most constrained limit over every provider, for the Usage button's dot (in the reminders' urgency colours) and tooltip
 export function usageSummary(): { pct: number; level: "" | "soon" | "late"; label: string } | null {
-  let top: { w: LimitWindow; p: AgentProvider | undefined; id: string } | null = null;
-  for (const l of usage.limits || [])
-    if (l.limits.ok)
-      for (const w of l.limits.windows)
-        if (!top || w.pct > top.w.pct) top = { w, p: agent(l.provider), id: l.provider };
+  const top = mostConstrained();
   if (!top) return null;
-  const { w, p } = top,
-    label = t("usage.limitTop", { name: p?.name ?? top.id, label: winText(p, w) }),
-    pct = Math.round(w.pct),
-    when = resetWhen(w.resets);
+  const { limitWindow, provider } = top;
+  const label = t("usage.limitTop", { name: provider?.name ?? top.id, label: winText(provider, limitWindow) });
+  const pct = Math.round(limitWindow.pct);
+  const when = resetWhen(limitWindow.resets);
   return {
-    pct: w.pct,
-    level: level(w.pct),
+    pct: limitWindow.pct,
+    level: level(limitWindow.pct),
     label: when ? t("usage.summaryResets", { label, pct, when }) : t("usage.summary", { label, pct }),
   };
 }
-export const num = (n: number) =>
-  new Intl.NumberFormat(currentLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(n);
-export const usd = (n: number) =>
+export const num = (count: number) =>
+  new Intl.NumberFormat(currentLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(count);
+export const usd = (amount: number) =>
   new Intl.NumberFormat(currentLocale(), {
     style: "currency",
     currency: "USD",
-    maximumFractionDigits: n < 10 ? 2 : 0,
-  }).format(n);
+    maximumFractionDigits: amount < 10 ? 2 : 0,
+  }).format(amount);
 // the usage view names the conversations it lists and opens them on a click
-export const usageSession = (k: string | undefined, sid: string) => {
-  const c = k ? chat.chats[k] : undefined;
-  if (c) return { label: `${projectLabel(c.project)} › ${displayTitle(c.title)}`, key: c.key };
-  const tm = terminalSessions().find(x => x.sid === sid);
-  return tm ? { label: `${projectLabel(tm.project)} › ${tm.title}`, key: tm.key } : null;
+export const usageSession = (chatKey: string | undefined, sessionId: string) => {
+  const conversation = chatKey ? chat.chats[chatKey] : undefined;
+  if (conversation)
+    return {
+      label: `${projectLabel(conversation.project)} › ${displayTitle(conversation.title)}`,
+      key: conversation.key,
+    };
+  const session = terminalSessions().find(x => x.sid === sessionId);
+  return session ? { label: `${projectLabel(session.project)} › ${session.title}`, key: session.key } : null;
 };

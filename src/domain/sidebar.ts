@@ -29,8 +29,8 @@ export const sidebar = {
   projOrder: ls.get<Record<string, string[]>>("projOrder", {}), // projects within a section,
   convOrder: ls.get<Record<string, string[]>>("convOrder", {}), // conversations per project (or "" for Algemeen)
 };
-export const setFind = (q: string) => {
-  sidebar.find = q;
+export const setFind = (text: string) => {
+  sidebar.find = text;
   changed();
 };
 export function toggleSection(id: string) {
@@ -38,22 +38,23 @@ export function toggleSection(id: string) {
   ls.set("collapsed", sidebar.collapsed);
   changed();
 }
-export function toggleUnfold(p: string) {
-  if (sidebar.unfolded.has(p)) sidebar.unfolded.delete(p);
-  else sidebar.unfolded.add(p);
+export function toggleUnfold(project: string) {
+  if (sidebar.unfolded.has(project)) sidebar.unfolded.delete(project);
+  else sidebar.unfolded.add(project);
   changed();
 }
 /** `list` with `id` moved before or after `ref` (to the end when `ref` is not in it). */
 export const place = (list: string[], id: string, ref: string, after: boolean) => {
-  const l = list.filter(x => x !== id),
-    i = l.indexOf(ref);
-  l.splice(i < 0 ? l.length : i + (after ? 1 : 0), 0, id);
-  return l;
+  const rest = list.filter(x => x !== id);
+  const refIndex = rest.indexOf(ref);
+  const at = refIndex < 0 ? rest.length : refIndex + (after ? 1 : 0);
+  rest.splice(at, 0, id);
+  return rest;
 };
 /** A drop after dragging: `visible` is the order as shown, the dragged `id` goes before or after `ref`. */
 export function reorder(
   kind: "sec" | "proj" | "conv",
-  ctx: string,
+  scope: string,
   visible: string[],
   id: string,
   ref: string,
@@ -63,10 +64,10 @@ export function reorder(
     sidebar.secOrder = place(sidebar.secOrder, id, ref, after);
     ls.set("secOrder", sidebar.secOrder);
   } else if (kind === "conv") {
-    sidebar.convOrder[ctx] = place(visible, id, ref, after);
+    sidebar.convOrder[scope] = place(visible, id, ref, after);
     ls.set("convOrder", sidebar.convOrder);
   } else {
-    sidebar.projOrder[ctx] = place(visible, id, ref, after);
+    sidebar.projOrder[scope] = place(visible, id, ref, after);
     ls.set("projOrder", sidebar.projOrder);
   }
   changed();
@@ -74,18 +75,21 @@ export function reorder(
 /** Rows in the user's dragged order first, the rest after them in their own order. */
 export const ordered = <T>(
   rows: T[],
-  key: (r: T) => string,
+  key: (row: T) => string,
   order: string[] = [],
-  rest: (a: T, b: T) => number = () => 0,
+  byRest: (a: T, b: T) => number = () => 0,
 ) =>
   rows
-    .map((r, i) => ({ r, i }))
+    .map((row, index) => ({ row, index }))
     .sort((a, b) => {
-      const ia = order.indexOf(key(a.r)),
-        ib = order.indexOf(key(b.r));
-      return ia >= 0 && ib >= 0 ? ia - ib : ia >= 0 ? -1 : ib >= 0 ? 1 : rest(a.r, b.r) || a.i - b.i;
+      const posA = order.indexOf(key(a.row));
+      const posB = order.indexOf(key(b.row));
+      if (posA >= 0 && posB >= 0) return posA - posB;
+      if (posA >= 0) return -1;
+      if (posB >= 0) return 1;
+      return byRest(a.row, b.row) || a.index - b.index;
     })
-    .map(x => x.r);
+    .map(x => x.row);
 
 // ---------- what the sidebar shows, built from the state: the view rows on top, then the sections with their rows
 export type Trail = "" | "dot" | "spin";
@@ -130,154 +134,212 @@ export type Section = {
 };
 
 // contexts come from the vault index, in its order, each takes the next of three colours
-const CTX = ["ctx-a", "ctx-m", "ctx-p"] as const;
+const CONTEXT_TINTS = ["ctx-a", "ctx-m", "ctx-p"] as const;
 export const GENERAL = "Algemeen";
+const SHOWN_CONVERSATIONS = 5;
 
+const isOpenDraft = (conversation: Chat, project: string | null) =>
+  conversation.draft &&
+  !conversation.closed &&
+  conversation.project === project &&
+  (conversation.key === ui.selected || chat.typed[conversation.key]);
 // the open draft shows as "Nieuw gesprek" under its project, its title follows what is typed
-const listed = (p: string | null): Chat[] => [
-  ...Object.values(chat.chats).filter(
-    c => c.draft && !c.closed && c.project === p && (c.key === ui.selected || chat.typed[c.key]),
-  ),
-  ...chatsOf(p),
+const listed = (project: string | null): Chat[] => [
+  ...Object.values(chat.chats).filter(conversation => isOpenDraft(conversation, project)),
+  ...chatsOf(project),
 ];
-const trailOf = (keys: string[]): Trail =>
-  keys.some(isWaiting) ? "dot" : keys.some(k => chat.status[k] === "busy") ? "spin" : "";
-const subsOf = (k: string) => {
-  const n = runningSubs(k);
-  return { subs: n, subsTitle: n ? tn("nav.agentsWorking", n) : "" };
+const trailOf = (keys: string[]): Trail => {
+  if (keys.some(isWaiting)) return "dot";
+  if (keys.some(key => chat.status[key] === "busy")) return "spin";
+  return "";
 };
-const convRow = (c: Chat): ConvRow => ({
-  key: c.key,
-  parent: c.project ?? "",
+const terminalTrail = (session: TerminalSession): Trail => {
+  if (session.status === "busy") return "spin";
+  return session.state === "blocked" ? "dot" : "";
+};
+const subsOf = (key: string) => {
+  const count = runningSubs(key);
+  return { subs: count, subsTitle: count ? tn("nav.agentsWorking", count) : "" };
+};
+const convRow = (conversation: Chat): ConvRow => ({
+  key: conversation.key,
+  parent: conversation.project ?? "",
   term: false,
-  title: displayTitle(c.title),
-  selected: ui.selected === c.key,
-  unseen: chat.unseen.has(c.key),
-  trail: trailOf([c.key]),
-  ...subsOf(c.key),
-  closable: !(c.draft && !chat.typed[c.key]),
+  title: displayTitle(conversation.title),
+  selected: ui.selected === conversation.key,
+  unseen: chat.unseen.has(conversation.key),
+  trail: trailOf([conversation.key]),
+  ...subsOf(conversation.key),
+  closable: !(conversation.draft && !chat.typed[conversation.key]),
 });
-const termRow = (tm: TerminalSession): ConvRow => ({
-  key: tm.key,
-  parent: tm.project ?? "",
+const termRow = (session: TerminalSession): ConvRow => ({
+  key: session.key,
+  parent: session.project ?? "",
   term: true,
-  title: tm.title,
-  selected: ui.selected === tm.key,
+  title: session.title,
+  selected: ui.selected === session.key,
   unseen: false,
-  trail: tm.status === "busy" ? "spin" : tm.state === "blocked" ? "dot" : "",
-  ...subsOf(tm.key),
+  trail: terminalTrail(session),
+  ...subsOf(session.key),
   closable: true,
 });
 
-function projectBlock(p: Project, T: TerminalSession[]): ProjectBlock {
-  const cs = listed(p.name),
-    ts = T.filter(tm => tm.project === p.name),
-    keys = [...cs.map(c => c.key), ...ts.map(tm => tm.key)];
-  const unfolded = sidebar.unfolded.has(p.name),
-    ic = vault.icons[p.name];
+// the label without its emoji when the icon is already shown next to it
+const blockLabel = (name: string) =>
+  projectLabel(name).replace(/^\S+ (?=.)/, emoji => (config.value.projects[name]?.icon ? "" : emoji));
+const foldLabel = (total: number, unfolded: boolean) => {
+  if (total <= SHOWN_CONVERSATIONS) return "";
+  return unfolded ? t("nav.less") : t("nav.more", { n: total - SHOWN_CONVERSATIONS });
+};
+
+function projectBlock(project: Project, allSessions: TerminalSession[]): ProjectBlock {
+  const conversations = listed(project.name);
+  const sessions = allSessions.filter(session => session.project === project.name);
+  const keys = [...conversations.map(conversation => conversation.key), ...sessions.map(session => session.key)];
+  const unfolded = sidebar.unfolded.has(project.name);
+  const icon = vault.icons[project.name];
+  const shownConversations = conversations.slice(0, unfolded ? conversations.length : SHOWN_CONVERSATIONS);
   return {
-    name: p.name,
-    context: p.context,
-    unseen: keys.some(k => chat.unseen.has(k)),
+    name: project.name,
+    context: project.context,
+    unseen: keys.some(key => chat.unseen.has(key)),
     trail: trailOf(keys),
-    addTitle: t("nav.newChatAbout", { name: p.name }),
-    label: projectLabel(p.name).replace(/^\S+ (?=.)/, s => (config.value.projects[p.name]?.icon ? "" : s)),
-    img: ic?.img,
-    emoji: ic?.icon,
+    addTitle: t("nav.newChatAbout", { name: project.name }),
+    label: blockLabel(project.name),
+    img: icon?.img,
+    emoji: icon?.icon,
     convs: ordered(
-      [...ts.map(termRow), ...cs.slice(0, unfolded ? cs.length : 5).map(convRow)],
-      r => r.key,
-      sidebar.convOrder[p.name],
+      [...sessions.map(termRow), ...shownConversations.map(convRow)],
+      row => row.key,
+      sidebar.convOrder[project.name],
     ),
-    fold: cs.length > 5 ? (unfolded ? t("nav.less") : t("nav.more", { n: cs.length - 5 })) : "",
+    fold: foldLabel(conversations.length, unfolded),
   };
 }
 
-export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
-  const q = sidebar.find.toLowerCase(),
-    selP = projectOf(ui.selected),
-    T = terminalSessions();
-  const w = waitCount(),
-    due = vault.snap.reminders.filter(r => r.days <= 0).length;
-  const views: ViewRow[] = [
-    { key: WAIT, icon: "bell", name: t("nav.waiting"), meta: w ? { kind: "badge", n: w } : undefined },
-    {
-      key: REM,
-      icon: "list",
-      name: t("nav.reminders"),
-      meta: due ? { kind: vault.snap.reminders.some(r => r.days < 0) ? "late" : "soon", n: due } : undefined,
-    },
-    ...readyBoards().map(p => ({ key: boardKey(p.id), svg: p.glyph, name: p.name })),
-    ...(ghOn()
-      ? [
-          {
-            key: PRS,
-            icon: "pr",
-            name: t("nav.prs"),
-            meta: prs.list?.review.length
-              ? { kind: "count" as const, n: prs.list.review.length, title: t("nav.prsReview") }
-              : undefined,
-          },
-        ]
-      : []),
-    ...(mailOn()
-      ? [
-          {
-            key: MAIL,
-            icon: "mail",
-            name: t("nav.mail"),
-            meta: mail.list?.some(unread) ? { kind: "count" as const, n: mail.list.filter(unread).length } : undefined,
-          },
-        ]
-      : []),
-  ];
-
-  const gc = listed(null).filter(c => !q || c.title.toLowerCase().includes(q)),
-    gt = T.filter(tm => !tm.project && (!q || tm.title.toLowerCase().includes(q)));
-  const sec = (id: string, s: Omit<Section, "id" | "collapsed" | "open">): Section => ({
-    id,
-    collapsed: !!sidebar.collapsed[id],
-    open: !sidebar.collapsed[id] || !!q,
-    ...s,
-  });
-  const secs: Record<string, Section> = {
-    [GENERAL]: sec(GENERAL, {
-      label: t("general").toUpperCase(),
-      tint: "",
-      count: gc.length + gt.length,
-      add: "",
-      convs: ordered([...gc.map(convRow), ...gt.map(termRow)], r => r.key, sidebar.convOrder[""]),
-      projects: [],
-    }),
+// ---------- the view rows: waiting, reminders, the boards, pull requests and mail
+const waitingRow = (): ViewRow => {
+  const waiting = waitCount();
+  return { key: WAIT, icon: "bell", name: t("nav.waiting"), meta: waiting ? { kind: "badge", n: waiting } : undefined };
+};
+const remindersRow = (): ViewRow => {
+  const reminders = vault.snap.reminders;
+  const due = reminders.filter(reminder => reminder.days <= 0).length;
+  const overdue = reminders.some(reminder => reminder.days < 0);
+  return {
+    key: REM,
+    icon: "list",
+    name: t("nav.reminders"),
+    meta: due ? { kind: overdue ? "late" : "soon", n: due } : undefined,
   };
+};
+const boardRows = (): ViewRow[] =>
+  readyBoards().map(board => ({ key: boardKey(board.id), svg: board.glyph, name: board.name }));
+const prsRow = (): ViewRow => {
+  const review = prs.list?.review.length ?? 0;
+  return {
+    key: PRS,
+    icon: "pr",
+    name: t("nav.prs"),
+    meta: review ? { kind: "count", n: review, title: t("nav.prsReview") } : undefined,
+  };
+};
+const mailRow = (): ViewRow => {
+  const unreadCount = mail.list?.filter(unread).length ?? 0;
+  return {
+    key: MAIL,
+    icon: "mail",
+    name: t("nav.mail"),
+    meta: unreadCount ? { kind: "count", n: unreadCount } : undefined,
+  };
+};
+const viewRows = (): ViewRow[] => [
+  waitingRow(),
+  remindersRow(),
+  ...boardRows(),
+  ...(ghOn() ? [prsRow()] : []),
+  ...(mailOn() ? [mailRow()] : []),
+];
 
-  // an app conversation stays until the user closes it, a terminal session as long as it is open
-  const open = (p: Project) => T.some(tm => tm.project === p.name) || chatsOf(p.name).length > 0;
-  const lastAt = (n: string) =>
-    Math.max(0, ...chatsOf(n).map(c => c.at), ...T.filter(tm => tm.project === n).map(tm => tm.mtime));
-  const match = (p: Project) => p.name.toLowerCase().includes(q) || projectLabel(p.name).toLowerCase().includes(q);
-  contexts().forEach((ctx, i) => {
-    // manual order from dragging comes first, the rest follows by recency
-    const shown = ordered(
-      vault.snap.projects.filter((p: Project) => p.context === ctx && match(p) && (q || open(p) || p.name === selP)),
-      (p: Project) => p.name,
-      sidebar.projOrder[ctx],
-      (a: Project, b: Project) => lastAt(b.name) - lastAt(a.name),
-    );
-    if (shown.length)
-      secs[ctx] = sec(ctx, {
-        label: ctx.toUpperCase(),
-        tint: CTX[i % CTX.length],
-        count: shown.length,
-        convs: [],
-        projects: shown.map(p => projectBlock(p, T)),
-      });
+// ---------- the sections
+const section = (id: string, query: string, rest: Omit<Section, "id" | "collapsed" | "open">): Section => ({
+  id,
+  collapsed: !!sidebar.collapsed[id],
+  open: !sidebar.collapsed[id] || !!query,
+  ...rest,
+});
+
+function generalSection(query: string, sessions: TerminalSession[]): Section {
+  const conversations = listed(null).filter(conversation => !query || conversation.title.toLowerCase().includes(query));
+  const generalSessions = sessions.filter(
+    session => !session.project && (!query || session.title.toLowerCase().includes(query)),
+  );
+  return section(GENERAL, query, {
+    label: t("general").toUpperCase(),
+    tint: "",
+    count: conversations.length + generalSessions.length,
+    add: "",
+    convs: ordered(
+      [...conversations.map(convRow), ...generalSessions.map(termRow)],
+      row => row.key,
+      sidebar.convOrder[""],
+    ),
+    projects: [],
+  });
+}
+
+// an app conversation stays until the user closes it, a terminal session as long as it is open
+const hasOpenWork = (project: Project, sessions: TerminalSession[]) =>
+  sessions.some(session => session.project === project.name) || chatsOf(project.name).length > 0;
+const lastActivity = (name: string, sessions: TerminalSession[]) =>
+  Math.max(
+    0,
+    ...chatsOf(name).map(conversation => conversation.at),
+    ...sessions.filter(session => session.project === name).map(session => session.mtime),
+  );
+const matchesQuery = (project: Project, query: string) =>
+  project.name.toLowerCase().includes(query) || projectLabel(project.name).toLowerCase().includes(query);
+
+function contextSection(
+  context: string,
+  index: number,
+  query: string,
+  sessions: TerminalSession[],
+  selectedProject: string | null,
+): Section | undefined {
+  const candidates = vault.snap.projects.filter(
+    (project: Project) =>
+      project.context === context &&
+      matchesQuery(project, query) &&
+      (query || hasOpenWork(project, sessions) || project.name === selectedProject),
+  );
+  // manual order from dragging comes first, the rest follows by recency
+  const shown = ordered(
+    candidates,
+    (project: Project) => project.name,
+    sidebar.projOrder[context],
+    (a: Project, b: Project) => lastActivity(b.name, sessions) - lastActivity(a.name, sessions),
+  );
+  if (!shown.length) return undefined;
+  return section(context, query, {
+    label: context.toUpperCase(),
+    tint: CONTEXT_TINTS[index % CONTEXT_TINTS.length],
+    count: shown.length,
+    convs: [],
+    projects: shown.map(project => projectBlock(project, sessions)),
+  });
+}
+
+export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
+  const query = sidebar.find.toLowerCase();
+  const selectedProject = projectOf(ui.selected);
+  const sessions = terminalSessions();
+  const byId: Record<string, Section> = { [GENERAL]: generalSection(query, sessions) };
+  contexts().forEach((context, index) => {
+    const built = contextSection(context, index, query, sessions, selectedProject);
+    if (built) byId[context] = built;
   });
   // sections the user never dragged follow in the index order
-  return {
-    views,
-    sections: [...sidebar.secOrder, ...Object.keys(secs).filter(k => !sidebar.secOrder.includes(k))]
-      .filter(k => secs[k])
-      .map(k => secs[k]),
-  };
+  const ids = [...sidebar.secOrder, ...Object.keys(byId).filter(id => !sidebar.secOrder.includes(id))];
+  return { views: viewRows(), sections: ids.filter(id => byId[id]).map(id => byId[id]) };
 }

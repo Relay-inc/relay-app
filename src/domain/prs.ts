@@ -95,19 +95,25 @@ export const resetPrs = () => {
 };
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
 // posting on GitHub is something others see, so it isWaiting for the user (decided 29/9)
-export async function reviewPr(key: string) {
-  const pr = panel.detail[key] as PrDetail | undefined,
-    item = panelItem(key);
-  if (!pr || item?.kind !== "pr") return;
-  const repo = item.repo,
-    row = [...(prs.list?.review || []), ...(prs.list?.mine || [])].find(p => p.repo === repo && p.number === pr.number);
-  const k = newChat(row?.project && project(row.project) ? row.project : null);
-  chat.chats[k].title = `Review ${repo.split("/")[1]} #${pr.number}`;
-  chat.messages[k] = [{ kind: "note", text: t("note.reviewStarted", { repo, n: pr.number }) }]; // also keeps the typed title, no generated one
-  await select(k);
-  sendMsg(
-    `Review PR ${pr.url} (${repo} #${pr.number}: ${pr.title}). Haal de diff en context op met gh, en lees de projectnote als die er is. ` +
-      "Plaats niets op GitHub: geen review, comment of approve. Geef je bevindingen hier, meest ernstige eerst, met bestand en regel. " +
-      "Wil ik iets posten, dan vraag ik het je daarna.",
+const reviewPrompt = (pr: PrDetail, repo: string) =>
+  `Review PR ${pr.url} (${repo} #${pr.number}: ${pr.title}). Haal de diff en context op met gh, en lees de projectnote als die er is. ` +
+  "Plaats niets op GitHub: geen review, comment of approve. Geef je bevindingen hier, meest ernstige eerst, met bestand en regel. " +
+  "Wil ik iets posten, dan vraag ik het je daarna.";
+// the conversation goes under the project of the PR's row in the lists, when the vault knows it
+const projectOfPr = (repo: string, number: number) => {
+  const row = [...(prs.list?.review || []), ...(prs.list?.mine || [])].find(
+    x => x.repo === repo && x.number === number,
   );
+  return row?.project && project(row.project) ? row.project : null;
+};
+export async function reviewPr(key: string) {
+  const pr = panel.detail[key] as PrDetail | undefined;
+  const item = panelItem(key);
+  if (!pr || item?.kind !== "pr") return;
+  const repo = item.repo;
+  const chatKey = newChat(projectOfPr(repo, pr.number));
+  chat.chats[chatKey].title = `Review ${repo.split("/")[1]} #${pr.number}`;
+  chat.messages[chatKey] = [{ kind: "note", text: t("note.reviewStarted", { repo, n: pr.number }) }]; // also keeps the typed title, no generated one
+  await select(chatKey);
+  sendMsg(reviewPrompt(pr, repo));
 }
