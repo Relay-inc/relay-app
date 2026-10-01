@@ -39,7 +39,7 @@ export class RelaySidebar extends LitElement {
   @state() private ctx: Ctx | null = null;
 
   // drag reordering: the press, and what is shown while it moves (dragging row, drop indicator)
-  private drag: Drag | null = null;
+  @state() private drag: Drag | null = null;
   private justDragged = false;
 
   connectedCallback() {
@@ -64,20 +64,18 @@ export class RelaySidebar extends LitElement {
   };
   private onMove = (e: PointerEvent) => {
     const d = this.drag; if (!d) return;
-    if (!d.on) { if (Math.abs(e.clientY - d.y) < 5) return; d.on = true; this.toggleAttribute("reordering", true); document.body.classList.add("reordering"); }
+    if (!d.on) { if (Math.abs(e.clientY - d.y) < 5) return; this.toggleAttribute("reordering", true); document.body.classList.add("reordering"); }
     const under = this.shadowRoot!.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
     const tgt = under?.closest<HTMLElement>(dropSel(d.kind, d.ctx));
-    if (!tgt) { d.target = undefined; this.requestUpdate(); return; }
+    if (!tgt) { this.drag = { ...d, on: true, target: undefined }; return; }
     const box = (d.kind === "sec" ? tgt.querySelector("relay-sidebar-head")! : tgt).getBoundingClientRect(), whole = tgt.getBoundingClientRect();
-    d.after = d.kind === "sec" ? e.clientY > whole.top + whole.height / 2 : e.clientY > box.top + box.height / 2;
-    d.target = d.kind === "sec" ? tgt.dataset.drop : d.kind === "conv" ? tgt.dataset.k : tgt.dataset.p;
-    this.requestUpdate();
+    const after = d.kind === "sec" ? e.clientY > whole.top + whole.height / 2 : e.clientY > box.top + box.height / 2;
+    this.drag = { ...d, on: true, after, target: d.kind === "sec" ? tgt.dataset.drop : d.kind === "conv" ? tgt.dataset.k : tgt.dataset.p };
   };
   private onUp = () => {
     const d = this.drag; this.drag = null;
     this.toggleAttribute("reordering", false); document.body.classList.remove("reordering");
     if (!d?.on) return;
-    this.requestUpdate();
     this.justDragged = true; setTimeout(() => { this.justDragged = false; }, 0);
     if (!d.target) return;
     const visible = d.kind === "sec" ? [] : [...this.shadowRoot!.querySelectorAll<HTMLElement>(dropSel(d.kind, d.ctx))].map(r => (d.kind === "conv" ? r.dataset.k : r.dataset.p)!);

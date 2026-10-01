@@ -91,7 +91,7 @@ export class SettingsProjects extends SettingsElement {
     if (l) next.projects[n] = { ...next.projects[n], label: l }; else delete next.projects[n];
     emit(this, "save-settings", { settings: next, done: "" });
   }
-  private toggle(key: string) { if (!this.opened.delete(key)) this.opened.add(key); this.requestUpdate(); }
+  private toggle(key: string) { const o = new Set(this.opened); if (!o.delete(key)) o.add(key); this.opened = o; }
 
   private row(n: string) {
     const { icons, settings, repos } = this, i = icons![n];

@@ -1,5 +1,5 @@
 import { LitElement, css, html, nothing, type PropertyValues } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { t } from "../../core/i18n";
 import { StoreController } from "../../core/store";
@@ -17,7 +17,7 @@ export class RelayBoard extends LitElement {
   protected store = new StoreController(this);
   @property({ attribute: false }) provider!: BoardProvider;
   // dragging a card: pointer events, the Mac webview does not deliver HTML drag and drop reliably
-  private drag: Drag | null = null;
+  @state() private drag: Drag | null = null;
 
   connectedCallback() {
     super.connectedCallback();
@@ -42,12 +42,11 @@ export class RelayBoard extends LitElement {
     const d = this.drag; if (!d) return;
     if (!d.on) {
       if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return;
-      d.on = true; document.body.classList.add("reordering");
+      document.body.classList.add("reordering");
     }
-    d.px = e.clientX; d.py = e.clientY;
     // the columns are components: from here the hit is the column element itself
-    d.over = this.shadowRoot!.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("relay-board-column")?.dataset.list;
-    this.requestUpdate();
+    const over = this.shadowRoot!.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("relay-board-column")?.dataset.list;
+    this.drag = { ...d, on: true, px: e.clientX, py: e.clientY, over };
   };
   private onUp = () => {
     const d = this.drag; this.drag = null;
@@ -55,7 +54,7 @@ export class RelayBoard extends LitElement {
     if (!d.on) { openBoardCard(this.provider, d.id); return; }
     document.body.classList.remove("reordering");
     const c = boardState(this.provider).cards.find(x => x.id === d.id);
-    if (c && d.over && d.over !== c.column) moveCard(this.provider, c, d.over); else this.requestUpdate();
+    if (c && d.over && d.over !== c.column) moveCard(this.provider, c, d.over);
   };
 
   private pick(opts: Opt[], cur: string, empty: string, on: (v: string) => void, always = false, cls = "") {

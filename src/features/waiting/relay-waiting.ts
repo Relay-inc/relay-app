@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { t, currentLocale } from "../../core/i18n";
 import { StoreController } from "../../core/store";
@@ -16,11 +16,11 @@ export class RelayWaiting extends LitElement {
   static styles = [tw, css`:host{display:block}`];
   protected store = new StoreController(this);
   // a failed hide, stop or attach shows its error on the button
-  private errs = new Map<string, string>();
+  @state() private errs = new Map<string, string>();
 
   private async act(act: "hide" | "stop" | "attach", id: string) {
     try { await bg(act, id); }
-    catch (e) { this.errs.set(`${act}:${id}`, String(e).slice(0, 60)); this.requestUpdate(); }
+    catch (e) { this.errs = new Map(this.errs).set(`${act}:${id}`, String(e).slice(0, 60)); }
   }
   private btn(act: "hide" | "stop" | "attach", id: string, text: string, primary = false) {
     return html`<button class=${primary ? "btn btn-primary" : "btn"} @click=${() => this.act(act, id)}>${this.errs.get(`${act}:${id}`) ?? text}</button>`;

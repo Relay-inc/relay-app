@@ -1,5 +1,5 @@
 import { LitElement, html, css, nothing } from "lit";
-import { customElement } from "lit/decorators.js";
+import { customElement, state } from "lit/decorators.js";
 import { tn } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
@@ -15,13 +15,14 @@ export class RelaySubagents extends LitElement {
   static styles = [tw, css`:host{display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow-y:auto}`];
   protected store = new StoreController(this);
   private tick = 0;
+  @state() private now = Date.now(); // the running agents' durations count up every second
   // the running time of a working agent counts up every second
-  connectedCallback() { super.connectedCallback(); this.tick = window.setInterval(() => this.requestUpdate(), 1000); }
+  connectedCallback() { super.connectedCallback(); this.tick = window.setInterval(() => { this.now = Date.now(); }, 1000); }
   disconnectedCallback() { super.disconnectedCallback(); clearInterval(this.tick); }
 
   private row = (a: Sub) => html`<relay-subagent-row ?running=${a.running} .description=${a.description} .meta=${[a.agentType, a.model].filter(Boolean).join(" · ")}
     .tool=${a.tool ?? ""} .input=${a.input} .text=${a.text ?? ""} .log=${chat.subLog[a.id]}
-    .duration=${a.running ? dur((Date.now() - Date.parse(a.started_at)) / 1000) : dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}
+    .duration=${a.running ? dur((this.now - Date.parse(a.started_at)) / 1000) : dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}
     @toggle=${() => toggleSubLog(a.id)}></relay-subagent-row>`;
 
   render() {

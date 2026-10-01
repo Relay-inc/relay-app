@@ -16,8 +16,8 @@ const GROUPS: [Key, (d: number) => boolean][] = [
 ];
 const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
 
-// the new-reminder form lives outside the element, so a half-typed reminder survives switching views
-const draft: Draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
+// the new-reminder form is kept outside the element too, so a half-typed reminder survives switching views
+let saved: Draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
 
 /** The reminders view: the new-reminder form, then the reminders grouped by when they are due. */
 @customElement("relay-reminders")
@@ -26,15 +26,17 @@ export class RelayReminders extends LitElement {
   protected store = new StoreController(this);
   @state() private cal: string | null = null; // the row whose date picker is open
   @state() private busy: string | null = null; // the row whose action is running
+  @state() private draft: Draft = saved;
+  private setDraft(p: Partial<Draft>) { this.draft = saved = { ...saved, ...p }; }
 
-  private patch = (e: CustomEvent<Partial<Draft>>) => { Object.assign(draft, e.detail); this.requestUpdate(); };
+  private patch = (e: CustomEvent<Partial<Draft>>) => this.setDraft(e.detail);
 
   private async add() {
-    const d = draft, text = d.text.trim();
-    Object.assign(d, { busy: true, err: "" }); this.requestUpdate();
-    try { await remAdd(text, d.date, d.project || null, d.repeat || null); Object.assign(d, { open: false, text: "", date: "", project: "", repeat: "" }); }
-    catch (e) { d.err = String(e); }
-    d.busy = false; this.requestUpdate();
+    const d = this.draft, text = d.text.trim();
+    this.setDraft({ busy: true, err: "" });
+    try { await remAdd(text, d.date, d.project || null, d.repeat || null); this.setDraft({ open: false, text: "", date: "", project: "", repeat: "" }); }
+    catch (e) { this.setDraft({ err: String(e) }); }
+    this.setDraft({ busy: false });
   }
 
   private async run(id: string, action: "done" | "push", date?: string) {
@@ -55,7 +57,7 @@ export class RelayReminders extends LitElement {
       const items = all.filter(r => f(r.days)).sort((a, b) => a.days - b.days);
       return items.length ? html`<section class="mb-6"><h2 class="list-head">${t(name)} <span class="font-mono tabular-nums">${items.length}</span></h2>${items.map(r => this.row(r))}</section>` : nothing;
     });
-    return html`<relay-reminder-form .draft=${{ ...draft }} .projects=${projectsByLabel(currentLocale())} @reminder-draft=${this.patch} @reminder-add=${() => this.add()}></relay-reminder-form>
+    return html`<relay-reminder-form .draft=${this.draft} .projects=${projectsByLabel(currentLocale())} @reminder-draft=${this.patch} @reminder-add=${() => this.add()}></relay-reminder-form>
       ${vault.snap.vault?.found?.reminders === false ? html`<div class="text-secondary mb-2.5">${th("rem.noFile", { path: raw(`<code class="font-mono">${esc(vault.snap.vault?.map?.reminders ?? "")}</code>`) })}</div>` : nothing}
       ${all.length ? groups : html`<div class="text-secondary text-center py-6">${t("rem.none")}</div>`}`;
   }

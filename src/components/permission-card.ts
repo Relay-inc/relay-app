@@ -1,5 +1,5 @@
 import { LitElement, html, css } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { t, th } from "../core/i18n";
 import { emit } from "../core/dom";
 import { tw } from "../core/styles";
@@ -31,14 +31,13 @@ export class PermissionCard extends LitElement {
   @property() where = "";
   @property({ type: Boolean }) busy = false;
   // the options picked per question, and what is typed in its "other" field
-  private on: Record<number, Set<string>> = {};
+  @state() private on: Record<number, Set<string>> = {};
   private other: Record<number, string> = {};
 
   private pick(qi: number, lab: string, multi: boolean) {
-    const s = this.on[qi] ||= new Set();
-    if (s.has(lab)) s.delete(lab);
-    else { if (!multi) s.clear(); s.add(lab); }
-    this.requestUpdate();
+    const s = new Set(multi ? this.on[qi] : this.on[qi]?.has(lab) ? [lab] : []);
+    if (s.has(lab)) s.delete(lab); else s.add(lab);
+    this.on = { ...this.on, [qi]: s };
   }
   private answer() {
     const qs: any[] = this.request.input.questions || [];

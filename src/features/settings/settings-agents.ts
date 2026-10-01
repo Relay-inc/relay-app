@@ -54,10 +54,10 @@ export class SettingsAgents extends SettingsElement {
     if (!quiet) this.agSt = null;
     try { this.agSt = await agentsStatus(); } catch (e) { this.agMsg = String(e); this.agOk = false; }
   }
-  private toggle(id: string) { if (!this.opened.delete(id)) this.opened.add(id); this.requestUpdate(); }
+  private toggle(id: string) { const o = new Set(this.opened); if (!o.delete(id)) o.add(id); this.opened = o; }
   // add (folded open, to set it up) and remove
   private async switchTo(id: string, on: boolean) {
-    if (on) this.opened.add(id); else this.opened.delete(id);
+    const o = new Set(this.opened); if (on) o.add(id); else o.delete(id); this.opened = o;
     await this.save(a => { a.providers[id] = { ...a.providers[id], on }; });
   }
 

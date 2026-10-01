@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, query } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { t } from "../../core/i18n";
 import { emit } from "../../core/dom";
@@ -18,17 +18,18 @@ export class ReminderForm extends LitElement {
   static styles = [tw];
   @property({ attribute: false }) draft!: Draft;
   @property({ attribute: false }) projects: { name: string; label: string }[] = [];
-  private focusText = false;
+  @query('[data-rem-f="text"]') private textField?: HTMLInputElement;
+  private focusText = false; // opening the form: focus the text field once it is drawn
 
   updated() {
-    if (this.focusText) { this.focusText = false; this.renderRoot.querySelector<HTMLInputElement>('[data-rem-f="text"]')?.focus(); }
+    if (this.focusText) { this.focusText = false; this.textField?.focus(); }
   }
 
   private patch(p: Partial<Draft>) { emit(this, "reminder-draft", p); }
 
   private submit() {
     const d = this.draft;
-    if (!d.text.trim()) { this.focusText = true; this.requestUpdate(); return; }
+    if (!d.text.trim()) { this.textField?.focus(); return; }
     if (!d.date || d.busy) return;
     emit(this, "reminder-add");
   }

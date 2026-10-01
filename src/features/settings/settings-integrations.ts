@@ -43,7 +43,7 @@ export class SettingsIntegrations extends SettingsElement {
   @state() private ghLogin = ""; @state() private ghErr = ""; @state() private ghMsg = ""; @state() private ghOk = false;
   @state() private intMsg = ""; @state() private intOk = false;
   // which rows are folded open
-  private opened = new Set<string>();
+  @state() private opened = new Set<string>();
 
   connectedCallback() {
     super.connectedCallback();
@@ -66,14 +66,13 @@ export class SettingsIntegrations extends SettingsElement {
 
   // an integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain
   private async switchTo(id: string, on: boolean) {
-    if (on) this.opened.add(id); else this.opened.delete(id);
+    const o = new Set(this.opened); if (on) o.add(id); else o.delete(id); this.opened = o;
     const next = structuredClone(this.settings);
     if (id === "github") next.github.on = on;
     else if (id === "mail") next.mail = { ...next.mail, on };
     else next.integrations[id] = { ...next.integrations[id], on };
     try { this.commit(await invoke<Settings>("set_settings", { settings: next })); if (id === "mail") this.mail.edit.on = on; this.intMsg = ""; this.intOk = true; }
     catch (x) { this.intMsg = String(x); this.intOk = false; }
-    this.requestUpdate();
   }
 
   private async ghSave() {
@@ -116,7 +115,7 @@ export class SettingsIntegrations extends SettingsElement {
     ];
     const act = all.filter(x => x.on);
     const row = (x: Entry) => html`<relay-settings-fold ?open=${this.opened.has(x.id)} .ico=${x.ico} .name=${x.name} .state=${x.state}
-        @fold-toggle=${() => { if (!this.opened.delete(x.id)) this.opened.add(x.id); this.requestUpdate(); }} @int-remove=${() => this.switchTo(x.id, false)}>${this.opened.has(x.id) ? x.body() : nothing}</relay-settings-fold>`;
+        @fold-toggle=${() => { const o = new Set(this.opened); if (!o.delete(x.id)) o.add(x.id); this.opened = o; }} @int-remove=${() => this.switchTo(x.id, false)}>${this.opened.has(x.id) ? x.body() : nothing}</relay-settings-fold>`;
     return sec(t("set.tab.integrations"), act.length ? act.map(row) : html`<div class=${SEMPTY}>${t("int.empty")}</div>`,
       { desc: th("int.listHelp"), list: true, foot: this.intMsg ? foot(this.intMsg, this.intOk, nothing) : nothing,
         action: html`<relay-settings-menu .label=${t("int.add")} .items=${all.filter(x => !x.on).map(x => ({ id: x.id, ico: x.ico, name: x.name, state: x.state }))} @menu-pick=${(e: CustomEvent<string>) => this.switchTo(e.detail, true)}></relay-settings-menu>` });
