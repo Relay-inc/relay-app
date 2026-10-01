@@ -10,6 +10,7 @@ import { ghOn } from "../../domain/config";
 import { project, projectLabel } from "../../domain/vault";
 import { selectedProject } from "../../domain/chats/state";
 import { panel, setTab, cardOf, closeDetail, openDetail, cardAct, type CardAct } from "../../domain/panel";
+import { cardChat } from "../../domain/card-chat";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
@@ -58,8 +59,15 @@ export class RelayInspector extends LitElement {
         // the card's markup comes from its provider package, which tells the panel through an event that its close button was clicked
         const card = cardOf(key);
         return card
-          ? html`<div ?inert=${panel.acting} class=${panel.acting ? "opacity-70" : ""} @detail-close=${closeDetail} @detail-act=${(e: CustomEvent<CardAct>) => cardAct(key, e.detail)}>
-              ${panel.actErr ? html`<div class="err-box mb-3">${panel.actErr}</div>` : nothing}${card.detail.render(panel.detail[key] ?? null, panel.err)}</div>`
+          ? html`<div
+              ?inert=${panel.acting}
+              class=${panel.acting ? "opacity-70" : ""}
+              @detail-close=${closeDetail}
+              @detail-act=${(e: CustomEvent<CardAct>) => cardAct(key, e.detail)}
+              @detail-chat=${() => cardChat(key)}
+            >
+              ${panel.actErr ? html`<div class="err-box mb-3">${panel.actErr}</div>` : nothing}${card.detail.render(panel.detail[key] ?? null, panel.err)}
+            </div>`
           : nothing;
       }
       case "note":

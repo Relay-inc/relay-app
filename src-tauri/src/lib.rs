@@ -24,6 +24,7 @@ mod relay_config;
 mod reminders;
 mod tray;
 mod vault;
+mod worktrees;
 
 // ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
@@ -246,6 +247,7 @@ struct App {
     settings: Mutex<Value>,                // settings.json: vault, projects, overrides, agents, mail
     limits: Mutex<HashMap<String, (i64, Value)>>, // per provider: its last limits answer and when
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
+    worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -257,6 +259,10 @@ fn pending_dir(app: &AppHandle) -> PathBuf { data_dir(app).join("pending") }
 
 fn save_sids(app: &AppHandle, sids: &HashMap<String, agents::Sess>) {
     fs::write(data_dir(app).join("sessions.json"), agents::save_sessions(sids)).ok();
+}
+
+fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
+    fs::write(data_dir(app).join("worktrees.json"), json!(w).to_string()).ok();
 }
 
 fn login_path() -> String {
@@ -534,6 +540,8 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
     std::thread::spawn(move || {
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
         let mut err: Vec<String> = vec![];
+        // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
+        let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
         for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
             let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => break };
             let replay = n < backlog;
@@ -571,6 +579,17 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                         let mut r = request.clone();
                         (r.project, r.provider, r.relay) = (k.clone(), id.into(), true);
                         pending::write(&pend, &r).ok();
+                    }
+                    Event::ToolCall { id: call, input, .. } if worktrees::may_add(input) => { wt_before.insert(call.clone(), worktrees::snapshot(&wt_root)); }
+                    Event::ToolResult { id: call, .. } if wt_before.contains_key(call) => {
+                        let before = wt_before.remove(call).unwrap_or_default();
+                        let new: Vec<String> = worktrees::snapshot(&wt_root).difference(&before).map(|p| p.to_string_lossy().into()).collect();
+                        if !new.is_empty() {
+                            let st = a.state::<App>();
+                            let mut w = st.worktrees.lock().unwrap();
+                            w.entry(k.clone()).or_default().extend(new);
+                            save_worktrees(&a, &w);
+                        }
                     }
                     Event::TurnEnd { .. } => {
                         if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
@@ -701,6 +720,19 @@ fn stop(state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
 }
 
+/// A conversation closes: remove the worktrees it made that are safe to remove (see worktrees::remove). The ones
+/// kept stay linked, a next close tries again. Returns {removed, kept}.
+#[tauri::command]
+async fn drop_worktrees(app: AppHandle, state: State<'_, App>, project: String) -> Result<Value, String> {
+    let Some(paths) = state.worktrees.lock().unwrap().get(&project).cloned() else { return Ok(json!({"removed": 0, "kept": 0})) };
+    let path = state.path.clone();
+    let (removed, kept) = tauri::async_runtime::spawn_blocking(move || worktrees::remove(&paths, &path)).await.map_err(|e| e.to_string())?;
+    let mut w = state.worktrees.lock().unwrap();
+    if kept.is_empty() { w.remove(&project); } else { w.insert(project, kept.clone()); }
+    save_worktrees(&app, &w);
+    Ok(json!({"removed": removed, "kept": kept.len()}))
+}
+
 /// A short title for a new conversation, from its provider or else the first switched-on one that can.
 /// Async, so the wait (~5 s for Claude) never blocks the window.
 #[tauri::command]
@@ -737,8 +769,10 @@ fn reset(app: AppHandle, state: State<App>, project: String) {
 fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&from) { p.child.kill().ok(); }
     let mut sids = state.sids.lock().unwrap();
-    if let Some(sid) = sids.remove(&from) { sids.insert(to, sid); }
+    if let Some(sid) = sids.remove(&from) { sids.insert(to.clone(), sid); }
     save_sids(&app, &sids);
+    let mut w = state.worktrees.lock().unwrap();
+    if let Some(paths) = w.remove(&from) { w.insert(to, paths); save_worktrees(&app, &w); }
     Ok(())
 }
 
@@ -1045,6 +1079,13 @@ async fn integration_upload(provider: String, url: String, fields: serde_json::M
     tauri::async_runtime::spawn_blocking(move || providers::upload(p, &url, &fields, &name, &mime, &bytes)).await.map_err(|e| e.to_string())?
 }
 
+/// A picture's preview for a card panel (providers::thumb), as a data URL.
+#[tauri::command]
+async fn integration_thumb(provider: String, url: String) -> Result<String, String> {
+    let p = providers::get(&provider)?;
+    tauri::async_runtime::spawn_blocking(move || providers::thumb(p, &url)).await.map_err(|e| e.to_string())?
+}
+
 /// A board provider's credentials from Claude Code's MCP config (board_core::from_claude): ~/.claude.json for the user
 /// and for the vault as a project, and the vault's .mcp.json.
 fn claude_creds(state: &App, p: &providers::Provider) -> Option<(Vec<(String, String)>, serde_json::Map<String, Value>)> {
@@ -1327,12 +1368,13 @@ pub fn run() {
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
+            let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
             reattach(app.handle());
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

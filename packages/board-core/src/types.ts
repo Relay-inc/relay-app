@@ -23,7 +23,9 @@ export type BoardRef = { provider: string; project: string; board: string };
 /** What a provider gets for each call: its settings.integrations.<id>, and one API call through the backend. */
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
   /** a file posted as a form to a URL the backend's `upload` allows (no secrets go along), resolves with its Location */
-  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string> };
+  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string>;
+  /** a picture's preview from a URL the backend's `thumb` allows (no secrets go along), resolves with a data URL */
+  thumb: (url: string) => Promise<string> };
 
 /** The right panel for one card, optional: without it a click opens the card in the browser. */
 export interface CardDetail<D = any> {
@@ -35,6 +37,9 @@ export interface CardDetail<D = any> {
   /** An action from the panel, resolves with the card as it is now. The template asks for one with a bubbling, composed
    * "detail-act" event, detail `{ action, value, files }`: a picker's value or the composer's text, and picked or dropped files. */
   act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[] }): Promise<D>;
+  /** A conversation about the card: its title in the list, and what goes in front of the user's first message. The
+   * template asks for one with a bubbling, composed "detail-chat" event. */
+  chat?(d: D, id: string): { title: string; prompt: string };
 }
 
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).

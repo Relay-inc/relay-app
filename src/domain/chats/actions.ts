@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { t } from "../../core/i18n";
+import { t, tn } from "../../core/i18n";
 import { changed, ls, request } from "../../core/store";
 import { ui, WAIT, isTerminal } from "../ui";
 import { config, saveSettings, type Settings } from "../config";
@@ -11,6 +11,7 @@ import {
   chat,
   NEW,
   terminalOf,
+  terminalSessions,
   projectOf,
   selectedProject,
   label,
@@ -334,19 +335,29 @@ export function openTerminal() {
 
 // ---------- closing hides a conversation from the sidebar. An app conversation stops but keeps its session, a
 // terminal session keeps running in iTerm. Both come back via the undo bar or right-click > Heropen.
-export async function closeChat(key: string) {
-  const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
+async function hide(key: string) {
   if (isTerminal(key)) {
     chat.forked.push(termSid(key));
     ls.set("forkedTerms", chat.forked);
-  } else if (chat.chats[key]) {
-    await invoke("stop", { project: key });
-    chat.chats[key].closed = Date.now();
-    delete chat.status[key];
-    delete chat.queued[key];
-    saveChats();
+    return null;
   }
-  toast(t("toast.closed", { title: title ?? "" }), () => reopen(key));
+  if (!chat.chats[key]) return null;
+  await invoke("stop", { project: key });
+  // the git worktrees this conversation made go with it, the ones with work git would lose stay
+  const wt = await invoke<{ removed: number; kept: number }>("drop_worktrees", { project: key }).catch(() => null);
+  chat.chats[key].closed = Date.now();
+  delete chat.status[key];
+  delete chat.queued[key];
+  saveChats();
+  return wt;
+}
+const worktreeNote = (removed: number, kept: number) =>
+  (removed ? ` · ${tn("toast.worktreesRemoved", removed)}` : "") +
+  (kept ? ` · ${tn("toast.worktreesKept", kept)}` : "");
+export async function closeChat(key: string) {
+  const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
+  const wt = await hide(key);
+  toast(t("toast.closed", { title: title ?? "" }) + worktreeNote(wt?.removed ?? 0, wt?.kept ?? 0), () => reopen(key));
   if (ui.selected !== key) {
     changed();
     return;
@@ -354,6 +365,33 @@ export async function closeChat(key: string) {
   const project = isTerminal(key) ? null : projectOf(key);
   const neighbour = project ? chatsOf(project)[0] : undefined;
   await select(neighbour ? neighbour.key : WAIT);
+}
+// right-click on Algemeen or a project > close all: every open conversation and terminal session under it, one undo
+export async function closeAll(project: string | null) {
+  const keys = [
+    ...chatsOf(project).map(conversation => conversation.key),
+    ...terminalSessions()
+      .filter(session => session.project === project)
+      .map(session => session.key),
+  ];
+  let removed = 0;
+  let kept = 0;
+  for (const key of keys) {
+    const wt = await hide(key);
+    removed += wt?.removed ?? 0;
+    kept += wt?.kept ?? 0;
+  }
+  toast(tn("toast.closedAll", keys.length) + worktreeNote(removed, kept), () => {
+    const sids = keys.filter(isTerminal).map(termSid);
+    chat.forked = chat.forked.filter(sid => !sids.includes(sid));
+    ls.set("forkedTerms", chat.forked);
+    for (const key of keys) if (chat.chats[key]) delete chat.chats[key].closed;
+    saveChats();
+    ui.toast = null;
+    changed();
+  });
+  if (keys.includes(ui.selected)) await select(WAIT);
+  else changed();
 }
 export async function reopen(key: string) {
   if (isTerminal(key)) {

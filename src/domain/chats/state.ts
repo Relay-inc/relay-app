@@ -57,7 +57,7 @@ export type Chat = {
   draft?: boolean;
   fork?: string;
   closed?: number;
-  mail?: string;
+  mail?: string; // what goes in front of the first message: a mail or a card to read
   provider?: string; // its agent, set at the first message
   fromMail?: boolean; /* about a mail or has read mail */
 };

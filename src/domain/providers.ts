@@ -28,8 +28,16 @@ export const ctxOf = (
       r.onerror = () => no(r.error);
       r.readAsDataURL(file);
     });
-    return invoke<string>("integration_upload", { provider: boardProvider.id, url, fields, name: file.name, mime: file.type || "application/octet-stream", data });
+    return invoke<string>("integration_upload", {
+      provider: boardProvider.id,
+      url,
+      fields,
+      name: file.name,
+      mime: file.type || "application/octet-stream",
+      data,
+    });
   },
+  thumb: url => invoke<string>("integration_thumb", { provider: boardProvider.id, url }),
 });
 /** Switched on, config complete and a token in the keychain: the board shows in the sidebar. */
 export const ready = (boardProvider: BoardProvider) =>
