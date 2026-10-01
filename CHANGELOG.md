@@ -10,7 +10,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
-- Right-click on Algemeen or a project › Close all conversations closes every conversation and terminal session under it; one undo brings them all back
+- Right-click on Algemeen or a project › Close all conversations closes every conversation and terminal session under it; one undo brings them all back (#38)
 - Closing a conversation removes the git worktrees it made in your `~/projects` repos; the branches stay, and a worktree with uncommitted changes or unsaved commits is kept. The undo bar says how many went (#37)
 - Settings › General › Appearance picks light or dark mode, or System (the default) to follow macOS; both windows switch right away (#27)
 - Typing `/` in the composer lists Claude Code's slash commands and skills for the vault, with their descriptions; arrows pick, Tab or Enter completes, Escape closes. Relay asks Claude Code for the list when it starts (#26)
