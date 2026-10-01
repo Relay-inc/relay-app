@@ -42,6 +42,9 @@ const linear: BoardProvider<Key> = {
   settings: {
     tokenLabel: "token",
     help: "help",
+    // Linear's own page for personal API keys, shown as a button next to the field
+    tokenUrl: () => "https://linear.app/settings/account/security",
+    check: s => (s.token && !/^lin_api_\S+$/.test(s.token) ? "badToken" : undefined),
     fields: [{ key: "done", label: "states", placeholder: "showDone", check: true, optional: true }],
     async test(c) { teams = null; const v = (await gql(c, VIEWER))?.viewer; return t("connectedAs", { name: v?.displayName || v?.name || v?.id || "?" }); },
     allBoards: async c => (await all(c)).boards,
