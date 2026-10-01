@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
 import { renderReminders, onRemindersEvent, onReminderField, keepFormFocus, urgency } from "./reminders";
 import "./reminders.css";
@@ -336,8 +337,8 @@ function push(k: string, it: Item) { (convo[k] ||= []).push(it); }
 // messages sent but not answered yet: Claude Code answers queued messages one by one, one result each
 const queued: Record<string, number> = {};
 // a banner while the window is in the background, a click opens that conversation (src-tauri/src/notify.rs)
-function notify(k: string, body: string) {
-  if (document.hasFocus()) return;
+async function notify(k: string, body: string) {
+  if (await getCurrentWindow().isFocused().catch(() => false)) return;
   invoke("notify", { key: k, title: k === WAIT ? t("nav.waiting") : label(k), body: body.replace(/[#*`>_]+/g, "").replace(/\s+/g, " ").trim().slice(0, 160) });
 }
 const lastAi = (k: string) => [...(convo[k] || [])].reverse().find(i => i.kind === "ai")?.text || t("work.done");

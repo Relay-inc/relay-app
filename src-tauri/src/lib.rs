@@ -13,7 +13,7 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 mod mail;
-mod notify;
+pub mod notify;
 mod providers;
 mod reminders;
 mod tray;
