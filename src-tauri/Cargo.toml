@@ -18,11 +18,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 tauri-plugin-dialog = "2"
 sys-locale = "0.3.2"
+chrono = "0.4"
+sha1_smol = "1"
 tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
 # the board integrations, registered in src/providers.rs (PROVIDERS)
@@ -30,4 +32,17 @@ board-core.workspace = true
 integration-productive = { path = "../packages/integration-productive" }
 integration-trello = { path = "../packages/integration-trello" }
 integration-linear = { path = "../packages/integration-linear" }
+async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
+async-native-tls = { version = "0.6", default-features = false, features = ["runtime-tokio"] }
+tokio = { version = "1", features = ["net", "time", "sync", "rt", "macros"] }
+mail-parser = "0.11"
+ammonia = "4"
+futures = "0.3"
+base64 = "0.23"
 
+
+# the red menu bar title when a reminder is overdue (src/tray.rs), same versions as tauri's tray-icon
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"

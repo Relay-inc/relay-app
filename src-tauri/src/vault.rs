@@ -7,13 +7,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// The mapping keys: (key, is a folder, required). Only workState is required: it makes a folder a
-/// vault. The others switch a feature off when missing.
-pub const KEYS: [(&str, bool, bool); 4] = [
-    ("workState", false, true),      // the project tables per context
-    ("reminders", false, false),     // the reminder table
-    ("reminderScript", false, false), // reminder-digest.py: done / push / drop from the app
-    ("notes", true, false),          // folder searched for project notes (## Open, Stand van zaken)
+/// vault. The others switch a feature off when missing, except reminders: the first one creates the file.
+pub const KEYS: [(&str, bool, bool); 3] = [
+    ("workState", false, true),  // the project tables per context
+    ("reminders", false, false), // the reminder table, REMINDERS in the vault root when none is found
+    ("notes", true, false),      // folder searched for project notes (## Open, Stand van zaken)
 ];
+pub const REMINDERS: &str = "reminders.md";
 /// The brain folder of the known layouts: System/ in the new one, Resources/Meta/Claude/ in the old one.
 const BRAINS: [&str; 2] = ["System", "Resources/Meta/Claude"];
 
@@ -66,10 +66,10 @@ pub fn detect(vault: &str) -> (String, Value) {
     let work = in_brain("rules/core/work-state.md").or_else(|| scan(&root, "work-state.md"));
     let next_to_work = |name: &str| work.as_ref().and_then(|w| w.parent()).map(|d| d.join(name)).filter(|p| p.is_file());
     let reminders = in_brain("reminders.md").or_else(|| next_to_work("reminders.md")).or_else(|| scan(&root, "reminders.md"));
-    let script = in_brain("scripts/reminder-digest.py").or_else(|| scan(&root, "reminder-digest.py"));
     let notes = Some(root.join("Contexts")).filter(|p| p.is_dir());
     let r = |p: Option<PathBuf>| json!(p.map(|p| rel(&root, &p)).unwrap_or_default());
-    (v, json!({"workState": r(work), "reminders": r(reminders), "reminderScript": r(script), "notes": r(notes)}))
+    let reminders = json!(reminders.map_or(REMINDERS.into(), |p| rel(&root, &p)));
+    (v, json!({"workState": r(work), "reminders": reminders, "notes": r(notes)}))
 }
 
 /// The detected mapping with the stored one on top, keeping only known keys with text values.
@@ -77,7 +77,7 @@ pub fn merge(detected: &Value, stored: &Value) -> Value {
     let mut m = Map::new();
     for (k, _, _) in KEYS {
         let s = stored[k].as_str().or(detected[k].as_str()).unwrap_or("").trim();
-        m.insert(k.into(), json!(s));
+        m.insert(k.into(), json!(if s.is_empty() && k == "reminders" { REMINDERS } else { s }));
     }
     Value::Object(m)
 }
@@ -117,8 +117,7 @@ mod tests {
         let d = tmp("system");
         for f in ["System/rules/core/work-state.md", "System/reminders.md", "System/scripts/reminder-digest.py", "Contexts/Antenna/Portfolio/X.md"] { touch(&d, f); }
         let s = det(&d);
-        assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md",
-            "reminderScript": "System/scripts/reminder-digest.py", "notes": "Contexts"}));
+        assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md", "notes": "Contexts"}));
         assert_eq!(s["ok"], true);
     }
 
@@ -129,8 +128,6 @@ mod tests {
         let s = det(&d);
         assert_eq!(s["map"]["workState"], "Resources/Meta/Claude/rules/core/work-state.md");
         assert_eq!(s["map"]["reminders"], "Resources/Meta/Claude/reminders.md");
-        assert_eq!(s["map"]["reminderScript"], ""); // no script: the feature is off, the vault still works
-        assert_eq!(s["found"]["reminderScript"], false);
         assert_eq!(s["ok"], true);
     }
 
@@ -149,6 +146,17 @@ mod tests {
         assert_eq!(m["workState"], "Contexts/Personal/State/work-state.md");
         assert_eq!(m["reminders"], "Contexts/Personal/State/reminders.md");
         assert_eq!(status(&v, &m)["ok"], true);
+    }
+
+    #[test]
+    fn reminders_default_to_the_vault_root() {
+        let d = tmp("norem");
+        touch(&d, "System/rules/core/work-state.md");
+        let s = det(&d);
+        assert_eq!(s["map"]["reminders"], REMINDERS); // created by the first reminder
+        assert_eq!(s["found"]["reminders"], false);
+        assert_eq!(merge(&json!({}), &json!({"reminders": ""}))["reminders"], REMINDERS); // older settings stored ""
+        assert_eq!(s["ok"], true);
     }
 
     #[test]
