@@ -6,7 +6,7 @@ import { glyphSvg } from "../../core/icons";
 import { t, th } from "../../core/i18n";
 import { PROVIDERS, provider as providerById, type BoardProvider } from "../../domain/providers";
 import { BoardsController } from "./board-controller";
-import { footer, appIcon, EMPTY_LIST, formText, section, statusLine, TILE } from "./blocks";
+import { buttonClass, BUTTON_GLYPH, footer, appIcon, EMPTY_LIST, formText, section, statusLine, TILE } from "./blocks";
 import { MailController } from "./mail-controller";
 import "./settings-board";
 import "./settings-fold";
@@ -14,6 +14,7 @@ import "./settings-github";
 import "./settings-mail";
 import "./settings-menu";
 import type { BoardRow } from "./settings-board";
+import type { BoardLink } from "./board-controller";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
 import type { Settings } from "./types";
@@ -34,12 +35,13 @@ type Entry = {
   name: unknown;
   status: unknown;
   on: boolean;
-  body: () => unknown;
+  /** its page: sections of its own (a board provider), or one body that goes in a card */
+  page: () => unknown;
 };
 
 /** Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on), the others
- *  are in the Add menu. In the list means in the sidebar; Remove switches it off and keeps the token. The state of every
- *  integration lives here, not in its row, so it survives the row folding shut. */
+ *  are in the Add menu. In the list means in the sidebar; a row opens the integration's own page, Remove switches it off
+ *  and keeps the token. The state of every integration lives here, so it survives going back to the list. */
 @customElement("relay-settings-integrations")
 export class SettingsIntegrations extends SettingsElement {
   static override styles = [tws, page];
@@ -58,8 +60,8 @@ export class SettingsIntegrations extends SettingsElement {
   @state() private githubOk = false;
   @state() private listMessage = "";
   @state() private listOk = false;
-  // which rows are folded open
-  @state() private opened = new Set<string>();
+  // the integration whose page is open, or null for the list
+  @state() private detail: string | null = null;
 
   override connectedCallback() {
     super.connectedCallback();
@@ -102,10 +104,7 @@ export class SettingsIntegrations extends SettingsElement {
   }
 
   private setOpen(id: string, open: boolean) {
-    const opened = new Set(this.opened);
-    if (open) opened.add(id);
-    else opened.delete(id);
-    this.opened = opened;
+    this.detail = open ? id : null;
   }
 
   private settingsWithOn(id: string, on: boolean): Settings {
@@ -161,8 +160,8 @@ export class SettingsIntegrations extends SettingsElement {
       const otherProvider = current ? (providerById(current.provider)?.name ?? current.provider) : "";
       return {
         vaultProject,
-        noneLabel: isOurs || !current ? t("kb.linkNone") : otherProvider,
         board: isOurs ? current.board : undefined,
+        other: current && !isOurs ? otherProvider : undefined,
       };
     });
   }
@@ -185,8 +184,7 @@ export class SettingsIntegrations extends SettingsElement {
       @board-save=${() => boards.saveForm(provider)}
       @board-import=${() => boards.import(provider)}
       @board-clear=${() => boards.clear(provider)}
-      @board-map=${(e: CustomEvent<{ vaultProject: string; value: string }>) =>
-        boards.map(provider, e.detail.vaultProject, e.detail.value)}
+      @board-map=${(e: CustomEvent<BoardLink[]>) => boards.map(provider, e.detail)}
       @boards-load=${() => {
         if (!boards.all[id]) boards.load(provider);
       }}
@@ -234,7 +232,7 @@ export class SettingsIntegrations extends SettingsElement {
       name: provider.name,
       status: this.boardStatus(provider),
       on: this.isBoardOn(provider),
-      body: () => this.boardBody(provider),
+      page: () => this.boardBody(provider),
     }));
     return [
       ...boardEntries,
@@ -244,7 +242,7 @@ export class SettingsIntegrations extends SettingsElement {
         name: "GitHub",
         status: this.githubStatus(),
         on: !!this.settings.github.on,
-        body: () => this.githubBody(),
+        page: () => section(t("int.connection"), this.githubBody()),
       },
       {
         id: "mail",
@@ -252,22 +250,38 @@ export class SettingsIntegrations extends SettingsElement {
         name: "Mail",
         status: this.mailStatus(),
         on: !!this.settings.mail?.on,
-        body: () => this.mailBody(),
+        page: () => section(t("int.connection"), this.mailBody()),
       },
     ];
   }
 
   private renderEntry(entry: Entry) {
-    const open = this.opened.has(entry.id);
     return html`<relay-settings-fold
-      ?open=${open}
+      nav
       .icon=${entry.icon}
       .name=${entry.name}
       .status=${entry.status}
-      @fold-toggle=${() => this.setOpen(entry.id, !open)}
-      @int-remove=${() => this.switchTo(entry.id, false)}
-      >${open ? entry.body() : nothing}</relay-settings-fold
-    >`;
+      @fold-toggle=${() => this.setOpen(entry.id, true)}
+    ></relay-settings-fold>`;
+  }
+
+  // an integration's own page: back to the list, its name and status, then its sections
+  private renderDetail(entry: Entry) {
+    return html`<header class="grid gap-3">
+        <button class="${buttonClass("ghost")} -ml-2 justify-self-start" @click=${() => this.setOpen(entry.id, false)}>
+          ${appIcon("left", BUTTON_GLYPH)}${t("set.tab.integrations")}
+        </button>
+        <div class="flex items-center gap-3">
+          <span class="grid size-9 flex-none place-items-center rounded-lg border border-s-border bg-s-bg"
+            >${entry.icon}</span
+          >
+          <div class="min-w-0">
+            <h1 class="text-base font-semibold text-s-fg">${entry.name}</h1>
+            <div class="mt-px flex">${entry.status}</div>
+          </div>
+        </div>
+      </header>
+      ${entry.page()}`;
   }
 
   private renderAddMenu(unused: Entry[]) {
@@ -282,6 +296,8 @@ export class SettingsIntegrations extends SettingsElement {
   override render() {
     if (!this.loaded) return nothing;
     const entries = this.entries();
+    const open = entries.find(entry => entry.id === this.detail && entry.on);
+    if (open) return this.renderDetail(open);
     const listed = entries.filter(entry => entry.on);
     const rows = listed.length
       ? listed.map(entry => this.renderEntry(entry))

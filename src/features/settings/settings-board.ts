@@ -1,18 +1,21 @@
-import { html, nothing } from "lit";
+import { css, html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
 import { pt, pth, t, th } from "../../core/i18n";
 import type { BoardOpt, BoardProvider } from "../../domain/providers";
 import {
+  appIcon,
+  BUTTON_GLYPH,
+  OPTIONAL_TEXT,
+  section,
   buttonClass,
   ERROR_MESSAGE,
   field,
   FIELD,
   footer,
   FOOTER_IN_ROW,
-  HINT,
   HINT_IN_ROW,
   withoutColon,
   SELECT,
@@ -22,6 +25,8 @@ import {
   formText,
 } from "./blocks";
 import "./settings-menu";
+import { matchBoard } from "./board-match";
+import type { BoardLink } from "./board-controller";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 import type { Message } from "./types";
@@ -36,20 +41,28 @@ declare global {
     "board-save": CustomEvent<void>;
     "board-import": CustomEvent<void>;
     "board-clear": CustomEvent<void>;
-    "board-map": CustomEvent<{ vaultProject: string; value: string }>;
+    "board-map": CustomEvent<BoardLink[]>;
     "boards-load": CustomEvent<void>;
   }
 }
 
 type ProviderField = BoardProvider["settings"]["fields"][number];
 
-/** A vault project's row in the board mapping: what its "none" option says, and the board of this provider it is on */
-export type BoardRow = { vaultProject: string; noneLabel: string; board?: string };
+/** A vault project in the board mapping: the board of this provider it is on, or the other provider it is on */
+export type BoardRow = { vaultProject: string; board?: string; other?: string };
 
-/** A board provider's body in the integrations list: the token, the fields of its config, its boards per vault project. */
+/** A board provider's page in Integrations: the connection (token, the fields of its config), its boards per vault project. */
 @customElement("relay-settings-board")
 export class SettingsBoard extends SettingsElement {
-  static override styles = [tws];
+  // its sections sit in the page's column, like the page's own
+  static override styles = [
+    tws,
+    css`
+      :host {
+        display: contents;
+      }
+    `,
+  ];
 
   @property({ attribute: false }) provider!: BoardProvider;
   @property({ attribute: false }) config: IntegrationConfig = {};
@@ -64,6 +77,9 @@ export class SettingsBoard extends SettingsElement {
   @property({ type: Boolean }) wantBoards = false;
   @property({ attribute: false }) boards?: { list: BoardOpt[] | null; err: string };
   @property({ attribute: false }) rows: BoardRow[] = [];
+  // the row that adds a link: what is picked so far
+  @state() private addProject = "";
+  @state() private addBoard = "";
 
   override updated() {
     if (this.wantBoards && !this.boards) emit(this, "boards-load");
@@ -76,36 +92,137 @@ export class SettingsBoard extends SettingsElement {
     emit(this, "board-field", { id, value });
   };
 
-  private renderBoardMapping(row: BoardRow, list: BoardOpt[]) {
-    const options = list.map(
-      board =>
-        html`<option value="${board.project}/${board.id}" ?selected=${row.board === board.id}>
-          ${board.group} › ${board.name}
-        </option>`,
+  private link(links: BoardLink[]) {
+    emit(this, "board-map", links);
+  }
+  // the boards under their workspace, so a picked board shows its own name
+  private boardOptions(list: BoardOpt[], selected?: string) {
+    const groups = [...new Set(list.map(board => board.group))];
+    return groups.map(
+      group =>
+        html`<optgroup label=${group}>
+          ${list
+            .filter(board => board.group === group)
+            .map(
+              board =>
+                html`<option value="${board.project}/${board.id}" ?selected=${selected === board.id}>
+                  ${board.name}
+                </option>`,
+            )}
+        </optgroup>`,
     );
-    const select = html`<select
-      class=${SELECT}
-      @change=${(e: Event) => emit(this, "board-map", { vaultProject: row.vaultProject, value: inputValue(e) })}
-    >
-      <option value="">${row.noneLabel}</option>
-      ${options}
-    </select>`;
-    return field(row.vaultProject, select);
   }
 
-  // the provider's boards per vault project
+  // a linked vault project: its board, to change, and unlink
+  private renderLinked(row: BoardRow, list: BoardOpt[]) {
+    const vaultProject = row.vaultProject;
+    const select = html`<select
+      class=${SELECT}
+      aria-label=${vaultProject}
+      @change=${(e: Event) => this.link([{ vaultProject, value: inputValue(e) }])}
+    >
+      ${this.boardOptions(list, row.board)}
+    </select>`;
+    const unlink = html`<button
+      class=${buttonClass("ghost", true)}
+      title=${t("int.unlink")}
+      aria-label=${t("int.unlink")}
+      @click=${() => this.link([{ vaultProject, value: "" }])}
+    >
+      ${appIcon("close", BUTTON_GLYPH)}
+    </button>`;
+    return field(vaultProject, html`${select}${unlink}`);
+  }
+
+  // vault projects without a board whose name matches one: linked with one click, or all at once
+  private renderSuggestions(free: BoardRow[], list: BoardOpt[]) {
+    const suggestions = free
+      .map(row => ({ row, board: matchBoard(row.vaultProject, list) }))
+      .filter((match): match is { row: BoardRow; board: BoardOpt } => !!match.board);
+    if (!suggestions.length) return nothing;
+    const links = suggestions.map(({ row, board }) => ({
+      vaultProject: row.vaultProject,
+      value: `${board.project}/${board.id}`,
+    }));
+    const linkAll =
+      links.length > 1
+        ? html`<button class=${buttonClass("ghost")} @click=${() => this.link(links)}>${t("int.linkAll")}</button>`
+        : nothing;
+    return html`<div class="grid grid-cols-1 gap-1.5 border-t border-s-border pt-3">
+      <div class="flex items-center justify-between gap-2">
+        <b class="text-xs font-semibold">${t("int.suggested")}</b>${linkAll}
+      </div>
+      ${suggestions.map(
+        ({ row, board }, i) =>
+          html`<div class="flex items-center gap-2 text-sm">
+            <span class="min-w-0 flex-1 truncate"
+              >${row.vaultProject} <span class="text-s-faint">→ ${board.name} · ${board.group}</span>${
+                row.other
+                  ? html` <span class=${OPTIONAL_TEXT}>(${t("int.nowOn", { name: row.other })})</span>`
+                  : nothing
+              }</span
+            ><button class=${buttonClass()} @click=${() => this.link([links[i]])}>${t("int.link")}</button>
+          </div>`,
+      )}
+    </div>`;
+  }
+
+  // one more: a vault project and a board, then Link
+  private renderAdd(free: BoardRow[], list: BoardOpt[]) {
+    if (!free.length) return nothing;
+    const project = free.some(row => row.vaultProject === this.addProject) ? this.addProject : "";
+    const board = list.some(x => `${x.project}/${x.id}` === this.addBoard) ? this.addBoard : "";
+    const add = () => {
+      this.link([{ vaultProject: project, value: board }]);
+      this.addProject = "";
+      this.addBoard = "";
+    };
+    return html`<div class="flex flex-wrap items-center gap-2 border-t border-s-border pt-3">
+      <select
+        class="${SELECT} w-44!"
+        aria-label=${t("int.pickProject")}
+        @change=${(e: Event) => (this.addProject = inputValue(e))}
+      >
+        <option value="" ?selected=${!project}>${t("int.pickProject")}</option>
+        ${free.map(
+          row =>
+            html`<option value=${row.vaultProject} ?selected=${row.vaultProject === project}>
+              ${row.other ? `${row.vaultProject} (${row.other})` : row.vaultProject}
+            </option>`,
+        )}
+      </select>
+      <span class="text-s-faint">→</span>
+      <select
+        class="${SELECT} min-w-0 flex-1"
+        aria-label=${t("int.pickBoard")}
+        @change=${(e: Event) => (this.addBoard = inputValue(e))}
+      >
+        <option value="" ?selected=${!board}>${t("int.pickBoard")}</option>
+        ${this.boardOptions(list, board.split("/")[1])}
+      </select>
+      <button class=${buttonClass()} ?disabled=${!project || !board} @click=${add}>${t("int.link")}</button>
+    </div>`;
+  }
+
+  // which board a vault project opens: the linked ones, suggestions by name, and a row to add one
   private renderBoards() {
     const boards = this.boards;
     if (!this.wantBoards || !boards) return nothing;
-    if (!boards.list) return html`<div class=${HINT_IN_ROW}>${t("pr.loading")}</div>`;
-    if (boards.err)
-      return html`<div class="flex items-center gap-2"><span class=${ERROR_MESSAGE}>${boards.err}</span></div>`;
-    const list = boards.list;
-    return html`<div class="mt-2 grid gap-0.5 border-t border-s-border pt-3">
-        <b class="text-xs font-semibold">${t("int.boards")}</b>
-        <p class=${HINT}>${th("int.boardsHelp")}</p>
-      </div>
-      ${this.rows.map(row => this.renderBoardMapping(row, list))}`;
+    let body: unknown;
+    if (!boards.list) body = html`<div class=${HINT_IN_ROW}>${t("pr.loading")}</div>`;
+    else if (boards.err) body = html`<span class=${ERROR_MESSAGE}>${boards.err}</span>`;
+    else {
+      const list = boards.list;
+      const linked = this.rows.filter(row => row.board);
+      const free = this.rows.filter(row => !row.board);
+      body = html`${
+        linked.length
+          ? linked.map(row => this.renderLinked(row, list))
+          : html`<div class=${HINT_IN_ROW}>${t("int.noLinks")}</div>`
+      }
+      ${this.renderSuggestions(free, list)} ${this.renderAdd(free, list)}`;
+    }
+    return section(t("int.boards"), body, { desc: th("int.boardsHelp") });
   }
 
   private get tokenPlaceholder() {
@@ -228,10 +345,11 @@ export class SettingsBoard extends SettingsElement {
     const tokenInput = provider.settings.tokenUrl
       ? html`<div class="flex items-center gap-2">${this.renderSecretInput(tokenId)}${this.renderTokenButton()}</div>`
       : this.renderSecretInput(tokenId);
-    return html`${this.renderFoundInClaude()}
+    const connection = html`${this.renderFoundInClaude()}
       <p class="${HINT_IN_ROW} [&_a]:underline">${pth(provider, provider.settings.help)}</p>
       ${secrets.map(fieldConfig => this.renderProviderField(fieldConfig))}
       ${field(withoutColon(pt(provider, provider.settings.tokenLabel)), tokenInput, { id: tokenId })}
-      ${rest.map(fieldConfig => this.renderProviderField(fieldConfig))} ${this.renderFooter()} ${this.renderBoards()}`;
+      ${rest.map(fieldConfig => this.renderProviderField(fieldConfig))} ${this.renderFooter()}`;
+    return html`${section(t("int.connection"), connection)} ${this.renderBoards()}`;
   }
 }
