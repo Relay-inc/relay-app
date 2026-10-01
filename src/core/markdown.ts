@@ -1,12 +1,18 @@
 import { marked } from "marked";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { noteOf, noteKnown, isNotePath } from "../app/notes";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 /** Links that may open: the web and mail. */
 export const urlOk = (u: string) => /^(https?:|mailto:)/i.test(u);
-// a known vault note becomes a link the app opens in the right panel (src/ui/app.ts listens for data-note)
+// ---------- vault notes: a markdown link without a scheme, a [[wikilink]] or a `path.md:12` becomes a link when the note
+// exists (src/domain/notes.ts says which do), and the app opens it in the right panel (it listens for data-note)
+/** The note a link or path names: without its anchor, alias or line number. */
+export const noteOf = (s: string) => { try { s = decodeURI(s); } catch {} return s.replace(/[#|].*$/, "").replace(/:\d+(-\d+)?$/, "").trim(); };
+export const isNotePath = (s: string) => /\.md$/i.test(noteOf(s));
+let noteKnown = (_: string) => false;
+/** Which notes exist changed: text is parsed again, so links follow. */
+export function setNoteCheck(known: (target: string) => boolean) { noteKnown = known; cache.clear(); }
 const noteA = (target: string, inner: string) => noteKnown(target) ? `<a class="vlink" data-note="${esc(target)}">${inner}</a>` : inner;
 marked.use({
   extensions: [{
@@ -33,8 +39,6 @@ marked.use({
 // a streaming answer redraws the conversation on every delta: each finished block is parsed once
 // ponytail: unbounded until 500 entries, then cleared; an LRU if long sessions show it
 const cache = new Map<string, string>();
-/** The vault's notes changed: which text links to a note may differ, parse again. */
-export const mdStale = () => cache.clear();
 export function mdHtml(s: string) {
   let h = cache.get(s);
   if (h === undefined) { if (cache.size > 500) cache.clear(); h = marked.parse(s, { async: false }) as string; cache.set(s, h); }

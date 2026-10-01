@@ -1,4 +1,4 @@
-import { html } from "lit";
+import { html, nothing } from "lit";
 import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 
 // the app's icons: Hugeicons' free stroke-rounded set, the one bb uses. Each icon is data, drawn here as SVG markup;
@@ -29,6 +29,11 @@ const extra: Record<string, string> = {
 
 // inner markup on the 24×24 grid: built here from Hugeicons' data, so trusted
 export const iconPaths = (n: string) => extra[n] ?? draw(ICONS[n]);
-export const icon = (n: string, cls = "g") => html`<svg class=${cls} viewBox="0 0 24 24" aria-hidden="true">${unsafeSVG(iconPaths(n))}</svg>`;
-/** A provider's own 16×16 glyph (a package's static SVG body), `scale` to draw it on another grid. */
-export const glyphSvg = (body: string, cls = "g", box = "0 0 16 16") => html`<svg class=${cls} viewBox=${box} aria-hidden="true">${unsafeSVG(body)}</svg>`;
+export const icon = (n: string, cls = "glyph") => html`<svg class=${cls} viewBox="0 0 24 24" aria-hidden="true">${unsafeSVG(iconPaths(n))}</svg>`;
+/** A provider's own 16×16 glyph (a package's static SVG body). `cls` sizes it: the `glyph` utility only sets fill and stroke. */
+export const glyphSvg = (body: string, cls = "glyph", box = "0 0 16 16") => html`<svg class=${cls} viewBox=${box} aria-hidden="true">${unsafeSVG(body)}</svg>`;
+
+/** Only an image data url becomes an <img>. */
+export const isImg = (u?: string | null): u is string => !!u && /^data:image\/(png|jpeg|gif|webp|svg\+xml|x-icon);base64,[A-Za-z0-9+/=]+$/.test(u);
+// the project image in a row, the size of a glyph
+export const iconImg = (u?: string | null, cls = "w-[15px] h-[15px] flex-none object-contain rounded-[3px] align-[-2px] mr-1.5") => isImg(u) ? html`<img class=${cls} src=${u} alt="">` : nothing;
