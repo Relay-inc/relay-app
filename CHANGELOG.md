@@ -11,6 +11,8 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-10-01
+
 ### Added
 - Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded (#39)
 - Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation" (#39)
@@ -82,5 +84,6 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/LaurentMe/vault-app/releases/tag/v0.0.1
