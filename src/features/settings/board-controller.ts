@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { t } from "../../core/i18n";
+import { pt, t } from "../../core/i18n";
 import { ctxOf, PROVIDERS, type BoardOpt, type BoardProvider } from "../../domain/providers";
 import { formText } from "./blocks";
 import type { IntegrationsHost } from "./mail-controller";
@@ -111,6 +111,12 @@ export class BoardsController {
 
   async saveForm(provider: BoardProvider) {
     const { config, secrets } = this.readForm(provider);
+    const wrong = provider.settings.check?.(secrets);
+    if (wrong) {
+      this.messages[provider.id] = { text: pt(provider, wrong), ok: false };
+      this.redraw();
+      return;
+    }
     this.messages[provider.id] = { text: t("int.busy"), ok: true };
     this.redraw();
     await this.save(provider, config, secrets);
