@@ -170,6 +170,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
+    ("err.mail_pw", ["The app password is the 16-letter code Google showed (spaces are fine)", "Het app-wachtwoord is de code van 16 letters die Google toonde (spaties mogen)",
+        "Le mot de passe d'application est le code de 16 lettres affiché par Google (les espaces sont acceptés)", "Das App-Passwort ist der 16-stellige Code, den Google angezeigt hat (Leerzeichen sind ok)"]),
     ("err.no_mail_account", ["Mail: no account set up. Add one under Vault › Settings… › Integrations › Mail.", "Mail: nog geen account. Voeg er een toe bij Vault › Instellingen… › Integraties › Mail.", "Mail : aucun compte. Ajoutez-en un dans Vault › Réglages… › Intégrations › Mail.", "Mail: noch kein Konto. Füge eins unter Vault › Einstellungen… › Integrationen › Mail hinzu."]),
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
     ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
@@ -1042,6 +1044,28 @@ async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: boo
     state.mail.set_seen(&a, &id, seen).await
 }
 
+/// Settings › Mail the guided way: the app password goes straight into the keychain (service vault-mail, account
+/// the email, over stdin so it never shows in the process list), then a login test. A code Gmail refuses is
+/// removed again. Returns the account for the settings, the window adds and saves it.
+#[tauri::command]
+async fn mail_connect(state: State<'_, App>, email: String, password: String) -> Result<Value, String> {
+    let email = email.trim().to_string();
+    let account = json!({"email": email, "keychain_service": "vault-mail", "keychain_account": email});
+    let a = mail::accounts(&json!({"accounts": [account.clone()]})).pop().ok_or_else(|| trc("err.mail_account"))?;
+    let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
+    if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+    let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s vault-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
+    ch.wait().map_err(|e| e.to_string())?;
+    match state.mail.test(&a).await {
+        Ok(n) => Ok(json!({"account": account, "result": n})),
+        Err(e) => {
+            if e.starts_with("Login failed") { Command::new("/usr/bin/security").args(["delete-generic-password", "-s", "vault-mail", "-a", &email]).output().ok(); }
+            Err(e)
+        }
+    }
+}
+
 /// Try an account from the settings window, saved or not yet: log in and count the inbox.
 #[tauri::command]
 async fn mail_test(state: State<'_, App>, account: Value) -> Result<String, String> {
@@ -1144,7 +1168,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, open_settings_window, usage::usage_tokens, usage::usage_limits, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

@@ -428,6 +428,7 @@ impl Mail {
 
     /// A fresh login outside the cache, so the settings pane tests exactly what it shows.
     pub async fn test(&self, acct: &Account) -> Result<String, String> {
+        *entry(&self.pws, acct.email.to_ascii_lowercase()).lock().await = None; // a code just stored is the one tried
         let mut c = self.connect(acct).await.map_err(Fail::msg)?;
         let n = search(&mut c, "in:inbox").await.map_err(Fail::msg)?.len();
         let _ = timeout(CONNECT, c.s.logout()).await;

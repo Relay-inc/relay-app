@@ -31,3 +31,13 @@ body.prefs .set{display:flex;flex-direction:column;gap:0;height:100%;min-height:
 .chk{display:flex;align-items:center;gap:6px;font-size:13px}
 .hint code{font-family:var(--mono);font-size:11px;background:var(--fill);padding:1px 4px;border-radius:4px}
 .ahead{margin:6px 0 0;font-size:13px;font-weight:600}
+.mail-acct{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.mail-guide{margin-top:18px;padding:16px 18px;border:1px solid var(--separator);border-radius:10px;background:var(--fill)}
+.mail-guide h3{font-size:14px;font-weight:600;margin:0 0 12px}
+.mail-step{margin:0 0 14px}
+.mail-step:last-child{margin-bottom:0}
+.mail-step>b{display:block;font-size:13px;margin-bottom:4px}
+.mail-step p{margin:0 0 8px;font-size:13px;line-height:1.5}
+.mail-step .form{margin-top:8px}
+.mail-step summary{cursor:pointer;font-size:13px;font-weight:600}
+.mail-step a.btn{text-decoration:none;display:inline-block}
