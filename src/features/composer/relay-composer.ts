@@ -8,7 +8,8 @@ import { tw } from "../../core/styles";
 import { ui, isTerminal } from "../../domain/ui";
 import { chat, terminalOf, projectOf } from "../../domain/chats/state";
 import { project } from "../../domain/vault";
-import { chatAgent, agentOf, onAgents, picks, setPick } from "../../domain/agents";
+import { chatAgent, agentOf, onAgents, picks, setPick, commands } from "../../domain/agents";
+import { matchCommands, type SlashCommand } from "../../domain/commands";
 import { setTyped, sendMsg, sendOrStop, attach, unattach, setAgent } from "../../domain/chats/actions";
 import { zoom } from "../../domain/navigation";
 import { pastedImages, hasFiles } from "../../components/image-files";
@@ -57,6 +58,9 @@ export class RelayComposer extends LitElement {
   ];
   protected store = new StoreController(this);
   @state() private dropping = false;
+  @state() private picked = 0;
+  // the text Escape closed the list on: it stays closed until the text changes
+  @state() private dismissed = "";
   @query("textarea") private field!: HTMLTextAreaElement | null;
   private grown = "";
 
@@ -76,7 +80,35 @@ export class RelayComposer extends LitElement {
     if (this.field && this.field.value !== this.grown) this.grow();
   }
 
+  // Claude Code's slash commands and skills while the field is a `/` and a name
+  private get completions() {
+    const typed = chat.typed[ui.selected] ?? "";
+    if (chatAgent(ui.selected) !== "claude" || typed === this.dismissed) return [];
+    return matchCommands(commands.list, typed);
+  }
+  private complete(command: SlashCommand) {
+    setTyped(`/${command.name} `);
+    this.picked = 0;
+    this.focusInput();
+  }
+  // arrows move through the list, Tab or Enter takes one, Escape closes it
+  private onCompletionKey(e: KeyboardEvent) {
+    const list = this.completions;
+    if (!list.length || e.isComposing) return false;
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      this.picked = (this.picked + step + list.length) % list.length;
+    } else if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+      this.complete(list[Math.min(this.picked, list.length - 1)]);
+    } else if (e.key === "Escape") {
+      this.dismissed = chat.typed[ui.selected] ?? "";
+    } else return false;
+    e.preventDefault();
+    return true;
+  }
+
   private onKey(e: KeyboardEvent) {
+    if (this.onCompletionKey(e)) return;
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       sendMsg();
@@ -84,6 +116,7 @@ export class RelayComposer extends LitElement {
   }
   private onInput(e: Event) {
     setTyped((e.target as HTMLTextAreaElement).value);
+    this.picked = 0;
     this.grow();
   }
   private onPaste(e: ClipboardEvent) {
@@ -122,6 +155,33 @@ export class RelayComposer extends LitElement {
     const projectName = this.projectName;
     if (this.terminalSession) return t("ph.term");
     return project(projectName) ? t("ph.project", { name: projectName ?? "" }) : t("ph.general");
+  }
+
+  private renderCompletions() {
+    const list = this.completions;
+    if (!list.length) return nothing;
+    const picked = Math.min(this.picked, list.length - 1);
+    return html`<ul
+      class="absolute bottom-full inset-x-0 mb-1.5 py-1 rounded-lg bg-bg border border-separator shadow-md overflow-hidden"
+      role="listbox"
+      aria-label=${t("composer.commands")}
+    >
+      ${list.map(
+        (command, i) =>
+          html`<li
+            class="flex items-baseline gap-2 px-3 py-1.5 text-sm cursor-default ${i === picked ? "bg-fill" : ""}"
+            role="option"
+            aria-selected=${i === picked}
+            @mousedown=${(e: MouseEvent) => e.preventDefault()}
+            @click=${() => this.complete(command)}
+            @mouseenter=${() => (this.picked = i)}
+          >
+            <span class="font-medium whitespace-nowrap">/${command.name}</span>
+            ${command.argumentHint ? html`<span class="text-secondary whitespace-nowrap">${command.argumentHint}</span>` : nothing}
+            <span class="text-secondary truncate">${command.description}</span>
+          </li>`,
+      )}
+    </ul>`;
   }
 
   private renderThumbs() {
@@ -184,12 +244,12 @@ export class RelayComposer extends LitElement {
     const showEffort = !agent || (agent.caps.effort && agent.efforts.length > 0);
     const border = this.dropping ? "border-accent bg-accent/5" : "border-separator";
     return html`<div
-      class="rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent ${border}"
+      class="relative rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent ${border}"
       @dragover=${this.onDragOver}
       @dragleave=${this.onDragLeave}
       @drop=${this.onDrop}
     >
-      ${this.renderThumbs()}
+      ${this.renderCompletions()} ${this.renderThumbs()}
       <textarea
         rows="1"
         .value=${live(chat.typed[ui.selected] ?? "")}

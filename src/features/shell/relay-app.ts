@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement } from "lit/decorators.js";
 import { invoke } from "@tauri-apps/api/core";
 import { th } from "../../core/i18n";
-import { inField } from "../../core/dom";
+import { inField, copyText } from "../../core/dom";
 import { urlOk } from "../../core/markdown";
 import { request, StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
@@ -84,6 +84,14 @@ export class RelayApp extends LitElement {
     if (noteLink) {
       e.preventDefault();
       openDetail(noteKey(noteLink.dataset.note!));
+      return;
+    }
+    // a code block's copy button (src/core/markdown.ts)
+    const copyButton = path.find(
+      (target): target is HTMLElement => target instanceof HTMLElement && target.hasAttribute("data-copy"),
+    );
+    if (copyButton) {
+      copyText(copyButton.parentElement?.querySelector("pre")?.innerText ?? "", copyButton);
       return;
     }
     const anchor = path.find(

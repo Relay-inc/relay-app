@@ -116,6 +116,8 @@ export default {
   "bar.togglePanel": "Afficher ou masquer le panneau",
   "bar.togglePanelTitle": "Afficher ou masquer le panneau (⌥⌘I)",
   "composer.send": "Envoyer",
+  "composer.commands": "Commandes et skills",
+  copy: "Copier",
   "tab.open": "À faire",
   "tab.stand": "État",
   "img.remove": "Supprimer",

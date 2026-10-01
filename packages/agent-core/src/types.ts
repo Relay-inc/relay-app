@@ -33,6 +33,7 @@ export type AgentEvent =
   | { type: "error"; text: string }
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
+  | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills
   | { type: "exit" };                  // added by the app: the process ended
 
 /** A limit window; `label` is a key in the provider's strings, `name` fills its {name}. */

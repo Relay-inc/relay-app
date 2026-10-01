@@ -6,6 +6,7 @@ import opencode from "@relay/agent-opencode";
 import { changed, ls } from "../core/store";
 import { ui, isTerminal } from "./ui";
 import { chat } from "./chats/state";
+import type { SlashCommand } from "./commands";
 
 export type * from "@relay/agent-core";
 
@@ -67,4 +68,11 @@ export function picks(kind: "model" | "effort") {
 export function setPick(kind: "model" | "effort", value: string) {
   ls.set(picks(kind).key, value);
   changed();
+}
+
+// ---------- Claude Code's slash commands and skills, from its last start: kept, so the composer completes before one runs
+export const commands = { list: ls.get<SlashCommand[]>("commands", []) };
+export function setCommands(list: SlashCommand[]) {
+  commands.list = list.map(({ name, description, argumentHint }) => ({ name, description, argumentHint }));
+  ls.set("commands", commands.list);
 }

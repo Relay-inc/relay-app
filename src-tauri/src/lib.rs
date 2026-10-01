@@ -549,6 +549,10 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                             }
                             emit(json!({"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}));
                         }
+                        // the slash commands and skills this vault has, for the composer's completion
+                        if ev["response"]["request_id"] == "init" && ev["response"]["response"]["commands"].is_array() {
+                            emit(json!({"type": "commands", "commands": ev["response"]["response"]["commands"]}));
+                        }
                         continue;
                     }
                 }

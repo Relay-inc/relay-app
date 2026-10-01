@@ -1,5 +1,7 @@
 import { marked } from "marked";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { t } from "./i18n";
+import { iconPaths } from "./icons";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (value: unknown) =>
@@ -59,6 +61,9 @@ marked.use({
   ],
   renderer: {
     html: ({ text }) => esc(text),
+    // a code block with a copy button in its corner on hover (the app copies it, src/features/shell/relay-app.ts)
+    code: ({ text }) =>
+      `<div class="relative group/code"><pre><code>${esc(text)}</code></pre><button data-copy class="absolute top-1.5 right-1.5 grid place-items-center size-6 rounded-sm border-0 bg-bg text-secondary opacity-0 group-hover/code:opacity-100 focus-visible:opacity-100" title="${esc(t("copy"))}" aria-label="${esc(t("copy"))}"><svg class="glyph size-3.5" viewBox="0 0 24 24" aria-hidden="true">${iconPaths("copy")}</svg></button></div>`,
     image: ({ text }) => esc(text),
     codespan: ({ text }) =>
       isNotePath(text) ? noteA(noteOf(text), `<code>${esc(text)}</code>`) : `<code>${esc(text)}</code>`,

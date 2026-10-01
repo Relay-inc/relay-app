@@ -115,6 +115,8 @@ export default {
   "bar.togglePanel": "Seitenbereich ein- oder ausblenden",
   "bar.togglePanelTitle": "Seitenbereich ein- oder ausblenden (⌥⌘I)",
   "composer.send": "Senden",
+  "composer.commands": "Befehle und Skills",
+  copy: "Kopieren",
   "tab.open": "Offen",
   "tab.stand": "Stand",
   "img.remove": "Entfernen",
