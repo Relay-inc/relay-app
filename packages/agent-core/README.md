@@ -1,4 +1,4 @@
-# @vault/agent-core / agent-core
+# @relay/agent-core / agent-core
 
 The agent-provider contract, nothing specific to one CLI. See [Agent providers](../../README.md#agent-providers)
 in the app's README for the whole picture.

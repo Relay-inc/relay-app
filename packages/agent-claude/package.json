@@ -1,5 +1,5 @@
 {
-  "name": "@vault/agent-claude",
+  "name": "@relay/agent-claude",
   "private": true,
   "version": "0.1.0",
   "description": "Claude Code as an agent provider: name, glyph, strings and model names for the webview",
@@ -11,6 +11,6 @@
     "test": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "dependencies": {
-    "@vault/agent-core": "workspace:*"
+    "@relay/agent-core": "workspace:*"
   }
 }

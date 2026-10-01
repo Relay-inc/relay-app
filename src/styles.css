@@ -68,6 +68,8 @@ section.chat{display:flex;flex-direction:column;min-width:0;min-height:0}
 .perm .acts{display:flex;justify-content:flex-end;gap:8px}
 .btn{height:28px;padding:0 14px;border-radius:var(--r);border:1px solid var(--separator);background:var(--bg);cursor:default;transition:filter var(--d) var(--ease)}
 .btn:hover{filter:brightness(.97)}
+.btn.ib{width:28px;padding:0;display:inline-grid;place-items:center}
+.btn .g{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
 .btn:focus-visible,.tb:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:1px}
 .composer{flex:none;max-width:720px;width:calc(100% - 56px);margin:8px auto 20px;border-radius:var(--r);background:var(--bg);
@@ -284,6 +286,7 @@ aside.side input{-webkit-user-select:text;user-select:text}
 /* first launch: choose the vault, over the main window */
 .onboard{position:fixed;inset:0;z-index:50;overflow:auto;background:var(--inspector);padding:28px 32px}
 .onboard .set{max-width:640px;margin:40px auto}
+.onboard .logo{display:block;height:44px;margin-bottom:16px}
 .vmap{display:grid;gap:10px}
 .vrow{display:grid;gap:4px}
 .vlabel{font-weight:500}

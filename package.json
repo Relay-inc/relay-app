@@ -1,5 +1,5 @@
 {
-  "name": "vault",
+  "name": "relay",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -11,15 +11,20 @@
     "test": "node --test --experimental-strip-types \"packages/*/tests/*.test.ts\""
   },
   "dependencies": {
+    "@hugeicons/core-free-icons": "^4.3.5",
+    "@relay/board-core": "workspace:*",
+    "@relay/integration-linear": "workspace:*",
+    "@relay/integration-productive": "workspace:*",
+    "@relay/integration-trello": "workspace:*",
     "@tauri-apps/api": "^2",
-    "@vault/agent-claude": "workspace:*",
-    "@vault/agent-codex": "workspace:*",
-    "@vault/agent-core": "workspace:*",
-    "@vault/agent-opencode": "workspace:*",
-    "@vault/board-core": "workspace:*",
-    "@vault/integration-linear": "workspace:*",
-    "@vault/integration-productive": "workspace:*",
-    "@vault/integration-trello": "workspace:*",
+    "@relay/agent-claude": "workspace:*",
+    "@relay/agent-codex": "workspace:*",
+    "@relay/agent-core": "workspace:*",
+    "@relay/agent-opencode": "workspace:*",
+    "@relay/board-core": "workspace:*",
+    "@relay/integration-linear": "workspace:*",
+    "@relay/integration-productive": "workspace:*",
+    "@relay/integration-trello": "workspace:*",
     "marked": "^18.0.14"
   },
   "devDependencies": {

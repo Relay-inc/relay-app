@@ -53,7 +53,7 @@ from this checkout, so a build only works on this machine.
 | `src/settings-window.ts` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
 | `src/i18n.ts`, `src/locales/` | UI strings in English, Dutch, French and German. `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors. The language follows macOS unless set in the settings. |
 
-State lives in `~/Library/Application Support/be.laurentmeersman.vault/`: `settings.json`,
+State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
 `sessions.json` (conversation to session id, and to its provider when that is not Claude Code) and `pending/`. Board provider tokens sit
 in the macOS keychain (`vault-app.<provider>`, account `token`, so `vault-app.productive`) and never reach the webview.
 
@@ -116,7 +116,7 @@ The app's commands (all take `provider`): `integration_status` (on, ready and a 
 `integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
 with the token over stdin; the webview never sees it. The keychain, curl and the commands are the app's, not a package's.
 
-**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@vault/board-core`, registered in `PROVIDERS` in `src/providers/index.ts`.
+**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@relay/board-core`, registered in `PROVIDERS` in `src/providers/index.ts`.
 
 ```ts
 interface BoardProvider {
@@ -149,8 +149,8 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 
 ### Adding an integration
 
-1. `packages/integration-<id>/` with a `package.json` (`@vault/integration-<id>`, depending on
-   `@vault/board-core`) and a `Cargo.toml` (crate `integration-<id>`, depending on `board-core`).
+1. `packages/integration-<id>/` with a `package.json` (`@relay/integration-<id>`, depending on
+   `@relay/board-core`) and a `Cargo.toml` (crate `integration-<id>`, depending on `board-core`).
 2. `src/lib.rs`: `pub const PROVIDER: Provider`. Keep the allowlist to reads plus the one write that moves a
    card, and test it (and the error mapping) in the same file.
 3. `src/index.ts`: the `BoardProvider<Key>` with its glyph and `strings`; `src/locales.ts` in all four

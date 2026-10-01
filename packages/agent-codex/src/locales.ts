@@ -1,4 +1,4 @@
-import type { Locales } from "@vault/agent-core";
+import type { Locales } from "@relay/agent-core";
 
 // Codex's own UI strings: the Usage view (its rate-limit windows, why they are unavailable), the settings hint and
 // options. English is the reference; tsc fails on a missing or extra key.

@@ -1,4 +1,4 @@
-# @vault/agent-claude / agent-claude
+# @relay/agent-claude / agent-claude
 
 Claude Code as an agent provider.
 

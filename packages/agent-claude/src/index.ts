@@ -1,4 +1,4 @@
-import type { AgentProvider } from "@vault/agent-core";
+import type { AgentProvider } from "@relay/agent-core";
 import { strings, type Key } from "./locales.ts";
 import { modelName } from "./models.ts";
 

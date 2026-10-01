@@ -51,9 +51,14 @@ pub fn enabled(s: &Value) -> Vec<&'static dyn AgentProvider> {
     PROVIDERS.iter().copied().filter(|p| s["agents"]["providers"][p.id()]["on"] == true).collect()
 }
 pub fn default_id(s: &Value) -> String { s["agents"]["default"].as_str().unwrap_or(FIRST).to_string() }
-/// The binary: the settings' override, else where the provider installs itself.
-pub fn bin(s: &Value, p: &dyn AgentProvider, home: &str) -> String {
-    Some(s["agents"]["providers"][p.id()]["bin"].as_str().unwrap_or("")).filter(|b| !b.is_empty()).map(String::from).unwrap_or_else(|| p.default_bin(home))
+/// The binary: the settings' override, else where the provider installs itself, else the same name on the login
+/// PATH (an npm or Homebrew install).
+pub fn bin(s: &Value, p: &dyn AgentProvider, home: &str, path: &str) -> String {
+    Some(s["agents"]["providers"][p.id()]["bin"].as_str().unwrap_or("")).filter(|b| !b.is_empty()).map(String::from).unwrap_or_else(|| {
+        let def = p.default_bin(home);
+        if std::path::Path::new(&def).is_file() { return def; }
+        def.rsplit('/').next().and_then(|n| agent_core::which(n, path)).unwrap_or(def)
+    })
 }
 
 /// A conversation's session: which provider, and its session id there.
@@ -108,7 +113,7 @@ mod tests {
         assert!(check(&v).is_err());
         v["agents"]["providers"]["claude"] = json!({"on": false, "bin": ""});
         assert!(check(&v).is_err());
-        assert_eq!(bin(&json!({}), PROVIDERS[0], "/h"), "/h/.local/bin/claude");
+        assert_eq!(bin(&json!({}), PROVIDERS[0], "/h", ""), "/h/.local/bin/claude");
         assert!(term_key("t:abc").is_some_and(|(p, s)| p.id() == "claude" && s == "abc"));
         assert!(term_key("t:nope:abc").is_none() && term_key("c:1").is_none());
     }

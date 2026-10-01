@@ -41,7 +41,7 @@ def main():
             out(line)
         sys.exit(codex.wait() or 1)
 
-    send({"id": 0, "method": "initialize", "params": {"clientInfo": {"name": "vault", "title": "Vault", "version": "0.1.0"}, "capabilities": None}})
+    send({"id": 0, "method": "initialize", "params": {"clientInfo": {"name": "relay", "title": "Relay", "version": "0.1.0"}, "capabilities": None}})
     until(0)
     send({"method": "initialized"})
     opts = {"cwd": cfg.get("cwd"), "approvalPolicy": cfg.get("approval") or "on-request", "sandbox": cfg.get("sandbox") or "workspace-write"}

@@ -42,29 +42,29 @@ export function openUsage(changed: () => void) { if (Date.now() - tokAt > 60000)
 // after the agents changed in the settings: limits and tokens for the new set
 export function reloadUsage(changed: () => void, visible: boolean) { loadLimits(changed); if (visible) loadTokens(changed); else tokAt = 0; }
 
-const level = (p: number) => p >= 95 ? "late" : p >= 80 ? "soon" : "";
+const level = (p: number): "" | "soon" | "late" => p >= 95 ? "late" : p >= 80 ? "soon" : "";
 const winLabel = (p: AgentProvider | undefined, w: LimitWindow, esc: (s: string) => string) =>
   p ? at(p, w.label, { name: esc(w.name ?? "") }) : esc(w.label);
-// sidebar: the most constrained limit over every provider, in the reminders' urgency colours when it runs out
-export function usageTrail() {
-  let top: { pct: number; title: string } | null = null;
-  for (const l of limits || []) if (l.limits.ok) for (const w of l.limits.windows) {
-    const p = agent(l.provider);
-    if (!top || w.pct > top.pct) top = { pct: w.pct, title: t("usage.limitTop", { name: p?.name ?? l.provider, label: winLabel(p, w, s => s) }) };
-  }
-  return top ? `<span class="count ${level(top.pct) ? `due-${level(top.pct)}` : ""}" title="${top.title.replace(/"/g, "&quot;")}">${Math.round(top.pct)}%</span>` : "";
+// sidebar: the most constrained limit over every provider, for the Usage button's dot (in the reminders' urgency colours) and tooltip
+export function usageSummary(): { pct: number; level: "" | "soon" | "late"; label: string } | null {
+  let top: { w: LimitWindow; p: AgentProvider | undefined; id: string } | null = null;
+  for (const l of limits || []) if (l.limits.ok) for (const w of l.limits.windows)
+    if (!top || w.pct > top.w.pct) top = { w, p: agent(l.provider), id: l.provider };
+  if (!top) return null;
+  const { w, p } = top, label = t("usage.limitTop", { name: p?.name ?? top.id, label: winLabel(p, w, s => s) }), pct = Math.round(w.pct), when = resetWhen(w.resets);
+  return { pct: w.pct, level: level(w.pct), label: when ? t("usage.summaryResets", { label, pct, when }) : t("usage.summary", { label, pct }) };
 }
 
 const num = (n: number) => new Intl.NumberFormat(currentLocale(), { notation: "compact", maximumFractionDigits: 1 }).format(n);
 const usd = (n: number) => new Intl.NumberFormat(currentLocale(), { style: "currency", currency: "USD", maximumFractionDigits: n < 10 ? 2 : 0 }).format(n);
-function resets(iso: string | null) {
+function resetWhen(iso: string | null) {
   const at = iso ? Date.parse(iso) : NaN;
   if (isNaN(at)) return "";
   const min = Math.max(1, Math.round((at - Date.now()) / 60000)), rtf = new Intl.RelativeTimeFormat(currentLocale(), { numeric: "auto" });
-  const when = min < 60 ? rtf.format(min, "minute") : min < 24 * 60 ? rtf.format(Math.round(min / 60), "hour")
+  return min < 60 ? rtf.format(min, "minute") : min < 24 * 60 ? rtf.format(Math.round(min / 60), "hour")
     : new Intl.DateTimeFormat(currentLocale(), { weekday: "long", hour: "2-digit", minute: "2-digit" }).format(at);
-  return t("usage.resets", { when });
 }
+const resets = (iso: string | null) => { const when = resetWhen(iso); return when ? t("usage.resets", { when }) : ""; };
 
 function meter(label: string, w: LimitWindow) {
   const p = Math.min(100, Math.max(0, w.pct));

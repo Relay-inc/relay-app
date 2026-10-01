@@ -1,4 +1,4 @@
-# @vault/agent-opencode / agent-opencode
+# @relay/agent-opencode / agent-opencode
 
 OpenCode ([sst/opencode](https://github.com/sst/opencode), <https://opencode.ai>) as an agent provider. Written against
 opencode 1.18.33 (`opencode serve`, its OpenAPI document at `/doc`, and its SQLite storage).

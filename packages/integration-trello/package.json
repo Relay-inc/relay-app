@@ -1,5 +1,5 @@
 {
-  "name": "@vault/integration-trello",
+  "name": "@relay/integration-trello",
   "private": true,
   "version": "0.1.0",
   "description": "The Trello board: provider, response mapping, strings and glyph",
@@ -11,6 +11,6 @@
     "test": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "dependencies": {
-    "@vault/board-core": "workspace:*"
+    "@relay/board-core": "workspace:*"
   }
 }

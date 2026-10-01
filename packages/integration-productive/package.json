@@ -1,5 +1,5 @@
 {
-  "name": "@vault/integration-productive",
+  "name": "@relay/integration-productive",
   "private": true,
   "version": "0.1.0",
   "description": "The Productive board: provider, response mapping, strings and glyph",
@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@vault/board-core": "workspace:*"
+    "@relay/board-core": "workspace:*"
   },
   "peerDependencies": {
     "@tauri-apps/api": "^2"

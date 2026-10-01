@@ -63,7 +63,7 @@ def unlink(text):
     return re.sub(r"\[\[([^\]|]+)(\|[^\]]+)?\]\]", r"\1", text)
 
 
-CACHE = os.path.expanduser("~/Library/Application Support/be.laurentmeersman.vault/topics.json")
+CACHE = os.path.expanduser("~/Library/Application Support/be.laurentmeersman.relay/topics.json")
 # Claude Code keeps a project's transcripts under its path with every non-alphanumeric character as "-"
 TRANSCRIPTS = os.path.expanduser("~/.claude/projects/" + re.sub(r"[^A-Za-z0-9]", "-", VAULT))
 

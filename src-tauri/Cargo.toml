@@ -1,7 +1,7 @@
 [package]
-name = "vault"
+name = "relay"
 version = "0.1.0"
-description = "Vault control room"
+description = "Relay control room"
 authors = []
 edition = "2021"
 
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "vault_lib"
+name = "relay_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -32,9 +32,22 @@ board-core.workspace = true
 integration-productive = { path = "../packages/integration-productive" }
 integration-trello = { path = "../packages/integration-trello" }
 integration-linear = { path = "../packages/integration-linear" }
+async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
+async-native-tls = { version = "0.6", default-features = false, features = ["runtime-tokio"] }
+tokio = { version = "1", features = ["net", "time", "sync", "rt", "macros"] }
+mail-parser = "0.11"
+ammonia = "4"
+futures = "0.3"
+base64 = "0.23"
 
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true
 agent-claude = { path = "../packages/agent-claude" }
 agent-codex = { path = "../packages/agent-codex" }
 agent-opencode = { path = "../packages/agent-opencode" }
+
+# the red menu bar title when a reminder is overdue (src/tray.rs), same versions as tauri's tray-icon
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = "0.3"
+objc2-foundation = "0.3"

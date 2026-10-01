@@ -1,4 +1,4 @@
-import type { Locales } from "@vault/agent-core";
+import type { Locales } from "@relay/agent-core";
 
 // Claude Code's own UI strings: the Usage view (its limit windows, why they are unavailable) and the settings hint.
 // English is the reference; tsc fails on a missing or extra key.

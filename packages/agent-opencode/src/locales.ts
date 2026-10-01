@@ -1,4 +1,4 @@
-import type { Locales } from "@vault/agent-core";
+import type { Locales } from "@relay/agent-core";
 
 // OpenCode's own UI strings: the Usage view (it has no plan limits, only tokens and cost), the settings hint and
 // option. English is the reference; tsc fails on a missing or extra key.

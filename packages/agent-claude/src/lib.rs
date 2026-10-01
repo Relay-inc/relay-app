@@ -16,6 +16,13 @@ pub mod usage_log;
 // ponytail: perm_server.py is read from this checkout, fine as long as the app runs from its own checkout
 const PERM_SERVER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/perm_server.py");
 
+/// Tools no app session may call: mail only ever becomes a draft (hard wall) and the mailbox is never touched, so
+/// the whole Gmail connector goes, and in the app mail goes through relay-mail, never himalaya.
+/// Enforced by the CLI at call time, before the app hears of it (scripts/pipe-check.py).
+pub const DENIED: [&str; 2] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"];
+/// The mail tools run without a card, also once the session holds mail text: none can send, a draft only lands in Drafts.
+pub const MAIL_TOOLS: [&str; 5] = ["mcp__relay-mail__search", "mcp__relay-mail__read", "mcp__relay-mail__thread", "mcp__relay-mail__attachment", "mcp__relay-mail__save_draft"];
+
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
@@ -51,13 +58,15 @@ impl AgentProvider for Claude {
     }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
-        let mcp = json!({"mcpServers": {"vaultperm": {
+        let mut mcp = json!({"mcpServers": {"vaultperm": {
             "command": "/usr/bin/python3", "args": [PERM_SERVER],
             "env": {"PENDING": env.pending.to_string_lossy(), "PROJECT": l.key}}}});
+        // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
+        if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-            .arg(mcp.to_string()).args(["-n", l.name]);
+            .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg("--disallowedTools").args(DENIED).args(["-n", l.name]);
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { cmd.args(["--resume", sid]); }
@@ -140,11 +149,17 @@ mod tests {
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(&args[..8], ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-prompt-tool", "mcp__vaultperm__approve"]);
         assert!(args[9].contains("perm_server.py") && args[9].contains("\"PROJECT\":\"c:1\""));
-        assert_eq!(&args[10..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        assert!(!args[9].contains("relay-mail"));
+        assert_eq!(args[10], "--allowedTools");
+        assert_eq!(args[16], "--disallowedTools");
+        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[10..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        let opts = json!({"mail": true});
+        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args[9].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
     }
     #[test]
     fn terminal_commands() {

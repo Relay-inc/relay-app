@@ -1,4 +1,4 @@
-# @vault/agent-codex / agent-codex
+# @relay/agent-codex / agent-codex
 
 OpenAI Codex as an agent provider. Written against codex-cli 0.159.2 (`codex app-server` protocol v2).
 

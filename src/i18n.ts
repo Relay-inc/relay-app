@@ -3,9 +3,9 @@ import en, { type Key } from "./locales/en";
 import nl from "./locales/nl";
 import fr from "./locales/fr";
 import de from "./locales/de";
-import { LANGS, bindHost, type Lang } from "@vault/board-core";
+import { LANGS, bindHost, type Lang } from "@relay/board-core";
 import { PROVIDERS, type BoardProvider } from "./providers";
-import { bindAgentHost } from "@vault/agent-core";
+import { bindAgentHost } from "@relay/agent-core";
 import { AGENTS, type AgentProvider } from "./agents";
 
 // UI strings: one dictionary per locale, English is the reference. nl, fr and de are typed against
