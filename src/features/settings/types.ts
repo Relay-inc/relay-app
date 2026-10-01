@@ -1,6 +1,6 @@
 // the settings as the backend keeps them: one type for both windows
 import type { Settings } from "../../domain/config";
-export type { Settings, MailAcct, MailCfg, AgentCfg } from "../../domain/config";
+export type { Settings, MailAcct, MailCfg, AgentCfg, Machine } from "../../domain/config";
 /** A template to render, or text. */
 export type Renderable = unknown;
 export type Message = { text: string; ok: boolean };

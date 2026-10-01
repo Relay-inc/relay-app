@@ -37,10 +37,11 @@ export async function pollSubs() {
 let agentsAt = 0;
 export async function pollAgents() {
   agentsAt = Date.now();
-  [chat.agentsList, chat.appSids, chat.sidOf] = await Promise.all([
+  [chat.agentsList, chat.appSids, chat.sidOf, chat.machines] = await Promise.all([
     invoke<AgentSession[]>("agents"),
     invoke<string[]>("app_sids"),
     invoke<typeof chat.sidOf>("app_sessions").catch(() => chat.sidOf),
+    invoke<typeof chat.machines>("chat_machines").catch(() => chat.machines), // older backends have no machines
   ]);
   await syncBusy();
   changed();

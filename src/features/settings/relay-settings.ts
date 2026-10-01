@@ -20,6 +20,7 @@ import { appIcon } from "./blocks";
 import "./settings-agents";
 import "./settings-general";
 import "./settings-integrations";
+import "./settings-machines";
 import "./settings-projects";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
@@ -40,6 +41,7 @@ const TABS = [
   ["projects", "set.tab.projects", "folder"],
   ["agents", "set.tab.agents", "agent"],
   ["integrations", "set.tab.integrations", "plug"],
+  ["machines", "set.tab.machines", "server"],
 ] as const satisfies readonly (readonly [string, Key, string])[];
 type Tab = (typeof TABS)[number][0];
 
@@ -66,7 +68,7 @@ export class RelaySettings extends SettingsElement {
 
   private onKeydown = (e: KeyboardEvent) => {
     if (e.key === "Escape" || (e.metaKey && e.key === "w")) window.close();
-    // Cmd-1 to 4 jump to a page
+    // Cmd-1 to 5 jump to a page
     const pageNumber = e.metaKey && !e.altKey && !e.shiftKey ? Number(e.key) : 0;
     if (pageNumber >= 1 && pageNumber <= TABS.length) {
       e.preventDefault();
@@ -232,6 +234,11 @@ export class RelaySettings extends SettingsElement {
             .settings=${settings}
             @settings-changed=${this.onSettingsChanged}
           ></relay-settings-integrations>
+          <relay-settings-machines
+            ?active=${tab === "machines"}
+            .settings=${settings}
+            @settings-changed=${this.onSettingsChanged}
+          ></relay-settings-machines>
         </div>
       </section>
     </div>`;

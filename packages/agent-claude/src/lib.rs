@@ -13,8 +13,10 @@ pub mod stream;
 pub mod subagents;
 pub mod usage_log;
 
-// ponytail: perm_server.py is read from this checkout, fine as long as the app runs from its own checkout
+// ponytail: perm_server.py is read from this checkout, fine as long as the app runs from its own checkout. A
+// relay-server writes its own copy (PERM_SERVER_PY) and the app passes that path as opts.perm_server.
 const PERM_SERVER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/perm_server.py");
+pub const PERM_SERVER_PY: &str = include_str!("../perm_server.py");
 
 /// Tools no app session may call: mail only ever becomes a draft (hard wall) and the mailbox is never touched, so
 /// the whole Gmail connector goes, and in the app mail goes through relay-mail, never himalaya.
@@ -59,7 +61,7 @@ impl AgentProvider for Claude {
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         let mut mcp = json!({"mcpServers": {"vaultperm": {
-            "command": "/usr/bin/python3", "args": [PERM_SERVER],
+            "command": "/usr/bin/python3", "args": [if env.opt("perm_server").is_empty() { PERM_SERVER } else { env.opt("perm_server") }],
             "env": {"PENDING": env.pending.to_string_lossy(), "PROJECT": l.key}}}});
         // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
         if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }

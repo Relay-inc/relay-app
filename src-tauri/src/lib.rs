@@ -9,14 +9,14 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use std::os::unix::net::UnixStream;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
 mod agents;
-pub mod broker;
+pub use relay_remote::broker;
+mod machines;
 mod mail;
 pub mod notify;
 mod providers;
@@ -90,6 +90,9 @@ fn norm(mut v: Value) -> Value {
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     if !v["accent"].as_str().is_some_and(|a| ["relay", "graphite"].contains(&a)) { v["accent"] = json!("relay"); }
+    // work machines (machines.rs): only complete ones, a broken entry is dropped rather than half used
+    if !v["machines"].is_array() { v["machines"] = json!([]); }
+    v["machines"].as_array_mut().unwrap().retain(machines::valid);
     v
 }
 
@@ -187,6 +190,15 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
+    ("err.machine_mail", ["A conversation about a mail runs on this Mac, not on a work machine", "Een gesprek over een mail loopt op deze Mac, niet op een werkmachine",
+        "Une conversation sur un mail tourne sur ce Mac, pas sur une machine de travail", "Ein Gespräch über eine Mail läuft auf diesem Mac, nicht auf einer Arbeitsmaschine"]),
+    ("err.machine_down", ["Work machine unreachable: {v}", "Werkmachine niet bereikbaar: {v}", "Machine de travail injoignable : {v}", "Arbeitsmaschine nicht erreichbar: {v}"]),
+    ("err.machine_terminal", ["This conversation runs on {v}: open it in the terminal there", "Dit gesprek loopt op {v}: open het daar in de terminal",
+        "Cette conversation tourne sur {v} : ouvrez-la là-bas dans le terminal", "Dieses Gespräch läuft auf {v}: öffne es dort im Terminal"]),
+    ("err.machine", ["Invalid work machine in the settings", "Ongeldige werkmachine in de instellingen", "Machine de travail invalide dans les réglages", "Ungültige Arbeitsmaschine in den Einstellungen"]),
+    ("err.machine_folder", ["{v}: a folder needs a vault project and an absolute path on the machine", "{v}: een map heeft een vaultproject en een absoluut pad op de machine nodig",
+        "{v} : un dossier a besoin d'un projet du coffre et d'un chemin absolu sur la machine", "{v}: ein Ordner braucht ein Vault-Projekt und einen absoluten Pfad auf der Maschine"]),
+    ("err.no_machine", ["No such work machine", "Onbekende werkmachine", "Machine de travail inconnue", "Unbekannte Arbeitsmaschine"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
     let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
@@ -239,7 +251,8 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
 // with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
-struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32 }
+// remote: on a work machine (machines.rs), stopped and taken back through its relay-server
+struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, remote: bool }
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -249,6 +262,7 @@ struct App {
     limits: Mutex<HashMap<String, (i64, Value)>>, // per provider: its last limits answer and when
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
+    machines: machines::Machines,          // work machines, this Mac's certificate and which conversation runs where
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -511,21 +525,40 @@ fn pipe_init(mail_on: bool) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, project_name: Option<&str>) -> Result<Proc, String> {
     let dir = need_vault(state)?;
-    let eb = env_of(app, state, p);
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
-    let mut cmd = p.command(&eb.env(), &l)?;
-    cmd.current_dir(&dir).env("PATH", &state.path);
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
-    let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
-    let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
-    if claude { writeln!(stdin, "{}", pipe_init(eb.opts["mail"] == true)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
-    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()) };
-    read_agent(app, project, p, c);
+    let settings = state.settings.lock().unwrap().clone();
+    // a project with a folder on a work machine runs there (machines.rs); a fork copies a session of this Mac, so stays
+    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, project_name, resume.is_some()) } else { None };
+    let (c, mail_on, remote) = if let Some((m, bind)) = remote {
+        if from_mail { return Err(trc("err.machine_mail")); }
+        let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
+        let mut eb = env_of(app, state, p);
+        // that machine's paths, its claude and its copy of perm_server.py; no mail tools there
+        eb.opts["mail"] = json!(false);
+        eb.opts["perm_server"] = json!(info.perm);
+        let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
+        let mut cmd = p.command(&eb.env(), &l)?;
+        cmd.current_dir(&bind.cwd).env("PATH", &info.path);
+        let c = state.machines.client(&m).launch(&meta, &broker::Spec::of(&cmd)).map_err(|e| format!("{} start ({}): {e}", p.id(), m["name"].as_str().unwrap_or("")))?;
+        state.machines.set_bind(project, bind);
+        (c, false, true)
+    } else {
+        let eb = env_of(app, state, p);
+        let mut cmd = p.command(&eb.env(), &l)?;
+        cmd.current_dir(&dir).env("PATH", &state.path);
+        (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.opts["mail"] == true, false)
+    };
+    let broker::Conn { agent, mut stdin, frames, backlog } = c;
+    if claude { writeln!(stdin, "{}", pipe_init(mail_on)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
+    let pid = agent.id();
+    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), remote };
+    read_agent(app, project, p, pid, frames, backlog);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if claude && from_mail { write_taint(&mut proc, &dir); }
     Ok(proc)
@@ -535,16 +568,16 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
 /// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
 /// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
 /// end, it reads the rest from the transcript.
-fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn) {
-    let (a, k, pid, id, claude, pend, mut parse) = (app.clone(), key.to_string(), c.agent.id(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
-    let (frames, backlog) = (c.frames, c.backlog);
+fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32, frames: Box<dyn BufRead + Send>, backlog: usize) {
+    let (a, k, id, claude, pend, mut parse) = (app.clone(), key.to_string(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
     std::thread::spawn(move || {
+        let mut exited = false;
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
         let mut err: Vec<String> = vec![];
         // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
         let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
         for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
-            let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => break };
+            let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => { exited = true; break } };
             let replay = n < backlog;
             // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
             if claude {
@@ -601,6 +634,9 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
             }
         }
         if !err.is_empty() { emit(json!({"type": "stderr", "text": err.join("\n")})); }
+        // a work machine's connection that dropped without the agent ending (the Mac slept, the wifi went): its
+        // agent goes on there, take it back once the machine answers again
+        if !exited && a.state::<App>().machines.bind_of(&k).is_some() && reconnect(&a, &k, p, pid) { return; }
         broker::forget(&k, pid);
         // a process replaced for a model or effort switch exits quietly, its successor keeps the slot
         {
@@ -616,7 +652,51 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
 /// The app quits: an agent with no turn running stops (the next message resumes its session, nothing is lost), so
 /// only a running turn keeps an agent and its broker alive while the app is closed.
 fn quit(app: &AppHandle) {
-    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| x.turns == 0) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
+    // a work machine's agents stay: that is what the machine is for, and its server winds an idle one down itself
+    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| x.turns == 0 && !x.remote) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
+}
+
+/// Take a work machine's conversation back after its connection dropped: every few seconds while its slot still holds
+/// this agent, for at most an hour. False when it is gone (it ended there, or was stopped).
+fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32) -> bool {
+    let st = app.state::<App>();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        if !st.procs.lock().unwrap().get(key).is_some_and(|x| x.child.id() == pid) { return true; } // stopped or replaced: nothing to do
+        let Some(m) = st.machines.bind_of(key).and_then(|b| machines::Machines::find(&st.settings.lock().unwrap(), &b.machine)) else { return false };
+        match st.machines.client(&m).attach(key) {
+            Ok(Some(c)) if c.agent.id() == pid => {
+                let broker::Conn { agent, stdin, frames, backlog } = c;
+                if let Some(x) = st.procs.lock().unwrap().get_mut(key) { x.stdin = stdin; x.child = agent; }
+                read_agent(app, key, p, pid, frames, backlog);
+                return true;
+            }
+            Ok(_) => return false,
+            Err(_) => continue,
+        }
+    }
+    false
+}
+
+/// After a restart, a work machine's conversations: the ones whose broker still runs there are the app's again.
+/// Off the setup thread, a machine that does not answer only delays its own conversations.
+fn reattach_remote(app: &AppHandle) {
+    let st = app.state::<App>();
+    let list = st.settings.lock().unwrap()["machines"].as_array().cloned().unwrap_or_default();
+    for m in list {
+        let c = st.machines.client(&m);
+        let Ok(metas) = c.list() else { continue };
+        for meta in metas.into_iter().filter(|x| st.machines.bind_of(&x.key).is_some_and(|b| m["id"] == b.machine.as_str())) {
+            let (Ok(p), Ok(Some(conn))) = (agents::get(&meta.provider), c.attach(&meta.key)) else { continue };
+            if st.procs.lock().unwrap().contains_key(&meta.key) { continue; }
+            let broker::Conn { agent, stdin, frames, backlog } = conn;
+            let pid = agent.id();
+            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, remote: true };
+            st.procs.lock().unwrap().insert(meta.key.clone(), x);
+            read_agent(app, &meta.key, p, pid, frames, backlog);
+        }
+    }
 }
 
 /// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
@@ -625,10 +705,11 @@ fn reattach(app: &AppHandle) {
     for f in dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
         let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
-        let Ok(stdin) = c.stdin.try_clone() else { continue };
-        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1 };
+        let broker::Conn { agent, stdin, frames, backlog } = c;
+        let pid = agent.id();
+        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1, remote: false };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        read_agent(app, &m.key, p, c);
+        read_agent(app, &m.key, p, pid, frames, backlog);
     }
 }
 
@@ -680,7 +761,7 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, project_name: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
@@ -698,7 +779,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, project_name.as_deref())?;
         procs.insert(project, x);
         return Ok(());
     }
@@ -706,7 +787,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let mut was_tainted = false;
     if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id()) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, project_name.as_deref())?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -749,16 +830,22 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
 
 /// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
 #[tauri::command]
-fn history(app: AppHandle, state: State<App>, project: String) -> Value {
-    let Some(s) = state.sids.lock().unwrap().get(&project).cloned() else { return json!([]) };
+async fn history(app: AppHandle, state: State<'_, App>, project: String) -> Result<Value, String> {
+    let Some(s) = state.sids.lock().unwrap().get(&project).cloned() else { return Ok(json!([])) };
     let p = agents::get_or_first(Some(&s.provider));
-    json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0)
+    // a work machine's conversation: its transcript is there
+    if let Some((m, b)) = state.machines.bind_of(&project).and_then(|b| Some((machines::Machines::find(&state.settings.lock().unwrap(), &b.machine)?, b))) {
+        let c = state.machines.client(&m);
+        return tauri::async_runtime::spawn_blocking(move || c.history(&s.sid, 0, &b.cwd).map(|(items, _)| items)).await.map_err(|e| e.to_string())?;
+    }
+    Ok(json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0))
 }
 
 /// "Nieuw gesprek": stop the process and forget the session, the next message starts fresh.
 #[tauri::command]
 fn reset(app: AppHandle, state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+    state.machines.unbind(&project); // a fresh start goes where the project's folders say now
     let mut sids = state.sids.lock().unwrap();
     sids.remove(&project);
     save_sids(&app, &sids);
@@ -769,6 +856,7 @@ fn reset(app: AppHandle, state: State<App>, project: String) {
 #[tauri::command]
 fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&from) { p.child.kill().ok(); }
+    state.machines.rebind(&from, &to);
     let mut sids = state.sids.lock().unwrap();
     if let Some(sid) = sids.remove(&from) { sids.insert(to.clone(), sid); }
     save_sids(&app, &sids);
@@ -832,7 +920,12 @@ fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys(
 
 /// The open permission requests and questions of every provider.
 #[tauri::command]
-fn pending(app: AppHandle) -> Vec<Value> { pending::list(&pending_dir(&app)) }
+fn pending(app: AppHandle, state: State<App>) -> Vec<Value> {
+    // the work machines' cards as their poller last saw them (machines.rs), after this Mac's own
+    let mut list = pending::list(&pending_dir(&app));
+    list.extend(state.machines.pending());
+    list
+}
 
 /// The user's decision. A provider that raised the request in its own protocol gets it over stdin.
 #[tauri::command]
@@ -840,6 +933,14 @@ fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Res
     if !pending::valid_id(&id) { return Err("bad id".into()); }
     let dir = pending_dir(&app);
     let req = pending::read(&dir, &id);
+    // a card of a work machine: its perm_server.py waits for the answer file there
+    if req.is_none() {
+        if let Some(m) = state.machines.pending_owner(&id).and_then(|m| machines::Machines::find(&state.settings.lock().unwrap(), &m)) {
+            state.machines.client(&m).answer(&id, &decision)?;
+            state.machines.seen.lock().unwrap().values_mut().for_each(|s| s.pending.retain(|x| x["id"] != id.as_str()));
+            return Ok(());
+        }
+    }
     pending::answer(&dir, &id, &decision)?;
     if let Some(r) = req.filter(|r| r.relay) {
         pending::take(&dir, &id);
@@ -867,6 +968,10 @@ fn agents(app: AppHandle, state: State<App>) -> Value {
 /// write the same session.
 #[tauri::command]
 fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
+    if let Some(b) = state.machines.bind_of(&project) {
+        let m = machines::Machines::find(&state.settings.lock().unwrap(), &b.machine).map(|m| m["name"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        return Err(trc_v("err.machine_terminal", &m));
+    }
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
     need_vault(&state)?;
     let p = provider_of(&state, &project, None);
@@ -1279,6 +1384,63 @@ async fn mail_test(state: State<'_, App>, account: Value) -> Result<String, Stri
     state.mail.test(&a).await
 }
 
+// ---------- Work machines (machines.rs, packages/relay-server): pairing, status, folders per project.
+
+/// Save settings changed here (not by the settings window), and tell both windows.
+fn save_settings(app: &AppHandle, s: &Value) -> Result<(), String> {
+    fs::write(data_dir(app).join("settings.json"), serde_json::to_string_pretty(s).unwrap()).map_err(|e| e.to_string())?;
+    app.emit("settings-changed", s).ok();
+    Ok(())
+}
+/// Pair with the line `relay-server pair` printed. The machine is saved under the name given, else its host name.
+#[tauri::command]
+async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name: String) -> Result<Value, String> {
+    let (id, me) = (state.machines.id.clone(), sys_name());
+    let (l, info) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::pair(&line, &id, &me)).await.map_err(|e| e.to_string())??;
+    let name: String = if name.trim().is_empty() { info.host.clone() } else { name.trim().chars().take(60).collect() };
+    let m = json!({"id": &l.fp[..12], "name": name, "host": l.host, "port": l.port, "fp": l.fp, "folders": {}});
+    let mut s = state.settings.lock().unwrap();
+    let list = s["machines"].as_array_mut().unwrap();
+    list.retain(|x| x["fp"] != m["fp"]);
+    list.push(m.clone());
+    save_settings(&app, &s)?;
+    Ok(m)
+}
+/// This Mac's name, for the server's list of paired devices.
+fn sys_name() -> String {
+    Command::new("/usr/sbin/scutil").args(["--get", "ComputerName"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|n| !n.is_empty()).unwrap_or_else(|| "Relay".into())
+}
+/// Whether a machine answers, with what it says about itself.
+#[tauri::command]
+async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, String> {
+    let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    let c = state.machines.client(&m);
+    let r = tauri::async_runtime::spawn_blocking(move || c.info()).await.map_err(|e| e.to_string())?;
+    Ok(match r { Ok(i) => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os}), Err(e) => json!({"ok": false, "error": e}) })
+}
+/// Forget a machine here. Its conversations lose their bind; on the machine `relay-server revoke` unpairs this Mac.
+#[tauri::command]
+fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
+    let mut s = state.settings.lock().unwrap();
+    s["machines"].as_array_mut().unwrap().retain(|m| m["id"] != id.as_str());
+    state.machines.forget(&id);
+    save_settings(&app, &s)
+}
+/// A machine's folders: vault project -> absolute folder there.
+#[tauri::command]
+fn set_machine_folders(app: AppHandle, state: State<App>, id: String, folders: serde_json::Map<String, Value>) -> Result<(), String> {
+    if let Some((p, _)) = folders.iter().find(|(p, d)| !machines::folder_ok(p, d)) { return Err(trc_v("err.machine_folder", p)); }
+    let mut s = state.settings.lock().unwrap();
+    let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
+    m["folders"] = Value::Object(folders);
+    if !machines::valid(m) { return Err(trc("err.machine")); }
+    save_settings(&app, &s)
+}
+/// Conversation key -> machine name and folder, for the conversations that run on one.
+#[tauri::command]
+fn chat_machines(state: State<App>) -> Value { state.machines.chat_machines(&state.settings.lock().unwrap()) }
+
 /// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
 #[tauri::command]
 async fn pick_folder(app: AppHandle) -> Option<String> {
@@ -1370,12 +1532,23 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
+            let machines = machines::Machines::load(&data_dir(app.handle()))?;
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new(), machines });
             reattach(app.handle());
+            // the work machines: their conversations back, then their cards every second (only when there are machines)
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                reattach_remote(&h);
+                loop {
+                    let s = h.state::<App>().settings.lock().unwrap().clone();
+                    if s["machines"].as_array().is_some_and(|m| !m.is_empty()) { h.state::<App>().machines.poll(&s); }
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
+            });
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

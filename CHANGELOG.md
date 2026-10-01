@@ -10,6 +10,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+- Work machines: run a project's conversations on another computer in your network (a home server, a spare Mac), so they keep going while this Mac is closed. Install `relay-server` there (packages/relay-server), run `relay-server pair` and paste the line in Settings › Machines, then link a project to its folder on that machine. The connection is mutual TLS with pinned certificates: a device that is not paired never gets past the handshake. Permission cards from there show up here as usual, the composer says where a conversation runs, and a conversation that lost its connection is taken back when the machine answers again. Mail, the vault and general conversations stay on this Mac
 - Pi joins Claude Code, Codex and OpenCode as an agent: Settings › Agents › Pi turns it on once `pi` is installed and has a login or key. Pick its models and thinking levels, paste images, resume, fork or continue a session in the terminal, and see its tokens and cost in Usage. Pi never asks before it edits files or runs commands, so there are no permission cards (#46)
 
 ## [0.0.2] - 2026-10-01

@@ -220,6 +220,15 @@ export class RelayComposer extends LitElement {
       ><span class="w-px h-3.5 bg-separator-strong mx-1"></span>`;
   }
 
+  // a conversation of a project bound to a machine runs there
+  private renderMachine() {
+    const machine = chat.machines[ui.selected]?.machine;
+    if (!machine) return nothing;
+    return html`<span class="px-1.5 text-xs text-secondary whitespace-nowrap" title=${t("composer.onMachineHelp")}
+        >${t("composer.onMachine", { name: machine })}</span
+      ><span class="w-px h-3.5 bg-separator-strong mx-1"></span>`;
+  }
+
   private chevron() {
     return html`<span class="absolute inset-y-0 right-1.5 flex items-center pointer-events-none text-secondary"
       >${icon("down", "glyph size-2.75 stroke-2")}</span
@@ -298,7 +307,7 @@ export class RelayComposer extends LitElement {
         @paste=${this.onPaste}
       ></textarea>
       <div class="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
-        ${this.renderAttach()} ${this.renderAgentPick()}
+        ${this.renderAttach()} ${this.renderAgentPick()} ${this.renderMachine()}
         <!-- a switch restarts the process, so not while a turn runs -->
         ${this.renderPick("model", model.list, model.value, t("composer.defaultModel"), true)}
         ${this.renderPick("effort", effort.list, effort.value, t("composer.defaultEffort"), showEffort)}

@@ -116,6 +116,7 @@ export const chat = {
   // when that turn's prompt came in and the last line after it, from the transcript timestamps, for "Klaar · duur"
   outsideAt: {} as Record<string, { from: number; to: number }>,
   termOffset: {} as Record<string, number>,
+  machines: {} as Record<string, { machine: string; cwd: string }>, // conversation key: the machine it runs on (`chat_machines`)
   subs: {} as Record<string, Sub[]>, // per conversation key, polled every 2 s
   subsOpen: new Set<string>(), // conversations whose finished agents are unfolded
   subLog: {} as Record<string, string[]>, // agent id: its last messages, while unfolded

@@ -191,6 +191,7 @@ async function deliver(key: string, conversation: Chat | undefined, text: string
       model: picks("model").value,
       effort: picks("effort").value,
       provider: chatAgent(key),
+      projectName: conversation?.project ?? null,
     });
   } catch (error) {
     push(key, { kind: "err", text: String(error) });

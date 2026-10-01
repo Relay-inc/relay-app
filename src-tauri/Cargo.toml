@@ -40,6 +40,9 @@ ammonia = "4"
 futures = "0.3"
 base64 = "0.23"
 
+# the broker and the link to a work machine (src/machines.rs, packages/relay-server)
+relay-remote = { path = "../packages/relay-remote" }
+
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true
 agent-claude = { path = "../packages/agent-claude" }

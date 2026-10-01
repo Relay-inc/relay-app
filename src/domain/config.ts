@@ -13,6 +13,15 @@ export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 export type Theme = "system" | "light" | "dark";
 /** The accent: Relay blue, or graphite (the text colour). */
 export type Accent = "relay" | "graphite";
+/** Another computer in the LAN running relay-server; folders: vault project name to an absolute path on it. */
+export type Machine = {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  fp: string;
+  folders: Record<string, string>;
+};
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
@@ -27,6 +36,7 @@ export type Settings = {
   accent?: Accent;
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
+  machines?: Machine[];
 };
 
 export const config = {
