@@ -34,7 +34,7 @@ export class BoardColumn extends LitElement {
 
   override render() {
     return html`<div
-      class="flex flex-col gap-1.5 max-h-160 bg-fill rounded-xl p-1.5 transition-shadow duration-150 ease-out ${this.over ? "ring-2 ring-inset ring-accent" : ""}"
+      class="flex flex-col gap-1.5 max-h-160 bg-well border border-separator rounded-xl p-1.5 transition-shadow duration-150 ease-out ${this.over ? "ring-2 ring-inset ring-accent" : ""}"
     >
       <div
         class="flex ${this.folded ? "flex-col items-center" : "items-center"} gap-2 ${this.folded ? "py-1.5" : "h-7.5 px-1.5"} text-xs font-semibold cursor-pointer"

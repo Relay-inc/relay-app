@@ -495,17 +495,17 @@ export class RelayBoard extends LitElement {
       @click=${() => openBoardCard(provider, card.id)}
     >
       ${ring(card.state)}
-      <span class="w-14 flex-none font-mono text-[11px] text-tertiary truncate"
+      <span class="w-14 flex-none font-mono text-[11px] text-secondary truncate"
         >${/^\d+$/.test(card.number) ? "#" : ""}${card.number}</span
       >
       <span class="flex-1 min-w-0 truncate text-[13px] font-medium">${card.title}</span>
       ${(card.labels ?? []).map(name => html`<span class="h-4.5 px-1.5 rounded-sm bg-fill-2 text-[11px] text-secondary inline-flex items-center">${name}</span>`)}
-      <span class="w-32 flex-none truncate text-[11px] text-tertiary"
+      <span class="w-32 flex-none truncate text-[11px] text-secondary"
         >${[card.folder, card.list].filter(Boolean).join(" › ")}</span
       >
       <span class="w-13 flex-none text-[11px] font-medium tabular-nums ${day?.tone ?? ""}">${day?.short ?? ""}</span>
       <span class="w-5 flex-none inline-flex">${avatar(card.who)}</span>
-      <span class="w-11 flex-none text-right text-[11px] text-tertiary tabular-nums">${updated(card.updated)}</span>
+      <span class="w-11 flex-none text-right text-[11px] text-secondary tabular-nums">${updated(card.updated)}</span>
     </div>`;
   }
 
