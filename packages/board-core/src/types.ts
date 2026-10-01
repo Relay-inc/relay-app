@@ -76,8 +76,10 @@ export interface BoardProvider<K extends string = string> {
   id: string;
   /** the product's name, not translated */
   name: string;
-  /** a 16×16 SVG body for the sidebar row and the settings list */
+  /** a 16×16 SVG body in the product's own colours, for the settings list */
   glyph: string;
+  /** a 24×24 monochrome SVG body for the sidebar, like the app's own icons: stroke and its width come from the CSS */
+  mark: string;
   /** its UI strings in every language, which the app keeps as <id>.<key> */
   strings: Locales<K>;
 
