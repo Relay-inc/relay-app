@@ -55,9 +55,11 @@ export class ToolStep extends LitElement {
 
   override render() {
     const change = this.tool ? changeOf(this.tool.name, this.tool.input) : null;
-    const cls = `flex items-center gap-2 h-6 text-[13px] [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill-2 [&_code]:text-label [&_code]:px-1.25 [&_code]:py-px [&_code]:rounded-sm ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : ""}`;
+    const cls = `flex items-center gap-2 h-6 min-w-0 text-[13px] [&_code]:whitespace-nowrap [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill-2 [&_code]:text-label [&_code]:px-1.25 [&_code]:py-px [&_code]:rounded-sm ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : ""}`;
     return html`<div class=${cls} @click=${this.link ? () => emit(this, "open-note") : null}>
-        ${this.glyph()}${this.tool ? toolLine(this.tool.name, this.tool.input, this.link) : this.text}
+        ${this.glyph()}<span class="min-w-0 truncate"
+          >${this.tool ? toolLine(this.tool.name, this.tool.input, this.link) : this.text}</span
+        >
         ${change?.add.length ? html`<span class="font-mono text-[11px] text-add-fg">+${change.add.length}</span>` : nothing}
         ${change?.del.length ? html`<span class="font-mono text-[11px] text-del-fg">−${change.del.length}</span>` : nothing}
       </div>
