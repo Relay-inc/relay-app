@@ -915,7 +915,8 @@ fn gh_repo(dir: &str) -> Option<String> {
 fn repo_projects(vault: &str) -> HashMap<String, String> {
     let mut out: HashMap<String, String> = repo_index(vault).into_iter().collect();
     if let Some(r) = relay_config::load(vault).and_then(|c| c["repos"].as_object().cloned()) {
-        out.extend(r.into_iter().filter_map(|(k, v)| Some((k, v.as_str()?.to_string()))));
+        // GitHub names are case-insensitive and the PRs are looked up lowercased: "o2o-Bicycle-leasing/x" matches too
+        out.extend(r.into_iter().filter_map(|(k, v)| Some((k.to_lowercase(), v.as_str()?.to_string()))));
     }
     out
 }
