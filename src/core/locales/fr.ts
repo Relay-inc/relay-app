@@ -509,6 +509,7 @@ export default {
   "kb.presetName": "Nom",
   "kb.presetDelete": "Supprimer le préréglage",
   "kb.noPresets": "Aucun préréglage",
+  "kb.viewUnsupported": "Utilise un filtre que Relay ne peut pas appliquer ici (ou une liste de tâches d'un autre tableau)",
   "kb.save": "Enregistrer",
   "kb.filters": "Filtres",
   "kb.clearAll": "Effacer tous les filtres",
