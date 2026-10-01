@@ -10,6 +10,7 @@ import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
 import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
 import { vault, projectLabel } from "../../domain/vault";
+import { contextTint } from "../../domain/sidebar";
 import "./chat-bar";
 import "./project-panel";
 import "../board/relay-board";
