@@ -99,6 +99,7 @@ export const chat = {
   queued: {} as Record<string, number>, // messages sent but not answered yet: one turn end each
   unseen: new Set<string>(),
   dismissed: new Set<string>(), // "is this about project X?" answered no
+  closing: new Set<string>(), // conversations being closed: the process stops and its worktrees go, which can take a while
   // what is typed but not sent, per conversation: survives switching and closing the app
   typed: ls.get<Record<string, string>>("typed", {}),
   attached: [] as Img[], // waiting in the composer until the next send

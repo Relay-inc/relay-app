@@ -349,9 +349,17 @@ async function hide(key: string) {
     return null;
   }
   if (!chat.chats[key]) return null;
-  await invoke("stop", { project: key });
-  // the git worktrees this conversation made go with it, the ones with work git would lose stay
-  const wt = await invoke<{ removed: number; kept: number }>("drop_worktrees", { project: key }).catch(() => null);
+  // the sidebar greys the row out while this runs
+  chat.closing.add(key);
+  changed();
+  let wt;
+  try {
+    await invoke("stop", { project: key });
+    // the git worktrees this conversation made go with it, the ones with work git would lose stay
+    wt = await invoke<{ removed: number; kept: number }>("drop_worktrees", { project: key }).catch(() => null);
+  } finally {
+    chat.closing.delete(key);
+  }
   chat.chats[key].closed = Date.now();
   delete chat.status[key];
   delete chat.queued[key];
@@ -362,6 +370,7 @@ const worktreeNote = (removed: number, kept: number) =>
   (removed ? ` · ${tn("toast.worktreesRemoved", removed)}` : "") +
   (kept ? ` · ${tn("toast.worktreesKept", kept)}` : "");
 export async function closeChat(key: string) {
+  if (chat.closing.has(key)) return;
   const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
   const wt = await hide(key);
   toast(t("toast.closed", { title: title ?? "" }) + worktreeNote(wt?.removed ?? 0, wt?.kept ?? 0), () => reopen(key));
@@ -383,6 +392,9 @@ export async function closeAll(project: string | null) {
   ];
   let removed = 0;
   let kept = 0;
+  // all of them grey out at once, each goes when its turn is done
+  for (const key of keys) if (chat.chats[key]) chat.closing.add(key);
+  changed();
   for (const key of keys) {
     const wt = await hide(key);
     removed += wt?.removed ?? 0;
