@@ -47,3 +47,10 @@ test("pages are followed by cursor until the last, and capped", async () => {
   await allIssues(async () => { n++; return fx("issues-1").data; });
   assert.equal(n, MAX_PAGES);
 });
+
+test("an issue carries its state kind, status name, labels and last update when Linear sends them", () => {
+  const [c] = mapIssues({ issues: { nodes: [{ id: "i", identifier: "A-1", title: "t", state: { id: "s", name: "In Review", type: "started" },
+    labels: { nodes: [{ name: "bug" }] }, updatedAt: "2026-09-30T10:00:00Z" }], pageInfo: {} } }).cards;
+  assert.deepEqual([c.state, c.status, c.labels, c.updated], ["doing", "In Review", ["bug"], "2026-09-30T10:00:00Z"]);
+  assert.equal(mapStates(fx("states").data, true).find(s => s.name === "Done")?.state, "done");
+});

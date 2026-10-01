@@ -15,6 +15,8 @@ import { config, type Settings } from "./config";
 import { ui } from "./ui";
 import { vault, projectLabel } from "./vault";
 import { openCard } from "./panel";
+import { NOBODY, matches, parsePresets, savePreset, tidy, type Facet, type Filters, type Preset } from "./board-filter";
+export { NOBODY };
 
 // A provider's board as a kanban: pick a project and one of its boards, the columns and cards come from
 // the provider (src/domain/providers.ts). Moving a card to another column moves it in the tracker right away,
@@ -32,9 +34,9 @@ export type Board = {
   gen: number;
   group: string; // the provider's grouping shown (Productive: task lists or statuses), "" when it has one
   q: string; // the search over title and number
-  who: string; // the assignee filter: a first name, NOBODY, or "" for everyone
+  filters: Filters; // the facet filters (state, status, assignee, folder, task list, labels), see board-filter.ts
+  view: "kanban" | "list";
 };
-export const NOBODY = "\u0001"; // the assignee filter's "unassigned"
 
 export const boards = {
   ready: [] as string[], // a board row only shows once its integration is switched on and set up, with a token in the keychain
@@ -64,31 +66,69 @@ export const refOf = (provider: BoardProvider, state: Board): BoardRef => ({
 });
 
 // a card's column in the grouping shown: the first grouping is `column`, the others come from `in`
-const firstGroup = (provider: BoardProvider, state: Board) => !provider.groupings || state.group === provider.groupings[0].id;
+const firstGroup = (provider: BoardProvider, state: Board) =>
+  !provider.groupings || state.group === provider.groupings[0].id;
 export const colOf = (provider: BoardProvider, state: Board, card: Card) =>
-  firstGroup(provider, state) ? card.column : card.in?.[state.group] ?? "";
+  firstGroup(provider, state) ? card.column : (card.in?.[state.group] ?? "");
 const withCol = (provider: BoardProvider, state: Board, card: Card, column: string): Card =>
   firstGroup(provider, state) ? { ...card, column } : { ...card, in: { ...card.in, [state.group]: column } };
-/** The assignees on the board, and the cards the filters leave. A filter on someone not on this board is dropped: it would hide every card. */
+/** The cards the search and the filters leave, and all of them. A value no card has any more (someone no longer on the board) is dropped from the filters: it would hide every card. */
 export function filtered(state: Board) {
-  const people = [...new Set(state.cards.map(card => card.who).filter(Boolean))].sort();
-  if (state.who && state.who !== NOBODY && !people.includes(state.who)) state.who = "";
-  const q = state.q.toLowerCase();
-  const cards = state.cards.filter(card =>
-    (!q || `${card.title} ${card.number}`.toLowerCase().includes(q)) &&
-    (!state.who || (state.who === NOBODY ? !card.who : card.who === state.who)));
-  return { people, cards };
+  if (state.cards.length) state.filters = tidy(state.filters, state.cards);
+  return { all: state.cards, cards: state.cards.filter(card => matches(card, state.q, state.filters)) };
 }
-export function setFilter(provider: BoardProvider, filter: { q?: string; who?: string }) {
+export function setFilter(provider: BoardProvider, filter: { q?: string; filters?: Filters }) {
   Object.assign(boardState(provider), filter);
   changed();
 }
-// folded columns, by column id, kept across sessions
-export const folded = (provider: BoardProvider) => new Set<string>(JSON.parse(lsGet(`${lsKey(provider)}Folded`) || "[]"));
-export function toggleFold(provider: BoardProvider, column: string) {
-  const set = folded(provider);
-  if (!set.delete(column)) set.add(column);
-  lsSet(`${lsKey(provider)}Folded`, JSON.stringify([...set]));
+/** Switch one value of a facet on or off. */
+export function toggleFilter(provider: BoardProvider, facet: Facet, value: string) {
+  const state = boardState(provider);
+  const now = state.filters[facet] ?? [];
+  state.filters = { ...state.filters, [facet]: now.includes(value) ? now.filter(v => v !== value) : [...now, value] };
+  changed();
+}
+export const clearFilters = (provider: BoardProvider, facet?: Facet) =>
+  setFilter(provider, {
+    filters: facet ? { ...boardState(provider).filters, [facet]: [] } : {},
+  });
+export const setView = (provider: BoardProvider, view: Board["view"]) => {
+  boardState(provider).view = view;
+  lsSet(`${lsKey(provider)}View`, view);
+  changed();
+};
+
+// presets: filter sets saved under a name, per board, in this app's storage
+const presetsKey = (provider: BoardProvider) => `${lsKey(provider)}Presets:${boardState(provider).board}`;
+export const presetsOf = (provider: BoardProvider): Preset[] =>
+  parsePresets(localStorage.getItem(presetsKey(provider)));
+export function savePresetAs(provider: BoardProvider, name: string) {
+  lsSet(
+    presetsKey(provider),
+    JSON.stringify(savePreset(presetsOf(provider), name.trim(), boardState(provider).filters)),
+  );
+  changed();
+}
+export function deletePreset(provider: BoardProvider, name: string) {
+  lsSet(presetsKey(provider), JSON.stringify(presetsOf(provider).filter(p => p.name !== name)));
+  changed();
+}
+export const applyPreset = (provider: BoardProvider, preset: Preset) =>
+  setFilter(provider, { filters: preset.filters });
+
+// folded columns: what the user chose per column id, kept across sessions; a column that is done starts folded
+const foldKey = (provider: BoardProvider) => `${lsKey(provider)}Fold`;
+const foldChoices = (provider: BoardProvider): Record<string, boolean> => {
+  try {
+    return JSON.parse(lsGet(foldKey(provider)) || "{}") || {};
+  } catch {
+    return {};
+  }
+};
+export const isFolded = (provider: BoardProvider, column: Column) =>
+  foldChoices(provider)[column.id] ?? column.state === "done";
+export function toggleFold(provider: BoardProvider, column: Column) {
+  lsSet(foldKey(provider), JSON.stringify({ ...foldChoices(provider), [column.id]: !isFolded(provider, column) }));
   changed();
 }
 
@@ -112,9 +152,10 @@ export function boardState(provider: BoardProvider): Board {
       err: "",
       busy: false,
       gen: 0,
-      group: provider.groupings?.some(x => x.id === group) ? group : provider.groupings?.[0].id ?? "",
+      group: provider.groupings?.some(x => x.id === group) ? group : (provider.groupings?.[0].id ?? ""),
       q: "",
-      who: "",
+      filters: {},
+      view: lsGet(`${lsKey(provider)}View`) === "list" ? "list" : "kanban",
     });
   return boards.states.get(provider.id)!;
 }
@@ -139,7 +180,10 @@ async function run(state: Board, load: (live: () => boolean) => Promise<void>) {
 async function loadCards(provider: BoardProvider, state: Board, live: () => boolean, boardId: string) {
   const ref = { ...refOf(provider, state), board: boardId };
   const [columns, cards] = boardId
-    ? await Promise.all([provider.columns(ctx(provider), ref, state.group || undefined), provider.cards(ctx(provider), ref)])
+    ? await Promise.all([
+        provider.columns(ctx(provider), ref, state.group || undefined),
+        provider.cards(ctx(provider), ref),
+      ])
     : [[], []];
   if (!live()) return;
   state.board = boardId;
@@ -210,7 +254,10 @@ export function pickGroup(provider: BoardProvider, group: string) {
 }
 // a card goes to the end of its new column
 const endOf = (provider: BoardProvider, state: Board, column: string, except: string) =>
-  Math.max(0, ...state.cards.filter(x => colOf(provider, state, x) === column && x.id !== except).map(x => x.placement)) + 1;
+  Math.max(
+    0,
+    ...state.cards.filter(x => colOf(provider, state, x) === column && x.id !== except).map(x => x.placement),
+  ) + 1;
 // shown in the new column at once, back where it was when the tracker refuses
 // (a card is replaced, not changed: the components only redraw for a new object)
 export async function moveCard(provider: BoardProvider, card: Card, column: string) {
@@ -224,7 +271,13 @@ export async function moveCard(provider: BoardProvider, card: Card, column: stri
   state.err = "";
   changed();
   try {
-    const placement = await provider.move(ctx(provider), refOf(provider, state), moved, column, state.group || undefined);
+    const placement = await provider.move(
+      ctx(provider),
+      refOf(provider, state),
+      moved,
+      column,
+      state.group || undefined,
+    );
     if (placement != null) replace({ ...moved, placement });
   } catch (e) {
     replace(card);

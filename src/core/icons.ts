@@ -31,6 +31,14 @@ import {
   ImageNotFound01Icon,
   RefreshIcon,
   MoreHorizontalIcon,
+  Bookmark01Icon,
+  FilterHorizontalIcon,
+  ArrowDown01Icon,
+  ArrowUpRight01Icon,
+  Add01Icon,
+  KanbanIcon,
+  ListViewIcon,
+  DashboardSquare01Icon,
 } from "@hugeicons/core-free-icons";
 
 type Icon = readonly (readonly [string, Readonly<Record<string, string | number>>])[];
@@ -72,6 +80,14 @@ const ICONS: Record<string, Icon> = {
   none: ImageNotFound01Icon,
   refresh: RefreshIcon,
   more: MoreHorizontalIcon,
+  bookmark: Bookmark01Icon,
+  filter: FilterHorizontalIcon,
+  down: ArrowDown01Icon,
+  out: ArrowUpRight01Icon,
+  plus: Add01Icon,
+  kanban: KanbanIcon,
+  rows: ListViewIcon,
+  board: DashboardSquare01Icon,
 };
 const extra: Record<string, string> = {
   // unread: the envelope with a solid dot in its corner

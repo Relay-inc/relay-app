@@ -32,7 +32,7 @@ const trello: BoardProvider<Key> = {
   boards: async (c, p) => (await all(c)).boards.filter(b => b.project === p),
   columns: async (c, ref) => mapColumns(await c.call("GET", `/boards/${ref.board}/lists?filter=open&fields=name,pos,closed`)),
   cards: async (c, ref) => {
-    const [raw, m] = await Promise.all([c.call("GET", `/boards/${ref.board}/cards/open?fields=name,idShort,idList,pos,due,idMembers,shortUrl,closed&members=true&member_fields=fullName`),
+    const [raw, m] = await Promise.all([c.call("GET", `/boards/${ref.board}/cards/open?fields=name,idShort,idList,pos,due,idMembers,shortUrl,closed,labels,dateLastActivity&members=true&member_fields=fullName`),
       c.config.mine ? who(c) : null]);
     for (const x of raw || []) links.set(x.id, x.shortUrl);
     return mapCards(raw || [], m?.id);
