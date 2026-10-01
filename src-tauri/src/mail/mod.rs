@@ -554,7 +554,7 @@ mod tests {
         assert_eq!(safe_name("a\nb\u{202e}fdp.exe"), "a_b_fdp.exe");
         assert_eq!(safe_name("C:\\x.pdf"), "C__x.pdf");
         assert_eq!(safe_name(&"é".repeat(300)).chars().count(), 120);
-        let dir = std::env::temp_dir().join(format!("vaultmail-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("relay-mail-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let names: Vec<_> = (0..3).map(|_| save(&dir, "report.pdf", b"x").unwrap().file_name().unwrap().to_string_lossy().to_string()).collect();
         assert_eq!(names, ["report.pdf", "report (1).pdf", "report (2).pdf"]);
