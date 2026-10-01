@@ -69,7 +69,7 @@ export class PermissionCard extends LitElement {
         ${(question.options || []).map(
           option =>
             html`<button
-              class=${this.picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"}
+              class=${this.picked[qi]?.has(option.label) ? "btn btn-primary cursor-pointer" : "btn cursor-pointer"}
               title=${option.description || ""}
               ?disabled=${this.busy}
               @click=${() => this.pick(qi, option.label, !!question.multiSelect)}
@@ -93,9 +93,9 @@ export class PermissionCard extends LitElement {
       <div class="text-sm text-secondary">${t("card.asks")}</div>
       ${(this.request.input.questions || []).map((question: Question, qi: number) => this.renderQuestion(question, qi))}
       <div class="flex justify-end gap-2">
-        <button class="btn" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
+        <button class="btn cursor-pointer" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
           ${t("card.skip")}</button
-        ><button class="btn btn-primary" ?disabled=${this.busy} @click=${() => this.answer()}>
+        ><button class="btn btn-primary cursor-pointer" ?disabled=${this.busy} @click=${() => this.answer()}>
           ${t("card.answer")}
         </button>
       </div>
@@ -116,9 +116,13 @@ export class PermissionCard extends LitElement {
       >
 ${describe(request)}</pre>
       <div class="flex justify-end gap-2">
-        <button class="btn" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
+        <button class="btn cursor-pointer" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
           ${t("card.deny")}</button
-        ><button class="btn btn-primary" ?disabled=${this.busy} @click=${() => emit(this, "answer", "allow")}>
+        ><button
+          class="btn btn-primary cursor-pointer"
+          ?disabled=${this.busy}
+          @click=${() => emit(this, "answer", "allow")}
+        >
           ${t("card.allow")}
         </button>
       </div>

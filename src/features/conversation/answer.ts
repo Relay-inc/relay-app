@@ -30,7 +30,7 @@ export class Answer extends LitElement {
     return html`<div class="group">
       <div class="md-chat [&_a:not(.vlink)]:underline [&_strong]:font-bold!">${md(this.text)}</div>
       <button
-        class="grid place-items-center size-6 -ml-1 mt-1 rounded-sm border-0 bg-transparent text-secondary hover:bg-fill opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        class="grid place-items-center size-6 -ml-1 cursor-pointer mt-1 rounded-sm border-0 bg-transparent text-secondary hover:bg-fill opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         title=${t("copy")}
         aria-label=${t("copy")}
         @click=${this.copy}

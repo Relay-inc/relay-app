@@ -58,7 +58,7 @@ export class ToolStep extends LitElement {
     const change = this.tool ? changeOf(this.tool.name, this.tool.input) : null;
     const command = this.tool?.name === "Bash" ? String(this.tool.input?.command || "") : "";
     const click = this.link ? () => emit(this, "open-note") : command ? () => (this.open = !this.open) : null;
-    const cls = `flex items-center gap-2 h-6 min-w-0 text-[13px] [&_code]:whitespace-nowrap [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill-2 [&_code]:text-label [&_code]:px-1.25 [&_code]:py-px [&_code]:rounded-sm ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : command ? " hover:text-label" : ""}`;
+    const cls = `flex items-center gap-2 h-6 min-w-0 text-[13px] [&_code]:whitespace-nowrap [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill-2 [&_code]:text-label [&_code]:px-1.25 [&_code]:py-px [&_code]:rounded-sm ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : command ? " cursor-pointer hover:text-label" : ""}`;
     return html`<div class=${cls} @click=${click}>
         ${this.glyph()}<span class="min-w-0 truncate"
           >${this.tool ? toolLine(this.tool.name, this.tool.input, this.link) : this.text}</span

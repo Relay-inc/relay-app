@@ -23,7 +23,7 @@ export class ToolGroup extends LitElement {
   override render() {
     const shown = this.open || this.active;
     return html`<button
-        class="inline-flex items-center gap-1.5 h-6 px-1.5 -ml-1.5 border-0 rounded-md bg-transparent text-xs text-secondary hover:bg-fill hover:text-label"
+        class="inline-flex items-center gap-1.5 h-6 cursor-pointer px-1.5 -ml-1.5 border-0 rounded-md bg-transparent text-xs text-secondary hover:bg-fill hover:text-label"
         aria-expanded=${shown}
         @click=${() => (this.open = !this.open)}
       >

@@ -229,6 +229,9 @@
   & a {
     @apply text-accent-text;
   }
+  & a {
+    @apply cursor-pointer;
+  }
   & a:not(.vlink) {
     @apply underline decoration-focus underline-offset-2;
   }

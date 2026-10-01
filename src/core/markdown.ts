@@ -63,7 +63,7 @@ marked.use({
     html: ({ text }) => esc(text),
     // a code block under a header with its language and a copy button (the app copies it, src/features/shell/relay-app.ts)
     code: ({ text, lang }) =>
-      `<div class="codeblock my-2 rounded-[10px] bg-well border border-separator overflow-hidden"><div class="flex items-center h-7.5 pl-3 pr-1.5 border-b border-separator font-mono text-[11px] text-tertiary"><span class="flex-1">${esc((lang ?? "").split(/\s/)[0])}</span><button data-copy class="inline-flex items-center gap-1 h-5.5 px-1.5 border-0 rounded-[5px] bg-transparent text-secondary font-sans text-[11px] hover:bg-fill-2 hover:text-label" title="${esc(t("copy"))}"><svg class="glyph size-3" viewBox="0 0 24 24" aria-hidden="true">${iconPaths("copy")}</svg>${esc(t("copy"))}</button></div><pre><code>${esc(text)}</code></pre></div>`,
+      `<div class="codeblock my-2 rounded-[10px] bg-well border border-separator overflow-hidden"><div class="flex items-center h-7.5 pl-3 pr-1.5 border-b border-separator font-mono text-[11px] text-tertiary"><span class="flex-1">${esc((lang ?? "").split(/\s/)[0])}</span><button data-copy class="cursor-pointer inline-flex items-center gap-1 h-5.5 px-1.5 border-0 rounded-[5px] bg-transparent text-secondary font-sans text-[11px] hover:bg-fill-2 hover:text-label" title="${esc(t("copy"))}"><svg class="glyph size-3" viewBox="0 0 24 24" aria-hidden="true">${iconPaths("copy")}</svg>${esc(t("copy"))}</button></div><pre><code>${esc(text)}</code></pre></div>`,
     image: ({ text }) => esc(text),
     codespan: ({ text }) =>
       isNotePath(text) ? noteA(noteOf(text), `<code>${esc(text)}</code>`) : `<code>${esc(text)}</code>`,
