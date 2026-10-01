@@ -12,11 +12,6 @@
   },
   "dependencies": {
     "@hugeicons/core-free-icons": "^4.3.5",
-    "@relay/board-core": "workspace:*",
-    "@relay/integration-linear": "workspace:*",
-    "@relay/integration-productive": "workspace:*",
-    "@relay/integration-trello": "workspace:*",
-    "@tauri-apps/api": "^2",
     "@relay/agent-claude": "workspace:*",
     "@relay/agent-codex": "workspace:*",
     "@relay/agent-core": "workspace:*",
@@ -25,6 +20,8 @@
     "@relay/integration-linear": "workspace:*",
     "@relay/integration-productive": "workspace:*",
     "@relay/integration-trello": "workspace:*",
+    "@tauri-apps/api": "^2",
+    "lit": "^3.3.3",
     "marked": "^18.0.14"
   },
   "devDependencies": {

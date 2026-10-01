@@ -1,3 +1,6 @@
+import { LitElement, html, nothing } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
+import { live } from "lit/directives/live.js";
 import { t, currentLocale } from "./i18n";
 import type { Key } from "./locales/en";
 
@@ -5,175 +8,161 @@ import type { Key } from "./locales/en";
 export const urgency = (days: number) => days < 0 ? "due-late" : days <= 2 ? "due-soon" : "";
 
 export type Reminder = { id: string; date: string; days: number; project: string | null; title: string; text: string; repeat: string | null };
-type H = { esc: (s: unknown) => string; md: (s: string) => string; projectLabel: (p: string | null) => string; glyph: (n: string) => string };
+type Project = { name: string; label: string };
+type Act = (action: "done" | "push", id: string, date?: string) => Promise<void>;
+type Add = (text: string, date: string, project: string | null, repeat: string | null) => Promise<void>;
 
 const GROUPS: [Key, (d: number) => boolean][] = [
   ["rem.late", d => d < 0], ["rem.today", d => d === 0], ["rem.tomorrow", d => d === 1], ["rem.week", d => d >= 2 && d <= 7], ["rem.later", d => d > 7],
 ];
+const REPEATS = ["", "1w", "14d", "1m", "3m"];
+const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+const todayIso = (plus = 0) => { const d = new Date(); d.setDate(d.getDate() + plus); return iso(d.getFullYear(), d.getMonth(), d.getDate()); };
+const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+// some translations get markup around their numbers, so those go in raw; the values are escaped first
+const tr = (key: Key, p?: Record<string, string | number>) => unsafeHTML(t(key, p));
+const num = (s: string | number) => `<span class="rem-n">${esc(String(s))}</span>`;
 
-function when(r: Reminder): string {
-  if (r.days < 0) return t("due.overdue", { n: `<span class="rem-n">${-r.days}</span>` });
+function when(r: Reminder) {
+  if (r.days < 0) return tr("due.overdue", { n: num(-r.days) });
   if (r.days === 0) return t("due.today");
   const [y, m, d] = r.date.split("-").map(Number), day = new Date(Date.UTC(y, m - 1, d)), fmt = (o: Intl.DateTimeFormatOptions) =>
     new Intl.DateTimeFormat(currentLocale(), { ...o, timeZone: "UTC" }).format(day);
-  return `${fmt({ weekday: "short" })} <span class="rem-n">${fmt({ day: "numeric", month: "numeric" })}</span>`;
+  return html`${fmt({ weekday: "short" })} <span class="rem-n">${fmt({ day: "numeric", month: "numeric" })}</span>`;
 }
 
-// ---------- the new-reminder form: the draft lives here so a snapshot redraw keeps what was typed
-type Project = { name: string; label: string };
-const REPEATS = ["", "1w", "14d", "1m", "3m"];
-const draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
-let projects: Project[] = [], mapped = "";
-const todayIso = (plus = 0) => { const d = new Date(); d.setDate(d.getDate() + plus); return iso(d.getFullYear(), d.getMonth(), d.getDate()); };
+/**
+ * The reminders view. Light DOM so reminders.css applies. main.ts creates it once and keeps it, so the
+ * half-typed form and the open date picker survive snapshot reloads and switching views.
+ */
+export class RelayReminders extends LitElement {
+  static properties = { reminders: { attribute: false }, projects: { attribute: false }, found: { attribute: false }, path: {} };
+  declare reminders: Reminder[];
+  declare projects: Project[];
+  declare found: { reminders?: boolean } | undefined;
+  declare path: string;
+  // from main.ts; md and glyph return trusted HTML
+  md: (s: string) => string = s => s;
+  glyph: (name: string) => string = () => "";
+  projectLabel: (p: string) => string = p => p;
+  act: Act = async () => {};
+  add: Add = async () => {};
+  chat: (id: string) => void = () => {};
 
-function form(h: Pick<H, "esc">): string {
-  if (!draft.open) return `<div class="rem-new"><button class="btn" data-rem-new>${t("rem.new")}</button></div>`;
-  if (!draft.date) draft.date = todayIso(1);
-  const opt = (v: string, l: string, cur: string) => `<option value="${h.esc(v)}"${v === cur ? " selected" : ""}>${h.esc(l)}</option>`;
-  return `<div class="rem-new open">
-    <input class="rem-f" data-rem-f="text" value="${h.esc(draft.text)}" placeholder="${t("rem.newText")}" aria-label="${t("rem.newText")}" spellcheck="false">
-    <div class="rem-new-row">
-      <input type="date" class="rem-f" data-rem-f="date" value="${draft.date}" min="${todayIso()}" aria-label="${t("rem.newDate")}">
-      <select class="rem-f" data-rem-f="project" aria-label="${t("rem.newProject")}">${opt("", t("rem.noProject"), draft.project)}${projects.map(p => opt(p.name, p.label, draft.project)).join("")}</select>
-      <select class="rem-f" data-rem-f="repeat" aria-label="${t("rem.newRepeat")}">${REPEATS.map(r => opt(r, r ? t("rem.every", { n: r }) : t("rem.noRepeat"), draft.repeat)).join("")}</select>
-      <span class="rem-new-go"><button class="btn" data-rem-cancel>${t("rem.cancel")}</button>
-        <button class="btn primary" data-rem-add${draft.busy ? " disabled" : ""}>${t("rem.add")}</button></span></div>
-    ${draft.err ? `<div class="rem-err" role="alert">${h.esc(draft.err)}</div>` : ""}</div>`;
-}
+  private draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
+  private cal: { id: string; y: number; m: number } | null = null;
+  private busy: string | null = null; // the row whose action is running
+  private focusText = false;
 
-let formEsc: (s: unknown) => string = String;
-function redrawForm() {
-  const el = document.querySelector<HTMLElement>(".rem-new");
-  if (el) el.outerHTML = form({ esc: formEsc });
-  if (draft.open) document.querySelector<HTMLInputElement>('[data-rem-f="text"]')?.focus();
-}
+  constructor() { super(); this.reminders = []; this.projects = []; this.path = ""; }
+  createRenderRoot() { return this; }
 
-/** runs a full redraw and puts the caret back in the form when it had focus, so typing survives a snapshot reload */
-export function keepFormFocus(redraw: () => void) {
-  const a = document.activeElement as HTMLElement | null, f = a?.closest?.(".rem-new") ? a.dataset.remF : undefined;
-  redraw();
-  if (!f) return;
-  const n = document.querySelector<HTMLInputElement>(`[data-rem-f="${f}"]`);
-  n?.focus(); if (n?.type === "text") n.setSelectionRange(n.value.length, n.value.length);
-}
+  connectedCallback() { super.connectedCallback(); document.addEventListener("pointerdown", this.closeCal); document.addEventListener("keydown", this.closeCal); }
+  disconnectedCallback() { super.disconnectedCallback(); document.removeEventListener("pointerdown", this.closeCal); document.removeEventListener("keydown", this.closeCal); }
 
-async function submit(add: Add) {
-  const text = draft.text.trim();
-  if (!text || !draft.date || draft.busy) { if (!text) document.querySelector<HTMLInputElement>('[data-rem-f="text"]')?.focus(); return; }
-  draft.busy = true; draft.err = ""; redrawForm();
-  try { await add(text, draft.date, draft.project || null, draft.repeat || null); Object.assign(draft, { open: false, text: "", date: "", project: "", repeat: "" }); }
-  catch (e) { draft.err = String(e); }
-  draft.busy = false; redrawForm();
-}
-
-type Add = (text: string, date: string, project: string | null, repeat: string | null) => Promise<void>;
-
-/** typing, selecting and Enter/Escape in the form */
-export function onReminderField(e: Event, add: Add): void {
-  const n = (e.target as HTMLElement | null)?.closest<HTMLInputElement>("[data-rem-f]");
-  if (!n) return;
-  if (e.type === "input" || e.type === "change") { (draft as any)[n.dataset.remF!] = n.value; return; }
-  if (!(e instanceof KeyboardEvent) || e.isComposing) return;
-  if (e.key === "Enter" && n.dataset.remF === "text") { e.preventDefault(); submit(add); }
-  else if (e.key === "Escape") { draft.open = false; draft.err = ""; redrawForm(); }
-}
-
-/** `found`: which vault paths exist. Without a reminders file, a hint that the first reminder creates it at `path`. */
-export function renderReminders(rem: Reminder[], h: H, found?: { reminders?: boolean }, path = "", projs: Project[] = []): string {
-  glyphOf = h.glyph; formEsc = h.esc; projects = projs; mapped = path;
-  const row = (r: Reminder) => {
-    const id = h.esc(r.id);
-    const proj = r.project ? `<span>${h.esc(h.projectLabel(r.project))}</span>` : "";
-    const rep = r.repeat ? `<span>${t("rem.every", { n: `<span class="rem-n">${h.esc(r.repeat)}</span>` })}</span>` : "";
-    return `<div class="rem-row${r.days < 0 ? " late" : ""}">
-      <div class="rem-main"><div class="rem-t">${h.md(r.title)}</div>
-        <div class="rem-meta">${proj}<span class="${urgency(r.days)}">${when(r)}</span>${rep}</div></div>
-      <div class="rem-acts">
-        <button class="btn ic" data-rem-chat data-id="${id}" data-tip="${t("rem.chat")}" aria-label="${t("rem.chat")}">${h.glyph("chat")}</button>
-        <button class="btn ic" data-rem="done" data-id="${id}" data-tip="${t("rem.done")}" aria-label="${t("rem.done")}">${h.glyph("check")}</button>
-        <button class="btn" data-rem="push" data-date="morgen" data-id="${id}">${t("rem.tomorrow")}</button>
-        <button class="btn" data-rem="push" data-date="+1w" data-id="${id}">${t("rem.plusWeek")}</button>
-        <button class="btn ic" data-rem-cal data-id="${id}" data-tip="${t("rem.pick")}" aria-label="${t("rem.pick")}">${h.glyph("cal")}</button>
-        ${cal?.id === r.id ? calendar() : ""}
-      </div></div>`;
+  private closeCal = (e: Event) => {
+    if (!this.cal) return;
+    if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest?.(".rem-cal,[data-rem-cal]")) { this.cal = null; this.requestUpdate(); }
   };
-  const out = GROUPS.map(([name, f]) => {
-    const items = rem.filter(r => f(r.days)).sort((a, b) => a.days - b.days);
-    return items.length
-      ? `<section class="rem-grp"><h2 class="rem-h">${t(name)} <span class="rem-n">${items.length}</span></h2>${items.map(row).join("")}</section>`
-      : "";
-  }).join("");
-  const hint = found?.reminders === false ? t("rem.noFile", { path: `<code>${h.esc(mapped)}</code>` }) : "";
-  return form(h) + (hint ? `<div class="meta rem-hint">${hint}</div>` : "") + (out || `<div class="rem-empty">${t("rem.none")}</div>`);
-}
 
-// ---------- the date picker: a month grid under the calendar button, past days off, Monday first
-let cal: { id: string; y: number; m: number } | null = null;
-let glyphOf: (n: string) => string = () => "";
-const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-
-function calendar(): string {
-  if (!cal) return "";
-  const glyph = glyphOf;
-  const { y, m } = cal, now = new Date(), today = iso(now.getFullYear(), now.getMonth(), now.getDate());
-  const f = (o: Intl.DateTimeFormatOptions, d: Date) => new Intl.DateTimeFormat(currentLocale(), o).format(d);
-  const lead = (new Date(y, m, 1).getDay() + 6) % 7, n = new Date(y, m + 1, 0).getDate();
-  const wd = Array.from({ length: 7 }, (_, i) => `<span>${f({ weekday: "narrow" }, new Date(2024, 0, 1 + i))}</span>`).join("");
-  const days = Array.from({ length: n }, (_, i) => {
-    const d = iso(y, m, i + 1);
-    return `<button data-cal-day="${d}"${d < today ? " disabled" : ""}${d === today ? ' class="today"' : ""}>${i + 1}</button>`;
-  }).join("");
-  const first = y === now.getFullYear() && m === now.getMonth();
-  return `<div class="rem-cal" role="dialog" aria-label="${t("rem.pick")}">
-    <div class="cal-top"><span class="cal-m">${f({ month: "long", year: "numeric" }, new Date(y, m, 1))}</span>
-      <button data-cal-nav="-1"${first ? " disabled" : ""} aria-label="${t("cal.prev")}">${glyph("left")}</button>
-      <button data-cal-nav="1" aria-label="${t("cal.next")}">${glyph("right")}</button></div>
-    <div class="cal-wd">${wd}</div><div class="cal-grid">${"<span></span>".repeat(lead)}${days}</div></div>`;
-}
-
-// redraws only the popover, the list stays as it is. Near the bottom of the view it opens upwards.
-function redrawCal() {
-  document.querySelector(".rem-cal")?.remove();
-  const b = cal && document.querySelector<HTMLElement>(`[data-rem-cal][data-id="${cal.id}"]`);
-  if (!b) return;
-  b.insertAdjacentHTML("afterend", calendar());
-  const pop = b.nextElementSibling as HTMLElement, box = b.closest(".log")?.getBoundingClientRect();
-  if (box && pop.getBoundingClientRect().bottom > box.bottom) pop.classList.add("up");
-}
-const closeCal = (e: Event) => {
-  if (!cal) return;
-  if (e instanceof KeyboardEvent ? e.key === "Escape" : !(e.target as Element).closest?.(".rem-cal,[data-rem-cal]")) { cal = null; redrawCal(); }
-};
-document.addEventListener("pointerdown", closeCal);
-document.addEventListener("keydown", closeCal);
-
-export function onRemindersEvent(e: Event, act: (action: "done" | "push", id: string, date?: string) => Promise<void>, add: Add): boolean {
-  const t = e.target as HTMLElement | null;
-  if (!t) return false;
-  if (e.type === "click") {
-    if (t.closest("[data-rem-new]")) { draft.open = true; redrawForm(); return true; }
-    if (t.closest("[data-rem-cancel]")) { draft.open = false; draft.err = ""; redrawForm(); return true; }
-    if (t.closest("[data-rem-add]")) { submit(add); return true; }
+  updated() {
+    if (this.focusText) { this.focusText = false; this.querySelector<HTMLInputElement>('[data-rem-f="text"]')?.focus(); }
+    // near the bottom of the view the picker opens upwards
+    const pop = this.querySelector<HTMLElement>(".rem-cal"), box = this.closest(".log")?.getBoundingClientRect();
+    if (pop && box) { pop.classList.remove("up"); if (pop.getBoundingClientRect().bottom > box.bottom) pop.classList.add("up"); }
   }
-  let action: "done" | "push", id: string, date: string | undefined, src: HTMLElement;
-  if (e.type !== "click") return false;
-  const c = t.closest<HTMLElement>("[data-rem-cal],[data-cal-nav]"), day = t.closest<HTMLElement>("[data-cal-day]");
-  if (c) {
-    if (c.dataset.calNav) { const d = new Date(cal!.y, cal!.m + Number(c.dataset.calNav)); cal = { ...cal!, y: d.getFullYear(), m: d.getMonth() }; }
-    else if (cal?.id === c.dataset.id) cal = null;
-    else { const now = new Date(); cal = { id: c.dataset.id!, y: now.getFullYear(), m: now.getMonth() }; }
-    redrawCal();
-    return true;
+
+  private setDraft(p: Partial<RelayReminders["draft"]>) { Object.assign(this.draft, p); this.requestUpdate(); }
+
+  private async submit() {
+    const d = this.draft, text = d.text.trim();
+    if (!text) { this.focusText = true; this.requestUpdate(); return; }
+    if (!d.date || d.busy) return;
+    this.setDraft({ busy: true, err: "" });
+    try { await this.add(text, d.date, d.project || null, d.repeat || null); this.setDraft({ open: false, text: "", date: "", project: "", repeat: "" }); }
+    catch (e) { this.setDraft({ err: String(e) }); }
+    this.setDraft({ busy: false });
   }
-  if (day && cal) {
-    src = day; action = "push"; id = cal.id; date = day.dataset.calDay; cal = null; redrawCal();
-  } else {
-    const b = t.closest<HTMLElement>("[data-rem]");
-    if (!b) return false;
-    src = b; action = b.dataset.rem as "done" | "push"; id = b.dataset.id!; date = b.dataset.date;
+
+  private async run(id: string, action: "done" | "push", date?: string) {
+    this.busy = id; this.cal = null; this.requestUpdate();
+    try { await this.act(action, id, date); } finally { this.busy = null; this.requestUpdate(); }
   }
-  const ctl = src.closest(".rem-row")?.querySelectorAll<HTMLButtonElement>("button") ?? [];
-  ctl.forEach(c => (c.disabled = true));
-  act(action, id, date).catch(() => ctl.forEach(c => (c.disabled = false)));
-  return true;
+
+  /** Enter in the text field adds, Escape anywhere in the form closes it */
+  private onKey = (e: KeyboardEvent) => {
+    if (e.isComposing) return;
+    const f = (e.target as HTMLElement).dataset.remF;
+    if (e.key === "Enter" && f === "text") { e.preventDefault(); this.submit(); }
+    else if (e.key === "Escape") this.setDraft({ open: false, err: "" });
+  };
+
+  private form() {
+    const d = this.draft;
+    if (!d.open) return html`<div class="rem-new"><button class="btn" @click=${() => { this.focusText = true; this.setDraft({ open: true }); }}>${t("rem.new")}</button></div>`;
+    if (!d.date) d.date = todayIso(1);
+    // the draft follows the fields without a redraw, the browser already shows what was typed
+    const set = (f: "text" | "date" | "project" | "repeat") => (e: Event) => { d[f] = (e.target as HTMLInputElement).value; };
+    const opt = (v: string, l: string, cur: string) => html`<option value=${v} ?selected=${v === cur}>${l}</option>`;
+    return html`<div class="rem-new open" @keydown=${this.onKey}>
+      <input class="rem-f" data-rem-f="text" .value=${live(d.text)} @input=${set("text")} placeholder=${t("rem.newText")} aria-label=${t("rem.newText")} spellcheck="false">
+      <div class="rem-new-row">
+        <input type="date" class="rem-f" data-rem-f="date" .value=${live(d.date)} @change=${set("date")} min=${todayIso()} aria-label=${t("rem.newDate")}>
+        <select class="rem-f" data-rem-f="project" @change=${set("project")} aria-label=${t("rem.newProject")}>
+          ${opt("", t("rem.noProject"), d.project)}${this.projects.map(p => opt(p.name, p.label, d.project))}</select>
+        <select class="rem-f" data-rem-f="repeat" @change=${set("repeat")} aria-label=${t("rem.newRepeat")}>
+          ${REPEATS.map(r => opt(r, r ? t("rem.every", { n: r }) : t("rem.noRepeat"), d.repeat))}</select>
+        <span class="rem-new-go"><button class="btn" @click=${() => this.setDraft({ open: false, err: "" })}>${t("rem.cancel")}</button>
+          <button class="btn primary" ?disabled=${d.busy} @click=${() => this.submit()}>${t("rem.add")}</button></span></div>
+      ${d.err ? html`<div class="rem-err" role="alert">${d.err}</div>` : nothing}</div>`;
+  }
+
+  private toggleCal(id: string) {
+    const now = new Date();
+    this.cal = this.cal?.id === id ? null : { id, y: now.getFullYear(), m: now.getMonth() };
+    this.requestUpdate();
+  }
+
+  // a month grid under the calendar button, past days off, Monday first
+  private calendar() {
+    const { y, m, id } = this.cal!, now = new Date(), today = iso(now.getFullYear(), now.getMonth(), now.getDate());
+    const f = (o: Intl.DateTimeFormatOptions, d: Date) => new Intl.DateTimeFormat(currentLocale(), o).format(d);
+    const lead = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
+    const nav = (step: number) => { const d = new Date(y, m + step); this.cal = { id, y: d.getFullYear(), m: d.getMonth() }; this.requestUpdate(); };
+    return html`<div class="rem-cal" role="dialog" aria-label=${t("rem.pick")}>
+      <div class="cal-top"><span class="cal-m">${f({ month: "long", year: "numeric" }, new Date(y, m, 1))}</span>
+        <button ?disabled=${y === now.getFullYear() && m === now.getMonth()} @click=${() => nav(-1)} aria-label=${t("cal.prev")}>${unsafeHTML(this.glyph("left"))}</button>
+        <button @click=${() => nav(1)} aria-label=${t("cal.next")}>${unsafeHTML(this.glyph("right"))}</button></div>
+      <div class="cal-wd">${Array.from({ length: 7 }, (_, i) => html`<span>${f({ weekday: "narrow" }, new Date(2024, 0, 1 + i))}</span>`)}</div>
+      <div class="cal-grid">${Array.from({ length: lead }, () => html`<span></span>`)}${Array.from({ length: days }, (_, i) => {
+        const d = iso(y, m, i + 1);
+        return html`<button ?disabled=${d < today} class=${d === today ? "today" : ""} @click=${() => this.run(id, "push", d)}>${i + 1}</button>`;
+      })}</div></div>`;
+  }
+
+  private row(r: Reminder) {
+    const off = this.busy === r.id, g = (name: string) => unsafeHTML(this.glyph(name));
+    return html`<div class="rem-row${r.days < 0 ? " late" : ""}">
+      <div class="rem-main"><div class="rem-t">${unsafeHTML(this.md(r.title))}</div>
+        <div class="rem-meta">${r.project ? html`<span>${this.projectLabel(r.project)}</span>` : nothing}<span class=${urgency(r.days)}>${when(r)}</span>${r.repeat ? html`<span>${tr("rem.every", { n: num(r.repeat) })}</span>` : nothing}</div></div>
+      <div class="rem-acts">
+        <button class="btn ic" ?disabled=${off} @click=${() => this.chat(r.id)} data-tip=${t("rem.chat")} aria-label=${t("rem.chat")}>${g("chat")}</button>
+        <button class="btn ic" ?disabled=${off} @click=${() => this.run(r.id, "done")} data-tip=${t("rem.done")} aria-label=${t("rem.done")}>${g("check")}</button>
+        <button class="btn" ?disabled=${off} @click=${() => this.run(r.id, "push", "morgen")}>${t("rem.tomorrow")}</button>
+        <button class="btn" ?disabled=${off} @click=${() => this.run(r.id, "push", "+1w")}>${t("rem.plusWeek")}</button>
+        <button class="btn ic" data-rem-cal ?disabled=${off} @click=${() => this.toggleCal(r.id)} data-tip=${t("rem.pick")} aria-label=${t("rem.pick")}>${g("cal")}</button>
+        ${this.cal?.id === r.id ? this.calendar() : nothing}
+      </div></div>`;
+  }
+
+  render() {
+    const groups = GROUPS.map(([name, f]) => {
+      const items = this.reminders.filter(r => f(r.days)).sort((a, b) => a.days - b.days);
+      return items.length ? html`<section class="rem-grp"><h2 class="rem-h">${t(name)} <span class="rem-n">${items.length}</span></h2>${items.map(r => this.row(r))}</section>` : nothing;
+    });
+    return html`${this.form()}
+      ${this.found?.reminders === false ? html`<div class="meta rem-hint">${tr("rem.noFile", { path: `<code>${esc(this.path)}</code>` })}</div>` : nothing}
+      ${this.reminders.length ? groups : html`<div class="rem-empty">${t("rem.none")}</div>`}`;
+  }
 }
+customElements.define("relay-reminders", RelayReminders);

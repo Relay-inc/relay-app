@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { marked } from "marked";
-import { renderReminders, onRemindersEvent, onReminderField, keepFormFocus, urgency } from "./reminders";
+import { RelayReminders, urgency } from "./reminders";
 import "./reminders.css";
 import { initI18n, applyStatic, t, tn, currentLocale } from "./i18n";
 import type { Key } from "./locales/en";
@@ -652,7 +652,13 @@ function renderChat() {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("term").style.display = "none";
     $("ts").textContent = "";
-    $("t").textContent = t("nav.reminders"); keepFormFocus(() => { msgs.innerHTML = renderReminders(snap.reminders, { esc, md, projectLabel: pLabel, glyph }, snap.vault?.found, snap.vault?.map?.reminders, snap.projects.map((p: any) => ({ name: p.name, label: pLabel(p.name) })).sort((a: any, b: any) => a.label.localeCompare(b.label, currentLocale()))); });
+    $("t").textContent = t("nav.reminders");
+    if (remEl.parentElement !== msgs) msgs.replaceChildren(remEl);
+    Object.assign(remEl, {
+      reminders: snap.reminders, found: snap.vault?.found, path: snap.vault?.map?.reminders ?? "",
+      projects: snap.projects.map((p: any) => ({ name: p.name, label: pLabel(p.name) })).sort((a: any, b: any) => a.label.localeCompare(b.label, currentLocale())),
+    });
+    remEl.requestUpdate(); // the language may have changed
     return;
   }
   if (sel === WAIT) {
@@ -932,7 +938,6 @@ $("nav").addEventListener("click", e => {
   if (r.dataset.k) select(r.dataset.k); else if (r.dataset.p) openProject(r.dataset.p);
 });
 $("find").addEventListener("input", renderNav);
-for (const ev of ["input", "change", "keydown"]) $("msgs").addEventListener(ev, e => { if (sel === REM) onReminderField(e, remAdd); });
 $("msgs").addEventListener("input", e => { if ((e.target as HTMLElement).id === "mailq") setMailFilter({ q: (e.target as HTMLInputElement).value }); });
 $("msgs").addEventListener("change", e => { if ((e.target as HTMLElement).id === "mailproj") setMailFilter({ project: (e.target as HTMLSelectElement).value }); });
 // reorder by pressing and moving: a section header among headers, a project among the projects of its
@@ -1041,10 +1046,9 @@ async function remChat(id: string) {
   const ta = $("c") as HTMLTextAreaElement;
   ta.value = t("rem.chatText", { date: r.date, text: r.text }); ta.dispatchEvent(new Event("input"));
 }
+// made once and kept, so its form and date picker survive redraws and switching views
+const remEl = Object.assign(new RelayReminders(), { md, glyph, projectLabel: pLabel, act: remAct, add: remAdd, chat: remChat });
 $("msgs").addEventListener("click", e => {
-  const rc = sel === REM && (e.target as HTMLElement).closest<HTMLElement>("[data-rem-chat]");
-  if (rc) { remChat(rc.dataset.id!); return; }
-  if (sel === REM && onRemindersEvent(e, remAct, remAdd)) return;
   if ((e.target as HTMLElement).closest("[data-pr=reload]")) { loadPrs(); return; }
   if ((e.target as HTMLElement).closest("[data-mail=reload]")) { loadMails(); return; }
   // the settings window opens on Integrations › Mail (it reads its pane from the shared localStorage)

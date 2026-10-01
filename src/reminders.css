@@ -1,3 +1,5 @@
+/* the element is only a wrapper: its children sit in the #msgs flex column, as before */
+relay-reminders{display:contents}
 .rem-grp{margin-bottom:22px}
 .rem-h{font-size:13px;font-weight:600;color:var(--secondary);margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--separator)}
 .rem-n{font-family:var(--mono);font-variant-numeric:tabular-nums}
