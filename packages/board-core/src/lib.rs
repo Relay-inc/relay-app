@@ -35,6 +35,33 @@ pub struct Provider {
     pub ok: fn(body: &Value) -> bool,
     /// an error answer as one line: HTTP status and the API's own message
     pub error: fn(code: &str, body: &Value) -> String,
+    /// where in Claude Code's MCP config the provider's credentials can come from, if anywhere
+    pub mcp: Option<Mcp>,
+}
+
+/// A Claude Code MCP server that carries a provider's credentials in its env: a server whose name is `server` (or
+/// contains it), the env names per keychain account (the first one set wins), and env -> config field.
+pub struct Mcp {
+    pub server: &'static str,
+    pub secrets: &'static [(&'static str, &'static [&'static str])],
+    pub fields: &'static [(&'static str, &'static str)],
+}
+
+/// The provider's credentials from Claude Code's config: the keychain accounts with their values, and the config
+/// fields. Claude Code keeps a server for the user (`mcpServers` in ~/.claude.json), for a project
+/// (`projects.<path>.mcpServers`) or shared in the project's .mcp.json; looked at in that order, a server named
+/// exactly like `server` before one that only contains it. None when no server has every secret.
+pub fn from_claude(p: &Provider, claude_json: &Value, vault: &str, mcp_json: &Value) -> Option<(Vec<(String, String)>, serde_json::Map<String, Value>)> {
+    let m = p.mcp.as_ref()?;
+    let scopes = [&claude_json["mcpServers"], &claude_json["projects"][vault]["mcpServers"], &mcp_json["mcpServers"]];
+    let servers: Vec<(&String, &Value)> = scopes.iter().filter_map(|s| s.as_object()).flatten().collect();
+    let read = |env: &Value| -> Option<Vec<(String, String)>> {
+        m.secrets.iter().map(|(acct, names)| names.iter().find_map(|n| env[*n].as_str().filter(|v| !v.is_empty())).map(|v| (acct.to_string(), v.to_string()))).collect()
+    };
+    let exact = servers.iter().find(|(n, s)| n.to_lowercase() == m.server && read(&s["env"]).is_some());
+    let (_, s) = exact.or_else(|| servers.iter().find(|(n, s)| n.to_lowercase().contains(m.server) && read(&s["env"]).is_some()))?;
+    let fields = m.fields.iter().map(|(env, key)| (key.to_string(), Value::from(s["env"][*env].as_str().unwrap_or("")))).collect();
+    Some((read(&s["env"])?, fields))
 }
 
 // ---------- strings: the app sets the language, an integration looks its keys up in its own `Text`

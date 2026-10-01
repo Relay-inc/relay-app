@@ -1,4 +1,3 @@
-import { invoke } from "@tauri-apps/api/core";
 import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 
@@ -170,7 +169,6 @@ const productive: BoardProvider<Key> = {
       const a = who?.data?.attributes || {};
       return c.config.user ? t("connectedAs", { name: [a.first_name, a.last_name].filter(Boolean).join(" ") }) : t("connected");
     },
-    import: { label: "import", run: () => invoke<Record<string, string>>("productive_import") },
   },
 };
 export default productive;

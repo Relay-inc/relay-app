@@ -49,6 +49,8 @@ pub const PROVIDER: Provider = Provider {
         let m = board_core::message(v["errors"][0]["message"].as_str().or(v.as_str()));
         if code.starts_with('2') { format!("Linear: {m}") } else { format!("Linear {code}: {m}") }
     },
+    // the official Linear MCP server signs in in the browser: nothing to take over; a key-based one has LINEAR_API_KEY
+    mcp: Some(board_core::Mcp { server: "linear", secrets: &[("token", &["LINEAR_API_KEY", "LINEAR_API_TOKEN"])], fields: &[] }),
 };
 #[cfg(test)]
 mod tests {

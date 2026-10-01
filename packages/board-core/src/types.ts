@@ -65,6 +65,5 @@ export interface BoardProvider<K extends string = string> {
     /** Every board the user can open, when the API gives them in one call: Settings then maps boards to vault projects. */
     allBoards?(ctx: Ctx): Promise<BoardOpt[]>;
     /** Take token and config from elsewhere (Productive: Claude Code's MCP config), resolves with the config fields to save. */
-    import?: { label: K; run(): Promise<Record<string, string>> };
   };
 }
