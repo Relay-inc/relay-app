@@ -9,7 +9,7 @@ export type VaultMap = Record<MapKey, string>;
 export type VaultStatus = { vault: string; map: VaultMap; found: Record<MapKey, boolean>; ok: boolean };
 export type MapKey = "workState" | "reminders" | "notes";
 // key, is a folder, required: the same list as KEYS in src-tauri/src/vault.rs
-const KEYS: [MapKey, boolean, boolean][] = [["workState", false, true], ["reminders", false, false], ["notes", true, false]];
+export const KEYS: [MapKey, boolean, boolean][] = [["workState", false, true], ["reminders", false, false], ["notes", true, false]];
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
 /** The mapping rows: label and hint, an editable path with a picker, and found / missing. */
