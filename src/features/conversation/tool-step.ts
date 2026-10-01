@@ -1,8 +1,9 @@
-import { LitElement, html, css } from "lit";
+import { LitElement, html, css, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { tw } from "../../core/styles";
 import { emit } from "../../core/dom";
-import { toolLine } from "../../components/tool-line";
+import { icon } from "../../core/icons";
+import { toolLine, changeOf } from "../../components/tool-line";
 import type { ToolInput } from "../../domain/chats/state";
 
 declare global {
@@ -11,7 +12,7 @@ declare global {
   }
 }
 
-/** One tool call, a quiet line between the messages. A step on a note that exists is a link (`open-note`). */
+/** One tool call, a line with its icon, and the change it made when the call carries one. A step on a note that exists is a link (`open-note`). */
 @customElement("relay-tool-step")
 export class ToolStep extends LitElement {
   static override styles = [
@@ -27,16 +28,40 @@ export class ToolStep extends LitElement {
   @property() state: "run" | "ok" | "err" | "" = "";
   @property({ type: Boolean }) link = false;
 
-  override render() {
-    // the arrow before the line; a running step has a spinner instead
-    const lead =
-      this.state === "run"
-        ? "before:size-2 before:rounded-full before:border-2 before:border-separator before:border-t-secondary before:animate-spin"
-        : "before:w-0 before:h-0 before:border-l-5 before:border-l-current before:border-y-4 before:border-y-transparent before:opacity-60";
-    const cls = `flex items-center gap-2 text-sm [&_code]:font-mono [&_code]:text-xs ${lead} ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : ""}`;
-    return html`<div class=${cls} @click=${this.link ? () => emit(this, "open-note") : null}>
-      ${this.tool ? toolLine(this.tool.name, this.tool.input) : this.text}
+  private glyph() {
+    const name = this.tool?.name ?? "";
+    if (this.state === "run") return html`<span class="spinner"></span>`;
+    const kind = /^(Edit|MultiEdit|Write)$/.test(name)
+      ? "edit"
+      : /^(Grep|Glob|WebSearch)$/.test(name)
+        ? "search"
+        : name === "Bash"
+          ? "term"
+          : "file";
+    return icon(kind, "glyph size-3.5 flex-none");
+  }
+
+  private renderDiff(change: NonNullable<ReturnType<typeof changeOf>>) {
+    const row = (sign: string, line: string, colour: string) =>
+      html`<div class="px-3 whitespace-pre-wrap wrap-anywhere ${colour}">${sign} ${line}</div>`;
+    if (!change.del.length && !change.add.length) return nothing;
+    return html`<div
+      class="my-1 border border-separator rounded-lg overflow-hidden font-mono text-xs leading-[1.7] max-h-60 overflow-y-auto"
+    >
+      ${change.del.map(line => row("−", line, "bg-del-bg text-del-fg"))}
+      ${change.add.map(line => row("+", line, "bg-add-bg text-add-fg"))}
     </div>`;
+  }
+
+  override render() {
+    const change = this.tool ? changeOf(this.tool.name, this.tool.input) : null;
+    const cls = `flex items-center gap-2 h-6 text-[13px] [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill-2 [&_code]:text-label [&_code]:px-1.25 [&_code]:py-px [&_code]:rounded-sm ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : ""}`;
+    return html`<div class=${cls} @click=${this.link ? () => emit(this, "open-note") : null}>
+        ${this.glyph()}${this.tool ? toolLine(this.tool.name, this.tool.input, this.link) : this.text}
+        ${change?.add.length ? html`<span class="font-mono text-[11px] text-add-fg">+${change.add.length}</span>` : nothing}
+        ${change?.del.length ? html`<span class="font-mono text-[11px] text-del-fg">−${change.del.length}</span>` : nothing}
+      </div>
+      ${change ? this.renderDiff(change) : nothing}`;
   }
 }
 

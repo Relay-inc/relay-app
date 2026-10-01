@@ -41,7 +41,7 @@ export type AgentSession = {
 };
 /** A tool line keeps the call, so it is drawn (and translated) when shown. */
 export type Item = {
-  kind: "me" | "ai" | "tool" | "err" | "note" | "done";
+  kind: "me" | "ai" | "tool" | "err" | "note" | "done" | "allowed" | "denied";
   text: string;
   id?: string;
   state?: "run" | "ok" | "err";
