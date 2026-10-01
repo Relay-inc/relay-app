@@ -4,12 +4,15 @@ Every PR adds a line under **Unreleased**, in the group that fits (Added, Change
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
-`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Versions follow [semver](https://semver.org);
-the format follows [Keep a Changelog](https://keepachangelog.com).
+`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
+builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes; run
+the workflow by hand (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+[semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
 ### Added
+- Every version is a GitHub release with the macOS app to download and that version's changes as its notes
 - Settings › General › Appearance picks light or dark mode, or System (the default) to follow macOS; both windows switch right away (#27)
 - Typing `/` in the composer lists Claude Code's slash commands and skills for the vault, with their descriptions; arrows pick, Tab or Enter completes, Escape closes. Relay asks Claude Code for the list when it starts (#26)
 - A copy button on an answer when you hover it, and on each code block, in conversations and in the right panel (#26)
