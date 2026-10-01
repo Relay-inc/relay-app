@@ -38,7 +38,8 @@ export function toggleSection(id: string) {
   changed();
 }
 export function toggleUnfold(p: string) {
-  sidebar.unfolded.has(p) ? sidebar.unfolded.delete(p) : sidebar.unfolded.add(p);
+  if (sidebar.unfolded.has(p)) sidebar.unfolded.delete(p);
+  else sidebar.unfolded.add(p);
   changed();
 }
 /** `list` with `id` moved before or after `ref` (to the end when `ref` is not in it). */

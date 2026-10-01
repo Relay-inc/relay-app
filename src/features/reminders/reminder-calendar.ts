@@ -25,6 +25,12 @@ const nav =
   "grid place-items-center rounded-md cursor-default w-6 h-6 enabled:hover:bg-fill disabled:*:opacity-35 focus-visible:outline-2 focus-visible:outline-accent/45";
 
 /** A month grid under its button, past days off, Monday first. Opens upwards near the bottom of the view; a click outside or Escape closes it (the toggle button, marked data-rem-cal, handles itself). */
+function scrollingAncestor(start: Node): HTMLElement | null {
+  for (let n: Node | null = start; n; n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentNode)
+    if (n instanceof HTMLElement && getComputedStyle(n).overflowY === "auto") return n;
+  return null;
+}
+
 @customElement("relay-reminder-calendar")
 export class ReminderCalendar extends LitElement {
   // the host takes no box, the picker is positioned against the row's actions
@@ -63,12 +69,7 @@ export class ReminderCalendar extends LitElement {
 
   // the scrolling ancestor, through the shadow roots on the way up
   private scroller(): HTMLElement | null {
-    let n: Node | null = this;
-    while (n) {
-      if (n instanceof HTMLElement && getComputedStyle(n).overflowY === "auto") return n;
-      n = n.parentNode instanceof ShadowRoot ? n.parentNode.host : n.parentNode;
-    }
-    return null;
+    return scrollingAncestor(this);
   }
 
   updated() {

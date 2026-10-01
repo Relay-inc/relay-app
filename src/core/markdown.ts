@@ -15,7 +15,9 @@ export const urlOk = (u: string) => /^(https?:|mailto:)/i.test(u);
 export const noteOf = (s: string) => {
   try {
     s = decodeURI(s);
-  } catch {}
+  } catch {
+    // not URI-encoded: keep it as it is
+  }
   return s
     .replace(/[#|].*$/, "")
     .replace(/:\d+(-\d+)?$/, "")

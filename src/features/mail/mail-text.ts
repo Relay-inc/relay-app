@@ -47,7 +47,7 @@ const fold = (label: unknown, quote: unknown, open = false) =>
 function body(text: string, depth = 0): TemplateResult {
   const lines = text.replace(/\r/g, "").split("\n"),
     nested = depth > 0;
-  let q = lines.findIndex(l => QUOTED.test(l));
+  const q = lines.findIndex(l => QUOTED.test(l));
   // Outlook: the earlier mail starts at its From/Van header, it is not quoted line by line
   const o = lines.findIndex(
     (l, i) =>
