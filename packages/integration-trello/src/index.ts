@@ -53,6 +53,7 @@ const trello: BoardProvider<Key> = {
       s.key ? `https://trello.com/1/authorize?expiration=never&scope=read,write&response_type=token&name=Relay&key=${encodeURIComponent(s.key)}` : undefined,
     check: s => {
       // a key is 32 hex digits; the Secret (and an older token) 64; a token today starts with ATTA
+      if (s.key?.startsWith("ATTA")) return "keyIsToken";
       if (s.key && /^[0-9a-f]{64}$/i.test(s.key)) return "keyIsSecret";
       if (s.key && !/^[0-9a-f]{32}$/i.test(s.key)) return "badKey";
       if (s.token && !/^(ATTA[0-9A-Za-z]{20,}|[0-9a-f]{64})$/.test(s.token)) return "badToken";
