@@ -473,7 +473,7 @@ export default {
   "mail.duplicate": "Dieses Konto ist schon in der Liste.",
   "pr.close": "Schließen (Esc)",
   "pr.reviewTitle": "Ein Gespräch starten, in dem Claude diesen PR reviewt",
-  "pr.review": "Von Claude reviewen lassen",
+  "pr.review": "KI-Review",
   "pr.openGh": "Auf GitHub öffnen",
   "pr.files_one": "in {n} Datei",
   "pr.files_other": "in {n} Dateien",

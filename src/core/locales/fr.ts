@@ -475,7 +475,7 @@ export default {
   "mail.duplicate": "Ce compte est déjà dans la liste.",
   "pr.close": "Fermer (Échap)",
   "pr.reviewTitle": "Lancer une conversation où Claude relit cette PR",
-  "pr.review": "Faire relire par Claude",
+  "pr.review": "Revue IA",
   "pr.openGh": "Ouvrir sur GitHub",
   "pr.files_one": "dans {n} fichier",
   "pr.files_other": "dans {n} fichiers",

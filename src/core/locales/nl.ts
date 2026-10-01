@@ -471,7 +471,7 @@ export default {
   "mail.duplicate": "Dit account staat al in de lijst.",
   "pr.close": "Sluiten (Esc)",
   "pr.reviewTitle": "Start een gesprek waarin Claude deze PR reviewt",
-  "pr.review": "Laat Claude reviewen",
+  "pr.review": "AI-review",
   "pr.openGh": "Openen op GitHub",
   "pr.files_one": "in {n} bestand",
   "pr.files_other": "in {n} bestanden",

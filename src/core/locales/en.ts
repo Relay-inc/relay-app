@@ -469,7 +469,7 @@ const en = {
   "mail.duplicate": "This account is already in the list.",
   "pr.close": "Close (Esc)",
   "pr.reviewTitle": "Start a conversation in which Claude reviews this PR",
-  "pr.review": "Let Claude review",
+  "pr.review": "AI review",
   "pr.openGh": "Open on GitHub",
   "pr.files_one": "in {n} file",
   "pr.files_other": "in {n} files",
