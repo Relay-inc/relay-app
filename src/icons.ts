@@ -1,0 +1,33 @@
+// the app's icons: Hugeicons' free stroke-rounded set, the one bb uses. Each icon is data, drawn here as SVG markup;
+// stroke and its width are left to the CSS, so a row can colour its glyph the way it did with the hand-drawn ones
+import {
+  Notification01Icon, LeftToRightListBulletIcon, Message01Icon, ComputerTerminal01Icon, Settings01Icon, Folder01Icon,
+  DashboardSpeed01Icon, Tick02Icon, Calendar03Icon, ArrowLeft01Icon, ArrowRight01Icon, GitPullRequestIcon, Mail01Icon,
+  Cancel01Icon, MailOpen01Icon, TextAlignLeftIcon, Image01Icon, MailReply01Icon, Plug01Icon, Search01Icon, ArrowUp02Icon,
+} from "@hugeicons/core-free-icons";
+
+type Icon = readonly (readonly [string, Readonly<Record<string, string | number>>])[];
+const kebab = (k: string) => k.replace(/[A-Z]/g, c => "-" + c.toLowerCase());
+const draw = (icon: Icon) => icon.map(([tag, a]) =>
+  `<${tag} ${Object.entries(a).filter(([k]) => k !== "key" && !k.startsWith("stroke")).map(([k, v]) => `${kebab(k)}="${v}"`).join(" ")}/>`).join("");
+
+const ICONS: Record<string, Icon> = {
+  bell: Notification01Icon, list: LeftToRightListBulletIcon, chat: Message01Icon, term: ComputerTerminal01Icon,
+  gear: Settings01Icon, folder: Folder01Icon, gauge: DashboardSpeed01Icon, check: Tick02Icon, cal: Calendar03Icon,
+  left: ArrowLeft01Icon, right: ArrowRight01Icon, pr: GitPullRequestIcon, mail: Mail01Icon, close: Cancel01Icon,
+  read: MailOpen01Icon, text: TextAlignLeftIcon, html: Image01Icon, reply: MailReply01Icon, talk: Message01Icon,
+  plug: Plug01Icon, search: Search01Icon, send: ArrowUp02Icon,
+};
+const extra: Record<string, string> = {
+  // unread: the envelope with a solid dot in its corner
+  unread: draw(Mail01Icon) + '<circle cx="19.5" cy="5" r="3.2" fill="currentColor" stroke="none"/>',
+  stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
+};
+
+// inner markup on the 24×24 grid
+export const iconPaths = (n: string) => extra[n] ?? draw(ICONS[n]);
+export const icon = (n: string, cls = "g") => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${iconPaths(n)}</svg>`;
+// static markup in index.html names its icons with data-icon="name" (and data-icon-class for svg.i)
+export function fillIcons(root: ParentNode = document) {
+  root.querySelectorAll<HTMLElement>("[data-icon]").forEach(e => { e.outerHTML = icon(e.dataset.icon!, e.dataset.iconClass || "g"); });
+}

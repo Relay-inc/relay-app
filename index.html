@@ -11,17 +11,17 @@
   <div class="snaperr" id="snaperr" hidden></div>
   <aside class="side">
     <div class="drag" data-tauri-drag-region></div>
-    <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="find" data-i18n-placeholder="nav.search"></label>
+    <label class="search"><i data-icon="search" data-icon-class="i"></i><input id="find" data-i18n-placeholder="nav.search"></label>
     <nav class="nav" id="nav"></nav>
     <div class="foot">
-      <button class="icon-btn" id="usage-btn" data-i18n-title="nav.usage" data-i18n-aria="nav.usage"><svg class="g" viewBox="0 0 16 16"><path d="M2.8 11.5a5.5 5.5 0 1 1 10.4 0M8 9.5 10.5 6"/><circle cx="8" cy="9.5" r=".8"/></svg><span class="usage-dot"></span></button>
-      <button class="icon-btn" id="opensettings" data-i18n-title="nav.settingsTooltip" data-i18n-aria="nav.settingsLabel"><svg class="g" viewBox="0 0 16 16"><g transform="scale(.6667)"><path vector-effect="non-scaling-stroke" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="3"/></g></svg></button>
+      <button class="icon-btn" id="usage-btn" data-i18n-title="nav.usage" data-i18n-aria="nav.usage"><i data-icon="gauge"></i><span class="usage-dot"></span></button>
+      <button class="icon-btn" id="opensettings" data-i18n-title="nav.settingsTooltip" data-i18n-aria="nav.settingsLabel"><i data-icon="gear"></i></button>
     </div>
     <div class="ctx" id="ctx" hidden></div>
   </aside>
   <section class="chat">
     <div class="bar" data-tauri-drag-region><h1 id="t"></h1><span class="crumb" id="ctsep">›</span><input class="ctitle" id="ct" spellcheck="false" data-i18n-aria="bar.chatTitle"><span class="sub" id="ts"></span><span class="sp" data-tauri-drag-region></span>
-      <button class="tb ib" id="term" data-i18n-title="bar.openTerminal" data-i18n-aria="bar.openTerminal"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/></svg></button><button class="tb ib" id="toggleinsp" data-i18n-title="bar.togglePanelTitle" data-i18n-aria="bar.togglePanel"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
+      <button class="tb ib" id="term" data-i18n-title="bar.openTerminal" data-i18n-aria="bar.openTerminal"><i data-icon="term"></i></button><button class="tb ib" id="toggleinsp" data-i18n-title="bar.togglePanelTitle" data-i18n-aria="bar.togglePanel"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
     <div class="pop" id="pop" hidden></div>
     <div class="log" id="log"><div class="msgs" id="msgs"></div></div>
     <div class="subs" id="subs" style="display:none"></div>
@@ -33,7 +33,7 @@
       <div class="cfoot"><select class="pick" id="model" data-i18n-title="composer.model" data-i18n-aria="composer.model"><option value="" data-i18n="composer.defaultModel"></option><option value="fable">Fable</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select>
         <select class="pick" id="effort" data-i18n-title="composer.effort" data-i18n-aria="composer.effort"><option value="" data-i18n="composer.defaultEffort"></option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select>
         <span class="sp"></span>
-        <button class="send" id="send" data-i18n-aria="composer.send"><svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg></button></div>
+        <button class="send" id="send" data-i18n-aria="composer.send"><i data-icon="send" data-icon-class="i"></i></button></div>
     </div>
   </section>
   <div class="zoom" id="zoom" hidden><img alt=""></div>

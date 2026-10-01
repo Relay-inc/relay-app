@@ -14,6 +14,8 @@ import "./github.css";
 import { startUsage, openUsage, renderUsage, usageSummary } from "./usage";
 import { mailRef, renderMailSetup, renderMailBar, renderMailTools, renderMailList, renderMailDetail, renderMailLink, mailKey, unread, sender, setSeen, type Mail, type MailBody, type MailFilter } from "./mail";
 import "./mail.css";
+import { icon, fillIcons } from "./icons";
+fillIcons();
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -488,22 +490,7 @@ const waitCount = () => pendingList.length + blockedAgents().length;
 const waits = (k: string) => pendingList.some(r => r.project === k);
 const trailOf = (keys: string[]) => keys.some(waits) ? '<span class="dot"></span>' : keys.some(k => status[k] === "busy") ? '<span class="spin"></span>' : "";
 // sidebar glyphs, the way Mail and Finder put one in front of each row
-const G: Record<string, string> = {
-  bell: '<path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3L4 11ZM6.5 14h3"/>',
-  list: '<path d="M6 4.5h7M6 8h7M6 11.5h7M3 4.5h.5M3 8h.5M3 11.5h.5"/>',
-  chat: '<path d="M4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7l-2.5 2.5V11A1.5 1.5 0 0 1 3 9.5v-5A1.5 1.5 0 0 1 4.5 3Z"/>',
-  term: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M5 6.5 7 8l-2 1.5M8.5 10h2.5"/>',
-  gear: '<g transform="scale(.6667)"><path vector-effect="non-scaling-stroke" d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle vector-effect="non-scaling-stroke" cx="12" cy="12" r="3"/></g>',
-  folder: '<path d="M2.5 5V4a1 1 0 0 1 1-1h3l1.5 1.5h4.5a1 1 0 0 1 1 1V12a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V5Z"/>',
-  gauge: '<path d="M2.8 11.5a5.5 5.5 0 1 1 10.4 0M8 9.5 10.5 6"/><circle cx="8" cy="9.5" r=".8"/>',
-  check: '<path d="M3.5 8.5 6.5 11.5 12.5 4.5"/>',
-  cal: '<rect x="2.5" y="3.5" width="11" height="10" rx="1.5"/><path d="M2.5 6.5h11M5.5 2v3M10.5 2v3"/>',
-  left: '<path d="M10 3.5 5.5 8 10 12.5"/>',
-  right: '<path d="M6 3.5 10.5 8 6 12.5"/>',
-  pr: '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="12.5" r="1.5"/><path d="M4.5 5v6M11.5 11V6.5a2 2 0 0 0-2-2H7.5M9 3 7.5 4.5 9 6"/>',
-};
-G.mail = '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"/><path d="m3 4.5 5 4 5-4"/>';
-const glyph = (n: string) => `<svg class="g" viewBox="0 0 16 16">${G[n]}</svg>`;
+const glyph = (n: string) => icon(n);
 // contexts come from the vault index, in its order, each takes the next of three colours
 const contexts = (): string[] => [...new Set<string>(snap.projects.map((p: any) => p.context))];
 const CTX = ["ctx-a", "ctx-m", "ctx-p"];
@@ -689,8 +676,7 @@ function renderChat() {
   $("movebar").style.display = T || about ? "" : "none";
   const busy = status[sel] === "busy";
   $("send").classList.toggle("stop", busy);
-  $("send").innerHTML = busy ? '<svg class="i" viewBox="0 0 16 16"><rect x="4" y="4" width="8" height="8" fill="currentColor" stroke="none"/></svg>'
-    : '<svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg>';
+  $("send").innerHTML = icon(busy ? "stop" : "send", "i");
   // a switch restarts the process, so not while a turn runs
   for (const id of ["model", "effort"]) ($(id) as HTMLSelectElement).disabled = busy;
   ($("c") as HTMLTextAreaElement).placeholder = T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general");

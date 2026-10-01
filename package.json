@@ -11,11 +11,12 @@
     "test": "node --test --experimental-strip-types \"packages/*/tests/*.test.ts\""
   },
   "dependencies": {
-    "@tauri-apps/api": "^2",
+    "@hugeicons/core-free-icons": "^4.3.5",
     "@relay/board-core": "workspace:*",
     "@relay/integration-linear": "workspace:*",
     "@relay/integration-productive": "workspace:*",
     "@relay/integration-trello": "workspace:*",
+    "@tauri-apps/api": "^2",
     "marked": "^18.0.14"
   },
   "devDependencies": {
