@@ -13,14 +13,18 @@ declare global {
 }
 
 // what a permission card shows: the command, the file (and what is written to it), or the input as it is
-function describe(r: Pending): string {
-  const i = r.input || {};
-  if (r.tool_name === "Bash") return String(i.command ?? "");
-  if (i.file_path) return String(i.file_path) + (i.content ? `\n\n${String(i.content).slice(0, 600)}` : "");
-  return JSON.stringify(i, null, 2).slice(0, 900);
+function describe(request: Pending): string {
+  const input = request.input || {};
+  if (request.tool_name === "Bash") return String(input.command ?? "");
+  if (input.file_path)
+    return String(input.file_path) + (input.content ? `\n\n${String(input.content).slice(0, 600)}` : "");
+  return JSON.stringify(input, null, 2).slice(0, 900);
 }
 // a question with options (kind "question"; files from before the providers only have Claude's tool name)
-const isQuestion = (r: Pending) => r.kind === "question" || r.tool_name === "AskUserQuestion";
+const isQuestion = (request: Pending) => request.kind === "question" || request.tool_name === "AskUserQuestion";
+
+// a long path never widens the card past its border
+const box = "grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3";
 
 /** A pending permission or question of an agent, waiting for the user. `where`: the conversation it belongs to when shown outside it.
  *  The container answers and sets `busy` while it does; a card that is not answered stays usable. */
@@ -38,72 +42,85 @@ export class PermissionCard extends LitElement {
   @property() where = "";
   @property({ type: Boolean }) busy = false;
   // the options picked per question, and what is typed in its "other" field
-  @state() private on: Record<number, Set<string>> = {};
+  @state() private picked: Record<number, Set<string>> = {};
   private other: Record<number, string> = {};
 
-  private pick(qi: number, lab: string, multi: boolean) {
-    const s = new Set(multi ? this.on[qi] : this.on[qi]?.has(lab) ? [lab] : []);
-    if (s.has(lab)) s.delete(lab);
-    else s.add(lab);
-    this.on = { ...this.on, [qi]: s };
+  private pick(questionIndex: number, option: string, multiple: boolean) {
+    const current = this.picked[questionIndex];
+    const next = new Set(multiple ? current : current?.has(option) ? [option] : []);
+    if (next.has(option)) next.delete(option);
+    else next.add(option);
+    this.picked = { ...this.picked, [questionIndex]: next };
   }
   private answer() {
-    const qs = this.request.input.questions || [];
+    const questions = this.request.input.questions || [];
     emit<Answer>(this, "answer", {
-      picked: qs.map((q, qi) => (q.options || []).map(o => o.label).filter((l: string) => this.on[qi]?.has(l))),
-      other: qs.map((_, qi) => this.other[qi] ?? ""),
+      picked: questions.map((question, qi) =>
+        (question.options || []).map(option => option.label).filter((label: string) => this.picked[qi]?.has(label)),
+      ),
+      other: questions.map((_, qi) => this.other[qi] ?? ""),
     });
   }
 
-  override render() {
-    const r = this.request,
-      busy = this.busy;
-    const box = "grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3"; // a long path never widens the card past its border
-    if (isQuestion(r))
-      return html`<div class=${box}>
-        <div class="text-sm text-secondary">${t("card.asks")}</div>
-        ${(r.input.questions || []).map(
-          (q: Question, qi: number) =>
-            html` <div class="text-base font-semibold text-label">${q.question}</div>
-              <div class="flex flex-wrap gap-2">
-                ${(q.options || []).map(
-                  o =>
-                    html`<button
-                      class=${this.on[qi]?.has(o.label) ? "btn btn-primary" : "btn"}
-                      title=${o.description || ""}
-                      ?disabled=${busy}
-                      @click=${() => this.pick(qi, o.label, !!q.multiSelect)}
-                    >
-                      ${o.label}
-                    </button>`,
-                )}
-              </div>
-              <input
-                class="rounded-md border border-separator bg-bg px-2.5 py-1.5 text-sm text-label placeholder:text-secondary"
-                placeholder=${t("card.other")}
-                .value=${this.other[qi] ?? ""}
-                @input=${(e: Event) => {
-                  this.other[qi] = (e.target as HTMLInputElement).value;
-                }}
-              />`,
+  private renderQuestion(question: Question, qi: number) {
+    return html` <div class="text-base font-semibold text-label">${question.question}</div>
+      <div class="flex flex-wrap gap-2">
+        ${(question.options || []).map(
+          option =>
+            html`<button
+              class=${this.picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"}
+              title=${option.description || ""}
+              ?disabled=${this.busy}
+              @click=${() => this.pick(qi, option.label, !!question.multiSelect)}
+            >
+              ${option.label}
+            </button>`,
         )}
-        <div class="flex justify-end gap-2">
-          <button class="btn" ?disabled=${busy} @click=${() => emit(this, "answer", "deny")}>${t("card.skip")}</button
-          ><button class="btn btn-primary" ?disabled=${busy} @click=${() => this.answer()}>${t("card.answer")}</button>
-        </div>
-      </div>`;
+      </div>
+      <input
+        class="rounded-md border border-separator bg-bg px-2.5 py-1.5 text-sm text-label placeholder:text-secondary"
+        placeholder=${t("card.other")}
+        .value=${this.other[qi] ?? ""}
+        @input=${(e: Event) => {
+          this.other[qi] = (e.target as HTMLInputElement).value;
+        }}
+      />`;
+  }
+
+  private renderQuestionCard() {
+    return html`<div class=${box}>
+      <div class="text-sm text-secondary">${t("card.asks")}</div>
+      ${(this.request.input.questions || []).map((question: Question, qi: number) => this.renderQuestion(question, qi))}
+      <div class="flex justify-end gap-2">
+        <button class="btn" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
+          ${t("card.skip")}</button
+        ><button class="btn btn-primary" ?disabled=${this.busy} @click=${() => this.answer()}>
+          ${t("card.answer")}
+        </button>
+      </div>
+    </div>`;
+  }
+
+  private renderPermissionCard() {
+    const request = this.request;
+    const where = this.where ? t("card.in", { name: this.where }) : "";
     return html`<div class=${box}>
       <div class="text-sm text-secondary [&_code]:font-mono [&_code]:text-xs">
-        ${th("card.wants", { tool: r.tool_name, where: this.where ? t("card.in", { name: this.where }) : "" })}
+        ${th("card.wants", { tool: request.tool_name, where })}
       </div>
-      <pre class="font-mono text-sm whitespace-pre-wrap wrap-anywhere text-label">${describe(r)}</pre>
+      <pre class="font-mono text-sm whitespace-pre-wrap wrap-anywhere text-label">${describe(request)}</pre>
       <div class="flex justify-end gap-2">
-        <button class="btn" ?disabled=${busy} @click=${() => emit(this, "answer", "deny")}>${t("card.deny")}</button
-        ><button class="btn btn-primary" ?disabled=${busy} @click=${() => emit(this, "answer", "allow")}>
+        <button class="btn" ?disabled=${this.busy} @click=${() => emit(this, "answer", "deny")}>
+          ${t("card.deny")}</button
+        ><button class="btn btn-primary" ?disabled=${this.busy} @click=${() => emit(this, "answer", "allow")}>
           ${t("card.allow")}
         </button>
       </div>
     </div>`;
+  }
+
+  override render() {
+    return isQuestion(this.request) ? this.renderQuestionCard() : this.renderPermissionCard();
   }
 }
 

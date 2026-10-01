@@ -33,15 +33,15 @@ export class ImageThumbs extends LitElement {
   @property({ reflect: true }) size: "composer" | "message" = "composer";
 
   override render() {
-    const img = this.size === "message" ? "h-16 max-w-50" : "h-15 max-w-45";
-    return this.urls.map((u, i) =>
-      u
+    const imageSize = this.size === "message" ? "h-16 max-w-50" : "h-15 max-w-45";
+    return this.urls.map((url, i) =>
+      url
         ? html`<span class="group relative block flex-none"
             ><img
-              class="${img} block object-cover rounded-lg ring-1 ring-separator cursor-zoom-in"
-              src=${u}
+              class="${imageSize} block object-cover rounded-lg ring-1 ring-separator cursor-zoom-in"
+              src=${url}
               alt=""
-              @click=${() => emit(this, "open", u)}
+              @click=${() => emit(this, "open", url)}
             />${
               this.removable
                 ? html`<button

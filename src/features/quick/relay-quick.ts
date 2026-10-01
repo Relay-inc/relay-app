@@ -22,24 +22,23 @@ export class RelayQuick extends LitElement {
     `,
   ];
   protected store = new StoreController(this);
-  private imgs: Img[] = []; // images waiting in the field, dropped when it closes without sending
+  private images: Img[] = []; // images waiting in the field, dropped when it closes without sending
   private sent = false;
-  @query("textarea") private ta!: HTMLTextAreaElement;
+  @query("textarea") private field!: HTMLTextAreaElement;
 
   override firstUpdated() {
-    this.ta.focus();
+    this.field.focus();
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
-    if (!this.sent) this.imgs.forEach(i => URL.revokeObjectURL(i.url));
+    if (!this.sent) this.images.forEach(image => URL.revokeObjectURL(image.url));
   }
   private close() {
     toggleQuickAsk(false);
   }
   private grow() {
-    const ta = this.ta;
-    ta.style.height = "auto";
-    ta.style.height = ta.scrollHeight + "px";
+    this.field.style.height = "auto";
+    this.field.style.height = this.field.scrollHeight + "px";
   }
   private onKey(e: KeyboardEvent) {
     if (e.key === "Escape") {
@@ -51,16 +50,20 @@ export class RelayQuick extends LitElement {
     }
     if (e.key !== "Enter" || e.shiftKey || e.isComposing) return;
     e.preventDefault();
-    const text = this.ta.value.trim();
-    if (!text && !this.imgs.length) return;
+    const text = this.field.value.trim();
+    if (!text && !this.images.length) return;
     this.sent = true;
     this.close();
-    quickSend(text, this.imgs);
+    quickSend(text, this.images);
+  }
+  private onPaste(e: ClipboardEvent) {
+    const files = pastedImages(e);
+    if (files.length) attach(files, this.images);
   }
   private onDrop(e: DragEvent) {
     if (!hasFiles(e)) return;
     e.preventDefault();
-    attach([...e.dataTransfer!.files], this.imgs);
+    attach([...e.dataTransfer!.files], this.images);
   }
 
   // the textarea keeps the browser's own 2px padding and grey placeholder, as it always had
@@ -79,14 +82,14 @@ export class RelayQuick extends LitElement {
         @drop=${this.onDrop}
       >
         ${
-          this.imgs.length
+          this.images.length
             ? html`<relay-image-thumbs
                 class="mb-2"
                 removable
-                .urls=${this.imgs.map(a => a.url)}
+                .urls=${this.images.map(image => image.url)}
                 @remove=${(e: CustomEvent<number>) => {
-                  unattach(e.detail, this.imgs);
-                  this.ta.focus();
+                  unattach(e.detail, this.images);
+                  this.field.focus();
                 }}
                 @open=${(e: CustomEvent<string>) => zoom(e.detail)}
               ></relay-image-thumbs>`
@@ -100,12 +103,7 @@ export class RelayQuick extends LitElement {
           aria-label=${t("qk.label")}
           @input=${this.grow}
           @keydown=${this.onKey}
-          @paste=${(e: ClipboardEvent) => {
-            const f = pastedImages(e);
-            if (f.length) {
-              attach(f, this.imgs);
-            }
-          }}
+          @paste=${this.onPaste}
         ></textarea>
         <div class="text-xs text-secondary mt-1.5">${t("qk.hint")}</div>
       </div>

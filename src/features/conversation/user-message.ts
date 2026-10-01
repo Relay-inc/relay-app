@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { tw } from "../../core/styles";
 import "../../components/image-thumbs";
 
-const lines = (text: string) => text.split("\n").map((l, i) => html`${i ? html`<br />` : nothing}${l}`);
+const lines = (text: string) => text.split("\n").map((line, i) => html`${i ? html`<br />` : nothing}${line}`);
 
 /** What the user sent: its images over a bubble with the text. Its children sit in the conversation's column. */
 @customElement("relay-user-message")

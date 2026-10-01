@@ -16,7 +16,7 @@ declare global {
   }
 }
 
-const tb =
+const barButton =
   "h-6 rounded-lg border-0 bg-transparent cursor-default whitespace-nowrap transition-colors duration-(--d) ease-(--ease) hover:bg-fill focus-visible:outline-3 focus-visible:outline-accent/45 focus-visible:outline-offset-1";
 
 /** The title bar of the centre column: the project (or the view) and the conversation's title, the terminal and the right panel buttons. */
@@ -44,30 +44,36 @@ export class ChatBar extends LitElement {
   // the conversation title while it is edited: a redraw must not take the text away from under the caret
   private draft: string | null = null;
 
-  private reset(ct: HTMLInputElement) {
-    ct.value = this.value;
-    ct.size = Math.max(4, this.value.length);
+  private resetTitle(input: HTMLInputElement) {
+    input.value = this.value;
+    input.size = Math.max(4, this.value.length);
     this.draft = null;
   }
   private onTitleKey(e: KeyboardEvent) {
-    const ct = e.target as HTMLInputElement;
+    const input = e.target as HTMLInputElement;
     if (e.key === "Enter") {
       e.preventDefault();
-      ct.blur();
+      input.blur();
     } else if (e.key === "Escape") {
       e.preventDefault();
-      this.reset(ct);
-      ct.blur();
+      this.resetTitle(input);
+      input.blur();
     }
   }
   private onTitleChange(e: Event) {
-    const ct = e.target as HTMLInputElement,
-      v = ct.value.trim();
-    if (!this.renamable || !v) this.reset(ct);
-    else {
-      this.draft = null;
-      emit(this, "rename", v);
+    const input = e.target as HTMLInputElement;
+    const title = input.value.trim();
+    if (!this.renamable || !title) {
+      this.resetTitle(input);
+      return;
     }
+    this.draft = null;
+    emit(this, "rename", title);
+  }
+  private onTitleInput(e: Event) {
+    const input = e.target as HTMLInputElement;
+    this.draft = input.value;
+    input.size = Math.max(4, input.value.length);
   }
 
   override render() {
@@ -99,11 +105,7 @@ export class ChatBar extends LitElement {
                 title=${this.readonly ? t("chat.titleFromTerm") : t("chat.titleEdit")}
                 size=${Math.max(4, shown.length)}
                 .value=${live(shown)}
-                @input=${(e: Event) => {
-                  const ct = e.target as HTMLInputElement;
-                  this.draft = ct.value;
-                  ct.size = Math.max(4, ct.value.length);
-                }}
+                @input=${this.onTitleInput}
                 @keydown=${this.onTitleKey}
                 @change=${this.onTitleChange}
               />`
@@ -112,7 +114,7 @@ export class ChatBar extends LitElement {
       <span class="text-secondary whitespace-nowrap overflow-hidden text-ellipsis">${this.sub}</span
       ><span class="flex-1" data-tauri-drag-region></span>
       <button
-        class="${tb} w-7 p-0 grid place-items-center text-secondary hover:text-label"
+        class="${barButton} w-7 p-0 grid place-items-center text-secondary hover:text-label"
         ?hidden=${this.noTerm}
         ?disabled=${this.locked}
         title=${t(this.locked ? "bar.termMail" : "bar.openTerminal")}
@@ -122,7 +124,7 @@ export class ChatBar extends LitElement {
         ${icon("term", "glyph size-4")}
       </button>
       <button
-        class="${tb} w-7 p-0 grid place-items-center ${this.panelOff ? "text-accent" : "text-secondary hover:text-label"}"
+        class="${barButton} w-7 p-0 grid place-items-center ${this.panelOff ? "text-accent" : "text-secondary hover:text-label"}"
         title=${t("bar.togglePanelTitle")}
         aria-label=${t("bar.togglePanel")}
         @click=${() => emit(this, "toggle-panel")}

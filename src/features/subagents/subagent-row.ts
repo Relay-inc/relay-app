@@ -64,11 +64,11 @@ export class SubagentRow extends LitElement {
               ${
                 this.log.length
                   ? this.log.map(
-                      m =>
+                      message =>
                         html`<div
                           class="md-chat [&_a:not(.vlink)]:underline [&_strong]:font-bold! text-sm! leading-normal!"
                         >
-                          ${md(m)}
+                          ${md(message)}
                         </div>`,
                     )
                   : html`<div class="text-xs text-secondary">${t("subs.nothing")}</div>`

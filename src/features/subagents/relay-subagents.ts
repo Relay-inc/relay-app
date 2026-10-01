@@ -25,38 +25,55 @@ export class RelaySubagents extends LitElement {
     `,
   ];
   protected store = new StoreController(this);
-  private tick = 0;
+  private timerId = 0;
   @state() private now = Date.now(); // the running agents' durations count up every second
   // the running time of a working agent counts up every second
   override connectedCallback() {
     super.connectedCallback();
-    this.tick = window.setInterval(() => {
+    this.timerId = window.setInterval(() => {
       this.now = Date.now();
     }, 1000);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
-    clearInterval(this.tick);
+    clearInterval(this.timerId);
   }
 
-  private row = (a: Sub) =>
+  // a running agent counts up to now, a finished one stopped at its last message
+  private durationOf(agent: Sub) {
+    const end = agent.running ? this.now : Date.parse(agent.last_at);
+    return formatDuration((end - Date.parse(agent.started_at)) / 1000);
+  }
+
+  private renderRow = (agent: Sub) =>
     html`<relay-subagent-row
-      ?running=${a.running}
-      .description=${a.description}
-      .meta=${[a.agentType, a.model].filter(Boolean).join(" · ")}
-      .tool=${a.tool ?? ""}
-      .input=${a.input}
-      .text=${a.text ?? ""}
-      .log=${chat.subLog[a.id]}
-      .duration=${a.running ? formatDuration((this.now - Date.parse(a.started_at)) / 1000) : formatDuration((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}
-      @toggle=${() => toggleSubLog(a.id)}
+      ?running=${agent.running}
+      .description=${agent.description}
+      .meta=${[agent.agentType, agent.model].filter(Boolean).join(" · ")}
+      .tool=${agent.tool ?? ""}
+      .input=${agent.input}
+      .text=${agent.text ?? ""}
+      .log=${chat.subLog[agent.id]}
+      .duration=${this.durationOf(agent)}
+      @toggle=${() => toggleSubLog(agent.id)}
     ></relay-subagent-row>`;
 
+  private renderFinished(finished: Sub[]) {
+    if (!finished.length) return nothing;
+    const unfolded = chat.subsOpen.has(ui.selected);
+    return html`<button
+        class="self-start px-1.5 py-0.5 rounded-md text-xs text-secondary hover:bg-fill hover:text-label"
+        @click=${toggleSubsDone}
+      >
+        ${tn("subs.done", finished.length)}</button
+      >${unfolded ? finished.map(this.renderRow) : nothing}`;
+  }
+
   override render() {
-    const list = chat.subs[ui.selected] || [],
-      run = list.filter(a => a.running),
-      done = list.filter(a => !a.running);
-    return html`${run.map(this.row)}${done.length ? html`<button class="self-start px-1.5 py-0.5 rounded-md text-xs text-secondary hover:bg-fill hover:text-label" @click=${toggleSubsDone}>${tn("subs.done", done.length)}</button>${chat.subsOpen.has(ui.selected) ? done.map(this.row) : nothing}` : nothing}`;
+    const agents = chat.subs[ui.selected] || [];
+    const running = agents.filter(x => x.running);
+    const finished = agents.filter(x => !x.running);
+    return html`${running.map(this.renderRow)}${this.renderFinished(finished)}`;
   }
 }
 

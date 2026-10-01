@@ -57,24 +57,23 @@ export class RelayComposer extends LitElement {
   ];
   protected store = new StoreController(this);
   @state() private dropping = false;
-  @query("textarea") private ta!: HTMLTextAreaElement | null;
+  @query("textarea") private field!: HTMLTextAreaElement | null;
   private grown = "";
 
   focusInput() {
-    const ta = this.ta;
-    if (ta) ta.focus();
-    else this.updateComplete.then(() => this.ta?.focus());
+    if (this.field) this.field.focus();
+    else this.updateComplete.then(() => this.field?.focus());
   }
   private grow() {
-    const ta = this.ta;
-    if (!ta) return;
-    ta.style.height = "auto";
-    ta.style.height = ta.scrollHeight + "px";
-    this.grown = ta.value;
+    const field = this.field;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = field.scrollHeight + "px";
+    this.grown = field.value;
   }
   // switching to another conversation puts other text in the field
   override updated() {
-    if (this.ta && this.ta.value !== this.grown) this.grow();
+    if (this.field && this.field.value !== this.grown) this.grow();
   }
 
   private onKey(e: KeyboardEvent) {
@@ -87,100 +86,125 @@ export class RelayComposer extends LitElement {
     setTyped((e.target as HTMLTextAreaElement).value);
     this.grow();
   }
+  private onPaste(e: ClipboardEvent) {
+    const files = pastedImages(e);
+    if (files.length) attach(files);
+  }
+  private onDragOver(e: DragEvent) {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    this.dropping = true;
+  }
+  private onDragLeave() {
+    this.dropping = false;
+  }
   private onDrop(e: DragEvent) {
     this.dropping = false;
     if (!hasFiles(e)) return;
     e.preventDefault();
     attach([...e.dataTransfer!.files]);
   }
-  private select(kind: "model" | "effort", list: Pick[], value: string, def: string, show: boolean, busy: boolean) {
+  private onRemoveImage(e: CustomEvent<number>) {
+    unattach(e.detail);
+    this.focusInput();
+  }
+
+  private get terminalSession() {
+    return isTerminal(ui.selected) ? terminalOf(ui.selected) : undefined;
+  }
+  private get projectName() {
+    return this.terminalSession ? this.terminalSession.project : projectOf(ui.selected);
+  }
+  private get busy() {
+    return chat.status[ui.selected] === "busy";
+  }
+  private get placeholder() {
+    const projectName = this.projectName;
+    if (this.terminalSession) return t("ph.term");
+    return project(projectName) ? t("ph.project", { name: projectName ?? "" }) : t("ph.general");
+  }
+
+  private renderThumbs() {
+    if (!chat.attached.length) return nothing;
+    return html`<relay-image-thumbs
+      class="mb-2"
+      removable
+      .urls=${chat.attached.map(image => image.url)}
+      @remove=${this.onRemoveImage}
+      @open=${(e: CustomEvent<string>) => zoom(e.detail)}
+    ></relay-image-thumbs>`;
+  }
+
+  // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
+  private renderAgentPick() {
+    const agents = onAgents();
+    const selected = ui.selected;
+    if (agents.length <= 1 || isTerminal(selected) || !chat.chats[selected]) return nothing;
+    const agentId = chatAgent(selected);
+    const started = !!(chat.messages[selected] || []).length || !!chat.chats[selected]?.fork;
+    return html`<select
+      ?disabled=${started}
+      title=${t("composer.agent")}
+      aria-label=${t("composer.agent")}
+      @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}
+    >
+      ${agents.map(agent => html`<option value=${agent.id} .selected=${agent.id === agentId}>${agent.name}</option>`)}
+    </select>`;
+  }
+
+  private renderPick(kind: "model" | "effort", options: Pick[], value: string, defaultLabel: string, show: boolean) {
     return html`<select
       ?hidden=${!show}
-      ?disabled=${busy}
+      ?disabled=${this.busy}
       title=${t(`composer.${kind}`)}
       aria-label=${t(`composer.${kind}`)}
       @change=${(e: Event) => setPick(kind, (e.target as HTMLSelectElement).value)}
     >
-      <option value="" .selected=${value === ""}>${def}</option>
-      ${list.map(c => html`<option value=${c.id} .selected=${c.id === value}>${c.label}</option>`)}
+      <option value="" .selected=${value === ""}>${defaultLabel}</option>
+      ${options.map(option => html`<option value=${option.id} .selected=${option.id === value}>${option.label}</option>`)}
     </select>`;
   }
 
+  private renderSendButton() {
+    const busy = this.busy;
+    const colour = busy ? "bg-label" : "bg-accent";
+    return html`<button
+      class="grid place-items-center size-6 rounded-lg border-0 ${colour} text-on-accent"
+      aria-label=${t("composer.send")}
+      @click=${sendOrStop}
+    >
+      ${icon(busy ? "stop" : "send", "glyph size-3.5 stroke-2")}
+    </button>`;
+  }
+
   override render() {
-    const sel = ui.selected,
-      T = isTerminal(sel) ? terminalOf(sel) : undefined,
-      pn = T ? T.project : projectOf(sel),
-      P = project(pn);
-    const busy = chat.status[sel] === "busy",
-      id = chatAgent(sel),
-      st = agentOf(id),
-      on = onAgents();
-    // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
-    const showAgent = on.length > 1 && !isTerminal(sel) && !!chat.chats[sel];
-    const model = picks("model"),
-      effort = picks("effort");
-    const box = "rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent";
+    const agent = agentOf(chatAgent(ui.selected));
+    const model = picks("model");
+    const effort = picks("effort");
+    const showEffort = !agent || (agent.caps.effort && agent.efforts.length > 0);
+    const border = this.dropping ? "border-accent bg-accent/5" : "border-separator";
     return html`<div
-      class=${this.dropping ? `${box} border-accent bg-accent/5` : `${box} border-separator`}
-      @dragover=${(e: DragEvent) => {
-        if (!hasFiles(e)) return;
-        e.preventDefault();
-        this.dropping = true;
-      }}
-      @dragleave=${() => {
-        this.dropping = false;
-      }}
+      class="rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent ${border}"
+      @dragover=${this.onDragOver}
+      @dragleave=${this.onDragLeave}
       @drop=${this.onDrop}
     >
-      ${
-        chat.attached.length
-          ? html`<relay-image-thumbs
-              class="mb-2"
-              removable
-              .urls=${chat.attached.map(a => a.url)}
-              @remove=${(e: CustomEvent<number>) => {
-                unattach(e.detail);
-                this.focusInput();
-              }}
-              @open=${(e: CustomEvent<string>) => zoom(e.detail)}
-            ></relay-image-thumbs>`
-          : nothing
-      }
+      ${this.renderThumbs()}
       <textarea
         rows="1"
-        .value=${live(chat.typed[sel] ?? "")}
-        placeholder=${T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general")}
+        .value=${live(chat.typed[ui.selected] ?? "")}
+        placeholder=${this.placeholder}
         @keydown=${this.onKey}
         @input=${this.onInput}
-        @paste=${(e: ClipboardEvent) => {
-          const f = pastedImages(e);
-          if (f.length) attach(f);
-        }}
+        @paste=${this.onPaste}
       ></textarea>
       <div class="flex items-center gap-2 mt-1.5 text-secondary">
-        ${
-          showAgent
-            ? html`<select
-                ?disabled=${!!(chat.messages[sel] || []).length || !!chat.chats[sel]?.fork}
-                title=${t("composer.agent")}
-                aria-label=${t("composer.agent")}
-                @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}
-              >
-                ${on.map(p => html`<option value=${p.id} .selected=${p.id === id}>${p.name}</option>`)}
-              </select>`
-            : nothing
-        }
+        ${this.renderAgentPick()}
         <!-- a switch restarts the process, so not while a turn runs -->
-        ${this.select("model", model.list, model.value, t("composer.defaultModel"), true, busy)}
-        ${this.select("effort", effort.list, effort.value, t("composer.defaultEffort"), !st || (st.caps.effort && st.efforts.length > 0), busy)}
+        ${this.renderPick("model", model.list, model.value, t("composer.defaultModel"), true)}
+        ${this.renderPick("effort", effort.list, effort.value, t("composer.defaultEffort"), showEffort)}
         <span class="flex-1"></span>
-        <button
-          class=${busy ? "grid place-items-center size-6 rounded-lg border-0 bg-label text-on-accent" : "grid place-items-center size-6 rounded-lg border-0 bg-accent text-on-accent"}
-          aria-label=${t("composer.send")}
-          @click=${sendOrStop}
-        >
-          ${icon(busy ? "stop" : "send", "glyph size-3.5 stroke-2")}
-        </button>
+        ${this.renderSendButton()}
       </div>
     </div>`;
   }
