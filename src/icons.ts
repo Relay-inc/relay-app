@@ -1,3 +1,6 @@
+import { html } from "lit";
+import { unsafeSVG } from "lit/directives/unsafe-svg.js";
+
 // the app's icons: Hugeicons' free stroke-rounded set, the one bb uses. Each icon is data, drawn here as SVG markup;
 // stroke and its width are left to the CSS, so a row can colour its glyph the way it did with the hand-drawn ones
 import {
@@ -24,10 +27,8 @@ const extra: Record<string, string> = {
   stop: '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>',
 };
 
-// inner markup on the 24×24 grid
+// inner markup on the 24×24 grid: built here from Hugeicons' data, so trusted
 export const iconPaths = (n: string) => extra[n] ?? draw(ICONS[n]);
-export const icon = (n: string, cls = "g") => `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${iconPaths(n)}</svg>`;
-// static markup in index.html names its icons with data-icon="name" (and data-icon-class for svg.i)
-export function fillIcons(root: ParentNode = document) {
-  root.querySelectorAll<HTMLElement>("[data-icon]").forEach(e => { e.outerHTML = icon(e.dataset.icon!, e.dataset.iconClass || "g"); });
-}
+export const icon = (n: string, cls = "g") => html`<svg class=${cls} viewBox="0 0 24 24" aria-hidden="true">${unsafeSVG(iconPaths(n))}</svg>`;
+/** A provider's own 16×16 glyph (a package's static SVG body), `scale` to draw it on another grid. */
+export const glyphSvg = (body: string, cls = "g", box = "0 0 16 16") => html`<svg class=${cls} viewBox=${box} aria-hidden="true">${unsafeSVG(body)}</svg>`;

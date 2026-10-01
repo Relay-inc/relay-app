@@ -1,0 +1,31 @@
+/* The page itself, for both windows: the design tokens (custom properties reach into every shadow root) and the body.
+   Everything a component draws is styled in its own shadow root, from shared.css and its own file. */
+:root{
+  --bg:#FFFFFF; --sidebar:#EFEEED; --inspector:#F7F6F5;
+  --label:rgba(0,0,0,.85); --secondary:rgba(0,0,0,.50); --separator:rgba(0,0,0,.10);
+  --fill:rgba(0,0,0,.05); --accent:#007AFF; --on-accent:#FFFFFF;
+  --r:8px; --ease:ease-out; --d:150ms;
+  --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;
+  --mono:"SF Mono",ui-monospace,Menlo,monospace;
+  --ctx-a:#5856D6;--ctx-m:#30B0C7;--ctx-p:#34C759;
+  --late:#FF3B30;--soon:#FF9500;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#1E1E1E; --sidebar:#2A2A2A; --inspector:#242424;
+  --label:rgba(255,255,255,.85); --secondary:rgba(255,255,255,.55); --separator:rgba(255,255,255,.10);
+  --fill:rgba(255,255,255,.07); --accent:#0A84FF;
+  --ctx-a:#5E5CE6;--ctx-m:#40C8E0;--ctx-p:#30D158;
+  --late:#FF453A;--soon:#FF9F0A;
+}}
+:root[data-theme=dark]{
+  --bg:#1E1E1E; --sidebar:#2A2A2A; --inspector:#242424;
+  --label:rgba(255,255,255,.85); --secondary:rgba(255,255,255,.55); --separator:rgba(255,255,255,.10);
+  --fill:rgba(255,255,255,.07); --accent:#0A84FF;
+}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;overflow:hidden}
+body{font:13px/1.4 var(--sans);color:var(--label);background:var(--bg);-webkit-font-smoothing:antialiased}
+/* the main window is transparent with the macOS sidebar material behind it, only the sidebar lets it through */
+body.main{background:transparent}
+body.reordering,body.reordering *{cursor:grabbing!important;user-select:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

@@ -1,0 +1,107 @@
+/* Adopted by every component (src/lib/store.ts `styles`): the reset a shadow root does not inherit, and the building
+   blocks several views use. A rule only one component needs lives in that component's own file. */
+*,:host{box-sizing:border-box}
+/* only the elements with a default margin: a bare `*` would also reset the margin a child component gives its own host */
+:where(p,h1,h2,h3,h4,h5,h6,ul,ol,li,dl,dd,figure,blockquote,pre,form,fieldset,details,summary,table,hr,menu,input,button,select,textarea){margin:0}
+[hidden]{display:none!important}
+button{font:inherit;color:inherit}
+svg.i{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* small parts */
+.sp{flex:1}
+.count{color:var(--secondary);font-variant-numeric:tabular-nums}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.badge{min-width:18px;height:16px;padding:0 5px;border-radius:var(--r);background:var(--accent);color:var(--on-accent);font-size:11px;font-weight:600;display:grid;place-items:center}
+.spin{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--separator);border-top-color:var(--secondary);animation:r 1s linear infinite;flex:none}
+@keyframes r{to{transform:rotate(360deg)}}
+.pulse{display:inline-flex;gap:4px}
+.pulse i{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pl 1.2s ease-in-out infinite}
+.pulse i:nth-child(2){animation-delay:.15s}
+.pulse i:nth-child(3){animation-delay:.3s}
+@keyframes pl{0%,80%,100%{opacity:.25;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+.meta{color:var(--secondary);margin-bottom:12px}
+.hint{font-size:12px}
+.note{color:var(--secondary);font-size:13px;text-align:center}
+.err{border:1px solid var(--separator);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--secondary);white-space:pre-wrap;font-family:var(--mono)}
+.okmsg{color:var(--secondary);font-size:13px}
+.errmsg{color:var(--late);font-size:13px}
+.due-late{color:var(--late)!important;font-weight:600}
+.due-soon{color:var(--soon)!important;font-weight:600}
+.pimg{width:15px;height:15px;flex:none;object-fit:contain;border-radius:3px;vertical-align:-2px;margin-right:6px}
+.emo{width:15px;flex:none;text-align:center;font-size:13px;line-height:1}
+.setrow{display:flex;gap:8px;align-items:center}
+
+/* buttons, fields, the segmented control */
+.btn{height:28px;padding:0 14px;border-radius:var(--r);border:1px solid var(--separator);background:var(--bg);cursor:default;transition:filter var(--d) var(--ease)}
+.btn:hover{filter:brightness(.97)}
+.btn.ib{width:28px;padding:0;display:inline-grid;place-items:center}
+.btn .g{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:1px}
+.field{height:28px;border:1px solid var(--separator);border-radius:var(--r);background:var(--bg);color:var(--label);font:13px var(--sans);padding:0 8px}
+.seg{display:flex;background:var(--fill);border-radius:var(--r);padding:2px}
+.seg button{height:22px;padding:0 12px;border:0;border-radius:calc(var(--r) - 2px);background:transparent;color:var(--secondary)}
+.seg button.on{background:var(--bg);color:var(--label);box-shadow:0 0 0 .5px var(--separator)}
+/* a view's head row: pickers on the left, reload on the right */
+.kbhead{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+
+/* lists in the views and the right panel: a heading with its count, rows like the reminders */
+.rem-grp{margin-bottom:22px}
+.rem-h{font-size:13px;font-weight:600;color:var(--secondary);margin:0 0 4px;padding-bottom:6px;border-bottom:1px solid var(--separator)}
+.rem-n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.pr-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--separator);color:inherit;text-decoration:none;cursor:default}
+.pr-row:hover .pr-t{color:var(--accent)}
+.pr-main{min-width:0}
+.pr-t{font-size:15px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.pr-meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:13px;color:var(--secondary);margin-top:2px;font-variant-numeric:tabular-nums}
+.pr-st{display:flex;gap:6px}
+.pr-chip{font-size:12px;padding:2px 8px;border-radius:var(--r);background:var(--fill);color:var(--secondary);white-space:nowrap}
+.pr-chip.ok{color:#248A3D}
+.pr-chip.bad{color:#D70015}
+@media (prefers-color-scheme:dark){.pr-chip.ok{color:#30D158}.pr-chip.bad{color:#FF6961}}
+.pr-draft{font-size:12px;color:var(--secondary);border:1px solid var(--separator);border-radius:4px;padding:0 5px;margin-right:6px;vertical-align:1px}
+.pr-none{color:var(--secondary);font-size:13px;padding:8px 0}
+.pr-row.sel{background:var(--fill);margin:0 -10px;padding-left:10px;padding-right:10px;border-radius:var(--r)}
+/* in the right panel: narrower, the chips go under the title */
+.pr-side .pr-row{grid-template-columns:minmax(0,1fr);gap:4px;padding:8px 0}
+.pr-side .pr-t{font-size:13px}
+.pr-side .pr-meta{font-size:12px}
+.todo{list-style:none;padding:0}
+.todo li{display:grid;grid-template-columns:16px 1fr;align-items:start;gap:8px;padding:7px 0;border-bottom:1px solid var(--separator);font-size:13px;line-height:1.4}
+.todo input{margin:2px 0 0;accent-color:var(--accent)}
+.todo .tx{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+
+/* one PR, mail or card in the right panel */
+.prd-bar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+/* a narrow panel wraps the buttons to a new row, a label never breaks inside its button */
+.prd-bar .btn{white-space:nowrap;flex:none}
+.prd-grp{display:flex;align-items:center;gap:8px}
+.prd-grp.end{margin-left:auto}
+.prd-bar a.btn{display:inline-flex;align-items:center;color:inherit;text-decoration:none}
+.prd-t{font-size:16px;line-height:1.35;margin:0 0 6px}
+.prd .pr-st{flex-wrap:wrap;margin-top:8px}
+.prd-sec{margin-top:18px}
+.prd-sec h3{font-size:12px;font-weight:600;color:var(--secondary);text-transform:uppercase;letter-spacing:.03em;margin:0 0 6px;padding-bottom:4px;border-bottom:1px solid var(--separator)}
+.prd-md{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.prd-md pre{overflow-x:auto;background:var(--fill);padding:8px;border-radius:6px;font-size:12px}
+.prd-md code{font-family:var(--mono);font-size:12px}
+.prd-md :first-child{margin-top:0} .prd-md :last-child{margin-bottom:0}
+.prd-c{padding:8px 0;border-bottom:1px solid var(--separator)}
+.prd-ch{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px}
+.prd-ch .count{margin-left:auto;font-size:12px}
+
+/* markdown from an agent */
+.ai{font-size:16px;line-height:1.55}
+.ai p+p{margin-top:10px}
+.ai b{font-weight:600}
+.ai h1,.ai h2,.ai h3{font-size:16px;font-weight:600;margin:14px 0 6px}
+.ai ul,.ai ol{padding-left:22px;margin:6px 0}
+.ai li+li{margin-top:3px}
+.ai code{font-family:var(--mono);font-size:14px;background:var(--fill);padding:1px 4px;border-radius:4px}
+.ai pre{background:var(--fill);border-radius:var(--r);padding:10px 12px;overflow-x:auto;margin:8px 0}
+.ai pre code{background:none;padding:0;font-size:13px}
+.ai table{border-collapse:collapse;margin:10px 0;font-size:14px;display:block;overflow-x:auto}
+.ai th,.ai td{border-bottom:1px solid var(--separator);padding:6px 12px 6px 0;text-align:left;vertical-align:top}
+.ai th{font-weight:600}
+.ai a{color:var(--accent)}

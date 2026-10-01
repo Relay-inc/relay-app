@@ -1,6 +1,7 @@
 // Project icons live in the vault's .relay/config.json (src-tauri/src/relay_config.rs, `icons`): an image file in
 // .relay/icons/, an emoji, a website whose favicon the app fetches, or "" for none. Shared by both windows.
 import { invoke } from "@tauri-apps/api/core";
+import { html, nothing } from "lit";
 
 /** One project's icon: the raw value from the config, and what to show (`img` a data url, or `icon` an emoji). */
 export type ProjectIcon = { value: string; img?: string | null; icon?: string };
@@ -23,5 +24,5 @@ export async function iconFrom(f: Blob): Promise<string | null> {
   return cv.toDataURL("image/png");
 }
 /** Only an image data url becomes an <img>. */
-export const iconImg = (u?: string | null, cls = "pimg") =>
-  u && /^data:image\/(png|jpeg|gif|webp|svg\+xml|x-icon);base64,[A-Za-z0-9+/=]+$/.test(u) ? `<img class="${cls}" src="${u}" alt="">` : "";
+export const isImg = (u?: string | null): u is string => !!u && /^data:image\/(png|jpeg|gif|webp|svg\+xml|x-icon);base64,[A-Za-z0-9+/=]+$/.test(u);
+export const iconImg = (u?: string | null, cls = "pimg") => isImg(u) ? html`<img class=${cls} src=${u} alt="">` : nothing;
