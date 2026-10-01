@@ -31,7 +31,28 @@ export class Working extends LitElement {
           background-position: 0 0;
         }
       }
+      /* the label's trailing dots fill in one by one; the box keeps three dots of room so the line doesn't shift */
+      .dots::after {
+        content: "...";
+        position: absolute;
+        left: calc(100% - 1.4ch);
+        width: 0;
+        overflow: hidden;
+        animation: dots 1.2s steps(4, jump-none) infinite;
+      }
+      .dots {
+        position: relative;
+        padding-right: 1.4ch;
+      }
+      @keyframes dots {
+        to {
+          width: 1.2ch;
+        }
+      }
       @media (prefers-reduced-motion: reduce) {
+        .dots::after {
+          width: 1.2ch;
+        }
         .flow {
           background: var(--separator);
         }
@@ -48,7 +69,7 @@ export class Working extends LitElement {
       aria-label=${this.label || nothing}
     >
       <span class="flow flex-1 h-px"></span
-      ><span class="max-w-[70%] min-w-0 truncate [&_code]:font-mono [&_code]:text-[11px]"
+      ><span class="dots max-w-[70%] min-w-0 truncate [&_code]:font-mono [&_code]:text-[11px]"
         >${this.text || t("bar.working")}</span
       ><span class="flow rev flex-1 h-px"></span>
     </div>`;
