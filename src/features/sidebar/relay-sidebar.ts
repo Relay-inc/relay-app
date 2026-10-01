@@ -234,6 +234,7 @@ export class RelaySidebar extends LitElement {
       data-parent=${row.parent}
       title=${ifDefined(row.term ? t("nav.inTerminal") : undefined)}
       .icon=${row.term ? "term" : "chat"}
+      .svg=${row.glyph}
       .name=${row.title}
       .selected=${row.selected}
       .unseen=${row.unseen}
