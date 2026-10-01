@@ -146,18 +146,17 @@ export class RelayConversation extends LitElement {
     );
   }
 
-  // visible while Claude works: only the pulsing dots, the running step has its own line
+  // visible while Claude works: only the flowing line, the running step has its own line
   private renderWorking(waiting: Pending[]) {
     if (chat.status[ui.selected] !== "busy" || waiting.length) return nothing;
     return html`<relay-working
-      .label=${t("work.working")}
-      .text=${ui.selected in chat.outside ? t("work.outside") : ""}
+      .label=${ui.selected in chat.outside ? t("work.outside") : t("work.working")}
     ></relay-working>`;
   }
 
   private renderTerminalWriting() {
     if (this.terminalSession?.status !== "busy") return nothing;
-    return html`<relay-working .text=${t("term.writing")}></relay-working>`;
+    return html`<relay-working .label=${t("term.writing")}></relay-working>`;
   }
 
   override render() {
