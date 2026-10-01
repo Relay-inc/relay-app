@@ -82,10 +82,12 @@ export function filtered(list: Mail[], f: MailFilter) {
     && (!q || `${m.subject} ${sender(m)} ${m.from[0]?.email ?? ""}`.toLowerCase().includes(q)));
 }
 // read or unread on the user's click: the list follows at once, a failure puts it back and shows why
+// (a mail is replaced, not changed: the rows only redraw for a new object)
 export async function mailSeen(key: string, seen: boolean) {
   const m = mail.list?.find(x => mailKey(x) === key); if (!m) return;
-  m.unread = !seen; changed();
-  try { await invoke("mail_seen", { account: m.account, id: m.id, seen }); mail.err = ""; } catch (e) { m.unread = seen; mail.err = String(e); }
+  const flag = (unread: boolean) => { mail.list = mail.list!.map(x => mailKey(x) === key ? { ...x, unread } : x); };
+  flag(!seen); changed();
+  try { await invoke("mail_seen", { account: m.account, id: m.id, seen }); mail.err = ""; } catch (e) { flag(seen); mail.err = String(e); }
   changed();
 }
 /** The open mail as text (what Claude reads) or as its html. */

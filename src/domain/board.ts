@@ -76,14 +76,17 @@ export function pickProject(p: BoardProvider, id: string) {
 }
 export const pickBoard = (p: BoardProvider, id: string) => { const s = boardState(p); run(s, live => loadCards(p, s, live, id)); };
 // shown in the new column at once, back where it was when the tracker refuses
+// (a card is replaced, not changed: the components only redraw for a new object)
 export async function moveCard(p: BoardProvider, c: Card, to: string) {
-  const s = boardState(p), from = c.column, was = c.placement;
-  if (to === from) return;
-  c.column = to; c.placement = Math.max(0, ...s.cards.filter(x => x.column === to && x !== c).map(x => x.placement)) + 1; s.err = ""; changed();
+  const s = boardState(p);
+  if (to === c.column) return;
+  const put = (next: Card) => { s.cards = s.cards.map(x => x.id === c.id ? next : x); };
+  const moved = { ...c, column: to, placement: Math.max(0, ...s.cards.filter(x => x.column === to && x.id !== c.id).map(x => x.placement)) + 1 };
+  put(moved); s.err = ""; changed();
   try {
-    const placed = await p.move(ctx(p), refOf(p, s), c, to);
-    if (placed != null) c.placement = placed;
-  } catch (x) { c.column = from; c.placement = was; s.err = t("kb.moveFailed", { e: String(x) }); }
+    const placed = await p.move(ctx(p), refOf(p, s), moved, to);
+    if (placed != null) put({ ...moved, placement: placed });
+  } catch (x) { put(c); s.err = t("kb.moveFailed", { e: String(x) }); }
   changed();
 }
 export const openBoardCard = (p: BoardProvider, id: string) => openCard(p, refOf(p, boardState(p)), id);
