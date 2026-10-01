@@ -38,13 +38,14 @@ export class RelayComposer extends LitElement {
         color: var(--label);
       }
       textarea::placeholder {
-        color: var(--secondary);
+        color: var(--tertiary);
       }
       select {
         all: unset;
         font-size: 12px;
         color: var(--secondary);
         height: 26px;
+        line-height: 26px;
         padding: 0 20px 0 8px;
         border-radius: 7px;
         cursor: default;
@@ -220,7 +221,7 @@ export class RelayComposer extends LitElement {
   }
 
   private chevron() {
-    return html`<span class="absolute right-1.5 pointer-events-none text-secondary"
+    return html`<span class="absolute inset-y-0 right-1.5 flex items-center pointer-events-none text-secondary"
       >${icon("down", "glyph size-2.75 stroke-2")}</span
     >`;
   }
