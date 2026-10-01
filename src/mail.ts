@@ -1,17 +1,20 @@
-// The inbox, fetched by the backend through himalaya: the newest mails. A row opens the mail in the right panel,
+// The inbox, fetched by the backend over IMAP (Gmail): the newest mails. A row opens the mail in the right panel,
 // and from there a button starts a conversation about it. Opening leaves a mail unread, read/unread only changes
 // on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
 import { t, currentLocale } from "./i18n";
 
-export type Mail = { id: string; subject: string; date: string; flags: { iana?: string }[];
-  from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; "has-attachment": boolean | null };
+export type Mail = { id: string; account: string; subject: string; date: string; unread: boolean;
+  from: { name: string | null; email: string }[]; to: { name: string | null; email: string }[]; attachments: boolean };
+export type MailBody = { text: string; html: string | null; attachments: { index: number; name: string; size: number; mime: string }[] };
 export type MailFilter = { q: string; state: "all" | "unread" | "read"; project: string };
 type H = { esc: (s: unknown) => string; projectOf: (m: Mail) => string | null; projectLabel: (p: string | null) => string; open: string };
-export const mailKey = (id: string) => `mail:${id}`;
-export const unread = (m: Mail) => !m.flags.some(f => f.iana === "seen");
+export const mailKey = (m: { account: string; id: string }) => `mail:${m.account}:${m.id}`;
+/** The account and id back out of a key (an email has no colon). */
+export const mailRef = (key: string) => { const i = key.lastIndexOf(":"); return { account: key.slice(5, i), id: key.slice(i + 1) }; };
+export const unread = (m: Mail) => m.unread;
 export const sender = (m: Mail) => m.from[0]?.name || m.from[0]?.email || "";
-/** Flip the seen flag in the local copy, so the list follows before himalaya answers. */
-export const setSeen = (m: Mail, seen: boolean) => { m.flags = seen ? [...m.flags.filter(f => f.iana !== "seen"), { iana: "seen" }] : m.flags.filter(f => f.iana !== "seen"); };
+/** Flip the seen flag in the local copy, so the list follows before the backend answers. */
+export const setSeen = (m: Mail, seen: boolean) => { m.unread = !seen; };
 
 // today a time, this year a day and month, before that with the year
 function when(iso: string) {
@@ -19,15 +22,36 @@ function when(iso: string) {
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString(currentLocale(), { hour: "2-digit", minute: "2-digit" });
   return d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
 }
-const seenBtn = (m: Mail, cls = "btn") => `<button class="${cls}" data-mail-seen="${unread(m) ? 1 : 0}" data-id="${m.id}" title="${unread(m) ? t("mail.markRead") : t("mail.markUnread")}">${unread(m) ? t("mail.markRead") : t("mail.markUnread")}</button>`;
+const esc_ = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+// 16px line icons in the app's glyph style, every icon button carries its label as tooltip and for VoiceOver
+const ICON: Record<string, string> = {
+  close: '<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>',
+  read: '<path d="M2.5 6.5 8 3l5.5 3.5v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/><path d="m2.5 6.5 5.5 3.5 5.5-3.5"/>',
+  unread: '<rect x="2" y="4" width="10" height="8.5" rx="1"/><path d="m2 5 5 3.5L12 5"/><circle cx="13" cy="3.5" r="1.8" fill="currentColor" stroke="none"/>',
+  text: '<path d="M3 4h10M3 7h10M3 10h7M3 13h4.5"/>',
+  html: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="m4.5 11 2.5-3 2 2 1.5-1.5 1.5 2.5"/><circle cx="6" cy="6" r=".9"/>',
+  reply: '<path d="M6.5 4 2.5 8l4 4"/><path d="M2.5 8h6.5a4.5 4.5 0 0 1 4.5 4.5v.5"/>',
+  talk: '<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7.5L4.5 13.5V11A1.5 1.5 0 0 1 3 9.5z"/>',
+};
+const ib = (icon: string, label: string, attrs: string, cls = "btn ib", tip = label) =>
+  `<button class="${cls}" ${attrs} title="${esc_(tip)}" aria-label="${esc_(label)}"><svg class="g" viewBox="0 0 16 16">${ICON[icon]}</svg></button>`;
+const seenBtn = (m: Mail, cls = "btn ib") => ib(unread(m) ? "read" : "unread", unread(m) ? t("mail.markRead") : t("mail.markUnread"),
+  `data-mail-seen="${unread(m) ? 1 : 0}" data-key="${esc_(mailKey(m))}"`, cls);
 
 function row(m: Mail, h: H) {
   const e = h.esc, p = h.projectOf(m);
-  return `<div class="pr-row mail-row${unread(m) ? " unread" : ""}${h.open === mailKey(m.id) ? " sel" : ""}" data-mail-open="${e(m.id)}">
+  return `<div class="pr-row mail-row${unread(m) ? " unread" : ""}${h.open === mailKey(m) ? " sel" : ""}" data-mail-open="${e(mailKey(m))}">
     <div class="pr-main"><div class="pr-t">${e(m.subject || t("mail.noSubject"))}</div>
       <div class="pr-meta"><span>${e(sender(m))}</span>${p ? `<span>${e(h.projectLabel(p))}</span>` : ""}</div></div>
-    <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn mail-flip")}</div></div>`;
+    <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn ib mail-flip")}</div></div>`;
 }
+
+/** No account yet: what to do in three steps, and the way into the settings. The texts are the app's own. */
+export const renderMailSetup = () => `<div class="mail-setup">
+  <h2>${t("mail.setupTitle")}</h2><p>${t("mail.setupIntro")}</p>
+  <ol><li>${t("mail.setupStep1")}</li><li>${t("mail.setupStep2")}</li><li>${t("mail.setupStep3")}</li></ol>
+  <p class="mail-dim">${t("mail.setupPw")}</p>
+  <button class="btn primary" data-mail="setup">${t("mail.setupOpen")}</button></div>`;
 
 /** Search, read state and project, mounted once so typing in the search field keeps its focus. */
 export const renderMailBar = (f: MailFilter, esc: (s: unknown) => string) =>
@@ -93,16 +117,30 @@ export function renderBody(body: string, esc: (s: unknown) => string, depth = 0)
     + (after ? `<div class="mail-body">${prose(after, esc)}</div>` : "");
 }
 
-/** One mail in the right panel: who, when, the text, and the ways into a conversation. Headers show at once, the text loads. */
-export function renderMailDetail(m: Mail | undefined, body: string | undefined, err: string, esc: (s: unknown) => string): string {
-  const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("pr.close")}">×</button>${m ? seenBtn(m) : ""}<span class="sp"></span>`
-    + (m ? `<button class="btn" data-mail-chat="draft" title="${t("mail.draftTitle")}">${t("mail.draft")}</button><button class="btn primary" data-mail-chat="talk" title="${t("mail.talkTitle")}">${t("mail.talk")}</button>` : "") + `</div>`;
+// the escaped srcdoc per body object: a streaming conversation redraws the panel often, a big mail is escaped once
+const built = new WeakMap<MailBody, { frame?: string }>();
+const main = (b: MailBody, textView: boolean, esc: (s: unknown) => string) => { const c = built.get(b) ?? {}; built.set(b, c);
+  return b.html && !textView ? (c.frame ??= `<iframe class="mail-frame" sandbox="" referrerpolicy="no-referrer" srcdoc="${esc(b.html)}"></iframe>`) : renderBody(b.text, esc); };
+const kb = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} kB` : `${(n / 1048576).toFixed(1)} MB`;
+/** The confirm bar for a link clicked inside a mail. Lives in its own element (#maillink) so the frame below is not redrawn. */
+export const renderMailLink = (url: string, esc: (s: unknown) => string) => url
+  ? `<div class="mail-link"><div class="mail-url">${esc(url)}</div><div class="mail-link-btns"><button class="btn primary" data-mail-link="open">${t("mail.linkOpen")}</button><button class="btn" data-mail-link="cancel">${t("mail.linkCancel")}</button></div></div>` : "";
+
+/** One mail in the right panel: who, when, the mail, and the ways into a conversation. Headers show at once, the body loads.
+ *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
+export function renderMailDetail(m: Mail | undefined, body: MailBody | undefined, err: string, esc: (s: unknown) => string, textView = false): string {
+  // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
+  const bar = `<div class="prd-bar"><span class="prd-grp">${ib("close", t("pr.close"), "data-pr-close")}${m ? seenBtn(m) : ""}`
+    + (body?.html ? (textView ? ib("html", t("mail.showMail"), "data-mail-view") : ib("text", t("mail.showText"), "data-mail-view")) : "") + `</span>`
+    + (m ? `<span class="prd-grp end">${ib("reply", t("mail.draft"), 'data-mail-chat="draft"', "btn ib", `${t("mail.draft")}: ${t("mail.draftTitle")}`)}`
+      + `${ib("talk", t("mail.talk"), 'data-mail-chat="talk"', "btn ib primary", `${t("mail.talk")}: ${t("mail.talkTitle")}`)}</span>` : "") + `</div>`;
   if (!m) return bar + `<div class="meta">${t("mail.gone")}</div>`;
   const who = (l: Mail["from"]) => l.map(a => a.name ? `${esc(a.name)} <span class="count">${esc(a.email)}</span>` : esc(a.email)).join(", ");
   const loading = `<div class="mail-load"><span class="spin"></span>${t("mail.loadingBody")}</div><div class="skel">${[92, 100, 84, 96, 60, 0, 88, 72].map(w => `<i style="width:${w}%"></i>`).join("")}</div>`;
-  return bar + `<div class="prd">
+  const atts = body?.attachments.length ? `<div class="mail-atts">${body.attachments.map(a => `<span class="count">${esc(a.name)} (${kb(a.size)})</span>`).join("")}</div>` : "";
+  return bar + `<div id="maillink"></div><div class="prd">
     <h2 class="prd-t">${esc(m.subject || t("mail.noSubject"))}</h2>
     <div class="mail-hd"><div>${who(m.from)}</div><div class="count">${t("mail.to")} ${who(m.to)}</div><div class="count">${esc(new Date(m.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" }))}</div></div>`
-    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : renderBody(body, esc))
+    + (err ? `<div class="err">${esc(err)}</div>` : body === undefined ? loading : atts + main(body, textView, esc))
     + `</div>`;
 }

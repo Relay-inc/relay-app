@@ -1,5 +1,5 @@
 {
-  "name": "@vault/integration-linear",
+  "name": "@relay/integration-linear",
   "private": true,
   "version": "0.1.0",
   "description": "The Linear board: provider, response mapping, strings and glyph",
@@ -11,6 +11,6 @@
     "test": "node --test --experimental-strip-types tests/*.test.ts"
   },
   "dependencies": {
-    "@vault/board-core": "workspace:*"
+    "@relay/board-core": "workspace:*"
   }
 }

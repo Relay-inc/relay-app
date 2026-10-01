@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "./i18n";
+import mark from "./relay-mark.svg";
 import type { Key } from "./locales/en";
 
 // The vault and its mapping: which file or folder the app reads for each piece, relative to the vault.
@@ -57,6 +58,7 @@ export function onboard(start: VaultStatus): Promise<void> {
   let st: VaultStatus | null = start.vault ? start : null, msg = "";
   const render = () => {
     el.innerHTML = `<main class="set">
+      <img class="logo" src="${mark}" alt="">
       <h2>${t("vault.welcome")}</h2>
       <div class="meta">${t("vault.intro")}</div>
       <div class="setrow"><input class="field" readonly value="${esc(st?.vault ?? "")}" placeholder="${t("vault.none")}">

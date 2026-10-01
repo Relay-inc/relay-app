@@ -52,11 +52,27 @@ pub fn refresh(app: &AppHandle) {
     { let mut shown = SHOWN.lock().unwrap(); if *shown == key { return; } *shown = key; }
     let n = |f: fn(i64) -> bool| rows.iter().filter(|r| f(days(r))).count();
     let (late, now) = (n(|d| d < 0), n(|d| d == 0));
-    tray.set_title(Some(if late + now > 0 { format!("⏰ {late}·{now}") } else { "⏰".into() })).ok();
+    let title = if late + now > 0 { format!("⏰ {late}·{now}") } else { "⏰".into() };
+    tray.set_title(Some(&title)).ok();
+    #[cfg(target_os = "macos")]
+    if late > 0 { tray.with_inner_tray_icon(move |t| red_title(t.ns_status_item(), &title)).ok(); }
     match build(app, &rows, lang) {
         Ok(m) => { tray.set_menu(Some(m)).ok(); }
         Err(e) => eprintln!("tray menu: {e}"),
     }
+}
+
+/// Red title while something is overdue, like the SwiftBar plugin. A plain set_title clears it again.
+#[cfg(target_os = "macos")]
+fn red_title(item: Option<objc2::rc::Retained<objc2_app_kit::NSStatusItem>>, title: &str) {
+    use objc2_app_kit::{NSColor, NSForegroundColorAttributeName};
+    use objc2_foundation::{NSAttributedString, NSDictionary, NSString};
+    let (Some(item), Some(mtm)) = (item, objc2::MainThreadMarker::new()) else { return };
+    let Some(button) = item.button(mtm) else { return };
+    let red = NSColor::systemRedColor();
+    let attrs = NSDictionary::from_slices(&[unsafe { NSForegroundColorAttributeName }], &[&**red as &objc2::runtime::AnyObject]);
+    let s = unsafe { NSAttributedString::new_with_attributes(&NSString::from_str(title), &attrs) };
+    button.setAttributedTitle(&s);
 }
 
 fn days(r: &Value) -> i64 { r["days"].as_i64().unwrap_or(0) }

@@ -1,4 +1,4 @@
-import { currentLocale, translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@vault/board-core";
+import { currentLocale, translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
 import { mapBoards, mapCards, mapColumns } from "./map";
 import strings, { type Key } from "./locales";
 

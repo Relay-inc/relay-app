@@ -8,7 +8,7 @@
 /* the date, and on hover the read/unread button in its place */
 .mail-side{display:grid;justify-items:end}
 .mail-side>*{grid-area:1/1}
-.mail-flip{height:24px;padding:0 10px;font-size:12px;visibility:hidden}
+.mail-flip{width:24px;height:24px;visibility:hidden}
 .mail-row:hover .mail-flip{visibility:visible}
 .mail-row:hover .mail-side .pr-meta{visibility:hidden}
 /* "more mails" under the list */
@@ -36,3 +36,17 @@
 .skel i[style="width:0%"]{height:6px;background:none}
 @keyframes skel{50%{opacity:.45}}
 @media (prefers-reduced-motion:reduce){.skel i{animation:none}}
+/* the html of a mail: sandboxed frame that scrolls itself, white because mails are designed for white */
+.mail-frame{display:block;width:100%;height:calc(100vh - 250px);min-height:280px;margin-top:12px;border:1px solid var(--separator);border-radius:var(--r);background:#fff}
+.mail-atts{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:10px;font-size:12px}
+/* confirm before a link in a mail opens */
+.mail-link{margin:8px 0;padding:8px 10px;border:1px solid var(--separator);border-radius:var(--r);background:var(--fill)}
+.mail-url{font-size:12px;word-break:break-all;user-select:text}
+.mail-link-btns{display:flex;gap:8px;margin-top:8px}
+.mail-acct{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.mail-setup{max-width:540px;margin:32px auto;padding:22px 26px;border:1px solid var(--separator);border-radius:12px;background:var(--fill)}
+.mail-setup h2{font-size:16px;font-weight:600;margin:0 0 6px}
+.mail-setup p{margin:0 0 12px;font-size:13px;line-height:1.5}
+.mail-setup ol{margin:0 0 14px;padding-left:20px;font-size:13px;line-height:1.6}
+.mail-setup li{margin-bottom:6px}
+.mail-setup code{font-family:var(--mono);font-size:12px;background:var(--fill);padding:1px 5px;border-radius:4px}
