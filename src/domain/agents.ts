@@ -76,3 +76,8 @@ export function setCommands(list: SlashCommand[]) {
   commands.list = list.map(({ name, description, argumentHint }) => ({ name, description, argumentHint }));
   ls.set("commands", commands.list);
 }
+/** Asked once at the start, without waiting for a conversation; a Claude start updates it too (src/domain/chats/events.ts). */
+export const loadCommands = () =>
+  invoke<SlashCommand[]>("claude_commands")
+    .then(setCommands)
+    .catch(e => console.error(e));
