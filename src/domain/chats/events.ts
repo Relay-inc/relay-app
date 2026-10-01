@@ -12,6 +12,10 @@ import { chat, NEW, label, lastAi, saveChats, formatDuration, type Item, type Im
 
 // ---------- images from a transcript, shown via blob URLs (short strings, so redrawing the log does not re-parse megabytes of base64)
 export const IMG_OK = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** Around the project line the app puts in front of a message; the transcript keeps it, the conversation hides it. */
+export const CTX_OPEN = "<relay-project>";
+export const CTX_CLOSE = "</relay-project>";
+const CTX_RE = new RegExp(`^${CTX_OPEN}[\\s\\S]*?${CTX_CLOSE}\\s*`);
 export const toImg = (mediaType: string, data: string): Img => ({
   mt: mediaType,
   data,
@@ -159,7 +163,7 @@ export function toItems(history: AgentEvent[]): Item[] {
       const imgs = entry.images.map(image =>
         image && IMG_OK.includes(image.media_type) ? toImg(image.media_type, image.data).url : "",
       );
-      items.push({ kind: "me", text: entry.text, ...(imgs.length ? { imgs } : {}) });
+      items.push({ kind: "me", text: entry.text.replace(CTX_RE, ""), ...(imgs.length ? { imgs } : {}) });
     } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok"));
   }

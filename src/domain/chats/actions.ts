@@ -4,7 +4,7 @@ import { changed, ls, request } from "../../core/store";
 import { ui, WAIT, isTerminal } from "../ui";
 import { config, saveSettings, type Settings } from "../config";
 import { setIcon } from "../icons";
-import { vault, findProjects } from "../vault";
+import { vault, findProjects, project as vaultProject } from "../vault";
 import { chatAgent, picks } from "../agents";
 import { select, toast, hideToast } from "../navigation";
 import {
@@ -24,7 +24,7 @@ import {
   type Img,
   type Pending,
 } from "./state";
-import { push, IMG_OK, toImg } from "./events";
+import { push, IMG_OK, toImg, CTX_OPEN, CTX_CLOSE } from "./events";
 import { termSid } from "../keys";
 import type { Decision } from "@relay/agent-core";
 
@@ -173,9 +173,17 @@ function queueMessage(key: string, text: string, images: Img[]) {
   changed();
   if (key === ui.selected) request("scroll-bottom");
 }
+// the agent only hears the project through the message: in front of the first one, and again after a move
+function projectContext(conversation: Chat | undefined): string {
+  const name = conversation?.project;
+  if (!name || conversation.told === name) return "";
+  const context = vaultProject(name)?.context;
+  return `${CTX_OPEN}This conversation is about the vault project "${name}"${context ? ` (context ${context})` : ""}. Read its project note before answering.${CTX_CLOSE}\n\n`;
+}
 async function deliver(key: string, conversation: Chat | undefined, text: string, images: Img[]) {
   const name = `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`;
-  const sent = conversation?.mail ? `${conversation.mail}\n\n${text}` : text;
+  const told = projectContext(conversation);
+  const sent = told + (conversation?.mail ? `${conversation.mail}\n\n${text}` : text);
   if (conversation?.mail) {
     delete conversation.mail;
     saveChats();
@@ -192,6 +200,10 @@ async function deliver(key: string, conversation: Chat | undefined, text: string
       effort: picks("effort").value,
       provider: chatAgent(key),
     });
+    if (told && conversation?.project) {
+      conversation.told = conversation.project;
+      saveChats();
+    }
   } catch (error) {
     push(key, { kind: "err", text: String(error) });
     chat.queued[key] = Math.max(0, (chat.queued[key] || 1) - 1);
