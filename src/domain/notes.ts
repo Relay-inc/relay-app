@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { noteOf, setNoteCheck } from "../core/markdown";
 import { config } from "./config";
+import { noteKey } from "./keys";
 
 // Vault notes named in a conversation open in the right panel. Only notes that exist link: the vault's paths
 // (vault_notes, refreshed with the snapshot) and their names for [[wikilinks]].
@@ -28,6 +29,4 @@ export function noteKnown(target: string) {
 }
 /** A path from a tool call that names an existing note, or "". */
 export const notePath = (p?: string) => (p && /\.md$/i.test(noteOf(p)) && noteKnown(noteOf(p)) ? p : "");
-/** The key of a note in the right panel (src/domain/panel.ts). */
-export const noteKey = (target: string) => `note:${target}`;
-export { noteOf };
+export { noteOf, noteKey };

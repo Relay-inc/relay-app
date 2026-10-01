@@ -5,7 +5,7 @@ import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { config } from "../../domain/config";
 import { pLabel } from "../../domain/vault";
-import { panel, openPr } from "../../domain/panel";
+import { panel, openDetail } from "../../domain/panel";
 import {
   mail,
   mailKey,
@@ -61,7 +61,7 @@ export class RelayMail extends LitElement {
                   .sender=${sender(m)}
                   .project=${p ? pLabel(p) : ""}
                   ?selected=${panel.open === key}
-                  @open-mail=${() => openPr(key)}
+                  @open-mail=${() => openDetail(key)}
                   @flip-mail=${() => mailSeen(key, unread(m))}
                 ></relay-mail-row>`;
               })

@@ -7,6 +7,7 @@ import { chat, newChat } from "./chats/state";
 import { panel } from "./panel";
 import { select } from "./navigation";
 import { sendMsg } from "./chats/actions";
+import { prKey, panelItem } from "./keys";
 
 // Pull requests from GitHub, fetched by the backend through gh: what waits on the user's review and what
 // he opened. Read-only: a row opens the PR in the right panel (description, checks, conversation), a link
@@ -25,7 +26,7 @@ export type PR = {
   project: string | null;
 };
 export type PRs = { mine: PR[]; review: PR[] };
-export const prKey = (repo: string, number: number | string) => `${repo}#${number}`;
+export { prKey };
 
 export const prs = { list: null as PRs | null, err: "", busy: false };
 
@@ -50,9 +51,10 @@ export const resetPrs = () => {
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
 // posting on GitHub is something others see, so it waits for the user (decided 29/9)
 export async function reviewPr(key: string) {
-  const pr = panel.detail[key];
-  if (!pr) return;
-  const repo = key.slice(0, key.lastIndexOf("#")),
+  const pr = panel.detail[key],
+    item = panelItem(key);
+  if (!pr || item?.kind !== "pr") return;
+  const repo = item.repo,
     row = [...(prs.list?.review || []), ...(prs.list?.mine || [])].find(p => p.repo === repo && p.number === pr.number);
   const k = newChat(row?.project && project(row.project) ? row.project : null);
   chat.chats[k].title = `Review ${repo.split("/")[1]} #${pr.number}`;

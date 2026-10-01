@@ -3,7 +3,7 @@ import { customElement } from "lit/decorators.js";
 import { t, th } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { panel, closePr } from "../../domain/panel";
+import { panel, closeDetail } from "../../domain/panel";
 import { reviewPr } from "../../domain/prs";
 import "./pr-body";
 
@@ -25,7 +25,7 @@ export class RelayPrDetail extends LitElement {
       pr = panel.detail[key] ?? null,
       err = panel.err;
     const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3">
-      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closePr}>×</button>
+      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closeDetail}>×</button>
       ${pr ? html`<span class="flex-1"></span><button class="btn btn-primary whitespace-nowrap flex-none" title=${t("pr.reviewTitle")} @click=${() => reviewPr(key)}>${th("pr.review")}</button><a class="btn whitespace-nowrap flex-none inline-flex items-center" href=${pr.url}>${th("pr.openGh")}</a>` : nothing}
     </div>`;
     if (err)

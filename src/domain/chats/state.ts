@@ -4,6 +4,7 @@ import { ls } from "../../core/store";
 import { ui, isTerm } from "../ui";
 import { vault, findProjects } from "../vault";
 import { config } from "../config";
+import { termKey, newChatKey } from "../keys";
 
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
 // what waits for the user (permission cards, questions, background sessions that block).
@@ -110,7 +111,7 @@ export const chatsOf = (p: string | null) =>
 export const saveChats = () =>
   ls.set("chats", Object.fromEntries(Object.entries(chat.chats).filter(([k, c]) => !c.draft || chat.typed[k])));
 export function newChat(p: string | null): string {
-  const key = `c:${Date.now().toString(36)}`;
+  const key = newChatKey();
   chat.chats[key] = { key, project: p, title: NEW, at: Date.now(), draft: true };
   return key;
 }
@@ -144,7 +145,7 @@ export function terms(hiddenOnes = false): Term[] {
       const a = live.get(x.sessionId);
       const ov = config.value.overrides[x.sessionId];
       return {
-        key: `t:${x.sessionId}`,
+        key: termKey(x.sessionId),
         sid: x.sessionId,
         id: a.id,
         mtime: x.last_at ? Date.parse(x.last_at) : 0,

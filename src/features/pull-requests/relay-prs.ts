@@ -4,8 +4,9 @@ import { th } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { pLabel } from "../../domain/vault";
-import { panel, openPr } from "../../domain/panel";
-import { prs, prKey, loadPrs, type PR } from "../../domain/prs";
+import { panel, openDetail } from "../../domain/panel";
+import { prs, loadPrs, type PR } from "../../domain/prs";
+import { prKey } from "../../domain/keys";
 import "./pr-row";
 
 /** The Pull requests view: both lists, with a reload button. */
@@ -35,7 +36,7 @@ export class RelayPrs extends LitElement {
                   ?mine=${mine}
                   .project=${p.project ? pLabel(p.project) : ""}
                   ?selected=${panel.open === prKey(p.repo, p.number)}
-                  @open-pr=${() => openPr(prKey(p.repo, p.number))}
+                  @open-pr=${() => openDetail(prKey(p.repo, p.number))}
                 ></relay-pr-row>`,
             )
           : html`<div class="text-secondary text-sm py-2">${th("pr.none")}</div>`

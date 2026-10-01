@@ -3,7 +3,8 @@ import { changed, ls } from "../core/store";
 import { ui } from "./ui";
 import { config } from "./config";
 import { ctxOf, provider, type BoardProvider, type BoardRef } from "./providers";
-import { mail, mailRef, type MailBody } from "./mail";
+import { mail, type MailBody } from "./mail";
+import { panelItem, cardKey, type PanelItem } from "./keys";
 
 // The right panel's detail: a PR ("owner/repo#12"), a mail ("mail:…"), a vault note ("note:…") or a board card
 // ("card:<provider>:<id>"). While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
@@ -14,16 +15,17 @@ export const panel = {
   cardRefs: {} as Record<string, BoardRef>,
 };
 
+/** The provider and card id of a card key, when that provider draws its cards in the panel. */
 export const cardOf = (key: string) => {
-  const m = /^card:([^:]+):(.+)$/.exec(key),
-    p = m ? provider(m[1]) : undefined;
-  return p?.detail ? { p, d: p.detail, id: m![2] } : undefined;
+  const item = panelItem(key);
+  const p = item?.kind === "card" ? provider(item.provider) : undefined;
+  return item?.kind === "card" && p?.detail ? { p, d: p.detail, id: item.id } : undefined;
 };
 // a card opens in the right panel when its provider has one, else in the browser
 export async function openCard(p: BoardProvider, ref: BoardRef, id: string) {
   if (p.detail) {
-    panel.cardRefs[`card:${p.id}:${id}`] = ref;
-    return openPr(`card:${p.id}:${id}`);
+    panel.cardRefs[cardKey(p.id, id)] = ref;
+    return openDetail(cardKey(p.id, id));
   }
   try {
     invoke("plugin:opener|open_url", { url: await p.url(ctxOf(p, config.value.integrations), ref, id) });
@@ -31,7 +33,25 @@ export async function openCard(p: BoardProvider, ref: BoardRef, id: string) {
     console.error(e);
   }
 }
-export async function openPr(key: string) {
+
+function fetchDetail(key: string, item: PanelItem): Promise<unknown> {
+  switch (item.kind) {
+    case "card": {
+      const card = cardOf(key)!;
+      return card.d.fetch(ctxOf(card.p, config.value.integrations), panel.cardRefs[key], card.id);
+    }
+    case "mail":
+      return invoke<MailBody>("mail_read", { account: item.account, id: item.id });
+    case "note":
+      return invoke("read_note", { target: item.target });
+    case "pr":
+      return invoke("github_pr", { repo: item.repo, number: item.number });
+  }
+}
+/** Show a PR, mail, note or card in the right panel: what is known at once, then fresh from the backend. */
+export async function openDetail(key: string) {
+  const item = panelItem(key);
+  if (!item) return;
   panel.open = key;
   panel.err = "";
   mail.link = "";
@@ -40,28 +60,22 @@ export async function openPr(key: string) {
   ui.noinsp = false;
   ls.set("noinsp", false);
   changed();
-  const i = key.lastIndexOf("#");
   try {
-    panel.detail[key] = card
-      ? await card.d.fetch(ctxOf(card.p, config.value.integrations), panel.cardRefs[key], card.id)
-      : key.startsWith("mail:")
-        ? await invoke<MailBody>("mail_read", mailRef(key))
-        : key.startsWith("note:")
-          ? await invoke("read_note", { target: key.slice(5) })
-          : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) });
+    panel.detail[key] = await fetchDetail(key, item);
   } catch (e) {
-    if (key.startsWith("mail:")) delete panel.detail[key];
+    // a mail that cannot be read is not shown from an older answer
+    if (item.kind === "mail") delete panel.detail[key];
     if (!panel.detail[key]) panel.err = String(e);
   }
   changed();
 }
-export function closePr() {
+export function closeDetail() {
   if (!panel.open) return;
   panel.open = "";
   changed();
 }
 export function setTab(tab: string) {
   ui.tab = tab;
-  if (panel.open) closePr();
+  if (panel.open) closeDetail();
   else changed();
 }

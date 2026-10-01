@@ -1,4 +1,4 @@
-import { LitElement, css, html } from "lit";
+import { LitElement, css, html, nothing } from "lit";
 import { customElement } from "lit/decorators.js";
 import { t, th } from "../../core/i18n";
 import { md } from "../../core/markdown";
@@ -9,8 +9,9 @@ import { ui } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
 import { project, pLabel } from "../../domain/vault";
 import { selProject } from "../../domain/chats/state";
-import { panel, setTab, cardOf, closePr, openPr } from "../../domain/panel";
-import { prs, prKey, type PR } from "../../domain/prs";
+import { panel, setTab, cardOf, closeDetail, openDetail } from "../../domain/panel";
+import { prs, type PR } from "../../domain/prs";
+import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
 import "./todo-list";
 import "../pull-requests/pr-row";
@@ -44,14 +45,22 @@ export class RelayInspector extends LitElement {
   protected store = new StoreController(this);
 
   private detail() {
-    const key = panel.open,
-      cd = cardOf(key);
-    // the card's markup comes from its provider package, which tells the panel through an event that its close button was clicked
-    if (cd) return html`<div @detail-close=${closePr}>${cd.d.render(panel.detail[key] ?? null, panel.err)}</div>`;
-    if (key.startsWith("note:")) return html`<relay-note-detail></relay-note-detail>`;
-    return key.startsWith("mail:")
-      ? html`<relay-mail-detail></relay-mail-detail>`
-      : html`<relay-pr-detail></relay-pr-detail>`;
+    const key = panel.open;
+    switch (panelItem(key)?.kind) {
+      case "card": {
+        // the card's markup comes from its provider package, which tells the panel through an event that its close button was clicked
+        const card = cardOf(key);
+        return card
+          ? html`<div @detail-close=${closeDetail}>${card.d.render(panel.detail[key] ?? null, panel.err)}</div>`
+          : nothing;
+      }
+      case "note":
+        return html`<relay-note-detail></relay-note-detail>`;
+      case "mail":
+        return html`<relay-mail-detail></relay-mail-detail>`;
+      default:
+        return html`<relay-pr-detail></relay-pr-detail>`;
+    }
   }
 
   private heading(title: unknown, n?: number) {
@@ -71,7 +80,7 @@ export class RelayInspector extends LitElement {
       ?mine=${mine}
       .project=${p.project ? pLabel(p.project) : ""}
       ?selected=${panel.open === key}
-      @open-pr=${() => openPr(key)}
+      @open-pr=${() => openDetail(key)}
     ></relay-pr-row>`;
   }
 

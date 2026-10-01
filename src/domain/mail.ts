@@ -6,6 +6,9 @@ import { config, mailOn } from "./config";
 import { findProjects } from "./vault";
 import { chat, newChat } from "./chats/state";
 import { panel } from "./panel";
+import { mailKey, isMailKey } from "./keys";
+
+export { mailKey };
 import { select } from "./navigation";
 import { sendMsg } from "./chats/actions";
 
@@ -28,12 +31,6 @@ export type MailBody = {
   attachments: { index: number; name: string; size: number; mime: string }[];
 };
 export type MailFilter = { q: string; state: "all" | "unread" | "read"; project: string };
-export const mailKey = (m: { account: string; id: string }) => `mail:${m.account}:${m.id}`;
-/** The account and id back out of a key (an email has no colon). */
-export const mailRef = (key: string) => {
-  const i = key.lastIndexOf(":");
-  return { account: key.slice(5, i), id: key.slice(i + 1) };
-};
 export const unread = (m: Mail) => m.unread;
 export const sender = (m: Mail) => m.from[0]?.name || m.from[0]?.email || "";
 
@@ -110,7 +107,7 @@ export async function moreMails() {
 /** The mail state from before a settings change is dropped: answers still on their way are ignored. */
 export function resetMail() {
   mail.gen++;
-  for (const k of Object.keys(panel.detail)) if (k.startsWith("mail:")) delete panel.detail[k];
+  for (const k of Object.keys(panel.detail)) if (isMailKey(k)) delete panel.detail[k];
   mail.textView.clear();
   mail.link = "";
   mail.list = null;
@@ -160,12 +157,13 @@ export async function mailSeen(key: string, seen: boolean) {
 }
 /** The open mail as text (what Claude reads) or as its html. */
 export function toggleMailText() {
-  mail.textView.has(panel.open) ? mail.textView.delete(panel.open) : mail.textView.add(panel.open);
+  if (mail.textView.has(panel.open)) mail.textView.delete(panel.open);
+  else mail.textView.add(panel.open);
   changed();
 }
 /** A link clicked inside a mail (the sandboxed frame reports it through the backend) waits for the user's go. */
 export function mailLinkClicked(url: string) {
-  if (!panel.open.startsWith("mail:") || !urlOk(url)) return;
+  if (!isMailKey(panel.open) || !urlOk(url)) return;
   mail.link = url;
   changed();
 }

@@ -5,6 +5,7 @@ import { changed } from "../../core/store";
 import type { AgentEvent } from "../agents";
 import { ui, WAIT, isTerm } from "../ui";
 import { loadSnapshot } from "../vault";
+import { termSid } from "../keys";
 import { chat, NEW, label, lastAi, saveChats, dur, type Item, type Img } from "./state";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) and the transcripts behind a conversation.
@@ -127,7 +128,7 @@ export function toItems(hist: AgentEvent[]): Item[] {
 // a terminal conversation: first the whole transcript, then only what was added since the last read
 export async function tailTerm(k: string): Promise<boolean> {
   const r = await invoke<{ items: AgentEvent[]; next: number }>("history_sid", {
-    sid: k.slice(2),
+    sid: termSid(k),
     from: chat.termOffset[k] ?? 0,
   });
   const fresh = chat.termOffset[k] === undefined;

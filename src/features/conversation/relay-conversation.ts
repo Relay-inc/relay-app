@@ -9,8 +9,9 @@ import { chat, termOf, projOf, label } from "../../domain/chats/state";
 import type { Item, Pending } from "../../domain/chats/state";
 import { routeTo, answer } from "../../domain/chats/actions";
 import { project } from "../../domain/vault";
-import { openPr } from "../../domain/panel";
-import { notePath, noteKey } from "../../domain/notes";
+import { openDetail } from "../../domain/panel";
+import { notePath } from "../../domain/notes";
+import { noteKey } from "../../domain/keys";
 import "./user-message";
 import "./answer";
 import "./tool-step";
@@ -62,7 +63,7 @@ export class RelayConversation extends LitElement {
           .text=${it.text}
           .state=${it.state ?? ""}
           ?link=${!!note}
-          @open-note=${() => openPr(noteKey(note))}
+          @open-note=${() => openDetail(noteKey(note))}
         ></relay-tool-step>`;
       }
       case "err":

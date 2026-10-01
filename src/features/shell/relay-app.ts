@@ -11,8 +11,8 @@ import { vault } from "../../domain/vault";
 import { chat } from "../../domain/chats/state";
 import { escStop, ctrlC } from "../../domain/chats/actions";
 import { setInsp, toggleQuick, zoom } from "../../domain/navigation";
-import { panel, closePr, openPr } from "../../domain/panel";
-import { noteKey } from "../../domain/notes";
+import { panel, closeDetail, openDetail } from "../../domain/panel";
+import { noteKey } from "../../domain/keys";
 import "../sidebar/relay-sidebar";
 import "../chat/relay-chat";
 import "../inspector/relay-inspector";
@@ -77,7 +77,7 @@ export class RelayApp extends LitElement {
     const nl = e.composedPath().find((n): n is HTMLElement => n instanceof HTMLElement && !!n.dataset.note);
     if (nl) {
       e.preventDefault();
-      openPr(noteKey(nl.dataset.note!));
+      openDetail(noteKey(nl.dataset.note!));
       return;
     }
     const a = e.composedPath().find((n): n is HTMLAnchorElement => n instanceof HTMLAnchorElement && !!n.href);
@@ -110,7 +110,7 @@ export class RelayApp extends LitElement {
         zoom("");
       } else if (panel.open && !ui.pop && !inField(e)) {
         e.preventDefault();
-        closePr();
+        closeDetail();
       }
       // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)
       else if (chat.status[ui.sel] === "busy" && !ui.pop && !ui.qk && !inField(e, "input, select")) {

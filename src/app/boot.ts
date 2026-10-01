@@ -5,7 +5,8 @@ import { changed, ls } from "../core/store";
 import type { AgentEvent } from "../domain/agents";
 import { loadAgents } from "../domain/agents";
 import type { VaultStatus } from "../domain/vault-setup";
-import { ui, BOARD, PRS, MAIL, WAIT, isView, isTerm, boardKey } from "../domain/ui";
+import { ui, PRS, MAIL, WAIT, isView, isTerm, boardKey } from "../domain/ui";
+import { opened, chatTime, isLegacyGeneral, isMailKey, LEGACY_BOARD } from "../domain/keys";
 import { config, ghOn, mailOn, type Settings } from "../domain/config";
 import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "../domain/vault";
 import { chat, termOf, saveChats, newChat } from "../domain/chats/state";
@@ -16,13 +17,14 @@ import { select, newHere } from "../domain/navigation";
 import { boards, checkBoards, resetBoard } from "../domain/board";
 import { loadPrs, resetPrs } from "../domain/prs";
 import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
-import { panel, closePr } from "../domain/panel";
+import { panel, closeDetail } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
 import { onboard } from "../features/onboarding/onboard";
 
+// a board the sidebar no longer shows: its integration was switched off or lost its token
 const boardDown = (k: string) => {
-  const p = k.startsWith(`${BOARD}:`) ? k.slice(BOARD.length + 1) : "";
-  return !!p && !boards.ready.includes(p);
+  const o = opened(k);
+  return o.kind === "board" && !boards.ready.includes(o.provider);
 };
 
 // the settings window saved: follow it here
@@ -42,7 +44,7 @@ async function settingsChanged(next: Settings) {
   }
   if (mailChanged) {
     resetMail();
-    if (panel.open.startsWith("mail:")) closePr();
+    if (isMailKey(panel.open)) closeDetail();
     if (!mailOn() && ui.sel === MAIL) select(WAIT);
     loadMails();
   }
@@ -87,15 +89,15 @@ export async function boot() {
   const oldGens = ls.get<Record<string, { title: string; at: number }>>("gens", {});
   for (const k of await invoke<string[]>("chats")) {
     if (chat.chats[k]) continue;
-    if (k.startsWith("general:"))
+    if (isLegacyGeneral(k))
       chat.chats[k] = {
         key: k,
         project: null,
         title: oldGens[k]?.title || "Algemeen gesprek",
-        at: oldGens[k]?.at || parseInt(k.slice(8), 36) || 0,
+        at: oldGens[k]?.at || chatTime(k),
       };
     else if (project(k)) chat.chats[k] = { key: k, project: k, title: "Gesprek", at: 0 };
-    else chat.chats[k] = { key: k, project: null, title: "Gesprek", at: parseInt(k.slice(2), 36) || 0 };
+    else chat.chats[k] = { key: k, project: null, title: "Gesprek", at: chatTime(k) };
   }
   // the agent of each conversation with a session, from sessions.json (entries from before the providers are Claude's)
   for (const [k, p] of Object.entries(
@@ -111,7 +113,7 @@ export async function boot() {
   );
   await pollAgents();
   await checkBoards();
-  if (ui.sel === BOARD) ui.sel = boardKey("productive"); // the one board before the providers
+  if (ui.sel === LEGACY_BOARD) ui.sel = boardKey("productive"); // the one board before the providers
   if (
     (!isView(ui.sel) && !chat.chats[ui.sel] && !termOf(ui.sel)) ||
     boardDown(ui.sel) ||

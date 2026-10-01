@@ -22,6 +22,7 @@ import {
   type Pending,
 } from "./state";
 import { push, IMG_OK, toImg } from "./events";
+import { termSid } from "../keys";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
 // to a project, closing and reopening, and Cmd-K.
@@ -308,7 +309,7 @@ export function openTerminal() {
 export async function closeChat(k: string) {
   const title = isTerm(k) ? termOf(k)?.title : label(k);
   if (isTerm(k)) {
-    chat.forked.push(k.slice(2));
+    chat.forked.push(termSid(k));
     ls.set("forkedTerms", chat.forked);
   } else if (chat.chats[k]) {
     await invoke("stop", { project: k });
@@ -325,7 +326,7 @@ export async function closeChat(k: string) {
 }
 export async function reopen(k: string) {
   if (isTerm(k)) {
-    chat.forked = chat.forked.filter(x => x !== k.slice(2));
+    chat.forked = chat.forked.filter(x => x !== termSid(k));
     ls.set("forkedTerms", chat.forked);
   } else if (chat.chats[k]) {
     delete chat.chats[k].closed;
@@ -372,7 +373,7 @@ export async function savePop(
   const next = structuredClone(config.value);
   const T0 = isTerm(ui.sel) ? termOf(ui.sel) : undefined,
     cur = T0 ? T0.project : projOf(ui.sel); // the project the icon fields belong to
-  if (isTerm(ui.sel)) next.overrides[ui.sel.slice(2)] = proj;
+  if (isTerm(ui.sel)) next.overrides[termSid(ui.sel)] = proj;
   else if (chat.chats[ui.sel]) {
     chat.chats[ui.sel].project = proj;
     saveChats();

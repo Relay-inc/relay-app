@@ -5,8 +5,9 @@ import { md } from "../../core/markdown";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
-import { panel, closePr, openPr } from "../../domain/panel";
-import { noteOf, noteKnown, noteKey } from "../../domain/notes";
+import { panel, closeDetail, openDetail } from "../../domain/panel";
+import { noteOf, noteKnown } from "../../domain/notes";
+import { noteKey, panelItem } from "../../domain/keys";
 
 // the frontmatter's [[links]] clickable, the rest as written
 const frontmatter = (fm: string) =>
@@ -15,10 +16,15 @@ const frontmatter = (fm: string) =>
     if (!m) return part;
     const target = noteOf(m[1]),
       label = m[1].split("|").pop()!.trim();
-    return noteKnown(target) ? html`<a class="vlink" @click=${() => openPr(noteKey(target))}>${label}</a>` : label;
+    return noteKnown(target) ? html`<a class="vlink" @click=${() => openDetail(noteKey(target))}>${label}</a>` : label;
   });
 
 /** A vault note in the right panel: the frontmatter as small print, the body as markdown. Links in it open the next note. */
+const noteTarget = (key: string) => {
+  const item = panelItem(key);
+  return item?.kind === "note" ? item.target : "";
+};
+
 @customElement("relay-note-detail")
 export class RelayNoteDetail extends LitElement {
   static styles = [
@@ -36,9 +42,9 @@ export class RelayNoteDetail extends LitElement {
     const n = panel.detail[panel.open] as { path: string; text: string } | undefined,
       err = panel.err;
     const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3">
-      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closePr}>×</button>
+      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closeDetail}>×</button>
       <span class="text-secondary overflow-hidden text-ellipsis whitespace-nowrap flex-1 min-w-0"
-        >${n?.path ?? panel.open.slice(5)}</span
+        >${n?.path ?? noteTarget(panel.open)}</span
       >
     </div>`;
     if (err)

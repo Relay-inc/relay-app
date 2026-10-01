@@ -4,7 +4,7 @@ import { t, th, currentLocale } from "../../core/i18n";
 import { icon } from "../../core/icons";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { panel, closePr } from "../../domain/panel";
+import { panel, closeDetail } from "../../domain/panel";
 import {
   mail,
   mailKey,
@@ -62,7 +62,7 @@ export class RelayMailDetail extends LitElement {
     // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
     const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3">
       <span class="flex items-center gap-2"
-        >${ib("close", t("pr.close"), closePr)}${m ? ib(unread(m) ? "read" : "unread", unread(m) ? t("mail.markRead") : t("mail.markUnread"), () => mailSeen(key, unread(m))) : nothing}
+        >${ib("close", t("pr.close"), closeDetail)}${m ? ib(unread(m) ? "read" : "unread", unread(m) ? t("mail.markRead") : t("mail.markUnread"), () => mailSeen(key, unread(m))) : nothing}
         ${body?.html ? (textView ? ib("html", t("mail.showMail"), toggleMailText) : ib("text", t("mail.showText"), toggleMailText)) : nothing}</span
       >
       ${m ? html`<span class="flex items-center gap-2 ml-auto">${ib("reply", t("mail.draft"), () => mailChat(key, "draft"), "btn btn-icon", `${t("mail.draft")}: ${t("mail.draftTitle")}`)}${ib("talk", t("mail.talk"), () => mailChat(key, "talk"), "btn btn-icon btn-primary", `${t("mail.talk")}: ${t("mail.talkTitle")}`)}</span>` : nothing}
