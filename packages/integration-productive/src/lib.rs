@@ -47,8 +47,13 @@ pub const PROVIDER: Provider = Provider {
 
 /// Token, org and user from Claude Code's own Productive MCP config (~/.claude.json, read by the app):
 /// the token for the keychain, and the config fields for the settings window to save.
-pub fn import(claude_json: &Value) -> Result<(String, Value), String> {
-    let env = &claude_json["mcpServers"]["productive"]["env"];
+/// The Productive MCP server's credentials from Claude Code's config, wherever Claude Code keeps the server: for the
+/// user (`mcpServers`), for the vault as a project (`projects.<vault>.mcpServers`), or shared in the vault's .mcp.json
+/// (`mcp_json`, Null when there is none).
+pub fn import(claude_json: &Value, vault: &str, mcp_json: &Value) -> Result<(String, Value), String> {
+    let has = |s: &Value| s["productive"]["env"]["PRODUCTIVE_API_TOKEN"].is_string();
+    let servers = [&claude_json["mcpServers"], &claude_json["projects"][vault]["mcpServers"], &mcp_json["mcpServers"]];
+    let env = &servers.into_iter().find(|s| has(s)).unwrap_or(&Value::Null)["productive"]["env"];
     let token = env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| t(TEXT, "no_import_token"))?;
     Ok((token.to_string(), json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") })))
 }
@@ -56,6 +61,15 @@ pub fn import(claude_json: &Value) -> Result<(String, Value), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn imports_from_wherever_claude_code_keeps_the_server() {
+        let env = json!({"env": {"PRODUCTIVE_API_TOKEN": "t", "PRODUCTIVE_ORG_ID": "9093", "PRODUCTIVE_USER_ID": "7"}});
+        let fields = json!({"org": "9093", "user": "7"});
+        assert_eq!(import(&json!({"mcpServers": {"productive": env}}), "/v", &Value::Null).unwrap(), ("t".into(), fields.clone()));
+        assert_eq!(import(&json!({"projects": {"/v": {"mcpServers": {"productive": env}}}}), "/v", &Value::Null).unwrap(), ("t".into(), fields.clone()));
+        assert_eq!(import(&json!({}), "/v", &json!({"mcpServers": {"productive": env}})).unwrap(), ("t".into(), fields));
+        assert!(import(&json!({"projects": {"/other": {"mcpServers": {"productive": env}}}}), "/v", &Value::Null).is_err());
+    }
     #[test]
     fn allows_reads_and_moving_one_task() {
         let p = &PROVIDER;
@@ -78,8 +92,8 @@ mod tests {
     }
     #[test]
     fn import_reads_the_mcp_config() {
-        let (tok, cfg) = import(&json!({ "mcpServers": { "productive": { "env": { "PRODUCTIVE_API_TOKEN": "abc", "PRODUCTIVE_ORG_ID": "7" } } } })).unwrap();
+        let (tok, cfg) = import(&json!({ "mcpServers": { "productive": { "env": { "PRODUCTIVE_API_TOKEN": "abc", "PRODUCTIVE_ORG_ID": "7" } } } }), "", &Value::Null).unwrap();
         assert_eq!((tok.as_str(), cfg), ("abc", json!({ "org": "7", "user": "" })));
-        assert!(import(&json!({})).is_err());
+        assert!(import(&json!({}), "", &Value::Null).is_err());
     }
 }

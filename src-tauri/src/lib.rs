@@ -994,10 +994,12 @@ async fn integration_call(state: State<'_, App>, provider: String, method: Strin
 /// Take the token, org and user from Claude Code's own Productive MCP config. The token goes to the
 /// keychain, org and user come back for the settings window to save.
 #[tauri::command]
-fn productive_import() -> Result<Value, String> {
+fn productive_import(state: State<App>) -> Result<Value, String> {
     let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
         .and_then(|s| serde_json::from_str(&s).ok()).ok_or_else(|| trc("err.claude_json"))?;
-    let (token, fields) = integration_productive::import(&cfg)?;
+    let v = vault(&state);
+    let mcp: Value = fs::read_to_string(format!("{v}/.mcp.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+    let (token, fields) = integration_productive::import(&cfg, &v, &mcp)?;
     providers::set_token(providers::get("productive")?, "token", &token)?;
     Ok(fields)
 }

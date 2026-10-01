@@ -21,6 +21,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - Favicons and the "this conversation is about" suggestion work wherever a vault keeps its project notes, not only under `Projects/` or `Portfolio/`; a project with a short name like o2o gets its site too (only a domain that is exactly its name, o2o.be)
 
 ### Fixed
+- Productive's "Import from Claude Code" finds the Productive MCP server wherever Claude Code keeps it: for the user, for the vault as a project, or in the vault's `.mcp.json` (it only looked at the first)
 - Reminders added in Relay say `Relay` as their source instead of the old name
 - Chats without a project are no longer named "Algemeen" in the terminal when the app is in another language
 
