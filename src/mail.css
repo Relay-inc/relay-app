@@ -8,7 +8,7 @@
 /* the date, and on hover the read/unread button in its place */
 .mail-side{display:grid;justify-items:end}
 .mail-side>*{grid-area:1/1}
-.mail-flip{height:24px;padding:0 10px;font-size:12px;visibility:hidden}
+.mail-flip{width:24px;height:24px;visibility:hidden}
 .mail-row:hover .mail-flip{visibility:visible}
 .mail-row:hover .mail-side .pr-meta{visibility:hidden}
 /* "more mails" under the list */

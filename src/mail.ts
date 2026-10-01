@@ -23,14 +23,27 @@ function when(iso: string) {
   return d.toLocaleDateString(currentLocale(), { day: "numeric", month: "short", ...(d.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}) });
 }
 const esc_ = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-const seenBtn = (m: Mail, cls = "btn") => `<button class="${cls}" data-mail-seen="${unread(m) ? 1 : 0}" data-key="${esc_(mailKey(m))}" title="${unread(m) ? t("mail.markRead") : t("mail.markUnread")}">${unread(m) ? t("mail.markRead") : t("mail.markUnread")}</button>`;
+// 16px line icons in the app's glyph style, every icon button carries its label as tooltip and for VoiceOver
+const ICON: Record<string, string> = {
+  close: '<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>',
+  read: '<path d="M2.5 6.5 8 3l5.5 3.5v6a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1z"/><path d="m2.5 6.5 5.5 3.5 5.5-3.5"/>',
+  unread: '<rect x="2" y="4" width="10" height="8.5" rx="1"/><path d="m2 5 5 3.5L12 5"/><circle cx="13" cy="3.5" r="1.8" fill="currentColor" stroke="none"/>',
+  text: '<path d="M3 4h10M3 7h10M3 10h7M3 13h4.5"/>',
+  html: '<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="m4.5 11 2.5-3 2 2 1.5-1.5 1.5 2.5"/><circle cx="6" cy="6" r=".9"/>',
+  reply: '<path d="M6.5 4 2.5 8l4 4"/><path d="M2.5 8h6.5a4.5 4.5 0 0 1 4.5 4.5v.5"/>',
+  talk: '<path d="M3 4.5A1.5 1.5 0 0 1 4.5 3h7A1.5 1.5 0 0 1 13 4.5v5a1.5 1.5 0 0 1-1.5 1.5H7.5L4.5 13.5V11A1.5 1.5 0 0 1 3 9.5z"/>',
+};
+const ib = (icon: string, label: string, attrs: string, cls = "btn ib", tip = label) =>
+  `<button class="${cls}" ${attrs} title="${esc_(tip)}" aria-label="${esc_(label)}"><svg class="g" viewBox="0 0 16 16">${ICON[icon]}</svg></button>`;
+const seenBtn = (m: Mail, cls = "btn ib") => ib(unread(m) ? "read" : "unread", unread(m) ? t("mail.markRead") : t("mail.markUnread"),
+  `data-mail-seen="${unread(m) ? 1 : 0}" data-key="${esc_(mailKey(m))}"`, cls);
 
 function row(m: Mail, h: H) {
   const e = h.esc, p = h.projectOf(m);
   return `<div class="pr-row mail-row${unread(m) ? " unread" : ""}${h.open === mailKey(m) ? " sel" : ""}" data-mail-open="${e(mailKey(m))}">
     <div class="pr-main"><div class="pr-t">${e(m.subject || t("mail.noSubject"))}</div>
       <div class="pr-meta"><span>${e(sender(m))}</span>${p ? `<span>${e(h.projectLabel(p))}</span>` : ""}</div></div>
-    <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn mail-flip")}</div></div>`;
+    <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn ib mail-flip")}</div></div>`;
 }
 
 /** No account yet: what to do in three steps, and the way into the settings. The texts are the app's own. */
@@ -117,9 +130,10 @@ export const renderMailLink = (url: string, esc: (s: unknown) => string) => url
  *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
 export function renderMailDetail(m: Mail | undefined, body: MailBody | undefined, err: string, esc: (s: unknown) => string, textView = false): string {
   // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
-  const bar = `<div class="prd-bar"><span class="prd-grp"><button class="btn" data-pr-close title="${t("pr.close")}">×</button>${m ? seenBtn(m) : ""}`
-    + (body?.html ? `<button class="btn" data-mail-view>${textView ? t("mail.showMail") : t("mail.showText")}</button>` : "") + `</span>`
-    + (m ? `<span class="prd-grp end"><button class="btn" data-mail-chat="draft" title="${t("mail.draftTitle")}">${t("mail.draft")}</button><button class="btn primary" data-mail-chat="talk" title="${t("mail.talkTitle")}">${t("mail.talk")}</button></span>` : "") + `</div>`;
+  const bar = `<div class="prd-bar"><span class="prd-grp">${ib("close", t("pr.close"), "data-pr-close")}${m ? seenBtn(m) : ""}`
+    + (body?.html ? (textView ? ib("html", t("mail.showMail"), "data-mail-view") : ib("text", t("mail.showText"), "data-mail-view")) : "") + `</span>`
+    + (m ? `<span class="prd-grp end">${ib("reply", t("mail.draft"), 'data-mail-chat="draft"', "btn ib", `${t("mail.draft")}: ${t("mail.draftTitle")}`)}`
+      + `${ib("talk", t("mail.talk"), 'data-mail-chat="talk"', "btn ib primary", `${t("mail.talk")}: ${t("mail.talkTitle")}`)}</span>` : "") + `</div>`;
   if (!m) return bar + `<div class="meta">${t("mail.gone")}</div>`;
   const who = (l: Mail["from"]) => l.map(a => a.name ? `${esc(a.name)} <span class="count">${esc(a.email)}</span>` : esc(a.email)).join(", ");
   const loading = `<div class="mail-load"><span class="spin"></span>${t("mail.loadingBody")}</div><div class="skel">${[92, 100, 84, 96, 60, 0, 88, 72].map(w => `<i style="width:${w}%"></i>`).join("")}</div>`;
