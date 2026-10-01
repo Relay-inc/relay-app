@@ -1,0 +1,31 @@
+import { LitElement, html, css, nothing } from "lit";
+import { customElement } from "lit/decorators.js";
+import { tn } from "../../core/i18n";
+import { StoreController } from "../../core/store";
+import { tw } from "../../core/styles";
+import { ui } from "../../domain/ui";
+import { chat, dur } from "../../domain/chats/state";
+import type { Sub } from "../../domain/chats/state";
+import { toggleSubLog, toggleSubsDone } from "../../domain/chats/actions";
+import "./subagent-row";
+
+/** The agents of the open conversation above the composer, like the terminal lists them under the prompt: the running ones, and the finished ones folded away. */
+@customElement("relay-subagents")
+export class RelaySubagents extends LitElement {
+  static styles = [tw, css`:host{display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow-y:auto}`];
+  protected store = new StoreController(this);
+  private tick = 0;
+  // the running time of a working agent counts up every second
+  connectedCallback() { super.connectedCallback(); this.tick = window.setInterval(() => this.requestUpdate(), 1000); }
+  disconnectedCallback() { super.disconnectedCallback(); clearInterval(this.tick); }
+
+  private row = (a: Sub) => html`<relay-subagent-row ?running=${a.running} .description=${a.description} .meta=${[a.agentType, a.model].filter(Boolean).join(" · ")}
+    .tool=${a.tool ?? ""} .input=${a.input} .text=${a.text ?? ""} .log=${chat.subLog[a.id]}
+    .duration=${a.running ? dur((Date.now() - Date.parse(a.started_at)) / 1000) : dur((Date.parse(a.last_at) - Date.parse(a.started_at)) / 1000)}
+    @toggle=${() => toggleSubLog(a.id)}></relay-subagent-row>`;
+
+  render() {
+    const list = chat.subs[ui.sel] || [], run = list.filter(a => a.running), done = list.filter(a => !a.running);
+    return html`${run.map(this.row)}${done.length ? html`<button class="self-start px-[6px] py-[2px] rounded-md text-xs text-secondary hover:bg-fill hover:text-label" @click=${toggleSubsDone}>${tn("subs.done", done.length)}</button>${chat.subsOpen.has(ui.sel) ? done.map(this.row) : nothing}` : nothing}`;
+  }
+}

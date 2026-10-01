@@ -1,5 +1,0 @@
-:host{display:block}
-.perm code{font-family:var(--mono);font-size:12.5px}
-.perm pre{font-family:var(--mono);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--label)}
-.qh{font-size:15px;font-weight:600;color:var(--label)}
-.perm .other{font:inherit;font-size:13px;padding:6px 10px;border:1px solid var(--separator);border-radius:6px;background:var(--bg);color:var(--label)}
