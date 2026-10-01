@@ -1,7 +1,7 @@
 // Relay: a shell around the real Claude Code CLI. Every conversation is a `claude -p` process in
 // stream-json mode, in the vault, on the user's subscription (no API key). Permission requests and
 // Claude's questions come in through perm_server.py as files in the pending folder. Mail tools (mail/) are answered
-// by the app itself over the same stdin/stdout pipe, as the in-process MCP server `vaultmail`.
+// by the app itself over the same stdin/stdout pipe, as the in-process MCP server `relay-mail`.
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -234,7 +234,7 @@ struct App {
     path: String,                          // login-shell PATH, so Claude's tools find gh and node
     settings: Mutex<Value>,                // settings.json: vault, projects, overrides
     subs: Mutex<SubCache>,
-    mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the vaultmail tools
+    mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
 }
 
 /// Subagent rows per agent file (reparsed only when mtime or size changes), and per parent session
@@ -321,9 +321,11 @@ async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, Stri
 fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
 
 /// Tools no app session may call: mail only ever becomes a draft (hard wall) and the mailbox is never touched, so
-/// the whole Gmail connector goes, and in the app mail goes through vaultmail, never himalaya.
+/// the whole Gmail connector goes, and in the app mail goes through relay-mail, never himalaya.
 /// Enforced by the CLI at call time, before the app hears of it (scripts/pipe-check.py).
 const DENIED: [&str; 2] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)"];
+/// The mail tools run without a card, also once the session holds mail text: none can send, a draft only lands in Drafts.
+const MAIL_TOOLS: [&str; 5] = ["mcp__relay-mail__search", "mcp__relay-mail__read", "mcp__relay-mail__thread", "mcp__relay-mail__attachment", "mcp__relay-mail__save_draft"];
 
 /// What a session loses once it holds mail text, a stranger's words that may try to steer it: pushing, PRs, gh
 /// api and comments, Slack posts, calendar invites, agents, work handed to the cloud or to later, messages to other
@@ -341,9 +343,9 @@ fn taint(settings: &[Value], all_read: bool) -> [Value; 2] {
     deny.extend(DENIED.map(String::from)); // the flag layer may not keep the CLI's own denies, so they go along
     if !all_read { deny.push("Bash".into()); }
     deny.extend(settings.iter().flat_map(|s| s["permissions"]["allow"].as_array().into_iter().flatten())
-        .filter_map(|r| r.as_str()).filter(|r| !r.starts_with("mcp__vaultmail")).map(String::from));
+        .filter_map(|r| r.as_str()).filter(|r| !r.starts_with("mcp__relay-mail")).map(String::from));
     deny.sort(); deny.dedup();
-    [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"deny": deny}}}}),
+    [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"allow": MAIL_TOOLS, "deny": deny}}}}),
      json!({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})]
 }
 /// The settings a session in the vault loads that can allow tools, the user's and the vault's, shared and local,
@@ -366,7 +368,7 @@ fn write_taint(p: &mut Proc, vault: &str) {
 }
 /// The request that opens the pipe: which in-process MCP servers the app answers for.
 fn pipe_init(mail_on: bool) -> Value {
-    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": if mail_on { json!(["vaultmail"]) } else { json!([]) }}})
+    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": if mail_on { json!(["relay-mail"]) } else { json!([]) }}})
 }
 
 fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&str>, opts: (String, String), from_mail: bool) -> Result<Proc, String> {
@@ -375,12 +377,12 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
         "env": {"PENDING": pending_dir(app).to_string_lossy(), "PROJECT": project}}}});
     // the mail tools only when mail is on and an account is set up, answered by the app over this pipe
     let mail_on = { let s = state.settings.lock().unwrap(); s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() };
-    if mail_on { mcp["mcpServers"]["vaultmail"] = json!({"type": "sdk", "name": "vaultmail"}); }
+    if mail_on { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
     let dir = need_vault(state)?;
     let mut cmd = Command::new(claude_bin());
     cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
               "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-        .arg(mcp.to_string()).arg("--disallowedTools").args(DENIED).args(["-n", name]);
+        .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg("--disallowedTools").args(DENIED).args(["-n", name]);
     if !opts.0.is_empty() { cmd.args(["--model", &opts.0]); }
     if !opts.1.is_empty() { cmd.args(["--effort", &opts.1]); }
     if let Some(sid) = state.sids.lock().unwrap().get(project) { cmd.args(["--resume", sid]); }
@@ -407,7 +409,7 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
                     if rid.starts_with("taint") {
                         if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&p).filter(|x| x.child.id() == pid) { x.child.kill().ok(); }
                     }
-                    a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": format!("vaultmail ({rid}): {}", ev["response"]["error"])}})).ok();
+                    a.emit("claude", json!({"project": p, "event": {"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}})).ok();
                 }
                 continue;
             }
@@ -441,11 +443,11 @@ fn spawn(app: &AppHandle, state: &App, project: &str, name: &str, fork: Option<&
     Ok(proc)
 }
 
-/// A request from the CLI over the pipe. Only vaultmail's MCP messages are answered, a tool call runs off this
+/// A request from the CLI over the pipe. Only relay-mail's MCP messages are answered, a tool call runs off this
 /// reader thread so the conversation keeps streaming while IMAP works.
 fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
     let (rid, req) = (ev["request_id"].clone(), &ev["request"]);
-    if req["subtype"] != "mcp_message" || req["server_name"] != "vaultmail" {
+    if req["subtype"] != "mcp_message" || req["server_name"] != "relay-mail" {
         return pipe_reply(app, key, pid, json!({"subtype": "error", "request_id": rid, "error": "unsupported"}));
     }
     match mail::rpc(&req["message"]) {
@@ -1285,7 +1287,7 @@ mod mail_tests {
     #[test]
     fn sessions_can_never_send_mail() {
         // a session with mail text loses the user's allow rules (deny beats allow) and goes to default mode
-        let user = serde_json::json!({"permissions": {"allow": ["Bash(git push *)", "Bash(pandoc *)", "mcp__vaultmail__read", "mcp__pencil"]}});
+        let user = serde_json::json!({"permissions": {"allow": ["Bash(git push *)", "Bash(pandoc *)", "mcp__relay-mail__read", "mcp__pencil"]}});
         let [rules, mode] = super::taint(&[user.clone(), serde_json::json!({"hooks": {}})], true);
         let deny: Vec<&str> = rules["request"]["settings"]["permissions"]["deny"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
         for t in ["Bash(git push *)", "Bash(pandoc *)", "mcp__pencil", "Bash(git push*)", "Bash(gh api*)", "mcp__claude_ai_Google_Calendar__create_event",
@@ -1293,10 +1295,11 @@ mod mail_tests {
         assert!(!deny.contains(&"Bash"), "Bash stays when every settings file parsed");
         let [unread, _] = super::taint(&[user], false);
         assert!(unread["request"]["settings"]["permissions"]["deny"].as_array().unwrap().contains(&serde_json::json!("Bash")), "an unreadable settings file costs Bash");
-        assert!(!deny.iter().any(|d| d.starts_with("mcp__vaultmail")), "the mail tools themselves stay");
+        assert!(!deny.iter().any(|d| d.starts_with("mcp__relay-mail")), "the mail tools themselves stay");
+        assert_eq!(rules["request"]["settings"]["permissions"]["allow"], serde_json::json!(super::MAIL_TOOLS), "the mail tools need no card");
         assert_eq!((rules["request"]["subtype"].as_str(), mode["request"]["subtype"].as_str(), mode["request"]["mode"].as_str()),
                    (Some("apply_flag_settings"), Some("set_permission_mode"), Some("default")));
-        assert_eq!(super::pipe_init(true)["request"]["sdkMcpServers"], serde_json::json!(["vaultmail"]));
+        assert_eq!(super::pipe_init(true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
         assert_eq!(super::pipe_init(false)["request"]["sdkMcpServers"], serde_json::json!([]));
     }
     #[test]
