@@ -35,9 +35,9 @@ fn rel(root: &Path, p: &Path) -> String {
     r.to_string_lossy().into_owned()
 }
 
-/// Breadth-first search for a file called `name`, shallowest first. Skips hidden folders, archives and
-/// node_modules, does not follow symlinks (no loops), and stops after a few thousand folders.
-fn scan(root: &Path, name: &str) -> Option<PathBuf> {
+/// Breadth-first walk over the files, shallowest first, until `f` returns true. Skips hidden folders,
+/// archives and node_modules, does not follow symlinks (no loops), and stops after a few thousand folders.
+fn walk(root: &Path, mut f: impl FnMut(&Path, &str) -> bool) -> Option<PathBuf> {
     let mut queue = std::collections::VecDeque::from([(root.to_path_buf(), 0)]);
     let mut seen = 0;
     while let Some((dir, depth)) = queue.pop_front() {
@@ -47,13 +47,22 @@ fn scan(root: &Path, name: &str) -> Option<PathBuf> {
         let mut subs = vec![];
         for e in rd.flatten() {
             let (n, Ok(ft)) = (e.file_name().to_string_lossy().into_owned(), e.file_type()) else { continue };
-            if ft.is_file() && n == name { return Some(e.path()); }
+            if ft.is_file() && f(&e.path(), &n) { return Some(e.path()); }
             if ft.is_dir() && depth < 6 && !n.starts_with('.') && !["node_modules", "_archive"].contains(&n.as_str()) { subs.push(e.path()); }
         }
         subs.sort();
         queue.extend(subs.into_iter().map(|p| (p, depth + 1)));
     }
     None
+}
+fn scan(root: &Path, name: &str) -> Option<PathBuf> { walk(root, |_, n| n == name) }
+
+/// Every note in the vault, relative to it, so a conversation only links what is there.
+pub fn notes(vault: &str) -> (String, Vec<String>) {
+    let root = PathBuf::from(canon(vault));
+    let mut out = vec![];
+    walk(&root, |p, n| { if n.ends_with(".md") { out.push(rel(&root, p)); } false });
+    (root.to_string_lossy().into_owned(), out)
 }
 
 /// A note a conversation points at, as (path relative to the vault, its text). `target` is a path,
@@ -221,6 +230,7 @@ mod tests {
         assert_eq!(note(v, "Contexts/A/Plan"), ok);
         assert_eq!(note(v, &format!("{v}/Contexts/A/Plan.md")), ok);
         assert_eq!(note(v, "Plan"), ok); // a wikilink name
+        assert_eq!(notes(v).1, vec!["Contexts/A/Plan.md"]); // not the symlink, not secret.txt
         for bad in ["secret.txt", "../note-out/Out.md", "Link.md", out.join("Out.md").to_str().unwrap(), "Nope", "A/Nope", ""] {
             assert_eq!(note(v, bad), None, "{bad}");
         }

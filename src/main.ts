@@ -23,8 +23,22 @@ fillIcons();
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 // a vault note named in the text (a markdown link without a scheme, [[wikilink]], `path.md:12`) opens in the right panel
-const noteA = (target: string, inner: string) => `<a class="vlink" data-note="${esc(target)}">${inner}</a>`;
+// only notes that exist link: the vault's paths (vault_notes, refreshed with the snapshot) and their names for [[wikilinks]]
+let vaultRoot = "", notePaths = new Set<string>(), noteNames = new Set<string>();
+async function loadNotes() {
+  try {
+    const r = await invoke<{ root: string; notes: string[] }>("vault_notes");
+    vaultRoot = r.root; notePaths = new Set(r.notes); noteNames = new Set(r.notes.map(p => p.split("/").pop()!));
+  } catch { notePaths = new Set(); noteNames = new Set(); }
+}
 const noteOf = (s: string) => { try { s = decodeURI(s); } catch {} return s.replace(/[#|].*$/, "").replace(/:\d+(-\d+)?$/, "").trim(); };
+function noteKnown(target: string) {
+  let t = target;
+  for (const v of [vaultRoot, settings.vault]) if (v && t.startsWith(v.replace(/\/$/, "") + "/")) t = t.slice(v.replace(/\/$/, "").length + 1);
+  if (!/\.md$/i.test(t)) t += ".md";
+  return notePaths.has(t) || (!t.includes("/") && noteNames.has(t));
+}
+const noteA = (target: string, inner: string) => noteKnown(target) ? `<a class="vlink" data-note="${esc(target)}">${inner}</a>` : inner;
 const isNotePath = (s: string) => /\.md$/i.test(noteOf(s));
 marked.use({
   extensions: [{
@@ -704,7 +718,7 @@ function renderChat() {
     if (it.kind === "me") return (it.imgs?.length ? `<div class="mimgs">${thumbs(it.imgs)}</div>` : "")
       + (it.text ? `<div class="me">${esc(it.text).replace(/\n/g, "<br>")}</div>` : "");
     if (it.kind === "ai") return `<div class="ai">${md(it.text)}</div>`;
-    if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}${it.path && isNotePath(it.path) ? ` vlink" data-note="${esc(it.path)}` : ""}">${it.text}</div>`;
+    if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}${it.path && isNotePath(it.path) && noteKnown(noteOf(it.path)) ? ` vlink" data-note="${esc(it.path)}` : ""}">${it.text}</div>`;
     if (it.kind === "err") return `<div class="err">${esc(it.text)}</div>`;
     if (it.kind === "done") return `<div class="done">${glyph("check")}${esc(it.text)}</div>`;
     return `<div class="note">${esc(it.text)}</div>`;
@@ -1317,7 +1331,7 @@ async function refreshIcons() {
 let snapErr = "";
 async function loadSnapshot() {
   let err = "";
-  try { snap = await invoke("snapshot"); render(); } catch (e) { err = String(e); }
+  try { [snap] = await Promise.all([invoke("snapshot"), loadNotes()]); render(); } catch (e) { err = String(e); }
   if (err === snapErr) return;
   snapErr = err;
   if (err) console.error(err);
