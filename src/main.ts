@@ -686,7 +686,6 @@ function renderChat() {
     : '<svg class="i" viewBox="0 0 16 16"><path d="M8 13V3M4 7l4-4 4 4"/></svg>';
   // a switch restarts the process, so not while a turn runs
   for (const id of ["model", "effort"]) ($(id) as HTMLSelectElement).disabled = busy;
-  $("hint").textContent = busy ? t("hint.busy") : "";
   ($("c") as HTMLTextAreaElement).placeholder = T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general");
   if (atBottom) log.scrollTop = log.scrollHeight;
 }
@@ -1127,7 +1126,19 @@ window.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   if (!$("zoom").hidden) { e.preventDefault(); $("zoom").hidden = true; }
   else if (prOpen && $("pop").hidden && !(e.target as HTMLElement).closest("input, textarea, select")) { e.preventDefault(); closePr(); }
+  else if (status[sel] === "busy" && $("pop").hidden && $("qk").hidden && !(e.target as HTMLElement).closest(".search, #ct, select")) escStop(e);
 });
+// Escape on a running turn: the first press warns, a second within 2s stops it like the stop button
+let escAt = 0;
+function escStop(e: KeyboardEvent) {
+  e.preventDefault();
+  const el = $("toast");
+  clearTimeout(toastTimer);
+  if (Date.now() - escAt < 2000) { escAt = 0; el.hidden = true; stopChat(); return; }
+  escAt = Date.now();
+  el.textContent = t("toast.escStop"); el.hidden = false;
+  toastTimer = window.setTimeout(() => { el.hidden = true; }, 2000);
+}
 // a PR row, in the list or in a project's PR tab, opens the PR in the right panel
 document.addEventListener("click", e => {
   const el = e.target as HTMLElement;
