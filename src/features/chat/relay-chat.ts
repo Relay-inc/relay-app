@@ -10,6 +10,7 @@ import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
 import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
 import { vault, projectLabel } from "../../domain/vault";
+import { contextTint } from "../../domain/sidebar";
 import "./chat-bar";
 import "./project-panel";
 import "../board/relay-board";
@@ -159,12 +160,19 @@ export class RelayChat extends LitElement {
     return html`<relay-conversation></relay-conversation>`;
   }
 
+  private get projectTint() {
+    const context = vault.snap.projects.find(project => project.name === this.projectName)?.context;
+    return context ? contextTint(context) : "";
+  }
+
   private renderBar() {
     const session = this.terminalSession;
     const projectName = this.projectName;
     return html`<relay-chat-bar
       .heading=${this.heading}
       .img=${!this.onView && projectName ? (vault.icons[projectName]?.img ?? "") : ""}
+      .tint=${this.projectTint}
+      .state=${chat.chats[this.selected] ? (chat.status[this.selected] ?? "idle") : ""}
       ?editable=${!this.onView}
       .sub=${this.subheading}
       .value=${session ? session.title : label(this.selected)}

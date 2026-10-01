@@ -24,6 +24,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - The right panel follows the redesign: it sits on the main background, the tabs span the full width, open items get round checkboxes, reminder dates colour by urgency, and pull requests show a state-coloured icon with the CI result as a dot
 
 - The settings window follows the redesign: a nav with ⌘1 to ⌘4 hints, Appearance as a segmented control, Accent as two swatches, and lists with icon tiles and chevrons
+
 - The redesign's palette: Relay blue for selection, primary buttons and what waits for you, cooler greys, raised cards with a soft shadow and 8px corners on buttons and fields. Settings › General › Accent switches to Graphite (the text colour) instead. The settings window uses the same palette as the main window now
 - Each integration in Settings › Integrations opens a page of its own instead of folding open in the list, with its connection on top and, for board integrations, the boards per vault project below. That part now lists only the vault projects that have a board, suggests boards whose name matches a project (one click, or Link all), and adds one with a project and a board picker instead of a dropdown for every project. Boards are grouped by workspace (#33)
 - Setting up Linear walks you through creating the API key in three steps, with a link to Linear's Security & access page and a Create key button next to the field; a pasted value that isn't a personal API key (lin_api_…) is caught before saving (#35)
