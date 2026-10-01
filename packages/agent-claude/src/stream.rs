@@ -26,6 +26,7 @@ pub fn parse(line: &str) -> Vec<Event> {
     let mut out = vec![];
     match ev["type"].as_str().unwrap_or("") {
         "system" if ev["subtype"] == "init" => if let Some(id) = ev["session_id"].as_str() { out.push(Event::Session { id: id.into() }); },
+        "conversation_reset" => out.push(Event::Reset),
         "assistant" => assistant(&ev["message"]["content"], &mut out),
         "user" => for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
             out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
@@ -89,9 +90,10 @@ mod tests {
         assert!(matches!(&ev[2], Event::ToolCall { id, name, input } if id == "toolu_1" && name == "Read" && input["file_path"] == "/v/a.md"));
         assert_eq!(ev[3], Event::ToolResult { id: "toolu_1".into(), error: false });
         assert_eq!(ev[4], Event::ToolResult { id: "toolu_2".into(), error: true });
-        assert!(matches!(&ev[5], Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(4200) } if u.input == 12 && u.cache_read == 300 && u.cost == Some(0.25)));
-        assert_eq!(ev[6], Event::TurnEnd { ok: false, error: Some("error_max_turns".into()), usage: None, duration_ms: None });
-        assert_eq!(ev.len(), 7); // blank text, rate-limit and unknown lines give nothing
+        assert_eq!(ev[5], Event::Reset);
+        assert!(matches!(&ev[6], Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(4200) } if u.input == 12 && u.cache_read == 300 && u.cost == Some(0.25)));
+        assert_eq!(ev[7], Event::TurnEnd { ok: false, error: Some("error_max_turns".into()), usage: None, duration_ms: None });
+        assert_eq!(ev.len(), 8); // blank text, rate-limit and unknown lines give nothing
     }
 
     #[test]
