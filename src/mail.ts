@@ -116,9 +116,10 @@ export const renderMailLink = (url: string, esc: (s: unknown) => string) => url
 /** One mail in the right panel: who, when, the mail, and the ways into a conversation. Headers show at once, the body loads.
  *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
 export function renderMailDetail(m: Mail | undefined, body: MailBody | undefined, err: string, esc: (s: unknown) => string, textView = false): string {
-  const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("pr.close")}">×</button>${m ? seenBtn(m) : ""}<span class="sp"></span>`
-    + (body?.html ? `<button class="btn" data-mail-view>${textView ? t("mail.showMail") : t("mail.showText")}</button>` : "")
-    + (m ? `<button class="btn" data-mail-chat="draft" title="${t("mail.draftTitle")}">${t("mail.draft")}</button><button class="btn primary" data-mail-chat="talk" title="${t("mail.talkTitle")}">${t("mail.talk")}</button>` : "") + `</div>`;
+  // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
+  const bar = `<div class="prd-bar"><span class="prd-grp"><button class="btn" data-pr-close title="${t("pr.close")}">×</button>${m ? seenBtn(m) : ""}`
+    + (body?.html ? `<button class="btn" data-mail-view>${textView ? t("mail.showMail") : t("mail.showText")}</button>` : "") + `</span>`
+    + (m ? `<span class="prd-grp end"><button class="btn" data-mail-chat="draft" title="${t("mail.draftTitle")}">${t("mail.draft")}</button><button class="btn primary" data-mail-chat="talk" title="${t("mail.talkTitle")}">${t("mail.talk")}</button></span>` : "") + `</div>`;
   if (!m) return bar + `<div class="meta">${t("mail.gone")}</div>`;
   const who = (l: Mail["from"]) => l.map(a => a.name ? `${esc(a.name)} <span class="count">${esc(a.email)}</span>` : esc(a.email)).join(", ");
   const loading = `<div class="mail-load"><span class="spin"></span>${t("mail.loadingBody")}</div><div class="skel">${[92, 100, 84, 96, 60, 0, 88, 72].map(w => `<i style="width:${w}%"></i>`).join("")}</div>`;
