@@ -2,12 +2,12 @@ import { css, html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { emit } from "../../core/dom";
-import { btn, IB, ic } from "./blocks";
+import { buttonClass, BUTTON_GLYPH, appIcon } from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
-import type { Tpl } from "./types";
+import type { Renderable } from "./types";
 
-export type MenuItem = { id: string; ico?: Tpl; name: Tpl; state?: Tpl };
+export type MenuItem = { id: string; icon?: Renderable; name: Renderable; status?: Renderable };
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -42,56 +42,64 @@ export class SettingsMenu extends SettingsElement {
   @property({ attribute: false }) items: MenuItem[] = [];
   @state() private shown = false;
 
-  private away = (e: MouseEvent) => {
+  private closeOnOutside = (e: MouseEvent) => {
     if (this.shown && !e.composedPath().includes(this)) this.shown = false;
   };
   override connectedCallback() {
     super.connectedCallback();
-    window.addEventListener("click", this.away);
+    window.addEventListener("click", this.closeOnOutside);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener("click", this.away);
+    window.removeEventListener("click", this.closeOnOutside);
   }
 
   // nothing to offer: not even a flex gap for the host
   override willUpdate() {
     this.toggleAttribute("hidden", !this.items.length);
   }
+
+  private pick(item: MenuItem) {
+    this.shown = false;
+    emit(this, "menu-pick", item.id);
+  }
+
+  private renderItem(item: MenuItem) {
+    const icon = item.icon
+      ? html`<span class="mt-px grid size-4 flex-none place-items-center">${item.icon}</span>`
+      : nothing;
+    return html`<button
+      class="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-s-hover focus-visible:bg-s-hover focus-visible:outline-none"
+      @click=${() => this.pick(item)}
+    >
+      ${icon}<span class="grid min-w-0 gap-0.5"
+        ><b class="text-sm font-medium">${item.name}</b>${item.status ?? nothing}</span
+      >
+    </button>`;
+  }
+
+  private renderPanel() {
+    if (!this.shown) return nothing;
+    const side = this.up ? "bottom-8 left-0" : "top-8 right-0";
+    return html`<div
+      class="absolute z-0 grid w-75 gap-0.5 rounded-md border border-s-border bg-s-bg p-1 shadow-lg ${side}"
+    >
+      ${this.items.map(item => this.renderItem(item))}
+    </div>`;
+  }
+
   override render() {
     if (!this.items.length) return nothing;
     return html`<button
-        class=${this.label ? btn() : btn("plain", true)}
+        class=${this.label ? buttonClass() : buttonClass("plain", true)}
         @click=${() => {
           this.shown = !this.shown;
         }}
         title=${ifDefined(this.tip || undefined)}
         aria-expanded=${this.shown}
       >
-        ${this.label || ic("more", IB)}
+        ${this.label || appIcon("more", BUTTON_GLYPH)}
       </button>
-      ${
-        this.shown
-          ? html`<div
-              class="absolute z-0 grid w-75 gap-0.5 rounded-md border border-s-border bg-s-bg p-1 shadow-lg ${this.up ? "bottom-8 left-0" : "top-8 right-0"}"
-            >
-              ${this.items.map(
-                x =>
-                  html`<button
-                    class="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-s-hover focus-visible:bg-s-hover focus-visible:outline-none"
-                    @click=${() => {
-                      this.shown = false;
-                      emit(this, "menu-pick", x.id);
-                    }}
-                  >
-                    ${x.ico ? html`<span class="mt-px grid size-4 flex-none place-items-center">${x.ico}</span>` : nothing}<span
-                      class="grid min-w-0 gap-0.5"
-                      ><b class="text-sm font-medium">${x.name}</b>${x.state ?? nothing}</span
-                    >
-                  </button>`,
-              )}
-            </div>`
-          : nothing
-      }`;
+      ${this.renderPanel()}`;
   }
 }

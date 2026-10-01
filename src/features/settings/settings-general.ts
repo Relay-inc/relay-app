@@ -4,7 +4,17 @@ import { emit } from "../../core/dom";
 import { t, th } from "../../core/i18n";
 import type { Key } from "../../core/locales/en";
 import type { MapKey, VaultMap, VaultStatus } from "../../domain/vault-setup";
-import { btn, field, foot, nc, OPT, sec, SELECT, sw, val } from "./blocks";
+import {
+  buttonClass,
+  field,
+  footer,
+  OPTIONAL_TEXT,
+  section,
+  SELECT,
+  toggleSwitch,
+  inputValue,
+  withoutColon,
+} from "./blocks";
 import "./settings-path";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
@@ -25,13 +35,23 @@ declare global {
 }
 
 // language names stay in their own language, so they are findable whatever the app is set to
-const LANG_OPTS = () => [
+const LANGUAGES = () => [
   ["system", t("set.system")],
   ["en", "English"],
   ["nl", "Nederlands"],
   ["fr", "Français"],
   ["de", "Deutsch"],
 ];
+
+type PathOptions = {
+  found?: boolean | null;
+  wide?: boolean;
+  readonly?: boolean;
+  placeholder?: string;
+  onInput?: (value: string) => void;
+  onChange?: () => void;
+  onPick: () => void;
+};
 
 /** General: the vault folder with its mapping, and the interface (language, favicons). */
 @customElement("relay-settings-general")
@@ -40,95 +60,106 @@ export class SettingsGeneral extends SettingsElement {
 
   @property({ type: Boolean, reflect: true }) active = false;
   @property({ attribute: false }) settings!: Settings;
-  @property({ attribute: false }) vs!: VaultStatus;
+  @property({ attribute: false }) vaultStatus!: VaultStatus;
   /** [key, only when the vault has one, required] per mapped file (src/domain/vault-setup.ts KEYS) */
   @property({ attribute: false }) keys: [MapKey, boolean, boolean][] = [];
   /** The result of the last save */
-  @property() msg = "";
+  @property() message = "";
   @property({ type: Boolean }) ok = false;
   // the vault mapping as it is being edited, bound to the inputs
   private map!: VaultMap;
 
   override willUpdate(changed: Map<string, unknown>) {
-    if (changed.has("vs")) this.map = { ...this.vs.map };
+    if (changed.has("vaultStatus")) this.map = { ...this.vaultStatus.map };
   }
 
-  private trimmed(): VaultMap {
-    return Object.fromEntries(this.keys.map(([k]) => [k, this.map[k].trim()])) as VaultMap;
+  private trimmedMap(): VaultMap {
+    return Object.fromEntries(this.keys.map(([key]) => [key, this.map[key].trim()])) as VaultMap;
   }
-  private path(
-    value: string,
-    tip: string,
-    o: {
-      found?: boolean | null;
-      wide?: boolean;
-      readonly?: boolean;
-      placeholder?: string;
-      input?: (v: string) => void;
-      change?: () => void;
-      pick: () => void;
-    },
-  ) {
+
+  private renderPath(value: string, tip: string, options: PathOptions) {
+    const { found, wide, readonly, placeholder, onInput, onChange, onPick } = options;
     return html`<relay-settings-path
       .value=${value}
       .tip=${tip}
-      .found=${o.found ?? null}
-      ?wide=${o.wide}
-      ?readonly=${o.readonly}
-      .placeholder=${o.placeholder ?? ""}
-      .foundTip=${o.found == null ? "" : t(o.found ? "vault.found" : "vault.missing")}
+      .found=${found ?? null}
+      ?wide=${wide}
+      ?readonly=${readonly}
+      .placeholder=${placeholder ?? ""}
+      .foundTip=${found == null ? "" : t(found ? "vault.found" : "vault.missing")}
       .pickTip=${t("vault.pickPath")}
-      @path-input=${(e: CustomEvent<string>) => o.input?.(e.detail)}
-      @path-change=${() => o.change?.()}
-      @path-pick=${o.pick}
+      @path-input=${(e: CustomEvent<string>) => onInput?.(e.detail)}
+      @path-change=${() => onChange?.()}
+      @path-pick=${onPick}
     ></relay-settings-path>`;
   }
 
-  override render() {
-    const { vs, settings } = this;
-    const maps = this.keys.map(([k, , req]) =>
-      field(
-        html`${th(`vault.k.${k}` as Key)}${req ? nothing : html` <span class=${OPT}>${t("vault.optional")}</span>`}`,
-        this.path(this.map[k], vs.map[k], {
-          found: req || vs.map[k] ? vs.found[k] : null,
-          input: v => {
-            this.map[k] = v;
-          },
-          change: () => emit(this, "map-check", this.trimmed()),
-          pick: () => emit(this, "map-pick", { key: k, map: this.trimmed() }),
-        }),
-        { hint: th(`vault.h.${k}` as Key) },
-      ),
+  private renderMapping([key, , required]: [MapKey, boolean, boolean]) {
+    const { vaultStatus } = this;
+    const configured = vaultStatus.map[key];
+    const optionalTag = required ? nothing : html` <span class=${OPTIONAL_TEXT}>${t("vault.optional")}</span>`;
+    const path = this.renderPath(this.map[key], configured, {
+      found: required || configured ? vaultStatus.found[key] : null,
+      onInput: value => {
+        this.map[key] = value;
+      },
+      onChange: () => emit(this, "map-check", this.trimmedMap()),
+      onPick: () => emit(this, "map-pick", { key, map: this.trimmedMap() }),
+    });
+    return field(html`${th(`vault.k.${key}` as Key)}${optionalTag}`, path, { hint: th(`vault.h.${key}` as Key) });
+  }
+
+  private renderVaultFolder() {
+    const { vault } = this.vaultStatus;
+    const path = this.renderPath(vault, vault, {
+      wide: true,
+      readonly: true,
+      placeholder: t("vault.none"),
+      onPick: () => emit(this, "vault-pick"),
+    });
+    return section(withoutColon(t("set.vaultLabel")), path, { desc: th("set.vaultHelp") });
+  }
+
+  private renderFolders() {
+    const save = html`<button
+      class=${buttonClass("primary")}
+      @click=${() => emit(this, "folders-save", this.trimmedMap())}
+    >
+      ${t("set.save")}
+    </button>`;
+    return section(
+      t("set.sec.folders"),
+      this.keys.map(entry => this.renderMapping(entry)),
+      {
+        desc: th("vault.mapHelp"),
+        footer: footer(this.message, this.ok, save),
+      },
     );
-    return html`${sec(
-      nc(t("set.vaultLabel")),
-      this.path(vs.vault, vs.vault, {
-        wide: true,
-        readonly: true,
-        placeholder: t("vault.none"),
-        pick: () => emit(this, "vault-pick"),
-      }),
-      { desc: th("set.vaultHelp") },
-    )}
-    ${sec(t("set.sec.folders"), maps, { desc: th("vault.mapHelp"), foot: foot(this.msg, this.ok, html`<button class=${btn("primary")} @click=${() => emit(this, "folders-save", this.trimmed())}>${t("set.save")}</button>`) })}
-    ${sec(
-      t("set.sec.interface"),
-      html` ${field(
-        t("set.language"),
-        html`<select class=${SELECT} id="language" @change=${(e: Event) => emit(this, "language-change", val(e))}>
-          ${LANG_OPTS().map(
-            ([v, name]) => html`<option value=${v} ?selected=${(settings.language || "system") === v}>${name}</option>`,
-          )}
-        </select>`,
-        { id: "language", hint: th("set.languageHelp") },
-      )}
-      ${field(
-        t("set.faviconsOn"),
-        sw("favon", settings.favicons?.on !== false, e =>
-          emit(this, "favicons-change", (e.target as HTMLInputElement).checked),
-        ),
-        { id: "favon", hint: th("set.faviconsHelp") },
-      )}`,
-    )}`;
+  }
+
+  private renderLanguage() {
+    const current = this.settings.language || "system";
+    const choices = LANGUAGES().map(
+      ([code, name]) => html`<option value=${code} ?selected=${current === code}>${name}</option>`,
+    );
+    return field(
+      t("set.language"),
+      html`<select class=${SELECT} id="language" @change=${(e: Event) => emit(this, "language-change", inputValue(e))}>
+        ${choices}
+      </select>`,
+      { id: "language", hint: th("set.languageHelp") },
+    );
+  }
+
+  private renderFavicons() {
+    const toggle = toggleSwitch("favon", this.settings.favicons?.on !== false, e =>
+      emit(this, "favicons-change", (e.target as HTMLInputElement).checked),
+    );
+    return field(t("set.faviconsOn"), toggle, { id: "favon", hint: th("set.faviconsHelp") });
+  }
+
+  override render() {
+    return html`${this.renderVaultFolder()} ${this.renderFolders()}
+    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderFavicons()}`)}`;
   }
 }

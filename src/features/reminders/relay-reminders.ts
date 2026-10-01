@@ -11,17 +11,17 @@ import type { Draft } from "./reminder-form";
 import "./reminder-form";
 import "./reminder-row";
 
-const GROUPS: [Key, (d: number) => boolean][] = [
-  ["rem.late", d => d < 0],
-  ["rem.today", d => d === 0],
-  ["rem.tomorrow", d => d === 1],
-  ["rem.week", d => d >= 2 && d <= 7],
-  ["rem.later", d => d > 7],
+const GROUPS: [Key, (days: number) => boolean][] = [
+  ["rem.late", days => days < 0],
+  ["rem.today", days => days === 0],
+  ["rem.tomorrow", days => days === 1],
+  ["rem.week", days => days >= 2 && days <= 7],
+  ["rem.later", days => days > 7],
 ];
-const esc = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, char => `&#${char.charCodeAt(0)};`);
 
 // the new-reminder form is kept outside the element too, so a half-typed reminder survives switching views
-let saved: Draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
+let savedDraft: Draft = { open: false, text: "", date: "", project: "", repeat: "", err: "", busy: false };
 
 /** The reminders view: the new-reminder form, then the reminders grouped by when they are due. */
 @customElement("relay-reminders")
@@ -37,21 +37,22 @@ export class RelayReminders extends LitElement {
     `,
   ];
   protected store = new StoreController(this);
-  @state() private cal: string | null = null; // the row whose date picker is open
-  @state() private busy: string | null = null; // the row whose action is running
-  @state() private draft: Draft = saved;
-  private setDraft(p: Partial<Draft>) {
-    this.draft = saved = { ...saved, ...p };
+  @state() private calendarRow: string | null = null; // the row whose date picker is open
+  @state() private busyRow: string | null = null; // the row whose action is running
+  @state() private draft: Draft = savedDraft;
+
+  private setDraft(changes: Partial<Draft>) {
+    this.draft = savedDraft = { ...savedDraft, ...changes };
   }
 
-  private patch = (e: CustomEvent<Partial<Draft>>) => this.setDraft(e.detail);
+  private onDraftChange = (e: CustomEvent<Partial<Draft>>) => this.setDraft(e.detail);
 
-  private async add() {
-    const d = this.draft,
-      text = d.text.trim();
+  private async addReminder() {
+    const draft = this.draft;
+    const text = draft.text.trim();
     this.setDraft({ busy: true, err: "" });
     try {
-      await remAdd(text, d.date, d.project || null, d.repeat || null);
+      await remAdd(text, draft.date, draft.project || null, draft.repeat || null);
       this.setDraft({ open: false, text: "", date: "", project: "", repeat: "" });
     } catch (e) {
       this.setDraft({ err: String(e) });
@@ -59,51 +60,67 @@ export class RelayReminders extends LitElement {
     this.setDraft({ busy: false });
   }
 
-  private async run(id: string, action: "done" | "push", date?: string) {
-    this.busy = id;
-    this.cal = null;
+  private async runAction(id: string, action: "done" | "push", date?: string) {
+    this.busyRow = id;
+    this.calendarRow = null;
     try {
       await remAct(action, id, date);
     } finally {
-      this.busy = null;
+      this.busyRow = null;
     }
   }
 
-  private row(r: Reminder) {
+  private toggleCalendar(id: string) {
+    this.calendarRow = this.calendarRow === id ? null : id;
+  }
+
+  private renderRow(reminder: Reminder) {
+    const id = reminder.id;
     return html`<relay-reminder-row
-      .reminder=${r}
-      .label=${r.project ? projectLabel(r.project) : ""}
-      urgency=${urgency(r.days)}
-      ?busy=${this.busy === r.id}
-      ?cal=${this.cal === r.id}
-      @reminder-chat=${() => remChat(r.id)}
-      @reminder-done=${() => this.run(r.id, "done")}
-      @reminder-push=${(e: CustomEvent<{ id: string; date: string }>) => this.run(e.detail.id, "push", e.detail.date)}
-      @reminder-cal=${() => {
-        this.cal = this.cal === r.id ? null : r.id;
-      }}
+      .reminder=${reminder}
+      .label=${reminder.project ? projectLabel(reminder.project) : ""}
+      urgency=${urgency(reminder.days)}
+      ?busy=${this.busyRow === id}
+      ?cal=${this.calendarRow === id}
+      @reminder-chat=${() => remChat(id)}
+      @reminder-done=${() => this.runAction(id, "done")}
+      @reminder-push=${(e: CustomEvent<{ id: string; date: string }>) => this.runAction(e.detail.id, "push", e.detail.date)}
+      @reminder-cal=${() => this.toggleCalendar(id)}
     ></relay-reminder-row>`;
   }
 
-  override render() {
-    const all = reminders();
-    const groups = GROUPS.map(([name, f]) => {
-      const items = all.filter(r => f(r.days)).sort((a, b) => a.days - b.days);
-      return items.length
-        ? html`<section class="mb-6">
-            <h2 class="list-head">${t(name)} <span class="font-mono tabular-nums">${items.length}</span></h2>
-            ${items.map(r => this.row(r))}
-          </section>`
-        : nothing;
+  private renderGroup(name: Key, dueReminders: Reminder[]) {
+    if (!dueReminders.length) return nothing;
+    return html`<section class="mb-6">
+      <h2 class="list-head">${t(name)} <span class="font-mono tabular-nums">${dueReminders.length}</span></h2>
+      ${dueReminders.map(reminder => this.renderRow(reminder))}
+    </section>`;
+  }
+
+  private renderGroups(all: Reminder[]) {
+    if (!all.length) return html`<div class="text-secondary text-center py-6">${t("rem.none")}</div>`;
+    return GROUPS.map(([name, inGroup]) => {
+      const due = all.filter(reminder => inGroup(reminder.days)).sort((a, b) => a.days - b.days);
+      return this.renderGroup(name, due);
     });
+  }
+
+  // shown when the vault has no reminders file yet
+  private renderMissingFile() {
+    const vaultInfo = vault.snap.vault;
+    if (vaultInfo?.found?.reminders !== false) return nothing;
+    const path = raw(`<code class="font-mono">${escapeHtml(vaultInfo.map?.reminders ?? "")}</code>`);
+    return html`<div class="text-secondary mb-2.5">${th("rem.noFile", { path })}</div>`;
+  }
+
+  override render() {
     return html`<relay-reminder-form
         .draft=${this.draft}
         .projects=${projectsByLabel(currentLocale())}
-        @reminder-draft=${this.patch}
-        @reminder-add=${() => this.add()}
+        @reminder-draft=${this.onDraftChange}
+        @reminder-add=${() => this.addReminder()}
       ></relay-reminder-form>
-      ${vault.snap.vault?.found?.reminders === false ? html`<div class="text-secondary mb-2.5">${th("rem.noFile", { path: raw(`<code class="font-mono">${esc(vault.snap.vault?.map?.reminders ?? "")}</code>`) })}</div>` : nothing}
-      ${all.length ? groups : html`<div class="text-secondary text-center py-6">${t("rem.none")}</div>`}`;
+      ${this.renderMissingFile()} ${this.renderGroups(reminders())}`;
   }
 }
 

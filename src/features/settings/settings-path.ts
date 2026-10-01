@@ -3,7 +3,7 @@ import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
-import { ic, val } from "./blocks";
+import { appIcon, inputValue } from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 
@@ -55,14 +55,14 @@ export class SettingsPath extends SettingsElement {
         placeholder=${ifDefined(this.placeholder || undefined)}
         ?readonly=${this.readonly}
         spellcheck="false"
-        @input=${(e: Event) => emit(this, "path-input", val(e))}
+        @input=${(e: Event) => emit(this, "path-input", inputValue(e))}
         @change=${() => emit(this, "path-change")}
       /><button
         class="box-content grid h-7 w-8 flex-none place-items-center border-l border-s-border text-s-muted hover:bg-s-hover hover:text-s-fg focus-visible:ring-1 ring-inset ring-s-primary"
         @click=${() => emit(this, "path-pick")}
         title=${this.pickTip}
       >
-        ${ic("folder", "size-4 fill-none stroke-current stroke-2 glyph")}
+        ${appIcon("folder", "size-4 fill-none stroke-current stroke-2 glyph")}
       </button>
     </div>`;
   }

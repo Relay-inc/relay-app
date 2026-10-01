@@ -4,9 +4,9 @@ import { invoke } from "@tauri-apps/api/core";
 import { emit } from "../../core/dom";
 import { glyphSvg } from "../../core/icons";
 import { t, th } from "../../core/i18n";
-import { PROVIDERS, provider, type BoardProvider } from "../../domain/providers";
+import { PROVIDERS, provider as providerById, type BoardProvider } from "../../domain/providers";
 import { BoardsController } from "./board-controller";
-import { foot, ic, SEMPTY, sec, st, TILE } from "./blocks";
+import { footer, appIcon, EMPTY_LIST, formText, section, statusLine, TILE } from "./blocks";
 import { MailController } from "./mail-controller";
 import "./settings-board";
 import "./settings-fold";
@@ -25,9 +25,17 @@ declare global {
 }
 
 // a provider's 16×16 glyph on the 24×24 tile
-const pIcon = (p: BoardProvider) => glyphSvg(`<g transform="scale(1.5)">${p.glyph}</g>`, TILE, "0 0 24 24");
+const providerIcon = (provider: BoardProvider) =>
+  glyphSvg(`<g transform="scale(1.5)">${provider.glyph}</g>`, TILE, "0 0 24 24");
 
-type Entry = { id: string; ico: unknown; name: unknown; state: unknown; on: boolean; body: () => unknown };
+type Entry = {
+  id: string;
+  icon: unknown;
+  name: unknown;
+  status: unknown;
+  on: boolean;
+  body: () => unknown;
+};
 
 /** Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on), the others
  *  are in the Add menu. In the list means in the sidebar; Remove switches it off and keeps the token. The state of every
@@ -44,12 +52,12 @@ export class SettingsIntegrations extends SettingsElement {
   private boards = new BoardsController(this, this.form);
   private mail = new MailController(this);
   // GitHub: no token of our own, the app uses gh's login. The status is the account gh is signed in with
-  @state() private ghLogin = "";
-  @state() private ghErr = "";
-  @state() private ghMsg = "";
-  @state() private ghOk = false;
-  @state() private intMsg = "";
-  @state() private intOk = false;
+  @state() private githubLogin = "";
+  @state() private githubError = "";
+  @state() private githubMessage = "";
+  @state() private githubOk = false;
+  @state() private listMessage = "";
+  @state() private listOk = false;
   // which rows are folded open
   @state() private opened = new Set<string>();
 
@@ -59,216 +67,230 @@ export class SettingsIntegrations extends SettingsElement {
     this.boards.loadTokens().then(() => {
       this.loaded = true;
     });
-    this.ghCheck();
+    this.checkGithub();
   }
   override willUpdate() {
     if (this.active) this.boards.askMcp();
   }
 
   /** A change to the settings made here: kept, and reported to the window */
-  commit(s: Settings) {
-    this.settings = s;
-    emit(this, "settings-changed", s);
+  commit(settings: Settings) {
+    this.settings = settings;
+    emit(this, "settings-changed", settings);
   }
 
-  private fstr(id: string, d: unknown = "") {
-    const v = this.form[id];
-    return typeof v === "string" ? v : String(d ?? "");
-  }
-  private field = (e: CustomEvent<{ id: string; value: string | boolean }>) => {
+  private onBoardField = (e: CustomEvent<{ id: string; value: string | boolean }>) => {
     this.form[e.detail.id] = e.detail.value;
   };
 
-  private ghState() {
-    return st(
-      this.ghLogin ? "ok" : this.ghErr ? "warn" : "off",
-      this.ghLogin ? t("gh.connected", { login: this.ghLogin }) : this.ghErr || t("gh.checking"),
-    );
+  private githubStatus() {
+    if (this.githubLogin) return statusLine("ok", t("gh.connected", { login: this.githubLogin }));
+    return statusLine(this.githubError ? "warn" : "off", this.githubError || t("gh.checking"));
   }
-  private mailState() {
-    return st(this.mail.edit.accounts.length ? "ok" : "off", t("mail.accounts", { n: this.mail.edit.accounts.length }));
+  private mailStatus() {
+    const count = this.mail.edit.accounts.length;
+    return statusLine(count ? "ok" : "off", t("mail.accounts", { n: count }));
   }
-  private boardState(p: BoardProvider) {
-    const set = this.boards.setUp(p);
-    return !set && this.boards.mcp[p.id]?.found
-      ? st("warn", t("int.foundClaude"))
-      : st(set ? "ok" : "off", set ? t("int.set") : t("int.notSet"));
+  private boardStatus(provider: BoardProvider) {
+    const isSetUp = this.boards.setUp(provider);
+    if (!isSetUp && this.boards.mcp[provider.id]?.found) return statusLine("warn", t("int.foundClaude"));
+    return statusLine(isSetUp ? "ok" : "off", isSetUp ? t("int.set") : t("int.notSet"));
   }
-  private boardOn(p: BoardProvider) {
-    const on = this.settings.integrations[p.id]?.on;
-    return on === true || (on === undefined && !!this.boards.setUp(p));
+  private isBoardOn(provider: BoardProvider) {
+    const on = this.settings.integrations[provider.id]?.on;
+    return on === true || (on === undefined && !!this.boards.setUp(provider));
   }
 
-  // an integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain
-  private async switchTo(id: string, on: boolean) {
-    const o = new Set(this.opened);
-    if (on) o.add(id);
-    else o.delete(id);
-    this.opened = o;
+  private setOpen(id: string, open: boolean) {
+    const opened = new Set(this.opened);
+    if (open) opened.add(id);
+    else opened.delete(id);
+    this.opened = opened;
+  }
+
+  private settingsWithOn(id: string, on: boolean): Settings {
     const next = structuredClone(this.settings);
     if (id === "github") next.github.on = on;
     else if (id === "mail") next.mail = { ...next.mail, on };
     else next.integrations[id] = { ...next.integrations[id], on };
+    return next;
+  }
+
+  // an integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain
+  private async switchTo(id: string, on: boolean) {
+    this.setOpen(id, on);
     try {
-      this.commit(await invoke<Settings>("set_settings", { settings: next }));
+      this.commit(await invoke<Settings>("set_settings", { settings: this.settingsWithOn(id, on) }));
       if (id === "mail") this.mail.edit.on = on;
-      this.intMsg = "";
-      this.intOk = true;
-    } catch (x) {
-      this.intMsg = String(x);
-      this.intOk = false;
+      this.listMessage = "";
+      this.listOk = true;
+    } catch (error) {
+      this.listMessage = String(error);
+      this.listOk = false;
     }
   }
 
-  private async ghSave() {
-    const next = {
-      ...this.settings,
-      github: { ...this.settings.github, owners: this.fstr("ghowners", this.settings.github.owners).trim() },
-    };
+  private async saveGithub() {
+    const owners = formText(this.form, "ghowners", this.settings.github.owners).trim();
+    const next = { ...this.settings, github: { ...this.settings.github, owners } };
     try {
       this.commit(await invoke<Settings>("set_settings", { settings: next }));
       delete this.form.ghowners;
-      this.ghMsg = t("set.saved");
-      this.ghOk = true;
-    } catch (x) {
-      this.ghMsg = String(x);
-      this.ghOk = false;
+      this.githubMessage = t("set.saved");
+      this.githubOk = true;
+    } catch (error) {
+      this.githubMessage = String(error);
+      this.githubOk = false;
     }
   }
-  private async ghCheck() {
-    this.ghLogin = "";
-    this.ghErr = "";
+  private async checkGithub() {
+    this.githubLogin = "";
+    this.githubError = "";
     try {
-      this.ghLogin = await invoke<string>("github_status");
-    } catch (e) {
-      this.ghErr = String(e);
+      this.githubLogin = await invoke<string>("github_status");
+    } catch (error) {
+      this.githubError = String(error);
     }
   }
 
-  private boardBody(p: BoardProvider) {
-    const b = this.boards,
-      want = !!p.settings.allBoards && !!b.setUp(p);
-    const rows: BoardRow[] = (b.vaultProjects || []).map(vp => {
-      const cur = this.settings.boards?.[vp],
-        mine = cur?.provider === p.id;
+  // each vault project with the board of this provider it is on; a vault project has at most one board
+  private boardRows(provider: BoardProvider): BoardRow[] {
+    return (this.boards.vaultProjects || []).map(vaultProject => {
+      const current = this.settings.boards?.[vaultProject];
+      const isOurs = current?.provider === provider.id;
+      const otherProvider = current ? (providerById(current.provider)?.name ?? current.provider) : "";
       return {
-        vp,
-        none: mine || !cur ? t("kb.linkNone") : (provider(cur.provider)?.name ?? cur.provider),
-        board: mine ? cur.board : undefined,
+        vaultProject,
+        noneLabel: isOurs || !current ? t("kb.linkNone") : otherProvider,
+        board: isOurs ? current.board : undefined,
       };
     });
+  }
+
+  private boardBody(provider: BoardProvider) {
+    const boards = this.boards;
+    const id = provider.id;
     return html`<relay-settings-board
-      .provider=${p}
-      .cfg=${this.settings.integrations[p.id] || {}}
-      .hasToken=${!!b.tokens[p.id]}
+      .provider=${provider}
+      .config=${this.settings.integrations[id] || {}}
+      .hasToken=${!!boards.tokens[id]}
       .form=${{ ...this.form }}
-      .mcp=${b.mcp[p.id]}
-      .setUp=${!!b.setUp(p)}
-      .msg=${b.msgs[p.id]}
-      .wantBoards=${want}
-      .boards=${b.all[p.id]}
-      .rows=${rows}
-      @board-field=${this.field}
-      @board-save=${() => b.saveForm(p)}
-      @board-import=${() => b.import(p)}
-      @board-clear=${() => b.clear(p)}
-      @board-map=${(e: CustomEvent<{ vp: string; value: string }>) => b.map(p, e.detail.vp, e.detail.value)}
+      .mcp=${boards.mcp[id]}
+      .setUp=${!!boards.setUp(provider)}
+      .message=${boards.messages[id]}
+      .wantBoards=${!!provider.settings.allBoards && !!boards.setUp(provider)}
+      .boards=${boards.all[id]}
+      .rows=${this.boardRows(provider)}
+      @board-field=${this.onBoardField}
+      @board-save=${() => boards.saveForm(provider)}
+      @board-import=${() => boards.import(provider)}
+      @board-clear=${() => boards.clear(provider)}
+      @board-map=${(e: CustomEvent<{ vaultProject: string; value: string }>) =>
+        boards.map(provider, e.detail.vaultProject, e.detail.value)}
       @boards-load=${() => {
-        if (!b.all[p.id]) b.load(p);
+        if (!boards.all[id]) boards.load(provider);
       }}
     ></relay-settings-board>`;
   }
   private githubBody() {
     return html`<relay-settings-github
-      .owners=${this.fstr("ghowners", this.settings.github.owners)}
-      .msg=${this.ghMsg}
-      ?ok=${this.ghOk}
+      .owners=${formText(this.form, "ghowners", this.settings.github.owners)}
+      .message=${this.githubMessage}
+      ?ok=${this.githubOk}
       @owners-input=${(e: CustomEvent<string>) => {
         this.form.ghowners = e.detail;
       }}
-      @gh-recheck=${() => this.ghCheck()}
-      @gh-save=${() => this.ghSave()}
+      @gh-recheck=${() => this.checkGithub()}
+      @gh-save=${() => this.saveGithub()}
     ></relay-settings-github>`;
   }
   private mailBody() {
-    const m = this.mail;
+    const mail = this.mail;
     return html`<relay-settings-mail
-      .cfg=${{ ...m.edit }}
-      .fresh=${{ ...m.fresh }}
-      .tests=${{ ...m.tests }}
-      .busy=${m.busy}
-      .msg=${m.msg}
-      ?ok=${m.ok}
-      @mail-new=${(e: CustomEvent<{ key: keyof typeof m.fresh; value: string }>) => {
-        m.fresh[e.detail.key] = e.detail.value;
+      .config=${{ ...mail.edit }}
+      .newAccount=${{ ...mail.newAccount }}
+      .tests=${{ ...mail.tests }}
+      .busy=${mail.busy}
+      .message=${mail.message}
+      ?ok=${mail.ok}
+      @mail-new=${(e: CustomEvent<{ key: keyof typeof mail.newAccount; value: string }>) => {
+        mail.newAccount[e.detail.key] = e.detail.value;
       }}
       @mail-account=${(e: CustomEvent<string>) => {
-        m.edit.account = e.detail;
+        mail.edit.account = e.detail;
       }}
-      @mail-test=${(e: CustomEvent) => m.test(e.detail)}
-      @mail-drop=${(e: CustomEvent) => m.drop(e.detail)}
-      @mail-connect=${() => m.connect()}
-      @mail-add=${() => m.add()}
-      @mail-save=${() => m.save()}
+      @mail-test=${(e: CustomEvent) => mail.test(e.detail)}
+      @mail-drop=${(e: CustomEvent) => mail.drop(e.detail)}
+      @mail-connect=${() => mail.connect()}
+      @mail-add=${() => mail.add()}
+      @mail-save=${() => mail.save()}
     ></relay-settings-mail>`;
   }
 
-  override render() {
-    if (!this.loaded) return nothing;
-    const all: Entry[] = [
-      ...PROVIDERS.map(p => ({
-        id: p.id,
-        ico: pIcon(p),
-        name: p.name,
-        state: this.boardState(p),
-        on: this.boardOn(p),
-        body: () => this.boardBody(p),
-      })),
+  private entries(): Entry[] {
+    const boardEntries = PROVIDERS.map(provider => ({
+      id: provider.id,
+      icon: providerIcon(provider),
+      name: provider.name,
+      status: this.boardStatus(provider),
+      on: this.isBoardOn(provider),
+      body: () => this.boardBody(provider),
+    }));
+    return [
+      ...boardEntries,
       {
         id: "github",
-        ico: ic("gh", TILE),
+        icon: appIcon("gh", TILE),
         name: "GitHub",
-        state: this.ghState(),
+        status: this.githubStatus(),
         on: !!this.settings.github.on,
         body: () => this.githubBody(),
       },
       {
         id: "mail",
-        ico: ic("mail", TILE),
+        icon: appIcon("mail", TILE),
         name: "Mail",
-        state: this.mailState(),
+        status: this.mailStatus(),
         on: !!this.settings.mail?.on,
         body: () => this.mailBody(),
       },
     ];
-    const act = all.filter(x => x.on);
-    const row = (x: Entry) =>
-      html`<relay-settings-fold
-        ?open=${this.opened.has(x.id)}
-        .ico=${x.ico}
-        .name=${x.name}
-        .state=${x.state}
-        @fold-toggle=${() => {
-          const o = new Set(this.opened);
-          if (!o.delete(x.id)) o.add(x.id);
-          this.opened = o;
-        }}
-        @int-remove=${() => this.switchTo(x.id, false)}
-        >${this.opened.has(x.id) ? x.body() : nothing}</relay-settings-fold
-      >`;
-    return sec(
-      t("set.tab.integrations"),
-      act.length ? act.map(row) : html`<div class=${SEMPTY}>${t("int.empty")}</div>`,
-      {
-        desc: th("int.listHelp"),
-        list: true,
-        foot: this.intMsg ? foot(this.intMsg, this.intOk, nothing) : nothing,
-        action: html`<relay-settings-menu
-          .label=${t("int.add")}
-          .items=${all.filter(x => !x.on).map(x => ({ id: x.id, ico: x.ico, name: x.name, state: x.state }))}
-          @menu-pick=${(e: CustomEvent<string>) => this.switchTo(e.detail, true)}
-        ></relay-settings-menu>`,
-      },
-    );
+  }
+
+  private renderEntry(entry: Entry) {
+    const open = this.opened.has(entry.id);
+    return html`<relay-settings-fold
+      ?open=${open}
+      .icon=${entry.icon}
+      .name=${entry.name}
+      .status=${entry.status}
+      @fold-toggle=${() => this.setOpen(entry.id, !open)}
+      @int-remove=${() => this.switchTo(entry.id, false)}
+      >${open ? entry.body() : nothing}</relay-settings-fold
+    >`;
+  }
+
+  private renderAddMenu(unused: Entry[]) {
+    const items = unused.map(({ id, icon, name, status }) => ({ id, icon, name, status }));
+    return html`<relay-settings-menu
+      .label=${t("int.add")}
+      .items=${items}
+      @menu-pick=${(e: CustomEvent<string>) => this.switchTo(e.detail, true)}
+    ></relay-settings-menu>`;
+  }
+
+  override render() {
+    if (!this.loaded) return nothing;
+    const entries = this.entries();
+    const listed = entries.filter(entry => entry.on);
+    const rows = listed.length
+      ? listed.map(entry => this.renderEntry(entry))
+      : html`<div class=${EMPTY_LIST}>${t("int.empty")}</div>`;
+    return section(t("set.tab.integrations"), rows, {
+      desc: th("int.listHelp"),
+      list: true,
+      footer: this.listMessage ? footer(this.listMessage, this.listOk, nothing) : nothing,
+      action: this.renderAddMenu(entries.filter(entry => !entry.on)),
+    });
   }
 }

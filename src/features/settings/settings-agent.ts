@@ -4,7 +4,7 @@ import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
 import { at, ath, t } from "../../core/i18n";
 import type { AgentProvider, AgentStatus } from "../../domain/agents";
-import { btn, field, FIELD, HINT0, nc, PILL, SELECT, val } from "./blocks";
+import { buttonClass, field, FIELD, HINT_IN_ROW, withoutColon, PILL, SELECT, inputValue } from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 
@@ -25,52 +25,61 @@ export class SettingsAgent extends SettingsElement {
   static override styles = [tws];
 
   @property({ attribute: false }) status!: AgentStatus;
-  @property({ attribute: false }) cfg!: { on: boolean; bin: string; [opt: string]: unknown };
+  @property({ attribute: false }) config!: { on: boolean; bin: string; [opt: string]: unknown };
   /** The agent's own package: its help and options */
   @property({ attribute: false }) agent?: AgentProvider;
 
+  private renderCapabilities() {
+    const names = ["images", "permissions", "questions", "subagents", "terminal", "limits", "effort"] as const;
+    const pills = names
+      .filter(name => this.status.caps[name])
+      .map(name => html`<span class=${PILL}>${t(`ag.cap.${name}`)}</span>`);
+    return field(
+      withoutColon(t("ag.caps")),
+      html`<span class="flex max-w-2xs flex-wrap justify-end gap-1">${pills}</span>`,
+    );
+  }
+
+  private renderBin() {
+    const { status, config } = this;
+    const id = status.id;
+    const note = status.detect.note;
+    const input = html`<input
+      class=${FIELD}
+      id="agbin-${id}"
+      .value=${live(config.bin)}
+      placeholder=${t("ag.binPh", { bin: status.defaultBin })}
+      spellcheck="false"
+      @change=${(e: Event) => emit(this, "agent-bin", inputValue(e).trim())}
+    />`;
+    return field(withoutColon(t("ag.bin")), input, { id: `agbin-${id}`, hint: note ? html`<code>${note}</code>` : "" });
+  }
+
+  private renderOption(provider: AgentProvider, option: NonNullable<AgentProvider["options"]>[number]) {
+    const id = `agopt-${this.status.id}-${option.id}`;
+    const current = this.config[option.id] ?? option.choices[0].id;
+    const choices = option.choices.map(
+      choice =>
+        html`<option value=${choice.id} ?selected=${current === choice.id}>${at(provider, choice.label)}</option>`,
+    );
+    const select = html`<select
+      class=${SELECT}
+      id=${id}
+      @change=${(e: Event) => emit(this, "agent-option", { id: option.id, value: inputValue(e) })}
+    >
+      ${choices}
+    </select>`;
+    return field(at(provider, option.label), select, { id });
+  }
+
   override render() {
-    const { status: p, cfg, agent: ap } = this,
-      d = p.detect,
-      id = p.id;
-    const caps = (["images", "permissions", "questions", "subagents", "terminal", "limits", "effort"] as const)
-      .filter(c => p.caps[c])
-      .map(c => html`<span class=${PILL}>${t(`ag.cap.${c}`)}</span>`);
-    return html`${ap ? html`<p class=${HINT0}>${ath(ap, "set.help")}</p>` : nothing}
-      ${field(
-        nc(t("ag.bin")),
-        html`<input
-          class=${FIELD}
-          id="agbin-${id}"
-          .value=${live(cfg.bin)}
-          placeholder=${t("ag.binPh", { bin: p.defaultBin })}
-          spellcheck="false"
-          @change=${(e: Event) => emit(this, "agent-bin", val(e).trim())}
-        />`,
-        { id: `agbin-${id}`, hint: d.note ? html`<code>${d.note}</code>` : "" },
-      )}
-      ${(ap?.options ?? []).map(o =>
-        field(
-          at(ap!, o.label),
-          html`<select
-            class=${SELECT}
-            id="agopt-${id}-${o.id}"
-            @change=${(e: Event) => emit(this, "agent-option", { id: o.id, value: val(e) })}
-          >
-            ${o.choices.map(
-              c =>
-                html`<option value=${c.id} ?selected=${(cfg[o.id] ?? o.choices[0].id) === c.id}>
-                  ${at(ap!, c.label)}
-                </option>`,
-            )}
-          </select>`,
-          { id: `agopt-${id}-${o.id}` },
-        ),
-      )}
-      ${field(nc(t("ag.caps")), html`<span class="flex max-w-2xs flex-wrap justify-end gap-1">${caps}</span>`)}
+    const provider = this.agent;
+    return html`${provider ? html`<p class=${HINT_IN_ROW}>${ath(provider, "set.help")}</p>` : nothing}
+      ${this.renderBin()} ${(provider?.options ?? []).map(option => this.renderOption(provider!, option))}
+      ${this.renderCapabilities()}
       <div class="mt-0.5 flex flex-wrap items-center gap-2">
         <span class="flex-1"></span
-        ><button class=${btn("ghost")} @click=${() => emit(this, "agent-remove")}>${t("ag.remove")}</button>
+        ><button class=${buttonClass("ghost")} @click=${() => emit(this, "agent-remove")}>${t("ag.remove")}</button>
       </div>`;
   }
 }

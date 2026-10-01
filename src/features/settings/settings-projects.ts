@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { emit } from "../../core/dom";
 import { t, th, tn } from "../../core/i18n";
 import { iconFrom, isSite, loadIcons, setIcon, type IconKind, type ProjectIcon } from "../../domain/icons";
-import { btn, foot, OPT, projectIcon, sec, SEMPTY, ST } from "./blocks";
+import { buttonClass, footer, OPTIONAL_TEXT, projectIcon, section, EMPTY_LIST, STATUS_TEXT } from "./blocks";
 import "./settings-fold";
 import "./settings-project";
 import { SettingsElement } from "./settings-element";
@@ -31,12 +31,12 @@ export class SettingsProjects extends SettingsElement {
   @property({ type: Boolean, reflect: true }) active = false;
   @property({ attribute: false }) settings!: Settings;
   /** The result of the container's last save (a project's name) */
-  @property() msg = "";
+  @property() message = "";
   @property({ type: Boolean }) ok = false;
   // the project icons: every project, folded, to override
   @state() private icons: Record<string, ProjectIcon> | null = null;
   @state() private iconNames: string[] = [];
-  @state() private iconMsg = "";
+  @state() private iconMessage = "";
   @state() private iconOk = false;
   @state() private finding = false;
   @state() private repos: Record<string, string[]> = {};
@@ -49,7 +49,7 @@ export class SettingsProjects extends SettingsElement {
     super.connectedCallback();
     listen("icons-changed", () => {
       if (this.icons) this.load();
-    }).then(f => (this.unlisten = f));
+    }).then(unlisten => (this.unlisten = unlisten));
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
@@ -63,152 +63,183 @@ export class SettingsProjects extends SettingsElement {
   }
 
   private async load() {
-    const [i, snap, rp] = await Promise.all([
+    const [icons, snapshot, repos] = await Promise.all([
       loadIcons(),
       invoke<Snapshot>("snapshot").catch((): Pick<Snapshot, "projects"> => ({ projects: [] })),
       invoke<Record<string, string[]>>("project_repos").catch(() => ({})),
     ]);
-    this.icons = i;
-    this.repos = rp;
-    this.iconProjects = snap.projects || [];
-    this.iconNames = this.iconProjects.map(x => String(x.name)).sort((a, b) => a.localeCompare(b));
+    this.icons = icons;
+    this.repos = repos;
+    this.iconProjects = snapshot.projects || [];
+    this.iconNames = this.iconProjects.map(project => String(project.name)).sort((a, b) => a.localeCompare(b));
   }
+
   // what the icon is now, under the icon line
-  private iconHint(n: string) {
-    const i = this.icons?.[n];
-    if (!i) return t("pi.guess");
-    if (i.img) return t("pi.image");
-    if (i.icon) return t("pi.emoji");
-    if (isSite(i.value))
-      return this.settings.favicons?.tried?.[n] === i.value
-        ? t("pi.siteNoIcon", { site: i.value })
-        : t("pi.siteSoon", { site: i.value });
-    return t("pi.noIcon");
+  private iconHint(project: string) {
+    const icon = this.icons?.[project];
+    if (!icon) return t("pi.guess");
+    if (icon.img) return t("pi.image");
+    if (icon.icon) return t("pi.emoji");
+    if (!isSite(icon.value)) return t("pi.noIcon");
+    const faviconTried = this.settings.favicons?.tried?.[project] === icon.value;
+    return faviconTried ? t("pi.siteNoIcon", { site: icon.value }) : t("pi.siteSoon", { site: icon.value });
   }
-  private async setRepos(project: string, list: string[]) {
+
+  private async setRepos(project: string, repos: string[]) {
     try {
-      await invoke("set_project_repos", { project, repos: list });
-      this.iconMsg = "";
+      await invoke("set_project_repos", { project, repos });
+      this.iconMessage = "";
       this.iconOk = true;
       this.repos = await invoke<Record<string, string[]>>("project_repos");
-    } catch (x) {
-      this.iconMsg = String(x);
+    } catch (error) {
+      this.iconMessage = String(error);
       this.iconOk = false;
     }
   }
+
   // Find icons: Claude looks up the website of every project without an icon (or set to none), its favicon follows
   private async findIcons() {
-    const targets = this.iconProjects.filter(p => {
-      const i = this.icons?.[p.name];
-      return !i || i.value === "";
+    const targets = this.iconProjects.filter(project => {
+      const icon = this.icons?.[project.name];
+      return !icon || icon.value === "";
     });
     if (!targets.length) {
-      this.iconMsg = t("pi.findNone");
+      this.iconMessage = t("pi.findNone");
       this.iconOk = true;
       return;
     }
     this.finding = true;
-    this.iconMsg = "";
+    this.iconMessage = "";
     try {
-      const found = await invoke<Record<string, string>>("find_icon_sites", {
-        projects: targets.map(p => ({ name: p.name, context: p.context ?? "", summary: p.summary ?? "" })),
+      const sites = await invoke<Record<string, string>>("find_icon_sites", {
+        projects: targets.map(project => ({
+          name: project.name,
+          context: project.context ?? "",
+          summary: project.summary ?? "",
+        })),
       });
-      for (const [n, site] of Object.entries(found)) await setIcon(n, "site", site);
-      const n = Object.keys(found).length;
-      this.iconMsg = n ? t("pi.found", { n, total: targets.length }) : t("pi.findNone");
+      for (const [name, site] of Object.entries(sites)) await setIcon(name, "site", site);
+      const found = Object.keys(sites).length;
+      this.iconMessage = found ? t("pi.found", { n: found, total: targets.length }) : t("pi.findNone");
       this.iconOk = true;
-    } catch (x) {
-      this.iconMsg = String(x);
+    } catch (error) {
+      this.iconMessage = String(error);
       this.iconOk = false;
     }
     this.finding = false;
   }
+
   // the backend emits icons-changed, which reloads the pane
-  private async iconSet(project: string, kind: IconKind, value = "") {
+  private async setProjectIcon(project: string, kind: IconKind, value = "") {
     try {
       await setIcon(project, kind, value);
-      this.iconMsg = "";
+      this.iconMessage = "";
       this.iconOk = true;
-    } catch (x) {
-      this.iconMsg = String(x);
+    } catch (error) {
+      this.iconMessage = String(error);
       this.iconOk = false;
     }
-  }
-  private async iconFile(project: string, f: File) {
-    const u = await iconFrom(f);
-    if (u) await this.iconSet(project, "img", u);
-    else {
-      this.iconMsg = t("img.unreadable");
-      this.iconOk = false;
-    }
-  }
-  private label(n: string, l: string) {
-    const next = structuredClone(this.settings);
-    if (l) next.projects[n] = { ...next.projects[n], label: l };
-    else delete next.projects[n];
-    emit(this, "save-settings", { settings: next, done: "" });
-  }
-  private toggle(key: string) {
-    const o = new Set(this.opened);
-    if (!o.delete(key)) o.add(key);
-    this.opened = o;
   }
 
-  private row(n: string) {
-    const { icons, settings, repos } = this,
-      i = icons![n];
-    const l = settings.projects[n]?.label,
-      ctx = this.iconProjects.find(p => p.name === n)?.context ?? "";
+  private async setIconFromFile(project: string, file: File) {
+    const dataUrl = await iconFrom(file);
+    if (dataUrl) {
+      await this.setProjectIcon(project, "img", dataUrl);
+      return;
+    }
+    this.iconMessage = t("img.unreadable");
+    this.iconOk = false;
+  }
+
+  private setLabel(project: string, label: string) {
+    const next = structuredClone(this.settings);
+    if (label) next.projects[project] = { ...next.projects[project], label };
+    else delete next.projects[project];
+    emit(this, "save-settings", { settings: next, done: "" });
+  }
+
+  private toggle(project: string) {
+    const opened = new Set(this.opened);
+    if (!opened.delete(project)) opened.add(project);
+    this.opened = opened;
+  }
+
+  // what the single icon input does with what was typed: nothing is reset, a website is a site, else an emoji
+  private onIconText(project: string, text: string) {
+    if (!text) return this.setProjectIcon(project, "reset", text);
+    return this.setProjectIcon(project, isSite(text) ? "site" : "emoji", text);
+  }
+
+  private renderProjectBody(name: string, icon: ProjectIcon | undefined) {
+    const label = this.settings.projects[name]?.label;
     // one input for an emoji or a website; the buttons for an image, none and guessing again
-    const v = i?.icon ?? (i && isSite(i.value) ? i.value : "");
+    const iconText = icon?.icon ?? (icon && isSite(icon.value) ? icon.value : "");
+    return html`<relay-settings-project
+      .name=${name}
+      .label=${label ?? ""}
+      .icon=${icon}
+      .iconText=${iconText}
+      .iconHint=${this.iconHint(name)}
+      .repos=${this.repos[name] ?? []}
+      @label-change=${(e: CustomEvent<string>) => this.setLabel(name, e.detail)}
+      @icon-text=${(e: CustomEvent<string>) => this.onIconText(name, e.detail)}
+      @icon-file=${(e: CustomEvent<File>) => this.setIconFromFile(name, e.detail)}
+      @icon-none=${() => this.setProjectIcon(name, "none")}
+      @icon-reset=${() => this.setProjectIcon(name, "reset")}
+      @repos-change=${(e: CustomEvent<string[]>) => this.setRepos(name, e.detail)}
+    ></relay-settings-project>`;
+  }
+
+  // the context of the project and how many repos it has
+  private renderSummary(name: string) {
+    const context = this.iconProjects.find(project => project.name === name)?.context ?? "";
+    const repoCount = this.repos[name]?.length;
+    const parts = [context, repoCount ? tn("pc.repoCount", repoCount) : ""].filter(Boolean);
+    return html`<span class=${STATUS_TEXT}>${parts.join(" · ")}</span>`;
+  }
+
+  private renderRow(name: string) {
+    const icon = this.icons![name];
+    const label = this.settings.projects[name]?.label;
+    const displayName = label ? html`${label} <span class="${OPTIONAL_TEXT} ml-1 font-normal">${name}</span>` : name;
+    const open = this.opened.has(name);
     return html`<relay-settings-fold
-      ?open=${this.opened.has(n)}
-      @fold-toggle=${() => this.toggle(n)}
-      .ico=${projectIcon(i, "row")}
-      .name=${l ? html`${l} <span class="${OPT} ml-1 font-normal">${n}</span>` : n}
-      .state=${html`<span class=${ST}>${[ctx, repos[n]?.length ? tn("pc.repoCount", repos[n].length) : ""].filter(Boolean).join(" · ")}</span>`}
+      ?open=${open}
+      @fold-toggle=${() => this.toggle(name)}
+      .icon=${projectIcon(icon, "row")}
+      .name=${displayName}
+      .status=${this.renderSummary(name)}
     >
-      ${
-        this.opened.has(n)
-          ? html`<relay-settings-project
-              .name=${n}
-              .label=${l ?? ""}
-              .icon=${i}
-              .iconText=${v}
-              .iconHint=${this.iconHint(n)}
-              .repos=${repos[n] ?? []}
-              @label-change=${(e: CustomEvent<string>) => this.label(n, e.detail)}
-              @icon-text=${(e: CustomEvent<string>) => this.iconSet(n, !e.detail ? "reset" : isSite(e.detail) ? "site" : "emoji", e.detail)}
-              @icon-file=${(e: CustomEvent<File>) => this.iconFile(n, e.detail)}
-              @icon-none=${() => this.iconSet(n, "none")}
-              @icon-reset=${() => this.iconSet(n, "reset")}
-              @repos-change=${(e: CustomEvent<string[]>) => this.setRepos(n, e.detail)}
-            ></relay-settings-project>`
-          : nothing
-      }
+      ${open ? this.renderProjectBody(name, icon) : nothing}
     </relay-settings-fold>`;
+  }
+
+  private renderFindButton() {
+    return html`<button
+      class=${buttonClass()}
+      @click=${() => this.findIcons()}
+      title=${t("pi.findHelp")}
+      ?disabled=${this.finding}
+    >
+      ${this.finding ? html`<span class="spinner"></span> ${t("pi.finding")}` : t("pi.find")}
+    </button>`;
   }
 
   override render() {
     if (!this.icons)
-      return sec(t("set.tab.projects"), html`<div class=${ST}><span class="spinner"></span>${t("pr.loading")}</div>`);
-    const m = this.iconMsg || this.msg;
-    return sec(
-      t("set.tab.projects"),
-      this.iconNames.length ? this.iconNames.map(n => this.row(n)) : html`<div class=${SEMPTY}>${t("set.none")}</div>`,
-      {
-        desc: th("pc.desc"),
-        list: true,
-        foot: m ? foot(m, this.iconMsg ? this.iconOk : this.ok, nothing) : nothing,
-        action: html`<button
-          class=${btn()}
-          @click=${() => this.findIcons()}
-          title=${t("pi.findHelp")}
-          ?disabled=${this.finding}
-        >
-          ${this.finding ? html`<span class="spinner"></span> ${t("pi.finding")}` : t("pi.find")}
-        </button>`,
-      },
-    );
+      return section(
+        t("set.tab.projects"),
+        html`<div class=${STATUS_TEXT}><span class="spinner"></span>${t("pr.loading")}</div>`,
+      );
+    const message = this.iconMessage || this.message;
+    const rows = this.iconNames.length
+      ? this.iconNames.map(name => this.renderRow(name))
+      : html`<div class=${EMPTY_LIST}>${t("set.none")}</div>`;
+    return section(t("set.tab.projects"), rows, {
+      desc: th("pc.desc"),
+      list: true,
+      footer: message ? footer(message, this.iconMessage ? this.iconOk : this.ok, nothing) : nothing,
+      action: this.renderFindButton(),
+    });
   }
 }

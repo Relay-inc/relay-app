@@ -31,8 +31,8 @@ export class BoardColumn extends LitElement {
       <div class="flex flex-col gap-1.5 min-h-7 overflow-y-auto">
         ${repeat(
           this.cards,
-          c => c.id,
-          c => html`<relay-board-card .card=${c}></relay-board-card>`,
+          card => card.id,
+          card => html`<relay-board-card .card=${card}></relay-board-card>`,
         )}
       </div>
     </div>`;

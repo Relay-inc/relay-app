@@ -2,7 +2,7 @@
 import type { Settings } from "../../domain/config";
 export type { Settings, MailAcct, MailCfg, AgentCfg } from "../../domain/config";
 /** A template to render, or text. */
-export type Tpl = unknown;
-export type Msg = { text: string; ok: boolean };
+export type Renderable = unknown;
+export type Message = { text: string; ok: boolean };
 /** What a page asks its container to save: the settings, and the message to show when it worked. */
 export type SaveSettings = { settings: Settings; done: string };

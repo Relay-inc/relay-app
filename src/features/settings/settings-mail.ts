@@ -2,13 +2,28 @@ import { html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
+import type { Key } from "../../core/locales/en";
 import { currentLocale, t, th } from "../../core/i18n";
-import { btn, CODE, ERRMSG, field, FIELD, foot, FOOT_ROW, HINT, HINT0, nc, OKMSG, SELECT, val } from "./blocks";
+import {
+  buttonClass,
+  CODE,
+  ERROR_MESSAGE,
+  field,
+  FIELD,
+  footer,
+  FOOTER_IN_ROW,
+  HINT,
+  HINT_IN_ROW,
+  withoutColon,
+  OK_MESSAGE,
+  SELECT,
+  inputValue,
+} from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
-import type { MailAcct, MailCfg, Msg } from "./types";
+import type { MailAcct, MailCfg, Message } from "./types";
 
-export type MailNew = { email: string; keychain_service: string; keychain_account: string; pw: string };
+export type MailNew = { email: string; keychain_service: string; keychain_account: string; password: string };
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -31,145 +46,189 @@ const PARA = `text-sm leading-normal ${CODE}`;
 const HINT_STEP = `mt-0.5 text-sm leading-normal text-s-faint ${CODE}`;
 const SUB = "mt-2 grid gap-0.5 border-t border-s-border pt-3";
 
+// the backend's errors we know what to do about, each with the text that says it
+const KNOWN_ERRORS: [RegExp, Key][] = [
+  [/^Login failed/, "mail.errLogin"],
+  [/No password in the keychain/, "mail.errNoPw"],
+  [/not approved in time/, "mail.errKeychain"],
+  [/Only Gmail/, "mail.errGmail"],
+  [/IMAP (connection|timeout|protocol)/, "mail.errNet"],
+];
+
 /** Mail's body in the integrations list: the accounts, and the steps to connect another. No password of our own either,
  *  the app reads the app password from the macOS keychain. Edits stay local until Save. */
 @customElement("relay-settings-mail")
 export class SettingsMail extends SettingsElement {
   static override styles = [tws];
 
-  @property({ attribute: false }) cfg!: MailCfg;
+  @property({ attribute: false }) config!: MailCfg;
   /** What sits in the add fields */
-  @property({ attribute: false }) fresh!: MailNew;
-  @property({ attribute: false }) tests: Record<string, Msg | "busy"> = {};
+  @property({ attribute: false }) newAccount!: MailNew;
+  @property({ attribute: false }) tests: Record<string, Message | "busy"> = {};
   /** "connect" or "advanced" while that step runs */
   @property() busy = "";
-  @property() msg = "";
+  @property() message = "";
   @property({ type: Boolean }) ok = false;
 
   // a backend error as what to do about it, with the raw message small below for when it is something else
-  private err(e: string) {
-    const k = /^Login failed/.test(e)
-      ? "mail.errLogin"
-      : /No password in the keychain/.test(e)
-        ? "mail.errNoPw"
-        : /not approved in time/.test(e)
-          ? "mail.errKeychain"
-          : /Only Gmail/.test(e)
-            ? "mail.errGmail"
-            : /IMAP (connection|timeout|protocol)/.test(e)
-              ? "mail.errNet"
-              : "";
-    return k
-      ? html`${t(k)}
-          <div class=${HINT}>${e}</div>`
-      : e;
+  private explainError(error: string) {
+    const known = KNOWN_ERRORS.find(([pattern]) => pattern.test(error));
+    if (!known) return error;
+    return html`${t(known[1])}
+      <div class=${HINT}>${error}</div>`;
   }
-  private input = (key: keyof MailNew) => (e: Event) => emit(this, "mail-new", { key, value: val(e) });
 
-  override render() {
-    const c = this.cfg,
-      mn = this.fresh;
-    const tr = (a: MailAcct) => {
-      const r = this.tests[a.email];
-      return r === "busy"
-        ? html`<span class="spinner"></span>`
-        : r
-          ? html`<span class=${r.ok ? OKMSG : ERRMSG}
-              >${r.ok ? t("mail.testOk", { n: Number((r.text.match(/\d+/) || ["0"])[0]).toLocaleString(currentLocale()) }) : this.err(r.text)}</span
-            >`
-          : nothing;
-    };
-    const busy = (k: string) =>
-      this.busy === k ? html`<span class="spinner"></span> ${t("mail.connecting")}` : nothing;
-    const accts = c.accounts.map(
-      a =>
-        html`<div class="group flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0">
-          <span class="min-w-0 flex-1"
-            ><b class="block truncate font-medium">${a.email}</b
-            ><span class="block truncate text-xs text-s-muted"
-              >${t("mail.inKeychain", { svc: a.keychain_service })}</span
-            ></span
-          >${tr(a)}
-          <span
-            class="flex items-center gap-1 opacity-0 transition-opacity duration-150 ease-in-out group-focus-within:opacity-100 group-hover:opacity-100"
-            ><button class=${btn()} @click=${() => emit(this, "mail-test", a)}>${t("mail.test")}</button
-            ><button class=${btn("ghost")} @click=${() => emit(this, "mail-drop", a)}>${t("mail.remove")}</button></span
-          >
-        </div>`,
-    );
-    const emailIn = (id: string) =>
-      field(
-        nc(t("mail.emailL")),
-        html`<input
-          class=${FIELD}
-          id=${id}
-          type="email"
-          .value=${live(mn.email)}
-          @input=${this.input("email")}
-          placeholder="naam@bedrijf.be"
-          spellcheck="false"
-          autocomplete="off"
-        />`,
-        { id, cls: "w-full" },
-      );
-    return html`<p class=${HINT0}>${t("mail.help")}</p>
-      ${
-        accts.length
-          ? html`<div class=${SUB}><b class="text-xs font-semibold">${t("mail.accountsH")}</b></div>
-              <div class="rounded-md border border-s-border px-3">${accts}</div>`
-          : nothing
-      }
-      ${
-        c.accounts.length > 1
-          ? field(
-              nc(t("mail.account")),
-              html`<select class=${SELECT} id="mailacct" @change=${(e: Event) => emit(this, "mail-account", val(e))}>
-                ${c.accounts.map(
-                  a =>
-                    html`<option value=${a.email} ?selected=${a.email === (c.account || c.accounts[0].email)}>
-                      ${a.email}
-                    </option>`,
-                )}
-              </select>`,
-              { id: "mailacct" },
-            )
-          : nothing
-      }
-      <div class=${FOOT_ROW}>
-        <button class=${btn("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button
-        >${foot(this.msg && (this.ok ? this.msg : this.err(this.msg)), this.ok, html`<button class=${btn("primary")} @click=${() => emit(this, "mail-save")}>${t("set.save")}</button>`)}
-      </div>
-      <div class=${SUB}>
-        <b class="text-xs font-semibold">${c.accounts.length ? t("mail.guideMore") : t("mail.guideH")}</b>
-      </div>
+  private onNewField = (key: keyof MailNew) => (e: Event) => emit(this, "mail-new", { key, value: inputValue(e) });
+
+  private renderTestResult(account: MailAcct) {
+    const result = this.tests[account.email];
+    if (result === "busy") return html`<span class="spinner"></span>`;
+    if (!result) return nothing;
+    if (!result.ok) return html`<span class=${ERROR_MESSAGE}>${this.explainError(result.text)}</span>`;
+    const mailCount = Number((result.text.match(/\d+/) || ["0"])[0]).toLocaleString(currentLocale());
+    return html`<span class=${OK_MESSAGE}>${t("mail.testOk", { n: mailCount })}</span>`;
+  }
+
+  private renderBusy(step: string) {
+    return this.busy === step ? html`<span class="spinner"></span> ${t("mail.connecting")}` : nothing;
+  }
+
+  private renderAccount(account: MailAcct) {
+    return html`<div class="group flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0">
+      <span class="min-w-0 flex-1"
+        ><b class="block truncate font-medium">${account.email}</b
+        ><span class="block truncate text-xs text-s-muted"
+          >${t("mail.inKeychain", { svc: account.keychain_service })}</span
+        ></span
+      >${this.renderTestResult(account)}
+      <span
+        class="flex items-center gap-1 opacity-0 transition-opacity duration-150 ease-in-out group-focus-within:opacity-100 group-hover:opacity-100"
+        ><button class=${buttonClass()} @click=${() => emit(this, "mail-test", account)}>${t("mail.test")}</button
+        ><button class=${buttonClass("ghost")} @click=${() => emit(this, "mail-drop", account)}>
+          ${t("mail.remove")}
+        </button></span
+      >
+    </div>`;
+  }
+
+  private renderAccounts() {
+    if (!this.config.accounts.length) return nothing;
+    return html`<div class=${SUB}><b class="text-xs font-semibold">${t("mail.accountsH")}</b></div>
+      <div class="rounded-md border border-s-border px-3">
+        ${this.config.accounts.map(account => this.renderAccount(account))}
+      </div>`;
+  }
+
+  // which account the app reads, when there are several
+  private renderAccountChoice() {
+    const { accounts, account } = this.config;
+    if (accounts.length < 2) return nothing;
+    const current = account || accounts[0].email;
+    const select = html`<select
+      class=${SELECT}
+      id="mailacct"
+      @change=${(e: Event) => emit(this, "mail-account", inputValue(e))}
+    >
+      ${accounts.map(
+        entry => html`<option value=${entry.email} ?selected=${entry.email === current}>${entry.email}</option>`,
+      )}
+    </select>`;
+    return field(withoutColon(t("mail.account")), select, { id: "mailacct" });
+  }
+
+  private renderEmailField(id: string) {
+    const input = html`<input
+      class=${FIELD}
+      id=${id}
+      type="email"
+      .value=${live(this.newAccount.email)}
+      @input=${this.onNewField("email")}
+      placeholder="naam@bedrijf.be"
+      spellcheck="false"
+      autocomplete="off"
+    />`;
+    return field(withoutColon(t("mail.emailL")), input, { id, classes: "w-full" });
+  }
+
+  private renderTextField(id: string, label: string, key: keyof MailNew, placeholder: string) {
+    const input = html`<input
+      class=${FIELD}
+      id=${id}
+      .value=${live(this.newAccount[key])}
+      @input=${this.onNewField(key)}
+      placeholder=${placeholder}
+      spellcheck="false"
+    />`;
+    return field(withoutColon(label), input, { id, classes: "w-full" });
+  }
+
+  private renderPasswordField() {
+    const input = html`<input
+      class=${FIELD}
+      id="mailpw"
+      type="password"
+      .value=${live(this.newAccount.password)}
+      @input=${this.onNewField("password")}
+      placeholder=${t("mail.pwPh")}
+      autocomplete="off"
+      spellcheck="false"
+    />`;
+    return field(withoutColon(t("mail.pwL")), input, { id: "mailpw", classes: "w-full" });
+  }
+
+  private renderSaveRow() {
+    const message = this.message && (this.ok ? this.message : this.explainError(this.message));
+    const save = html`<button class=${buttonClass("primary")} @click=${() => emit(this, "mail-save")}>
+      ${t("set.save")}
+    </button>`;
+    return html`<div class=${FOOTER_IN_ROW}>
+      <button class=${buttonClass("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button
+      >${footer(message, this.ok, save)}
+    </div>`;
+  }
+
+  private renderConnectSteps() {
+    const heading = this.config.accounts.length ? t("mail.guideMore") : t("mail.guideH");
+    return html`<div class=${SUB}><b class="text-xs font-semibold">${heading}</b></div>
       <div class=${STEP}>
         <b class="font-medium">${t("mail.step1H")}</b>
         <p class=${PARA}>${th("mail.step1")}</p>
-        <a class=${btn()} href="https://myaccount.google.com/apppasswords" target="_blank">${t("mail.step1Btn")}</a>
+        <a class=${buttonClass()} href="https://myaccount.google.com/apppasswords" target="_blank"
+          >${t("mail.step1Btn")}</a
+        >
         <p class=${HINT_STEP}>${th("mail.step1Hint")}</p>
       </div>
       <div class=${STEP}>
         <b class="font-medium">${t("mail.step2H")}</b>
-        ${emailIn("mailnew")}
-        ${field(nc(t("mail.pwL")), html`<input class=${FIELD} id="mailpw" type="password" .value=${live(mn.pw)} @input=${this.input("pw")} placeholder=${t("mail.pwPh")} autocomplete="off" spellcheck="false" />`, { id: "mailpw", cls: "w-full" })}
+        ${this.renderEmailField("mailnew")} ${this.renderPasswordField()}
         <div class="flex items-center gap-2">
-          <button class=${btn("primary")} @click=${() => emit(this, "mail-connect")} ?disabled=${!!this.busy}>
+          <button class=${buttonClass("primary")} @click=${() => emit(this, "mail-connect")} ?disabled=${!!this.busy}>
             ${t("mail.connect")}</button
-          >${busy("connect")}
+          >${this.renderBusy("connect")}
         </div>
         <p class=${HINT_STEP}>${th("mail.step2Hint")}</p>
+      </div>`;
+  }
+
+  // the same without the app password: an account whose password already sits in the keychain
+  private renderAdvanced() {
+    return html`<details class=${STEP} ?open=${!!this.newAccount.keychain_service}>
+      <summary class="font-medium">${t("mail.advH")}</summary>
+      <p class=${HINT_STEP}>${th("mail.adv")}</p>
+      ${this.renderEmailField("mailemail2")}
+      ${this.renderTextField("mailsvc", t("mail.svcL"), "keychain_service", "himalaya-weareantenna-imap")}
+      ${this.renderTextField("mailkacc", t("mail.kaccL"), "keychain_account", "weareantenna")}
+      <div class="flex items-center gap-2">
+        <button class=${buttonClass()} @click=${() => emit(this, "mail-add")} ?disabled=${!!this.busy}>
+          ${t("mail.addTest")}</button
+        >${this.renderBusy("advanced")}
       </div>
-      <details class=${STEP} ?open=${!!mn.keychain_service}>
-        <summary class="font-medium">${t("mail.advH")}</summary>
-        <p class=${HINT_STEP}>${th("mail.adv")}</p>
-        ${emailIn("mailemail2")}
-        ${field(nc(t("mail.svcL")), html`<input class=${FIELD} id="mailsvc" .value=${live(mn.keychain_service)} @input=${this.input("keychain_service")} placeholder="himalaya-weareantenna-imap" spellcheck="false" />`, { id: "mailsvc", cls: "w-full" })}
-        ${field(nc(t("mail.kaccL")), html`<input class=${FIELD} id="mailkacc" .value=${live(mn.keychain_account)} @input=${this.input("keychain_account")} placeholder="weareantenna" spellcheck="false" />`, { id: "mailkacc", cls: "w-full" })}
-        <div class="flex items-center gap-2">
-          <button class=${btn()} @click=${() => emit(this, "mail-add")} ?disabled=${!!this.busy}>
-            ${t("mail.addTest")}</button
-          >${busy("advanced")}
-        </div>
-      </details>`;
+    </details>`;
+  }
+
+  override render() {
+    return html`<p class=${HINT_IN_ROW}>${t("mail.help")}</p>
+      ${this.renderAccounts()} ${this.renderAccountChoice()} ${this.renderSaveRow()} ${this.renderConnectSteps()}
+      ${this.renderAdvanced()}`;
   }
 }

@@ -4,7 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { t } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import type { BoardProvider, Opt } from "../../domain/providers";
+import type { BoardProvider, Card, Column, Opt } from "../../domain/providers";
 import {
   boards,
   boardState,
@@ -17,20 +17,19 @@ import {
   linkedProject,
   linkBoard,
 } from "../../domain/board";
+import type { CardGrab } from "./board-card";
 import "./board-column";
 
-type Drag = {
-  id: string;
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
-  w: number;
-  on: boolean;
-  px: number;
-  py: number;
-  over?: string;
+/** A card being pressed or dragged: where the pointer started and is now, and the column it hovers. `moving` once it has left the click tolerance. */
+type Drag = CardGrab & {
+  moving: boolean;
+  currentX: number;
+  currentY: number;
+  overColumn?: string;
 };
+
+// a press that moves less than this many pixels is a click, not a drag
+const DRAG_THRESHOLD = 5;
 
 /** A provider's board as a kanban: the head row (pickers, link to a vault project, reload) and the columns. Dragging a card to another column moves it in the tracker. */
 @customElement("relay-board")
@@ -50,109 +49,150 @@ export class RelayBoard extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    window.addEventListener("pointermove", this.onMove);
-    window.addEventListener("pointerup", this.onUp);
+    window.addEventListener("pointermove", this.onPointerMove);
+    window.addEventListener("pointerup", this.onPointerUp);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener("pointermove", this.onMove);
-    window.removeEventListener("pointerup", this.onUp);
+    window.removeEventListener("pointermove", this.onPointerMove);
+    window.removeEventListener("pointerup", this.onPointerUp);
     this.drag = null;
     document.body.classList.remove("reordering");
   }
 
   // load when shown, and again once resetBoard (new credentials, a new language) has cleared what was known
-  override willUpdate(ch: PropertyValues) {
-    if (this.provider && (ch.has("provider") || !boards.states.has(this.provider.id))) showBoard(this.provider);
+  override willUpdate(changed: PropertyValues) {
+    if (this.provider && (changed.has("provider") || !boards.states.has(this.provider.id))) showBoard(this.provider);
   }
 
-  private onDown = (e: CustomEvent<{ id: string; x: number; y: number; dx: number; dy: number; w: number }>) => {
-    const { id, x, y, dx, dy, w } = e.detail;
-    this.drag = { id, x, y, dx, dy, w, on: false, px: x, py: y };
+  private onGrab = (e: CustomEvent<CardGrab>) => {
+    this.drag = { ...e.detail, moving: false, currentX: e.detail.pointerX, currentY: e.detail.pointerY };
   };
-  private onMove = (e: PointerEvent) => {
-    const d = this.drag;
-    if (!d) return;
-    if (!d.on) {
-      if (Math.hypot(e.clientX - d.x, e.clientY - d.y) < 5) return;
+
+  private onPointerMove = (e: PointerEvent) => {
+    const drag = this.drag;
+    if (!drag) return;
+    if (!drag.moving) {
+      if (Math.hypot(e.clientX - drag.pointerX, e.clientY - drag.pointerY) < DRAG_THRESHOLD) return;
       document.body.classList.add("reordering");
     }
-    // the columns are components: from here the hit is the column element itself
-    const over = this.shadowRoot!.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("relay-board-column")
-      ?.dataset.list;
-    this.drag = { ...d, on: true, px: e.clientX, py: e.clientY, over };
+    this.drag = { ...drag, moving: true, currentX: e.clientX, currentY: e.clientY, overColumn: this.columnAt(e) };
   };
-  private onUp = () => {
-    const d = this.drag;
+
+  // the columns are components: from here the hit is the column element itself
+  private columnAt(e: PointerEvent) {
+    return this.shadowRoot!.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("relay-board-column")?.dataset
+      .list;
+  }
+
+  private onPointerUp = () => {
+    const drag = this.drag;
     this.drag = null;
-    if (!d) return;
-    if (!d.on) {
-      openBoardCard(this.provider, d.id);
+    if (!drag) return;
+    if (!drag.moving) {
+      openBoardCard(this.provider, drag.id);
       return;
     }
     document.body.classList.remove("reordering");
-    const c = boardState(this.provider).cards.find(x => x.id === d.id);
-    if (c && d.over && d.over !== c.column) moveCard(this.provider, c, d.over);
+    this.dropCard(drag);
   };
 
-  private pick(opts: Opt[], cur: string, empty: string, on: (v: string) => void, always = false, cls = "") {
+  private dropCard(drag: Drag) {
+    const card = boardState(this.provider).cards.find(x => x.id === drag.id);
+    if (card && drag.overColumn && drag.overColumn !== card.column) moveCard(this.provider, card, drag.overColumn);
+  }
+
+  private renderSelect(
+    options: Opt[],
+    current: string,
+    emptyLabel: string,
+    onChange: (value: string) => void,
+    alwaysShowEmpty = false,
+  ) {
+    const showEmpty = !current || alwaysShowEmpty;
     return html`<select
-      class="field max-w-2xs ${cls}"
-      @change=${(e: Event) => on((e.target as HTMLSelectElement).value)}
+      class="field max-w-2xs"
+      @change=${(e: Event) => onChange((e.target as HTMLSelectElement).value)}
     >
-      ${cur && !always ? nothing : html`<option value="">${empty}</option>`}${opts.map(o => html`<option value=${o.id} ?selected=${o.id === cur}>${o.name}</option>`)}
+      ${showEmpty ? html`<option value="">${emptyLabel}</option>` : nothing}${options.map(option => html`<option value=${option.id} ?selected=${option.id === current}>${option.name}</option>`)}
     </select>`;
   }
 
-  override render() {
-    const p = this.provider;
-    if (!p) return nothing;
-    const s = boardState(p),
-      d = this.drag;
-    // which vault project this board belongs to: a vault project has at most one board
-    const vps = vaultProjects();
-    const link =
-      s.board && vps.length
-        ? html`<span class="text-xs text-label opacity-75" title=${t("kb.linkHelp")}>${t("kb.link")}</span>${this.pick(
-              vps.map(([id, name]): Opt => ({ id, name })),
-              linkedProject(p),
-              t("kb.linkNone"),
-              v => linkBoard(p, v),
-              true,
-            )}`
-        : nothing;
-    const ghost = d?.on ? s.cards.find(c => c.id === d.id) : undefined;
+  // which vault project this board belongs to: a vault project has at most one board
+  private renderLink(provider: BoardProvider) {
+    const projects = vaultProjects();
+    if (!boardState(provider).board || !projects.length) return nothing;
+    const options = projects.map(([id, name]): Opt => ({ id, name }));
+    return html`<span class="text-xs text-label opacity-75" title=${t("kb.linkHelp")}>${t("kb.link")}</span
+      >${this.renderSelect(
+        options,
+        linkedProject(provider),
+        t("kb.linkNone"),
+        projectId => linkBoard(provider, projectId),
+        true,
+      )}`;
+  }
+
+  private renderHead(provider: BoardProvider) {
+    const boardData = boardState(provider);
+    const projectEmptyLabel = boardData.projects ? t("kb.pickProject") : t("pr.loading");
     return html`<div class="flex items-center gap-2 mb-3.5">
-        ${this.pick(s.projects || [], s.project, s.projects ? t("kb.pickProject") : t("pr.loading"), v => pickProject(p, v))}
-        ${s.project ? this.pick(s.boards, s.board, t("kb.noBoards"), v => pickBoard(p, v)) : nothing}
-        <span class="flex-1"></span>${link}${s.busy ? html`<span class="spinner"></span>` : nothing}<button
-          class="btn"
-          @click=${() => showBoard(p, true)}
-        >
-          ${t("pr.reload")}
-        </button>
-      </div>
-      ${s.err ? html`<div class="err-box mb-3">${s.err}</div>` : nothing}
-      ${
-        s.board && s.columns.length
-          ? html`<div class="flex gap-3 items-start overflow-x-auto pb-2" @board-card-grab=${this.onDown}>
-              ${repeat(
-                s.columns,
-                l => l.id,
-                l =>
-                  html`<relay-board-column
-                    data-list=${l.id}
-                    .column=${l}
-                    .cards=${s.cards.filter(c => c.column === l.id).sort((a, b) => a.placement - b.placement)}
-                    ?over=${!!d?.on && d.over === l.id}
-                  ></relay-board-column>`,
-              )}
-            </div>`
-          : s.board && !s.busy && !s.err
-            ? html`<div class="text-secondary text-sm text-center">${t("kb.noCols")}</div>`
-            : nothing
-      }
-      ${ghost && d ? html`<relay-board-card .card=${ghost} .ghost=${{ x: d.px - d.dx, y: d.py - d.dy, w: d.w }}></relay-board-card>` : nothing}`;
+      ${this.renderSelect(boardData.projects || [], boardData.project, projectEmptyLabel, projectId => pickProject(provider, projectId))}
+      ${boardData.project ? this.renderSelect(boardData.boards, boardData.board, t("kb.noBoards"), boardId => pickBoard(provider, boardId)) : nothing}
+      <span class="flex-1"></span
+      >${this.renderLink(provider)}${boardData.busy ? html`<span class="spinner"></span>` : nothing}<button
+        class="btn"
+        @click=${() => showBoard(provider, true)}
+      >
+        ${t("pr.reload")}
+      </button>
+    </div>`;
+  }
+
+  private renderColumn(column: Column, cards: Card[]) {
+    const columnCards = cards.filter(card => card.column === column.id).sort((a, b) => a.placement - b.placement);
+    const hovered = !!this.drag?.moving && this.drag.overColumn === column.id;
+    return html`<relay-board-column
+      data-list=${column.id}
+      .column=${column}
+      .cards=${columnCards}
+      ?over=${hovered}
+    ></relay-board-column>`;
+  }
+
+  private renderColumns(provider: BoardProvider) {
+    const boardData = boardState(provider);
+    if (!boardData.board) return nothing;
+    if (!boardData.columns.length) {
+      if (boardData.busy || boardData.err) return nothing;
+      return html`<div class="text-secondary text-sm text-center">${t("kb.noCols")}</div>`;
+    }
+    return html`<div class="flex gap-3 items-start overflow-x-auto pb-2" @board-card-grab=${this.onGrab}>
+      ${repeat(
+        boardData.columns,
+        column => column.id,
+        column => this.renderColumn(column, boardData.cards),
+      )}
+    </div>`;
+  }
+
+  // the copy of the dragged card that follows the pointer
+  private renderGhost(provider: BoardProvider) {
+    const drag = this.drag;
+    if (!drag?.moving) return nothing;
+    const card = boardState(provider).cards.find(x => x.id === drag.id);
+    if (!card) return nothing;
+    const position = { left: drag.currentX - drag.offsetX, top: drag.currentY - drag.offsetY, width: drag.width };
+    return html`<relay-board-card .card=${card} .ghost=${position}></relay-board-card>`;
+  }
+
+  override render() {
+    const provider = this.provider;
+    if (!provider) return nothing;
+    const boardData = boardState(provider);
+    return html`${this.renderHead(provider)}
+    ${boardData.err ? html`<div class="err-box mb-3">${boardData.err}</div>` : nothing} ${this.renderColumns(provider)}
+    ${this.renderGhost(provider)}`;
   }
 }
 

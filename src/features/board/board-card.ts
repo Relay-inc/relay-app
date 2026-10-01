@@ -7,14 +7,26 @@ import { emit } from "../../core/dom";
 import { tw } from "../../core/styles";
 import type { Card } from "../../domain/providers";
 
+/** where a card was grabbed: the pointer, and the pointer's offset inside the card */
+export type CardGrab = {
+  id: string;
+  pointerX: number;
+  pointerY: number;
+  offsetX: number;
+  offsetY: number;
+  width: number;
+};
+
 declare global {
   interface HTMLElementEventMap {
-    "board-card-grab": CustomEvent<{ id: string; x: number; y: number; dx: number; dy: number; w: number }>;
+    "board-card-grab": CustomEvent<CardGrab>;
   }
 }
 
 // priorities 1 and 2 are coloured, 3 and 4 only named
-const PRIO: Record<number, string> = { 1: "text-late", 2: "text-soon", 3: "", 4: "" };
+const PRIORITY_CLASS: Record<number, string> = { 1: "text-late", 2: "text-soon", 3: "", 4: "" };
+const CARD_AT_REST = "shadow-xs ring-1 ring-separator";
+const CARD_DRAGGED = "fixed left-0 top-0 z-40 pointer-events-none opacity-95 shadow-lg";
 
 /** One card. Pressing it reports where it was grabbed (the board drags it with pointer events, the Mac webview does not deliver HTML drag and drop reliably); `ghost` is the copy that follows the pointer. */
 @customElement("relay-board-card")
@@ -28,33 +40,50 @@ export class BoardCard extends LitElement {
     `,
   ];
   @property({ attribute: false }) card!: Card;
-  @property({ attribute: false }) ghost: { x: number; y: number; w: number } | null = null;
+  @property({ attribute: false }) ghost: { left: number; top: number; width: number } | null = null;
 
   private onDown(e: PointerEvent) {
     if (e.button !== 0) return;
     e.preventDefault();
-    const r = this.getBoundingClientRect();
+    const box = this.getBoundingClientRect();
     emit(this, "board-card-grab", {
       id: this.card.id,
-      x: e.clientX,
-      y: e.clientY,
-      dx: e.clientX - r.left,
-      dy: e.clientY - r.top,
-      w: r.width,
+      pointerX: e.clientX,
+      pointerY: e.clientY,
+      offsetX: e.clientX - box.left,
+      offsetY: e.clientY - box.top,
+      width: box.width,
     });
   }
 
+  private get dueLabel() {
+    // 2026-10-03 shows as 3/10
+    return this.card.due!.split("-").reverse().slice(0, 2).map(Number).join("/");
+  }
+
+  private renderNumber() {
+    const { number } = this.card;
+    if (!number) return nothing;
+    return html`<span>${/^\d+$/.test(number) ? "#" : ""}${number}</span>`;
+  }
+
+  private renderPriority() {
+    const { priority } = this.card;
+    if (!priority || priority > 4) return nothing;
+    return html`<span class=${PRIORITY_CLASS[priority] ?? ""}>${t(`kb.prio${priority}` as Key)}</span>`;
+  }
+
   override render() {
-    const c = this.card,
-      g = this.ghost;
+    const { card, ghost } = this;
+    const position = ghost ? { width: `${ghost.width}px`, transform: `translate(${ghost.left}px,${ghost.top}px)` } : {};
     return html`<div
-      class="bg-bg rounded-md px-2.5 py-2 cursor-grab select-none ${g ? "fixed left-0 top-0 z-40 pointer-events-none opacity-95 shadow-lg" : "shadow-xs ring-1 ring-separator"}"
-      style=${styleMap(g ? { width: `${g.w}px`, transform: `translate(${g.x}px,${g.y}px)` } : {})}
-      @pointerdown=${g ? nothing : (e: PointerEvent) => this.onDown(e)}
+      class="bg-bg rounded-md px-2.5 py-2 cursor-grab select-none ${ghost ? CARD_DRAGGED : CARD_AT_REST}"
+      style=${styleMap(position)}
+      @pointerdown=${ghost ? nothing : (e: PointerEvent) => this.onDown(e)}
     >
-      <div class="text-sm leading-snug">${c.title}</div>
+      <div class="text-sm leading-snug">${card.title}</div>
       <div class="flex gap-2.5 mt-1 text-xs text-secondary tabular-nums">
-        ${c.number ? html`<span>${/^\d+$/.test(c.number) ? "#" : ""}${c.number}</span>` : nothing}${c.priority && c.priority <= 4 ? html`<span class=${PRIO[c.priority] ?? ""}>${t(`kb.prio${c.priority}` as Key)}</span>` : nothing}${c.who ? html`<span>${c.who}</span>` : nothing}${c.due ? html`<span>${c.due.split("-").reverse().slice(0, 2).map(Number).join("/")}</span>` : nothing}
+        ${this.renderNumber()}${this.renderPriority()}${card.who ? html`<span>${card.who}</span>` : nothing}${card.due ? html`<span>${this.dueLabel}</span>` : nothing}
       </div>
     </div>`;
   }

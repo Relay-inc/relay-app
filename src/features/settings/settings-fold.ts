@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { emit } from "../../core/dom";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
-import type { Tpl } from "./types";
+import type { Renderable } from "./types";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -28,9 +28,9 @@ export class SettingsFold extends SettingsElement {
   ];
 
   @property({ type: Boolean }) open = false;
-  @property({ attribute: false }) ico: Tpl = nothing;
-  @property({ attribute: false }) name: Tpl = nothing;
-  @property({ attribute: false }) state: Tpl = nothing;
+  @property({ attribute: false }) icon: Renderable = nothing;
+  @property({ attribute: false }) name: Renderable = nothing;
+  @property({ attribute: false }) status: Renderable = nothing;
 
   override render() {
     // a hairline between the rows, none above the first (the host's own border would lose to the page's `*` reset)
@@ -40,12 +40,12 @@ export class SettingsFold extends SettingsElement {
         @click=${() => emit(this, "fold-toggle")}
         aria-expanded=${this.open}
       >
-        <span class="grid w-6 flex-none place-items-center">${this.ico}</span>
+        <span class="grid w-6 flex-none place-items-center">${this.icon}</span>
         <span class="min-w-0 flex-1"
           ><b class="flex items-center gap-1.5 overflow-hidden font-medium text-ellipsis whitespace-nowrap"
             >${this.name}</b
           >
-          <div class="mt-px flex">${this.state}</div></span
+          <div class="mt-px flex">${this.status}</div></span
         >
         <svg
           class="size-3.5 flex-none fill-none stroke-s-subtle stroke-2 transition-transform duration-150 ease-in-out glyph group-hover:stroke-s-fg ${this.open ? "rotate-90" : ""}"

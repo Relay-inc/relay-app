@@ -15,6 +15,9 @@ declare global {
   }
 }
 
+const HEADING = "text-base font-semibold mt-2.5";
+type MapKey = (typeof KEYS)[number][0];
+
 /** First launch, or a vault that is gone: a welcome screen over the main window until a vault is saved (then it removes itself and emits `saved`). */
 @customElement("relay-onboard")
 export class RelayOnboard extends LitElement {
@@ -34,98 +37,113 @@ export class RelayOnboard extends LitElement {
   ];
   // what was configured before (a folder that no longer holds a vault) stays visible, to fix or replace
   @property({ attribute: false }) start?: VaultStatus;
-  @state() private st: VaultStatus | null = null;
+  @state() private status: VaultStatus | null = null;
   @state() private map: VaultMap | null = null; // the paths as typed, checked on change
-  @state() private msg = "";
+  @state() private message = "";
 
   override connectedCallback() {
     super.connectedCallback();
-    this.set(this.start?.vault ? this.start : null);
+    this.setStatus(this.start?.vault ? this.start : null);
   }
-  private set(st: VaultStatus | null) {
-    this.st = st;
-    this.map = st ? { ...st.map } : null;
-  }
-  private trimmed = (): VaultMap =>
-    Object.fromEntries(Object.entries(this.map!).map(([k, v]) => [k, v.trim()])) as VaultMap;
 
-  private async pick() {
-    this.msg = "";
-    const s = await pickVault();
-    if (s) this.set(s);
+  private setStatus(status: VaultStatus | null) {
+    this.status = status;
+    this.map = status ? { ...status.map } : null;
   }
-  private async pickMap(k: (typeof KEYS)[number][0]) {
-    this.msg = "";
-    this.set(await pickMapped(this.st!, k, this.trimmed()));
+
+  private trimmedMap = (): VaultMap =>
+    Object.fromEntries(Object.entries(this.map!).map(([key, path]) => [key, path.trim()])) as VaultMap;
+
+  private async chooseVault() {
+    this.message = "";
+    const status = await pickVault();
+    if (status) this.setStatus(status);
   }
-  private async check() {
-    this.set(await checkMapping(this.st!.vault, this.trimmed()));
+
+  private async chooseMappedPath(key: MapKey) {
+    this.message = "";
+    this.setStatus(await pickMapped(this.status!, key, this.trimmedMap()));
   }
-  private async use() {
-    this.msg = "";
+
+  private async checkMap() {
+    this.setStatus(await checkMapping(this.status!.vault, this.trimmedMap()));
+  }
+
+  private async saveVault() {
+    this.message = "";
     try {
-      const s = await invoke<Settings>("get_settings");
+      const settings = await invoke<Settings>("get_settings");
+      const vault = this.status!.vault;
       await invoke("set_settings", {
-        settings: { ...s, vault: this.st!.vault, vaults: { ...s.vaults, [this.st!.vault]: this.trimmed() } },
+        settings: { ...settings, vault, vaults: { ...settings.vaults, [vault]: this.trimmedMap() } },
       });
       this.remove();
       emit(this, "saved");
     } catch (err) {
-      this.msg = String(err);
+      this.message = String(err);
     }
   }
 
-  private mapping(st: VaultStatus) {
-    return html`<div class="grid gap-2.5">
-      ${KEYS.map(([k, , req]) => {
-        const found = st.found[k];
-        return html`<div class="grid gap-1">
-          <div class="font-medium">
-            ${th(`vault.k.${k}`)}${req ? nothing : html` <span class="text-secondary tabular-nums">${t("vault.optional")}</span>`}
-            <div class="text-secondary mb-3">${th(`vault.h.${k}`)}</div>
-          </div>
-          <div class="flex gap-2 items-center">
-            <input
-              class="field flex-1 font-mono"
-              .value=${live(this.map![k])}
-              @input=${(e: Event) => {
-                this.map![k] = (e.target as HTMLInputElement).value;
-              }}
-              @change=${() => this.check()}
-              spellcheck="false"
-            />
-            <button class="btn" @click=${() => this.pickMap(k)}>${t("vault.pickPath")}</button>
-            <span class="min-w-13 text-xs ${found ? "text-secondary" : req ? "text-late" : "text-secondary mb-3"}"
-              >${found ? t("vault.found") : t("vault.missing")}</span
-            >
-          </div>
-        </div>`;
-      })}
+  private foundClass(found: boolean, required: boolean) {
+    if (found) return "text-secondary";
+    return required ? "text-late" : "text-secondary mb-3";
+  }
+
+  private renderMapEntry(status: VaultStatus, [key, , required]: (typeof KEYS)[number]) {
+    const found = status.found[key];
+    return html`<div class="grid gap-1">
+      <div class="font-medium">
+        ${th(`vault.k.${key}`)}${required ? nothing : html` <span class="text-secondary tabular-nums">${t("vault.optional")}</span>`}
+        <div class="text-secondary mb-3">${th(`vault.h.${key}`)}</div>
+      </div>
+      <div class="flex gap-2 items-center">
+        <input
+          class="field flex-1 font-mono"
+          .value=${live(this.map![key])}
+          @input=${(e: Event) => {
+            this.map![key] = (e.target as HTMLInputElement).value;
+          }}
+          @change=${() => this.checkMap()}
+          spellcheck="false"
+        />
+        <button class="btn" @click=${() => this.chooseMappedPath(key)}>${t("vault.pickPath")}</button>
+        <span class="min-w-13 text-xs ${this.foundClass(found, required)}"
+          >${found ? t("vault.found") : t("vault.missing")}</span
+        >
+      </div>
     </div>`;
   }
 
+  private renderMapping(status: VaultStatus) {
+    return html`<div class="grid gap-2.5">${KEYS.map(entry => this.renderMapEntry(status, entry))}</div>`;
+  }
+
+  private renderMappingSection(status: VaultStatus | null) {
+    if (!status) return nothing;
+    return html`<h2 class=${HEADING}>${t("vault.map")}</h2>
+      <div class="text-secondary mb-3">${th("vault.mapHelp")}</div>
+      ${this.renderMapping(status)}`;
+  }
+
   override render() {
-    const st = this.st,
-      h2 = "text-base font-semibold mt-2.5";
+    const status = this.status;
     return html`<main class="grid gap-2.5 max-w-2xl mx-auto my-10">
       <img class="block h-11 mb-4" src=${mark} alt="" />
-      <h2 class=${h2}>${t("vault.welcome")}</h2>
+      <h2 class=${HEADING}>${t("vault.welcome")}</h2>
       <div class="text-secondary mb-3">${th("vault.intro")}</div>
       <div class="flex gap-2 items-center">
-        <input class="field flex-1 font-mono" readonly .value=${st?.vault ?? ""} placeholder=${t("vault.none")} />
-        <button class="btn ${st ? "" : "btn-primary"}" @click=${() => this.pick()}>${t("vault.choose")}</button>
+        <input class="field flex-1 font-mono" readonly .value=${status?.vault ?? ""} placeholder=${t("vault.none")} />
+        <button class="btn ${status ? "" : "btn-primary"}" @click=${() => this.chooseVault()}>
+          ${t("vault.choose")}
+        </button>
       </div>
-      ${
-        st
-          ? html`<h2 class=${h2}>${t("vault.map")}</h2>
-              <div class="text-secondary mb-3">${th("vault.mapHelp")}</div>
-              ${this.mapping(st)}`
-          : nothing
-      }
-      ${st && !st.ok ? html`<div class="text-late text-sm">${th("vault.invalid")}</div>` : nothing}
+      ${this.renderMappingSection(status)}
+      ${status && !status.ok ? html`<div class="text-late text-sm">${th("vault.invalid")}</div>` : nothing}
       <div class="flex gap-2 items-center justify-end">
-        ${this.msg ? html`<span class="text-late text-sm">${this.msg}</span>` : nothing}
-        <button class="btn btn-primary" ?disabled=${!st?.ok} @click=${() => this.use()}>${t("vault.use")}</button>
+        ${this.message ? html`<span class="text-late text-sm">${this.message}</span>` : nothing}
+        <button class="btn btn-primary" ?disabled=${!status?.ok} @click=${() => this.saveVault()}>
+          ${t("vault.use")}
+        </button>
       </div>
     </main>`;
   }
