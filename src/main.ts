@@ -12,7 +12,7 @@ import "./productive.css";
 import { renderPrs, renderProjectPrs, renderPrDetail, type PRs } from "./github";
 import "./github.css";
 import { startUsage, openUsage, renderUsage, usageTrail } from "./usage";
-import { mailRef, renderMailBar, renderMailTools, renderMailList, renderMailDetail, renderMailLink, mailKey, unread, sender, setSeen, type Mail, type MailBody, type MailFilter } from "./mail";
+import { mailRef, renderMailSetup, renderMailBar, renderMailTools, renderMailList, renderMailDetail, renderMailLink, mailKey, unread, sender, setSeen, type Mail, type MailBody, type MailFilter } from "./mail";
 import "./mail.css";
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
@@ -232,7 +232,7 @@ async function mailSeen(key: string, seen: boolean) {
   render();
 }
 async function loadMails() {
-  if (!mailOn() || mailBusy) return;
+  if (!mailOn() || mailBusy || !settings.mail.accounts?.length) return;
   mailBusy = true; if (sel === MAIL) renderChat();
   const g = mailGen;
   try {
@@ -615,6 +615,8 @@ function renderChat() {
     $("composer").style.display = "none"; $("movebar").style.display = "none";
     $("term").style.display = "none";
     $("t").textContent = t("nav.mail"); $("ts").textContent = "";
+    // no account yet: the steps to set one up instead of an empty list and an error
+    if (!settings.mail.accounts?.length) { msgs.innerHTML = renderMailSetup(); return; }
     // the bar is mounted once, so the search field keeps its focus and caret while the list redraws
     if (!document.getElementById("mailbar")) msgs.innerHTML = `<div id="mailbar">${renderMailBar(mailFilter, esc)}</div><div id="maillist"></div>`;
     const h = { esc, projectOf: mailProject, projectLabel: pLabel, open: prOpen };
@@ -1014,6 +1016,8 @@ $("msgs").addEventListener("click", e => {
   if (sel === REM && onRemindersEvent(e, remAct, remAdd)) return;
   if ((e.target as HTMLElement).closest("[data-pr=reload]")) { loadPrs(); return; }
   if ((e.target as HTMLElement).closest("[data-mail=reload]")) { loadMails(); return; }
+  // the settings window opens on Integrations › Mail (it reads its pane from the shared localStorage)
+  if ((e.target as HTMLElement).closest("[data-mail=setup]")) { localStorage.setItem("prefsTab", "integrations"); localStorage.setItem("prefsAcct", "mail"); invoke("open_settings_window"); return; }
   if ((e.target as HTMLElement).closest("[data-mail=more]")) { moreMails(); return; }
   const g = (e.target as HTMLElement).closest<HTMLElement>("[data-bg]");
   if (g) {

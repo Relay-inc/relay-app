@@ -44,3 +44,9 @@
 .mail-url{font-size:12px;word-break:break-all;user-select:text}
 .mail-link-btns{display:flex;gap:8px;margin-top:8px}
 .mail-acct{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.mail-setup{max-width:540px;margin:32px auto;padding:22px 26px;border:1px solid var(--separator);border-radius:12px;background:var(--fill)}
+.mail-setup h2{font-size:16px;font-weight:600;margin:0 0 6px}
+.mail-setup p{margin:0 0 12px;font-size:13px;line-height:1.5}
+.mail-setup ol{margin:0 0 14px;padding-left:20px;font-size:13px;line-height:1.6}
+.mail-setup li{margin-bottom:6px}
+.mail-setup code{font-family:var(--mono);font-size:12px;background:var(--fill);padding:1px 5px;border-radius:4px}

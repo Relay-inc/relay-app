@@ -33,6 +33,13 @@ function row(m: Mail, h: H) {
     <div class="mail-side"><span class="pr-meta">${when(m.date)}</span>${seenBtn(m, "btn mail-flip")}</div></div>`;
 }
 
+/** No account yet: what to do in three steps, and the way into the settings. The texts are the app's own. */
+export const renderMailSetup = () => `<div class="mail-setup">
+  <h2>${t("mail.setupTitle")}</h2><p>${t("mail.setupIntro")}</p>
+  <ol><li>${t("mail.setupStep1")}</li><li>${t("mail.setupStep2")}</li><li>${t("mail.setupStep3")}</li></ol>
+  <p class="mail-dim">${t("mail.setupPw")}</p>
+  <button class="btn primary" data-mail="setup">${t("mail.setupOpen")}</button></div>`;
+
 /** Search, read state and project, mounted once so typing in the search field keeps its focus. */
 export const renderMailBar = (f: MailFilter, esc: (s: unknown) => string) =>
   `<div class="kbhead mail-bar"><input class="field" id="mailq" type="search" placeholder="${t("mail.search")}" value="${esc(f.q)}" spellcheck="false"><span id="mailtools"></span></div>`;
