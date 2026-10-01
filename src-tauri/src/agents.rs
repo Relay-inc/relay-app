@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Every agent provider, in the order of the settings and the composer. A new one is one line here and one in
 /// src/agents/index.ts.
-pub static PROVIDERS: &[&dyn AgentProvider] = &[&agent_claude::PROVIDER, &agent_codex::PROVIDER, &agent_opencode::PROVIDER];
+pub static PROVIDERS: &[&dyn AgentProvider] = &[&agent_claude::PROVIDER, &agent_codex::PROVIDER, &agent_opencode::PROVIDER, &agent_pi::PROVIDER];
 /// The provider of everything from before the providers: sessions.json strings, old pending files, `t:<sid>`.
 pub const FIRST: &str = "claude";
 
@@ -141,7 +141,7 @@ mod tests {
     fn settings_fill_in_claude() {
         let mut v = json!({});
         migrate(&mut v);
-        assert_eq!(v["agents"], json!({"default": "claude", "providers": {"claude": {"on": true, "bin": "", "accounts": [], "active": "", "auto": false}, "codex": {"on": false, "bin": ""}, "opencode": {"on": false, "bin": ""}}}));
+        assert_eq!(v["agents"], json!({"default": "claude", "providers": {"claude": {"on": true, "bin": "", "accounts": [], "active": "", "auto": false}, "codex": {"on": false, "bin": ""}, "opencode": {"on": false, "bin": ""}, "pi": {"on": false, "bin": ""}}}));
         assert!(check(&v).is_ok());
         v["agents"]["providers"]["claude"]["accounts"] = json!([{"name": "Work", "dir": "relative"}]);
         assert!(check(&v).is_err());

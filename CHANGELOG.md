@@ -10,6 +10,9 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+- Pi joins Claude Code, Codex and OpenCode as an agent: Settings › Agents › Pi turns it on once `pi` is installed and has a login or key. Pick its models and thinking levels, paste images, resume, fork or continue a session in the terminal, and see its tokens and cost in Usage. Pi never asks before it edits files or runs commands, so there are no permission cards (#46)
+
+## [0.0.2] - 2026-10-01
 
 ### Added
 - Claude Code can run on more than one account: Settings › Agents › Claude Code › Accounts adds a login as its own config folder (sign in once with `CLAUDE_CONFIG_DIR=<folder> claude /login`) and picks the one new conversations use. Each conversation stays on its account. Switch on **Switch accounts automatically** and a conversation whose account hit its plan limit moves to the next account with room on your next message, history included (#45)
@@ -83,5 +86,6 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/LaurentMe/vault-app/releases/tag/v0.0.1

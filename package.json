@@ -1,7 +1,7 @@
 {
   "name": "relay",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -19,6 +19,7 @@
     "@relay/agent-codex": "workspace:*",
     "@relay/agent-core": "workspace:*",
     "@relay/agent-opencode": "workspace:*",
+    "@relay/agent-pi": "workspace:*",
     "@relay/board-core": "workspace:*",
     "@relay/integration-linear": "workspace:*",
     "@relay/integration-productive": "workspace:*",

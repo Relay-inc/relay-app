@@ -168,25 +168,25 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 
 ## Agent providers
 
-The conversations run on a coding-agent CLI: Claude Code, Codex or OpenCode. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
+The conversations run on a coding-agent CLI: Claude Code, Codex, OpenCode or Pi. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
 [`packages/agent-core`](packages/agent-core/README.md). The app owns the processes, `sessions.json`, the pending folder,
 the settings and the commands; a provider builds its command line, turns its output into normalised events, reads its
 own transcripts and logs, and reports its limits and tokens.
 
-| | Claude Code | Codex | OpenCode |
-|---|---|---|---|
-| Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) |
-| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` |
-| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) |
-| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) |
-| Thinking, images | –, yes | yes, yes | yes, yes |
-| Resume, fork | yes, yes | yes, – | yes, yes |
-| Subagents, titles | yes, yes | –, – | –, – |
-| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants |
-| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` |
-| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded |
-| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) |
-| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price |
+| | Claude Code | Codex | OpenCode | Pi |
+|---|---|---|---|---|
+| Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) | [`agent-pi`](packages/agent-pi/README.md) |
+| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` | `pi --mode rpc` (JSON lines over stdio), no bridge |
+| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
+| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no |
+| Thinking, images | –, yes | yes, yes | yes, yes | yes, yes |
+| Resume, fork | yes, yes | yes, – | yes, yes | yes (`--session-id`), yes (`--fork`) |
+| Subagents, titles | yes, yes | –, – | –, – | –, – |
+| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants | `pi --list-models`, thinking levels |
+| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` | session files, `pi --session` |
+| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded | session files, with the cost pi computed from its prices |
+| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) | none (pi has none) |
+| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price | no permissions or questions; extension dialogs unanswered; no limits, subagents or titles |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
 registered in `PROVIDERS` in `src-tauri/src/agents.rs`:

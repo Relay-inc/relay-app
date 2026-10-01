@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.0.1"
+version = "0.0.2"
 description = "Relay control room"
 authors = []
 edition = "2021"
@@ -53,3 +53,4 @@ objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
 # banners for a finished turn or a waiting card (src/notify.rs), with the click coming back to the app
 mac-notification-sys = "0.6"
+agent-pi = { path = "../packages/agent-pi" }

@@ -5,3 +5,6 @@
 {"type":"assistant","message":{"content":[{"type":"text","text":"Drie dingen."},{"type":"tool_use","id":"toolu_9","name":"Bash","input":{"command":"ls"}}]}}
 {"type":"user","timestamp":"2026-09-30T08:00:07.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_9","content":"a"}]}}
 {"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"side"}]}}
+{"type":"user","isMeta":true,"message":{"role":"user","content":"Another Claude session sent a message:\n<agent-message from=\"a1\">\nklaar\n</agent-message>"}}
+{"type":"user","message":{"role":"user","content":"Another Claude session sent a message:\n<teammate-message teammate_id=\"review\">\n{\"type\":\"idle_notification\"}\n</teammate-message>"}}
+{"type":"user","isMeta":true,"message":{"role":"user","content":[{"type":"text","text":"Base directory for this skill: /x"}]}}
