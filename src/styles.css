@@ -62,9 +62,9 @@ section.chat{display:flex;flex-direction:column;min-width:0;min-height:0}
 .tool{display:flex;align-items:center;gap:8px;color:var(--secondary);font-size:13px;margin:-6px 0}
 .tool::before{content:"";width:0;height:0;border-left:5px solid currentColor;border-top:4px solid transparent;border-bottom:4px solid transparent;opacity:.6}
 .tool code,.perm code{font-family:var(--mono);font-size:12.5px}
-.perm{border:1px solid var(--accent);border-radius:var(--r);background:var(--fill);padding:12px 14px;display:grid;gap:10px}
+.perm{border:1px solid var(--accent);border-radius:var(--r);background:var(--fill);padding:12px 14px;display:grid;grid-template-columns:minmax(0,1fr);gap:10px} /* a long path never widens the card past its border */
 .perm .q{font-size:13px;color:var(--secondary)}
-.perm pre{font-family:var(--mono);font-size:13px;white-space:pre-wrap;color:var(--label)}
+.perm pre{font-family:var(--mono);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;color:var(--label)}
 .perm .acts{display:flex;justify-content:flex-end;gap:8px}
 .btn{height:28px;padding:0 14px;border-radius:var(--r);border:1px solid var(--separator);background:var(--bg);cursor:default;transition:filter var(--d) var(--ease)}
 .btn:hover{filter:brightness(.97)}
@@ -143,8 +143,8 @@ textarea{resize:none;max-height:40vh;overflow-y:auto}
 .subrow{padding-left:22px;height:26px;color:var(--secondary)}
 .subrow.sel{color:var(--on-accent)}
 .subrow.new{color:var(--label)}
-.prow .add{visibility:hidden;margin-left:4px}
-.prow:hover .add{visibility:visible}
+.prow .add{display:none;margin-left:4px}
+.prow:hover .add{display:block}
 .row.sel .add{color:var(--on-accent)}
 .tb{white-space:nowrap}
 .bar h1,.bar .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -165,6 +165,7 @@ textarea{resize:none;max-height:40vh;overflow-y:auto}
 .pop{position:absolute;z-index:5;top:56px;left:16px;width:340px;background:var(--bg);border:1px solid var(--separator);border-radius:var(--r);
   box-shadow:0 8px 24px rgba(0,0,0,.12);padding:14px;display:grid;gap:12px}
 .pop[hidden]{display:none}
+.pop,.pop .plab{grid-template-columns:minmax(0,1fr)} /* a long project name in the select or the inputs never push past the panel */
 section.chat{position:relative}
 .plab{display:grid;gap:6px;font-size:13px;color:var(--secondary)}
 .pop select,.set .field,.pop .field{height:28px;border:1px solid var(--separator);border-radius:var(--r);background:var(--bg);color:var(--label);font:13px var(--sans);padding:0 8px}

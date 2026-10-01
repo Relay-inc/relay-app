@@ -779,7 +779,7 @@ function openPop() {
     ($("popicon") as HTMLInputElement).value = "";
   });
   document.getElementById("popicon")?.addEventListener("input", () => {
-    if (!popImg) return; popImg = undefined; document.querySelector(".picon")!.firstChild!.replaceWith("Afbeelding…");
+    if (!popImg) return; popImg = undefined; document.querySelector(".picon")!.firstChild!.replaceWith(t("pop.img"));
   });
 }
 let popImg: string | undefined; // the image chosen in the open panel
@@ -903,7 +903,8 @@ async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
   if (k in outside) { push(k, { kind: "note", text: t("work.waitOutside") }); if (k === sel) renderChat(); return; }
   if (!to) { ta.value = ""; grow(); }
   // first message of a general conversation: if it names one project, it goes under that project
-  if (c && !c.project && !forced && !(convo[k] || []).length) {
+  // (also from Cmd-K, which passes `to`; the resend after the route question passes neither and must not ask again)
+  if (c && !c.project && (!forced || to) && !(convo[k] || []).length) {
     const hits = findProjects(text);
     if (hits.length === 1) { c.project = hits[0]; push(k, { kind: "note", text: t("note.moved", { name: hits[0] }) }); }
     else if (hits.length > 1) { routeChoice = { key: k, text, hits }; renderChat(); return; }
