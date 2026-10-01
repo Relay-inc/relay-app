@@ -22,13 +22,28 @@ fillIcons();
 
 // ---------- safe markdown: Claude's text never becomes live HTML in a window that can approve actions
 const esc = (s: unknown) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+// a vault note named in the text (a markdown link without a scheme, [[wikilink]], `path.md:12`) opens in the right panel
+const noteA = (target: string, inner: string) => `<a class="vlink" data-note="${esc(target)}">${inner}</a>`;
+const noteOf = (s: string) => { try { s = decodeURI(s); } catch {} return s.replace(/[#|].*$/, "").replace(/:\d+(-\d+)?$/, "").trim(); };
+const isNotePath = (s: string) => /\.md$/i.test(noteOf(s));
 marked.use({
+  extensions: [{
+    name: "wikilink", level: "inline",
+    start: (src: string) => src.indexOf("[["),
+    tokenizer(src: string) {
+      const m = /^\[\[([^\]\n]+)\]\]/.exec(src);
+      if (m) return { type: "wikilink", raw: m[0], target: noteOf(m[1]), label: m[1].split("|").pop()!.trim() };
+    },
+    renderer: (tok: any) => noteA(tok.target, esc(tok.label)),
+  }],
   renderer: {
     html: ({ text }) => esc(text),
     image: ({ text }) => esc(text),
+    codespan: ({ text }) => isNotePath(text) ? noteA(noteOf(text), `<code>${esc(text)}</code>`) : `<code>${esc(text)}</code>`,
     link({ href, tokens }) {
       const inner = this.parser.parseInline(tokens);
-      return mailUrlOk(href) ? `<a href="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>` : inner;
+      if (mailUrlOk(href)) return `<a href="${esc(href)}" target="_blank" rel="noreferrer">${inner}</a>`;
+      return !/^[a-z][\w+.-]*:|^#/i.test(href) && noteOf(href) ? noteA(noteOf(href), inner) : inner;
     },
   },
 });
@@ -184,6 +199,7 @@ async function openPr(key: string) {
   document.body.classList.add("prwide"); setInsp(false); render();
   const i = key.lastIndexOf("#");
   try { prDetail[key] = card ? await card.d.fetch(ctxOf(card.p, settings.integrations), cardRefs[key], card.id) : key.startsWith("mail:") ? await invoke<MailBody>("mail_read", mailRef(key))
+    : key.startsWith("note:") ? await invoke("read_note", { target: key.slice(5) })
     : await invoke("github_pr", { repo: key.slice(0, i), number: Number(key.slice(i + 1)) }); }
   catch (e) { if (key.startsWith("mail:")) delete prDetail[key]; if (!prDetail[key]) prDetailErr = String(e); }
   if (prOpen === key) renderInsp();
@@ -688,7 +704,7 @@ function renderChat() {
     if (it.kind === "me") return (it.imgs?.length ? `<div class="mimgs">${thumbs(it.imgs)}</div>` : "")
       + (it.text ? `<div class="me">${esc(it.text).replace(/\n/g, "<br>")}</div>` : "");
     if (it.kind === "ai") return `<div class="ai">${md(it.text)}</div>`;
-    if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}">${it.text}</div>`;
+    if (it.kind === "tool") return `<div class="tool ${it.state === "run" ? "run" : it.state === "err" ? "err" : ""}${it.path && isNotePath(it.path) ? ` vlink" data-note="${esc(it.path)}` : ""}">${it.text}</div>`;
     if (it.kind === "err") return `<div class="err">${esc(it.text)}</div>`;
     if (it.kind === "done") return `<div class="done">${glyph("check")}${esc(it.text)}</div>`;
     return `<div class="note">${esc(it.text)}</div>`;
@@ -786,12 +802,21 @@ function workingHtml(away = false): string {
 const dur = (sec: number) => { const s = Math.max(0, Math.round(sec)); return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`; };
 setInterval(() => document.querySelectorAll<HTMLElement>(".ws").forEach(e => { e.textContent = dur((Date.now() - Number(e.dataset.since)) / 1000); }), 1000);
 
+// a vault note in the right panel: the frontmatter as small print (its [[links]] clickable), the body as markdown
+function renderNote(n: { path: string; text: string } | undefined, err: string) {
+  const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("pr.close")}">×</button><span class="meta note-path">${esc(n?.path ?? prOpen.slice(5))}</span></div>`;
+  if (err) return bar + `<div class="err">${esc(err)}</div>`;
+  if (!n) return bar + `<div class="meta">${t("pr.loading")}</div>`;
+  const m = /^---\n([\s\S]*?)\n---\n?/.exec(n.text), fm = m ? m[1] : "";
+  return bar + (fm ? `<div class="meta note-fm">${esc(fm).replace(/\[\[([^\]\n]+)\]\]/g, (_, x) => noteA(noteOf(x), x.split("|").pop()!.trim())).replace(/\n/g, "<br>")}</div>` : "")
+    + `<div class="stand note-body">${md(n.text.slice(m ? m[0].length : 0))}</div>`;
+}
 function renderInsp() {
   const P = project(isTerm(sel) ? termOf(sel)?.project ?? null : projOf(sel)), box = $("insp");
   if (prOpen) {
     // only when it changed: a redraw of the same PR would throw away the scroll position
     const cd = cardOf(prOpen);
-    const html = cd ? cd.d.render(prDetail[prOpen] ?? null, prDetailErr, esc) : prOpen.startsWith("mail:") ? renderMailDetail(mails?.find(m => mailKey(m) === prOpen), prDetail[prOpen], prDetailErr, esc, mailText.has(prOpen)) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
+    const html = cd ? cd.d.render(prDetail[prOpen] ?? null, prDetailErr, esc) : prOpen.startsWith("note:") ? renderNote(prDetail[prOpen], prDetailErr) : prOpen.startsWith("mail:") ? renderMailDetail(mails?.find(m => mailKey(m) === prOpen), prDetail[prOpen], prDetailErr, esc, mailText.has(prOpen)) : renderPrDetail(prDetail[prOpen] ?? null, prDetailErr, { esc, md });
     if (html !== prHtml || !box.querySelector(".prd-bar")) { box.innerHTML = html; prHtml = html; }
     const ml = document.getElementById("maillink"); if (ml) ml.innerHTML = renderMailLink(mailLink, esc);
     return;
@@ -1174,6 +1199,8 @@ function escStop(e: KeyboardEvent) {
 // a PR row, in the list or in a project's PR tab, opens the PR in the right panel
 document.addEventListener("click", e => {
   const el = e.target as HTMLElement;
+  const nl = el.closest<HTMLElement>("[data-note]");
+  if (nl) { e.preventDefault(); openPr(`note:${nl.dataset.note}`); return; }
   if (el.closest("[data-pr-close]")) { closePr(); return; }
   if (el.closest("[data-pr-review]")) { reviewPr(prOpen); return; }
   const ms = el.closest<HTMLElement>("[data-mail-seen]");

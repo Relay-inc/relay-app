@@ -307,3 +307,8 @@ aside.side input{-webkit-user-select:text;user-select:text}
 body:has(>aside.side){background:transparent}
 aside.side{background:transparent}
 section.chat{background:var(--bg)}
+.vlink{color:var(--accent);cursor:pointer;text-decoration:none}
+.vlink:hover{text-decoration:underline}
+.tool.vlink{color:var(--secondary)}
+.note-path{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.note-fm{margin-bottom:12px;font-family:var(--mono);font-size:12px}

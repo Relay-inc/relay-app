@@ -151,6 +151,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("tray.plus_week", ["→ +1 week", "→ +1 week", "→ +1 semaine", "→ +1 Woche"]),
     ("tray.plus_month", ["→ +1 month", "→ +1 maand", "→ +1 mois", "→ +1 Monat"]),
     ("tray.drop", ["✕ Drop", "✕ Schrappen", "✕ Supprimer", "✕ Verwerfen"]),
+    ("err.note", ["No note '{v}' in the vault", "Geen note '{v}' in de vault", "Aucune note '{v}' dans le coffre", "Keine Notiz '{v}' im Vault"]),
     ("err.no_vault_set", ["No vault chosen yet", "Nog geen vault gekozen", "Aucun coffre choisi", "Noch kein Vault gewählt"]),
     ("err.project", ["Invalid project '{v}': icon (max 4 characters), label (max 60) and img (png data url) must be text",
         "Ongeldig project '{v}': icon (max 4 tekens), label (max 60) en img (png data url) moeten tekst zijn",
@@ -388,6 +389,14 @@ fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: St
     relay_config::set_icon(&v, &project, &kind, &value)?;
     app.emit("icons-changed", ()).ok();
     Ok(())
+}
+
+/// A vault note a conversation links to, for the right panel: {path (relative to the vault), text}.
+#[tauri::command]
+fn read_note(state: State<App>, target: String) -> Result<Value, String> {
+    let v = need_vault(&state)?;
+    vault::note(&v, &target).map(|(path, text)| json!({"path": path, "text": text}))
+        .ok_or_else(|| tr_v(ui_lang_of(&state.settings.lock().unwrap()), "err.note", &target))
 }
 
 /// The configured vault: path, mapping, found per path, ok.
@@ -1265,7 +1274,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, read_note, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
