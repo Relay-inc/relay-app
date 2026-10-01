@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "description": "The Productive board: provider, response mapping, strings and glyph",
   "type": "module",
+  "scripts": {
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  },
   "exports": {
     ".": "./src/index.ts"
   },

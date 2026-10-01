@@ -448,6 +448,9 @@ const en = {
   "kb.linkNone": "None",
   "kb.linkHelp": "Opening the board from this vault project shows this board",
   "kb.noBoards": "No boards",
+  "kb.search": "Search cards",
+  "kb.everyone": "Everyone",
+  "kb.unassigned": "Unassigned",
   "kb.noCols": "This board has no columns.",
   "kb.moveFailed": "Moving failed: {e}",
 };

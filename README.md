@@ -127,18 +127,22 @@ interface BoardProvider {
   strings: Locales<Key>;                               // its UI strings, en/nl/fr/de
   projects(ctx): Promise<Opt[]>;                       // level 1: Productive project, Trello workspace, Linear team
   boards(ctx, project): Promise<Opt[]>;                // level 2: Productive board, Trello board, Linear project
-  columns(ctx, ref): Promise<Column[]>;                // task lists, lists, workflow states
+  groupings?: { id: string; label: Key }[];           // more than one column layout (Productive: lists, statuses); first is default
+  columns(ctx, ref, group?): Promise<Column[]>;        // task lists, lists, workflow states
   cards(ctx, ref): Promise<Card[]>;
-  move(ctx, ref, card, toColumn): Promise<number | void>; // resolves with the new placement if known
+  move(ctx, ref, card, toColumn, group?): Promise<number | void>; // resolves with the new placement if known
   url(ctx, ref, cardId): Promise<string>;              // the card in the browser
-  detail?: CardDetail;                                 // right-panel view; without it a click opens url()
+  detail?: CardDetail;                                 // right-panel view; without it a click opens url(). Its act() runs the
+                                                       // panel's [data-cd] controls: comment, status, assignee, files
   reset?(): void;                                      // drop caches
   settings: { fields: Field<Key>[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>;
               allBoards?(ctx): Promise<BoardOpt[]>; import?: {...} };
 }
 ```
 
-`ctx` is `{ config: settings.integrations.<id>, call(method, path, body?) }`. `ref` is a `BoardRef`
+`ctx` is `{ config: settings.integrations.<id>, call(method, path, body?), upload(url, fields, file) }`; `upload` posts a
+file as a form to a URL the backend's `upload` allows (Productive: its S3 bucket), without the secrets. A card's column in a
+grouping other than the first is `card.in[group]`. `ref` is a `BoardRef`
 `{ provider, project, board }`. Settings › Integrations draws a pane per provider from `settings.fields`
 (each a string in `integrations.<id>`; a `secret` field goes to the keychain under its key instead, a `check`
 field is a checkbox stored as a boolean), with the sidebar switch, the token and a Save that runs `test`.

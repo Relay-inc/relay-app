@@ -31,6 +31,8 @@ pub struct Provider {
     pub url: fn(cfg: &Value, method: &str, path: &str, body: &Option<Value>) -> Option<String>,
     /// the headers that carry the secrets (in the order of `secrets`), and anything else the API wants
     pub headers: fn(cfg: &Value, secrets: &[String]) -> Vec<String>,
+    /// whether a file may be posted as a form to this URL (Productive: its S3 bucket), never with the secrets
+    pub upload: fn(url: &str) -> bool,
     /// whether a 2xx answer is a success: a GraphQL API (Linear) answers its errors with 200 and `errors`
     pub ok: fn(body: &Value) -> bool,
     /// an error answer as one line: HTTP status and the API's own message

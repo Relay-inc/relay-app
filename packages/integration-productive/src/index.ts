@@ -2,6 +2,7 @@ import { html, nothing } from "lit";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
 import strings, { type Key } from "./locales";
+import { toHtml, uploadFile } from "./write";
 
 const t = translator<Key>("productive");
 
@@ -54,29 +55,53 @@ async function ready(c: Ctx) {
     orgSlug = `${org}-${String(r.data.attributes.name).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
   })]);
 }
+// per project: its workflow's statuses (the status columns, in Productive's order) and its people, for the panel's pickers
+type Opts = { statuses: (Opt & { placement: number })[]; people: Opt[] };
+const opts = new Map<string, Promise<Opts>>(), optsDone = new Map<string, Opts>();
+function optsOf(c: Ctx, project: string) {
+  if (!opts.has(project)) opts.set(project, (async () => {
+    const pr = await c.call("GET", `/projects/${project}?include=workflow`), wf = pr.data?.relationships?.workflow?.data?.id;
+    const [st, pp] = await Promise.all([wf ? all(c, `/workflow_statuses?filter[workflow_id]=${wf}`) : { data: [] }, all(c, `/people?filter[project_id]=${project}&filter[status]=1`)]);
+    const o: Opts = { statuses: st.data.map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.position ?? 0 })).sort((a: any, b: any) => a.placement - b.placement),
+      people: pp.data.map((x: any) => ({ id: x.id, name: person(x) })).sort(byName) };
+    optsDone.set(project, o);
+    return o;
+  })().catch(e => { opts.delete(project); throw e; }));
+  return opts.get(project)!;
+}
+// an attachment as the panel shows it; Productive keeps deleted ones with deleted_at
+type File_ = { id: string; name: string; size: number; url: string };
+const fileOf = (x: any): File_ => ({ id: x.id, name: x.attributes.name || "", size: x.attributes.size || 0, url: x.attributes.url || "" });
+const live = (x: any) => x.type === "attachments" && !x.attributes?.deleted_at;
+const onComment = (x: any) => x.attributes?.attachable_type === "comment" || !!x.relationships?.comment?.data;
+const size = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} kB`;
 const pick = (included: any[], type: string, rel: any) => included.find((i: any) => i.type === type && i.id === rel?.data?.id);
 const taskUrl = (ref: BoardRef, id: string) => `https://app.productive.io/${orgSlug}/projects/${ref.project}/tasks/task/${id}`;
 
 // one task from its API record, its comments and its activities
-function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], acts: any[], actsInc: any[]) {
+function build(ref: BoardRef, task: any, inc: any[], cs: any[], csInc: any[], acts: any[], actsInc: any[], atts: any[] | null) {
   const a = task.attributes, rel = task.relationships, id = task.id;
   const custom = Object.entries(a.custom_fields || {}).map(([fid, v]) => {
     const f = fields?.get(fid), vals = (Array.isArray(v) ? v : [v]).map(x => f?.opts.get(String(x)) || String(x));
     return [f?.name || fid, vals.join(", ")] as [string, string];
   }).filter(([, v]) => v);
   // the feed, newest first like Productive: comments, and what changed on the task itself
-  const feed = [...cs.map((c: any) => ({ at: c.attributes.created_at, who: person(pick(csInc, "people", c.relationships.creator)), html: clean(c.attributes.body), change: "" })),
+  const filesOf = (c: any) => csInc.filter(i => live(i) && ((c.relationships.attachments?.data || []).some((r: any) => r.id === i.id) || i.relationships?.comment?.data?.id === c.id)).map(fileOf);
+  const feed = [...cs.map((c: any) => ({ at: c.attributes.created_at, who: person(pick(csInc, "people", c.relationships.creator)), html: clean(c.attributes.body), change: "", files: filesOf(c) })),
     ...acts.filter((x: any) => x.attributes.item_type === "task").map((x: any) => ({ at: x.attributes.created_at, who: person(pick(actsInc, "people", x.relationships.creator)), html: "",
       change: x.attributes.event === "create" ? t("created") : (x.attributes.changeset || []).map((c: any) => Object.entries(c).map(([k, [from, to]]: [string, any]) =>
-        k === "description" ? t("descChanged") : `${LABEL[k] ? t(LABEL[k]) : k}: ${from?.value ?? t("empty")} → ${to?.value ?? t("empty")}`).join(", ")).join(", ") }))]
-    .filter(f => f.html || f.change).sort((x, y) => y.at.localeCompare(x.at));
+        k === "description" ? t("descChanged") : `${LABEL[k] ? t(LABEL[k]) : k}: ${from?.value ?? t("empty")} → ${to?.value ?? t("empty")}`).join(", ")).join(", "), files: [] as File_[] }))]
+    .filter(f => f.html || f.change || f.files.length).sort((x, y) => y.at.localeCompare(x.at));
   const list = pick(inc, "task_lists", rel.task_list)?.attributes.name || "";
   return { title: a.title, number: a.number, closed: a.closed, description: clean(a.description), created: a.created_at, creator: person(pick(inc, "people", rel.creator)),
-    board: boardNames.get(ref.board) || "", list, url: taskUrl(ref, id),
-    fields: ([[t("status"), pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || ""], [t("taskList"), list],
-      [t("assignee"), person(pick(inc, "people", rel.assignee))], [t("start"), a.start_date || ""], [t("due"), [a.due_date, a.due_time].filter(Boolean).join(" ")],
+    board: boardNames.get(ref.board) || "", list, url: taskUrl(ref, id), project: ref.project,
+    statusId: rel.workflow_status?.data?.id ?? "", assigneeId: rel.assignee?.data?.id ?? "",
+    // the task's own attachments; null until fetched (the background load skips them)
+    files: atts && atts.filter(x => live(x) && !onComment(x)).map(fileOf),
+    fields: ([[t("status"), pick(inc, "workflow_statuses", rel.workflow_status)?.attributes.name || "", "status"], [t("taskList"), list],
+      [t("assignee"), person(pick(inc, "people", rel.assignee)), "assignee"], [t("start"), a.start_date || ""], [t("due"), [a.due_date, a.due_time].filter(Boolean).join(" ")],
       [t("estimate"), hours(a.initial_estimate)], [t("worked"), hours(a.worked_time)], [t("remaining"), hours(a.remaining_time)],
-      [t("tags"), (a.tag_list || []).join(", ")], ...custom] as [string, string][]).filter(([, v]) => v),
+      [t("tags"), (a.tag_list || []).join(", ")], ...custom] as [string, string, string?][]).filter(([, v, cd]) => v || cd),
     feed };
 }
 type Task = ReturnType<typeof build>;
@@ -91,10 +116,10 @@ async function prefetch(c: Ctx, ref: BoardRef, tk: { data: any[]; included: any[
     await ready(c);
     for (let i = 0; i < tk.data.length; i += 40) {
       const part = tk.data.slice(i, i + 40), ids = part.map((x: any) => x.id).join(",");
-      const [cs, acts] = await Promise.all([all(c, `/comments?filter[task_id]=${ids}&include=creator,task`), all(c, `/activities?filter[task_id]=${ids}&include=creator`)]);
+      const [cs, acts] = await Promise.all([all(c, `/comments?filter[task_id]=${ids}&include=creator,task,attachments`), all(c, `/activities?filter[task_id]=${ids}&include=creator`)]);
       if (g !== warming) return;
       for (const x of part) details.set(x.id, build(ref, x, tk.included, cs.data.filter((y: any) => y.relationships.task?.data?.id === x.id), cs.included,
-        acts.data.filter((y: any) => String(y.attributes.task_id) === x.id), acts.included));
+        acts.data.filter((y: any) => String(y.attributes.task_id) === x.id), acts.included, null));
     }
   } catch { /* see above */ }
 }
@@ -108,6 +133,7 @@ const productive: BoardProvider<Key> = {
   // Productive's favicon (productive.io), as vector: its own colours, not the glyph stroke
   glyph: '<defs><linearGradient id="pvg" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#AB40FF"/><stop offset="1" stop-color="#5D2BFF"/></linearGradient></defs><rect width="16" height="16" rx="3.6" fill="url(#pvg)" stroke="none"/><g transform="translate(2.5 1.6) scale(.357)" fill="#fff" stroke="none"><path d="M6.036 28.89L.17 18.977a1.217 1.217 0 01.426-1.667l4.633-2.74a1.217 1.217 0 011.666.426l3.3 5.579 3.424-5.89c4.28-7.018 8.712.738 6.693 4.034l-5.89 10.139a2.836 2.836 0 01-2.443 1.412l-3.492.015a2.838 2.838 0 01-2.451-1.393z"/><path d="M30.847 21.445a4.4 4.4 0 11-8.802.001 4.4 4.4 0 018.802 0zm-18.259 3.176c.966 1.64 3.34 1.632 4.297-.014l3.429-5.9c1.787-2.917 3.807-4.476 6.333-4.82.612-.083 1.211-.224 1.374-1.145l.938-5.259a1.234 1.234 0 00-1.207-1.485c-4.603 0-9.956 1.825-14.131 8.672l-3.426 5.892 2.393 4.059z"/></g>',
 
+  groupings: [{ id: "list", label: "groupList" }, { id: "status", label: "groupStatus" }],
   projects: async c => (await all(c, `/projects?filter[status]=1${c.config.user ? `&filter[person_id]=${c.config.user}` : ""}`)).data
     .map((p: any) => ({ id: p.id, name: p.attributes.name })).sort(byName),
   boards: async (c, p) => {
@@ -116,7 +142,7 @@ const productive: BoardProvider<Key> = {
     for (const b of bs) boardNames.set(b.id, b.name);
     return bs;
   },
-  columns: async (c, ref) => (await all(c, `/task_lists?filter[folder_id]=${ref.board}&filter[status]=1`)).data
+  columns: async (c, ref, group) => group === "status" ? (await optsOf(c, ref.project)).statuses : (await all(c, `/task_lists?filter[folder_id]=${ref.board}&filter[status]=1`)).data
     .map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.placement ?? 0 })).sort((a, b) => a.placement - b.placement),
   cards: async (c, ref) => {
     // include=task_list is required: without it the relationship comes back without an id
@@ -124,44 +150,86 @@ const productive: BoardProvider<Key> = {
     const people = new Map<string, string>(tk.included.filter((i: any) => i.type === "people").map((i: any) => [i.id, i.attributes.first_name || ""]));
     prefetch(c, ref, tk);
     return tk.data.map((x: any) => ({ id: x.id, title: x.attributes.title, number: x.attributes.number, placement: x.attributes.placement ?? 0, due: x.attributes.due_date,
-      column: x.relationships.task_list?.data?.id ?? "", who: people.get(x.relationships.assignee?.data?.id) || "" }));
+      column: x.relationships.task_list?.data?.id ?? "", in: { status: x.relationships.workflow_status?.data?.id ?? "" }, who: people.get(x.relationships.assignee?.data?.id) || "" }));
   },
-  move: async (c, _ref, card, to) => {
-    const r = await c.call("PATCH", `/tasks/${card.id}`, { data: { type: "tasks", id: card.id, relationships: { task_list: { data: { type: "task_lists", id: to } } } } });
+  move: async (c, _ref, card, to, group) => {
+    const rel = group === "status" ? { workflow_status: { data: { type: "workflow_statuses", id: to } } } : { task_list: { data: { type: "task_lists", id: to } } };
+    const r = await c.call("PATCH", `/tasks/${card.id}`, { data: { type: "tasks", id: card.id, relationships: rel } });
     return r?.data?.attributes?.placement ?? undefined;
   },
   url: async (c, ref, id) => { await ready(c); return taskUrl(ref, id); },
-  reset: () => { orgSlug = ""; fields = null; details.clear(); },
+  reset: () => { orgSlug = ""; fields = null; details.clear(); opts.clear(); optsDone.clear(); },
 
   detail: {
     cached: id => details.get(id),
     /** A task fresh from Productive, also when the background load already had it. */
     async fetch(c, ref, id) {
-      const [tk, cs, acts] = await Promise.all([c.call("GET", `/tasks/${id}?include=workflow_status,assignee,task_list,creator`),
-        all(c, `/comments?filter[task_id]=${id}&include=creator`), all(c, `/activities?filter[task_id]=${id}&include=creator`), ready(c)]);
-      const task = build(ref, tk.data, tk.included || [], cs.data, cs.included, acts.data, acts.included);
+      const [tk, cs, acts, atts] = await Promise.all([c.call("GET", `/tasks/${id}?include=workflow_status,assignee,task_list,creator`),
+        all(c, `/comments?filter[task_id]=${id}&include=creator,attachments`), all(c, `/activities?filter[task_id]=${id}&include=creator`),
+        all(c, `/attachments?filter[task_id]=${id}`), ready(c), optsOf(c, ref.project).catch(() => null)]);
+      const task = build(ref, tk.data, tk.included || [], cs.data, cs.included, acts.data, acts.included, atts.data);
       details.set(id, task);
       return task;
     },
     /** The panel, in the same Tailwind utilities as the PR detail so both look alike (Tailwind scans the packages). */
     // Description and feed are Productive's HTML, which the original trusted the same way (unsafeHTML); everything else is escaped by Lit.
-    // The close button tells the panel through an event, the package does not know the app.
+    // The package does not know the app: closing and acting go to the panel as bubbling, composed events ("detail-close", "detail-act").
     render(tk: Task | null, err) {
       const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3"><button class="btn whitespace-nowrap flex-none" title=${t("close")} @click=${(e: Event) => e.target!.dispatchEvent(new CustomEvent("detail-close", { bubbles: true, composed: true }))}>×</button>
         ${tk ? html`<span class="flex-1"></span><a class="btn whitespace-nowrap flex-none inline-flex items-center" href=${tk.url}>${t("open", { name: "Productive" })}</a>` : nothing}</div>`;
       if (err) return html`${bar}<div class="err-box">${err}</div>`;
       if (!tk) return html`${bar}<div class="text-secondary mb-3">${t("loading")}</div>`;
+      const act = (from: EventTarget, action: string, value: string, files: File[] = [], done?: () => void) =>
+        from.dispatchEvent(new CustomEvent("detail-act", { bubbles: true, composed: true, detail: { action, value, files, done } }));
       const meta = "flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5 tabular-nums";
       const sec = (title: string, n: number | string, body: unknown) => html`<section class="mt-4"><h3 class="text-xs font-semibold text-secondary uppercase tracking-wide mb-1.5 pb-1 border-b border-separator">${title}${n !== "" ? html` <span class="text-secondary tabular-nums">${n}</span>` : nothing}</h3>${body}</section>`;
-      return html`${bar}<div>
+      // status and assignee change from the panel once the project's options are known, else they are text
+      const o = optsDone.get(tk.project);
+      const rows = tk.fields.filter(([, v, cd]) => v || (cd && o));
+      const picker = (cd: string, v: string) => {
+        const list = cd === "status" ? o?.statuses : o?.people, cur = cd === "status" ? tk.statusId : tk.assigneeId;
+        if (!list) return v;
+        // a value the list lacks (someone no longer on the project) still shows as it is
+        const opts_ = cur && !list.some(x => x.id === cur) ? [{ id: cur, name: v }, ...list] : list;
+        return html`<select class="field w-full" @change=${(e: Event) => act(e.target!, cd, (e.target as HTMLSelectElement).value)}>
+          ${cd === "assignee" ? html`<option value="" ?selected=${!cur}>${t("unassigned")}</option>` : nothing}
+          ${opts_.map(x => html`<option value=${x.id} ?selected=${x.id === cur}>${x.name}</option>`)}</select>`;
+      };
+      // opening one needs the Productive session, so a link to the browser
+      const files = (fs: File_[]) => html`<ul class="flex flex-col gap-1 my-1.5 text-sm">${fs.map(f => html`<li class="flex items-baseline gap-2 min-w-0">
+        ${f.url ? html`<a class="truncate" href=${f.url}>${f.name}</a>` : html`<span class="truncate">${f.name}</span>`}<span class="text-xs text-secondary tabular-nums">${size(f.size)}</span></li>`)}</ul>`;
+      // files dropped anywhere on the task become its attachments
+      const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
+      const comment = (e: Event) => { const ta = (e.target as HTMLElement).closest("section")!.querySelector("textarea")!; act(e.target!, "comment", ta.value, [], () => { ta.value = ""; }); };
+      return html`${bar}<div @dragover=${(e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); }} @drop=${(e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); act(e.target!, "attach", "", [...e.dataTransfer!.files]); }}>
         <div class=${meta}>${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => html`<span>${x}</span>`)}</div>
         <h2 class="text-sm font-semibold mb-2 leading-snug">${tk.closed ? html`<span class="text-xs text-secondary border border-separator rounded-sm px-1 mr-1.5">${t("closed")}</span>` : nothing}${tk.title}</h2>
         <div class=${meta}><span>${tk.creator}</span><span>${when(tk.created)}</span></div>
-        <dl class="grid grid-cols-[max-content_1fr] gap-x-3.5 gap-y-1 mt-3 text-sm">${tk.fields.map(([k, v]) => html`<dt class="text-secondary">${k}</dt><dd class="wrap-anywhere">${v}</dd>`)}</dl>
+        <dl class="grid grid-cols-[max-content_1fr] gap-x-3.5 gap-y-1 mt-3 text-sm items-center">${rows.map(([k, v, cd]) => html`<dt class="text-secondary">${k}</dt><dd class="wrap-anywhere">${cd ? picker(cd, v) : v}</dd>`)}</dl>
+        ${tk.files ? sec(t("files"), tk.files.length, html`${tk.files.length ? files(tk.files) : html`<div class="text-secondary mb-2">${t("noFiles")}</div>`}
+          <label class="btn inline-flex items-center cursor-pointer">${t("attach")}<input type="file" multiple hidden @change=${(e: Event) => {
+            const i = e.target as HTMLInputElement; if (i.files?.length) act(i, "attach", "", [...i.files]); i.value = ""; }}></label>`) : nothing}
         ${sec(t("desc"), "", tk.description.trim() ? html`<div class="md-panel">${unsafeHTML(tk.description)}</div>` : html`<div class="text-secondary mb-3">${t("noDesc")}</div>`)}
-        ${sec(t("feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => html`<div class="py-2 border-b border-separator"><div class="flex items-center gap-2 text-sm mb-1"><b>${f.who || "Productive"}</b><span class="ml-auto text-xs text-secondary tabular-nums">${when(f.at)}</span></div>
-          ${f.html ? html`<div class="md-panel">${unsafeHTML(f.html)}</div>` : html`<div class="text-secondary mb-3">${f.change}</div>`}</div>`) : html`<div class="text-secondary mb-3">${t("nothing")}</div>`)}
+        ${sec(t("feed"), tk.feed.length, html`<div class="flex flex-col gap-1.5 mb-3"><textarea class="field w-full resize-y py-1.5" rows="3" placeholder=${t("commentPh")}></textarea>
+          <button class="btn primary self-end" @click=${comment}>${t("comment")}</button></div>
+          ${tk.feed.length ? tk.feed.map(f => html`<div class="py-2 border-b border-separator"><div class="flex items-center gap-2 text-sm mb-1"><b>${f.who || "Productive"}</b><span class="ml-auto text-xs text-secondary tabular-nums">${when(f.at)}</span></div>
+          ${f.html ? html`<div class="md-panel">${unsafeHTML(f.html)}</div>` : f.change ? html`<div class="text-secondary mb-3">${f.change}</div>` : nothing}${f.files.length ? files(f.files) : nothing}</div>`) : html`<div class="text-secondary mb-3">${t("nothing")}</div>`}`)}
       </div>`;
+    },
+    /** comment, status, assignee, attach: done in Productive, then the task read again */
+    async act(c, ref, id, action, { value, files }) {
+      const patch = (rel: any) => c.call("PATCH", `/tasks/${id}`, { data: { type: "tasks", id, relationships: rel } });
+      if (action === "comment" && value.trim()) await c.call("POST", "/comments", { data: { type: "comments", attributes: { body: toHtml(value) }, relationships: { task: { data: { type: "tasks", id } } } } });
+      else if (action === "status" && value) await patch({ workflow_status: { data: { type: "workflow_statuses", id: value } } });
+      else if (action === "assignee") await patch({ assignee: { data: value ? { type: "people", id: value } : null } });
+      else if (action === "attach" && files.length) {
+        // the relationship is the whole list: the ones already there and the new ones
+        // read now, not from the panel: a background load may have dropped them from the cache meanwhile
+        const ids = (await all(c, `/attachments?filter[task_id]=${id}`)).data.filter((x: any) => live(x) && !onComment(x)).map((x: any) => x.id as string);
+        for (const f of files) ids.push(await uploadFile(c, f));
+        await patch({ attachments: { data: ids.map(x => ({ type: "attachments", id: x })) } });
+      }
+      return productive.detail!.fetch(c, ref, id);
     },
   },
 

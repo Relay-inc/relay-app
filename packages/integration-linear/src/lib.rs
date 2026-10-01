@@ -41,6 +41,7 @@ pub const PROVIDER: Provider = Provider {
         (method == "POST" && path == "/graphql" && shape && q.len() < 4000 && (read || moves)).then(|| "https://api.linear.app/graphql".into())
     },
     headers: |_, s| vec![format!("Authorization: {}", s[0]), "Content-Type: application/json".into()],
+    upload: |_| false,
     ok: |v| v["errors"].as_array().is_none_or(|e| e.is_empty()),
     error: |code, v| {
         let c = gql_code(v);

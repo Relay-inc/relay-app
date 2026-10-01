@@ -13,7 +13,10 @@ export const panel = {
   detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
+  acting: false, // a card action (comment, status, files) is running: the panel is inert meanwhile
+  actErr: "",
 };
+export type CardAct = { action: string; value: string; files: File[]; done?: () => void };
 
 /** The provider and card id of a card key, when that provider draws its cards in the panel. */
 export const cardOf = (key: string) => {
@@ -58,6 +61,7 @@ export async function openDetail(key: string) {
   if (!item) return;
   panel.open = key;
   panel.err = "";
+  panel.actErr = "";
   mail.link = "";
   const card = cardOf(key);
   if (card) panel.detail[key] ??= card.detail.cached(card.id);
@@ -71,6 +75,23 @@ export async function openDetail(key: string) {
     if (item.kind === "mail") delete panel.detail[key];
     if (!panel.detail[key]) panel.err = String(e);
   }
+  changed();
+}
+/** An action from a card's panel: the provider does it in the tracker and answers with the card as it is now.
+ * `done` (the template's) runs on success, e.g. emptying the comment box; on a failure what was typed stays. */
+export async function cardAct(key: string, a: CardAct) {
+  const card = cardOf(key);
+  if (!card?.detail.act || panel.acting) return;
+  panel.acting = true;
+  panel.actErr = "";
+  changed();
+  try {
+    panel.detail[key] = await card.detail.act(ctxOf(card.provider, config.value.integrations), panel.cardRefs[key], card.id, a.action, { value: a.value, files: a.files });
+    a.done?.();
+  } catch (e) {
+    panel.actErr = String(e);
+  }
+  panel.acting = false;
   changed();
 }
 export function closeDetail() {
