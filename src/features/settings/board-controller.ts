@@ -8,6 +8,8 @@ import type { IntegrationConfig } from "../../domain/config";
 import type { Snapshot } from "../../domain/vault";
 
 type McpStatus = { supported: boolean; found: boolean };
+/** A vault project linked to a board ("project/board"), or unlinked (""). */
+export type BoardLink = { vaultProject: string; value: string };
 
 /** The vault's project names, sorted, for mapping boards to them. */
 async function loadVaultProjects() {
@@ -79,13 +81,15 @@ export class BoardsController {
     this.redraw();
   }
 
-  async map(provider: BoardProvider, vaultProject: string, value: string) {
-    // a vault project has at most one board: picking one replaces what it had, None only drops this provider's
+  /** Link vault projects to boards (`value` "project/board") or unlink them (""), in one save. */
+  async map(provider: BoardProvider, links: BoardLink[]) {
+    // a vault project has at most one board: picking one replaces what it had, unlinking only drops this provider's
     const boards = { ...this.host.settings.boards };
-    const [project, board] = value.split("/");
-    if (board) boards[vaultProject] = { provider: provider.id, project, board };
-    else if (boards[vaultProject]?.provider === provider.id) delete boards[vaultProject];
-    else return;
+    for (const { vaultProject, value } of links) {
+      const [project, board] = value.split("/");
+      if (board) boards[vaultProject] = { provider: provider.id, project, board };
+      else if (boards[vaultProject]?.provider === provider.id) delete boards[vaultProject];
+    }
     try {
       const saved = await invoke<Settings>("set_settings", { settings: { ...this.host.settings, boards } });
       this.host.commit(saved);

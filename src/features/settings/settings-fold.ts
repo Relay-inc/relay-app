@@ -1,5 +1,6 @@
 import { css, html, nothing } from "lit";
 import { customElement, property } from "lit/decorators.js";
+import { ifDefined } from "lit/directives/if-defined.js";
 import { emit } from "../../core/dom";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
@@ -28,6 +29,8 @@ export class SettingsFold extends SettingsElement {
   ];
 
   @property({ type: Boolean }) open = false;
+  /** a row that opens a page of its own instead of folding: no expanded state, never shows the slot */
+  @property({ type: Boolean }) nav = false;
   @property({ attribute: false }) icon: Renderable = nothing;
   @property({ attribute: false }) name: Renderable = nothing;
   @property({ attribute: false }) status: Renderable = nothing;
@@ -38,7 +41,7 @@ export class SettingsFold extends SettingsElement {
       <button
         class="group flex w-full items-center gap-3 rounded-sm py-2.5 text-left focus-visible:ring-2 ring-s-ring focus-visible:outline-none"
         @click=${() => emit(this, "fold-toggle")}
-        aria-expanded=${this.open}
+        aria-expanded=${ifDefined(this.nav ? undefined : (String(this.open) as "true" | "false"))}
       >
         <span class="grid w-6 flex-none place-items-center">${this.icon}</span>
         <span class="min-w-0 flex-1"
@@ -54,7 +57,7 @@ export class SettingsFold extends SettingsElement {
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
-      ${this.open ? html`<div class="grid grid-cols-1 gap-3 pb-3.5 pl-9"><slot></slot></div>` : nothing}
+      ${this.open && !this.nav ? html`<div class="grid grid-cols-1 gap-3 pb-3.5 pl-9"><slot></slot></div>` : nothing}
     </div>`;
   }
 }
