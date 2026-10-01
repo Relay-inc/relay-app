@@ -50,15 +50,15 @@ export class PermissionCard extends LitElement {
 
   render() {
     const r = this.request, busy = this.busy;
-    const box = "grid grid-cols-[minmax(0,1fr)] gap-[10px] rounded-lg border border-accent bg-fill px-[14px] py-3"; // a long path never widens the card past its border
+    const box = "grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3"; // a long path never widens the card past its border
     if (isQuestion(r)) return html`<div class=${box}><div class="text-sm text-secondary">${t("card.asks")}</div>${(r.input.questions || []).map((q: any, qi: number) => html`
-      <div class="text-lg font-semibold text-label">${q.question}</div>
+      <div class="text-base font-semibold text-label">${q.question}</div>
       <div class="flex flex-wrap gap-2">${(q.options || []).map((o: any) => html`<button class=${this.on[qi]?.has(o.label) ? "btn btn-primary" : "btn"} title=${o.description || ""} ?disabled=${busy}
         @click=${() => this.pick(qi, o.label, !!q.multiSelect)}>${o.label}</button>`)}</div>
-      <input class="rounded-[6px] border border-separator bg-bg px-[10px] py-[6px] text-sm text-label placeholder:text-[#757575]" placeholder=${t("card.other")} .value=${this.other[qi] ?? ""} @input=${(e: Event) => { this.other[qi] = (e.target as HTMLInputElement).value; }}>`)}
+      <input class="rounded-md border border-separator bg-bg px-2.5 py-1.5 text-sm text-label placeholder:text-secondary" placeholder=${t("card.other")} .value=${this.other[qi] ?? ""} @input=${(e: Event) => { this.other[qi] = (e.target as HTMLInputElement).value; }}>`)}
       <div class="flex justify-end gap-2"><button class="btn" ?disabled=${busy} @click=${() => emit(this, "answer", "deny")}>${t("card.skip")}</button><button class="btn btn-primary" ?disabled=${busy} @click=${() => this.answer()}>${t("card.answer")}</button></div></div>`;
-    return html`<div class=${box}><div class="text-sm text-secondary [&_code]:font-mono [&_code]:text-[12.5px]">${th("card.wants", { tool: r.tool_name, where: this.where ? t("card.in", { name: this.where }) : "" })}</div>
-      <pre class="font-mono text-sm whitespace-pre-wrap [overflow-wrap:anywhere] text-label">${describe(r)}</pre>
+    return html`<div class=${box}><div class="text-sm text-secondary [&_code]:font-mono [&_code]:text-xs">${th("card.wants", { tool: r.tool_name, where: this.where ? t("card.in", { name: this.where }) : "" })}</div>
+      <pre class="font-mono text-sm whitespace-pre-wrap wrap-anywhere text-label">${describe(r)}</pre>
       <div class="flex justify-end gap-2"><button class="btn" ?disabled=${busy} @click=${() => emit(this, "answer", "deny")}>${t("card.deny")}</button><button class="btn btn-primary" ?disabled=${busy} @click=${() => emit(this, "answer", "allow")}>${t("card.allow")}</button></div></div>`;
   }
 }

@@ -10,8 +10,8 @@ declare global { interface HTMLElementEventMap { "date-pick": CustomEvent<string
 export const iso = (y: number, m: number, d: number) => `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 export const todayIso = (plus = 0) => { const d = new Date(); d.setDate(d.getDate() + plus); return iso(d.getFullYear(), d.getMonth(), d.getDate()); };
 
-const G = "w-[15px] h-[15px] fill-none stroke-secondary [stroke-width:1.5] [stroke-linecap:round] [stroke-linejoin:round]";
-const nav = "grid place-items-center rounded-md cursor-default w-6 h-6 enabled:hover:bg-fill disabled:*:opacity-35 focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--accent)_45%,transparent)]";
+const G = "w-4 h-4 fill-none stroke-secondary glyph";
+const nav = "grid place-items-center rounded-md cursor-default w-6 h-6 enabled:hover:bg-fill disabled:*:opacity-35 focus-visible:outline-2 focus-visible:outline-accent/45";
 
 /** A month grid under its button, past days off, Monday first. Opens upwards near the bottom of the view; a click outside or Escape closes it (the toggle button, marked data-rem-cal, handles itself). */
 @customElement("relay-reminder-calendar")
@@ -52,14 +52,14 @@ export class ReminderCalendar extends LitElement {
     const { y, m } = this, now = new Date(), today = iso(now.getFullYear(), now.getMonth(), now.getDate());
     const f = (o: Intl.DateTimeFormatOptions, d: Date) => new Intl.DateTimeFormat(currentLocale(), o).format(d);
     const lead = (new Date(y, m, 1).getDay() + 6) % 7, days = new Date(y, m + 1, 0).getDate();
-    return html`<div data-pop class="absolute z-[7] right-0 top-[calc(100%+6px)] data-[up]:top-auto data-[up]:bottom-[calc(100%+6px)] w-[238px] p-2.5 bg-bg border border-separator rounded-xl shadow-[0_10px_30px_rgba(0,0,0,.14),0_1px_3px_rgba(0,0,0,.08)]" role="dialog" aria-label=${t("rem.pick")}>
+    return html`<div data-pop class="absolute z-10 right-0 top-full mt-1.5 data-[up]:top-auto data-[up]:bottom-full mb-1.5 w-60 p-2.5 bg-bg border border-separator rounded-xl shadow-xl" role="dialog" aria-label=${t("rem.pick")}>
       <div class="flex items-center gap-0.5 mb-2 ml-1"><span class="flex-1 text-sm font-semibold capitalize">${f({ month: "long", year: "numeric" }, new Date(y, m, 1))}</span>
         <button class=${nav} ?disabled=${y === now.getFullYear() && m === now.getMonth()} @click=${() => this.go(-1)} aria-label=${t("cal.prev")}>${icon("left", G)}</button>
         <button class=${nav} @click=${() => this.go(1)} aria-label=${t("cal.next")}>${icon("right", G)}</button></div>
-      <div class="grid grid-cols-7 gap-0.5 text-center">${Array.from({ length: 7 }, (_, i) => html`<span class="text-2xs font-semibold text-secondary uppercase pb-1">${f({ weekday: "narrow" }, new Date(2024, 0, 1 + i))}</span>`)}</div>
+      <div class="grid grid-cols-7 gap-0.5 text-center">${Array.from({ length: 7 }, (_, i) => html`<span class="text-xs font-semibold text-secondary uppercase pb-1">${f({ weekday: "narrow" }, new Date(2024, 0, 1 + i))}</span>`)}</div>
       <div class="grid grid-cols-7 gap-0.5 text-center">${Array.from({ length: lead }, () => html`<span></span>`)}${Array.from({ length: days }, (_, i) => {
         const d = iso(y, m, i + 1), isToday = d === today;
-        return html`<button ?disabled=${d < today} class="grid place-items-center rounded-md cursor-default h-[30px] text-sm font-mono tabular-nums focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--accent)_45%,transparent)] disabled:text-secondary disabled:opacity-45 enabled:hover:bg-accent enabled:hover:text-on-accent ${isToday ? "text-accent font-semibold shadow-[inset_0_0_0_1px_var(--accent)]" : "text-label"}" @click=${() => emit(this, "date-pick", d)}>${i + 1}</button>`;
+        return html`<button ?disabled=${d < today} class="grid place-items-center rounded-md cursor-default h-8 text-sm font-mono tabular-nums focus-visible:outline-2 focus-visible:outline-accent/45 disabled:text-secondary disabled:opacity-45 enabled:hover:bg-accent enabled:hover:text-on-accent ${isToday ? "text-accent font-semibold ring-1 ring-inset ring-accent" : "text-label"}" @click=${() => emit(this, "date-pick", d)}>${i + 1}</button>`;
       })}</div></div>`;
   }
 }

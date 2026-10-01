@@ -35,11 +35,11 @@ export class SettingsPath extends SettingsElement {
   @property() pickTip = "";
 
   render() {
-    return html`<div class="${this.wide ? "w-auto" : "w-[260px]"} box-content flex h-7 items-center gap-[7px] overflow-hidden rounded-[6px] border border-s-input py-0.5 pr-1 pl-[9px] text-xs focus-within:shadow-[0_0_0_1px_var(--s-primary)]">${this.found == null ? nothing : html`<span class="size-1.5 flex-none rounded-full ${this.found ? "bg-s-ok" : "bg-s-warn"}" title=${this.foundTip}></span>`}<input
-        class="h-[26px] min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-xs text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:shadow-[0_0_0_1px_var(--s-primary)] focus-visible:outline-none"
+    return html`<div class="${this.wide ? "w-auto" : "w-65"} box-content flex h-7 items-center gap-2 overflow-hidden rounded-md border border-s-input py-0.5 pr-1 pl-2 text-xs focus-within:ring-1 ring-s-primary">${this.found == null ? nothing : html`<span class="size-1.5 flex-none rounded-full ${this.found ? "bg-s-ok" : "bg-s-warn"}" title=${this.foundTip}></span>`}<input
+        class="h-6 min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-xs text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:ring-1 ring-s-primary focus-visible:outline-none"
         .value=${live(this.value)} title=${this.tip} placeholder=${this.placeholder || nothing} ?readonly=${this.readonly} spellcheck="false"
         @input=${(e: Event) => emit(this, "path-input", val(e))} @change=${() => emit(this, "path-change")}><button
-        class="box-content grid h-7 w-[30px] flex-none place-items-center border-l border-s-border text-s-muted hover:bg-s-hover hover:text-s-fg focus-visible:shadow-[inset_0_0_0_1px_var(--s-primary)]"
-        @click=${() => emit(this, "path-pick")} title=${this.pickTip}>${ic("folder", "size-[15px] fill-none stroke-current stroke-[1.6] [stroke-linecap:round] [stroke-linejoin:round]")}</button></div>`;
+        class="box-content grid h-7 w-8 flex-none place-items-center border-l border-s-border text-s-muted hover:bg-s-hover hover:text-s-fg focus-visible:ring-1 ring-inset ring-s-primary"
+        @click=${() => emit(this, "path-pick")} title=${this.pickTip}>${ic("folder", "size-4 fill-none stroke-current stroke-2 glyph")}</button></div>`;
   }
 }

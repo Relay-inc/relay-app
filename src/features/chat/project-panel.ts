@@ -48,15 +48,15 @@ export class ProjectPanel extends LitElement {
   render() {
     const cur = selProject(), names = vault.snap.projects.map((p: any) => p.name).sort((a: string, b: string) => a.localeCompare(b));
     // a long project name in the select or the inputs never pushes past the panel
-    const lab = "grid grid-cols-[minmax(0,1fr)] gap-[6px] text-sm text-secondary select-none";
-    return html`<div class="grid grid-cols-[minmax(0,1fr)] gap-3 bg-bg border border-separator rounded-lg [box-shadow:0_8px_24px_rgba(0,0,0,.12)] p-[14px]">
+    const lab = "grid grid-cols-1 gap-1.5 text-sm text-secondary select-none";
+    return html`<div class="grid grid-cols-1 gap-3 bg-bg border border-separator rounded-lg shadow-lg p-3.5">
       ${this.err ? html`<div class="err-box">${this.err}</div>` : nothing}
       <label class=${lab}>${t("pop.project")}
         <select class="field" @change=${(e: Event) => { this.proj = (e.target as HTMLSelectElement).value || null; }}><option value="" .selected=${!this.proj}>${t("general")}</option>${names.map((n: string) => html`<option .selected=${n === this.proj}>${n}</option>`)}</select></label>
       ${cur ? html`<div class=${lab}>${t("pop.sidebar", { name: cur })}
-        <div class="flex gap-2 items-center"><label class="btn inline-flex items-center flex-none" title=${t("pop.imgPick")}>${isImg(this.img) ? iconImg(this.img, "w-[18px] h-[18px] flex-none object-contain rounded-[3px]") : t("pop.img")}<input type="file" accept="image/*,.ico,.svg" hidden @change=${this.pickFile}></label>
-          <input class="field w-16 text-center placeholder:text-[#757575]" maxlength="4" placeholder="Emoji" .value=${live(this.emoji)} @input=${(e: Event) => { this.emoji = (e.target as HTMLInputElement).value; this.img = undefined; }}>
-          <input class="field flex-1 min-w-0 placeholder:text-[#757575]" placeholder=${cur} .value=${live(this.lab)} @input=${(e: Event) => { this.lab = (e.target as HTMLInputElement).value; }}></div></div>` : nothing}
+        <div class="flex gap-2 items-center"><label class="btn inline-flex items-center flex-none" title=${t("pop.imgPick")}>${isImg(this.img) ? iconImg(this.img, "w-4 h-4 flex-none object-contain rounded-xs") : t("pop.img")}<input type="file" accept="image/*,.ico,.svg" hidden @change=${this.pickFile}></label>
+          <input class="field w-16 text-center placeholder:text-secondary" maxlength="4" placeholder="Emoji" .value=${live(this.emoji)} @input=${(e: Event) => { this.emoji = (e.target as HTMLInputElement).value; this.img = undefined; }}>
+          <input class="field flex-1 min-w-0 placeholder:text-secondary" placeholder=${cur} .value=${live(this.lab)} @input=${(e: Event) => { this.lab = (e.target as HTMLInputElement).value; }}></div></div>` : nothing}
       <div><button class="btn" @click=${closePop}>${t("pop.cancel")}</button><button class="btn btn-primary" @click=${() => this.save()}>${t("pop.save")}</button></div></div>`;
   }
 }

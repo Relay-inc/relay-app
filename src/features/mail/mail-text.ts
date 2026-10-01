@@ -24,7 +24,7 @@ function prose(text: string) {
   return out;
 }
 // no whitespace inside: the text is pre-wrap. Inside a quote the gap above is smaller
-const block = (text: string, quoted: boolean) => html`<div class="whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-[1.5] ${quoted ? "mt-1.5" : "mt-3"}">${prose(text)}</div>`;
+const block = (text: string, quoted: boolean) => html`<div class="whitespace-pre-wrap wrap-anywhere text-sm leading-normal ${quoted ? "mt-1.5" : "mt-3"}">${prose(text)}</div>`;
 const fold = (label: unknown, quote: unknown, open = false) => html`<details class="mt-3.5" ?open=${open}><summary class="text-xs text-secondary cursor-default py-1 list-outside ml-3.5 hover:text-label">${label}</summary><blockquote class="mt-1.5 pl-3 border-l-2 border-separator text-secondary">${quote}</blockquote></details>`;
 
 /** A mail text: the new part, then the quoted mail as a fold whose label is its "On … wrote:" line, recursively per level. */

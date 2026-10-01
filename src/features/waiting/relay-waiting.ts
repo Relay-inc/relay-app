@@ -36,10 +36,10 @@ export class RelayWaiting extends LitElement {
     const byK: Record<string, Pending[]> = {};
     for (const r of chat.pendingList) (byK[r.project] ||= []).push(r);
     const head = (k: string) => `${projOf(k) ? `${projOf(k)} · ` : ""}${label(k)}`;
-    const proj = (text: string) => html`<div class="text-sm font-semibold text-secondary -mb-[6px]">${text}</div>`;
-    return html`<div class="flex flex-col gap-[14px]">${Object.entries(byK).map(([k, rs]) => html`${proj(head(k))}${repeat(rs, r => r.id, r =>
+    const proj = (text: string) => html`<div class="text-sm font-semibold text-secondary -mb-1.5">${text}</div>`;
+    return html`<div class="flex flex-col gap-3.5">${Object.entries(byK).map(([k, rs]) => html`${proj(head(k))}${repeat(rs, r => r.id, r =>
         html`<relay-permission-card .request=${r} .where=${r.project ? label(r.project) : ""} @answer=${(e: CustomEvent) => this.decide(r, e)}></relay-permission-card>`)}`)}
-      ${blockedAgents().map(a => html`${proj(a.name)}<div class="grid grid-cols-[minmax(0,1fr)] gap-[10px] rounded-lg border border-accent bg-fill px-[14px] py-3"><div class="text-sm text-secondary">${t("wait.bg", { date: new Date(a.startedAt).toLocaleDateString(currentLocale()) })}</div>
+      ${blockedAgents().map(a => html`${proj(a.name)}<div class="grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3"><div class="text-sm text-secondary">${t("wait.bg", { date: new Date(a.startedAt).toLocaleDateString(currentLocale()) })}</div>
         <div class="flex justify-end gap-2">${this.btn("hide", a.id, t("wait.hide"))}${this.btn("stop", a.id, t("wait.stop"))}${this.btn("attach", a.id, t("bar.openTerminal"), true)}</div></div>`)}</div>`;
   }
 }

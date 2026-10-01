@@ -21,10 +21,10 @@ export class ImageThumbs extends LitElement {
   @property({ reflect: true }) size: "composer" | "message" = "composer";
 
   render() {
-    const img = this.size === "message" ? "h-16 max-w-[200px]" : "h-[60px] max-w-[180px]";
+    const img = this.size === "message" ? "h-16 max-w-50" : "h-15 max-w-45";
     return this.urls.map((u, i) => u
-      ? html`<span class="group relative block flex-none"><img class="${img} block object-cover rounded-lg shadow-[0_0_0_.5px_var(--separator)] cursor-zoom-in" src=${u} alt="" @click=${() => emit(this, "open", u)}>${this.removable
-          ? html`<button class="absolute -top-[6px] -right-[6px] hidden group-hover:grid focus-visible:grid size-[18px] rounded-full p-0 bg-label text-bg text-[13px] leading-none place-items-center cursor-default" title=${t("img.remove")} aria-label=${t("img.removeLabel")} @click=${(e: Event) => { e.stopPropagation(); emit(this, "remove", i); }}>×</button>` : nothing}</span>`
+      ? html`<span class="group relative block flex-none"><img class="${img} block object-cover rounded-lg ring-1 ring-separator cursor-zoom-in" src=${u} alt="" @click=${() => emit(this, "open", u)}>${this.removable
+          ? html`<button class="absolute -top-1.5 -right-1.5 hidden group-hover:grid focus-visible:grid size-4 rounded-full p-0 bg-label text-bg text-sm leading-none place-items-center cursor-default" title=${t("img.remove")} aria-label=${t("img.removeLabel")} @click=${(e: Event) => { e.stopPropagation(); emit(this, "remove", i); }}>×</button>` : nothing}</span>`
       : html`<span class="text-sm text-secondary">${t("img.placeholder")}</span>`);
   }
 }

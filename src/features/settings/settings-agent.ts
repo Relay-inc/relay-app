@@ -35,7 +35,7 @@ export class SettingsAgent extends SettingsElement {
           @change=${(e: Event) => emit(this, "agent-bin", val(e).trim())}>`, { id: `agbin-${id}`, hint: d.note ? html`<code>${d.note}</code>` : "" })}
       ${(ap?.options ?? []).map(o => field(at(ap!, o.label), html`<select class=${SELECT} id="agopt-${id}-${o.id}" @change=${(e: Event) => emit(this, "agent-option", { id: o.id, value: val(e) })}>${o.choices.map(c =>
         html`<option value=${c.id} ?selected=${(cfg[o.id] ?? o.choices[0].id) === c.id}>${at(ap!, c.label)}</option>`)}</select>`, { id: `agopt-${id}-${o.id}` }))}
-      ${field(nc(t("ag.caps")), html`<span class="flex max-w-[300px] flex-wrap justify-end gap-1">${caps}</span>`)}
+      ${field(nc(t("ag.caps")), html`<span class="flex max-w-2xs flex-wrap justify-end gap-1">${caps}</span>`)}
       <div class="mt-0.5 flex flex-wrap items-center gap-2"><span class="flex-1"></span><button class=${btn("ghost")} @click=${() => emit(this, "agent-remove")}>${t("ag.remove")}</button></div>`;
   }
 }

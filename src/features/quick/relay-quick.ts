@@ -44,12 +44,12 @@ export class RelayQuick extends LitElement {
 
   // the textarea keeps the browser's own 2px padding and grey placeholder, as it always had
   render() {
-    return html`<div class="fixed inset-0 z-25 flex justify-center items-start pt-[18vh] bg-[rgba(0,0,0,.18)]" @click=${(e: Event) => { if (e.target === e.currentTarget) this.close(); }}>
-      <div class="w-[min(600px,calc(100%-80px))] bg-bg border border-separator rounded-2xl [box-shadow:0_16px_48px_rgba(0,0,0,.25)] px-4 pt-[14px] pb-[10px]" @dragover=${(e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); }} @drop=${this.onDrop}>
+    return html`<div class="fixed inset-0 z-25 flex justify-center items-start px-10 pt-36 bg-black/20" @click=${(e: Event) => { if (e.target === e.currentTarget) this.close(); }}>
+      <div class="w-full max-w-xl bg-bg border border-separator rounded-xl shadow-2xl px-4 pt-3.5 pb-2.5" @dragover=${(e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); }} @drop=${this.onDrop}>
         ${this.imgs.length ? html`<relay-image-thumbs class="mb-2" removable .urls=${this.imgs.map(a => a.url)}
           @remove=${(e: CustomEvent<number>) => { unattach(e.detail, this.imgs); this.ta.focus(); }} @open=${(e: CustomEvent<string>) => zoom(e.detail)}></relay-image-thumbs>` : nothing}
-        <textarea class="w-full border-0 outline-0 resize-none bg-transparent text-label text-2xl leading-[1.4] font-sans max-h-[40vh] overflow-y-auto p-[2px] placeholder:text-[#757575]" rows="1" spellcheck="false" placeholder=${t("qk.ph")} aria-label=${t("qk.label")} @input=${this.grow} @keydown=${this.onKey}
+        <textarea class="w-full border-0 outline-0 resize-none bg-transparent text-label text-lg leading-snug font-sans max-h-80 overflow-y-auto p-0.5 placeholder:text-secondary" rows="1" spellcheck="false" placeholder=${t("qk.ph")} aria-label=${t("qk.label")} @input=${this.grow} @keydown=${this.onKey}
           @paste=${(e: ClipboardEvent) => { const f = pastedImages(e); if (f.length) { attach(f, this.imgs); } }}></textarea>
-        <div class="text-2xs text-secondary mt-[6px]">${t("qk.hint")}</div></div></div>`;
+        <div class="text-xs text-secondary mt-1.5">${t("qk.hint")}</div></div></div>`;
   }
 }

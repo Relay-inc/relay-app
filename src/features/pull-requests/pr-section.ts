@@ -8,6 +8,6 @@ export class PrSection extends LitElement {
   static styles = [tw, css`:host { display: block; }`];
   @property() count: number | string = "";
   render() {
-    return html`<h3 class="text-xs font-semibold text-secondary uppercase tracking-[.03em] mb-1.5 pb-1 border-b border-separator"><slot name="heading"></slot>${this.count !== "" ? html` <span class="text-secondary tabular-nums">${this.count}</span>` : nothing}</h3><slot></slot>`;
+    return html`<h3 class="text-xs font-semibold text-secondary uppercase tracking-wide mb-1.5 pb-1 border-b border-separator"><slot name="heading"></slot>${this.count !== "" ? html` <span class="text-secondary tabular-nums">${this.count}</span>` : nothing}</h3><slot></slot>`;
   }
 }

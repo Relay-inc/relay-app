@@ -17,7 +17,7 @@ export class RouteChoice extends LitElement {
   @property({ attribute: false }) hits: string[] = [];
 
   render() {
-    return html`<div class="grid grid-cols-[minmax(0,1fr)] gap-[10px] rounded-lg border border-accent bg-fill px-[14px] py-3"><div class="text-sm text-secondary">${t("route.question")}</div>
+    return html`<div class="grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3"><div class="text-sm text-secondary">${t("route.question")}</div>
       <div class="flex flex-wrap gap-2">${this.hits.map(h => html`<button class="btn" @click=${() => emit(this, "route", h)}>${h}</button>`)}<button class="btn" @click=${() => emit(this, "route", "")}>${t("route.keep")}</button></div></div>`;
   }
 }

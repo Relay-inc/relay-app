@@ -26,6 +26,6 @@ export class RelaySubagents extends LitElement {
 
   render() {
     const list = chat.subs[ui.sel] || [], run = list.filter(a => a.running), done = list.filter(a => !a.running);
-    return html`${run.map(this.row)}${done.length ? html`<button class="self-start px-[6px] py-[2px] rounded-md text-xs text-secondary hover:bg-fill hover:text-label" @click=${toggleSubsDone}>${tn("subs.done", done.length)}</button>${chat.subsOpen.has(ui.sel) ? done.map(this.row) : nothing}` : nothing}`;
+    return html`${run.map(this.row)}${done.length ? html`<button class="self-start px-1.5 py-0.5 rounded-md text-xs text-secondary hover:bg-fill hover:text-label" @click=${toggleSubsDone}>${tn("subs.done", done.length)}</button>${chat.subsOpen.has(ui.sel) ? done.map(this.row) : nothing}` : nothing}`;
   }
 }

@@ -11,9 +11,9 @@ declare global { interface HTMLElementEventMap { "setup": CustomEvent<void>; } }
 export class MailSetup extends LitElement {
   static styles = [tw, css`:host { display: block; }`];
   render() {
-    return html`<div class="max-w-[540px] my-8 mx-auto px-[26px] py-[22px] border border-separator rounded-2xl bg-fill">
-      <h2 class="text-xl font-semibold mb-1.5">${th("mail.setupTitle")}</h2><p class="mb-3 text-sm leading-[1.5]">${th("mail.setupIntro")}</p>
-      <ol class="mb-[14px] pl-5 text-sm leading-[1.6] list-decimal [&_li]:mb-1.5 [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill [&_code]:px-[5px] [&_code]:py-px [&_code]:rounded-xs"><li>${th("mail.setupStep1")}</li><li>${th("mail.setupStep2")}</li><li>${th("mail.setupStep3")}</li></ol>
+    return html`<div class="max-w-lg my-8 mx-auto px-6 py-6 border border-separator rounded-xl bg-fill">
+      <h2 class="text-base font-semibold mb-1.5">${th("mail.setupTitle")}</h2><p class="mb-3 text-sm leading-normal">${th("mail.setupIntro")}</p>
+      <ol class="mb-3.5 pl-5 text-sm leading-relaxed list-decimal [&_li]:mb-1.5 [&_code]:font-mono [&_code]:text-xs [&_code]:bg-fill [&_code]:px-1 [&_code]:py-px [&_code]:rounded-sm"><li>${th("mail.setupStep1")}</li><li>${th("mail.setupStep2")}</li><li>${th("mail.setupStep3")}</li></ol>
       <p class="mb-3 text-secondary text-sm">${th("mail.setupPw")}</p>
       <button class="btn btn-primary" @click=${() => emit(this, "setup")}>${th("mail.setupOpen")}</button></div>`;
   }

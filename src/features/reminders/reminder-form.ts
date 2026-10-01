@@ -10,7 +10,7 @@ export type Draft = { open: boolean; text: string; date: string; project: string
 declare global { interface HTMLElementEventMap { "reminder-draft": CustomEvent<Partial<Draft>>; "reminder-add": CustomEvent<void> } }
 
 const REPEATS = ["", "1w", "14d", "1m", "3m"];
-const FIELD = "border border-separator rounded-lg bg-bg text-label px-2 min-w-0 focus-visible:outline-2 focus-visible:outline-[color-mix(in_srgb,var(--accent)_45%,transparent)]";
+const FIELD = "border border-separator rounded-lg bg-bg text-label px-2 min-w-0 focus-visible:outline-2 focus-visible:outline-accent/45";
 
 /** The new-reminder form. It shows the draft it is given and reports every change; the container keeps the draft (it survives switching views) and does the adding. */
 @customElement("relay-reminder-form")
@@ -47,7 +47,7 @@ export class ReminderForm extends LitElement {
     const set = (f: "text" | "date" | "project" | "repeat") => (e: Event) => this.patch({ [f]: (e.target as HTMLInputElement).value });
     const opt = (v: string, l: string, cur: string) => html`<option value=${v} ?selected=${v === cur}>${l}</option>`;
     return html`<div class="mb-4 flex flex-col gap-2 p-3 border border-separator rounded-xl bg-fill" @keydown=${this.onKey}>
-      <input class="${FIELD} h-8 text-lg" data-rem-f="text" .value=${live(d.text)} @input=${set("text")} placeholder=${t("rem.newText")} aria-label=${t("rem.newText")} spellcheck="false">
+      <input class="${FIELD} h-8 text-base" data-rem-f="text" .value=${live(d.text)} @input=${set("text")} placeholder=${t("rem.newText")} aria-label=${t("rem.newText")} spellcheck="false">
       <div class="flex flex-wrap items-center gap-2">
         <input type="date" class="${FIELD} h-7 text-sm" data-rem-f="date" .value=${live(d.date)} @change=${set("date")} min=${todayIso()} aria-label=${t("rem.newDate")}>
         <select class="${FIELD} h-7 text-sm" data-rem-f="project" @change=${set("project")} aria-label=${t("rem.newProject")}>
@@ -56,6 +56,6 @@ export class ReminderForm extends LitElement {
           ${REPEATS.map(r => opt(r, r ? t("rem.every", { n: r }) : t("rem.noRepeat"), d.repeat))}</select>
         <span class="ml-auto flex gap-1.5"><button class="btn" @click=${() => this.patch({ open: false, err: "" })}>${t("rem.cancel")}</button>
           <button class="btn btn-primary disabled:opacity-50" ?disabled=${d.busy} @click=${() => this.submit()}>${t("rem.add")}</button></span></div>
-      ${d.err ? html`<div class="text-sm text-[#d33]" role="alert">${d.err}</div>` : nothing}</div>`;
+      ${d.err ? html`<div class="text-sm text-late" role="alert">${d.err}</div>` : nothing}</div>`;
   }
 }

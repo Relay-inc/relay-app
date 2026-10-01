@@ -71,7 +71,7 @@ export class SettingsBoard extends SettingsElement {
     const items = [mcp?.supported ? { id: "import", name: t("int.importClaude"), state: html`<span class=${ST}>${t(mcp.found ? "int.importFound" : "int.importNone")}</span>` } : null,
       this.hasToken ? { id: "clear", name: t("int.clear") } : null].filter(x => x != null);
     const more = !items.length ? nothing : html`<relay-settings-menu up .tip=${t("int.more")} .items=${items} @menu-pick=${(e: CustomEvent<string>) => emit(this, e.detail === "import" ? "board-import" : "board-clear")}></relay-settings-menu>`;
-    const found = !this.setUp && mcp?.found ? html`<div class="flex items-center gap-3 rounded-[6px] border border-s-border bg-[color-mix(in_srgb,var(--s-mutedbg)_35%,transparent)] px-3 py-2.5 text-xs"><span class="flex-1">${t("int.foundClaudeLong", { name: p.name })}</span><button class=${btn("primary")} @click=${() => emit(this, "board-import")}>${t("int.import")}</button></div>` : nothing;
+    const found = !this.setUp && mcp?.found ? html`<div class="flex items-center gap-3 rounded-md border border-s-border bg-s-mutedbg/35 px-3 py-2.5 text-xs"><span class="flex-1">${t("int.foundClaudeLong", { name: p.name })}</span><button class=${btn("primary")} @click=${() => emit(this, "board-import")}>${t("int.import")}</button></div>` : nothing;
     return html`${found}<p class=${HINT0}>${pth(p, p.settings.help)}</p>
       ${field(nc(pt(p, p.settings.tokenLabel)), html`<input class=${FIELD} id="tok-${id}" type="password" autocomplete="off" placeholder=${secretPh} .value=${live(this.fstr(`tok-${id}`))} @input=${this.inp(`tok-${id}`)} spellcheck="false">`, { id: `tok-${id}` })}
       ${fields}

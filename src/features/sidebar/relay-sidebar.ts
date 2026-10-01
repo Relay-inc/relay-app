@@ -132,7 +132,7 @@ export class RelaySidebar extends LitElement {
   }
   private section(s: Section) {
     const d = this.dz("sec", s.id);
-    return html`<div class="mt-1.5 ${d.dragging ? "opacity-40" : ""} ${d.drop === "after" ? "shadow-[inset_0_-2px_0_var(--accent)]" : ""}" data-drop=${s.id}>
+    return html`<div class="mt-1.5 ${d.dragging ? "opacity-40" : ""} ${d.drop === "after" ? "relative before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-accent" : ""}" data-drop=${s.id}>
       <relay-sidebar-head .label=${s.label} .tint=${s.tint} .count=${s.count} .collapsed=${s.collapsed} ?addable=${s.add !== undefined} .dropBefore=${d.drop === "before"}
         @pointerdown=${this.press("sec", s.id)} @click=${this.go(() => toggleSection(s.id))}
         @contextmenu=${s.id === GENERAL ? this.menu({ k: "", p: null, kind: "proj" }) : nothing} @addchat=${this.stop(() => select(newChat(s.add || null)))}></relay-sidebar-head>
@@ -143,7 +143,7 @@ export class RelaySidebar extends LitElement {
     const { views, sections } = sidebarModel(), u = usageSummary(), m = this.ctx;
     return html`
       <div class="h-11 flex-none" data-tauri-drag-region></div>
-      <label class="flex items-center gap-1.5 mx-3 mb-2.5 h-7 px-2 rounded-lg bg-fill text-secondary">${icon("search", "glyph size-3.5 flex-none [stroke-width:1.6]")}
+      <label class="flex items-center gap-1.5 mx-3 mb-2.5 h-7 px-2 rounded-lg bg-fill text-secondary">${icon("search", "glyph size-3.5 flex-none stroke-2")}
         <input class="min-w-0 flex-1 text-sm text-label outline-none select-text placeholder:text-secondary" .value=${sidebar.find} placeholder=${t("nav.search")} @input=${(e: Event) => setFind((e.target as HTMLInputElement).value)}>
       </label>
       <nav class="flex-1 overflow-y-auto px-2.5 pb-4">${views.map(v => this.view(v))}${sections.map(s => this.section(s))}</nav>

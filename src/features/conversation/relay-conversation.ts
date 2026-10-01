@@ -41,7 +41,7 @@ export class RelayConversation extends LitElement {
       case "tool": {
         // a Read or Edit on a note that exists opens it in the right panel
         const note = notePath(it.path);
-        return html`<relay-tool-step class="-my-[6px]" .tool=${it.tool} .text=${it.text} .state=${it.state ?? ""} ?link=${!!note} @open-note=${() => openPr(noteKey(note))}></relay-tool-step>`;
+        return html`<relay-tool-step class="-my-1.5" .tool=${it.tool} .text=${it.text} .state=${it.state ?? ""} ?link=${!!note} @open-note=${() => openPr(noteKey(note))}></relay-tool-step>`;
       }
       case "err": return html`<relay-error-line .text=${it.text}></relay-error-line>`;
       case "done": return html`<relay-done-line .text=${it.text}></relay-done-line>`;

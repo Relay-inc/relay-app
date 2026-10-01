@@ -10,7 +10,7 @@ export class Working extends LitElement {
   @property() label = "";
 
   render() {
-    return html`<div class="flex items-center gap-[10px] text-secondary text-md py-1" role=${this.label ? "status" : nothing} aria-label=${this.label || nothing}><span class="pulse-dots"><i></i><i></i><i></i></span>${this.text
-      ? html`<span class="overflow-hidden whitespace-nowrap text-ellipsis min-w-0 [&_code]:font-mono [&_code]:text-[12.5px]">${this.text}</span>` : nothing}</div>`;
+    return html`<div class="flex items-center gap-2.5 text-secondary text-sm py-1" role=${this.label ? "status" : nothing} aria-label=${this.label || nothing}><span class="pulse-dots"><i></i><i></i><i></i></span>${this.text
+      ? html`<span class="overflow-hidden whitespace-nowrap text-ellipsis min-w-0 [&_code]:font-mono [&_code]:text-xs">${this.text}</span>` : nothing}</div>`;
   }
 }

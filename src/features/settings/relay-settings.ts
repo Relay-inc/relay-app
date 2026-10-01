@@ -84,10 +84,10 @@ export class RelaySettings extends SettingsElement {
   render() {
     const { settings, vs, tab } = this;
     if (!settings || !vs) return nothing;
-    return html`<div class="grid h-full min-h-0 grid-cols-[200px_minmax(0,1fr)]" @click=${this.onClick}>
-      <nav class="overflow-y-auto border-r border-s-seam bg-s-side px-2 py-3 select-none"><div class="mt-1 grid gap-0.5 first:mt-0">${TABS.map(([id, name, g]) =>
-        html`<button class="flex h-7 items-center gap-2 overflow-hidden rounded-[6px] px-2 text-sm text-s-fg hover:bg-s-sel focus-visible:shadow-[0_0_0_2px_var(--s-ring)] focus-visible:outline-none ${tab === id ? "bg-s-sel" : ""}" @click=${() => this.go(id)} aria-current=${tab === id ? "page" : nothing}>${ic(g, "size-4 flex-none fill-none stroke-current stroke-[1.75] [stroke-linecap:round] [stroke-linejoin:round]")}<span class="min-w-0 flex-1 truncate text-left">${t(name)}</span></button>`)}</div></nav>
-      <section class="min-h-0 overflow-y-auto px-6 pt-5 pb-6"><div class="mx-auto grid max-w-[640px] grid-cols-[minmax(0,1fr)] content-start gap-8 [&>*]:min-w-0">
+    return html`<div class="flex h-full min-h-0" @click=${this.onClick}>
+      <nav class="w-50 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 py-3 select-none"><div class="mt-1 grid gap-0.5 first:mt-0">${TABS.map(([id, name, g]) =>
+        html`<button class="flex h-7 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-s-fg hover:bg-s-sel focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel" : ""}" @click=${() => this.go(id)} aria-current=${tab === id ? "page" : nothing}>${ic(g, "size-4 flex-none fill-none stroke-current stroke-2 glyph")}<span class="min-w-0 flex-1 truncate text-left">${t(name)}</span></button>`)}</div></nav>
+      <section class="min-w-0 flex-1 min-h-0 overflow-y-auto px-6 pt-5 pb-6"><div class="mx-auto grid max-w-2xl grid-cols-1 content-start gap-8 [&>*]:min-w-0">
         <relay-settings-general ?active=${tab === "general"} .settings=${settings} .vs=${vs} .keys=${KEYS} .msg=${this.msg} .ok=${this.ok}
           @vault-pick=${async () => { this.vs = { ...((await pickVault()) ?? vs) }; this.msg = ""; }}
           @map-pick=${async (e: CustomEvent<{ key: MapKey; map: VaultMap }>) => { this.vs = await pickMapped(vs, e.detail.key, e.detail.map); }}

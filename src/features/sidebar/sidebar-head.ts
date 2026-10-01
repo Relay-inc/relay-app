@@ -19,11 +19,11 @@ export class SidebarHead extends LitElement {
   @property({ type: Boolean }) dropBefore = false;
 
   render() {
-    return html`<div class="flex items-center gap-1.5 px-2 pt-3 pb-1 text-2xs font-semibold text-secondary tracking-[.02em] cursor-default ${this.dropBefore ? "shadow-[inset_0_2px_0_var(--accent)]" : ""}">
-      <span class="w-0 h-0 border-l-4 border-l-secondary border-y-[3px] border-y-transparent transition-transform duration-150 ease-out ${this.collapsed ? "" : "rotate-90"}"></span>
+    return html`<div class="flex items-center gap-1.5 px-2 pt-3 pb-1 text-xs font-semibold text-secondary tracking-wide cursor-default ${this.dropBefore ? "relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent" : ""}">
+      <span class="w-0 h-0 border-l-4 border-l-secondary border-y-3 border-y-transparent transition-transform duration-150 ease-out ${this.collapsed ? "" : "rotate-90"}"></span>
       <span class=${TINT[this.tint]}>${this.label}</span>
       ${this.collapsed && this.count ? html`<span class="font-normal tabular-nums">${this.count}</span>` : nothing}
-      ${this.addable ? html`<button class="ml-auto w-5 h-[18px] rounded-md text-lg leading-none text-secondary cursor-[inherit] hover:bg-fill hover:text-label" title=${t("nav.newChat")}
+      ${this.addable ? html`<button class="ml-auto w-5 h-4 rounded-md text-base leading-none text-secondary cursor-default hover:bg-fill hover:text-label" title=${t("nav.newChat")}
         @click=${(e: Event) => { e.stopPropagation(); emit(this, "addchat"); }}>+</button>` : nothing}
     </div>`;
   }

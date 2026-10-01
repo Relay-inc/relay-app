@@ -23,7 +23,7 @@ export class RelayMailDetail extends LitElement {
   private main(b: MailBody, textView: boolean) {
     // the srcdoc is a plain attribute binding: while the html is the same string the frame is not touched, so it does not reload
     // the html of a mail: sandboxed frame that scrolls itself, white because mails are designed for white
-    return b.html && !textView ? html`<iframe class="block w-full h-[calc(100vh-250px)] min-h-[280px] mt-3 border border-separator rounded-lg bg-white" sandbox="" referrerpolicy="no-referrer" srcdoc=${b.html}></iframe>`
+    return b.html && !textView ? html`<iframe class="block w-full h-140 mt-3 border border-separator rounded-lg bg-white" sandbox="" referrerpolicy="no-referrer" srcdoc=${b.html}></iframe>`
       : html`<relay-mail-text .text=${b.text}></relay-mail-text>`;
   }
 
@@ -38,13 +38,13 @@ export class RelayMailDetail extends LitElement {
     const who = (l: Mail["from"]) => l.map((a, i) => html`${i ? ", " : nothing}${a.name ? html`${a.name} ${count(a.email)}` : a.email}`);
     // the right panel: headers at once, a spinner and grey lines while the text loads
     const loading = html`<div class="flex items-center gap-2 mt-3.5 text-sm text-secondary"><span class="spinner"></span>${th("mail.loadingBody")}</div><div class="mt-3">${[92, 100, 84, 96, 60, 0, 88, 72].map(w =>
-      html`<i class="block mb-[9px] rounded-xs ${w ? "h-2.5 bg-fill animate-skel" : "h-1.5"}" style="width:${w}%"></i>`)}</div>`;
-    const atts = body?.attachments.length ? html`<div class="flex flex-wrap gap-x-[14px] gap-y-1 mt-2.5 text-xs">${body.attachments.map(a => count(`${a.name} (${kb(a.size)})`))}</div>` : nothing;
+      html`<i class="block mb-2 rounded-sm ${w ? "h-2.5 bg-fill animate-skel" : "h-1.5"}" style="width:${w}%"></i>`)}</div>`;
+    const atts = body?.attachments.length ? html`<div class="flex flex-wrap gap-x-3.5 gap-y-1 mt-2.5 text-xs">${body.attachments.map(a => count(`${a.name} (${kb(a.size)})`))}</div>` : nothing;
     // confirm before a link in a mail opens
-    const link = mail.link ? html`<div class="my-2 px-[10px] py-2 border border-separator rounded-lg bg-fill"><div class="text-xs break-all select-text">${mail.link}</div><div class="flex gap-2 mt-2"><button class="btn btn-primary" @click=${() => mailLinkGo(true)}>${th("mail.linkOpen")}</button><button class="btn" @click=${() => mailLinkGo(false)}>${th("mail.linkCancel")}</button></div></div>` : nothing;
+    const link = mail.link ? html`<div class="my-2 px-2.5 py-2 border border-separator rounded-lg bg-fill"><div class="text-xs break-all select-text">${mail.link}</div><div class="flex gap-2 mt-2"><button class="btn btn-primary" @click=${() => mailLinkGo(true)}>${th("mail.linkOpen")}</button><button class="btn" @click=${() => mailLinkGo(false)}>${th("mail.linkCancel")}</button></div></div>` : nothing;
     return html`${bar}${link}
-      <h2 class="text-sm font-semibold mb-2 leading-[1.35]">${m.subject || th("mail.noSubject")}</h2>
-      <div class="text-sm leading-[1.5] pb-2.5 border-b border-separator"><div>${who(m.from)}</div><div class="text-secondary tabular-nums">${th("mail.to")} ${who(m.to)}</div><div class="text-secondary tabular-nums">${new Date(m.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" })}</div></div>
+      <h2 class="text-sm font-semibold mb-2 leading-snug">${m.subject || th("mail.noSubject")}</h2>
+      <div class="text-sm leading-normal pb-2.5 border-b border-separator"><div>${who(m.from)}</div><div class="text-secondary tabular-nums">${th("mail.to")} ${who(m.to)}</div><div class="text-secondary tabular-nums">${new Date(m.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" })}</div></div>
       ${err ? html`<div class="err-box">${err}</div>` : body === undefined ? loading : html`${atts}${this.main(body, textView)}`}`;
   }
 }

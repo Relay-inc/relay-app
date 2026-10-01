@@ -53,7 +53,7 @@ export class RelayReminders extends LitElement {
     const all = reminders();
     const groups = GROUPS.map(([name, f]) => {
       const items = all.filter(r => f(r.days)).sort((a, b) => a.days - b.days);
-      return items.length ? html`<section class="mb-[22px]"><h2 class="list-head">${t(name)} <span class="font-mono tabular-nums">${items.length}</span></h2>${items.map(r => this.row(r))}</section>` : nothing;
+      return items.length ? html`<section class="mb-6"><h2 class="list-head">${t(name)} <span class="font-mono tabular-nums">${items.length}</span></h2>${items.map(r => this.row(r))}</section>` : nothing;
     });
     return html`<relay-reminder-form .draft=${{ ...draft }} .projects=${projectsByLabel(currentLocale())} @reminder-draft=${this.patch} @reminder-add=${() => this.add()}></relay-reminder-form>
       ${vault.snap.vault?.found?.reminders === false ? html`<div class="text-secondary mb-2.5">${th("rem.noFile", { path: raw(`<code class="font-mono">${esc(vault.snap.vault?.map?.reminders ?? "")}</code>`) })}</div>` : nothing}

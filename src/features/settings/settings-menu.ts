@@ -35,7 +35,7 @@ export class SettingsMenu extends SettingsElement {
   render() {
     if (!this.items.length) return nothing;
     return html`<button class=${this.label ? btn() : btn("plain", true)} @click=${() => { this.shown = !this.shown; }} title=${this.tip || nothing} aria-expanded=${this.shown}>${this.label || ic("more", IB)}</button>
-      ${this.shown ? html`<div class="absolute z-[5] grid w-[300px] gap-0.5 rounded-[6px] border border-s-border bg-s-bg p-1 shadow-[0_2px_0_0_rgba(51,51,51,.07),0_8px_24px_rgba(0,0,0,.08)] ${this.up ? "bottom-8 left-0" : "top-8 right-0"}">${this.items.map(x =>
-        html`<button class="flex w-full items-start gap-2 rounded-xs px-2 py-1.5 text-left hover:bg-s-hover focus-visible:bg-s-hover focus-visible:outline-none" @click=${() => { this.shown = false; emit(this, "menu-pick", x.id); }}>${x.ico ? html`<span class="mt-px grid size-[18px] flex-none place-items-center">${x.ico}</span>` : nothing}<span class="grid min-w-0 gap-0.5"><b class="text-sm font-medium">${x.name}</b>${x.state ?? nothing}</span></button>`)}</div>` : nothing}`;
+      ${this.shown ? html`<div class="absolute z-0 grid w-75 gap-0.5 rounded-md border border-s-border bg-s-bg p-1 shadow-lg ${this.up ? "bottom-8 left-0" : "top-8 right-0"}">${this.items.map(x =>
+        html`<button class="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left hover:bg-s-hover focus-visible:bg-s-hover focus-visible:outline-none" @click=${() => { this.shown = false; emit(this, "menu-pick", x.id); }}>${x.ico ? html`<span class="mt-px grid size-4 flex-none place-items-center">${x.ico}</span>` : nothing}<span class="grid min-w-0 gap-0.5"><b class="text-sm font-medium">${x.name}</b>${x.state ?? nothing}</span></button>`)}</div>` : nothing}`;
   }
 }

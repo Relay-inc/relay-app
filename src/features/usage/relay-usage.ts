@@ -11,8 +11,8 @@ import "./usage-meter";
 import "./usage-row";
 
 // headings: h2 per provider (or the only one), h3 for the parts
-const H2 = "text-lg font-semibold mb-2.5 flex items-baseline gap-2 not-first:mt-7";
-const H3 = "text-sm font-semibold text-secondary mt-[18px] pb-1.5 border-b border-separator";
+const H2 = "text-base font-semibold mb-2.5 flex items-baseline gap-2 not-first:mt-7";
+const H3 = "text-sm font-semibold text-secondary mt-4 pb-1.5 border-b border-separator";
 const NOTE = "text-sm text-secondary mt-2.5";
 
 const cost = (x: Tally) => x.cost > 0 ? usd(x.cost) : x.total ? "–" : "";
@@ -63,14 +63,14 @@ export class RelayUsage extends LitElement {
 
   render() {
     const on = usageAgents();
-    if (!on.length) return html`<div class="max-w-[640px]"><p class=${NOTE}>${th("usage.none")}</p></div>`;
+    if (!on.length) return html`<div class="max-w-2xl"><p class=${NOTE}>${th("usage.none")}</p></div>`;
     // one provider: the view as it always was; several: a section per provider, then the total
     const body: unknown[] = [], { limits, tokens } = usage;
     if (on.length === 1) body.push(...this.section(on[0].id, on[0].limits, "h2"));
     else {
       for (const a of on) {
         const p = agent(a.id), lim = limits?.find(l => l.provider === a.id)?.limits;
-        body.push(html`<h2 class=${H2}>${p ? glyphSvg(p.glyph, "glyph w-4 h-4 self-center [stroke-width:1.3]") : nothing}${p?.name ?? a.id}${plan(lim)}</h2>`, ...this.section(a.id, a.limits, "h3"));
+        body.push(html`<h2 class=${H2}>${p ? glyphSvg(p.glyph, "glyph w-4 h-4 self-center stroke-1") : nothing}${p?.name ?? a.id}${plan(lim)}</h2>`, ...this.section(a.id, a.limits, "h3"));
       }
       if (tokens) body.push(html`<h2 class=${H2}>${t("usage.combined")}</h2>`, headRow(), pair(t("usage.combined"), tokens.today, tokens.week, split(tokens.week)));
     }
@@ -78,6 +78,6 @@ export class RelayUsage extends LitElement {
       const unpricedN = tokens.week.unpriced, unpriced = unpricedN ? " " + t("usage.unpriced", { n: num(unpricedN) }) : "";
       body.push(html`<p class=${NOTE}>${th("usage.estimate")}${unpriced}</p>`);
     }
-    return html`<div class="max-w-[640px]">${body}</div>`;
+    return html`<div class="max-w-2xl">${body}</div>`;
   }
 }

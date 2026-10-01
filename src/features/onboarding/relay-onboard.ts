@@ -44,14 +44,14 @@ export class RelayOnboard extends LitElement {
           <div class="text-secondary mb-3">${th(`vault.h.${k}`)}</div></div>
         <div class="flex gap-2 items-center"><input class="field flex-1 font-mono" .value=${live(this.map![k])} @input=${(e: Event) => { this.map![k] = (e.target as HTMLInputElement).value; }} @change=${() => this.check()} spellcheck="false">
           <button class="btn" @click=${() => this.pickMap(k)}>${t("vault.pickPath")}</button>
-          <span class="min-w-[52px] text-xs ${found ? "text-secondary" : req ? "text-late" : "text-secondary mb-3"}">${found ? t("vault.found") : t("vault.missing")}</span></div>
+          <span class="min-w-13 text-xs ${found ? "text-secondary" : req ? "text-late" : "text-secondary mb-3"}">${found ? t("vault.found") : t("vault.missing")}</span></div>
       </div>`;
     })}</div>`;
   }
 
   render() {
-    const st = this.st, h2 = "text-lg font-semibold mt-2.5";
-    return html`<main class="grid gap-2.5 max-w-[640px] mx-auto my-10">
+    const st = this.st, h2 = "text-base font-semibold mt-2.5";
+    return html`<main class="grid gap-2.5 max-w-2xl mx-auto my-10">
       <img class="block h-11 mb-4" src=${mark} alt="">
       <h2 class=${h2}>${t("vault.welcome")}</h2>
       <div class="text-secondary mb-3">${th("vault.intro")}</div>

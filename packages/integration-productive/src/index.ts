@@ -152,12 +152,12 @@ const productive: BoardProvider<Key> = {
       if (err) return html`${bar}<div class="err-box">${err}</div>`;
       if (!tk) return html`${bar}<div class="text-secondary mb-3">${t("loading")}</div>`;
       const meta = "flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5 tabular-nums";
-      const sec = (title: string, n: number | string, body: unknown) => html`<section class="mt-[18px]"><h3 class="text-xs font-semibold text-secondary uppercase tracking-[.03em] mb-1.5 pb-1 border-b border-separator">${title}${n !== "" ? html` <span class="text-secondary tabular-nums">${n}</span>` : nothing}</h3>${body}</section>`;
+      const sec = (title: string, n: number | string, body: unknown) => html`<section class="mt-4"><h3 class="text-xs font-semibold text-secondary uppercase tracking-wide mb-1.5 pb-1 border-b border-separator">${title}${n !== "" ? html` <span class="text-secondary tabular-nums">${n}</span>` : nothing}</h3>${body}</section>`;
       return html`${bar}<div>
         <div class=${meta}>${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => html`<span>${x}</span>`)}</div>
-        <h2 class="text-sm font-semibold mb-2 leading-[1.35]">${tk.closed ? html`<span class="text-xs text-secondary border border-separator rounded-xs px-[5px] mr-1.5 align-[1px]">${t("closed")}</span>` : nothing}${tk.title}</h2>
+        <h2 class="text-sm font-semibold mb-2 leading-snug">${tk.closed ? html`<span class="text-xs text-secondary border border-separator rounded-sm px-1 mr-1.5">${t("closed")}</span>` : nothing}${tk.title}</h2>
         <div class=${meta}><span>${tk.creator}</span><span>${when(tk.created)}</span></div>
-        <dl class="grid grid-cols-[max-content_1fr] gap-x-[14px] gap-y-1 mt-3 text-sm">${tk.fields.map(([k, v]) => html`<dt class="text-secondary">${k}</dt><dd class="[overflow-wrap:anywhere]">${v}</dd>`)}</dl>
+        <dl class="grid grid-cols-[max-content_1fr] gap-x-3.5 gap-y-1 mt-3 text-sm">${tk.fields.map(([k, v]) => html`<dt class="text-secondary">${k}</dt><dd class="wrap-anywhere">${v}</dd>`)}</dl>
         ${sec(t("desc"), "", tk.description.trim() ? html`<div class="md-panel">${unsafeHTML(tk.description)}</div>` : html`<div class="text-secondary mb-3">${t("noDesc")}</div>`)}
         ${sec(t("feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => html`<div class="py-2 border-b border-separator"><div class="flex items-center gap-2 text-sm mb-1"><b>${f.who || "Productive"}</b><span class="ml-auto text-xs text-secondary tabular-nums">${when(f.at)}</span></div>
           ${f.html ? html`<div class="md-panel">${unsafeHTML(f.html)}</div>` : html`<div class="text-secondary mb-3">${f.change}</div>`}</div>`) : html`<div class="text-secondary mb-3">${t("nothing")}</div>`)}

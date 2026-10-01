@@ -59,7 +59,7 @@ export class RelayBoard extends LitElement {
   };
 
   private pick(opts: Opt[], cur: string, empty: string, on: (v: string) => void, always = false, cls = "") {
-    return html`<select class="field max-w-[280px] ${cls}" @change=${(e: Event) => on((e.target as HTMLSelectElement).value)}>${cur && !always ? nothing : html`<option value="">${empty}</option>`}${opts.map(o => html`<option value=${o.id} ?selected=${o.id === cur}>${o.name}</option>`)}</select>`;
+    return html`<select class="field max-w-2xs ${cls}" @change=${(e: Event) => on((e.target as HTMLSelectElement).value)}>${cur && !always ? nothing : html`<option value="">${empty}</option>`}${opts.map(o => html`<option value=${o.id} ?selected=${o.id === cur}>${o.name}</option>`)}</select>`;
   }
 
   render() {

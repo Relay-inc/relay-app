@@ -13,7 +13,7 @@ export class UserMessage extends LitElement {
   @property({ attribute: false }) imgs: string[] = [];
 
   render() {
-    return html`${this.imgs.length ? html`<relay-image-thumbs class="self-end max-w-[80%] -mb-[10px]" size="message" .urls=${this.imgs}></relay-image-thumbs>` : nothing}${this.text
-      ? html`<div class="self-end max-w-[80%] bg-fill rounded-lg px-[14px] py-[9px] text-xl leading-[1.45]">${lines(this.text)}</div>` : nothing}`;
+    return html`${this.imgs.length ? html`<relay-image-thumbs class="self-end max-w-4/5 -mb-2.5" size="message" .urls=${this.imgs}></relay-image-thumbs>` : nothing}${this.text
+      ? html`<div class="self-end max-w-4/5 bg-fill rounded-lg px-3.5 py-2 text-base leading-normal">${lines(this.text)}</div>` : nothing}`;
   }
 }

@@ -58,20 +58,20 @@ export class RelayComposer extends LitElement {
     // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
     const showAgent = on.length > 1 && !isTerm(sel) && !!chat.chats[sel];
     const model = picks("model"), effort = picks("effort");
-    const box = "rounded-lg bg-bg border p-[10px_12px_8px] [box-shadow:0_0_0_.5px_var(--separator),0_1px_2px_rgba(0,0,0,.06)] focus-within:border-accent";
-    return html`<div class=${this.dropping ? `${box} border-accent bg-[color-mix(in_srgb,var(--accent)_6%,var(--bg))]` : `${box} border-separator`}
+    const box = "rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent";
+    return html`<div class=${this.dropping ? `${box} border-accent bg-accent/5` : `${box} border-separator`}
         @dragover=${(e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); this.dropping = true; }} @dragleave=${() => { this.dropping = false; }} @drop=${this.onDrop}>
       ${chat.attached.length ? html`<relay-image-thumbs class="mb-2" removable .urls=${chat.attached.map(a => a.url)}
         @remove=${(e: CustomEvent<number>) => { unattach(e.detail); this.focusInput(); }} @open=${(e: CustomEvent<string>) => zoom(e.detail)}></relay-image-thumbs>` : nothing}
       <textarea rows="1" .value=${live(chat.typed[sel] ?? "")} placeholder=${T ? t("ph.term") : P ? t("ph.project", { name: pn ?? "" }) : t("ph.general")}
         @keydown=${this.onKey} @input=${this.onInput} @paste=${(e: ClipboardEvent) => { const f = pastedImages(e); if (f.length) attach(f); }}></textarea>
-      <div class="flex items-center gap-2 mt-[6px] text-secondary">
+      <div class="flex items-center gap-2 mt-1.5 text-secondary">
         ${showAgent ? html`<select ?disabled=${!!(chat.convo[sel] || []).length || !!chat.chats[sel]?.fork} title=${t("composer.agent")} aria-label=${t("composer.agent")}
           @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}>${on.map(p => html`<option value=${p.id} .selected=${p.id === id}>${p.name}</option>`)}</select>` : nothing}
         <!-- a switch restarts the process, so not while a turn runs -->
         ${this.select("model", model.list, model.value, t("composer.defaultModel"), true, busy)}
         ${this.select("effort", effort.list, effort.value, t("composer.defaultEffort"), !st || (st.caps.effort && st.efforts.length > 0), busy)}
         <span class="flex-1"></span>
-        <button class=${busy ? "grid place-items-center size-[26px] rounded-lg border-0 bg-label text-on-accent" : "grid place-items-center size-[26px] rounded-lg border-0 bg-accent text-on-accent"} aria-label=${t("composer.send")} @click=${sendOrStop}>${icon(busy ? "stop" : "send", "glyph size-[14px] [stroke-width:1.6]")}</button></div></div>`;
+        <button class=${busy ? "grid place-items-center size-6 rounded-lg border-0 bg-label text-on-accent" : "grid place-items-center size-6 rounded-lg border-0 bg-accent text-on-accent"} aria-label=${t("composer.send")} @click=${sendOrStop}>${icon(busy ? "stop" : "send", "glyph size-3.5 stroke-2")}</button></div></div>`;
   }
 }

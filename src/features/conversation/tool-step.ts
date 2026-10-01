@@ -22,9 +22,9 @@ export class ToolStep extends LitElement {
   render() {
     // the arrow before the line; a running step has a spinner instead
     const lead = this.state === "run"
-      ? "before:size-[9px] before:rounded-full before:border-[1.5px] before:border-separator before:border-t-secondary before:animate-spin"
-      : "before:w-0 before:h-0 before:border-l-[5px] before:border-l-current before:border-y-4 before:border-y-transparent before:opacity-60";
-    const cls = `flex items-center gap-2 text-sm [&_code]:font-mono [&_code]:text-[12.5px] before:content-[''] ${lead} ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : ""}`;
+      ? "before:size-2 before:rounded-full before:border-2 before:border-separator before:border-t-secondary before:animate-spin"
+      : "before:w-0 before:h-0 before:border-l-5 before:border-l-current before:border-y-4 before:border-y-transparent before:opacity-60";
+    const cls = `flex items-center gap-2 text-sm [&_code]:font-mono [&_code]:text-xs ${lead} ${this.state === "err" ? "text-label" : "text-secondary"}${this.link ? " cursor-pointer hover:underline" : ""}`;
     return html`<div class=${cls} @click=${this.link ? () => emit(this, "open-note") : null}>${this.tool ? toolLine(this.tool.name, this.tool.input) : this.text}</div>`;
   }
 }

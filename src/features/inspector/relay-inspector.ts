@@ -71,8 +71,8 @@ export class RelayInspector extends LitElement {
     this.toggleAttribute("wide", !!panel.open);
     if (ui.tab === "prs" && !ghOn()) ui.tab = "open";
     // app chrome is not text: no selection in the bar and the tabs, like a native Mac app
-    return html`<div class="flex flex-col flex-1 min-h-0 border-l border-separator"><div class="h-[52px] flex-none flex items-center gap-[10px] px-5 border-b border-separator min-w-[300px] select-none" data-tauri-drag-region><div class="seg select-none">${TABS.map(([id, key]) =>
+    return html`<div class="flex flex-col flex-1 min-h-0 border-l border-separator"><div class="h-13 flex-none flex items-center gap-2.5 px-5 border-b border-separator min-w-75 select-none" data-tauri-drag-region><div class="seg select-none">${TABS.map(([id, key]) =>
       html`<button class=${ui.tab === id ? "on" : ""} ?hidden=${id === "prs" && !ghOn()} @click=${() => setTab(id)}>${th(key)}</button>`)}</div></div>
-      <div class="overflow-y-auto pt-4 px-[18px] pb-6 ${panel.open ? "min-w-[460px]" : "min-w-[300px]"}">${this.body()}</div></div>`;
+      <div class="overflow-y-auto pt-4 px-4 pb-6 ${panel.open ? "min-w-115" : "min-w-75"}">${this.body()}</div></div>`;
   }
 }

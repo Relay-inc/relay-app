@@ -14,7 +14,7 @@ export class UsageRow extends LitElement {
 
   render() {
     const v = "w-16 text-right tabular-nums", c = "w-16 text-right text-secondary tabular-nums";
-    return html`<div class="flex items-baseline gap-3 text-sm py-[7px] border-b border-separator ${this.head ? "text-secondary font-medium" : ""}"><span class="flex-1 min-w-0 truncate"><slot></slot></span>
+    return html`<div class="flex items-baseline gap-3 text-sm py-2 border-b border-separator ${this.head ? "text-secondary font-medium" : ""}"><span class="flex-1 min-w-0 truncate"><slot></slot></span>
       <span class=${v}>${this.today}</span><span class=${c}>${this.todayCost}</span><span class=${v}>${this.week}</span><span class=${c}>${this.weekCost}</span></div>`;
   }
 }

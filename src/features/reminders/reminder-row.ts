@@ -30,9 +30,9 @@ function when(r: Reminder) {
 }
 
 // the buttons override the generic .btn: 26px high, icons 15px in the secondary colour (accent on hover)
-const BTN = "btn h-[26px]! px-[9px]! text-sm whitespace-nowrap disabled:opacity-50";
-const IBTN = `${BTN} group relative grid place-items-center w-[26px]! px-0! after:content-[attr(data-tip)] after:absolute after:bottom-[calc(100%+6px)] after:left-1/2 after:-translate-x-1/2 after:z-[6] after:px-[7px] after:py-[3px] after:rounded-[5px] after:bg-[rgba(30,30,30,.92)] after:text-white after:text-xs after:whitespace-nowrap after:pointer-events-none after:opacity-0 after:transition-opacity after:duration-[120ms] after:ease-app hover:after:opacity-100 hover:after:delay-[350ms]`;
-const G = "glyph w-[15px]! h-[15px]! stroke-secondary! [stroke-width:1.5]! group-hover:stroke-accent!";
+const BTN = "btn h-6! px-2! text-sm whitespace-nowrap disabled:opacity-50";
+const IBTN = `${BTN} group relative grid place-items-center w-6! px-0! after:content-[attr(data-tip)] after:absolute after:bottom-full after:mb-1.5 after:left-1/2 after:-translate-x-1/2 after:z-10 after:px-2 after:py-1 after:rounded-sm after:bg-black/90 after:text-white after:text-xs after:whitespace-nowrap after:pointer-events-none after:opacity-0 after:transition-opacity after:duration-100 after:ease-out hover:after:opacity-100 hover:after:delay-300`;
+const G = "glyph w-4! h-4! stroke-secondary! group-hover:stroke-accent!";
 
 /** One reminder: title, project, due date, repeat and the actions. `urgency` is the domain's "late" | "soon" | "". */
 @customElement("relay-reminder-row")
@@ -47,7 +47,7 @@ export class ReminderRow extends LitElement {
   render() {
     const r = this.reminder, off = this.busy, id = r.id;
     return html`<div class="list-row">
-      <div class="min-w-0"><div class="text-xl leading-[1.45] line-clamp-2 ${r.days < 0 ? "font-semibold" : ""} [&_code]:font-mono [&_code]:text-md [&_code]:bg-fill [&_code]:px-1 [&_code]:py-px [&_code]:rounded-xs [&_a]:text-[color:-webkit-link] [&_a]:underline [&_.vlink]:text-accent [&_.vlink]:no-underline [&_.vlink:hover]:underline">${md(r.title)}</div>
+      <div class="min-w-0"><div class="text-base leading-normal line-clamp-2 ${r.days < 0 ? "font-semibold" : ""} [&_code]:font-mono [&_code]:text-sm [&_code]:bg-fill [&_code]:px-1 [&_code]:py-px [&_code]:rounded-sm [&_a]:text-accent [&_a]:underline [&_.vlink]:text-accent [&_.vlink]:no-underline [&_.vlink:hover]:underline">${md(r.title)}</div>
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5">${r.project ? html`<span>${this.label}</span>` : nothing}<span class=${DUE[this.urgency]}>${when(r)}</span>${r.repeat ? html`<span>${th("rem.every", { n: num(r.repeat) })}</span>` : nothing}</div></div>
       <div class="relative flex items-center gap-1.5">
         <button class=${IBTN} ?disabled=${off} @click=${() => emit(this, "reminder-chat", id)} data-tip=${t("rem.chat")} aria-label=${t("rem.chat")}>${icon("chat", G)}</button>
