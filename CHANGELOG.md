@@ -10,7 +10,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Added
-- Vault notes named in a conversation open in the right panel: `[[wikilinks]]`, markdown links and `path.md` in code are clickable, and so is a Read/Edit line on a note. Links inside the opened note work too, so you can click through; only Markdown files inside the vault open
+- Vault notes named in a conversation open in the right panel: `[[wikilinks]]`, markdown links and `path.md` in code are clickable, and so is a Read/Edit line on a note. Links inside the opened note work too, so you can click through; only Markdown files inside the vault open (#22)
 - A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
 
 ### Changed
