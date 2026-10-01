@@ -40,6 +40,7 @@ export class SidebarRow extends LitElement {
   @property({ type: Boolean }) unseen = false;
   @property({ type: Boolean }) indent = false; // under its project
   @property({ type: Boolean }) closable = false;
+  @property({ type: Boolean }) closing = false; // being closed: greyed out and pulsing until it is gone
   @property() trail: Trail = "";
   @property({ type: Number }) subs = 0; // subagents working
   @property() subsTitle = "";
@@ -64,11 +65,13 @@ export class SidebarRow extends LitElement {
     return "";
   }
   private get rowClass() {
+    if (this.closing) return "text-tertiary";
     if (this.selected) return "bg-accent-soft";
     const subrowText = this.unseen ? "text-label" : "text-secondary hover:text-label";
     return `hover:bg-fill ${this.indent ? subrowText : ""}`;
   }
   private get glyphColor() {
+    if (this.closing) return "text-tertiary";
     if (this.selected) return "text-accent-text";
     return this.kind === "proj" ? TINT[this.tint] : "text-secondary";
   }
@@ -107,7 +110,7 @@ export class SidebarRow extends LitElement {
     return nothing;
   }
   private renderClose() {
-    if (!this.closable) return nothing;
+    if (!this.closable || this.closing) return nothing;
     return html`<button
       class="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default text-secondary hover:bg-fill-2 hover:text-label"
       title=${t("nav.close")}
@@ -132,7 +135,9 @@ export class SidebarRow extends LitElement {
     const subClass = sub ? "ml-4.5" : "";
     return html`<div
       class="group flex ${sub ? "h-6.5 gap-2" : "h-7 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out
-      ${this.rowClass} ${subClass} ${this.dropLineClass} ${this.dragging ? "opacity-40" : ""}"
+      ${this.rowClass} ${subClass} ${this.dropLineClass} ${this.dragging ? "opacity-40" : ""}
+      ${this.closing ? "pointer-events-none animate-skel" : ""}"
+      aria-busy=${this.closing ? "true" : "false"}
     >
       ${this.kind === "fold" ? nothing : this.renderLead()}
       <span class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${this.unseen ? "font-semibold" : ""}"

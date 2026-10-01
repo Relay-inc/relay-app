@@ -249,6 +249,7 @@ export class RelaySidebar extends LitElement {
       .unseen=${row.unseen}
       .indent=${indent}
       .closable=${row.closable}
+      .closing=${row.closing}
       .trail=${row.trail}
       .subs=${row.subs}
       .subsTitle=${row.subsTitle}

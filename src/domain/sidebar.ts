@@ -109,6 +109,7 @@ export type ConvRow = {
   subs: number;
   subsTitle: string;
   closable: boolean;
+  closing: boolean;
 };
 export type ProjectBlock = {
   name: string;
@@ -177,6 +178,7 @@ const convRow = (conversation: Chat): ConvRow => ({
   trail: trailOf([conversation.key]),
   ...subsOf(conversation.key),
   closable: !(conversation.draft && !chat.typed[conversation.key]),
+  closing: chat.closing.has(conversation.key),
 });
 const termRow = (session: TerminalSession): ConvRow => ({
   key: session.key,
@@ -189,6 +191,7 @@ const termRow = (session: TerminalSession): ConvRow => ({
   trail: terminalTrail(session),
   ...subsOf(session.key),
   closable: true,
+  closing: false,
 });
 
 // the label without its emoji when the icon is already shown next to it
