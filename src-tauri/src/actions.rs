@@ -7,9 +7,11 @@
 // `{ok: true, result}` or `{ok: false, error}`. The conversation is the agent's RELAY_CONVERSATION; a call from
 // anything that is not a running conversation of the app is refused.
 //
-// Each action has a policy: auto (runs), ask (a card in the conversation, like a permission) or deny. The user sets
-// it in settings.json `actions`: `{"productive": "auto"}` for a whole extension, or `{"productive": {"*": "ask",
-// "time_entries": "auto"}}` per action; without one, reads run and writes ask. A session that holds mail text asks
+// Each extension has agent access on or off (`{"trello": {"access": false}}`: not listed, every call refused), and
+// each action a policy: auto (runs), ask (a card in the conversation, like a permission) or deny. The user sets them
+// in Settings, each extension's Agent access section, kept in the vault's .relay/config.json `actions` (read on every
+// call, so a hand edit applies at once): `{"productive": "auto"}` for a whole extension, or `{"productive": {"*": "ask",
+// "time_entries": "auto"}}` per action; without one, reads run and writes ask. Claude Code may not edit that file. A session that holds mail text asks
 // before every write, and mail only reaches Claude Code, the one provider whose session can be restricted.
 
 use crate::{providers, reminders};
@@ -53,17 +55,20 @@ fn items() -> Vec<Item> {
     out
 }
 
-/// The user's policy for an action, from settings.json `actions`: the action's own, the extension's `*`, the
-/// extension as a whole, else the action's default.
-fn chosen(settings: &Value, it: &Item) -> Policy {
-    let s = &settings["actions"][it.ext];
+/// Whether the user lets agents use the extension at all. `acts`: the vault's `actions` (relay_config::actions).
+fn access(acts: &Value, ext: &str) -> bool { acts[ext]["access"] != false }
+
+/// The user's policy for an action: the action's own, the extension's `*`, the extension as a whole, else the
+/// action's default.
+fn chosen(acts: &Value, it: &Item) -> Policy {
+    let s = &acts[it.ext];
     let pick = |v: &Value| v.as_str().and_then(Policy::parse);
     pick(&s[it.id]).or_else(|| pick(&s["*"])).or_else(|| pick(s)).unwrap_or(it.default)
 }
 /// What applies in this conversation: mail only for Claude Code, and a session holding mail text asks before a write.
-fn effective(settings: &Value, it: &Item, provider: &str, tainted: bool) -> Policy {
+fn effective(acts: &Value, it: &Item, provider: &str, tainted: bool) -> Policy {
     if it.ext == "mail" && provider != "claude" { return Policy::Deny; }
-    match chosen(settings, it) {
+    match chosen(acts, it) {
         Policy::Auto if tainted && it.write && it.ext != "mail" => Policy::Ask,
         p => p,
     }
@@ -78,6 +83,22 @@ fn ready(app: &AppHandle, ext: &str) -> bool {
         "reminders" => crate::vault_of(&s)["ok"] == true,
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
+}
+
+fn acts(app: &AppHandle) -> Value { crate::relay_config::actions(&crate::vault(&app.state::<crate::App>())) }
+
+/// Every action and the vault's `actions`, for the Agent access sections in Settings.
+#[tauri::command]
+pub fn action_config(app: AppHandle) -> Value {
+    json!({ "actions": items().iter().map(|it| json!({ "ext": it.ext, "id": it.id, "about": it.about, "write": it.write, "default": it.default.as_str() })).collect::<Vec<_>>(),
+            "config": acts(&app) })
+}
+/// One extension's access and policies into the vault's .relay/config.json; the vault's `actions` back.
+#[tauri::command]
+pub fn set_action_config(app: AppHandle, ext: String, entry: Value) -> Result<Value, String> {
+    if !items().iter().any(|it| it.ext == ext) { return Err(format!("no extension {ext}")); }
+    crate::relay_config::set_actions(&crate::need_vault(&app.state::<crate::App>())?, &ext, &entry)?;
+    Ok(acts(&app))
 }
 
 // ---------- the app's side: the socket
@@ -124,9 +145,9 @@ fn conversation(app: &AppHandle, key: &str) -> Option<(String, bool)> {
 
 fn list(app: &AppHandle, key: &str) -> Result<Value, String> {
     let (provider, tainted) = conversation(app, key).ok_or(NOT_IN_APP)?;
-    let s = app.state::<crate::App>().settings.lock().unwrap().clone();
+    let s = acts(app);
     let mut ready_of = std::collections::HashMap::new();
-    Ok(items().iter().filter(|it| *ready_of.entry(it.ext).or_insert_with(|| ready(app, it.ext))).map(|it| json!({
+    Ok(items().iter().filter(|it| access(&s, it.ext) && *ready_of.entry(it.ext).or_insert_with(|| ready(app, it.ext))).map(|it| json!({
         "action": format!("{}.{}", it.ext, it.id), "about": it.about, "args": it.args.iter().map(|(n, a)| json!([n, a])).collect::<Vec<_>>(),
         "policy": effective(&s, it, &provider, tainted).as_str(),
     })).collect())
@@ -138,17 +159,18 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
     let all = items();
     let it = all.iter().find(|it| format!("{}.{}", it.ext, it.id) == action).ok_or_else(|| format!("no action '{action}', `relay help` lists them"))?;
     check_args(it.args, args)?;
+    let s = acts(app);
+    if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
-    let s = app.state::<crate::App>().settings.lock().unwrap().clone();
     match effective(&s, it, &provider, tainted) {
         Policy::Deny if it.ext == "mail" && provider != "claude" => return Err("mail is only available to Claude Code conversations".into()),
-        Policy::Deny => return Err(format!("the user does not allow {action} (settings.json, actions.{})", it.ext)),
+        Policy::Deny => return Err(format!("the user does not allow {action}")),
         Policy::Ask => ask(app, c, key, &provider, action, args)?,
         Policy::Auto => {}
     }
     match it.run {
         Run::Board(p, a) => {
-            let cfg = s["integrations"][p.id].clone();
+            let cfg = app.state::<crate::App>().settings.lock().unwrap()["integrations"][p.id].clone();
             let r = (a.build)(&cfg, args)?;
             providers::send(p, &cfg, r.method, &r.url, r.body).map(|v| (a.out)(&v))
         }
@@ -274,16 +296,23 @@ mod tests {
     fn policy_from_settings_then_default_and_mail_text_asks() {
         let w = item("productive");
         assert_eq!(chosen(&json!({}), w), Policy::Ask);
-        assert_eq!(chosen(&json!({"actions": {"productive": "auto"}}), w), Policy::Auto);
-        assert_eq!(chosen(&json!({"actions": {"productive": {"*": "deny", w.id: "auto"}}}), w), Policy::Auto);
-        assert_eq!(chosen(&json!({"actions": {"productive": {"*": "deny"}}}), w), Policy::Deny);
-        assert_eq!(chosen(&json!({"actions": {"productive": "maybe"}}), w), Policy::Ask);
-        let auto = json!({"actions": {"productive": "auto"}});
+        assert_eq!(chosen(&json!({"productive": "auto"}), w), Policy::Auto);
+        assert_eq!(chosen(&json!({"productive": {"*": "deny", w.id: "auto"}}), w), Policy::Auto);
+        assert_eq!(chosen(&json!({"productive": {"*": "deny"}}), w), Policy::Deny);
+        assert_eq!(chosen(&json!({"productive": "maybe"}), w), Policy::Ask);
+        let auto = json!({"productive": "auto"});
         assert_eq!(effective(&auto, w, "codex", false), Policy::Auto);
         assert_eq!(effective(&auto, w, "claude", true), Policy::Ask);
         let draft = items().into_iter().find(|i| i.ext == "mail" && i.id == "save_draft").unwrap();
         assert_eq!(effective(&json!({}), &draft, "claude", true), Policy::Auto);
-        assert_eq!(effective(&json!({"actions": {"mail": "auto"}}), &draft, "codex", false), Policy::Deny);
+        assert_eq!(effective(&json!({"mail": "auto"}), &draft, "codex", false), Policy::Deny);
+    }
+    #[test]
+    fn access_is_on_unless_switched_off() {
+        assert!(access(&json!({}), "trello") && access(&json!({"trello": "auto"}), "trello"));
+        assert!(!access(&json!({"trello": {"access": false, "*": "auto"}}), "trello"));
+        // the switch is no policy
+        assert_eq!(chosen(&json!({"productive": {"access": true}}), item("productive")), Policy::Ask);
     }
     #[test]
     fn every_action_has_a_unique_name() {

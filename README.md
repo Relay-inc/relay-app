@@ -283,14 +283,17 @@ the socket the app listens on and the CLI side.
   entries; Trello boards, lists, cards, comments; Linear teams and issues), mail (`search`, `read`, `thread`,
   `attachment`, `save_draft`, the relay-mail tools) and the vault's reminders (`list`, `add`, `done`, `push`). Only
   set-up extensions are listed.
-- Policy per action: `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission;
-  the command waits for it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft to `auto`. Set
-  them in settings.json:
+- Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
+  `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
+  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft to `auto`. Both are set in each
+  extension's Agent access section in Settings (Integrations › the extension; reminders under General) and kept in
+  the vault's `.relay/config.json`, read on every call, so a hand edit applies at once:
 
   ```json
-  "actions": { "productive": { "*": "ask", "add_time": "auto" }, "trello": "deny" }
+  "actions": { "productive": { "*": "ask", "add_time": "auto" }, "trello": { "access": false }, "linear": "auto" }
   ```
 
+  The agent works in the vault, so Claude Code is denied `Edit(./.relay/**)`: it cannot hand itself permissions.
 - A session that holds mail text asks before every write, and mail actions only run for Claude Code (the one
   provider whose session can be restricted, see `taint` in lib.rs); a mail read through `relay` restricts the session
   like relay-mail does.

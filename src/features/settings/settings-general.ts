@@ -15,6 +15,7 @@ import {
   inputValue,
   withoutColon,
 } from "./blocks";
+import "./settings-actions";
 import "./settings-path";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
@@ -207,6 +208,7 @@ export class SettingsGeneral extends SettingsElement {
 
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
-    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()}`)}`;
+      <relay-settings-actions .ext=${"reminders"} .name=${t("act.reminders")}></relay-settings-actions>
+      ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()}`)}`;
   }
 }

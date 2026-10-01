@@ -267,6 +267,16 @@ export default {
   "set.accent.relay": "Relay-blauw",
   "set.accent.graphite": "Grafiet",
   "set.favicons": "Projecticonen",
+  "act.reminders": "Herinneringen",
+  "act.title": "Toegang voor de agent",
+  "act.help":
+    "Wat de agent in een gesprek met {name} mag doen via het relay-commando. Bewaard in .relay/config.json van de vault, dat de agent niet kan aanpassen.",
+  "act.access": "De agent mag {name} gebruiken",
+  "act.mailOnly": "Enkel gesprekken met Claude Code krijgen mail.",
+  "act.default": "Standaard ({p})",
+  "act.auto": "Voert uit",
+  "act.ask": "Vraagt eerst",
+  "act.deny": "Nooit",
   "set.faviconsOn": "Favicon van de website als icoon",
   "set.faviconsHelp":
     "Eén keer per dag zoekt de app in de notities van elk project zonder icoon een website en gebruikt de favicon. Per website wordt een project één keer geprobeerd, een hersteld icoon komt niet terug.",
