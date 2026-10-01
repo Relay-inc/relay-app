@@ -4,8 +4,8 @@ import { repeat } from "lit/directives/repeat.js";
 import { t } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { ui, isTerm } from "../../domain/ui";
-import { chat, termOf, projOf, label } from "../../domain/chats/state";
+import { ui, isTerminal } from "../../domain/ui";
+import { chat, terminalOf, projectOf, label } from "../../domain/chats/state";
 import type { Item, Pending } from "../../domain/chats/state";
 import { routeTo, answer } from "../../domain/chats/actions";
 import { project } from "../../domain/vault";
@@ -76,10 +76,10 @@ export class RelayConversation extends LitElement {
   }
 
   override render() {
-    const sel = ui.sel,
-      items = chat.convo[sel] || [],
-      T = isTerm(sel) ? termOf(sel) : undefined,
-      pn = T ? T.project : projOf(sel);
+    const sel = ui.selected,
+      items = chat.messages[sel] || [],
+      T = isTerminal(sel) ? terminalOf(sel) : undefined,
+      pn = T ? T.project : projectOf(sel);
     const waiting = chat.pendingList.filter(r => r.project === sel),
       rc = chat.routeChoice;
     return html`${items.length ? items.map(it => this.item(it)) : html`<relay-note-line .text=${project(pn) ? t("chat.emptyProject", { name: pn ?? "" }) : t("chat.emptyGeneral")}></relay-note-line>`}

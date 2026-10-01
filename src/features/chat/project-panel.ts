@@ -8,9 +8,9 @@ import { tw } from "../../core/styles";
 import { config } from "../../domain/config";
 import { vault } from "../../domain/vault";
 import { iconFrom } from "../../domain/icons";
-import { selProject } from "../../domain/chats/state";
+import { selectedProject } from "../../domain/chats/state";
 import { savePop } from "../../domain/chats/actions";
-import { closePop } from "../../domain/navigation";
+import { closeProjectPanel } from "../../domain/navigation";
 
 /** Which project this conversation belongs to, and the project's icon and name. Opens under the title; a second container, it saves on its own. */
 @customElement("relay-project-panel")
@@ -38,7 +38,7 @@ export class ProjectPanel extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    const cur = selProject();
+    const cur = selectedProject();
     this.proj = cur;
     this.img = (cur ? vault.icons[cur]?.img : undefined) ?? undefined;
     this.emoji = this.img || !cur ? "" : vault.icons[cur]?.icon || "";
@@ -61,7 +61,7 @@ export class ProjectPanel extends LitElement {
     this.emoji = "";
   }
   private async save() {
-    const cur = selProject();
+    const cur = selectedProject();
     this.err = await savePop(
       this.proj,
       cur ? { img: this.img, emoji: this.emoji.trim(), label: this.lab.trim() } : undefined,
@@ -69,7 +69,7 @@ export class ProjectPanel extends LitElement {
   }
 
   override render() {
-    const cur = selProject(),
+    const cur = selectedProject(),
       names = vault.snap.projects.map(p => p.name).sort((a: string, b: string) => a.localeCompare(b));
     // a long project name in the select or the inputs never pushes past the panel
     const lab = "grid grid-cols-1 gap-1.5 text-sm text-secondary select-none";
@@ -122,7 +122,7 @@ export class ProjectPanel extends LitElement {
           : nothing
       }
       <div>
-        <button class="btn" @click=${closePop}>${t("pop.cancel")}</button
+        <button class="btn" @click=${closeProjectPanel}>${t("pop.cancel")}</button
         ><button class="btn btn-primary" @click=${() => this.save()}>${t("pop.save")}</button>
       </div>
     </div>`;

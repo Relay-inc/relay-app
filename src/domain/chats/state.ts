@@ -1,13 +1,13 @@
 import { t } from "../../core/i18n";
 import type { Key } from "../../core/locales/en";
 import { ls } from "../../core/store";
-import { ui, isTerm } from "../ui";
+import { ui, isTerminal } from "../ui";
 import { vault, findProjects } from "../vault";
 import { config } from "../config";
 import { termKey, newChatKey } from "../keys";
 
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
-// what waits for the user (permission cards, questions, background sessions that block).
+// what isWaiting for the user (permission cards, questions, background sessions that block).
 
 // A conversation has its own key and hangs under a project (or under Algemeen when project is null).
 // The key never changes, so moving a conversation to a project is only a label: the running
@@ -76,7 +76,7 @@ export type Sub = {
   text?: string;
 };
 /** A session open in the terminal (not started by the app), with the project snapshot.py read from its transcript. */
-export type Term = {
+export type TerminalSession = {
   key: string;
   sid: string;
   id: string;
@@ -94,7 +94,7 @@ export const NEW = "Nieuw gesprek";
 
 export const chat = {
   chats: ls.get<Record<string, Chat>>("chats", {}),
-  convo: {} as Record<string, Item[]>,
+  messages: {} as Record<string, Item[]>, // per conversation, from the transcript and the live events
   status: {} as Record<string, "idle" | "busy">,
   queued: {} as Record<string, number>, // messages sent but not answered yet: one turn end each
   unseen: new Set<string>(),
@@ -128,9 +128,9 @@ const PLACEHOLDER: Record<string, Key> = {
   Gesprek: "chat.untitled",
   "Algemeen gesprek": "chat.general",
 };
-export const shownTitle = (title: string) => (PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title);
-export const projOf = (key: string) => chat.chats[key]?.project ?? null;
-export const label = (key: string) => shownTitle(chat.chats[key]?.title || key);
+export const displayTitle = (title: string) => (PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title);
+export const projectOf = (key: string) => chat.chats[key]?.project ?? null;
+export const label = (key: string) => displayTitle(chat.chats[key]?.title || key);
 export const chatsOf = (p: string | null) =>
   Object.values(chat.chats)
     .filter(c => c.project === p && !c.draft && !c.closed)
@@ -144,7 +144,7 @@ export function newChat(p: string | null): string {
 }
 export function aboutProject(key: string): string | null {
   const score: Record<string, number> = {};
-  for (const it of chat.convo[key] || []) {
+  for (const it of chat.messages[key] || []) {
     if (it.kind === "me") for (const p of findProjects(it.text)) score[p] = (score[p] || 0) + 1;
     if (it.kind === "tool" && it.path)
       for (const p of vault.snap.projects) {
@@ -159,7 +159,7 @@ export function aboutProject(key: string): string | null {
 
 // ---------- terminal sessions (not started by the app)
 const GENERIC = /^obsidian-context-management-\w+$/;
-export function terms(hiddenOnes = false): Term[] {
+export function terminalSessions(hiddenOnes = false): TerminalSession[] {
   const live = new Map(chat.agentsList.map(a => [a.sessionId, a]));
   return vault.snap.sessions.items.flatMap(session => {
     const sid = session.sessionId,
@@ -184,22 +184,23 @@ export function terms(hiddenOnes = false): Term[] {
     ];
   });
 }
-export const termOf = (k: string) => terms().find(tm => tm.key === k);
+export const terminalOf = (k: string) => terminalSessions().find(tm => tm.key === k);
 /** The project of the open conversation, terminal or app. */
-export const selProject = () => (isTerm(ui.sel) ? (termOf(ui.sel)?.project ?? null) : projOf(ui.sel));
+export const selectedProject = () =>
+  isTerminal(ui.selected) ? (terminalOf(ui.selected)?.project ?? null) : projectOf(ui.selected);
 // background terminal sessions that wait
 export const blockedAgents = () =>
   chat.agentsList.filter(a => a.kind === "background" && a.state === "blocked" && !chat.hidden.includes(a.id));
 export const waitCount = () => chat.pendingList.length + blockedAgents().length;
-export const waits = (k: string) => chat.pendingList.some(r => r.project === k);
+export const isWaiting = (k: string) => chat.pendingList.some(r => r.project === k);
 export const runningSubs = (k: string) => (chat.subs[k] || []).filter(a => a.running).length;
 // what was closed under a project (or under Algemeen when p is null), newest first
 export function closedOf(p: string | null): { key: string; title: string }[] {
   const cs = Object.values(chat.chats)
     .filter(c => c.closed && c.project === p)
     .sort((a, b) => b.closed! - a.closed!)
-    .map(c => ({ key: c.key, title: shownTitle(c.title) }));
-  const ts = terms(true)
+    .map(c => ({ key: c.key, title: displayTitle(c.title) }));
+  const ts = terminalSessions(true)
     .filter(tm => tm.project === p)
     .map(tm => ({ key: tm.key, title: tm.title }));
   return [...cs, ...ts].slice(0, 8);
@@ -207,10 +208,9 @@ export function closedOf(p: string | null): { key: string; title: string }[] {
 /** A question with options (kind "question"; files from before the providers only have Claude's tool name). */
 export const isQuestion = (r: Pending) => r.kind === "question" || r.tool_name === "AskUserQuestion";
 
-export const dur = (sec: number) => {
+export const formatDuration = (sec: number) => {
   const s = Math.max(0, Math.round(sec));
   return s < 60 ? `${s} s` : `${Math.floor(s / 60)} min ${s % 60} s`;
 };
-export const base = (p = "") => p.split("/").pop() || p;
 export const lastAi = (k: string) =>
-  [...(chat.convo[k] || [])].reverse().find(i => i.kind === "ai")?.text || t("work.done");
+  [...(chat.messages[k] || [])].reverse().find(i => i.kind === "ai")?.text || t("work.done");

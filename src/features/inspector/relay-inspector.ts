@@ -7,8 +7,8 @@ import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
 import { ui } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
-import { project, pLabel } from "../../domain/vault";
-import { selProject } from "../../domain/chats/state";
+import { project, projectLabel } from "../../domain/vault";
+import { selectedProject } from "../../domain/chats/state";
 import { panel, setTab, cardOf, closeDetail, openDetail } from "../../domain/panel";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
@@ -78,7 +78,7 @@ export class RelayInspector extends LitElement {
       compact
       .pr=${p}
       ?mine=${mine}
-      .project=${p.project ? pLabel(p.project) : ""}
+      .project=${p.project ? projectLabel(p.project) : ""}
       ?selected=${panel.open === key}
       @open-pr=${() => openDetail(key)}
     ></relay-pr-row>`;
@@ -86,7 +86,7 @@ export class RelayInspector extends LitElement {
 
   private body() {
     if (panel.open) return this.detail();
-    const P = project(selProject());
+    const P = project(selectedProject());
     if (!P) {
       const due = reminders().filter(r => r.days <= 0);
       return html`${this.heading(th("insp.today"), due.length)}${

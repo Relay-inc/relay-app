@@ -35,9 +35,9 @@ export function opened(key: string): Opened {
   if (key.startsWith(TERM_PREFIX)) return { kind: "term", sid: key.slice(TERM_PREFIX.length) };
   return { kind: "chat", key };
 }
-export const isTerm = (key: string) => key.startsWith(TERM_PREFIX);
+export const isTerminal = (key: string) => key.startsWith(TERM_PREFIX);
 /** The session id of a terminal key, "" for any other key. */
-export const termSid = (key: string) => (isTerm(key) ? key.slice(TERM_PREFIX.length) : "");
+export const termSid = (key: string) => (isTerminal(key) ? key.slice(TERM_PREFIX.length) : "");
 
 // ---------- what the right panel shows in detail: a PR, a mail, a vault note or a tracker card
 export type PanelItem =

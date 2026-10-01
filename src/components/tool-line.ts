@@ -7,19 +7,19 @@ const esc = (s: unknown) =>
     /[&<>"']/g,
     c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
-const base = (p = "") => p.split("/").pop() || p;
+const fileName = (path = "") => path.split("/").pop() || path;
 
 /** One tool call as a short line ("read x.md", a command, "searched for ..."). Its `<code>` is styled by the line that holds it. */
 export function toolLine(name: string, input: ToolInput | undefined) {
   const i = input || {};
   switch (name) {
     case "Read":
-      return th("tool.read", { file: base(i.file_path) });
+      return th("tool.read", { file: fileName(i.file_path) });
     case "Write":
-      return th("tool.write", { file: base(i.file_path) });
+      return th("tool.write", { file: fileName(i.file_path) });
     case "Edit":
     case "MultiEdit":
-      return th("tool.edit", { file: base(i.file_path) });
+      return th("tool.edit", { file: fileName(i.file_path) });
     case "Bash":
       return html`<code>${String(i.command || "").slice(0, 90)}</code>`;
     case "Grep":

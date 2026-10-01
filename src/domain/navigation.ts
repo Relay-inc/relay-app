@@ -1,7 +1,7 @@
 import { t } from "../core/i18n";
 import { changed, ls, request } from "../core/store";
-import { ui, WAIT, PRS, MAIL, isView, isTerm } from "./ui";
-import { chat, chatsOf, newChat, termOf, projOf } from "./chats/state";
+import { ui, WAIT, PRS, MAIL, isView, isTerminal } from "./ui";
+import { chat, chatsOf, newChat, terminalOf, projectOf } from "./chats/state";
 import { ensureHistory } from "./chats/events";
 import { panel } from "./panel";
 import { loadPrs } from "./prs";
@@ -11,16 +11,21 @@ import { loadMails } from "./mail";
 
 export async function select(k: string) {
   // an empty draft that is left behind disappears, one with typed text stays
-  if (ui.sel !== k && chat.chats[ui.sel]?.draft && !(chat.convo[ui.sel] || []).length && !chat.typed[ui.sel])
-    delete chat.chats[ui.sel];
-  ui.pop = false;
-  if (ui.sel !== k && panel.open) panel.open = "";
-  ui.sel = k;
+  if (
+    ui.selected !== k &&
+    chat.chats[ui.selected]?.draft &&
+    !(chat.messages[ui.selected] || []).length &&
+    !chat.typed[ui.selected]
+  )
+    delete chat.chats[ui.selected];
+  ui.projectPanel = false;
+  if (ui.selected !== k && panel.open) panel.open = "";
+  ui.selected = k;
   chat.unseen.delete(k);
   chat.routeChoice = chat.routeChoice?.key === k ? chat.routeChoice : null;
   ls.set("sel", chat.chats[k]?.draft && !chat.typed[k] ? WAIT : k);
   changed();
-  if (!isView(k) && !chat.chats[k]?.draft) await ensureHistory(k, isTerm(k));
+  if (!isView(k) && !chat.chats[k]?.draft) await ensureHistory(k, isTerminal(k));
   if (k === PRS) loadPrs();
   if (k === MAIL) loadMails();
   changed();
@@ -30,7 +35,15 @@ export async function select(k: string) {
 export const openProject = (p: string) => select(chatsOf(p)[0]?.key || newChat(p));
 /** A new conversation under the open one's project, or a general one. */
 export const newHere = () =>
-  select(newChat(isView(ui.sel) ? null : isTerm(ui.sel) ? (termOf(ui.sel)?.project ?? null) : projOf(ui.sel)));
+  select(
+    newChat(
+      isView(ui.selected)
+        ? null
+        : isTerminal(ui.selected)
+          ? (terminalOf(ui.selected)?.project ?? null)
+          : projectOf(ui.selected),
+    ),
+  );
 export const newGeneral = () => select(newChat(null));
 
 let toastTimer = 0;
@@ -49,25 +62,25 @@ export const hideToast = () => {
   changed();
 };
 
-export const setInsp = (hide: boolean) => {
-  ui.noinsp = hide;
+export const setPanelHidden = (hide: boolean) => {
+  ui.panelHidden = hide;
   ls.set("noinsp", hide);
   changed();
 };
-export const openPop = () => {
-  if (isView(ui.sel)) return;
-  ui.pop = true;
+export const openProjectPanel = () => {
+  if (isView(ui.selected)) return;
+  ui.projectPanel = true;
   changed();
 };
-export const closePop = () => {
-  ui.pop = false;
+export const closeProjectPanel = () => {
+  ui.projectPanel = false;
   changed();
 };
 export const zoom = (url: string) => {
   ui.zoom = url;
   changed();
 };
-export const toggleQuick = (on = !ui.qk) => {
-  ui.qk = on;
+export const toggleQuickAsk = (on = !ui.quickAsk) => {
+  ui.quickAsk = on;
   changed();
 };

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { t } from "../../core/i18n";
 import { changed, ls, request } from "../../core/store";
-import { ui, WAIT, isTerm } from "../ui";
+import { ui, WAIT, isTerminal } from "../ui";
 import { config, saveSettings } from "../config";
 import { setIcon } from "../icons";
 import { vault, findProjects } from "../vault";
@@ -10,13 +10,13 @@ import { select, toast, hideToast } from "../navigation";
 import {
   chat,
   NEW,
-  termOf,
-  projOf,
+  terminalOf,
+  projectOf,
   label,
   chatsOf,
   newChat,
   saveChats,
-  shownTitle,
+  displayTitle,
   isQuestion,
   type Img,
   type Pending,
@@ -30,12 +30,12 @@ import type { Decision } from "@relay/agent-core";
 
 // ---------- the composer: what is typed per conversation, images waiting for the next send
 export function setTyped(v: string) {
-  const c = chat.chats[ui.sel];
-  if (v) chat.typed[ui.sel] = v;
-  else delete chat.typed[ui.sel];
+  const c = chat.chats[ui.selected];
+  if (v) chat.typed[ui.selected] = v;
+  else delete chat.typed[ui.selected];
   ls.set("typed", chat.typed);
   if (c?.draft) {
-    ls.set("sel", v ? ui.sel : WAIT);
+    ls.set("sel", v ? ui.selected : WAIT);
     saveChats();
   }
   // a draft is named after what is typed until it is sent
@@ -103,25 +103,25 @@ export function unattach(i: number, list: Img[] = chat.attached) {
 // ---------- sending
 // `to` sends to a conversation that is not open (Cmd-K) with its own images: the composer, its images and the view stay as they are
 export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) {
-  const text = forced ?? (chat.typed[ui.sel] ?? "").trim();
+  const text = forced ?? (chat.typed[ui.selected] ?? "").trim();
   if (forced === undefined && text) {
-    delete chat.typed[ui.sel];
+    delete chat.typed[ui.selected];
     ls.set("typed", chat.typed);
   }
-  if ((!text && !(to ? toImgs : chat.attached).length) || (!to && ui.sel === WAIT)) return;
-  if (!to && isTerm(ui.sel)) {
+  if ((!text && !(to ? toImgs : chat.attached).length) || (!to && ui.selected === WAIT)) return;
+  if (!to && isTerminal(ui.selected)) {
     // typing in a terminal conversation: fork it into an app conversation under the same project
-    const tm = termOf(ui.sel);
+    const tm = terminalOf(ui.selected);
     if (!tm) return;
     const k = newChat(tm.project);
     Object.assign(chat.chats[k], { title: tm.title, fork: tm.sid, draft: false, provider: "claude" }); // terminal sessions are Claude Code's
     chat.forked.push(tm.sid);
     ls.set("forkedTerms", chat.forked);
-    chat.convo[k] = [...(chat.convo[ui.sel] || []), { kind: "note", text: t("note.forked") }];
+    chat.messages[k] = [...(chat.messages[ui.selected] || []), { kind: "note", text: t("note.forked") }];
     await select(k);
     return sendMsg(text);
   }
-  const k = to ?? ui.sel,
+  const k = to ?? ui.selected,
     c = chat.chats[k];
   // a second process on the same session while the first still writes it would fork the transcript
   if (k in chat.outside) {
@@ -131,7 +131,7 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) 
   }
   // first message of a general conversation: if it names one project, it goes under that project
   // (also from Cmd-K, which passes `to`; the resend after the route question passes neither and must not ask again)
-  if (c && !c.project && (!forced || to) && !(chat.convo[k] || []).length) {
+  if (c && !c.project && (!forced || to) && !(chat.messages[k] || []).length) {
     const hits = findProjects(text);
     if (hits.length === 1) {
       c.project = hits[0];
@@ -150,7 +150,7 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) 
     saveChats();
   }
   // first message: a short generated title replaces the typed start, unless the user renamed it meanwhile
-  if (c && text && !(chat.convo[k] || []).length) {
+  if (c && text && !(chat.messages[k] || []).length) {
     const auto = c.title;
     invoke<string>("ai_title", { text, provider: chatAgent(k) })
       .then(title => {
@@ -168,8 +168,8 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) 
   chat.status[k] = "busy";
   chat.queued[k] = (chat.queued[k] || 0) + 1;
   changed();
-  if (k === ui.sel) request("scroll-bottom");
-  const name = `${c?.project || t("general")}: ${shownTitle(c?.title || k)}`;
+  if (k === ui.selected) request("scroll-bottom");
+  const name = `${c?.project || t("general")}: ${displayTitle(c?.title || k)}`;
   const sent = c?.mail ? `${c.mail}\n\n${text}` : text;
   if (c?.mail) {
     delete c.mail;
@@ -195,17 +195,17 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []) 
   }
 }
 export const stopChat = () => {
-  invoke("stop", { project: ui.sel });
-  chat.queued[ui.sel] = 0;
-  chat.status[ui.sel] = "idle";
-  push(ui.sel, { kind: "note", text: t("note.stopped") });
+  invoke("stop", { project: ui.selected });
+  chat.queued[ui.selected] = 0;
+  chat.status[ui.selected] = "idle";
+  push(ui.selected, { kind: "note", text: t("note.stopped") });
   changed();
 };
 /** The send button: send, or stop the running turn. */
-export const sendOrStop = () => (chat.status[ui.sel] === "busy" ? stopChat() : sendMsg());
+export const sendOrStop = () => (chat.status[ui.selected] === "busy" ? stopChat() : sendMsg());
 /** The agent of a conversation that has not started yet. */
 export function setAgent(id: string) {
-  const c = chat.chats[ui.sel];
+  const c = chat.chats[ui.selected];
   if (!c) return;
   c.provider = id;
   saveChats();
@@ -213,7 +213,7 @@ export function setAgent(id: string) {
 }
 /** The conversation's title, edited in place. Empty keeps the old one. */
 export function rename(v: string) {
-  const c = chat.chats[ui.sel];
+  const c = chat.chats[ui.selected];
   if (!c || !v.trim()) {
     changed();
     return;
@@ -237,10 +237,10 @@ export function routeTo(name: string) {
 /** The bar that asks whether a general conversation is about a project: yes moves it, no hides the question. */
 export function moveTo(p: string | null) {
   if (p) {
-    chat.chats[ui.sel].project = p;
-    push(ui.sel, { kind: "note", text: t("note.moved", { name: p }) });
+    chat.chats[ui.selected].project = p;
+    push(ui.selected, { kind: "note", text: t("note.moved", { name: p }) });
     saveChats();
-  } else chat.dismissed.add(ui.sel);
+  } else chat.dismissed.add(ui.selected);
   changed();
 }
 
@@ -289,27 +289,27 @@ export async function bg(act: "hide" | "stop" | "attach", id: string) {
 }
 /** The terminal button: a terminal session opens in iTerm, an app conversation resumes there. */
 export function openTerminal() {
-  if (ui.sel === WAIT || chat.chats[ui.sel]?.fromMail) return;
-  if (isTerm(ui.sel)) {
-    const tm = termOf(ui.sel);
+  if (ui.selected === WAIT || chat.chats[ui.selected]?.fromMail) return;
+  if (isTerminal(ui.selected)) {
+    const tm = terminalOf(ui.selected);
     if (tm) invoke("bg", { action: "attach", id: tm.id });
     return;
   }
   invoke("open_terminal", {
-    project: ui.sel,
+    project: ui.selected,
     session: null,
-    name: `${projOf(ui.sel) || t("general")}: ${label(ui.sel)}`,
+    name: `${projectOf(ui.selected) || t("general")}: ${label(ui.selected)}`,
   });
-  chat.queued[ui.sel] = 0;
-  chat.status[ui.sel] = "idle";
+  chat.queued[ui.selected] = 0;
+  chat.status[ui.selected] = "idle";
   changed();
 }
 
 // ---------- closing hides a conversation from the sidebar. An app conversation stops but keeps its session, a
 // terminal session keeps running in iTerm. Both come back via the undo bar or right-click > Heropen.
 export async function closeChat(k: string) {
-  const title = isTerm(k) ? termOf(k)?.title : label(k);
-  if (isTerm(k)) {
+  const title = isTerminal(k) ? terminalOf(k)?.title : label(k);
+  if (isTerminal(k)) {
     chat.forked.push(termSid(k));
     ls.set("forkedTerms", chat.forked);
   } else if (chat.chats[k]) {
@@ -320,13 +320,13 @@ export async function closeChat(k: string) {
     saveChats();
   }
   toast(t("toast.closed", { title: title ?? "" }), () => reopen(k));
-  if (ui.sel === k) {
-    const p = isTerm(k) ? null : projOf(k);
+  if (ui.selected === k) {
+    const p = isTerminal(k) ? null : projectOf(k);
     await select(p && chatsOf(p)[0] ? chatsOf(p)[0].key : WAIT);
   } else changed();
 }
 export async function reopen(k: string) {
-  if (isTerm(k)) {
+  if (isTerminal(k)) {
     chat.forked = chat.forked.filter(x => x !== termSid(k));
     ls.set("forkedTerms", chat.forked);
   } else if (chat.chats[k]) {
@@ -349,7 +349,7 @@ export function escStop() {
   toast(t("toast.escStop"), undefined, undefined, 2000);
 }
 /** Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed. */
-export const ctrlC = () => (chat.status[ui.sel] === "busy" ? stopChat() : setTyped(""));
+export const ctrlC = () => (chat.status[ui.selected] === "busy" ? stopChat() : setTyped(""));
 
 // ---------- Cmd-K: a question that becomes a new general conversation in the background, the open screen stays
 export function quickSend(text: string, imgs: Img[]) {
@@ -372,11 +372,11 @@ export async function savePop(
   f?: { img?: string; emoji: string; label: string },
 ): Promise<string> {
   const next = structuredClone(config.value);
-  const T0 = isTerm(ui.sel) ? termOf(ui.sel) : undefined,
-    cur = T0 ? T0.project : projOf(ui.sel); // the project the icon fields belong to
-  if (isTerm(ui.sel)) next.overrides[termSid(ui.sel)] = proj;
-  else if (chat.chats[ui.sel]) {
-    chat.chats[ui.sel].project = proj;
+  const T0 = isTerminal(ui.selected) ? terminalOf(ui.selected) : undefined,
+    cur = T0 ? T0.project : projectOf(ui.selected); // the project the icon fields belong to
+  if (isTerminal(ui.selected)) next.overrides[termSid(ui.selected)] = proj;
+  else if (chat.chats[ui.selected]) {
+    chat.chats[ui.selected].project = proj;
     saveChats();
   }
   if (cur && f) {
@@ -393,7 +393,7 @@ export async function savePop(
     }
   }
   if (!(await saveSettings(next))) return config.msg;
-  ui.pop = false;
+  ui.projectPanel = false;
   changed();
   return "";
 }
@@ -402,12 +402,12 @@ export async function savePop(
 /** A click on an agent unfolds its last messages, a second click folds them. */
 export async function toggleSubLog(id: string) {
   if (chat.subLog[id]) delete chat.subLog[id];
-  else chat.subLog[id] = await invoke<string[]>("agent_log", { key: ui.sel, id });
+  else chat.subLog[id] = await invoke<string[]>("agent_log", { key: ui.selected, id });
   changed();
 }
 /** The finished agents of the open conversation, folded away or shown. */
 export function toggleSubsDone() {
-  if (chat.subsOpen.has(ui.sel)) chat.subsOpen.delete(ui.sel);
-  else chat.subsOpen.add(ui.sel);
+  if (chat.subsOpen.has(ui.selected)) chat.subsOpen.delete(ui.selected);
+  else chat.subsOpen.add(ui.selected);
   changed();
 }

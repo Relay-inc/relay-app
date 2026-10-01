@@ -4,7 +4,7 @@ import { th } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { config } from "../../domain/config";
-import { pLabel } from "../../domain/vault";
+import { projectLabel } from "../../domain/vault";
 import { panel, openDetail } from "../../domain/panel";
 import {
   mail,
@@ -59,7 +59,7 @@ export class RelayMail extends LitElement {
                 return html`<relay-mail-row
                   .mail=${m}
                   .sender=${sender(m)}
-                  .project=${p ? pLabel(p) : ""}
+                  .project=${p ? projectLabel(p) : ""}
                   ?selected=${panel.open === key}
                   @open-mail=${() => openDetail(key)}
                   @flip-mail=${() => mailSeen(key, unread(m))}
@@ -78,7 +78,7 @@ export class RelayMail extends LitElement {
     const opts = [...new Set([...ps, ...(f.project && f.project !== "-" ? [f.project] : [])])];
     return html`<relay-mail-bar
         .filter=${f}
-        .projects=${opts.map((p): [string, string] => [p, pLabel(p)])}
+        .projects=${opts.map((p): [string, string] => [p, projectLabel(p)])}
         ?busy=${mail.busy}
         @filter=${(e: CustomEvent) => setMailFilter(e.detail)}
         @reload=${loadMails}

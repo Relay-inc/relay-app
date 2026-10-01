@@ -4,16 +4,16 @@ import { ui, WAIT, REM, PRS, MAIL, boardKey } from "./ui";
 import {
   chat,
   chatsOf,
-  projOf,
-  terms,
+  projectOf,
+  terminalSessions,
   waitCount,
-  waits,
+  isWaiting,
   runningSubs,
-  shownTitle,
+  displayTitle,
   type Chat,
-  type Term,
+  type TerminalSession,
 } from "./chats/state";
-import { vault, contexts, pLabel } from "./vault";
+import { vault, contexts, projectLabel } from "./vault";
 import { config, ghOn, mailOn } from "./config";
 import { readyBoards } from "./board";
 import { mail, unread } from "./mail";
@@ -136,12 +136,12 @@ export const GENERAL = "Algemeen";
 // the open draft shows as "Nieuw gesprek" under its project, its title follows what is typed
 const listed = (p: string | null): Chat[] => [
   ...Object.values(chat.chats).filter(
-    c => c.draft && !c.closed && c.project === p && (c.key === ui.sel || chat.typed[c.key]),
+    c => c.draft && !c.closed && c.project === p && (c.key === ui.selected || chat.typed[c.key]),
   ),
   ...chatsOf(p),
 ];
 const trailOf = (keys: string[]): Trail =>
-  keys.some(waits) ? "dot" : keys.some(k => chat.status[k] === "busy") ? "spin" : "";
+  keys.some(isWaiting) ? "dot" : keys.some(k => chat.status[k] === "busy") ? "spin" : "";
 const subsOf = (k: string) => {
   const n = runningSubs(k);
   return { subs: n, subsTitle: n ? tn("nav.agentsWorking", n) : "" };
@@ -150,26 +150,26 @@ const convRow = (c: Chat): ConvRow => ({
   key: c.key,
   parent: c.project ?? "",
   term: false,
-  title: shownTitle(c.title),
-  selected: ui.sel === c.key,
+  title: displayTitle(c.title),
+  selected: ui.selected === c.key,
   unseen: chat.unseen.has(c.key),
   trail: trailOf([c.key]),
   ...subsOf(c.key),
   closable: !(c.draft && !chat.typed[c.key]),
 });
-const termRow = (tm: Term): ConvRow => ({
+const termRow = (tm: TerminalSession): ConvRow => ({
   key: tm.key,
   parent: tm.project ?? "",
   term: true,
   title: tm.title,
-  selected: ui.sel === tm.key,
+  selected: ui.selected === tm.key,
   unseen: false,
   trail: tm.status === "busy" ? "spin" : tm.state === "blocked" ? "dot" : "",
   ...subsOf(tm.key),
   closable: true,
 });
 
-function projectBlock(p: Project, T: Term[]): ProjectBlock {
+function projectBlock(p: Project, T: TerminalSession[]): ProjectBlock {
   const cs = listed(p.name),
     ts = T.filter(tm => tm.project === p.name),
     keys = [...cs.map(c => c.key), ...ts.map(tm => tm.key)];
@@ -181,7 +181,7 @@ function projectBlock(p: Project, T: Term[]): ProjectBlock {
     unseen: keys.some(k => chat.unseen.has(k)),
     trail: trailOf(keys),
     addTitle: t("nav.newChatAbout", { name: p.name }),
-    label: pLabel(p.name).replace(/^\S+ (?=.)/, s => (config.value.projects[p.name]?.icon ? "" : s)),
+    label: projectLabel(p.name).replace(/^\S+ (?=.)/, s => (config.value.projects[p.name]?.icon ? "" : s)),
     img: ic?.img,
     emoji: ic?.icon,
     convs: ordered(
@@ -195,8 +195,8 @@ function projectBlock(p: Project, T: Term[]): ProjectBlock {
 
 export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
   const q = sidebar.find.toLowerCase(),
-    selP = projOf(ui.sel),
-    T = terms();
+    selP = projectOf(ui.selected),
+    T = terminalSessions();
   const w = waitCount(),
     due = vault.snap.reminders.filter(r => r.days <= 0).length;
   const views: ViewRow[] = [
@@ -255,7 +255,7 @@ export function sidebarModel(): { views: ViewRow[]; sections: Section[] } {
   const open = (p: Project) => T.some(tm => tm.project === p.name) || chatsOf(p.name).length > 0;
   const lastAt = (n: string) =>
     Math.max(0, ...chatsOf(n).map(c => c.at), ...T.filter(tm => tm.project === n).map(tm => tm.mtime));
-  const match = (p: Project) => p.name.toLowerCase().includes(q) || pLabel(p.name).toLowerCase().includes(q);
+  const match = (p: Project) => p.name.toLowerCase().includes(q) || projectLabel(p.name).toLowerCase().includes(q);
   contexts().forEach((ctx, i) => {
     // manual order from dragging comes first, the rest follows by recency
     const shown = ordered(

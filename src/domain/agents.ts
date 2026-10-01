@@ -4,7 +4,7 @@ import claude from "@relay/agent-claude";
 import codex from "@relay/agent-codex";
 import opencode from "@relay/agent-opencode";
 import { changed, ls } from "../core/store";
-import { ui, isTerm } from "./ui";
+import { ui, isTerminal } from "./ui";
 import { chat } from "./chats/state";
 
 export type * from "@relay/agent-core";
@@ -33,7 +33,7 @@ export const loadAgents = () =>
 export const onAgents = () => agents.status.providers.filter(p => p.on);
 export const agentOf = (id: string) => agents.status.providers.find(p => p.id === id);
 export const chatAgent = (k: string) =>
-  isTerm(k) ? "claude" : chat.chats[k]?.provider || agents.status.default || "claude";
+  isTerminal(k) ? "claude" : chat.chats[k]?.provider || agents.status.default || "claude";
 /** The providers whose limits and tokens the usage view lists; Claude's alone until they are known. */
 export const usageAgents = () =>
   agents.loaded ? onAgents().map(p => ({ id: p.id, limits: p.caps.limits })) : [{ id: "claude", limits: true }];
@@ -57,7 +57,7 @@ const FALLBACK: Record<"model" | "effort", { id: string; label: string }[]> = {
 };
 /** The model or effort choices of the open conversation's agent, and the one picked (a stale pick reads as the default). */
 export function picks(kind: "model" | "effort") {
-  const id = chatAgent(ui.sel),
+  const id = chatAgent(ui.selected),
     st = agentOf(id);
   const list = st ? (kind === "model" ? st.models : st.efforts) : FALLBACK[kind],
     want = ls.get(pickKey(kind, id), "");

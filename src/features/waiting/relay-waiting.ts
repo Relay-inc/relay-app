@@ -4,7 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { t, currentLocale } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { chat, projOf, label, blockedAgents, waitCount } from "../../domain/chats/state";
+import { chat, projectOf, label, blockedAgents, waitCount } from "../../domain/chats/state";
 import type { Pending } from "../../domain/chats/state";
 import { bg, answer } from "../../domain/chats/actions";
 import "../../components/permission-card";
@@ -51,7 +51,7 @@ export class RelayWaiting extends LitElement {
     if (!waitCount()) return html`<div class="text-center text-sm text-secondary">${t("wait.none")}</div>`;
     const byK: Record<string, Pending[]> = {};
     for (const r of chat.pendingList) (byK[r.project] ||= []).push(r);
-    const head = (k: string) => `${projOf(k) ? `${projOf(k)} · ` : ""}${label(k)}`;
+    const head = (k: string) => `${projectOf(k) ? `${projectOf(k)} · ` : ""}${label(k)}`;
     const proj = (text: string) => html`<div class="text-sm font-semibold text-secondary -mb-1.5">${text}</div>`;
     return html`<div class="flex flex-col gap-3.5">
       ${Object.entries(byK).map(

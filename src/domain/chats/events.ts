@@ -3,10 +3,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { t } from "../../core/i18n";
 import { changed } from "../../core/store";
 import type { AgentEvent } from "../agents";
-import { ui, WAIT, isTerm } from "../ui";
+import { ui, WAIT, isTerminal } from "../ui";
 import { loadSnapshot } from "../vault";
 import { termSid } from "../keys";
-import { chat, NEW, label, lastAi, saveChats, dur, type Item, type Img, type ToolInput } from "./state";
+import { chat, NEW, label, lastAi, saveChats, formatDuration, type Item, type Img, type ToolInput } from "./state";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) and the transcripts behind a conversation.
 
@@ -20,7 +20,7 @@ export const toImg = (mt: string, data: string): Img => ({
 
 // ---------- incoming events from the agent processes, normalised by their provider (packages/agent-core)
 export function push(k: string, it: Item) {
-  (chat.convo[k] ||= []).push(it);
+  (chat.messages[k] ||= []).push(it);
 }
 // assistant text: a whole block, or a delta appended to the block before it
 function pushText(items: Item[], text: string, delta: boolean) {
@@ -71,7 +71,7 @@ export function onEvent(k: string, ev: AgentEvent) {
     changed();
     return;
   }
-  if (ev.type === "text") pushText((chat.convo[k] ||= []), ev.text, ev.delta);
+  if (ev.type === "text") pushText((chat.messages[k] ||= []), ev.text, ev.delta);
   else if (ev.type === "tool_call") {
     // a chat that touched mail stays restricted: every later spawn of it starts with the mail limits
     if (ev.name.startsWith("mcp__relay-mail__") && chat.chats[k] && !chat.chats[k].fromMail) {
@@ -80,7 +80,7 @@ export function onEvent(k: string, ev: AgentEvent) {
     }
     push(k, toolItem(ev.id, ev.name, ev.input, "run"));
   } else if (ev.type === "tool_result") {
-    const it = chat.convo[k]?.find(x => x.id === ev.id);
+    const it = chat.messages[k]?.find(x => x.id === ev.id);
     if (it) it.state = ev.error ? "err" : "ok";
   } else if (ev.type === "turn_end") {
     chat.queued[k] = Math.max(0, (chat.queued[k] || 1) - 1);
@@ -89,10 +89,10 @@ export function onEvent(k: string, ev: AgentEvent) {
     else if (!chat.queued[k])
       push(k, {
         kind: "done",
-        text: ev.duration_ms ? t("work.doneIn", { d: dur(ev.duration_ms / 1000) }) : t("work.done"),
+        text: ev.duration_ms ? t("work.doneIn", { d: formatDuration(ev.duration_ms / 1000) }) : t("work.done"),
       });
     if (!chat.queued[k]) notify(k, ev.ok ? lastAi(k) : ev.error || t("err.unknown"));
-    if (k !== ui.sel) chat.unseen.add(k);
+    if (k !== ui.selected) chat.unseen.add(k);
     if (chat.chats[k]) {
       chat.chats[k].at = Date.now();
       saveChats();
@@ -134,18 +134,18 @@ export async function tailTerm(k: string): Promise<boolean> {
   const fresh = chat.termOffset[k] === undefined;
   chat.termOffset[k] = r.next;
   const add = toItems(r.items);
-  if (fresh) chat.convo[k] = add;
-  else if (add.length) chat.convo[k].push(...add);
+  if (fresh) chat.messages[k] = add;
+  else if (add.length) chat.messages[k].push(...add);
   return fresh || add.length > 0;
 }
 export async function ensureHistory(k: string, fresh = false) {
-  if (isTerm(k)) {
-    if (!chat.convo[k] || fresh) await tailTerm(k);
+  if (isTerminal(k)) {
+    if (!chat.messages[k] || fresh) await tailTerm(k);
     return;
   }
-  if (chat.convo[k] && !fresh) return;
+  if (chat.messages[k] && !fresh) return;
   const items = toItems(await invoke<AgentEvent[]>("history", { project: k }));
-  chat.convo[k] = items;
+  chat.messages[k] = items;
   const first = items.find(i => i.kind === "me"),
     c = chat.chats[k];
   if (c && [NEW, "Gesprek", "Algemeen gesprek"].includes(c.title) && first) {
@@ -176,11 +176,11 @@ export async function syncBusy() {
     if (busy && chat.status[k] === undefined) {
       chat.status[k] = "busy";
       if (owned.has(k)) {
-        if (!chat.convo[k]) await ensureHistory(k);
+        if (!chat.messages[k]) await ensureHistory(k);
       } // the events that follow land on top of the transcript
       else {
         const r = await invoke<{ items: AgentEvent[]; next: number }>("history_sid", { sid, from: 0, provider });
-        chat.convo[k] = toItems(r.items);
+        chat.messages[k] = toItems(r.items);
         chat.outside[k] = r.next;
         trackTimes(k, r.items);
       }
@@ -192,10 +192,13 @@ export async function syncBusy() {
       delete chat.outsideAt[k];
       push(k, {
         kind: "done",
-        text: span && span.to > span.from ? t("work.doneIn", { d: dur((span.to - span.from) / 1000) }) : t("work.done"),
+        text:
+          span && span.to > span.from
+            ? t("work.doneIn", { d: formatDuration((span.to - span.from) / 1000) })
+            : t("work.done"),
       });
       notify(k, lastAi(k));
-      if (k !== ui.sel) chat.unseen.add(k);
+      if (k !== ui.selected) chat.unseen.add(k);
     }
   }
 }
@@ -209,7 +212,7 @@ export async function tailOutside(k: string) {
   trackTimes(k, r.items);
   const add = toItems(r.items);
   if (add.length) {
-    chat.convo[k].push(...add);
+    chat.messages[k].push(...add);
     changed();
   }
 }

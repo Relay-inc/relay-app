@@ -5,8 +5,8 @@ import { t } from "../../core/i18n";
 import { icon } from "../../core/icons";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { ui, isTerm } from "../../domain/ui";
-import { chat, termOf, projOf } from "../../domain/chats/state";
+import { ui, isTerminal } from "../../domain/ui";
+import { chat, terminalOf, projectOf } from "../../domain/chats/state";
 import { project } from "../../domain/vault";
 import { chatAgent, agentOf, onAgents, picks, setPick } from "../../domain/agents";
 import { setTyped, sendMsg, sendOrStop, attach, unattach, setAgent } from "../../domain/chats/actions";
@@ -107,16 +107,16 @@ export class RelayComposer extends LitElement {
   }
 
   override render() {
-    const sel = ui.sel,
-      T = isTerm(sel) ? termOf(sel) : undefined,
-      pn = T ? T.project : projOf(sel),
+    const sel = ui.selected,
+      T = isTerminal(sel) ? terminalOf(sel) : undefined,
+      pn = T ? T.project : projectOf(sel),
       P = project(pn);
     const busy = chat.status[sel] === "busy",
       id = chatAgent(sel),
       st = agentOf(id),
       on = onAgents();
     // the agent is fixed once a conversation has a message; with one agent there is nothing to pick
-    const showAgent = on.length > 1 && !isTerm(sel) && !!chat.chats[sel];
+    const showAgent = on.length > 1 && !isTerminal(sel) && !!chat.chats[sel];
     const model = picks("model"),
       effort = picks("effort");
     const box = "rounded-lg bg-bg border pt-2.5 px-3 pb-2 shadow-xs focus-within:border-accent";
@@ -161,7 +161,7 @@ export class RelayComposer extends LitElement {
         ${
           showAgent
             ? html`<select
-                ?disabled=${!!(chat.convo[sel] || []).length || !!chat.chats[sel]?.fork}
+                ?disabled=${!!(chat.messages[sel] || []).length || !!chat.chats[sel]?.fork}
                 title=${t("composer.agent")}
                 aria-label=${t("composer.agent")}
                 @change=${(e: Event) => setAgent((e.target as HTMLSelectElement).value)}

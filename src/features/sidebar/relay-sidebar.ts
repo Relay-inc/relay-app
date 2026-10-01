@@ -21,7 +21,7 @@ import {
   type Section,
   type ViewRow,
 } from "../../domain/sidebar";
-import { select, openProject, openPop } from "../../domain/navigation";
+import { select, openProject, openProjectPanel } from "../../domain/navigation";
 import { newChat, closedOf } from "../../domain/chats/state";
 import { closeChat, reopen } from "../../domain/chats/actions";
 import { usageSummary } from "../../domain/usage";
@@ -181,7 +181,7 @@ export class RelaySidebar extends LitElement {
     this.ctx = null;
     if (id === "assign") {
       await select(m.k);
-      openPop();
+      openProjectPanel();
     } else if (id === "close") closeChat(m.k);
     else if (id === "new") select(newChat(m.p));
     else reopen(id.slice("reopen:".length));
@@ -202,7 +202,7 @@ export class RelaySidebar extends LitElement {
       .svg=${v.svg ?? ""}
       .name=${v.name}
       .meta=${v.meta}
-      .selected=${ui.sel === v.key}
+      .selected=${ui.selected === v.key}
       @click=${this.go(() => select(v.key))}
     ></relay-sidebar-row>`;
   }
@@ -300,7 +300,7 @@ export class RelaySidebar extends LitElement {
         ${views.map(v => this.view(v))}${sections.map(s => this.section(s))}
       </nav>
       <relay-sidebar-footer
-        .selected=${ui.sel === USAGE}
+        .selected=${ui.selected === USAGE}
         .level=${u?.level ?? ""}
         .tip=${u ? `${t("nav.usage")} — ${u.label}` : t("nav.usage")}
         @usage=${() => select(USAGE)}

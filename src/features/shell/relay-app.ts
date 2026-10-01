@@ -10,7 +10,7 @@ import { ui, isView } from "../../domain/ui";
 import { vault } from "../../domain/vault";
 import { chat } from "../../domain/chats/state";
 import { escStop, ctrlC } from "../../domain/chats/actions";
-import { setInsp, toggleQuick, zoom } from "../../domain/navigation";
+import { setPanelHidden, toggleQuickAsk, zoom } from "../../domain/navigation";
 import { panel, closeDetail, openDetail } from "../../domain/panel";
 import { noteKey } from "../../domain/keys";
 import "../sidebar/relay-sidebar";
@@ -89,13 +89,13 @@ export class RelayApp extends LitElement {
     // Cmd-K: a question that starts a general conversation in the background
     if (e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK") {
       e.preventDefault();
-      toggleQuick();
+      toggleQuickAsk();
       return;
     }
     // Cmd-Alt-I folds the right panel
     if (e.metaKey && e.altKey && e.code === "KeyI") {
       e.preventDefault();
-      setInsp(!ui.noinsp);
+      setPanelHidden(!ui.panelHidden);
       return;
     }
     // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
@@ -108,25 +108,39 @@ export class RelayApp extends LitElement {
       if (ui.zoom) {
         e.preventDefault();
         zoom("");
-      } else if (panel.open && !ui.pop && !inField(e)) {
+      } else if (panel.open && !ui.projectPanel && !inField(e)) {
         e.preventDefault();
         closeDetail();
       }
       // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)
-      else if (chat.status[ui.sel] === "busy" && !ui.pop && !ui.qk && !inField(e, "input, select")) {
+      else if (
+        chat.status[ui.selected] === "busy" &&
+        !ui.projectPanel &&
+        !ui.quickAsk &&
+        !inField(e, "input, select")
+      ) {
         e.preventDefault();
         escStop();
       }
       return;
     }
     // typing anywhere in an open conversation goes to the composer, focused or not: the key itself then lands there
-    if (e.key.length !== 1 || e.metaKey || e.ctrlKey || e.isComposing || isView(ui.sel) || ui.pop || ui.qk) return;
+    if (
+      e.key.length !== 1 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.isComposing ||
+      isView(ui.selected) ||
+      ui.projectPanel ||
+      ui.quickAsk
+    )
+      return;
     if (inField(e)) return;
     request("focus-composer");
   };
 
   override willUpdate() {
-    this.toggleAttribute("noinsp", ui.noinsp);
+    this.toggleAttribute("noinsp", ui.panelHidden);
     this.toggleAttribute("wide", !!panel.open);
   }
 
@@ -135,9 +149,9 @@ export class RelayApp extends LitElement {
       <relay-sidebar class="min-h-0 min-w-0 border-r border-separator"></relay-sidebar>
       <relay-chat class="min-h-0 min-w-0"></relay-chat>
       <relay-inspector
-        class="min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${ui.noinsp ? "opacity-0 border-l-transparent pointer-events-none" : ""}"
+        class="min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${ui.panelHidden ? "opacity-0 border-l-transparent pointer-events-none" : ""}"
       ></relay-inspector>
-      ${ui.qk ? html`<relay-quick></relay-quick>` : nothing}
+      ${ui.quickAsk ? html`<relay-quick></relay-quick>` : nothing}
       ${ui.zoom ? html`<div class="fixed inset-0 z-30 grid place-items-center p-10 bg-black/55 cursor-zoom-out" @click=${() => zoom("")}><img class="max-w-full max-h-full rounded-lg shadow-2xl bg-bg" alt="" src=${ui.zoom} /></div>` : nothing}`;
   }
 }

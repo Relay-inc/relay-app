@@ -13,7 +13,7 @@ import {
 } from "./providers";
 import { config, type Settings } from "./config";
 import { ui } from "./ui";
-import { vault, pLabel } from "./vault";
+import { vault, projectLabel } from "./vault";
 import { openCard } from "./panel";
 
 // A provider's board as a kanban: pick a project and one of its boards, the columns and cards come from
@@ -108,7 +108,7 @@ async function loadCards(p: BoardProvider, s: Board, live: () => boolean, b: str
 /** Show the provider's board fresh from the tracker: the board linked to the vault project last shown when there is one. */
 export function showBoard(p: BoardProvider, reload = false) {
   const s = boardState(p),
-    prefer = ui.lastP ? config.value.boards?.[ui.lastP] : undefined;
+    prefer = ui.lastProject ? config.value.boards?.[ui.lastProject] : undefined;
   if (reload) s.projects = null;
   if (prefer?.provider === p.id && (prefer.project !== s.project || prefer.board !== s.board)) {
     s.project = prefer.project;
@@ -179,7 +179,7 @@ const sameRef = (a: BoardRef | undefined, b: BoardRef) =>
   !!a && a.provider === b.provider && a.project === b.project && a.board === b.board;
 export const vaultProjects = (): [string, string][] =>
   vault.snap.projects
-    .map((x): [string, string] => [x.name, pLabel(x.name)])
+    .map((x): [string, string] => [x.name, projectLabel(x.name)])
     .sort((a: [string, string], b: [string, string]) => a[1].localeCompare(b[1], currentLocale()));
 export const linkedProject = (p: BoardProvider) =>
   Object.entries(config.value.boards || {}).find(([, r]) => sameRef(r, refOf(p, boardState(p))))?.[0] ?? "";

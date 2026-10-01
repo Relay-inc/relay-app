@@ -40,7 +40,7 @@ export const vault = {
 
 export const project = (n: string | null) => (n ? vault.snap.projects.find(p => p.name === n) : undefined);
 // how a project is shown: its own icon and name from the settings, else the note name
-export const pLabel = (n: string | null) => {
+export const projectLabel = (n: string | null) => {
   if (!n) return t("general");
   const c = config.value.projects[n] || {},
     e = vault.icons[n]?.icon;
@@ -49,7 +49,7 @@ export const pLabel = (n: string | null) => {
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>
   vault.snap.projects
-    .map(p => ({ name: p.name, label: pLabel(p.name) }))
+    .map(p => ({ name: p.name, label: projectLabel(p.name) }))
     .sort((a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, locale)) as {
     name: string;
     label: string;

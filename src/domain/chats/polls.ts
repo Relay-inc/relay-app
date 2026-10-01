@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { t } from "../../core/i18n";
 import { changed } from "../../core/store";
 import { WAIT } from "../ui";
-import { chat, terms, type Sub, type Pending, type AgentSession } from "./state";
+import { chat, terminalSessions, type Sub, type Pending, type AgentSession } from "./state";
 import { notify, syncBusy } from "./events";
 
 // ---------- polling: pending questions often, sessions and the vault now and then
@@ -15,7 +15,7 @@ export async function pollPending() {
       if (!known.has(r.id))
         notify(
           chat.chats[r.project] ? r.project : WAIT,
-          r.input?.questions?.[0]?.question || t("notify.waits", { tool: r.tool_name }),
+          r.input?.questions?.[0]?.question || t("notify.isWaiting", { tool: r.tool_name }),
         );
   chat.pendingList = next;
   chat.pendingPolled = true;
@@ -26,7 +26,7 @@ export async function pollSubs() {
     ...Object.values(chat.chats)
       .filter(c => !c.draft && !c.closed)
       .map(c => c.key),
-    ...terms().map(tm => tm.key),
+    ...terminalSessions().map(tm => tm.key),
   ];
   const next = await invoke<Record<string, Sub[]>>("subagents", { keys }).catch(() => chat.subs);
   if (JSON.stringify(next) === JSON.stringify(chat.subs)) return;

@@ -3,7 +3,7 @@ import { customElement } from "lit/decorators.js";
 import { th } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { pLabel } from "../../domain/vault";
+import { projectLabel } from "../../domain/vault";
 import { panel, openDetail } from "../../domain/panel";
 import { prs, loadPrs, type PR } from "../../domain/prs";
 import { prKey } from "../../domain/keys";
@@ -34,7 +34,7 @@ export class RelayPrs extends LitElement {
                 html`<relay-pr-row
                   .pr=${p}
                   ?mine=${mine}
-                  .project=${p.project ? pLabel(p.project) : ""}
+                  .project=${p.project ? projectLabel(p.project) : ""}
                   ?selected=${panel.open === prKey(p.repo, p.number)}
                   @open-pr=${() => openDetail(prKey(p.repo, p.number))}
                 ></relay-pr-row>`,

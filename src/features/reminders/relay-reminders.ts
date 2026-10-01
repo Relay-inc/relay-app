@@ -5,7 +5,7 @@ import type { Key } from "../../core/locales/en";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { reminders, urgency, remAct, remAdd, remChat } from "../../domain/reminders";
-import { vault, pLabel, projectsByLabel } from "../../domain/vault";
+import { vault, projectLabel, projectsByLabel } from "../../domain/vault";
 import type { Reminder } from "../../domain/reminders";
 import type { Draft } from "./reminder-form";
 import "./reminder-form";
@@ -72,7 +72,7 @@ export class RelayReminders extends LitElement {
   private row(r: Reminder) {
     return html`<relay-reminder-row
       .reminder=${r}
-      .label=${r.project ? pLabel(r.project) : ""}
+      .label=${r.project ? projectLabel(r.project) : ""}
       urgency=${urgency(r.days)}
       ?busy=${this.busy === r.id}
       ?cal=${this.cal === r.id}

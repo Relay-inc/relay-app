@@ -43,7 +43,7 @@ export const mail = {
   end: false,
   more: false, // pages of 50 loaded, whether the last one came back short, loading the next
   filter: { q: "", state: "all", project: "", ...ls.get("mailFilter", {}) } as MailFilter,
-  link: "", // a link clicked inside a mail waits here for the user's go (one at a time)
+  link: "", // a link clicked inside a mail isWaiting here for the user's go (one at a time)
   textView: new Set<string>(), // which open mails show the text instead of the html
 };
 
@@ -161,7 +161,7 @@ export function toggleMailText() {
   else mail.textView.add(panel.open);
   changed();
 }
-/** A link clicked inside a mail (the sandboxed frame reports it through the backend) waits for the user's go. */
+/** A link clicked inside a mail (the sandboxed frame reports it through the backend) isWaiting for the user's go. */
 export function mailLinkClicked(url: string) {
   if (!isMailKey(panel.open) || !urlOk(url)) return;
   mail.link = url;
@@ -181,7 +181,7 @@ export function openMailSetup() {
 }
 // a conversation about the open mail, under its project. Claude reads the mail itself through the relay-mail tools, so the
 // whole thread and its attachments are there. The prompt holds no subject or sender: that is third-party text.
-// "talk" waits for the user's question, "draft" asks for a reply as a draft right away. Sending stays with the user (decided 29/9).
+// "talk" isWaiting for the user's question, "draft" asks for a reply as a draft right away. Sending stays with the user (decided 29/9).
 export async function mailChat(key: string, how: "talk" | "draft") {
   const m = mail.list?.find(x => mailKey(x) === key);
   if (!m) return;
@@ -192,7 +192,7 @@ export async function mailChat(key: string, how: "talk" | "draft") {
   const k = newChat(mailProject(m));
   chat.chats[k].fromMail = true;
   chat.chats[k].title = `${how === "draft" ? "Antwoord: " : ""}${m.subject || t("mail.noSubject")}`.slice(0, 48);
-  chat.convo[k] = [{ kind: "note", text: t("note.mailStarted", { from: sender(m), subject: m.subject }) }]; // also keeps this title, no generated one
+  chat.messages[k] = [{ kind: "note", text: t("note.mailStarted", { from: sender(m), subject: m.subject }) }]; // also keeps this title, no generated one
   if (how === "talk") chat.chats[k].mail = ref; // goes in front of the first message the user sends
   await select(k);
   if (how === "draft")

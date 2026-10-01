@@ -4,12 +4,12 @@ import { keyed } from "lit/directives/keyed.js";
 import { t, th } from "../../core/i18n";
 import { StoreController, ui as bus } from "../../core/store";
 import { tw } from "../../core/styles";
-import { ui, WAIT, REM, PRS, MAIL, USAGE, isView, isTerm, boardOf } from "../../domain/ui";
-import { chat, termOf, projOf, label, aboutProject, waitCount } from "../../domain/chats/state";
+import { ui, WAIT, REM, PRS, MAIL, USAGE, isView, isTerminal, boardOf } from "../../domain/ui";
+import { chat, terminalOf, projectOf, label, aboutProject, waitCount } from "../../domain/chats/state";
 import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
-import { openPop, setInsp } from "../../domain/navigation";
+import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
-import { vault, pLabel } from "../../domain/vault";
+import { vault, projectLabel } from "../../domain/vault";
 import "./chat-bar";
 import "./project-panel";
 import "../board/relay-board";
@@ -91,7 +91,7 @@ export class RelayChat extends LitElement {
   };
 
   private view(bp: ReturnType<typeof boardOf>) {
-    const sel = ui.sel;
+    const sel = ui.selected;
     if (bp) return keyed(bp.id, html`<relay-board .provider=${bp}></relay-board>`);
     if (sel === PRS) return html`<relay-prs></relay-prs>`;
     if (sel === USAGE) return html`<relay-usage></relay-usage>`;
@@ -102,12 +102,12 @@ export class RelayChat extends LitElement {
   }
 
   override render() {
-    const sel = ui.sel,
+    const sel = ui.selected,
       bp = boardOf(sel),
       isv = isView(sel),
       busy = chat.status[sel] === "busy";
-    const T = !isv && isTerm(sel) ? termOf(sel) : undefined,
-      pn = T ? T.project : isv ? null : projOf(sel);
+    const T = !isv && isTerminal(sel) ? terminalOf(sel) : undefined,
+      pn = T ? T.project : isv ? null : projectOf(sel);
     let heading = "",
       sub = "";
     if (bp) heading = bp.name;
@@ -119,8 +119,8 @@ export class RelayChat extends LitElement {
       heading = t("nav.waiting");
       sub = `${waitCount()}`;
     } else {
-      ui.lastP = pn;
-      heading = pLabel(pn);
+      ui.lastProject = pn;
+      heading = projectLabel(pn);
     }
     // the terminal would resume a conversation that touched mail without the app's restrictions
     const locked = !!chat.chats[sel]?.fromMail;
@@ -142,13 +142,13 @@ export class RelayChat extends LitElement {
         ?renamable=${!!chat.chats[sel]}
         ?noTerm=${noTerm}
         ?locked=${locked}
-        ?panelOff=${ui.noinsp}
-        @edit-project=${openPop}
+        ?panelOff=${ui.panelHidden}
+        @edit-project=${openProjectPanel}
         @rename=${(e: CustomEvent<string>) => rename(e.detail)}
         @open-terminal=${openTerminal}
-        @toggle-panel=${() => setInsp(!ui.noinsp)}
+        @toggle-panel=${() => setPanelHidden(!ui.panelHidden)}
       ></relay-chat-bar>
-      ${ui.pop ? html`<relay-project-panel></relay-project-panel>` : nothing}
+      ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
       <div id="log" class="flex-1 overflow-y-auto pt-6 pb-2" @scroll=${this.onScroll}>
         <div id="msgs" class=${"mx-auto flex flex-col gap-4 " + (bp ? "px-5" : "max-w-2xl px-7")}>${this.view(bp)}</div>
       </div>

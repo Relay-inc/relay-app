@@ -3,8 +3,8 @@ import { t, at, currentLocale } from "../core/i18n";
 import { changed } from "../core/store";
 import { agent, type AgentProvider, type Limits, type LimitWindow, type Tally, type Tokens } from "./agents";
 import { ui, USAGE } from "./ui";
-import { chat, shownTitle, terms } from "./chats/state";
-import { pLabel } from "./vault";
+import { chat, displayTitle, terminalSessions } from "./chats/state";
+import { projectLabel } from "./vault";
 
 // Usage per switched-on agent provider: its plan or rate limits (the backend asks each provider, at most once a
 // minute) and the tokens in its local logs, today and this week, then the total over all of them. Limits every
@@ -20,7 +20,7 @@ export const usage = {
   tokAt: 0,
   reading: false,
 };
-const visible = () => ui.sel === USAGE;
+const visible = () => ui.selected === USAGE;
 
 async function loadLimits() {
   try {
@@ -108,7 +108,7 @@ export const usd = (n: number) =>
 // the usage view names the conversations it lists and opens them on a click
 export const usageSession = (k: string | undefined, sid: string) => {
   const c = k ? chat.chats[k] : undefined;
-  if (c) return { label: `${pLabel(c.project)} › ${shownTitle(c.title)}`, key: c.key };
-  const tm = terms().find(x => x.sid === sid);
-  return tm ? { label: `${pLabel(tm.project)} › ${tm.title}`, key: tm.key } : null;
+  if (c) return { label: `${projectLabel(c.project)} › ${displayTitle(c.title)}`, key: c.key };
+  const tm = terminalSessions().find(x => x.sid === sid);
+  return tm ? { label: `${projectLabel(tm.project)} › ${tm.title}`, key: tm.key } : null;
 };

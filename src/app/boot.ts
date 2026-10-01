@@ -5,11 +5,11 @@ import { changed, ls } from "../core/store";
 import type { AgentEvent } from "../domain/agents";
 import { loadAgents } from "../domain/agents";
 import type { VaultStatus } from "../domain/vault-setup";
-import { ui, PRS, MAIL, WAIT, isView, isTerm, boardKey } from "../domain/ui";
+import { ui, PRS, MAIL, WAIT, isView, isTerminal, boardKey } from "../domain/ui";
 import { opened, chatTime, isLegacyGeneral, isMailKey, LEGACY_BOARD } from "../domain/keys";
 import { config, ghOn, mailOn, type Settings } from "../domain/config";
 import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "../domain/vault";
-import { chat, termOf, saveChats, newChat } from "../domain/chats/state";
+import { chat, terminalOf, saveChats, newChat } from "../domain/chats/state";
 import { onEvent, ensureHistory, tailTerm, tailOutside } from "../domain/chats/events";
 import { pollPending, pollAgents, pollSubs, agentsStale } from "../domain/chats/polls";
 import { closeChat } from "../domain/chats/actions";
@@ -40,18 +40,18 @@ async function settingsChanged(next: Settings) {
   if (relang) await initI18n();
   if (ghChanged) {
     resetPrs();
-    if (!ghOn() && ui.sel === PRS) select(WAIT);
+    if (!ghOn() && ui.selected === PRS) select(WAIT);
     loadPrs();
   }
   if (mailChanged) {
     resetMail();
     if (isMailKey(panel.open)) closeDetail();
-    if (!mailOn() && ui.sel === MAIL) select(WAIT);
+    if (!mailOn() && ui.selected === MAIL) select(WAIT);
     loadMails();
   }
   changed();
   checkBoards().then(() => {
-    if (boardDown(ui.sel)) select(WAIT);
+    if (boardDown(ui.selected)) select(WAIT);
     loadSnapshot();
   });
   loadAgents().then(reloadUsage);
@@ -69,7 +69,8 @@ export async function boot() {
   listen<string>("menu", e => {
     if (e.payload === "new-general") select(newChat(null));
     else if (e.payload === "new-project") newHere();
-    else if (e.payload === "close-chat" && !isView(ui.sel) && !chat.chats[ui.sel]?.draft) closeChat(ui.sel);
+    else if (e.payload === "close-chat" && !isView(ui.selected) && !chat.chats[ui.selected]?.draft)
+      closeChat(ui.selected);
   });
   try {
     config.value = { ...config.value, ...(await invoke<Settings>("get_settings")) };
@@ -114,15 +115,15 @@ export async function boot() {
   );
   await pollAgents();
   await checkBoards();
-  if (ui.sel === LEGACY_BOARD) ui.sel = boardKey("productive"); // the one board before the providers
+  if (ui.selected === LEGACY_BOARD) ui.selected = boardKey("productive"); // the one board before the providers
   if (
-    (!isView(ui.sel) && !chat.chats[ui.sel] && !termOf(ui.sel)) ||
-    boardDown(ui.sel) ||
-    (ui.sel === PRS && !ghOn()) ||
-    (ui.sel === MAIL && !mailOn())
+    (!isView(ui.selected) && !chat.chats[ui.selected] && !terminalOf(ui.selected)) ||
+    boardDown(ui.selected) ||
+    (ui.selected === PRS && !ghOn()) ||
+    (ui.selected === MAIL && !mailOn())
   )
-    ui.sel = WAIT;
-  await select(ui.sel);
+    ui.selected = WAIT;
+  await select(ui.selected);
   pollPending();
   setInterval(pollPending, 700);
   setInterval(pollAgents, 10000);
@@ -130,9 +131,9 @@ export async function boot() {
   setInterval(pollSubs, 2000);
   // a terminal conversation that is open in the app: new transcript lines and its busy state every 2 s
   setInterval(async () => {
-    if (!isTerm(ui.sel)) return;
+    if (!isTerminal(ui.selected)) return;
     await Promise.all([
-      tailTerm(ui.sel),
+      tailTerm(ui.selected),
       invoke<AgentSession[]>("agents").then(a => {
         chat.agentsList = a;
       }),
@@ -149,9 +150,9 @@ export async function boot() {
   setInterval(loadSnapshot, 30000);
   listen("reminders-changed", loadSnapshot);
   setInterval(checkFavicons, 60 * 60000); // a project new in work-state gets its icon within the hour
-  if (ui.sel !== PRS) loadPrs(); // select() already loads it when the view is open
+  if (ui.selected !== PRS) loadPrs(); // select() already loads it when the view is open
   setInterval(loadPrs, 5 * 60000);
   startUsage(); // plan limits for the sidebar, tokens while the view is open
-  if (ui.sel !== MAIL) loadMails();
+  if (ui.selected !== MAIL) loadMails();
   setInterval(loadMails, 5 * 60000);
 }

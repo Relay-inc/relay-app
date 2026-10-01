@@ -6,11 +6,11 @@ import { tw } from "../../core/styles";
 import { ui } from "../../domain/ui";
 import type { Img } from "../../domain/chats/state";
 import { attach, unattach, quickSend } from "../../domain/chats/actions";
-import { toggleQuick, zoom } from "../../domain/navigation";
+import { toggleQuickAsk, zoom } from "../../domain/navigation";
 import { pastedImages, hasFiles } from "../../components/image-files";
 import "../../components/image-thumbs";
 
-/** Cmd-K: one question that becomes a new general conversation in the background, the open screen stays. Mounted while `ui.qk`. */
+/** Cmd-K: one question that becomes a new general conversation in the background, the open screen stays. Mounted while `ui.quickAsk`. */
 @customElement("relay-quick")
 export class RelayQuick extends LitElement {
   static override styles = [
@@ -34,7 +34,7 @@ export class RelayQuick extends LitElement {
     if (!this.sent) this.imgs.forEach(i => URL.revokeObjectURL(i.url));
   }
   private close() {
-    toggleQuick(false);
+    toggleQuickAsk(false);
   }
   private grow() {
     const ta = this.ta;

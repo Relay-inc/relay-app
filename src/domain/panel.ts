@@ -57,7 +57,7 @@ export async function openDetail(key: string) {
   mail.link = "";
   const card = cardOf(key);
   if (card) panel.detail[key] ??= card.d.cached(card.id);
-  ui.noinsp = false;
+  ui.panelHidden = false;
   ls.set("noinsp", false);
   changed();
   try {

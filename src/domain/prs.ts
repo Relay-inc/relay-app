@@ -9,7 +9,7 @@ import { select } from "./navigation";
 import { sendMsg } from "./chats/actions";
 import { prKey, panelItem } from "./keys";
 
-// Pull requests from GitHub, fetched by the backend through gh: what waits on the user's review and what
+// Pull requests from GitHub, fetched by the backend through gh: what isWaiting on the user's review and what
 // he opened. Read-only: a row opens the PR in the right panel (description, checks, conversation), a link
 // there opens it on GitHub. Anything others see (a review, a merge) does not happen from the app without approval (decided 29/9).
 export type PR = {
@@ -94,7 +94,7 @@ export const resetPrs = () => {
   prs.err = "";
 };
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
-// posting on GitHub is something others see, so it waits for the user (decided 29/9)
+// posting on GitHub is something others see, so it isWaiting for the user (decided 29/9)
 export async function reviewPr(key: string) {
   const pr = panel.detail[key] as PrDetail | undefined,
     item = panelItem(key);
@@ -103,7 +103,7 @@ export async function reviewPr(key: string) {
     row = [...(prs.list?.review || []), ...(prs.list?.mine || [])].find(p => p.repo === repo && p.number === pr.number);
   const k = newChat(row?.project && project(row.project) ? row.project : null);
   chat.chats[k].title = `Review ${repo.split("/")[1]} #${pr.number}`;
-  chat.convo[k] = [{ kind: "note", text: t("note.reviewStarted", { repo, n: pr.number }) }]; // also keeps the typed title, no generated one
+  chat.messages[k] = [{ kind: "note", text: t("note.reviewStarted", { repo, n: pr.number }) }]; // also keeps the typed title, no generated one
   await select(k);
   sendMsg(
     `Review PR ${pr.url} (${repo} #${pr.number}: ${pr.title}). Haal de diff en context op met gh, en lees de projectnote als die er is. ` +
