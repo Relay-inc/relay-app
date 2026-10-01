@@ -380,6 +380,7 @@ export default {
   "rs.dismissed": "review ingetrokken",
   "nav.mail": "Mail",
   "mail.inbox": "Inbox",
+  "mail.pick": "Kies een mail om ze te lezen",
   "mail.unread": "{n} ongelezen",
   "mail.none": "Geen mail.",
   "mail.noSubject": "(geen onderwerp)",

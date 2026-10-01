@@ -4,7 +4,7 @@ import { t, th, currentLocale } from "../../core/i18n";
 import { icon } from "../../core/icons";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import { panel, closeDetail } from "../../domain/panel";
+import { panel } from "../../domain/panel";
 import {
   mail,
   mailKey,
@@ -39,7 +39,7 @@ const formatAddresses = (addresses: Mail["from"]) =>
       html`${i ? ", " : nothing}${address.name ? html`${address.name} ${secondary(address.email)}` : address.email}`,
   );
 
-/** One mail in the right panel: who, when, the mail, and the ways into a conversation. Headers show at once, the body loads.
+/** One mail next to the Mail list: who, when, the mail, and the ways into a conversation. Headers show at once, the body loads.
  *  HTML goes in a sandbox without tokens (the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
 @customElement("relay-mail-detail")
 export class RelayMailDetail extends LitElement {
@@ -62,7 +62,8 @@ export class RelayMailDetail extends LitElement {
       const element = document.createElement("iframe");
       element.setAttribute("sandbox", "");
       element.referrerPolicy = "no-referrer";
-      element.className = "block w-full h-140 mt-3 border border-separator rounded-lg bg-white";
+      element.className =
+        "block w-full h-[calc(100vh-15rem)] min-h-100 mt-3 border border-separator rounded-lg bg-white";
       element.srcdoc = mailHtml;
       this.frame = { html: mailHtml, element };
     }
@@ -98,12 +99,11 @@ export class RelayMailDetail extends LitElement {
       )}</span
     >`;
   }
-  // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
+  // two groups: reading this mail on the left, the ways into a conversation on the right
   private renderBar(key: string, item: Mail | undefined, body: MailBody | undefined, textView: boolean) {
     return html`<div class="flex items-center flex-wrap gap-2 mb-3">
       <span class="flex items-center gap-2"
-        >${iconButton("close", t("pr.close"), closeDetail)}${item ? this.renderReadToggle(key, item) : nothing}
-        ${this.renderViewToggle(body, textView)}</span
+        >${item ? this.renderReadToggle(key, item) : nothing} ${this.renderViewToggle(body, textView)}</span
       >
       ${item ? this.renderConversationButtons(key) : nothing}
     </div>`;
@@ -143,8 +143,10 @@ export class RelayMailDetail extends LitElement {
   }
   private renderHeaders(item: Mail) {
     const sent = new Date(item.date).toLocaleString(currentLocale(), { dateStyle: "medium", timeStyle: "short" });
-    return html`<h2 class="text-sm font-semibold mb-2 leading-snug">${item.subject || th("mail.noSubject")}</h2>
-      <div class="text-sm leading-normal pb-2.5 border-b border-separator">
+    return html`<h2 class="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
+        ${item.subject || th("mail.noSubject")}
+      </h2>
+      <div class="text-[13px] leading-normal pb-3 border-b border-separator">
         <div>${formatAddresses(item.from)}</div>
         <div class="text-secondary tabular-nums">${th("mail.to")} ${formatAddresses(item.to)}</div>
         <div class="text-secondary tabular-nums">${sent}</div>
@@ -157,7 +159,7 @@ export class RelayMailDetail extends LitElement {
   }
 
   override render() {
-    const key = panel.open;
+    const key = panel.mailOpen;
     const item: Mail | undefined = mail.list?.find(candidate => mailKey(candidate) === key);
     const body = panel.detail[key] as MailBody | undefined;
     const textView = mail.textView.has(key);

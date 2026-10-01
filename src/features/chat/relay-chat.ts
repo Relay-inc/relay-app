@@ -154,7 +154,6 @@ export class RelayChat extends LitElement {
     const selected = this.selected;
     if (this.board) return keyed(this.board.id, html`<relay-board .provider=${this.board}></relay-board>`);
     if (selected === USAGE) return html`<relay-usage></relay-usage>`;
-    if (selected === MAIL) return html`<relay-mail></relay-mail>`;
     if (selected === REM) return html`<relay-reminders></relay-reminders>`;
     if (selected === WAIT) return html`<relay-waiting></relay-waiting>`;
     return html`<relay-conversation></relay-conversation>`;
@@ -230,8 +229,9 @@ export class RelayChat extends LitElement {
   override render() {
     const hasSubagents = !this.onView && (chat.subs[this.selected] || []).length > 0;
     const messagesWidth = this.board ? "px-5" : this.selected === REM ? "max-w-180 px-8" : "max-w-170 px-8";
-    // the Pull requests view scrolls its list and its PR apart, so it fills the pane instead of the log
+    // the Pull requests and Mail views scroll their list and the open item apart, so it fills the pane instead of the log
     if (this.selected === PRS) return html`${this.renderBar()}<relay-prs class="flex-1"></relay-prs>`;
+    if (this.selected === MAIL) return html`${this.renderBar()}<relay-mail class="flex-1"></relay-mail>`;
     return html` ${this.renderBar()} ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
       <div id="log" class="flex-1 overflow-y-auto pt-7 pb-3" @scroll=${this.onScroll}>
         <div id="msgs" class="mx-auto flex flex-col gap-5 ${messagesWidth}">${this.renderView()}</div>

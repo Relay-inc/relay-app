@@ -12,6 +12,7 @@ export const panel = {
   open: "", // the key of what is shown, "" for the tabs
   modal: "", // the card key shown in the ticket window over the board, "" for none
   prOpen: "", // the PR key shown in the Pull requests view, "" for none
+  mailOpen: "", // the mail key shown in the Mail view, "" for none
   detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
@@ -77,6 +78,23 @@ export async function openDetail(key: string) {
     // a mail that cannot be read is not shown from an older answer
     if (item.kind === "mail") delete panel.detail[key];
     if (!panel.detail[key]) panel.err = String(e);
+  }
+  changed();
+}
+/** Show a mail in the Mail view next to the list: its headers at once, the body from the server. */
+export async function openMail(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "mail") return;
+  panel.mailOpen = key;
+  panel.err = "";
+  mail.link = "";
+  changed();
+  try {
+    panel.detail[key] = await fetchDetail(key, item);
+  } catch (e) {
+    // a mail that cannot be read is not shown from an older answer
+    delete panel.detail[key];
+    panel.err = String(e);
   }
   changed();
 }

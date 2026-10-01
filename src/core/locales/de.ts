@@ -380,6 +380,7 @@ export default {
   "rs.dismissed": "Review zurückgezogen",
   "nav.mail": "Mail",
   "mail.inbox": "Posteingang",
+  "mail.pick": "Wähle eine Mail, um sie zu lesen",
   "mail.unread": "{n} ungelesen",
   "mail.none": "Keine Mails.",
   "mail.noSubject": "(kein Betreff)",

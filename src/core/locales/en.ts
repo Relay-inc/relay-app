@@ -377,6 +377,7 @@ const en = {
   "rs.dismissed": "review dismissed",
   "nav.mail": "Mail",
   "mail.inbox": "Inbox",
+  "mail.pick": "Pick a mail to read it",
   "mail.unread": "{n} unread",
   "mail.none": "No mail.",
   "mail.noSubject": "(no subject)",

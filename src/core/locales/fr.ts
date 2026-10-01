@@ -381,6 +381,7 @@ export default {
   "rs.dismissed": "revue retirée",
   "nav.mail": "Mail",
   "mail.inbox": "Boîte de réception",
+  "mail.pick": "Choisissez un mail pour le lire",
   "mail.unread": "{n} non lus",
   "mail.none": "Aucun mail.",
   "mail.noSubject": "(sans objet)",

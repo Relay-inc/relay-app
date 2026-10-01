@@ -16,7 +16,6 @@ import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
 import "./todo-list";
 import "../pull-requests/pr-row";
-import "../mail/relay-mail-detail";
 import "../notes/relay-note-detail";
 
 type ProjectInfo = NonNullable<ReturnType<typeof project>>;
@@ -70,8 +69,6 @@ export class RelayInspector extends LitElement {
       }
       case "note":
         return html`<relay-note-detail></relay-note-detail>`;
-      case "mail":
-        return html`<relay-mail-detail></relay-mail-detail>`;
       default:
         return nothing;
     }
