@@ -11,13 +11,12 @@ import { vault } from "../../domain/vault";
 import { chat } from "../../domain/chats/state";
 import { escStop, ctrlC } from "../../domain/chats/actions";
 import { setPanelHidden, toggleQuickAsk, zoom } from "../../domain/navigation";
-import { panel, closeDetail, closeTicket, closePrModal, openDetail } from "../../domain/panel";
+import { panel, closeDetail, closeTicket, openDetail } from "../../domain/panel";
 import { noteKey } from "../../domain/keys";
 import "../sidebar/relay-sidebar";
 import "../chat/relay-chat";
 import "../inspector/relay-inspector";
 import "../quick/relay-quick";
-import "../pull-requests/relay-pr-modal";
 
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
 const isQuickAskKey = (e: KeyboardEvent) => e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK";
@@ -129,10 +128,9 @@ export class RelayApp extends LitElement {
       zoom("");
       return;
     }
-    if (panel.modal || panel.prModal) {
+    if (panel.modal) {
       e.preventDefault();
-      if (panel.prModal) closePrModal();
-      else closeTicket();
+      closeTicket();
       return;
     }
     if (panel.open && !ui.projectPanel && !inField(e)) {
@@ -186,7 +184,6 @@ export class RelayApp extends LitElement {
       <relay-inspector
         class="min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${inspectorHidden}"
       ></relay-inspector>
-      ${panel.prModal ? html`<relay-pr-modal></relay-pr-modal>` : nothing}
       ${ui.quickAsk ? html`<relay-quick></relay-quick>` : nothing} ${this.renderZoom()}`;
   }
 }

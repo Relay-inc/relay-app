@@ -1,19 +1,17 @@
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement } from "lit/decorators.js";
 import { t, th, tn, currentLocale } from "../../core/i18n";
-import { copyText } from "../../core/dom";
 import { icon } from "../../core/icons";
 import type { Key } from "../../core/locales/en";
 import { md } from "../../core/markdown";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
-import "../../components/relay-modal";
-import { modalHeader, modalLink } from "../../components/relay-modal";
+import { modalLink } from "../../components/relay-modal";
 import { avatar } from "../board/format";
-import { panel, closePrModal, openPrModal } from "../../domain/panel";
+import { panel } from "../../domain/panel";
 import { prs, reviewPr, type PrDetail, type GhActor, type GhCheck, type GhThread } from "../../domain/prs";
-import { prKey, panelItem } from "../../domain/keys";
+import { panelItem } from "../../domain/keys";
 import { project, projectLabel } from "../../domain/vault";
 import { contextTint } from "../../domain/sidebar";
 import { age } from "./pr-row";
@@ -142,50 +140,43 @@ const entry = (who: string, at: string, body: string | undefined, extra?: Templa
 
 /** One PR in a window over the view, from the raw GraphQL answer of github_pr: title, meta, chips, description, checks,
  * conversation, comments in the code and files, with what to do about it in the sidebar. Opened from the list and the inspector. */
-@customElement("relay-pr-modal")
-export class PrModal extends LitElement {
+@customElement("relay-pr-detail")
+export class PrDetailView extends LitElement {
   static override styles = [
     tw,
     mdDefaults,
     css`
       :host {
-        display: contents;
+        display: block;
       }
     `,
   ];
   protected store = new StoreController(this);
 
-  // the PRs in the order of the list, to step through
-  private get order() {
-    const list = prs.list;
-    return list ? [...list.review, ...list.mine].map(pr => prKey(pr.repo, pr.number)) : [];
-  }
-
-  private renderHeader(key: string, pr: PrDetail | null) {
+  // repo · project on the left, GitHub and the AI review on the right
+  private renderHeader(key: string, pr: PrDetail) {
     const item = panelItem(key);
     const row = [...(prs.list?.review || []), ...(prs.list?.mine || [])].find(
       x => item?.kind === "pr" && x.repo === item.repo && x.number === item.number,
     );
     const known = project(row?.project ?? null);
-    const order = this.order;
-    const at = order.indexOf(key);
-    return modalHeader({
-      left: html`<span class="font-mono text-xs text-secondary">${item?.kind === "pr" ? item.repo : ""}</span> ${
-          known
-            ? html`<span class="text-tertiary">·</span
-                ><span class="inline-flex items-center gap-1 text-secondary"
-                  >${icon("folder", `glyph size-3 ${FOLDER[contextTint(known.context)]}`)}${projectLabel(known.name)}</span
-                >`
-            : nothing
-        }<span class="text-tertiary">/</span
-        ><span class="font-mono text-xs">#${item?.kind === "pr" ? item.number : ""}</span>`,
-      position: at >= 0 ? t("kb.tasksOf", { n: at + 1, total: order.length }) : "",
-      first: at <= 0,
-      last: at < 0 || at >= order.length - 1,
-      link: pr ? modalLink(pr.url, t("pr.openGh")) : nothing,
-      onStep: by => order[at + by] && openPrModal(order[at + by]),
-      onClose: closePrModal,
-    });
+    return html`<div class="flex items-center gap-2 text-xs text-secondary">
+      <span class="font-mono">${item?.kind === "pr" ? item.repo : ""}</span>${
+        known
+          ? html`<span>·</span
+              ><span class="inline-flex items-center gap-1"
+                >${icon("folder", `glyph size-3 ${FOLDER[contextTint(known.context)]}`)}${projectLabel(known.name)}</span
+              >`
+          : nothing
+      } <span class="flex-1"></span>${modalLink(pr.url, t("pr.openGh"))}
+      <button
+        class="btn btn-primary cursor-pointer inline-flex items-center gap-1.5 h-7 px-3 text-xs"
+        title=${t("pr.reviewTitle")}
+        @click=${() => reviewPr(key)}
+      >
+        ${icon("chat", "glyph size-3.5")}${th("pr.review")}
+      </button>
+    </div>`;
   }
 
   private renderMeta(pr: PrDetail) {
@@ -282,68 +273,33 @@ export class PrModal extends LitElement {
     );
   }
 
-  /** A sidebar field; the title above it, the value below. */
-  private field(label: string, body: unknown) {
-    return html`<div class="flex flex-col gap-1 px-2 py-1.5">
-      <span class="text-xs text-secondary">${label}</span><span class="text-[13px] font-medium">${body}</span>
-    </div>`;
-  }
-  private renderSidebar(key: string, pr: PrDetail) {
-    const asked = requestedReviewers(pr);
-    return html`<aside class="border-l border-separator bg-sidebar px-4 py-5 flex flex-col gap-0.5 overflow-y-auto">
-      ${this.field(t("pr.fAuthor"), actorName(pr.author))}
-      ${asked.length ? this.field(t("pr.fAsked"), asked.join(", ")) : nothing}
-      ${this.field(t("pr.fCreated"), formatDate(pr.createdAt))}
-      <div class="h-px bg-separator mx-2 my-3"></div>
-      <div class="flex flex-col gap-2 px-2">
-        <button
-          class="btn btn-primary inline-flex items-center justify-center gap-1.5 h-8 rounded-lg"
-          title=${t("pr.reviewTitle")}
-          @click=${() => {
-            closePrModal();
-            reviewPr(key);
-          }}
-        >
-          ${icon("chat", "glyph size-3.5")}${th("pr.review")}
-        </button>
-        <button class="btn h-8 rounded-lg" @click=${(e: Event) => copyText(pr.url, e.currentTarget as HTMLElement)}>
-          ${t("kb.copyLink")}
-        </button>
-      </div>
-    </aside>`;
-  }
-
   private renderBody(key: string, pr: PrDetail | null) {
-    if (panel.err && !pr) return html`<div class="p-8"><div class="err-box">${panel.err}</div></div>`;
-    if (!pr) return html`<div class="p-8 text-secondary">${th("pr.loading")}</div>`;
+    if (panel.err && !pr) return html`<div class="err-box">${panel.err}</div>`;
+    if (!pr) return html`<div class="text-secondary">${th("pr.loading")}</div>`;
     const rollup = pr.commits?.nodes?.[0]?.commit?.statusCheckRollup;
-    return html`<div class="min-h-0 grid grid-cols-[minmax(0,1fr)_272px] flex-1">
-      <div class="overflow-y-auto px-10 pt-7 pb-8 flex flex-col gap-7 select-text cursor-auto">
-        <div class="flex flex-col gap-2.5">
-          <h2 class="m-0 text-xl leading-snug font-semibold tracking-tight text-pretty">
-            ${pr.isDraft ? draftBadge() : nothing}${pr.title}
-          </h2>
-          ${this.renderMeta(pr)}${this.renderChips(pr, rollup)}
-        </div>
-        ${this.renderDescription(pr)}${this.renderChecks(checksOf(rollup?.contexts?.nodes || []))}${this.renderConversation(conversationOf(pr))}
-        ${this.renderThreads(pr.reviewThreads?.nodes || [])}${this.renderFiles(pr)}
+    return html`<div class="flex flex-col gap-2.5">
+        ${this.renderHeader(key, pr)}
+        <h2 class="m-0 text-xl leading-snug font-semibold tracking-tight text-pretty">
+          ${pr.isDraft ? draftBadge() : nothing}${pr.title}
+        </h2>
+        ${this.renderMeta(pr)}${this.renderChips(pr, rollup)}
       </div>
-      ${this.renderSidebar(key, pr)}
-    </div>`;
+      ${this.renderDescription(pr)}${this.renderChecks(checksOf(rollup?.contexts?.nodes || []))}${this.renderConversation(conversationOf(pr))}
+      ${this.renderThreads(pr.reviewThreads?.nodes || [])}${this.renderFiles(pr)}`;
   }
 
   override render() {
-    const key = panel.prModal;
+    const key = panel.prOpen;
     if (!key) return nothing;
     const pr = (panel.detail[key] as PrDetail | undefined) ?? null;
-    return html`<relay-modal @modal-close=${closePrModal}
-      >${this.renderHeader(key, pr)}${this.renderBody(key, pr)}</relay-modal
-    >`;
+    return html`<div class="max-w-180 px-8 pt-5.5 pb-10 flex flex-col gap-6 select-text cursor-auto">
+      ${this.renderBody(key, pr)}
+    </div>`;
   }
 }
 
 declare global {
   interface HTMLElementTagNameMap {
-    "relay-pr-modal": PrModal;
+    "relay-pr-detail": PrDetailView;
   }
 }

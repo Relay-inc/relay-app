@@ -11,7 +11,7 @@ import { panelItem, cardKey, type PanelItem } from "./keys";
 export const panel = {
   open: "", // the key of what is shown, "" for the tabs
   modal: "", // the card key shown in the ticket window over the board, "" for none
-  prModal: "", // the PR key shown in the pull request window, "" for none
+  prOpen: "", // the PR key shown in the Pull requests view, "" for none
   detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
@@ -97,11 +97,11 @@ export async function openTicket(key: string) {
   }
   changed();
 }
-/** Show a PR in its window: what is known at once, then fresh from GitHub. */
-export async function openPrModal(key: string) {
+/** Show a PR in the Pull requests view: what is known at once, then fresh from GitHub. */
+export async function openPr(key: string) {
   const item = panelItem(key);
   if (item?.kind !== "pr") return;
-  panel.prModal = key;
+  panel.prOpen = key;
   panel.err = "";
   changed();
   try {
@@ -109,11 +109,6 @@ export async function openPrModal(key: string) {
   } catch (e) {
     if (!panel.detail[key]) panel.err = String(e);
   }
-  changed();
-}
-export function closePrModal() {
-  if (!panel.prModal) return;
-  panel.prModal = "";
   changed();
 }
 export function closeTicket() {

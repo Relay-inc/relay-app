@@ -62,7 +62,7 @@ export class PrRow extends LitElement {
     const pr = this.pr;
     const byline = [this.mine ? "" : pr.author, age(pr.created)].filter(Boolean).join(" · ");
     return html`<div
-      class="flex gap-2.5 p-2.5 rounded-[9px] cursor-pointer hover:bg-fill"
+      class="flex gap-2.5 p-2.5 rounded-[9px] cursor-pointer ${this.selected ? "bg-accent-soft" : "hover:bg-fill"}"
       @click=${() => emit(this, "open-pr", this.pr)}
     >
       <span class="mt-px size-4 flex-none ${prColor(pr)}">${icon("pr")}</span>

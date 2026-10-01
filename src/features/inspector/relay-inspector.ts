@@ -5,11 +5,12 @@ import { md } from "../../core/markdown";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
-import { ui } from "../../domain/ui";
+import { ui, PRS } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
 import { project } from "../../domain/vault";
 import { selectedProject } from "../../domain/chats/state";
-import { panel, setTab, cardOf, closeDetail, openPrModal, cardAct, type CardAct } from "../../domain/panel";
+import { select } from "../../domain/navigation";
+import { panel, setTab, cardOf, closeDetail, openPr, cardAct, type CardAct } from "../../domain/panel";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
@@ -92,8 +93,11 @@ export class RelayInspector extends LitElement {
       compact
       .pr=${pr}
       ?mine=${mine}
-      ?selected=${panel.prModal === key}
-      @open-pr=${() => openPrModal(key)}
+      ?selected=${panel.prOpen === key}
+      @open-pr=${() => {
+        openPr(key);
+        select(PRS);
+      }}
     ></relay-pr-row>`;
   }
 
