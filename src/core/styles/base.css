@@ -1,0 +1,80 @@
+/* The page itself, for both windows: the design tokens (custom properties reach into every shadow root) and the body.
+   Everything a component draws is styled in its own shadow root, from shared.css and its own file. */
+:root {
+  --bg: #ffffff;
+  --sidebar: #efeeed;
+  --inspector: #f7f6f5;
+  --label: rgba(0, 0, 0, 0.85);
+  --secondary: rgba(0, 0, 0, 0.5);
+  --separator: rgba(0, 0, 0, 0.1);
+  --fill: rgba(0, 0, 0, 0.05);
+  --accent: #007aff;
+  --on-accent: #ffffff;
+  --r: 8px;
+  --ease: ease-out;
+  --d: 150ms;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --ctx-a: #5856d6;
+  --ctx-m: #30b0c7;
+  --ctx-p: #34c759;
+  --late: #ff3b30;
+  --soon: #ff9500;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1e1e1e;
+    --sidebar: #2a2a2a;
+    --inspector: #242424;
+    --label: rgba(255, 255, 255, 0.85);
+    --secondary: rgba(255, 255, 255, 0.55);
+    --separator: rgba(255, 255, 255, 0.1);
+    --fill: rgba(255, 255, 255, 0.07);
+    --accent: #0a84ff;
+    --ctx-a: #5e5ce6;
+    --ctx-m: #40c8e0;
+    --ctx-p: #30d158;
+    --late: #ff453a;
+    --soon: #ff9f0a;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #1e1e1e;
+  --sidebar: #2a2a2a;
+  --inspector: #242424;
+  --label: rgba(255, 255, 255, 0.85);
+  --secondary: rgba(255, 255, 255, 0.55);
+  --separator: rgba(255, 255, 255, 0.1);
+  --fill: rgba(255, 255, 255, 0.07);
+  --accent: #0a84ff;
+}
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+body {
+  font: 13px/1.4 var(--sans);
+  color: var(--label);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+/* the main window is transparent with the macOS sidebar material behind it, only the sidebar lets it through */
+body.main {
+  background: transparent;
+}
+body.reordering,
+body.reordering * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

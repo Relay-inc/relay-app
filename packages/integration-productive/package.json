@@ -8,7 +8,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@relay/board-core": "workspace:*"
+    "@relay/board-core": "workspace:*",
+    "lit": "^3.3.3"
   },
   "peerDependencies": {
     "@tauri-apps/api": "^2"

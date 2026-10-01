@@ -1,46 +1,12 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Relay</title>
-  <link rel="stylesheet" href="/src/styles.css" />
-  <script type="module" src="/src/main.ts" defer></script>
-</head>
-<body>
-  <div class="snaperr" id="snaperr" hidden></div>
-  <aside class="side">
-    <div class="drag" data-tauri-drag-region></div>
-    <label class="search"><i data-icon="search" data-icon-class="i"></i><input id="find" data-i18n-placeholder="nav.search"></label>
-    <nav class="nav" id="nav"></nav>
-    <div class="foot">
-      <button class="icon-btn" id="usage-btn" data-i18n-title="nav.usage" data-i18n-aria="nav.usage"><i data-icon="gauge"></i><span class="usage-dot"></span></button>
-      <button class="icon-btn" id="opensettings" data-i18n-title="nav.settingsTooltip" data-i18n-aria="nav.settingsLabel"><i data-icon="gear"></i></button>
-    </div>
-    <div class="ctx" id="ctx" hidden></div>
-  </aside>
-  <section class="chat">
-    <div class="bar" data-tauri-drag-region><h1 id="t"></h1><span class="crumb" id="ctsep">›</span><input class="ctitle" id="ct" spellcheck="false" data-i18n-aria="bar.chatTitle"><span class="sub" id="ts"></span><span class="sp" data-tauri-drag-region></span>
-      <button class="tb ib" id="term" data-i18n-title="bar.openTerminal" data-i18n-aria="bar.openTerminal"><i data-icon="term"></i></button><button class="tb ib" id="toggleinsp" data-i18n-title="bar.togglePanelTitle" data-i18n-aria="bar.togglePanel"><svg class="g" viewBox="0 0 16 16"><rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/></svg></button></div>
-    <div class="pop" id="pop" hidden></div>
-    <div class="log" id="log"><div class="msgs" id="msgs"></div></div>
-    <div class="subs" id="subs" style="display:none"></div>
-    <div class="toast" id="toast" hidden></div>
-    <div class="movebar" id="movebar" style="display:none"></div>
-    <div class="composer" id="composer">
-      <div class="atts" id="atts" hidden></div>
-      <textarea rows="1" id="c"></textarea>
-      <div class="cfoot"><select class="pick" id="agent" style="display:none" data-i18n-title="composer.agent" data-i18n-aria="composer.agent"></select><select class="pick" id="model" data-i18n-title="composer.model" data-i18n-aria="composer.model"><option value="" data-i18n="composer.defaultModel"></option><option value="fable">Fable</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option></select>
-        <select class="pick" id="effort" data-i18n-title="composer.effort" data-i18n-aria="composer.effort"><option value="" data-i18n="composer.defaultEffort"></option><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="xhigh">Extra high</option><option value="max">Max</option></select>
-        <span class="sp"></span>
-        <button class="send" id="send" data-i18n-aria="composer.send"><i data-icon="send" data-icon-class="i"></i></button></div>
-    </div>
-  </section>
-  <div class="zoom" id="zoom" hidden><img alt=""></div>
-  <div class="qk" id="qk" hidden><div class="qkbox" id="qkbox"><div class="atts" id="qkatts" hidden></div><textarea id="qkin" rows="1" spellcheck="false" data-i18n-placeholder="qk.ph" data-i18n-aria="qk.label"></textarea><div class="qkhint" data-i18n="qk.hint"></div></div></div>
-  <aside class="insp">
-    <div class="bar" data-tauri-drag-region><div class="seg" id="seg"><button data-tab="open" class="on" data-i18n="tab.open"></button><button data-tab="stand" data-i18n="tab.stand"></button><button data-tab="rem" data-i18n="nav.reminders"></button><button data-tab="prs" hidden data-i18n="tab.prs"></button></div></div>
-    <div class="ibody" id="insp"></div>
-  </aside>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Relay</title>
+    <script type="module" src="/src/main.ts" defer></script>
+  </head>
+  <body class="main">
+    <relay-app></relay-app>
+  </body>
 </html>

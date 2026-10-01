@@ -1,10 +1,14 @@
 import { defineConfig } from "vite";
+import tailwindcss from "@tailwindcss/vite";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
+  plugins: [tailwindcss()],
+  // the app and the integration packages share one Lit
+  resolve: { dedupe: ["lit"] },
   // two pages: the main window and the settings window
   build: { rollupOptions: { input: { main: "index.html", settings: "settings.html" } } },
 

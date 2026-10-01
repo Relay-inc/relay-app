@@ -1,3 +1,5 @@
+import { html, nothing } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 
@@ -141,22 +143,25 @@ const productive: BoardProvider<Key> = {
       details.set(id, task);
       return task;
     },
-    /** The panel, in the PR detail's classes so both look alike. */
-    render(tk: Task | null, err, e) {
-      const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("close")}">×</button>`
-        + (tk ? `<span class="sp"></span><a class="btn" href="${e(tk.url)}">${t("open", { name: "Productive" })}</a>` : "") + `</div>`;
-      if (err) return bar + `<div class="err">${e(err)}</div>`;
-      if (!tk) return bar + `<div class="meta">${t("loading")}</div>`;
-      const sec = (title: string, n: number | string, body: string) => `<section class="prd-sec"><h3>${title}${n !== "" ? ` <span class="count">${n}</span>` : ""}</h3>${body}</section>`;
-      return bar + `<div class="prd">
-        <div class="pr-meta">${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => `<span>${e(x)}</span>`).join("")}</div>
-        <h2 class="prd-t">${tk.closed ? `<span class="pr-draft">${t("closed")}</span>` : ""}${e(tk.title)}</h2>
-        <div class="pr-meta"><span>${e(tk.creator)}</span><span>${e(when(tk.created))}</span></div>
-        <dl class="pvf">${tk.fields.map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join("")}</dl>`
-        + sec(t("desc"), "", tk.description.trim() ? `<div class="prd-md">${tk.description}</div>` : `<div class="meta">${t("noDesc")}</div>`)
-        + sec(t("feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => `<div class="prd-c"><div class="prd-ch"><b>${e(f.who || "Productive")}</b><span class="count">${e(when(f.at))}</span></div>`
-          + (f.html ? `<div class="prd-md">${f.html}</div>` : `<div class="meta">${e(f.change)}</div>`) + `</div>`).join("") : `<div class="meta">${t("nothing")}</div>`)
-        + `</div>`;
+    /** The panel, in the same Tailwind utilities as the PR detail so both look alike (Tailwind scans the packages). */
+    // Description and feed are Productive's HTML, which the original trusted the same way (unsafeHTML); everything else is escaped by Lit.
+    // The close button tells the panel through an event, the package does not know the app.
+    render(tk: Task | null, err) {
+      const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3"><button class="btn whitespace-nowrap flex-none" title=${t("close")} @click=${(e: Event) => e.target!.dispatchEvent(new CustomEvent("detail-close", { bubbles: true, composed: true }))}>×</button>
+        ${tk ? html`<span class="flex-1"></span><a class="btn whitespace-nowrap flex-none inline-flex items-center" href=${tk.url}>${t("open", { name: "Productive" })}</a>` : nothing}</div>`;
+      if (err) return html`${bar}<div class="err-box">${err}</div>`;
+      if (!tk) return html`${bar}<div class="text-secondary mb-3">${t("loading")}</div>`;
+      const meta = "flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5 tabular-nums";
+      const sec = (title: string, n: number | string, body: unknown) => html`<section class="mt-4"><h3 class="text-xs font-semibold text-secondary uppercase tracking-wide mb-1.5 pb-1 border-b border-separator">${title}${n !== "" ? html` <span class="text-secondary tabular-nums">${n}</span>` : nothing}</h3>${body}</section>`;
+      return html`${bar}<div>
+        <div class=${meta}>${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => html`<span>${x}</span>`)}</div>
+        <h2 class="text-sm font-semibold mb-2 leading-snug">${tk.closed ? html`<span class="text-xs text-secondary border border-separator rounded-sm px-1 mr-1.5">${t("closed")}</span>` : nothing}${tk.title}</h2>
+        <div class=${meta}><span>${tk.creator}</span><span>${when(tk.created)}</span></div>
+        <dl class="grid grid-cols-[max-content_1fr] gap-x-3.5 gap-y-1 mt-3 text-sm">${tk.fields.map(([k, v]) => html`<dt class="text-secondary">${k}</dt><dd class="wrap-anywhere">${v}</dd>`)}</dl>
+        ${sec(t("desc"), "", tk.description.trim() ? html`<div class="md-panel">${unsafeHTML(tk.description)}</div>` : html`<div class="text-secondary mb-3">${t("noDesc")}</div>`)}
+        ${sec(t("feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => html`<div class="py-2 border-b border-separator"><div class="flex items-center gap-2 text-sm mb-1"><b>${f.who || "Productive"}</b><span class="ml-auto text-xs text-secondary tabular-nums">${when(f.at)}</span></div>
+          ${f.html ? html`<div class="md-panel">${unsafeHTML(f.html)}</div>` : html`<div class="text-secondary mb-3">${f.change}</div>`}</div>`) : html`<div class="text-secondary mb-3">${t("nothing")}</div>`)}
+      </div>`;
     },
   },
 
