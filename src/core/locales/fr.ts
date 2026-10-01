@@ -237,6 +237,10 @@ export default {
   "set.restored": "Réinitialisé.",
   "set.language": "Langue",
   "set.languageHelp": "La langue de l'app. Système suit la langue de macOS, ou l'anglais si l'app ne la propose pas.",
+  "set.theme": "Apparence",
+  "set.themeHelp": "Clair ou sombre. Système suit macOS.",
+  "set.themeLight": "Clair",
+  "set.themeDark": "Sombre",
   "set.favicons": "Icônes de projet",
   "set.faviconsOn": "Utiliser le favicon du site comme icône",
   "set.faviconsHelp":

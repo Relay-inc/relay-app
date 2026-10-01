@@ -22,7 +22,7 @@ body.prefs {
   --s-ring: color-mix(in srgb, var(--s-primary) 35%, transparent);
 }
 @media (prefers-color-scheme: dark) {
-  body.prefs {
+  :root:not([data-theme="light"]) body.prefs {
     --s-bg: #151515;
     --s-fg: #c1c1c1;
     --s-muted: #b7b7b7;

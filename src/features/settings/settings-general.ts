@@ -19,6 +19,7 @@ import "./settings-path";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
 import type { Settings } from "./types";
+import type { Theme } from "../../domain/config";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -30,6 +31,7 @@ declare global {
     "map-check": CustomEvent<VaultMap>;
     "folders-save": CustomEvent<VaultMap>;
     "language-change": CustomEvent<string>;
+    "theme-change": CustomEvent<Theme>;
     "favicons-change": CustomEvent<boolean>;
   }
 }
@@ -53,7 +55,7 @@ type PathOptions = {
   onPick: () => void;
 };
 
-/** General: the vault folder with its mapping, and the interface (language, favicons). */
+/** General: the vault folder with its mapping, and the interface (language, colour scheme, favicons). */
 @customElement("relay-settings-general")
 export class SettingsGeneral extends SettingsElement {
   static override styles = [tws, page];
@@ -151,6 +153,29 @@ export class SettingsGeneral extends SettingsElement {
     );
   }
 
+  private renderTheme() {
+    const current = this.settings.theme || "system";
+    const themes = [
+      ["system", t("set.system")],
+      ["light", t("set.themeLight")],
+      ["dark", t("set.themeDark")],
+    ];
+    const choices = themes.map(
+      ([value, name]) => html`<option value=${value} ?selected=${current === value}>${name}</option>`,
+    );
+    return field(
+      t("set.theme"),
+      html`<select
+        class=${SELECT}
+        id="theme"
+        @change=${(e: Event) => emit(this, "theme-change", inputValue(e) as Theme)}
+      >
+        ${choices}
+      </select>`,
+      { id: "theme", hint: th("set.themeHelp") },
+    );
+  }
+
   private renderFavicons() {
     const toggle = toggleSwitch("favon", this.settings.favicons?.on !== false, e =>
       emit(this, "favicons-change", (e.target as HTMLInputElement).checked),
@@ -160,6 +185,6 @@ export class SettingsGeneral extends SettingsElement {
 
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
-    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderFavicons()}`)}`;
+    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderFavicons()}`)}`;
   }
 }
