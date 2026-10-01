@@ -24,8 +24,8 @@ import {
   type ViewRow,
 } from "../../domain/sidebar";
 import { select, openProject, openProjectPanel } from "../../domain/navigation";
-import { newChat, closedOf } from "../../domain/chats/state";
-import { closeChat, reopen } from "../../domain/chats/actions";
+import { newChat, closedOf, chatsOf, terminalSessions } from "../../domain/chats/state";
+import { closeChat, closeAll, reopen } from "../../domain/chats/actions";
 import { usageSummary } from "../../domain/usage";
 import type { MenuItem } from "./sidebar-menu";
 import "./sidebar-row";
@@ -188,7 +188,13 @@ export class RelaySidebar extends LitElement {
           ...closed.map(chat => ({ id: `reopen:${chat.key}`, label: chat.title })),
         ]
       : [{ id: "", label: t("ctx.none"), head: true }];
-    return [{ id: "new", label: t("nav.newChat") }, ...recent];
+    const anyOpen =
+      chatsOf(target.project).length > 0 || terminalSessions().some(session => session.project === target.project);
+    return [
+      { id: "new", label: t("nav.newChat") },
+      ...(anyOpen ? [{ id: "closeall", label: t("ctx.closeAll") }] : []),
+      ...recent,
+    ];
   }
   private pick = async (e: CustomEvent<string>) => {
     const target = this.menuTarget!;
@@ -199,6 +205,7 @@ export class RelaySidebar extends LitElement {
       openProjectPanel();
     } else if (itemId === "close") closeChat(target.chatKey);
     else if (itemId === "new") select(newChat(target.project));
+    else if (itemId === "closeall") closeAll(target.project);
     else reopen(itemId.slice("reopen:".length));
   };
 
