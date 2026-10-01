@@ -3140,6 +3140,36 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "relay"
+version = "0.1.0"
+dependencies = [
+ "ammonia",
+ "async-imap",
+ "async-native-tls",
+ "base64 0.23.1",
+ "board-core",
+ "chrono",
+ "futures",
+ "integration-linear",
+ "integration-productive",
+ "integration-trello",
+ "mail-parser",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
+ "serde",
+ "serde_json",
+ "sha1_smol",
+ "sys-locale",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "tauri-plugin-window-state",
+ "tokio",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4583,36 +4613,6 @@ dependencies = [
  "js-sys",
  "serde_core",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "vault"
-version = "0.1.0"
-dependencies = [
- "ammonia",
- "async-imap",
- "async-native-tls",
- "base64 0.23.1",
- "board-core",
- "chrono",
- "futures",
- "integration-linear",
- "integration-productive",
- "integration-trello",
- "mail-parser",
- "objc2",
- "objc2-app-kit",
- "objc2-foundation",
- "serde",
- "serde_json",
- "sha1_smol",
- "sys-locale",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "tauri-plugin-window-state",
- "tokio",
 ]
 
 [[package]]
