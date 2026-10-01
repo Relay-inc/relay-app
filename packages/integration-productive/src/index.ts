@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@vault/board-core";
+import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 
 const t = translator<Key>("productive");

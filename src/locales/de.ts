@@ -312,7 +312,7 @@ export default {
   "mail.connect": "Verbinden",
   "mail.connecting": "Code im Schlüsselbund speichern und bei Gmail anmelden…",
   "mail.connected": "Verbunden mit {email}: {n} Mails im Posteingang. Gespeichert, du findest sie unter Mail in der Seitenleiste.",
-  "mail.step2Hint": "Der Code geht direkt in den macOS-Schlüsselbund, unter dem Dienst vault-mail. Die App speichert ihn nirgends sonst und zeigt ihn nicht mehr an. Stimmt er nicht, wird er sofort wieder entfernt.",
+  "mail.step2Hint": "Der Code geht direkt in den macOS-Schlüsselbund, unter dem Dienst relay-mail. Die App speichert ihn nirgends sonst und zeigt ihn nicht mehr an. Stimmt er nicht, wird er sofort wieder entfernt.",
   "mail.advH": "Erweitert: das Passwort liegt schon im Schlüsselbund (zum Beispiel von himalaya)",
   "mail.adv": "Öffne die App Schlüsselbundverwaltung und such den Eintrag. Sein Name ist der Dienst, sein Feld Account ist das Schlüsselbund-Konto. Für himalaya ist der Dienst himalaya-&lt;name&gt;-imap und das Konto &lt;name&gt;, mit dem Kontonamen aus deiner himalaya-Konfiguration. Zum Beispiel Dienst himalaya-weareantenna-imap und Konto weareantenna. Fragt macOS nach der Erlaubnis zum Lesen, wähl Immer erlauben.",
   "mail.svcL": "Dienst",

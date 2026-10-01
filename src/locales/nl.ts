@@ -312,7 +312,7 @@ export default {
   "mail.connect": "Verbind",
   "mail.connecting": "Code in de sleutelhanger zetten en inloggen bij Gmail…",
   "mail.connected": "Verbonden met {email}: {n} mails in de inbox. Opgeslagen, je ziet ze in Mail in de zijbalk.",
-  "mail.step2Hint": "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst vault-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
+  "mail.step2Hint": "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
   "mail.advH": "Geavanceerd: het wachtwoord staat al in de sleutelhanger (bijvoorbeeld van himalaya)",
   "mail.adv": "Open de app Sleutelhangertoegang en zoek het item. De naam van het item is de dienst, het veld Account is het sleutelhanger-account. Voor himalaya is de dienst himalaya-&lt;naam&gt;-imap en het account &lt;naam&gt;, met de accountnaam uit je himalaya-config. Bijvoorbeeld dienst himalaya-weareantenna-imap en account weareantenna. Vraagt macOS toestemming om het te lezen, kies dan Altijd toestaan.",
   "mail.svcL": "Dienst",

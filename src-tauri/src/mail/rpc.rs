@@ -47,7 +47,7 @@ pub fn tool_list() -> Value {
             json!({ "id": id, "account": account, "headers": { "type": "array", "maxItems": 10, "items": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$" }, "description": "Extra header names to return" } }), &["id"]),
         tool("thread", "Read the whole conversation of a mail, oldest first, up to 30 mails.",
             json!({ "id": id, "account": account }), &["id"]),
-        tool("attachment", "Save one attachment (index from read) into ~/Downloads/Vault-mail and return its path.",
+        tool("attachment", "Save one attachment (index from read) into ~/Downloads/Relay-mail and return its path.",
             json!({ "id": id, "index": { "type": "integer", "minimum": 0 }, "account": account }), &["id", "index"]),
         tool("save_draft", "Save a full RFC 5322 message as a Gmail draft. The From address must be the account. It is never sent.",
             json!({ "raw": { "type": "string" }, "account": account }), &["raw"]),

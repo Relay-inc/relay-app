@@ -312,7 +312,7 @@ export default {
   "mail.connect": "Connecter",
   "mail.connecting": "Enregistrement du code dans le trousseau et connexion à Gmail…",
   "mail.connected": "Connecté à {email} : {n} mails dans la boîte. Enregistré, vous les trouvez sous Mail dans la barre latérale.",
-  "mail.step2Hint": "Le code va directement dans le trousseau macOS, sous le service vault-mail. L'app ne le stocke nulle part ailleurs et ne l'affiche plus. S'il est faux, il est supprimé aussitôt.",
+  "mail.step2Hint": "Le code va directement dans le trousseau macOS, sous le service relay-mail. L'app ne le stocke nulle part ailleurs et ne l'affiche plus. S'il est faux, il est supprimé aussitôt.",
   "mail.advH": "Avancé : le mot de passe est déjà dans le trousseau (par exemple via himalaya)",
   "mail.adv": "Ouvrez l'app Trousseaux d'accès et cherchez l'élément. Son nom est le service, son champ Compte est le compte du trousseau. Pour himalaya, le service est himalaya-&lt;nom&gt;-imap et le compte &lt;nom&gt;, avec le nom de compte de votre configuration himalaya. Par exemple le service himalaya-weareantenna-imap et le compte weareantenna. Si macOS demande l'autorisation de le lire, choisissez Toujours autoriser.",
   "mail.svcL": "Service",

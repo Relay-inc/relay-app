@@ -1,4 +1,4 @@
-// Vault: a shell around the real Claude Code CLI. Every conversation is a `claude -p` process in
+// Relay: a shell around the real Claude Code CLI. Every conversation is a `claude -p` process in
 // stream-json mode, in the vault, on the user's subscription (no API key). Permission requests and
 // Claude's questions come in through perm_server.py as files in the pending folder. Mail tools (mail/) are answered
 // by the app itself over the same stdin/stdout pipe, as the in-process MCP server `vaultmail`.
@@ -463,7 +463,7 @@ fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
             tauri::async_runtime::spawn(async move {
                 let st = app.state::<App>();
                 let (on, accts, default) = { let s = st.settings.lock().unwrap(); (s["mail"]["on"] == true, mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
-                let dl = PathBuf::from(home()).join("Downloads/Vault-mail");
+                let dl = PathBuf::from(home()).join("Downloads/Relay-mail");
                 let res = if on { st.mail.tool(&accts, &default, &name, &args, &dl).await }
                     else { json!({"content": [{"type": "text", "text": "Mail is switched off in the app."}], "isError": true}) };
                 if name == "save_draft" && res["isError"] != true {
@@ -1044,23 +1044,23 @@ async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: boo
     state.mail.set_seen(&a, &id, seen).await
 }
 
-/// Settings › Mail the guided way: the app password goes straight into the keychain (service vault-mail, account
+/// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
 /// the email, over stdin so it never shows in the process list), then a login test. A code Gmail refuses is
 /// removed again. Returns the account for the settings, the window adds and saves it.
 #[tauri::command]
 async fn mail_connect(state: State<'_, App>, email: String, password: String) -> Result<Value, String> {
     let email = email.trim().to_string();
-    let account = json!({"email": email, "keychain_service": "vault-mail", "keychain_account": email});
+    let account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
     let a = mail::accounts(&json!({"accounts": [account.clone()]})).pop().ok_or_else(|| trc("err.mail_account"))?;
     let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
     if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s vault-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),
         Err(e) => {
-            if e.starts_with("Login failed") { Command::new("/usr/bin/security").args(["delete-generic-password", "-s", "vault-mail", "-a", &email]).output().ok(); }
+            if e.starts_with("Login failed") { Command::new("/usr/bin/security").args(["delete-generic-password", "-s", "relay-mail", "-a", &email]).output().ok(); }
             Err(e)
         }
     }

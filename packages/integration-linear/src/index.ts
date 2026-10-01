@@ -1,4 +1,4 @@
-import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@vault/board-core";
+import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
 import { ISSUES, ISSUE_URL, MOVE, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapStates, mapTeams } from "./map";
 import strings, { type Key } from "./locales";
 

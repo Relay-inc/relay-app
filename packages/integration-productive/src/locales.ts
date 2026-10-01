@@ -1,4 +1,4 @@
-import type { Locales } from "@vault/board-core";
+import type { Locales } from "@relay/board-core";
 
 // Productive's UI strings. The app keeps them as productive.<key> (src/i18n.ts). English is the reference: every
 // other language has exactly its keys, or tsc fails.

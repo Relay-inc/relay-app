@@ -1,10 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { BoardProvider, Ctx } from "@vault/board-core";
-import productive from "@vault/integration-productive";
-import trello from "@vault/integration-trello";
-import linear from "@vault/integration-linear";
+import type { BoardProvider, Ctx } from "@relay/board-core";
+import productive from "@relay/integration-productive";
+import trello from "@relay/integration-trello";
+import linear from "@relay/integration-linear";
 
-export type * from "@vault/board-core";
+export type * from "@relay/board-core";
 
 /** Every integration (packages/integration-*), in the order of the sidebar and the settings list. A new one is
  * one line here and one in src-tauri/src/providers.rs. */

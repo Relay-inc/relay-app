@@ -311,7 +311,7 @@ const en = {
   "mail.connect": "Connect",
   "mail.connecting": "Storing the code in the keychain and signing in to Gmail…",
   "mail.connected": "Connected to {email}: {n} mails in the inbox. Saved, you find them under Mail in the sidebar.",
-  "mail.step2Hint": "The code goes straight into the macOS keychain, under the service vault-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
+  "mail.step2Hint": "The code goes straight into the macOS keychain, under the service relay-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
   "mail.advH": "Advanced: the password is already in the keychain (for example from himalaya)",
   "mail.adv": "Open the Keychain Access app and find the item. The item's name is the service, its Account field is the keychain account. For himalaya the service is himalaya-&lt;name&gt;-imap and the account &lt;name&gt;, with the account name from your himalaya config. For example service himalaya-weareantenna-imap and account weareantenna. If macOS asks to allow reading it, choose Always Allow.",
   "mail.svcL": "Service",
