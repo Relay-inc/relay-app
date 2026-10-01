@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { t } from "../../core/i18n";
+import { t, tn } from "../../core/i18n";
 import { changed, ls, request } from "../../core/store";
 import { ui, WAIT, isTerminal } from "../ui";
 import { config, saveSettings, type Settings } from "../config";
@@ -336,17 +336,22 @@ export function openTerminal() {
 // terminal session keeps running in iTerm. Both come back via the undo bar or right-click > Heropen.
 export async function closeChat(key: string) {
   const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
+  let text = t("toast.closed", { title: title ?? "" });
   if (isTerminal(key)) {
     chat.forked.push(termSid(key));
     ls.set("forkedTerms", chat.forked);
   } else if (chat.chats[key]) {
     await invoke("stop", { project: key });
+    // the git worktrees this conversation made go with it, the ones with work git would lose stay
+    const wt = await invoke<{ removed: number; kept: number }>("drop_worktrees", { project: key }).catch(() => null);
+    if (wt?.removed) text += ` · ${tn("toast.worktreesRemoved", wt.removed)}`;
+    if (wt?.kept) text += ` · ${tn("toast.worktreesKept", wt.kept)}`;
     chat.chats[key].closed = Date.now();
     delete chat.status[key];
     delete chat.queued[key];
     saveChats();
   }
-  toast(t("toast.closed", { title: title ?? "" }), () => reopen(key));
+  toast(text, () => reopen(key));
   if (ui.selected !== key) {
     changed();
     return;
