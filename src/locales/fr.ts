@@ -316,6 +316,7 @@ export default {
   "mail.more": "Charger 50 mails de plus",
   "work.done": "Terminé",
   "work.doneIn": "Terminé · {d}",
+  "notify.waits": "En attente : autorisation pour {tool}.",
   "work.interrupted": "Interrompu : le processus s'est arrêté au milieu du tour.",
   "work.outside": "Toujours en cours hors de l'app, l'app suit",
   "work.waitOutside": "Ce tour tourne encore hors de l'app. Envoyez quand il est terminé.",
