@@ -16,6 +16,7 @@ import {
 import { vault, contexts, projectLabel } from "./vault";
 import { config, ghOn, mailOn } from "./config";
 import { readyBoards } from "./board";
+import { agent, chatAgent } from "./agents";
 import { mail, unread } from "./mail";
 import { prs } from "./prs";
 import type { Project } from "./vault";
@@ -100,6 +101,7 @@ export type ConvRow = {
   key: string;
   parent: string;
   term: boolean;
+  glyph: string; // the agent's own mark; a terminal session draws the terminal
   title: string;
   selected: boolean;
   unseen: boolean;
@@ -165,6 +167,7 @@ const convRow = (conversation: Chat): ConvRow => ({
   key: conversation.key,
   parent: conversation.project ?? "",
   term: false,
+  glyph: agent(chatAgent(conversation.key))?.glyph ?? "",
   title: displayTitle(conversation.title),
   selected: ui.selected === conversation.key,
   unseen: chat.unseen.has(conversation.key),
@@ -176,6 +179,7 @@ const termRow = (session: TerminalSession): ConvRow => ({
   key: session.key,
   parent: session.project ?? "",
   term: true,
+  glyph: "",
   title: session.title,
   selected: ui.selected === session.key,
   unseen: false,

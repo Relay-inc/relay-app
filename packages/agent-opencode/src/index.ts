@@ -11,8 +11,8 @@ const options: AgentOption<Key>[] = [
 const opencode: AgentProvider<Key> = {
   id: "opencode",
   name: "OpenCode",
-  // an open square bracket pair: the code between
-  glyph: '<path d="M5.5 3.5h-2v9h2M10.5 3.5h2v9h-2" stroke-linecap="round" stroke-linejoin="round"/>',
+  // OpenCode's mark (Simple Icons, 24×24), in one colour: the text's
+  glyph: '<g transform="scale(.6667)" fill="currentColor" stroke="none"><path d="M22 24H2V0h20zM17 4.8H7v14.4h10z"/></g>',
   strings,
   modelName,
   options,
