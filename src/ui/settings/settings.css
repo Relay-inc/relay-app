@@ -1,28 +1,5 @@
-/* the settings window, after bb's settings: a sidebar of pages on the left, sections on the right. A section is a
-   title and hint above a card with a hairline border; in the card a field is its label and hint on the left, the
-   control on the right. Monochrome: the primary button and a switch that is on are the text colour, not the accent. */
-body.prefs{
-  --s-bg:#fff; --s-fg:#333; --s-muted:#525252; --s-subtle:#636363; --s-faint:rgba(99,99,99,.75);
-  --s-border:#dfdfdf; --s-seam:#e9e9e9; --s-input:#bdbdbd; --s-mutedbg:#e6e6e6; --s-side:#fafafa; --s-sel:#ededed;
-  --s-hover:rgba(51,51,51,.059); --s-primary:#262626;
-  --s-ok:oklch(70% .15 155); --s-warn:oklch(70% .16 50); --s-err:oklch(45% .19 25.9);
-  --s-ring:color-mix(in srgb,var(--s-primary) 35%,transparent);
-}
-@media (prefers-color-scheme:dark){body.prefs{
-  --s-bg:#151515; --s-fg:#c1c1c1; --s-muted:#b7b7b7; --s-subtle:#989898; --s-faint:rgba(152,152,152,.75);
-  --s-border:#313131; --s-seam:#252525; --s-input:#464646; --s-mutedbg:#2c2c2c; --s-side:#1b1b1b; --s-sel:#262626;
-  --s-hover:rgba(193,193,193,.138); --s-primary:#c4c4c4;
-  --s-ok:oklch(74% .15 155); --s-warn:oklch(75% .16 50); --s-err:oklch(56% .19 22.2);
-}}
-:root[data-theme=dark] body.prefs{
-  --s-bg:#151515; --s-fg:#c1c1c1; --s-muted:#b7b7b7; --s-subtle:#989898; --s-faint:rgba(152,152,152,.75);
-  --s-border:#313131; --s-seam:#252525; --s-input:#464646; --s-mutedbg:#2c2c2c; --s-side:#1b1b1b; --s-sel:#262626;
-  --s-hover:rgba(193,193,193,.138); --s-primary:#c4c4c4;
-  --s-ok:oklch(74% .15 155); --s-warn:oklch(75% .16 50); --s-err:oklch(56% .19 22.2);
-}
-body.prefs{display:flex;min-width:0;height:100%;overflow:hidden;background:var(--s-bg);color:var(--s-fg);font-size:13px} /* not the main window's 900px */
-body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;width:100%;height:100%;min-height:0}
-
+:host{display:block;width:100%;height:100%;min-height:0}
+.set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;height:100%;min-height:0}
 /* the sidebar: 28px rows, a faded sentence-case label per group */
 .snav{background:var(--s-side);border-right:1px solid var(--s-seam);padding:12px 8px;overflow-y:auto;-webkit-user-select:none;user-select:none}
 .sn-g{display:grid;gap:2px;margin-top:4px}
@@ -41,7 +18,7 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .ss-h{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .ss-t{display:flex;gap:10px;align-items:flex-start;min-width:0}
 .ss-t h2{font-size:13px;font-weight:600;color:var(--s-fg);margin:0}
-.ss-t p,.sf-h,.prefs .hint{margin-top:2px;font-size:12px;line-height:1.375;color:var(--s-faint)}
+.ss-t p,.sf-h,.hint{margin-top:2px;font-size:12px;line-height:1.375;color:var(--s-faint)}
 .ss-a{flex:none;align-self:flex-start;display:flex;gap:6px;align-items:center}
 .ss-card{border:1px solid var(--s-border);border-radius:8px;background:var(--s-bg);padding:12px 16px;display:grid;grid-template-columns:minmax(0,1fr);gap:14px}
 .ss-card.list{padding:2px 16px;gap:0}
@@ -63,11 +40,14 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .opt{color:var(--s-faint);font-size:12px}
 
 /* a path: the input and its folder button in one field, a dot for found (green) or missing (orange) */
+/* the window used to load the main stylesheet too, where the composer's `.pick` (all:unset, 2px 4px padding) also hit these path
+   boxes: kept, it sets their height */
+.pick{all:unset;font-size:12px;padding:2px 4px}
 .pick{display:flex;align-items:center;width:260px;height:28px;border:1px solid var(--s-input);border-radius:6px;padding-left:9px;gap:7px;overflow:hidden}
 .pick.wide{width:auto}
 .pick:focus-within{box-shadow:0 0 0 1px var(--s-primary)}
-.prefs .pick .field{flex:1;min-width:0;width:auto;height:26px;border:0;border-radius:0;padding:0;background:transparent;font-family:var(--mono);font-size:12px;box-shadow:none}
-.prefs .pick .field[readonly]{color:var(--s-fg)}
+.pick .field{flex:1;min-width:0;width:auto;height:26px;border:0;border-radius:0;padding:0;background:transparent;font-family:var(--mono);font-size:12px;box-shadow:none}
+.pick .field[readonly]{color:var(--s-fg)}
 .pick-b{all:unset;flex:none;display:grid;place-items:center;width:30px;height:28px;border-left:1px solid var(--s-border);color:var(--s-muted)}
 .pick-b:hover{background:var(--s-hover);color:var(--s-fg)}
 .pick-b:focus-visible{box-shadow:inset 0 0 0 1px var(--s-primary)}
@@ -125,21 +105,21 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .sd.ok{background:var(--s-ok)}.sd.warn{background:var(--s-warn)}.sd.err{background:var(--s-err)}
 .pill{display:inline-block;font-weight:400;border:1px solid var(--s-border);background:color-mix(in srgb,var(--s-mutedbg) 40%,transparent);border-radius:4px;padding:2px 6px;font-size:10px;line-height:1.2;color:var(--s-subtle)}
 .pills{display:flex;flex-wrap:wrap;gap:4px;justify-content:flex-end;max-width:300px}
-.prefs code{font-family:var(--mono);font-size:11px;background:var(--s-mutedbg);padding:1px 4px;border-radius:4px}
+code{font-family:var(--mono);font-size:11px;background:var(--s-mutedbg);padding:1px 4px;border-radius:4px}
 
 /* controls */
-.prefs .btn{height:28px;padding:0 12px;border-radius:6px;border:1px solid var(--s-input);background:transparent;color:var(--s-fg);font:500 12px var(--sans);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;text-decoration:none;filter:none;transition:background-color 150ms}
-.prefs .btn:hover{background:var(--s-hover);filter:none;transition-duration:0s}
-.prefs .btn.primary{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-bg)}
-.prefs .btn.primary:hover{background:color-mix(in srgb,var(--s-primary) 90%,var(--s-bg))}
-.prefs .btn.ghost{border-color:transparent;color:var(--s-muted)}
-.prefs .btn.ghost:hover{color:var(--s-fg)}
-.prefs .btn:disabled{opacity:.5}
-.prefs .btn:focus-visible,.prefs .field:focus-visible{outline:none;box-shadow:0 0 0 1px var(--s-primary)}
-.prefs .field{height:30px;width:260px;padding:0 10px;border:1px solid var(--s-input);border-radius:6px;background:transparent;color:var(--s-fg);font:13px var(--sans)}
-.prefs .field[readonly]{color:var(--s-muted)}
-.prefs .field::placeholder{color:var(--s-subtle);font-family:var(--sans)}
-.prefs select.field{width:200px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;height:28px;font-size:12px;padding:0 26px 0 8px;-webkit-appearance:none;appearance:none;border-color:color-mix(in srgb,var(--s-border) 60%,var(--s-input));
+.btn{height:28px;padding:0 12px;border-radius:6px;border:1px solid var(--s-input);background:transparent;color:var(--s-fg);font:500 12px var(--sans);display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;text-decoration:none;filter:none;transition:background-color 150ms}
+.btn:hover{background:var(--s-hover);filter:none;transition-duration:0s}
+.btn.primary{background:var(--s-primary);border-color:var(--s-primary);color:var(--s-bg)}
+.btn.primary:hover{background:color-mix(in srgb,var(--s-primary) 90%,var(--s-bg))}
+.btn.ghost{border-color:transparent;color:var(--s-muted)}
+.btn.ghost:hover{color:var(--s-fg)}
+.btn:disabled{opacity:.5}
+.btn:focus-visible,.field:focus-visible{outline:none;box-shadow:0 0 0 1px var(--s-primary)}
+.field{height:30px;width:260px;padding:0 10px;border:1px solid var(--s-input);border-radius:6px;background:transparent;color:var(--s-fg);font:13px var(--sans)}
+.field[readonly]{color:var(--s-muted)}
+.field::placeholder{color:var(--s-subtle);font-family:var(--sans)}
+select.field{width:200px;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;height:28px;font-size:12px;padding:0 26px 0 8px;-webkit-appearance:none;appearance:none;border-color:color-mix(in srgb,var(--s-border) 60%,var(--s-input));
   background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 7px center}
 /* a switch, 28×16: on is the text colour with a light thumb, off a muted track with a dark thumb */
 .sw{-webkit-appearance:none;appearance:none;flex:none;position:relative;width:28px;height:16px;margin:0;border-radius:999px;border:1px solid var(--s-input);background:var(--s-mutedbg);cursor:default;transition:background-color 150ms}
@@ -147,13 +127,13 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .sw:checked{background:var(--s-fg);border-color:transparent}
 .sw:checked::after{background:var(--s-bg);transform:translateX(12px)}
 .sw:focus-visible{outline:none;box-shadow:0 0 0 2px var(--s-bg),0 0 0 4px var(--s-ring)}
-.prefs .okmsg{color:var(--s-muted);font-size:12px}
-.prefs .errmsg{color:var(--s-err);font-size:12px}
+.okmsg{color:var(--s-muted);font-size:12px}
+.errmsg{color:var(--s-err);font-size:12px}
 
-.prefs .setrow{display:flex;gap:8px;align-items:center}
-.prefs .setrow .field{flex:1;width:auto}
+.setrow{display:flex;gap:8px;align-items:center}
+.setrow .field{flex:1;width:auto}
 
-.prefs .field.ico{width:72px;text-align:center}
+.field.ico{width:72px;text-align:center}
 .srow-i .emo,.arow-h .srow-i .emo{font-size:15px;line-height:1}
 .srow-i img{width:18px;height:18px;border-radius:4px}
 
@@ -163,8 +143,8 @@ body.prefs .set{display:grid;grid-template-columns:200px minmax(0,1fr);gap:0;wid
 .itile{width:28px;height:28px;flex:none;display:grid;place-items:center;border:1px solid var(--s-border);border-radius:6px}
 .itile img{width:18px;height:18px;border-radius:4px}
 .itile svg{width:16px;height:16px;fill:none;stroke:var(--s-subtle);stroke-width:1.75}
-.prefs .btn.ib{width:28px;padding:0}
-.prefs .btn.ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+.btn.ib{width:28px;padding:0}
+.btn.ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
 .chips{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;max-width:340px}
 .chips .field{width:150px;height:26px;font-size:12px}
 .chip{display:inline-flex;align-items:center;gap:4px;height:24px;padding:0 4px 0 8px;border:1px solid var(--s-border);border-radius:999px;font:12px var(--mono);color:var(--s-muted)}
