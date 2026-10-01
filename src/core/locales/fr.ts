@@ -392,7 +392,7 @@ export default {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Afficher la boîte de réception",
-  "mail.account": "La barre latérale affiche :",
+  "mail.account": "Compte par défaut, utilisé par Claude quand on ne précise pas :",
   "mail.testOk": "Fonctionne : {n} mails dans la boîte",
   "mail.accounts": "{n} comptes",
   "mail.help":
@@ -420,7 +420,7 @@ export default {
   "mail.showMail": "Mail",
   "mail.showText": "Ce que Claude lit",
   "mail.accountsH": "Comptes",
-  "mail.setupTitle": "Connectez votre Gmail",
+  "mail.setupTitle": "Connectez votre messagerie",
   "mail.setupIntro": "Aucun compte mail pour l'instant. La connexion prend une minute.",
   "mail.setupStep1": "Cliquez ci-dessous sur Ouvrir les réglages, vous arrivez directement sur Mail.",
   "mail.setupStep2": "Créez un mot de passe d'application chez Google, le bouton se trouve à l'étape 1 de cet écran.",
@@ -442,7 +442,7 @@ export default {
   "mail.pwL": "Mot de passe d'application",
   "mail.pwPh": "les 16 lettres, espaces acceptés",
   "mail.connect": "Connecter",
-  "mail.connecting": "Enregistrement du code dans le trousseau et connexion à Gmail…",
+  "mail.connecting": "Enregistrement du mot de passe dans le trousseau et connexion…",
   "mail.connected":
     "Connecté à {email} : {n} mails dans la boîte. Enregistré, vous les trouvez sous Mail dans la barre latérale.",
   "mail.step2Hint":
@@ -454,15 +454,25 @@ export default {
   "mail.kaccL": "Compte du trousseau",
   "mail.addTest": "Tester et ajouter",
   "mail.inKeychain": "mot de passe dans le trousseau : {svc}",
+  "mail.kindGmail": "Gmail",
+  "mail.kindImap": "Autre serveur de messagerie (IMAP)",
+  "mail.guideImap": "Connecter un serveur de messagerie",
+  "mail.hostL": "Serveur",
+  "mail.portL": "Port",
+  "mail.imapPwL": "Mot de passe",
+  "mail.advHostL": "Serveur (vide pour Gmail)",
+  "mail.imapHint":
+    "Le mot de passe va directement dans le trousseau macOS, sous le service relay-mail. Le serveur doit accepter IMAP via SSL/TLS (en général le port 993) avec votre adresse e-mail comme identifiant. Si la connexion échoue, le mot de passe est supprimé aussitôt.",
   "mail.errLogin":
-    "Gmail a refusé la connexion. Vérifiez que le mot de passe d'application appartient à cette adresse et que vous avez copié tout le code. Sinon, créez un nouveau code à l'étape 1 et réessayez.",
+    "Le serveur de messagerie a refusé la connexion. Vérifiez l'adresse e-mail et le mot de passe. Pour Gmail, il faut le mot de passe d'application, le code entier : si cela échoue encore, créez un nouveau code à l'étape 1 et réessayez.",
   "mail.errNoPw":
     "Aucun mot de passe dans le trousseau sous ce service et ce compte. Vérifiez les noms dans Trousseaux d'accès, ils doivent correspondre exactement, ou utilisez les étapes 1 et 2 avec un nouveau mot de passe d'application.",
   "mail.errKeychain":
     "macOS a demandé l'autorisation de lire le trousseau sans obtenir de réponse. Réessayez et choisissez Toujours autoriser.",
   "mail.errGmail":
-    "Cette adresse n'est pas un compte Gmail ou Google Workspace. L'app ne prend en charge que Gmail pour l'instant.",
-  "mail.errNet": "Gmail est injoignable. Vérifiez votre connexion internet et réessayez.",
+    "Cette adresse n'est pas un compte Gmail ou Google Workspace. Pour un autre fournisseur, choisissez Autre serveur de messagerie (IMAP) et renseignez le serveur.",
+  "mail.errNet":
+    "Le serveur de messagerie est injoignable. Vérifiez votre connexion internet et le nom du serveur, puis réessayez.",
   "mail.test": "Tester",
   "mail.remove": "Supprimer",
   "mail.invalid": "Indiquez une adresse e-mail valide (et pour Avancé aussi le service et le compte).",

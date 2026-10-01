@@ -176,9 +176,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
     ("err.mail_pw", ["The app password is the 16-letter code Google showed (spaces are fine)", "Het app-wachtwoord is de code van 16 letters die Google toonde (spaties mogen)",
         "Le mot de passe d'application est le code de 16 lettres affiché par Google (les espaces sont acceptés)", "Das App-Passwort ist der 16-stellige Code, den Google angezeigt hat (Leerzeichen sind ok)"]),
+    ("err.mail_pw_any", ["The password must be 1 to 256 characters, without control characters", "Het wachtwoord moet 1 tot 256 tekens zijn, zonder stuurtekens", "Le mot de passe doit faire de 1 à 256 caractères, sans caractères de contrôle", "Das Passwort muss 1 bis 256 Zeichen lang sein, ohne Steuerzeichen"]),
     ("err.no_mail_account", ["Mail: no account set up. Add one under Relay › Settings… › Integrations › Mail.", "Mail: nog geen account. Voeg er een toe bij Relay › Instellingen… › Integraties › Mail.", "Mail : aucun compte. Ajoutez-en un dans Relay › Réglages… › Intégrations › Mail.", "Mail: noch kein Konto. Füge eins unter Relay › Einstellungen… › Integrationen › Mail hinzu."]),
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
-    ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
+    ("err.mail_account", ["Mail: invalid account (email, server, port, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, server, poort, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, serveur, port, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Server, Port, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
     ("err.no_import", ["Claude Code has no {v} MCP server with credentials", "Claude Code heeft geen {v}-MCP-server met inloggegevens", "Claude Code n'a pas de serveur MCP {v} avec des identifiants", "Claude Code hat keinen {v}-MCP-Server mit Zugangsdaten"]),
@@ -1211,7 +1212,7 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
-// ---------- Mail: Gmail over IMAP in mail/, the app password stays in the macOS keychain.
+// ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
 // Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
 // click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
 
@@ -1222,10 +1223,10 @@ fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
     mail::pick_account(&mail::accounts(&s["mail"]), want).ok_or_else(|| trc("err.no_mail_account"))
 }
 
-/// One page of 50 mails from the inbox, page 1 is the newest.
+/// One page of 50 mails from one account's inbox, page 1 is the newest. The window merges the accounts.
 #[tauri::command]
-async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
-    let a = mail_acct(&state, "")?;
+async fn mail_list(state: State<'_, App>, account: String, page: u32) -> Result<Value, String> {
+    let a = mail_acct(&state, &account)?;
     state.mail.list(&a, page.clamp(1, 1000)).await
 }
 
@@ -1244,17 +1245,28 @@ async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: boo
 }
 
 /// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
-/// the email, over stdin so it never shows in the process list), then a login test. A code Gmail refuses is
-/// removed again. Returns the account for the settings, the window adds and saves it.
+/// the email, over stdin so it never shows in the process list), then a login test. A password the server refuses
+/// is removed again. No host is Gmail (app password), else any IMAP server. Returns the account for the settings,
+/// the window adds and saves it.
 #[tauri::command]
-async fn mail_connect(state: State<'_, App>, email: String, password: String) -> Result<Value, String> {
+async fn mail_connect(state: State<'_, App>, email: String, password: String, host: Option<String>, port: Option<u16>) -> Result<Value, String> {
     let email = email.trim().to_string();
-    let account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    let host = host.map(|h| h.trim().to_string()).unwrap_or_default();
+    let mut account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    if !host.is_empty() { account["host"] = json!(host); account["port"] = json!(port.unwrap_or(993)); }
     let a = mail::accounts(&json!({"accounts": [account.clone()]})).pop().ok_or_else(|| trc("err.mail_account"))?;
-    let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
-    if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+    let pw = if host.is_empty() {
+        let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
+        if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+        pw
+    } else {
+        if !(1..=256).contains(&password.chars().count()) || password.chars().any(char::is_control) { return Err(trc("err.mail_pw_any")); }
+        password
+    };
+    // hex (-X) so no password character can end the command line `security -i` reads
+    let hex: String = pw.bytes().map(|b| format!("{b:02x}")).collect();
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -X {hex}").map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),

@@ -42,6 +42,8 @@ export class MailRow extends LitElement {
   @property() sender = "";
   /** the display label of the mail's project, "" when it has none */
   @property() project = "";
+  /** the account's address, set when there is more than one */
+  @property() account = "";
   @property({ type: Boolean }) selected = false;
 
   private renderSubject() {
@@ -74,6 +76,7 @@ export class MailRow extends LitElement {
   }
 
   override render() {
+    const account = this.account ? html`<span>${this.account}</span>` : nothing;
     const project = this.project ? html`<span>${this.project}</span>` : nothing;
     return html`<div
       class="group flex gap-4 items-center py-2.5 -mx-2.5 px-2.5 rounded-lg border-b border-separator text-inherit cursor-default transition-colors duration-150 ease-out
@@ -83,7 +86,7 @@ export class MailRow extends LitElement {
       <div class="min-w-0 flex-1">
         ${this.renderSubject()}
         <div class="flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5 tabular-nums">
-          <span>${this.sender}</span>${project}
+          <span>${this.sender}</span>${account}${project}
         </div>
       </div>
       ${this.renderDateAndFlip()}
