@@ -75,7 +75,11 @@ importers:
         specifier: workspace:*
         version: link:../agent-core
 
-  packages/board-core: {}
+  packages/board-core:
+    dependencies:
+      lit:
+        specifier: ^3.3.3
+        version: 3.3.3
 
   packages/integration-linear:
     dependencies:
@@ -91,6 +95,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2
         version: 2.12.0
+      lit:
+        specifier: ^3.3.3
+        version: 3.3.3
 
   packages/integration-trello:
     dependencies:

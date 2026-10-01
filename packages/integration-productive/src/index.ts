@@ -1,3 +1,5 @@
+import { html, nothing } from "lit";
+import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 
@@ -142,21 +144,23 @@ const productive: BoardProvider<Key> = {
       return task;
     },
     /** The panel, in the PR detail's classes so both look alike. */
-    render(tk: Task | null, err, e) {
-      const bar = `<div class="prd-bar"><button class="btn" data-pr-close title="${t("close")}">×</button>`
-        + (tk ? `<span class="sp"></span><a class="btn" href="${e(tk.url)}">${t("open", { name: "Productive" })}</a>` : "") + `</div>`;
-      if (err) return bar + `<div class="err">${e(err)}</div>`;
-      if (!tk) return bar + `<div class="meta">${t("loading")}</div>`;
-      const sec = (title: string, n: number | string, body: string) => `<section class="prd-sec"><h3>${title}${n !== "" ? ` <span class="count">${n}</span>` : ""}</h3>${body}</section>`;
-      return bar + `<div class="prd">
-        <div class="pr-meta">${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => `<span>${e(x)}</span>`).join("")}</div>
-        <h2 class="prd-t">${tk.closed ? `<span class="pr-draft">${t("closed")}</span>` : ""}${e(tk.title)}</h2>
-        <div class="pr-meta"><span>${e(tk.creator)}</span><span>${e(when(tk.created))}</span></div>
-        <dl class="pvf">${tk.fields.map(([k, v]) => `<dt>${e(k)}</dt><dd>${e(v)}</dd>`).join("")}</dl>`
-        + sec(t("desc"), "", tk.description.trim() ? `<div class="prd-md">${tk.description}</div>` : `<div class="meta">${t("noDesc")}</div>`)
-        + sec(t("feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => `<div class="prd-c"><div class="prd-ch"><b>${e(f.who || "Productive")}</b><span class="count">${e(when(f.at))}</span></div>`
-          + (f.html ? `<div class="prd-md">${f.html}</div>` : `<div class="meta">${e(f.change)}</div>`) + `</div>`).join("") : `<div class="meta">${t("nothing")}</div>`)
-        + `</div>`;
+    // Description and feed are Productive's HTML, which the original trusted the same way (unsafeHTML); everything else is escaped by Lit.
+    // The close button tells the panel through an event, the package does not know the app.
+    render(tk: Task | null, err) {
+      const bar = html`<div class="prd-bar"><button class="btn" title=${t("close")} @click=${(e: Event) => e.target!.dispatchEvent(new CustomEvent("detail-close", { bubbles: true, composed: true }))}>×</button>
+        ${tk ? html`<span class="sp"></span><a class="btn" href=${tk.url}>${t("open", { name: "Productive" })}</a>` : nothing}</div>`;
+      if (err) return html`${bar}<div class="err">${err}</div>`;
+      if (!tk) return html`${bar}<div class="meta">${t("loading")}</div>`;
+      const sec = (title: string, n: number | string, body: unknown) => html`<section class="prd-sec"><h3>${title}${n !== "" ? html` <span class="count">${n}</span>` : nothing}</h3>${body}</section>`;
+      return html`${bar}<div class="prd">
+        <div class="pr-meta">${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => html`<span>${x}</span>`)}</div>
+        <h2 class="prd-t">${tk.closed ? html`<span class="pr-draft">${t("closed")}</span>` : nothing}${tk.title}</h2>
+        <div class="pr-meta"><span>${tk.creator}</span><span>${when(tk.created)}</span></div>
+        <dl class="pvf">${tk.fields.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+        ${sec(t("desc"), "", tk.description.trim() ? html`<div class="prd-md">${unsafeHTML(tk.description)}</div>` : html`<div class="meta">${t("noDesc")}</div>`)}
+        ${sec(t("feed"), tk.feed.length, tk.feed.length ? tk.feed.map(f => html`<div class="prd-c"><div class="prd-ch"><b>${f.who || "Productive"}</b><span class="count">${when(f.at)}</span></div>
+          ${f.html ? html`<div class="prd-md">${unsafeHTML(f.html)}</div>` : html`<div class="meta">${f.change}</div>`}</div>`) : html`<div class="meta">${t("nothing")}</div>`)}
+      </div>`;
     },
   },
 

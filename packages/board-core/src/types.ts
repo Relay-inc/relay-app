@@ -1,3 +1,4 @@
+import type { TemplateResult } from "lit";
 import type { Locales } from "./i18n";
 
 // The contract a task tracker implements to show as a board in the sidebar (see README, "Integrations").
@@ -23,8 +24,8 @@ export interface CardDetail<D = any> {
   /** what a background load already has, so the panel opens at once */
   cached(id: string): D | undefined;
   fetch(ctx: Ctx, ref: BoardRef, id: string): Promise<D>;
-  /** HTML in the PR detail's classes; `e` escapes */
-  render(d: D | null, err: string, e: (s: unknown) => string): string;
+  /** A template in the PR detail's classes. Its close button fires a bubbling, composed "detail-close" event (the panel closes on it). */
+  render(d: D | null, err: string): TemplateResult;
 }
 
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).
