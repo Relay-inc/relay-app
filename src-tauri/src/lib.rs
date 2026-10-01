@@ -178,6 +178,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
+    ("err.no_import", ["Claude Code has no {v} MCP server with credentials", "Claude Code heeft geen {v}-MCP-server met inloggegevens", "Claude Code n'a pas de serveur MCP {v} avec des identifiants", "Claude Code hat keinen {v}-MCP-Server mit Zugangsdaten"]),
     ("err.icons_no_claude", ["Finding websites needs Claude Code switched on under Agents", "Websites zoeken heeft Claude Code nodig, aangezet onder Agents", "La recherche de sites nécessite Claude Code activé dans Agents", "Websites suchen braucht Claude Code, eingeschaltet unter Agents"]),
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
@@ -1007,15 +1008,28 @@ async fn integration_call(state: State<'_, App>, provider: String, method: Strin
     tauri::async_runtime::spawn_blocking(move || providers::call(p, &cfg, &method, &path, body)).await.map_err(|e| e.to_string())?
 }
 
-/// Take the token, org and user from Claude Code's own Productive MCP config. The token goes to the
-/// keychain, org and user come back for the settings window to save.
+/// A board provider's credentials from Claude Code's MCP config (board_core::from_claude): ~/.claude.json for the user
+/// and for the vault as a project, and the vault's .mcp.json.
+fn claude_creds(state: &App, p: &providers::Provider) -> Option<(Vec<(String, String)>, serde_json::Map<String, Value>)> {
+    let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+    let v = vault(state);
+    let mcp: Value = fs::read_to_string(format!("{v}/.mcp.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+    board_core::from_claude(p, &cfg, &v, &mcp)
+}
+/// Whether the provider can take its credentials from Claude Code, and whether Claude Code has them; the settings
+/// window offers the import when it finds them for an integration that is not set up.
 #[tauri::command]
-fn productive_import() -> Result<Value, String> {
-    let cfg: Value = fs::read_to_string(format!("{}/.claude.json", home())).ok()
-        .and_then(|s| serde_json::from_str(&s).ok()).ok_or_else(|| trc("err.claude_json"))?;
-    let (token, fields) = integration_productive::import(&cfg)?;
-    providers::set_token(providers::get("productive")?, "token", &token)?;
-    Ok(fields)
+fn integration_mcp(state: State<App>, provider: String) -> Result<Value, String> {
+    let p = providers::get(&provider)?;
+    Ok(json!({"supported": p.mcp.is_some(), "found": p.mcp.is_some() && claude_creds(&state, p).is_some()}))
+}
+/// Take the credentials over: the secrets into the keychain, the config fields back for the settings window to save.
+#[tauri::command]
+fn integration_import(state: State<App>, provider: String) -> Result<Value, String> {
+    let p = providers::get(&provider)?;
+    let (secrets, fields) = claude_creds(&state, p).ok_or_else(|| trc_v("err.no_import", p.name))?;
+    for (account, value) in &secrets { providers::set_token(p, account, value)?; }
+    Ok(Value::Object(fields))
 }
 
 // ---------- GitHub: pull requests through the gh CLI and its own login, so no token in the app.
@@ -1281,7 +1295,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, read_note, vault_notes, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, productive_import, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, chat_providers, send, ai_title, stop, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

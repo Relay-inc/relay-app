@@ -2,7 +2,7 @@
 //! (vault-app.productive/token). GET on any path, PATCH only on a single task (a card moved to another column).
 
 use board_core::{path_ok, t, t_v, Provider, Text};
-use serde_json::{json, Value};
+use serde_json::json;
 
 const TEXT: Text = &[
     ("digits", ["Productive: {v} may only contain digits", "Productive: {v} bestaat enkel uit cijfers", "Productive : {v} ne peut contenir que des chiffres", "Productive: {v} darf nur Ziffern enthalten"]),
@@ -43,19 +43,28 @@ pub const PROVIDER: Provider = Provider {
         let e = &v["errors"][0];
         format!("Productive {code}: {}", board_core::message(e["detail"].as_str().or(e["title"].as_str())))
     },
+    mcp: Some(board_core::Mcp { server: "productive", secrets: &[("token", &["PRODUCTIVE_API_TOKEN"])],
+        fields: &[("PRODUCTIVE_ORG_ID", "org"), ("PRODUCTIVE_USER_ID", "user")] }),
 };
-
-/// Token, org and user from Claude Code's own Productive MCP config (~/.claude.json, read by the app):
-/// the token for the keychain, and the config fields for the settings window to save.
-pub fn import(claude_json: &Value) -> Result<(String, Value), String> {
-    let env = &claude_json["mcpServers"]["productive"]["env"];
-    let token = env["PRODUCTIVE_API_TOKEN"].as_str().ok_or_else(|| t(TEXT, "no_import_token"))?;
-    Ok((token.to_string(), json!({ "org": env["PRODUCTIVE_ORG_ID"].as_str().unwrap_or(""), "user": env["PRODUCTIVE_USER_ID"].as_str().unwrap_or("") })))
-}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
+    #[test]
+    fn imports_from_wherever_claude_code_keeps_the_server() {
+        let env = json!({"env": {"PRODUCTIVE_API_TOKEN": "t", "PRODUCTIVE_ORG_ID": "9093", "PRODUCTIVE_USER_ID": "7"}});
+        let fields = json!({"org": "9093", "user": "7"});
+        let import = |c: Value, v: &str, m: Value| board_core::from_claude(&PROVIDER, &c, v, &m).map(|(s, f)| (s, Value::Object(f)));
+        let want = Some((vec![("token".to_string(), "t".to_string())], fields));
+        assert_eq!(import(json!({"mcpServers": {"productive": env}}), "/v", Value::Null), want);
+        assert_eq!(import(json!({"projects": {"/v": {"mcpServers": {"productive": env}}}}), "/v", Value::Null), want);
+        assert_eq!(import(json!({}), "/v", json!({"mcpServers": {"productive": env}})), want);
+        assert_eq!(import(json!({"projects": {"/other": {"mcpServers": {"productive": env}}}}), "/v", Value::Null), None);
+        // the exact name wins over one that contains it (productive-dev next to productive)
+        let dev = json!({"env": {"PRODUCTIVE_API_TOKEN": "dev"}});
+        assert_eq!(import(json!({"mcpServers": {"productive-dev": dev, "productive": env}}), "/v", Value::Null).unwrap().0[0].1, "t");
+    }
     #[test]
     fn allows_reads_and_moving_one_task() {
         let p = &PROVIDER;
@@ -78,8 +87,8 @@ mod tests {
     }
     #[test]
     fn import_reads_the_mcp_config() {
-        let (tok, cfg) = import(&json!({ "mcpServers": { "productive": { "env": { "PRODUCTIVE_API_TOKEN": "abc", "PRODUCTIVE_ORG_ID": "7" } } } })).unwrap();
-        assert_eq!((tok.as_str(), cfg), ("abc", json!({ "org": "7", "user": "" })));
-        assert!(import(&json!({})).is_err());
+        let (tok, cfg) = board_core::from_claude(&PROVIDER, &json!({ "mcpServers": { "productive": { "env": { "PRODUCTIVE_API_TOKEN": "abc", "PRODUCTIVE_ORG_ID": "7" } } } }), "", &Value::Null).unwrap();
+        assert_eq!((tok, Value::Object(cfg)), (vec![("token".to_string(), "abc".to_string())], json!({ "org": "7", "user": "" })));
+        assert!(board_core::from_claude(&PROVIDER, &json!({}), "", &Value::Null).is_none());
     }
 }

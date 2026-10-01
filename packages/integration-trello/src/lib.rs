@@ -39,6 +39,7 @@ pub const PROVIDER: Provider = Provider {
         "429" => t(TEXT, "rate"),
         _ => format!("Trello {code}: {}", board_core::message(v.as_str().or(v["message"].as_str()))),
     },
+    mcp: Some(board_core::Mcp { server: "trello", secrets: &[("key", &["TRELLO_API_KEY"]), ("token", &["TRELLO_TOKEN", "TRELLO_API_TOKEN"])], fields: &[] }),
 };
 
 #[cfg(test)]
