@@ -134,7 +134,7 @@ export class RelayReminders extends LitElement {
     if (!dueReminders.length) return nothing;
     return html`<section>
       <h2
-        class="flex items-baseline gap-1.5 pb-2 border-b border-separator text-[11px] font-semibold tracking-[0.06em] ${tint}"
+        class="flex items-baseline gap-1.5 pb-2 border-b border-separator text-[11px] font-semibold uppercase tracking-[0.06em] ${tint}"
       >
         ${t(name)} <span class="text-tertiary tabular-nums">${dueReminders.length}</span>
       </h2>
