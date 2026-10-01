@@ -10,7 +10,7 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 ## [Unreleased]
 
 ### Changed
-- Quitting Relay no longer cuts a running conversation loose: each agent runs under a small broker process, and Relay picks the conversation back up when you reopen it within 15 minutes, so you can keep typing instead of seeing "handled outside the app"
+- Quitting Relay no longer cuts a running turn loose: the agent keeps working under a small broker process (about 2 MB), and Relay picks the conversation back up when you reopen it within 15 minutes, so you can keep typing instead of seeing "handled outside the app". Idle agents stop when Relay quits; the next message resumes them
 
 ## [0.0.1] - 2026-10-01
 

@@ -22,8 +22,12 @@ use std::time::{Duration, Instant};
 use std::{fs, thread};
 
 const GRACE: Duration = Duration::from_secs(15 * 60);
-// ponytail: output buffered without the app is capped by line count; the oldest lines go first
-const MAX_BACKLOG: usize = 20_000;
+// output buffered while the app is away, at most this many bytes; the oldest lines go first (one Claude line can
+// carry a whole file, so a line count would not bound the memory)
+const MAX_BACKLOG: usize = 4 << 20;
+// the broker's threads only shuttle lines, their stacks stay small
+const STACK: usize = 128 << 10;
+fn spawn<F: FnOnce() + Send + 'static>(f: F) -> thread::JoinHandle<()> { thread::Builder::new().stack_size(STACK).spawn(f).expect("broker thread") }
 
 /// The provider's command, owned, so it crosses into the broker process.
 #[derive(Serialize, Deserialize)]
@@ -80,7 +84,7 @@ pub fn launch(meta: &Meta, cmd: &Command) -> Result<Conn, String> {
     // its own process group, so a Ctrl-C on `tauri dev` does not reach it; waited for, so it leaves no zombie
     let mut b = Command::new(exe).arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
         .process_group(0).spawn().map_err(|e| format!("broker: {e}"))?;
-    thread::spawn(move || { b.wait().ok(); });
+    spawn(move || { b.wait().ok(); });
     for _ in 0..100 {
         if let Ok(c) = connect(&sock) {
             if let Ok(c) = &c { save_meta(&Meta { pid: c.agent.id(), ..meta.clone() }); }
@@ -116,7 +120,7 @@ pub fn frame(line: &str) -> Frame {
 
 // gen: which app connection is current, so an old one ending does not mark a newer one gone
 // winding: stdin closed after GRACE, no more connections
-struct State { client: Option<UnixStream>, gen: u64, away: Option<Instant>, backlog: VecDeque<String>, winding: bool }
+struct State { client: Option<UnixStream>, gen: u64, away: Option<Instant>, backlog: VecDeque<String>, bytes: usize, winding: bool }
 impl State {
     // to the app, or into the backlog while it is away
     fn send(&mut self, frame: String) {
@@ -124,8 +128,9 @@ impl State {
             if writeln!(c, "{frame}").is_ok() { return; }
             self.client = None; self.away = Some(Instant::now());
         }
-        if self.backlog.len() == MAX_BACKLOG { self.backlog.pop_front(); }
+        self.bytes += frame.len();
         self.backlog.push_back(frame);
+        while self.bytes > MAX_BACKLOG { if let Some(f) = self.backlog.pop_front() { self.bytes -= f.len(); } else { break; } }
     }
 }
 
@@ -141,18 +146,18 @@ pub fn main(sock: &str, spec: &str) {
         }
     };
     let pid = child.id();
-    let st = Arc::new(Mutex::new(State { client: None, gen: 0, away: Some(Instant::now()), backlog: VecDeque::new(), winding: false }));
+    let st = Arc::new(Mutex::new(State { client: None, gen: 0, away: Some(Instant::now()), backlog: VecDeque::new(), bytes: 0, winding: false }));
     // its own lock: a write that blocks on a full pipe must not hold up the output threads
     let stdin = Arc::new(Mutex::new(child.stdin.take()));
     let pipe = |r: Box<dyn std::io::Read + Send>, tag: &'static str| {
         let st = st.clone();
-        thread::spawn(move || for l in BufReader::new(r).lines().map_while(Result::ok) { st.lock().unwrap().send(format!("{tag} {l}")); })
+        spawn(move || for l in BufReader::new(r).lines().map_while(Result::ok) { st.lock().unwrap().send(format!("{tag} {l}")); })
     };
     let out = pipe(Box::new(child.stdout.take().unwrap()), "o");
     let err = pipe(Box::new(child.stderr.take().unwrap()), "e");
     // the agent ends: the rest of its output, its exit code, then the broker goes
     let (st2, sock2) = (st.clone(), sock.to_string());
-    thread::spawn(move || {
+    spawn(move || {
         out.join().ok(); err.join().ok();
         let code = child.wait().ok().and_then(|s| s.code()).unwrap_or(-1);
         st2.lock().unwrap().send(format!("x {code}"));
@@ -161,7 +166,7 @@ pub fn main(sock: &str, spec: &str) {
     });
     // the app away longer than GRACE: close the agent's stdin and the socket, the agent winds down on its own
     let (st3, in3, sock3) = (st.clone(), stdin.clone(), sock.to_string());
-    thread::spawn(move || loop {
+    spawn(move || loop {
         thread::sleep(Duration::from_secs(30));
         let mut s = st3.lock().unwrap();
         if s.client.is_none() && s.away.is_some_and(|t| t.elapsed() > GRACE) { s.winding = true; *in3.lock().unwrap() = None; fs::remove_file(&sock3).ok(); return; }
@@ -175,13 +180,13 @@ pub fn main(sock: &str, spec: &str) {
         if let Some(old) = s.client.take() { old.shutdown(std::net::Shutdown::Both).ok(); }
         let sent = writeln!(c2, "p {pid} {}", s.backlog.len()).is_ok() && s.backlog.iter().all(|f| writeln!(c2, "{f}").is_ok());
         if !sent { continue; } // the backlog stays for the next connection
-        s.backlog.clear();
+        s.backlog = VecDeque::new(); s.bytes = 0; // the memory goes back too
         s.client = Some(c2); s.away = None; s.gen += 1;
         let gen = s.gen;
         drop(s);
         // the app's lines go to the agent's stdin; when the app goes, the agent keeps running
         let (st4, in4) = (st.clone(), stdin.clone());
-        thread::spawn(move || {
+        spawn(move || {
             for l in BufReader::new(c).lines().map_while(Result::ok) {
                 if let Some(i) = &mut *in4.lock().unwrap() { if writeln!(i, "{l}").and_then(|_| i.flush()).is_err() { break; } }
             }

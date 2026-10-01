@@ -228,8 +228,9 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 }
 
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
-// with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart
-struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String }
+// with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart.
+// turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
+struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32 }
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -407,7 +408,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
     if claude { writeln!(stdin, "{}", pipe_init(eb.opts["mail"] == true)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
-    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into() };
+    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()) };
     read_agent(app, project, p, c);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if claude && from_mail { write_taint(&mut proc, &dir); }
@@ -458,6 +459,9 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                         (r.project, r.provider, r.relay) = (k.clone(), id.into(), true);
                         pending::write(&pend, &r).ok();
                     }
+                    Event::TurnEnd { .. } => {
+                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
+                    }
                     _ => {}
                 }
                 if !replay || matches!(ev, Event::TurnEnd { .. }) { emit(serde_json::to_value(&ev).unwrap_or_default()); }
@@ -476,6 +480,12 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
     });
 }
 
+/// The app quits: an agent with no turn running stops (the next message resumes its session, nothing is lost), so
+/// only a running turn keeps an agent and its broker alive while the app is closed.
+fn quit(app: &AppHandle) {
+    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| x.turns == 0) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
+}
+
 /// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
 fn reattach(app: &AppHandle) {
     let Ok(dir) = fs::read_dir(broker::dir()) else { return };
@@ -483,7 +493,7 @@ fn reattach(app: &AppHandle) {
         let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let Ok(stdin) = c.stdin.try_clone() else { continue };
-        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone() };
+        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1 };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
         read_agent(app, &m.key, p, c);
     }
@@ -568,7 +578,9 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
     let x = procs.get_mut(&project).unwrap();
-    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+    x.turns += 1;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1154,7 +1166,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
-        .run(|app, e| if let tauri::RunEvent::Reopen { .. } = e { tray::show_main(app); });
+        .run(|app, e| match e {
+            tauri::RunEvent::Reopen { .. } => tray::show_main(app),
+            tauri::RunEvent::Exit => quit(app),
+            _ => {}
+        });
 }
 
 
