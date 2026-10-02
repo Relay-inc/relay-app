@@ -199,8 +199,8 @@ export const usageLimits = [
     { id: "five_hour", label: "limit.session", name: null, pct: 42, resets: iso(NOW + 2 * HOUR + 10 * 60000) },
     { id: "seven_day", label: "limit.weekly", name: null, pct: 81, resets: iso(NOW + 3 * DAY) },
     { id: "seven_day_opus", label: "limit.weeklyModel", name: "Opus", pct: 96, resets: iso(NOW + 3 * DAY) },
-  ] } },
-  { provider: "codex", limits: { ok: false, reason: "unavailable" } },
+  ] }, accounts: null },
+  { provider: "codex", limits: { ok: false, reason: "unavailable" }, accounts: null },
 ];
 export function usageTokens() {
   const today = tally(182_000, 64_000, 4_100_000, 310_000, 18.4);
@@ -220,7 +220,7 @@ export function usageTokens() {
 }
 
 // ---------- agents
-const caps = (all: boolean) => ({ persistent: true, images: all, thinking: !all, permissions: all, questions: all, subagents: all, fork: all, terminal: all, background: all, effort: true, limits: all, title: true });
+const caps = (all: boolean) => ({ persistent: true, images: all, thinking: !all, permissions: all, questions: all, subagents: all, fork: all, terminal: all, background: all, effort: true, limits: all, title: true, accounts: all });
 const choices = (pairs: [string, string][]) => pairs.map(([id, label]) => ({ id, label }));
 export const agentsStatus = {
   default: "claude",

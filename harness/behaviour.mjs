@@ -781,6 +781,45 @@ const SCENARIOS = {
     s.fact("entries", sets.map(c => c.args));
   },
 
+  // Claude Code's logins: an extra config folder per account (settings.agents.providers.claude), all through set_settings
+  async agentAccounts(s) {
+    await s.load({ path: "/settings.html" });
+    const { page } = s;
+    const claude = async () => (await s.calls("set_settings")).at(-1)?.args.settings?.agents?.providers?.claude;
+    await click(navButton(page, "Agents"), 300);
+    await click(page.getByRole("button", { name: /^Claude Code\b/, expanded: false }), 300);
+    s.check("accounts offered", await waitText(page, "Add account…"));
+    s.check("no account choice with only the CLI's own", !(await hasText(page, "New conversations use")));
+    await click(button(page, "Add account…"), 300);
+    s.check("a cancelled pick saves nothing", (await s.calls("set_settings")).length === 0);
+    await page.evaluate(() => { window.__harness.pickFolder = "/Users/demo/.claude-work"; });
+    await click(button(page, "Add account…"), 300);
+    const added = (await claude())?.accounts;
+    s.check("the folder added, named after itself", added?.length === 1 && added[0].name === "claude-work" && added[0].dir === "/Users/demo/.claude-work");
+    s.check("the login command shown", (await visible(page.locator("code", { hasText: "CLAUDE_CONFIG_DIR=/Users/demo/.claude-work claude /login" })).count()) === 1);
+    await click(button(page, "Add account…"), 300);
+    s.check("the same folder twice adds nothing", (await s.calls("set_settings")).length === 1);
+    await visible(page.locator("#agact-claude")).first().selectOption({ label: "claude-work" });
+    await settle(page, 300);
+    s.check("new conversations on the account", (await claude())?.active === "/Users/demo/.claude-work");
+    await click(visible(page.getByRole("switch", { name: "Switch accounts automatically" })), 300);
+    s.check("auto-switch saved", (await claude())?.auto === true);
+    const name = visible(page.getByRole("textbox", { name: "Account name" })).first();
+    const saves = (await s.calls("set_settings")).length;
+    await name.fill("   ");
+    await name.press("Enter");
+    await settle(page, 300);
+    s.check("a blank name is not saved", (await s.calls("set_settings")).length === saves && (await name.inputValue()) === "claude-work");
+    await name.fill("  Work ");
+    await name.press("Enter");
+    await settle(page, 300);
+    s.check("renamed, trimmed", (await claude())?.accounts?.[0]?.name === "Work");
+    await click(visible(page.getByRole("button", { name: "Remove Work", exact: true })), 300);
+    const last = await claude();
+    s.check("removed, back on the CLI's own", last?.accounts?.length === 0 && last?.active === "" && last?.auto === true);
+    s.fact("saved", (await s.calls("set_settings")).map(c => { const x = c.args.settings?.agents?.providers?.claude; return { accounts: x?.accounts, active: x?.active, auto: x?.auto }; }));
+  },
+
   async cmdkProject(s) {
     await s.load();
     await s.load({ sel: s.keys.switchTo });
@@ -924,6 +963,7 @@ const KNOWN = {
   calendar: "Lit keys a meeting's banner on Waiting (a second meeting's replaces it), checks only https:// before Join, and starts the meeting conversation on the default agent, which only Claude runs restricted",
   calendarNoClaude: "Lit starts the meeting conversation on the default agent, unrestricted when that is not Claude",
   deepLinks: "Lit sends relay://ask?q=<text> at once (quickSend in src/app/deep-links.ts); React opens Cmd-K with the text and waits for Enter",
+  agentAccounts: "Lit saves a blank account name and names every account's button just Remove; React keeps the old name and labels it Remove <name> (review of #45)",
 };
 
 // ---------- compare

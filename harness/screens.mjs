@@ -36,6 +36,11 @@ const intoView = async text => {
   await byText(page, text, false).scrollIntoViewIfNeeded();
   await settle(page);
 };
+/** a folded row of a settings list (an agent, an integration), opened by its name */
+const unfold = async name => {
+  await page.getByRole("button", { name: new RegExp(`^${name}\\b`), expanded: false }).locator("visible=true").first().click();
+  await settle(page);
+};
 const settingsPage = async (tab, sub, fixture = "default") => {
   await page.setViewportSize({ width: 900, height: 700 });
   await open(page, server.url, { path: "/settings.html", fixture });
@@ -295,6 +300,17 @@ const VIEWS = {
   ...Object.fromEntries(["Productive", "GitHub", "Mail"].map(name => [`settings-integration-${name.toLowerCase()}`, () => settingsPage("Integrations", name)])),
   "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
+  // Claude Code's row folded open: no extra accounts yet, then two with the work one active
+  "settings-agent-claude": async () => {
+    await settingsPage("Agents");
+    await unfold("Claude Code");
+    await intoView("Add account…");
+  },
+  "settings-agent-accounts": async () => {
+    await settingsPage("Agents", undefined, "accounts");
+    await unfold("Claude Code");
+    await intoView("Switch accounts automatically");
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");

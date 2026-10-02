@@ -1,4 +1,5 @@
 import type { Settings } from "../../domain/settings/types";
+import { addAccount, type Accounts } from "../../domain/settings/accounts";
 import * as backend from "../../infrastructure/backend";
 import { commit } from "./window";
 import { useSettingsStore } from "./store";
@@ -40,6 +41,13 @@ export const saveAgent = (id: string, changes: Record<string, unknown>) =>
 export async function saveAgentBin(id: string, bin: string) {
   await saveAgent(id, { bin });
   checkAgents(true);
+}
+/** An agent's logins, saved as a whole (Settings › Agents › Accounts). */
+export const saveAgentAccounts = (id: string, accounts: Accounts) => saveAgent(id, accounts);
+/** A folder picked as a new account; cancelled or already listed adds nothing. */
+export async function addAgentAccount(id: string, now: Accounts) {
+  const next = addAccount(now, (await backend.pickFolder()) ?? "");
+  if (next) await saveAgentAccounts(id, next);
 }
 export const setDefaultAgent = (id: string) =>
   saveAgents(agents => {

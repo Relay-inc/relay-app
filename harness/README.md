@@ -38,9 +38,9 @@ the installed Google Chrome.
 
 ## The mock
 
-URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|mailexp` (dark: settings theme dark; graphite: the graphite accent;
-icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; mailexp: the experimental mail
-flag on, so archive, delete and the Inbox/Other split), `?sel=<key>` the view or
+URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp` (dark: settings theme dark; graphite: the graphite accent;
+icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; accounts: Claude Code
+on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split), `?sel=<key>` the view or
 conversation the window opens on, `?link=<relay:// url>` the deep link the app was launched with (`plugin:deep-link|get_current`). On every load the mock resets localStorage to the fixture:
 the conversation list (`chats`), `sel`, and the Productive board choice (`pvProject`, `pvBoard`). The window is
 transparent over the macOS sidebar material in Tauri; the mock gives `html` the `--sidebar` token as its stand-in.
@@ -57,13 +57,14 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 | `deepLink(url)` | A `relay://` link while the app runs (the `deep-link://new-url` event). |
 | `resolved(key, model?, effort?)` | The `resolved` agent event: what a fresh session ran on when model and effort were left to the CLI. |
 | `liveTail(key?)` | Live events on the long conversation: a running tool, a failed one, an error, a draft note. |
+| `pickFolder` | What `pick_folder` answers (null, the default, is cancelled). |
 | `autoReply` | `send` answers with a short stream (on by default, perf turns it off). |
 | `keys`, `titles`, `markers` | The fixture's special conversations and texts to wait for. |
 | `nextTask()`, `nextPaint()` | A task after the current one; a task after the next animation frame (the frame has painted). |
 
 `pty_*` is a fake shell that prints a prompt and echoes what is written to it, over the Channel the frontend passes; `scratch_*` keeps the notes in memory.
 
-Commands answered with stubs (no real effect): `pick_folder`/`pick_path` (cancelled), `mail_connect`, `mail_test`,
+Commands answered with stubs (no real effect): `pick_folder` (`pickFolder`, cancelled by default), `pick_path` (cancelled), `mail_connect`, `mail_test`,
 `integration_token`, `integration_import`, `favicons`, `find_icon_sites` (nothing found), `set_project_icon`,
 `set_project_repos`, `ignore_repo`, `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
 `reset`, `move_chat`, `plugin:opener|open_url`, `running` (`{}`: no process of the app runs a turn).
@@ -78,7 +79,7 @@ in-memory tasks loosely.
 
 ## Views (`screens.mjs`)
 
-64 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+66 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
@@ -90,7 +91,8 @@ deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a proj
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
-settings-integration-calendar, settings-agent-access. Other: onboarding, dark-waiting,
+settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
+folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding, dark-waiting,
 dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail.
 
 1440x900 at device scale 2, page clock fixed to `NOW`, reduced motion, animations disabled, caret hidden. Navigation
@@ -106,7 +108,7 @@ the comment field's placeholder "Leave a comment…", and an HTML mail shown in 
 
 ## Behaviour (`behaviour.mjs`)
 
-28 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
+29 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
 send, stop, cards (permission, question, agent action), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
 mail (two accounts merged, read per account, load more, the link bar), mailTriage (experimental: Inbox/Other, E and #,
 a held key acting once, Cmd- and Shift-click, Cmd-A, Esc, bulk read and delete, a reload keeps moved mails gone),
@@ -114,7 +116,7 @@ mailTriageFilter (mails a read filter hides after a bulk read leave the selectio
 tabs, no checkboxes, E does nothing), prs (side by side, AI review), board (ticket
 window, comment, status, Start conversation), boardTools (list view, filters, Productive's saved views, grouping),
 reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations on Claude), calendarNoClaude (refused with Claude off), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
-extension), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
+extension), agentAccounts (add a folder, pick it for new conversations, auto-switch, rename, remove), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
 typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
 split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: three Lit bugs (typingOutside,
 the mail link bar, mailTriageFilter) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
