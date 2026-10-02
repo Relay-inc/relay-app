@@ -36,10 +36,12 @@ TAURI_CONFIG="{\"identifier\":\"$ID\",\"productName\":\"Relay Selftest\"}" CARGO
 APP=target/selftest/debug/relay
 run() { RELAY_AGENTS_DIR="$DIR/agents" RELAY_SELFTEST=$1 RELAY_SELFTEST_LINE="$LINE" RELAY_SELFTEST_DIR="$DIR" "$APP" 2>"$DIR/app-$1.log" | grep '^selftest' || true; }
 
-echo "== phase 1"; run 1
-echo "== phase 2 (restart)"; run 2
+# PHASES=forget runs only the Forget-through-the-page check
+for phase in ${PHASES:-1 2}; do echo "== phase $phase"; run "$phase"; done
+if [ "${PHASES:-1 2}" = "1 2" ]; then
 NOTE=$("${COMPOSE[@]}" exec -T relay-server cat /home/relay/repos/testproject/note.txt 2>/dev/null || true)
 if [ "$NOTE" = relay ]; then echo "PASS the allowed Write landed on the machine" >> "$DIR/report.txt"; else echo "FAIL note.txt on the machine: '$NOTE'" >> "$DIR/report.txt"; fi
+fi
 "${COMPOSE[@]}" logs --no-color > "$DIR/server.log" 2>&1
 [ "${KEEP:-}" = 1 ] || "${COMPOSE[@]}" down -v >/dev/null 2>&1
 

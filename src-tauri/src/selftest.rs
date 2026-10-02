@@ -95,7 +95,7 @@ pub fn start(app: &AppHandle) {
         let mut r = Report { dir, failed: false };
         let upstream: u16 = std::env::var("RELAY_SELFTEST_UPSTREAM").ok().and_then(|p| p.parse().ok()).unwrap_or(47800);
         let proxy = Proxy::start(upstream);
-        if phase == "1" { one(&app, &ev, &ui_rx, &proxy, &mut r) } else { two(&app, &ev, &proxy, &mut r) }
+        if phase == "forget" { forget_ui(&app, &ui_rx, &mut r) } else if phase == "1" { one(&app, &ev, &ui_rx, &proxy, &mut r) } else { two(&app, &ev, &proxy, &mut r) }
         app.exit(if r.failed { 1 } else { 0 });
     });
 }
@@ -191,4 +191,21 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     r.step("forget the machine", machine_forget(app.clone(), app.state::<App>(), id).map(|_| format!("binds left: {}", st.machines.binds.lock().unwrap().len())));
     let none = wait(Duration::from_secs(10), || st.machines.client(&m).list().ok().filter(|l| l.is_empty()));
     r.step("forgetting stopped its conversations there", if none.is_some() { Ok("nothing of this Mac runs there".into()) } else { Err("still running there".into()) });
+}
+
+/// Pair through the page, then Forget through it: the machine must leave the list.
+fn forget_ui(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
+    let line = std::env::var("RELAY_SELFTEST_LINE").unwrap_or_default().replace(":47800#", &format!(":{PROXY}#"));
+    std::thread::sleep(Duration::from_secs(2));
+    open_settings(app);
+    std::thread::sleep(Duration::from_secs(3));
+    let w = app.get_webview_window("settings").unwrap();
+    let js = include_str!("selftest-ui.js").replace("__LINE__", &line).replace("__PROJECT__", PROJECT).replace("__PATH__", "/home/relay/repos/testproject");
+    w.eval(&js).ok();
+    r.step("paired through the page", ui.recv_timeout(Duration::from_secs(25)).map_err(|_| "no report".to_string()));
+    w.eval(include_str!("selftest-forget.js")).ok();
+    let said = ui.recv_timeout(Duration::from_secs(15)).map_err(|_| "no report".to_string());
+    r.step("forgot through the page", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+    let left = app.state::<App>().settings.lock().unwrap()["machines"].as_array().map_or(0, Vec::len);
+    r.step("settings after forget", if left == 0 { Ok("no machines".into()) } else { Err(format!("{left} machine(s) left")) });
 }

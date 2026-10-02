@@ -24,6 +24,9 @@ const BUTTON_KIND = {
   plain: "border-s-input bg-transparent text-s-fg hover:bg-s-hover",
   primary: "border-s-primary bg-s-primary text-on-accent hover:bg-accent-hover",
   ghost: "border-transparent bg-transparent text-s-muted hover:bg-s-hover hover:text-s-fg",
+  // what removes something: red, so it is found and not clicked by accident
+  danger: "border-s-err bg-transparent text-s-err hover:bg-s-err hover:text-white",
+  dangerSolid: "border-s-err bg-s-err text-white hover:opacity-90",
 };
 /** A button; `square` makes it a square holding a glyph. */
 export const buttonClass = (kind: keyof typeof BUTTON_KIND = "plain", square = false) =>

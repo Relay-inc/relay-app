@@ -43,7 +43,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
           <>
             <span className="text-xs text-s-muted">{t("mc.forgetSure")}</span>
             <button
-              className={buttonClass("plain")}
+              className={buttonClass("dangerSolid")}
               onClick={() => {
                 setConfirming(false);
                 forgetMachine(machine.id);
@@ -56,7 +56,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
             </button>
           </>
         ) : (
-          <button className={buttonClass("ghost")} onClick={() => setConfirming(true)}>
+          <button className={buttonClass("danger")} onClick={() => setConfirming(true)}>
             {t("mc.forget")}
           </button>
         )}
