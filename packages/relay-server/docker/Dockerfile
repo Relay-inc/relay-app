@@ -14,6 +14,8 @@ COPY --from=build /src/target/release/relay-server /usr/local/bin/relay-server
 USER relay
 WORKDIR /home/relay
 ENV RELAY_SERVER_DATA=/home/relay/data
+# where the Claude Code installer puts `claude`, so `docker exec … claude` finds it too
+ENV PATH=/home/relay/.local/bin:$PATH
 RUN mkdir -p /home/relay/data /home/relay/.claude /home/relay/repos /home/relay/.local/bin
 EXPOSE 47800
 CMD ["relay-server", "serve"]
