@@ -41,20 +41,20 @@ from this checkout, so a build only works on this machine.
 | Part | What it does |
 |---|---|
 | `src-tauri/src/lib.rs` | All Tauri commands. Starts one process per conversation through its agent provider, with the vault as cwd and the login-shell PATH, and passes the provider's normalised events to the webview. See [Agent providers](#agent-providers). |
-| `src-tauri/src/agents.rs`, `src/domain/agents.ts` | The registry of the agent providers, `settings.agents` and sessions.json. |
+| `src-tauri/src/agents.rs`, `src/shared/plugins.ts` | The registry of the agent providers, `settings.agents` and sessions.json. |
 | `packages/agent-claude/perm_server.py` | Stdio MCP server passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
 | `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
-| `src/core/` | What every part uses: `store.ts` (`changed()` redraws, `StoreController` connects a container), `dom.ts`, `i18n.ts` + `locales/` (UI strings in English, Dutch, French and German; `t(key)` in the webview, `tr()` in `lib.rs` for the menu bar and errors; the language follows macOS unless set in the settings), `icons.ts`, `markdown.ts`, and `styles/` (`base.css` with the design tokens, `tailwind.css` with the theme and the shared utilities). |
-| `src/domain/` | The state and logic, no DOM: one slice per area (`ui`, `config`, `vault`, `chats/`, `agents`, `sidebar`, `panel`, `prs`, `mail`, `board`, `reminders`, `usage`, `notes`) with its actions and loaders, plus the provider and agent registries and the vault mapping (`vault-setup.ts`). |
-| `src/features/<area>/` | The UI, one folder per area, Lit components in their own shadow roots styled with Tailwind utilities. `relay-<area>.ts` is the area's container (it reads the domain and calls its actions); the other files are presentational (properties in, events out). `shell/` is the window's grid and shortcuts, `settings/` the settings window. |
-| `src/components/` | Presentational components more than one area uses: the permission card, image thumbnails, the tool line. |
-| `src/app/boot.ts` | The main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |
-| `src/domain/reminders.ts`, `src/features/reminders/` | Reminders. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
-| `src/domain/board.ts`, `src/features/board/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
+| `src/shared/` | What every layer uses: `i18n.ts` + `locales/` (UI strings in English, Dutch, French and German; `useT()` in a component, `t(key)` elsewhere, `tr()` in `lib.rs` for the menu bar and errors; the language follows macOS unless set in the settings), `plugins.ts` (the provider and agent registries), `icons.ts`, `markdown.ts`. |
+| `src/domain/<context>/` | Pure types and rules per bounded context (conversations, agents, workspace, navigation, mail, board, reminders, pull-requests, usage, settings), unit tested with `node --test`. The agent events go through one reducer, `applyAgentEvent`. |
+| `src/application/<context>/` | One Zustand + Immer store per context (`use<Context>Store`) and its use cases: loaders, actions, polls. `boot.ts` is the main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |
+| `src/infrastructure/` | The only code that talks to the outside: `backend.ts` (every Tauri command and event, typed), `storage.ts` (localStorage), `window.ts`. |
+| `src/ui/` | React 19 with the React Compiler, styled with Tailwind: `app/` (the window's grid, shortcuts and link handling), `features/<context>/` (`<Context>View.tsx` is the container), `components/` (permission card, image thumbnails, tool line, markdown), `hooks/`, `styles/`. Layers and rules: [docs/frontend-architecture.md](docs/frontend-architecture.md). |
+| `src/application/reminders/`, `src/ui/features/reminders/` | Reminders. Klaar, Morgen, +1 week and a date picker go through the vault's `System/scripts/reminder-digest.py`. |
+| `src/application/board/`, `src/ui/features/board/` | The board in the sidebar, one per switched-on integration. Moving a card writes to the tracker right away. See [Integrations](#integrations). |
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
-| `src-tauri/src/vault.rs`, `src/domain/vault-setup.ts`, `src/features/onboarding/` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
-| `src/settings.ts`, `src/features/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
+| `src-tauri/src/vault.rs`, `src/application/workspace/vault-setup.ts`, `src/ui/features/workspace/` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
+| `src/settings.tsx`, `src/application/settings/`, `src/ui/features/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
 `sessions.json` (conversation to session id, and to its provider when that is not Claude Code) and `pending/`. Board provider tokens sit
@@ -90,13 +90,13 @@ packages/
     src/lib.rs                the backend Provider: base URL, allowlist, headers, errors, secrets
     tests/, tests/fixtures/   the mapping on fixture JSON; the Rust tests sit in lib.rs
     README.md                 setup and what the allowlist permits
-src/domain/providers.ts       PROVIDERS, the webview registry
+src/shared/plugins.ts         PROVIDERS, the webview registry
 src-tauri/src/providers.rs    PROVIDERS, the backend registry; keychain, curl, settings migration
 ```
 
 Strings: a package's `locales.ts` is typed with `Locales<Key>` (English is the reference), so a missing key in
-any language fails `tsc`, as it does for the app's own `src/core/locales/`. The app merges them into its dictionaries
-as `<id>.<key>` (`src/core/i18n.ts`); in the package, `translator<Key>(id)` is its `t`. Its native error strings
+any language fails `tsc`, as it does for the app's own `src/shared/locales/`. The app merges them into its dictionaries
+as `<id>.<key>` (`src/shared/i18n.ts`); in the package, `translator<Key>(id)` is its `t`. Its native error strings
 are a `Text` table in `lib.rs`.
 
 ### The contract
@@ -120,7 +120,7 @@ The app's commands (all take `provider`): `integration_status` (on, ready and a 
 `integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
 with the token over stdin; the webview never sees it. The keychain, curl and the commands are the app's, not a package's.
 
-**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@relay/board-core`, registered in `PROVIDERS` in `src/domain/providers.ts`.
+**Webview**, the package's TypeScript (`src/index.ts`, default export): a `BoardProvider<Key>` from `@relay/board-core`, registered in `PROVIDERS` in `src/shared/plugins.ts`.
 
 ```ts
 interface BoardProvider {
@@ -133,8 +133,8 @@ interface BoardProvider {
   cards(ctx, ref): Promise<Card[]>;
   move(ctx, ref, card, toColumn, group?): Promise<number | void>; // resolves with the new placement if known
   url(ctx, ref, cardId): Promise<string>;              // the card in the browser
-  detail?: CardDetail;                                 // right-panel view; without it a click opens url(). Its act() runs the
-                                                       // panel's [data-cd] controls: comment, status, assignee, files
+  detail?: CardDetail;                                 // right panel as data: view(d) gives fields, description, feed, files,
+                                                       // actions; the app draws it. act() runs comment, status, assignee, attach
   reset?(): void;                                      // drop caches
   settings: { fields: Field<Key>[]; tokenLabel: Key; help: Key; test(ctx): Promise<string>;
               allBoards?(ctx): Promise<BoardOpt[]>; import?: {...} };
@@ -165,7 +165,7 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
    languages; the response mapping in a pure module with fixture tests in `tests/`.
 4. A README: how to get the key or token, what the allowlist permits.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
-   `src-tauri/src/providers.rs` and `package.json` + `src/domain/providers.ts`, then `pnpm install`.
+   `src-tauri/src/providers.rs` and `package.json` + `src/shared/plugins.ts`, then `pnpm install`.
 
 ## Agent providers
 
@@ -234,7 +234,7 @@ constrained window over all providers.
 **Webview**, the package's TypeScript (`src/index.ts`, default export): an `AgentProvider<Key>` from
 `@vault/agent-core` (`id`, `name`, `glyph`, `strings` in en/nl/fr/de, optional `modelName` and `options`: selects shown
 in Settings › Agents and stored next to `on` and `bin`, the first choice the default), registered in `AGENTS` in
-`src/domain/agents.ts`. Its strings are merged into the app's as `<id>.<key>`; the app looks up `limits.loading`,
+`src/shared/plugins.ts`. Its strings are merged into the app's as `<id>.<key>`; the app looks up `limits.loading`,
 `off.<reason>`, each window's `label`, `tokens.reading` and `set.help`.
 
 **Settings** (Settings › Agents): `settings.agents = { default, providers: { <id>: { on, bin, …options } } }`, Claude Code
@@ -266,7 +266,7 @@ or `t:<provider>:<sid>`.
 4. A README: how to install it, how it runs, where it logs, how it asks for permissions and reports usage, what ran
    live and what did not, known gaps. A column in the table above.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
-   `src-tauri/src/agents.rs` and `package.json` + `src/domain/agents.ts`, then `pnpm install`.
+   `src-tauri/src/agents.rs` and `package.json` + `src/shared/plugins.ts`, then `pnpm install`.
 6. `pnpm build`, `pnpm test` and `cargo test --workspace`.
 
 ## Agent actions
@@ -311,7 +311,24 @@ the socket the app listens on and the CLI side.
 ```sh
 cd src-tauri && cargo test   # the app
 cargo test --workspace        # the app and every integration crate, from the repo root
-pnpm test                     # the packages' pure TypeScript on fixtures
+pnpm test                     # the packages' and src/domain's pure TypeScript (node --test)
+pnpm exec tsc --noEmit        # types
+pnpm lint                     # ESLint, the layer boundaries and the React hooks rules included
+pnpm check:compiler           # the React Compiler compiles every component and hook in src/ui
+pnpm format:check             # Prettier
+```
+
+CI (`.github/workflows/frontend.yml`) runs all but cargo, plus `vite build`.
+
+The frontend has a harness (`harness/`, see its README) that runs the real webview against a mocked Tauri backend,
+on the dev server (`pnpm exec vite --config harness/vite.config.ts`, http://127.0.0.1:1430):
+
+```sh
+node harness/behaviour.mjs --url http://127.0.0.1:1430 --label mine   # user flows, recorded
+node harness/behaviour.mjs --compare lit mine                         # against the Lit baseline
+node harness/screens.mjs --url http://127.0.0.1:1430 --label mine     # a screenshot per view
+node harness/diff.mjs lit mine                                        # pixel diff against the baseline
+node harness/perf.mjs --label mine                                    # streaming, typing and view switches
 ```
 
 The transcript and vault tests read the vault in `$VAULT` (`VAULT=/path/to/vault cargo test`) and

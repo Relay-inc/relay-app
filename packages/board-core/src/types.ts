@@ -1,4 +1,3 @@
-import type { TemplateResult } from "lit";
 import type { Locales } from "./i18n";
 
 // The contract a task tracker implements to show as a board in the sidebar (see README, "Integrations").
@@ -52,25 +51,19 @@ export type BoardRef = { provider: string; project: string; board: string };
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
   /** Upload to a backend-allowed URL. `fields` are Productive form fields, Linear signed headers, or empty for Trello.
    * Authentication and transport are selected by the backend; secrets never come from the webview. */
-  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string>;
-  /** a picture's preview from a URL the backend's `thumb` allows (no secrets go along), resolves with a data URL */
-  thumb: (url: string) => Promise<string> };
+  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string> };
 
-/** The right panel for one card, optional: without it a click opens the card in the browser. */
+/** A card's detail, optional: without it a click opens the card in the browser. Data only: the app draws the ticket
+ * window from `view` (ui/features/board), the package knows no UI framework. */
 export interface CardDetail<D = any> {
-  /** what a background load already has, so the panel opens at once */
+  /** what a background load already has, so the window opens at once */
   cached(id: string): D | undefined;
   fetch(ctx: Ctx, ref: BoardRef, id: string): Promise<D>;
-  /** The same card as data, for the ticket window; a provider without it has no window (its detail shows in the right panel). */
-  view?(d: D): CardView;
-  /** A template in the PR detail's classes. Its close button fires a bubbling, composed "detail-close" event (the panel closes on it). */
-  render(d: D | null, err: string): TemplateResult;
-  /** An action from the panel, resolves with the card as it is now. The template asks for one with a bubbling, composed
-   * "detail-act" event, detail `{ action, value, files }`: a picker's value or the composer's text, and picked or dropped files. */
+  /** The card as the ticket window shows it, made when it is drawn (strings in the language of that moment). */
+  view(d: D): CardView;
+  /** An action from the window, resolves with the card as it is now: "status" or "assignee" with the picked id,
+   * "member-add"/"member-remove" with a person id, "comment" with the composer's text, "attach" with picked files. */
   act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[] }): Promise<D>;
-  /** A conversation about the card: its title in the list, and what goes in front of the user's first message. The
-   * template asks for one with a bubbling, composed "detail-chat" event. */
-  chat?(d: D, id: string): { title: string; prompt: string };
 }
 
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).

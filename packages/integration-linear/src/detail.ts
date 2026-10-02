@@ -43,7 +43,7 @@ export function mapDetail(issue: any, comments: any[], history: any[], files: an
     const changes: string[] = [];
     for (const [key, label] of [["State", "Status"], ["Assignee", "Assignee"], ["Title", "Title"], ["DueDate", "Due date"], ["Priority", "Priority"]]) {
       const from = h[`from${key}`], to = h[`to${key}`];
-      if (from != null || to != null) changes.push(`${label}: ${typeof from === "object" && from ? name(from) : from ?? "—"} → ${typeof to === "object" && to ? name(to) : to ?? "—"}`);
+      if (from != null || to != null) changes.push(`${label}: ${typeof from === "object" && from ? name(from) : from ?? "–"} → ${typeof to === "object" && to ? name(to) : to ?? "–"}`);
     }
     if (h.updatedDescription) changes.push("Description updated");
     if (h.addedLabels?.length) changes.push(`+ ${h.addedLabels.map((l: any) => l.name).join(", ")}`);
@@ -67,7 +67,7 @@ async function mutate(c: Ctx, query: string, variables: Record<string, unknown>,
   if (!result?.success) throw new Error(`Linear: ${field} was refused`);
   return result;
 }
-export const linearTicket = ticketDetail("Linear", async (c, _ref, id) => {
+export const linearTicket = ticketDetail(async (c, _ref, id) => {
   const issue = (await gql(c, DETAIL, { id })).issue;
   if (!issue) throw new Error("Linear: issue not found");
   const [comments, history, files, labels, states, people] = await Promise.all([
