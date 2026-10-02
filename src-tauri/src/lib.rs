@@ -903,6 +903,15 @@ async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, S
     }).await.map_err(|e| e.to_string())
 }
 
+/// Resolve the inherited choices separately so provider startup never blocks the composer.
+#[tauri::command]
+async fn agent_defaults(app: AppHandle, state: State<'_, App>, provider: String, model: String) -> Result<Value, String> {
+    need_vault(&state)?;
+    let p = agents::PROVIDERS.iter().copied().find(|p| p.id() == provider).ok_or("unknown provider")?;
+    let eb = env_of(&app, &state, p);
+    tauri::async_runtime::spawn_blocking(move || p.defaults(&eb.env(), &model)).await.map_err(|e| e.to_string())
+}
+
 /// Claude Code's slash commands and skills for the vault, from a Claude that only answers `initialize` (hooks off, no
 /// message, so no session): the composer completes before any conversation has started a process of its own.
 #[tauri::command]
@@ -1375,7 +1384,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, agent_defaults, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

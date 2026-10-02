@@ -71,6 +71,9 @@ impl AgentProvider for Codex {
         Detect { installed, bin: env.bin.into(), version, logged_in: Some(logged_in), note }
     }
     fn models(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).0 }
+    fn defaults(&self, env: &Env, model: &str) -> Value {
+        agent_core::probe(env, model, include_str!("../defaults.py"))
+    }
     fn efforts(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).1 }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {

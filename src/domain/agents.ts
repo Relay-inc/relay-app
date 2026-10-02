@@ -29,6 +29,7 @@ export const loadAgents = () =>
     .then(status => {
       agents.status = status;
       agents.loaded = true;
+      refreshDefaults();
       changed();
     })
     .catch(e => console.error(e));
@@ -57,6 +58,33 @@ const FALLBACK: Record<"model" | "effort", { id: string; label: string }[]> = {
     ["max", "Max"],
   ].map(([id, label]) => ({ id, label })),
 };
+type Defaults = { model?: string | null; effort?: string | null };
+const defaults: Record<string, Defaults | undefined> = {};
+let defaultsGeneration = 0;
+const defaultsKey = (id: string, model: string) => `${id}:${model}`;
+function loadDefaults(id: string, model: string) {
+  const key = defaultsKey(id, model),
+    generation = defaultsGeneration;
+  if (key in defaults) return;
+  defaults[key] = undefined;
+  invoke<Defaults | null>("agent_defaults", { provider: id, model })
+    .then(value => {
+      if (generation === defaultsGeneration) defaults[key] = value ?? {};
+    })
+    .catch(() => {
+      if (generation === defaultsGeneration) defaults[key] = {};
+    })
+    .finally(changed);
+}
+function refreshDefaults() {
+  defaultsGeneration++;
+  for (const key of Object.keys(defaults)) delete defaults[key];
+  for (const status of agents.status.providers.filter(p => p.on && p.detect.installed)) {
+    const saved = ls.get(pickKey("model", status.id), "");
+    loadDefaults(status.id, status.models.some(m => m.id === saved) ? saved : "");
+  }
+}
+
 /** The choices and saved pick for a conversation's agent; the composer defaults to the open conversation. */
 export function picks(kind: "model" | "effort", chatKey = ui.selected) {
   const id = chatAgent(chatKey);
@@ -64,10 +92,20 @@ export function picks(kind: "model" | "effort", chatKey = ui.selected) {
   const own = kind === "model" ? status?.models : status?.efforts;
   const list = status ? own! : FALLBACK[kind];
   const wanted = ls.get(pickKey(kind, id), "");
-  return { list, value: list.some(choice => choice.id === wanted) ? wanted : "", key: pickKey(kind, id) };
+  const savedModel = ls.get(pickKey("model", id), "");
+  const selectedModel = status?.models.some(m => m.id === savedModel) ? savedModel : "";
+  const inherited = defaults[defaultsKey(id, selectedModel)];
+  return {
+    inherited: inherited?.[kind],
+    resolving: !agents.loaded || (defaultsKey(id, selectedModel) in defaults && inherited === undefined),
+    list,
+    value: list.some(choice => choice.id === wanted) ? wanted : "",
+    key: pickKey(kind, id),
+  };
 }
 export function setPick(kind: "model" | "effort", value: string) {
   ls.set(picks(kind).key, value);
+  if (kind === "model") loadDefaults(chatAgent(ui.selected), value);
   changed();
 }
 

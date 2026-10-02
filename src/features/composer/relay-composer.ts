@@ -226,6 +226,15 @@ export class RelayComposer extends LitElement {
     >`;
   }
 
+  private defaultLabel(pick: ReturnType<typeof picks>) {
+    if (!pick.inherited) return t(pick.resolving ? "composer.resolvingDefault" : "composer.unknownDefault");
+    const value =
+      pick.inherited === "base"
+        ? t("composer.baseEffort")
+        : (pick.list.find(choice => choice.id === pick.inherited)?.label ?? pick.inherited);
+    return t("composer.resolvedDefault", { value });
+  }
+
   private renderPick(kind: "model" | "effort", options: Pick[], value: string, defaultLabel: string, show: boolean) {
     return html`<span class="relative items-center ${show ? "inline-flex" : "hidden"}"
       ><select
@@ -300,8 +309,8 @@ export class RelayComposer extends LitElement {
       <div class="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
         ${this.renderAttach()} ${this.renderAgentPick()}
         <!-- a switch restarts the process, so not while a turn runs -->
-        ${this.renderPick("model", model.list, model.value, t("composer.defaultModel"), true)}
-        ${this.renderPick("effort", effort.list, effort.value, t("composer.defaultEffort"), showEffort)}
+        ${this.renderPick("model", model.list, model.value, this.defaultLabel(model), true)}
+        ${this.renderPick("effort", effort.list, effort.value, this.defaultLabel(effort), showEffort)}
         <span class="flex-1"></span>
         ${this.renderSendButton()}
       </div>

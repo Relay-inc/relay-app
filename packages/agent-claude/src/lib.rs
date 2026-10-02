@@ -53,6 +53,9 @@ impl AgentProvider for Claude {
     fn models(&self) -> Vec<Choice> {
         [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
+    fn defaults(&self, env: &Env, model: &str) -> Value {
+        agent_core::probe(env, model, include_str!("../defaults.py"))
+    }
     fn efforts(&self) -> Vec<Choice> {
         [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }

@@ -64,6 +64,9 @@ impl AgentProvider for Pi {
         Detect { installed, bin: env.bin.into(), version, logged_in: None, note }
     }
     fn models(&self) -> Vec<Choice> { models_of(&self.bin()) }
+    fn defaults(&self, env: &Env, model: &str) -> Value {
+        agent_core::probe(env, model, include_str!("../defaults.py"))
+    }
     fn efforts(&self) -> Vec<Choice> { EFFORTS.iter().map(|(i, l)| Choice::new(i, l)).collect() }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {

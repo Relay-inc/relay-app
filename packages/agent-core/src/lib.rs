@@ -155,6 +155,8 @@ pub trait AgentProvider: Sync {
     fn default_bin(&self, home: &str) -> String;
     fn detect(&self, env: &Env) -> Detect;
     fn models(&self) -> Vec<Choice>;
+    /// Resolved CLI defaults in this vault; no inference or saved session is created.
+    fn defaults(&self, _env: &Env, _model: &str) -> Value { Value::Null }
     fn efforts(&self) -> Vec<Choice> { vec![] }
     /// Whether a session id may go on a command line.
     fn valid_session(&self, id: &str) -> bool { safe_id(id) }
@@ -226,4 +228,13 @@ mod tests {
         assert!(safe_id("36099ce4-d17c-482a") && !safe_id("") && !safe_id("a b"));
         assert!(safe_model("opus") && safe_model("claude-opus-5-5[1m]") && safe_model("openai/gpt-5") && !safe_model("--x") && !safe_model("a b"));
     }
+}
+
+/// Run an embedded provider probe with a shared deadline and child-process cleanup.
+pub fn probe(env: &Env, model: &str, script: &str) -> Value {
+    if env.vault.is_empty() || !Path::new(env.bin).is_file() { return Value::Null; }
+    let script = format!("{}\n{}\nmain()", include_str!("../probe.py"), script);
+    Command::new("/usr/bin/python3").args(["-c", &script, env.bin, env.vault, model])
+        .env("PATH", env.path).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()
+        .filter(|o| o.status.success()).and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(Value::Null)
 }

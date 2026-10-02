@@ -73,6 +73,9 @@ impl AgentProvider for OpenCode {
         Detect { installed, bin: env.bin.into(), version, logged_in: None, note }
     }
     fn models(&self) -> Vec<Choice> { models_of(&self.bin()).0 }
+    fn defaults(&self, env: &Env, model: &str) -> Value {
+        agent_core::probe(env, model, include_str!("../defaults.py"))
+    }
     fn efforts(&self) -> Vec<Choice> { models_of(&self.bin()).1 }
     fn valid_session(&self, id: &str) -> bool { store::valid(id) }
 
