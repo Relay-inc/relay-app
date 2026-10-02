@@ -267,6 +267,10 @@ export default {
   "set.accentHelp": "Auswahl, Hauptschaltflächen und was auf dich wartet.",
   "set.accent.relay": "Relay-Blau",
   "set.accent.graphite": "Graphit",
+  "set.terminal": "Terminal",
+  "set.terminalAuto": "Automatisch",
+  "set.terminalHelp":
+    "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
   "set.faviconsOn": "Favicon der Website als Symbol",
   "set.faviconsHelp":

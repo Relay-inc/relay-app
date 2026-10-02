@@ -266,6 +266,10 @@ export default {
   "set.accentHelp": "Selectie, hoofdknoppen en wat op je wacht.",
   "set.accent.relay": "Relay-blauw",
   "set.accent.graphite": "Grafiet",
+  "set.terminal": "Terminal",
+  "set.terminalAuto": "Automatisch",
+  "set.terminalHelp":
+    "Waar “Openen in Terminal” een gesprek verderzet. Automatisch neemt de eerste die geïnstalleerd is: iTerm, WezTerm, dan Terminal.",
   "set.favicons": "Projecticonen",
   "set.faviconsOn": "Favicon van de website als icoon",
   "set.faviconsHelp":

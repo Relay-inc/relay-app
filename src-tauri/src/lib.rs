@@ -91,6 +91,7 @@ fn norm(mut v: Value) -> Value {
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     if !v["accent"].as_str().is_some_and(|a| ["relay", "graphite"].contains(&a)) { v["accent"] = json!("relay"); }
+    if !v["terminal"].as_str().is_some_and(|t| t == "auto" || TERMINALS.iter().any(|(id, _)| *id == t)) { v["terminal"] = json!("auto"); }
     v
 }
 
@@ -187,6 +188,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
+    ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
@@ -455,12 +457,33 @@ fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentPr
     let s = st.settings.lock().unwrap();
     asked.and_then(|a| agents::enabled(&s).into_iter().find(|p| p.id() == a)).unwrap_or_else(|| agents::get_or_first(Some(&agents::default_id(&s))))
 }
-/// Run a shell command in a new iTerm window.
-fn iterm(cmd: &str) -> Result<(), String> {
-    let script = format!(
-        "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
-        serde_json::to_string(cmd).unwrap());
-    Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
+/// The terminals a session opens in, by settings.terminal; "auto" takes the first one installed (Terminal always is).
+const TERMINALS: [(&str, &str); 3] = [("iterm", "iTerm"), ("wezterm", "WezTerm"), ("terminal", "Terminal")];
+fn app_path(app: &str) -> Option<PathBuf> {
+    [format!("/Applications/{app}.app"), format!("{}/Applications/{app}.app", home()), format!("/System/Applications/Utilities/{app}.app")]
+        .into_iter().map(PathBuf::from).find(|p| p.exists())
+}
+fn terminal_of(choice: &str, installed: impl Fn(&str) -> bool) -> &'static str {
+    TERMINALS.iter().find(|(id, app)| if choice == "auto" { installed(app) } else { *id == choice }).map_or("terminal", |(id, _)| id)
+}
+/// Run a shell command in a new window of the terminal from the settings.
+fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
+    let choice = st.settings.lock().unwrap()["terminal"].as_str().unwrap_or("auto").to_string();
+    let osa = |script: String| {
+        let o = Command::new("/usr/bin/osascript").args(["-e", &script]).output().map_err(|e| e.to_string())?;
+        if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().to_string()) }
+    };
+    let q = serde_json::to_string(cmd).unwrap();
+    match terminal_of(&choice, |app| app_path(app).is_some()) {
+        "iterm" => osa(format!("tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {q}\nend tell")),
+        "wezterm" => {
+            let bin = app_path("WezTerm").ok_or_else(|| trc_v("err.no_terminal", "WezTerm"))?.join("Contents/MacOS/wezterm");
+            // a login shell: a GUI app's PATH has no `claude`. The shell stays after the command, as in iTerm
+            let sh = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+            Command::new(bin).args(["start", "--", &sh, "-lc", &format!("{cmd}; exec {sh} -l")]).spawn().map(|_| ()).map_err(|e| e.to_string())
+        }
+        _ => osa(format!("tell application \"Terminal\"\n activate\n do script {q}\nend tell")),
+    }
 }
 
 /// DENIED and MAIL_TOOLS are agent_claude's: the flags it starts every Claude session with.
@@ -890,7 +913,7 @@ fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Op
     let cmd = sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
         .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(&project))))
         .ok_or_else(|| trc_v("err.agent_terminal", p.name()))?;
-    iterm(&cmd)
+    in_terminal(&state, &cmd)
 }
 
 /// Background sessions of a provider (not started by the app): step into one in iTerm, or stop it.
@@ -901,7 +924,7 @@ fn bg(app: AppHandle, state: State<App>, action: String, id: String, provider: O
     let eb = env_of(&app, &state, p);
     match action.as_str() {
         "stop" => p.stop_background(&eb.env(), &id),
-        "attach" => iterm(&p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
+        "attach" => in_terminal(&state, &p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
         _ => Err("unknown action".into()),
     }
 }
@@ -1503,5 +1526,19 @@ mod mail_tests {
         assert!(!ok((0..6).map(|i| a(&format!("u{i}@y.be"))).collect(), ""));
         assert!(!ok(vec![a("x@y.be"), a("X@Y.be")], ""), "the same email twice");
         assert!(!ok(vec![a("x@y.be")], "other@y.be"), "a sidebar account that is not configured");
+    }
+}
+
+#[cfg(test)]
+mod terminal_tests {
+    // "auto" takes the first installed terminal in TERMINALS order, an explicit choice stays even when not installed
+    #[test]
+    fn terminal_choice() {
+        use super::terminal_of;
+        assert_eq!(terminal_of("auto", |a| a == "WezTerm" || a == "Terminal"), "wezterm");
+        assert_eq!(terminal_of("auto", |a| a == "iTerm" || a == "WezTerm"), "iterm");
+        assert_eq!(terminal_of("auto", |_| false), "terminal");
+        assert_eq!(terminal_of("iterm", |_| false), "iterm");
+        assert_eq!(terminal_of("bogus", |_| true), "terminal");
     }
 }

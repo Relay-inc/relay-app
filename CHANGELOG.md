@@ -33,6 +33,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - Cmd-K can find projects by name, label, alias or context. Choose a result with the arrow keys and Enter, or click it, to open the project; Enter without a selection still asks a quick question (#58)
 
 ### Fixed
+- Open in Terminal works without iTerm: Settings › General › Terminal picks iTerm, WezTerm or Terminal, and Automatic (the default) takes the first one installed. A terminal that fails to open now shows an error instead of doing nothing (#67)
 - Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open (#56)
 - Repeated drags of a board card are saved in order. A failed move restores its last saved position, and late replies cannot change a different board after you switch views (#57)
 
