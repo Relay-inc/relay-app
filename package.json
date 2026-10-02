@@ -26,6 +26,8 @@
     "@relay/integration-trello": "workspace:*",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-deep-link": "^2.6.1",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "lit": "^3.3.3",
     "marked": "^18.0.14"
   },

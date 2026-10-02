@@ -1,6 +1,9 @@
 // English, the reference dictionary: every other locale has exactly these keys.
 const en = {
   general: "General",
+  "term.new": "New terminal",
+  "term.close": "Close terminal",
+  "term.exited": "[process exited]",
   "nav.search": "Search projects",
   "nav.waiting": "Waiting for you",
   "nav.reminders": "Reminders",

@@ -2,6 +2,9 @@ import type { Key } from "./en";
 
 export default {
   general: "Général",
+  "term.new": "Nouveau terminal",
+  "term.close": "Fermer le terminal",
+  "term.exited": "[processus terminé]",
   "nav.search": "Rechercher un projet",
   "nav.waiting": "En attente de vous",
   "nav.reminders": "Rappels",
