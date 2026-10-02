@@ -10,6 +10,7 @@ import {
   type Card,
   type Column,
   type Opt,
+  type View,
 } from "./providers";
 import { config, type Settings } from "./config";
 import { ui } from "./ui";
@@ -27,6 +28,7 @@ export type Board = {
   boards: Opt[];
   columns: Column[];
   cards: Card[];
+  views: View[]; // the board's saved views in the tracker, shown with the presets
   project: string;
   board: string;
   err: string;
@@ -66,11 +68,11 @@ export const refOf = (provider: BoardProvider, state: Board): BoardRef => ({
 });
 
 // a card's column in the grouping shown: the first grouping is `column`, the others come from `in`
-const firstGroup = (provider: BoardProvider, state: Board) =>
+const firstGroup = (provider: BoardProvider, state: Pick<Board, "group">) =>
   !provider.groupings || state.group === provider.groupings[0].id;
-export const colOf = (provider: BoardProvider, state: Board, card: Card) =>
+export const colOf = (provider: BoardProvider, state: Pick<Board, "group">, card: Card) =>
   firstGroup(provider, state) ? card.column : (card.in?.[state.group] ?? "");
-const withCol = (provider: BoardProvider, state: Board, card: Card, column: string): Card =>
+const withCol = (provider: BoardProvider, state: Pick<Board, "group">, card: Card, column: string): Card =>
   firstGroup(provider, state) ? { ...card, column } : { ...card, in: { ...card.in, [state.group]: column } };
 /** The cards the search and the filters leave, and all of them. A value no card has any more (someone no longer on the board) is dropped from the filters: it would hide every card. */
 export function filtered(state: Board) {
@@ -115,6 +117,14 @@ export function deletePreset(provider: BoardProvider, name: string) {
 }
 export const applyPreset = (provider: BoardProvider, preset: Preset) =>
   setFilter(provider, { filters: preset.filters });
+/** A saved view of the tracker: its filters, and its layout and grouping when the board has them. */
+export function applyView(provider: BoardProvider, view: View) {
+  if (!view.filters) return;
+  if (view.layout) setView(provider, view.layout);
+  setFilter(provider, { filters: view.filters });
+  if (view.group && view.group !== boardState(provider).group && provider.groupings?.some(g => g.id === view.group))
+    pickGroup(provider, view.group);
+}
 
 // folded columns: what the user chose per column id, kept across sessions; a column that is done starts folded
 const foldKey = (provider: BoardProvider) => `${lsKey(provider)}Fold`;
@@ -147,6 +157,7 @@ export function boardState(provider: BoardProvider): Board {
       boards: [],
       columns: [],
       cards: [],
+      views: [],
       project: lsGet(`${lsKey(provider)}Project`),
       board: lsGet(`${lsKey(provider)}Board`),
       err: "",
@@ -179,16 +190,19 @@ async function run(state: Board, load: (live: () => boolean) => Promise<void>) {
 }
 async function loadCards(provider: BoardProvider, state: Board, live: () => boolean, boardId: string) {
   const ref = { ...refOf(provider, state), board: boardId };
-  const [columns, cards] = boardId
+  // the views are extra: a board still shows when they don't load
+  const [columns, cards, views] = boardId
     ? await Promise.all([
         provider.columns(ctx(provider), ref, state.group || undefined),
         provider.cards(ctx(provider), ref),
+        provider.views?.(ctx(provider), ref).catch(() => []) ?? [],
       ])
-    : [[], []];
+    : [[], [], []];
   if (!live()) return;
   state.board = boardId;
   state.columns = columns;
   state.cards = cards;
+  state.views = views;
   lsSet(`${lsKey(provider)}Project`, state.project);
   lsSet(`${lsKey(provider)}Board`, state.board);
 }
@@ -203,6 +217,7 @@ function followLinkedBoard(provider: BoardProvider, state: Board) {
   state.boards = [];
   state.columns = [];
   state.cards = [];
+  state.views = [];
 }
 
 /** Show the provider's board fresh from the tracker: the board linked to the vault project last shown when there is one. */
@@ -234,6 +249,7 @@ export function pickProject(provider: BoardProvider, projectId: string) {
     state.boards = boardList;
     state.columns = [];
     state.cards = [];
+    state.views = [];
     await loadCards(provider, state, live, boardList[0]?.id || "");
   });
 }
@@ -258,32 +274,52 @@ const endOf = (provider: BoardProvider, state: Board, column: string, except: st
     0,
     ...state.cards.filter(x => colOf(provider, state, x) === column && x.id !== except).map(x => x.placement),
   ) + 1;
-// shown in the new column at once, back where it was when the tracker refuses
-// (a card is replaced, not changed: the components only redraw for a new object)
+// Moves of one card reach the tracker in order. Each waiter receives the last confirmed card,
+// so a failed move rolls back to that position, even when the preceding move also failed.
+const cardMoves = new Map<string, Promise<Card>>();
+// The move in flight is shown optimistically; later drags wait their turn. Different cards move independently.
 export async function moveCard(provider: BoardProvider, card: Card, column: string) {
   const state = boardState(provider);
-  if (column === colOf(provider, state, card)) return;
+  const ref = refOf(provider, state);
+  const context = ctx(provider);
+  const group = state.group;
+  const generation = state.gen;
+  const placement = endOf(provider, state, column, card.id);
+  const key = JSON.stringify([provider.id, ref.project, ref.board, card.id]);
+  const previous = cardMoves.get(key);
+  let finish!: (confirmed: Card) => void;
+  const done = new Promise<Card>(resolve => {
+    finish = resolve;
+  });
+  cardMoves.set(key, done);
+  let confirmed = previous ? await previous : card;
+  // Navigation, reloads and settings changes must not let a late answer replace a newer board's data.
+  const live = () =>
+    boards.states.get(provider.id) === state &&
+    state.gen === generation &&
+    state.project === ref.project &&
+    state.board === ref.board &&
+    state.group === group;
   const replace = (next: Card) => {
-    state.cards = state.cards.map(x => (x.id === card.id ? next : x));
+    if (live()) state.cards = state.cards.map(x => (x.id === card.id ? next : x));
   };
-  const moved = { ...withCol(provider, state, card, column), placement: endOf(provider, state, column, card.id) };
-  replace(moved);
-  state.err = "";
-  changed();
   try {
-    const placement = await provider.move(
-      ctx(provider),
-      refOf(provider, state),
-      moved,
-      column,
-      state.group || undefined,
-    );
-    if (placement != null) replace({ ...moved, placement });
+    if (column === colOf(provider, { group }, confirmed)) return;
+    const moved = { ...withCol(provider, { group }, confirmed, column), placement };
+    replace(moved);
+    if (live()) state.err = "";
+    changed();
+    const actualPlacement = await provider.move(context, ref, moved, column, group || undefined);
+    confirmed = actualPlacement == null ? moved : { ...moved, placement: actualPlacement };
+    replace(confirmed);
   } catch (e) {
-    replace(card);
-    state.err = t("kb.moveFailed", { e: String(e) });
+    replace(confirmed);
+    if (live()) state.err = t("kb.moveFailed", { e: String(e) });
+  } finally {
+    finish(confirmed);
+    if (cardMoves.get(key) === done) cardMoves.delete(key);
+    changed();
   }
-  changed();
 }
 export const openBoardCard = (provider: BoardProvider, id: string) =>
   openCard(provider, refOf(provider, boardState(provider)), id);

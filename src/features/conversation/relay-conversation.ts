@@ -4,6 +4,7 @@ import { repeat } from "lit/directives/repeat.js";
 import { t, th, raw } from "../../core/i18n";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
+import { agent, chatAgent } from "../../domain/agents";
 import { ui, isTerminal } from "../../domain/ui";
 import { chat, terminalOf, projectOf, label } from "../../domain/chats/state";
 import type { Item, Pending } from "../../domain/chats/state";
@@ -146,12 +147,13 @@ export class RelayConversation extends LitElement {
     );
   }
 
-  // visible while Claude works: only the pulsing dots, the running step has its own line
+  // Every provider shares the same animated indicator; permission cards take its place while waiting.
   private renderWorking(waiting: Pending[]) {
     if (chat.status[ui.selected] !== "busy" || waiting.length) return nothing;
+    const label = t("work.working", { agent: agent(chatAgent(ui.selected))?.name ?? chatAgent(ui.selected) });
     return html`<relay-working
-      .label=${t("work.working")}
-      .text=${ui.selected in chat.outside ? t("work.outside") : ""}
+      .label=${label}
+      .text=${ui.selected in chat.outside ? t("work.outside") : label}
     ></relay-working>`;
   }
 

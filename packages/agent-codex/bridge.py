@@ -15,6 +15,36 @@ import json, os, subprocess, sys, threading
 ASKS = {"item/commandExecution/requestApproval", "item/fileChange/requestApproval", "execCommandApproval", "applyPatchApproval"}
 
 
+def prepare_turn(message, skills):
+    """Slash UI commands become protocol operations, skills become explicit skill input items."""
+    params = message.get("params") or {}
+    inputs = params.get("input") or []
+    first = next((item for item in inputs if item.get("type") == "text"), None)
+    if not first or not first.get("text", "").startswith("/"):
+        return message
+    command, *rest = first["text"].split(maxsplit=1)
+    arguments = rest[0] if rest else ""
+    if command in ("/compact", "/review"):
+        if any(item.get("type") != "text" for item in inputs):
+            raise ValueError("This command does not accept attachments")
+        if command == "/compact" and arguments:
+            raise ValueError("/compact does not accept arguments")
+        params = {"threadId": params["threadId"]}
+        message = {"id": message["id"], "method": "thread/compact/start", "params": params}
+        if command == "/review":
+            message["method"] = "review/start"
+            params.update(delivery="inline", target={"type": "custom", "instructions": arguments} if arguments else {"type": "uncommittedChanges"})
+    elif command.startswith("/skill:"):
+        name = command[len("/skill:"):]
+        skill = skills.get(name)
+        if not skill:
+            raise ValueError("Skill is unavailable or disabled: " + name)
+        first["text"] = "$" + name + (" " + arguments if arguments else "")
+        first.pop("text_elements", None)
+        inputs.append({"type": "skill", "name": name, "path": skill["path"]})
+    return message
+
+
 def main():
     bin, cfg = sys.argv[1], json.loads(sys.argv[2])
     codex = subprocess.Popen([bin, "app-server"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, bufsize=1)
@@ -62,6 +92,14 @@ def main():
         codex.terminate()
         sys.exit(1)
 
+    send({"id": 3, "method": "skills/list", "params": {"cwds": [cfg.get("cwd") or os.getcwd()], "forceReload": True}})
+    result = until(3).get("result") or {}
+    skills = {}
+    for group in result.get("data", []):
+        for skill in group.get("skills", []):
+            if skill.get("enabled", True) and skill.get("path"):
+                skills.setdefault(skill["name"], skill)
+
     def pump():
         for line in codex.stdout:
             out(line)
@@ -92,8 +130,12 @@ def main():
                 if cfg.get("effort"):
                     p.setdefault("effort", cfg["effort"])
         try:
+            if m.get("method") == "turn/start":
+                m = prepare_turn(m, skills)
             send(m)
-        except (BrokenPipeError, ValueError):
+        except ValueError as error:
+            out(json.dumps({"id": m.get("id"), "error": {"message": str(error)}}))
+        except BrokenPipeError:
             break
     codex.terminate()
     sys.exit(codex.wait())

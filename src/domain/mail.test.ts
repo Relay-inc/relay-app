@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import type { Mail, MailFilter } from "./mail.ts";
+import * as mailMerge from "./mail-merge.ts";
 
 // mail.ts with its window/IPC neighbours stubbed, the way quick-send.test.ts loads its modules
 const source = readFileSync(new URL("./mail.ts", import.meta.url), "utf8");
@@ -21,6 +22,7 @@ const stubs: Record<string, unknown> = {
   "./vault": { findProjects: () => [] },
   "./chats/state": {},
   "./panel": { panel: { detail: {}, mailOpen: "" }, openMail: noop },
+  "./mail-merge": mailMerge,
   "./keys": { mailKey: (m: Mail) => `mail:${m.account}:${m.id}`, isMailKey: () => true },
   "./navigation": {},
   "./chats/actions": {},

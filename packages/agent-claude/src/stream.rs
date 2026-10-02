@@ -25,7 +25,10 @@ pub fn parse(line: &str) -> Vec<Event> {
     let Ok(ev) = serde_json::from_str::<Value>(line) else { return vec![] };
     let mut out = vec![];
     match ev["type"].as_str().unwrap_or("") {
-        "system" if ev["subtype"] == "init" => if let Some(id) = ev["session_id"].as_str() { out.push(Event::Session { id: id.into() }); },
+        "system" if ev["subtype"] == "init" => {
+            if let Some(id) = ev["session_id"].as_str() { out.push(Event::Session { id: id.into() }); }
+            if let Some(m) = ev["model"].as_str() { out.push(Event::Resolved { model: m.into(), effort: None }); }
+        }
         "conversation_reset" => out.push(Event::Reset),
         "assistant" => assistant(&ev["message"]["content"], &mut out),
         "user" => for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
@@ -87,8 +90,9 @@ mod tests {
 
     #[test]
     fn stream_json_to_events() {
-        let ev: Vec<Event> = STREAM.lines().flat_map(parse).collect();
+        let mut ev: Vec<Event> = STREAM.lines().flat_map(parse).collect();
         assert_eq!(ev[0], Event::Session { id: "36099ce4-d17c-482a-8907-23790cc0e8db".into() });
+        assert_eq!(ev.remove(1), Event::Resolved { model: "claude-opus-5-5".into(), effort: None });
         assert_eq!(ev[1], Event::Text { text: "Ik kijk even.".into(), delta: false });
         assert!(matches!(&ev[2], Event::ToolCall { id, name, input } if id == "toolu_1" && name == "Read" && input["file_path"] == "/v/a.md"));
         assert_eq!(ev[3], Event::ToolResult { id: "toolu_1".into(), error: false });

@@ -1,5 +1,6 @@
 import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
 import { ISSUES, ISSUE_URL, MOVE, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapStates, mapTeams } from "./map";
+import { linearTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
 const t = translator<Key>("linear");
@@ -39,7 +40,8 @@ const linear: BoardProvider<Key> = {
     return typeof r.issue?.sortOrder === "number" ? r.issue.sortOrder : undefined;
   },
   url: async (c, _ref, id) => links.get(id) || (await gql(c, ISSUE_URL, { id }))?.issue?.url || "https://linear.app",
-  reset: () => { teams = null; links.clear(); },
+  detail: linearTicket.detail,
+  reset: () => { teams = null; links.clear(); linearTicket.reset(); },
 
   settings: {
     tokenLabel: "token",

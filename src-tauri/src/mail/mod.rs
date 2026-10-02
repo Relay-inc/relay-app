@@ -1,9 +1,9 @@
-// Native Gmail access for the app and its Claude sessions, see /tmp/vaultmail-build/SPEC.md. One IMAP session
+// Native mail access (Gmail and any IMAP server) for the app and its Claude sessions, see /tmp/vaultmail-build/SPEC.md. One IMAP session
 // per account, shared by the UI and Claude. Everything reads All Mail through EXAMINE and BODY.PEEK, so reading
 // never changes a flag. Only set_seen (a UI click), save_draft (APPEND to Drafts) and, behind the experimental
-// mail flag, archive/trash (UI clicks only, no Claude tool) write. There is no path to send. The app password
-// comes from the macOS keychain and only lives in memory.
-// ponytail: Gmail only (X-GM-RAW, All Mail as the one folder), generic IMAP when a non-Gmail account appears.
+// mail flag, archive/trash (UI clicks only, no Claude tool, Gmail only) write. There is no path to send. The app
+// password comes from the macOS keychain and only lives in memory.
+// Gmail reads All Mail through X-GM-RAW; any other server reads INBOX only.
 
 mod render;
 mod rpc;
@@ -43,7 +43,7 @@ const MOVE_MAX: usize = 500;
 const RUNS: &[&str] = &["terminal", "command", "tool", "fileloc", "inetloc", "webloc", "app", "pkg", "scpt", "applescript", "workflow", "jar"];
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Account { pub email: String, pub keychain_service: String, pub keychain_account: String }
+pub struct Account { pub email: String, pub keychain_service: String, pub keychain_account: String, pub host: String, pub port: u16 }
 
 /// A keychain name as it goes to `security` as its own argv entry: never an option, never a control char.
 fn key_ok(s: &str) -> bool { (1..=128).contains(&s.chars().count()) && !s.starts_with('-') && !s.chars().any(char::is_control) }
@@ -51,14 +51,18 @@ fn email_ok(s: &str) -> bool {
     s.len() <= 254 && !s.starts_with('-') && s.chars().all(|c| c.is_ascii_graphic() && c != '"' && c != '\\')
         && s.split_once('@').is_some_and(|(u, d)| !u.is_empty() && d.contains('.') && !d.contains('@'))
 }
+/// "" is Gmail. A name that goes to TcpStream::connect, never an option or a path.
+fn host_ok(s: &str) -> bool { s.is_empty() || ((1..=253).contains(&s.len()) && !s.starts_with(['-', '.']) && s.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-')) }
 pub fn valid_account(a: &Value) -> bool {
     a["email"].as_str().is_some_and(email_ok) && ["keychain_service", "keychain_account"].iter().all(|k| a[*k].as_str().is_some_and(key_ok))
+        && (a["host"].is_null() || a["host"].as_str().is_some_and(host_ok)) && (a["port"].is_null() || a["port"].as_u64().is_some_and(|p| (1..=65535).contains(&p)))
 }
 pub fn accounts(settings_mail: &Value) -> Vec<Account> {
     settings_mail["accounts"].as_array().into_iter().flatten().filter(|a| valid_account(a)).map(|a| Account {
         email: a["email"].as_str().unwrap().to_string(),
         keychain_service: a["keychain_service"].as_str().unwrap().to_string(),
         keychain_account: a["keychain_account"].as_str().unwrap().to_string(),
+        host: a["host"].as_str().unwrap_or("").to_string(), port: a["port"].as_u64().unwrap_or(993) as u16,
     }).collect()
 }
 
@@ -72,7 +76,7 @@ pub fn pick_account(accts: &[Account], want: &str) -> Option<Account> {
 type Imap = async_imap::Session<async_native_tls::TlsStream<TcpStream>>;
 // `used` is wall-clock time: Instant stands still while the Mac sleeps, and a session that slept is dead
 // `known`: who the account wrote to (lowercase), for the Inbox/Other split, read once per session
-struct Conn { s: Imap, email: String, all: String, drafts: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime, known: Option<HashSet<String>> }
+struct Conn { s: Imap, email: String, gmail: bool, all: String, drafts: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime, known: Option<HashSet<String>> }
 /// A session plus the UIDVALIDITY it was opened with: ids from before a change would point at other mails.
 #[derive(Default)]
 struct Slot { conn: Option<Conn>, validity: Option<u32> }
@@ -135,9 +139,11 @@ async fn keychain(a: &Account) -> Result<String, Fail> {
 }
 
 async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {
-    let slow = |_| Fail::Net(format!("{HOST} did not answer in time"));
-    let tcp = timeout(CONNECT, TcpStream::connect((HOST, 993))).await.map_err(slow)?.map_err(|e| Fail::Net(format!("{HOST}: {e}")))?;
-    let tls = timeout(CONNECT, async_native_tls::connect(HOST, tcp)).await.map_err(slow)?.map_err(|e| Fail::Net(format!("TLS: {e}")))?;
+    let host = if a.host.is_empty() { HOST } else { a.host.as_str() };
+    let slow = |_| Fail::Net(format!("{host} did not answer in time"));
+    // ponytail: implicit TLS only (usually 993), STARTTLS on 143 is not supported
+    let tcp = timeout(CONNECT, TcpStream::connect((host, a.port))).await.map_err(slow)?.map_err(|e| Fail::Net(format!("{host}: {e}")))?;
+    let tls = timeout(CONNECT, async_native_tls::connect(host, tcp)).await.map_err(slow)?.map_err(|e| Fail::Net(format!("TLS: {e}")))?;
     let mut cl = async_imap::Client::new(tls);
     // Client::new does not read the greeting (login would skip it), read it here so a mute server fails fast
     timeout(CONNECT, cl.read_response()).await.map_err(slow)?.map_err(|e| Fail::Net(e.to_string()))?.ok_or_else(|| Fail::Net("no IMAP greeting".into()))?;
@@ -145,15 +151,26 @@ async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {
         Fail::Imap(m) => Fail::Auth(format!("Login failed for {}: {m}", a.email)),
         f => f,
     })?;
-    if !t(s.capabilities()).await?.has_str("X-GM-EXT-1") { return Err(user("Only Gmail accounts are supported")); }
+    let gmail = t(s.capabilities()).await?.has_str("X-GM-EXT-1");
+    if a.host.is_empty() && !gmail { return Err(user("Only Gmail accounts are supported without a server")); }
     let names: Vec<Name> = t(async { s.list(Some(""), Some("*")).await?.try_collect().await }).await?;
     // the special-use attributes, the names are localized ([Gmail]/Alle berichten)
     let find = |attr: NameAttribute| names.iter().find(|n| n.attributes().contains(&attr)).map(|n| n.name().to_string())
         .filter(|n| n.len() <= 256 && !n.chars().any(char::is_control));
-    let all = find(NameAttribute::All).ok_or_else(|| user("No \\All mailbox (Gmail All Mail) found"))?;
-    let (drafts, trash) = (find(NameAttribute::Drafts), find(NameAttribute::Trash));
+    let (all, drafts) = if gmail {
+        (find(NameAttribute::All).ok_or_else(|| user("No \\All mailbox (Gmail All Mail) found"))?, find(NameAttribute::Drafts))
+    } else {
+        ("INBOX".to_string(), find(NameAttribute::Drafts).or_else(|| drafts_named(names.iter().map(|n| n.name())).map(str::to_string)))
+    };
+    let trash = find(NameAttribute::Trash);
     let validity = t(s.examine(&all)).await?.uid_validity;
-    Ok(Conn { s, email: a.email.clone(), all, drafts, trash, validity, used: SystemTime::now(), known: None })
+    Ok(Conn { s, email: a.email.clone(), gmail, all, drafts, trash, validity, used: SystemTime::now(), known: None })
+}
+
+/// The Drafts folder of a server without special-use flags: a name whose last segment says drafts.
+fn drafts_named<'a>(mut names: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+    names.find(|n| n.len() <= 256 && !n.chars().any(char::is_control) && n.rsplit(['/', '.']).next()
+        .is_some_and(|l| ["drafts", "concepten", "brouillons", "entwürfe"].iter().any(|d| l.eq_ignore_ascii_case(d))))
 }
 
 /// Run `$body` (an expression using `$c: &mut Conn`) on the account's cached session (the UI's or, `$tool`
@@ -189,11 +206,18 @@ macro_rules! run {
 
 // ---------- mail operations, each on a session that sits in EXAMINE on All Mail
 
-async fn search(c: &mut Conn, q: &str) -> Result<Vec<u32>, Fail> {
-    let q = quoted(q)?;
-    let mut v: Vec<u32> = t(c.s.uid_search(format!("X-GM-RAW {q}"))).await?.into_iter().collect();
+async fn uids(c: &mut Conn, q: String) -> Result<Vec<u32>, Fail> {
+    let mut v: Vec<u32> = t(c.s.uid_search(q)).await?.into_iter().collect();
     v.sort_unstable_by(|a, b| b.cmp(a));
     Ok(v)
+}
+// ponytail: other servers search INBOX only (no Sent or archive), also for threads; TEXT is the portable search
+async fn search(c: &mut Conn, q: &str) -> Result<Vec<u32>, Fail> {
+    let q = quoted(q)?;
+    uids(c, if c.gmail { format!("X-GM-RAW {q}") } else { format!("TEXT {q}") }).await
+}
+async fn inbox(c: &mut Conn) -> Result<Vec<u32>, Fail> {
+    uids(c, if c.gmail { "X-GM-RAW \"in:inbox\"" } else { "ALL" }.into()).await
 }
 
 /// UI rows, newest first. The fetch stream also carries unsolicited FETCHes (flag updates for these or other
@@ -210,7 +234,9 @@ async fn rows(c: &mut Conn, uids: &[u32], split: bool) -> Result<Vec<Value>, Fai
     Ok(f.iter().map(|f| row(f, &c.email, known)).collect())
 }
 /// The addresses in To and Cc of the newest sent mails.
+// ponytail: other servers have no `in:sent` here (INBOX only), so nobody counts as known and all bulk mail goes to Other
 async fn known(c: &mut Conn) -> Result<HashSet<String>, Fail> {
+    if !c.gmail { return Ok(HashSet::new()); }
     let u = search(c, "in:sent").await?;
     let u = &u[..u.len().min(SENT_SCAN)];
     if u.is_empty() { return Ok(HashSet::new()); }
@@ -248,7 +274,7 @@ fn row(f: &Fetch, email: &str, known: Option<&HashSet<String>>) -> Value {
 }
 
 async fn page(c: &mut Conn, page: u32, split: bool) -> Result<Vec<Value>, Fail> {
-    let u = search(c, "in:inbox").await?;
+    let u = inbox(c).await?;
     let from = (page as usize - 1) * PAGE;
     rows(c, u.get(from..u.len().min(from + PAGE)).unwrap_or(&[]), split).await
 }
@@ -318,6 +344,7 @@ async fn store(c: &mut Conn, uid: u32, seen: bool) -> Result<(), Fail> {
 
 /// Archive (Gmail: drop the Inbox label, the mail stays in All Mail) or move to Trash (Gmail empties it after 30 days).
 async fn move_to(c: &mut Conn, uids: &[u32], trash: bool) -> Result<(), Fail> {
+    if !c.gmail { return Err(user("Archive and delete only work for Gmail accounts")); }
     let all = c.all.clone();
     let dest = if trash { Some(c.trash.clone().ok_or_else(|| user("No \\Trash mailbox found"))?) } else { None };
     t(c.s.select(&all)).await?;
@@ -490,7 +517,7 @@ impl Mail {
     pub async fn test(&self, acct: &Account) -> Result<String, String> {
         *entry(&self.pws, acct.email.to_ascii_lowercase()).lock().await = None; // a code just stored is the one tried
         let mut c = self.connect(acct).await.map_err(Fail::msg)?;
-        let n = search(&mut c, "in:inbox").await.map_err(Fail::msg)?.len();
+        let n = inbox(&mut c).await.map_err(Fail::msg)?.len();
         let _ = timeout(CONNECT, c.s.logout()).await;
         Ok(format!("ok, {n} in inbox"))
     }
@@ -563,7 +590,7 @@ impl Mail {
 mod tests {
     use super::*;
 
-    fn acct(e: &str) -> Account { Account { email: e.into(), keychain_service: "svc".into(), keychain_account: "acc".into() } }
+    fn acct(e: &str) -> Account { Account { email: e.into(), keychain_service: "svc".into(), keychain_account: "acc".into(), host: "".into(), port: 993 } }
     fn err(v: &Value) -> String { assert_eq!(v["isError"], true, "{v}"); v["content"][0]["text"].as_str().unwrap().to_string() }
 
     #[test]
@@ -577,8 +604,21 @@ mod tests {
             { "email": "a@b.be", "keychain_service": "x".repeat(129), "keychain_account": "x" },
             { "email": "a@b.be", "keychain_service": "", "keychain_account": "x" },
         ] });
-        assert_eq!(accounts(&m), vec![Account { email: "a@b.be".into(), keychain_service: "himalaya-x".into(), keychain_account: "x".into() }]);
+        assert_eq!(accounts(&m), vec![Account { email: "a@b.be".into(), keychain_service: "himalaya-x".into(), keychain_account: "x".into(), host: "".into(), port: 993 }]);
         assert!(accounts(&json!({})).is_empty());
+        let h = |h: Value, p: Value| accounts(&json!({ "accounts": [{ "email": "a@b.be", "keychain_service": "x", "keychain_account": "x", "host": h, "port": p }] }));
+        let n = Value::Null;
+        assert_eq!((h(json!("mail.ex-ample.com"), json!(143))[0].host.as_str(), h(json!("mail.ex-ample.com"), json!(143))[0].port), ("mail.ex-ample.com", 143));
+        assert_eq!((h(n.clone(), n.clone())[0].host.as_str(), h(n.clone(), n.clone())[0].port), ("", 993));
+        for bad in [(json!("a b"), n.clone()), (json!("-host"), n.clone()), (json!(".host"), n.clone()), (json!("a/b"), n.clone()), (json!("x".repeat(254)), n.clone()), (json!(5), n.clone()),
+                    (n.clone(), json!(0)), (n.clone(), json!(70000)), (n.clone(), json!("993"))] { assert!(h(bad.0, bad.1).is_empty()); }
+    }
+
+    #[test]
+    fn drafts_folder_by_name() {
+        assert_eq!(drafts_named(["INBOX", "INBOX.Sent", "INBOX.Concepten"].into_iter()), Some("INBOX.Concepten"));
+        assert_eq!(drafts_named(["INBOX", "Mail/DRAFTS"].into_iter()), Some("Mail/DRAFTS"));
+        assert_eq!(drafts_named(["INBOX", "Drafts-old", "Sent"].into_iter()), None);
     }
 
     #[test]
@@ -717,7 +757,7 @@ mod tests {
     #[ignore]
     async fn live_gmail_readonly() {
         let env = |k: &str| std::env::var(k).unwrap_or_else(|_| panic!("{k} not set"));
-        let a = Account { email: env("VAULTMAIL_EMAIL"), keychain_service: env("VAULTMAIL_SERVICE"), keychain_account: env("VAULTMAIL_ACCOUNT") };
+        let a = Account { email: env("VAULTMAIL_EMAIL"), keychain_service: env("VAULTMAIL_SERVICE"), keychain_account: env("VAULTMAIL_ACCOUNT"), host: "".into(), port: 993 };
         let (m, accts, d) = (Mail::new(), [a.clone()], std::env::temp_dir());
         let ok = |v: Value| -> Value { assert!(v["isError"].is_null(), "{v}"); serde_json::from_str(v["content"][0]["text"].as_str().unwrap()).unwrap() };
         // a fresh session in a fresh EXAMINE, so nothing cached answers

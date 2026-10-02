@@ -140,3 +140,13 @@ test("Cmd-K also uses the default Claude picks while Codex is open", () => {
   assert.equal(sends[0].model, "sonnet");
   assert.equal(sends[0].effort, "high");
 });
+
+test("slash commands keep their prefix and defer project/mail context", async () => {
+  const { actions, chat, sends } = setup();
+  chat.chats.open.project = "Relay";
+  chat.chats.open.mail = "Saved mail context";
+  await actions.sendMsg("/compact");
+  assert.equal(sends[0].text, "/compact");
+  assert.equal(chat.chats.open.told, undefined);
+  assert.equal(chat.chats.open.mail, "Saved mail context");
+});

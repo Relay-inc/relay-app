@@ -5,7 +5,13 @@ import type { VaultMap } from "./vault-setup";
 // The app's settings as the backend keeps them (settings.json): the main window reads them, the settings window edits them.
 /** One integration's settings.integrations.<id>: whether it is on, and its provider's own fields (strings, a checkbox). */
 export type IntegrationConfig = { on?: boolean; [field: string]: string | boolean | undefined };
-export type MailAcct = { email: string; keychain_service: string; keychain_account: string };
+export type MailAcct = {
+  email: string;
+  keychain_service: string;
+  keychain_account: string;
+  host?: string;
+  port?: number;
+}; // no host: Gmail
 /** `experimental`: archive, delete, the Inbox/Other split and bulk actions (Settings › Mail). */
 export type MailCfg = { on: boolean; account: string; accounts: MailAcct[]; experimental?: boolean };
 /** An agent provider's settings: switched on, the program, and its own options (Codex' sandbox, …). */
@@ -14,6 +20,8 @@ export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 export type Theme = "system" | "light" | "dark";
 /** The accent: Relay blue, or graphite (the text colour). */
 export type Accent = "relay" | "graphite";
+/** The terminal "Open in Terminal" uses: the first one installed (iTerm, WezTerm, Terminal), or a fixed one. */
+export type TerminalApp = "auto" | "iterm" | "wezterm" | "terminal";
 /** The views on top of the sidebar: rows with names or a row of icons, the order they were dragged in, the ones switched off. */
 export type SidebarCfg = { layout?: "list" | "icons"; order?: string[]; hidden?: string[] };
 export type Settings = {
@@ -28,6 +36,7 @@ export type Settings = {
   language?: string;
   theme?: Theme;
   accent?: Accent;
+  terminal?: TerminalApp;
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;

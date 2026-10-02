@@ -17,6 +17,7 @@ import {
   withoutColon,
   TILE,
 } from "./blocks";
+import "./settings-actions";
 import { glyphSvg } from "../../core/icons";
 import { PROVIDERS } from "../../domain/providers";
 import { viewItems, type ViewItem } from "../../domain/sidebar-views";
@@ -25,7 +26,7 @@ import "./settings-path";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
 import type { Settings } from "./types";
-import type { Accent, SidebarCfg, Theme } from "../../domain/config";
+import type { Accent, SidebarCfg, TerminalApp, Theme } from "../../domain/config";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -40,6 +41,7 @@ declare global {
     "theme-change": CustomEvent<Theme>;
     "accent-change": CustomEvent<Accent>;
     "favicons-change": CustomEvent<boolean>;
+    "terminal-change": CustomEvent<TerminalApp>;
     "sidebar-change": CustomEvent<SidebarCfg>;
   }
 }
@@ -212,6 +214,27 @@ export class SettingsGeneral extends SettingsElement {
     return field(t("set.faviconsOn"), toggle, { id: "favon", hint: th("set.faviconsHelp") });
   }
 
+  private renderTerminal() {
+    const current = this.settings.terminal || "auto";
+    const choices = [
+      ["auto", t("set.terminalAuto")],
+      ["iterm", "iTerm"],
+      ["wezterm", "WezTerm"],
+      ["terminal", "Terminal"],
+    ].map(([value, name]) => html`<option value=${value} ?selected=${current === value}>${name}</option>`);
+    return field(
+      t("set.terminal"),
+      html`<select
+        class=${SELECT}
+        id="terminal"
+        @change=${(e: Event) => emit(this, "terminal-change", inputValue(e) as TerminalApp)}
+      >
+        ${choices}
+      </select>`,
+      { id: "terminal", hint: th("set.terminalHelp") },
+    );
+  }
+
   private renderSidebarLayout(cfg: SidebarCfg) {
     const current = cfg.layout ?? "list";
     const layouts = [
@@ -266,7 +289,8 @@ export class SettingsGeneral extends SettingsElement {
 
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
-    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()}`)}
+      <relay-settings-actions .ext=${"reminders"} .name=${t("act.reminders")}></relay-settings-actions>
+    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()} ${this.renderTerminal()}`)}
     ${this.renderSidebar()}`;
   }
 }

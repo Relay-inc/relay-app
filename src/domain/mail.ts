@@ -7,6 +7,7 @@ import { findProjects } from "./vault";
 import { chat, newChat } from "./chats/state";
 import { panel, openMail } from "./panel";
 import { mailKey, isMailKey } from "./keys";
+import { newestFirst, visible } from "./mail-merge";
 
 export { mailKey };
 import { select } from "./navigation";
@@ -14,7 +15,7 @@ import { sendMsg } from "./chats/actions";
 
 const PAGE_SIZE = 50;
 
-// The inbox, fetched by the backend over IMAP (Gmail): the newest mails. A row opens the mail in the right panel,
+// The inbox, fetched by the backend over IMAP (Gmail or any server), every account merged: the newest mails. A row opens the mail in the right panel,
 // and from there a button starts a conversation about it. Opening leaves a mail unread, read/unread only changes
 // on the user's click. Nothing here sends a mail: a reply only becomes a draft, from a conversation (decided 29/9).
 // Behind the experimental mail flag the user can also archive and delete (to Trash), one mail or a selection, and the
@@ -45,9 +46,9 @@ export const mail = {
   err: "",
   busy: false,
   gen: 0, // bumped when the mail settings change: an answer from an older generation is dropped
-  pages: 0,
-  end: false,
-  more: false, // pages of 50 loaded, whether the last one came back short, loading the next
+  pages: {} as Record<string, number>, // per account: pages of 50 loaded
+  end: {} as Record<string, boolean>, // per account: whether the last one came back short
+  more: false, // loading the next pages
   filter: { q: "", state: "all", project: "", box: "inbox", ...ls.get("mailFilter", {}) } as MailFilter,
   selected: new Set<string>(), // the mail keys ticked for a bulk action (experimental)
   anchor: "", // the last key ticked, where a shift-click range starts
@@ -56,71 +57,76 @@ export const mail = {
   textView: new Set<string>(), // which open mails show the text instead of the html
 };
 
-// the newest page replaces what it covers, older pages loaded with "more" stay below it
-function applyFirstPage(fresh: Mail[]) {
-  // an empty page means an empty inbox: edge would be Infinity and keep every stale row
-  if (!fresh.length) {
-    mail.list = [];
-  } else {
-    const edge = Math.min(...fresh.map(message => Date.parse(message.date)));
-    const older = (mail.list || []).filter(
-      message => Date.parse(message.date) < edge && !fresh.some(x => x.id === message.id),
-    );
-    mail.list = [...fresh, ...older];
-  }
-  if (!mail.pages) {
-    mail.pages = 1;
-    mail.end = fresh.length < PAGE_SIZE;
+const accountList = () => (config.value.mail.accounts ?? []).map(account => account.email);
+// per account: ended once a page came back short. One never loaded (it failed) counts as ended: a reload retries it
+const hasMore = (account: string) => mail.pages[account] > 0 && !mail.end[account];
+/** Whether every account has shown its oldest mail. */
+export const mailEnded = () => !accountList().some(hasMore);
+/** The merged list as shown: complete down to the edge of the accounts that still have older pages. */
+export const visibleMails = () =>
+  visible(mail.list ?? [], Object.fromEntries(accountList().map(account => [account, hasMore(account)])));
+
+// one account's newest page replaces what it covers, its older pages loaded with "more" stay below it, other accounts' rows stay
+function applyFirstPage(account: string, fresh: Mail[]) {
+  const all = mail.list || [];
+  // an empty page means an empty inbox: with no edge nothing old is kept
+  const edge = fresh.length ? Math.min(...fresh.map(message => Date.parse(message.date) || 0)) : -Infinity;
+  const older = all.filter(
+    message =>
+      message.account === account && (Date.parse(message.date) || 0) < edge && !fresh.some(x => x.id === message.id),
+  );
+  mail.list = newestFirst([...all.filter(message => message.account !== account), ...fresh, ...older]);
+  if (!mail.pages[account]) {
+    mail.pages[account] = 1;
+    mail.end[account] = fresh.length < PAGE_SIZE;
   }
   pruneSelection();
 }
+// "account: error" per failed account, one line each
+const errorLines = (accounts: string[], results: PromiseSettledResult<unknown>[]) =>
+  results.flatMap((result, i) => (result.status === "rejected" ? [`${accounts[i]}: ${result.reason}`] : [])).join("\n");
+
 // once Mail is switched on in the settings. Refreshed every 5 minutes and on opening the view
 export async function loadMails() {
-  if (!mailOn() || mail.busy || !config.value.mail.accounts?.length) return;
+  const accounts = accountList();
+  if (!mailOn() || mail.busy || !accounts.length) return;
   mail.busy = true;
   changed();
   const generation = mail.gen;
   const moves = mail.moves;
-  try {
-    const fresh = await invoke<Mail[]>("mail_list", { page: 1 });
-    if (generation !== mail.gen || moves !== mail.moves) {
-      mail.busy = false;
-      loadMails();
-      return;
-    }
-    applyFirstPage(fresh);
-    mail.err = "";
-  } catch (e) {
-    if (generation === mail.gen) mail.err = String(e);
-  }
-  mail.busy = false;
-  if (generation !== mail.gen) {
+  const results = await Promise.allSettled(accounts.map(account => invoke<Mail[]>("mail_list", { account, page: 1 })));
+  if (generation !== mail.gen || moves !== mail.moves) {
+    mail.busy = false;
     loadMails();
     return;
   }
+  results.forEach((result, i) => result.status === "fulfilled" && applyFirstPage(accounts[i], result.value));
+  mail.err = errorLines(accounts, results);
+  mail.busy = false;
   changed();
 }
-// the next 50, appended under the list. ponytail: a mail archived meanwhile shifts the pages, so one at the border can be skipped until a reload
+// the next 50 of every account that has more, appended. ponytail: a mail archived meanwhile shifts the pages, so one at the border can be skipped until a reload
 export async function moreMails() {
-  if (mail.more || mail.end || !mail.list) return;
+  const accounts = accountList().filter(hasMore);
+  if (mail.more || !accounts.length || !mail.list) return;
   mail.more = true;
   changed();
   const generation = mail.gen;
   const moves = mail.moves;
-  try {
-    const next = await invoke<Mail[]>("mail_list", { page: mail.pages + 1 });
-    if (generation !== mail.gen || moves !== mail.moves || !mail.list) {
-      mail.more = false;
-      changed();
-      return;
-    }
-    const known = mail.list;
-    mail.list = [...known, ...next.filter(message => !known.some(x => x.id === message.id))];
-    mail.pages++;
-    mail.end = next.length < PAGE_SIZE;
-    mail.err = "";
-  } catch (e) {
-    if (generation === mail.gen) mail.err = String(e);
+  const results = await Promise.allSettled(
+    accounts.map(account => invoke<Mail[]>("mail_list", { account, page: mail.pages[account] + 1 })),
+  );
+  if (generation === mail.gen && moves === mail.moves && mail.list) {
+    const known = new Set(mail.list.map(mailKey));
+    const added: Mail[] = [];
+    results.forEach((result, i) => {
+      if (result.status !== "fulfilled") return;
+      mail.pages[accounts[i]]++;
+      mail.end[accounts[i]] = result.value.length < PAGE_SIZE;
+      added.push(...result.value.filter(message => !known.has(mailKey(message))));
+    });
+    mail.list = newestFirst([...mail.list, ...added]);
+    mail.err = errorLines(accounts, results);
   }
   mail.more = false;
   changed();
@@ -134,8 +140,8 @@ export function resetMail() {
   mail.link = "";
   mail.list = null;
   mail.err = "";
-  mail.pages = 0;
-  mail.end = false;
+  mail.pages = {};
+  mail.end = {};
 }
 
 export const setMailFilter = (patch: Partial<MailFilter>) => {
@@ -177,7 +183,8 @@ export function filtered(list: Mail[], filter: MailFilter, split = false) {
 }
 
 /** The keys of the mails on screen, in order: what a range, select all and "the next mail" go by. */
-export const shownMailKeys = () => (mail.list ? filtered(mail.list, mail.filter, mailExperimental()).map(mailKey) : []);
+export const shownMailKeys = () =>
+  mail.list ? filtered(visibleMails(), mail.filter, mailExperimental()).map(mailKey) : [];
 
 /** Tick or untick a mail; `range` (shift) ticks everything between the last one ticked and this one in `shown`. */
 export function toggleMailSelect(key: string, range: boolean, shown: string[]) {
@@ -235,8 +242,7 @@ export async function mailMove(keys: string[], trash: boolean, shown: string[]) 
   const error = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
   if (error && mail.list) {
     const back = moving.filter(x => failed.includes(x.account) && !mail.list!.some(y => mailKey(y) === mailKey(x)));
-    const time = (x: Mail) => Date.parse(x.date) || 0; // a mail without a date sorts last
-    mail.list = [...mail.list, ...back].sort((a, b) => time(b) - time(a));
+    mail.list = newestFirst([...mail.list, ...back]);
     mail.err = String(error.reason);
   } else mail.err = "";
   changed();

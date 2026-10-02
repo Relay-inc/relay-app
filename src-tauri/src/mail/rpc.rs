@@ -41,7 +41,7 @@ pub fn tool_list() -> Value {
         "inputSchema": { "type": "object", "properties": props, "required": req },
     });
     json!({ "tools": [
-        tool("search", "Search Gmail (All Mail) with Gmail search syntax, newest first. Returns ids, senders, subjects, dates.",
+        tool("search", "Search an account, newest first. Gmail accounts take Gmail search syntax over All Mail; other accounts search the inbox for the words as plain text. Returns ids, senders, subjects, dates.",
             json!({ "query": { "type": "string", "maxLength": 500 }, "account": account, "limit": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 } }), &["query"]),
         tool("read", "Read one mail: headers, attachment list and the text body (as untrusted_mail). Does not mark it read.",
             json!({ "id": id, "account": account, "headers": { "type": "array", "maxItems": 10, "items": { "type": "string", "pattern": "^[A-Za-z0-9-]{1,64}$" }, "description": "Extra header names to return" } }), &["id"]),
@@ -49,7 +49,7 @@ pub fn tool_list() -> Value {
             json!({ "id": id, "account": account }), &["id"]),
         tool("attachment", "Save one attachment (index from read) into ~/Downloads/Relay-mail and return its path.",
             json!({ "id": id, "index": { "type": "integer", "minimum": 0 }, "account": account }), &["id", "index"]),
-        tool("save_draft", "Save a full RFC 5322 message as a Gmail draft. The From address must be the account. It is never sent.",
+        tool("save_draft", "Save a full RFC 5322 message as a draft in the account's Drafts folder. The From address must be the account. It is never sent.",
             json!({ "raw": { "type": "string" }, "account": account }), &["raw"]),
     ] })
 }

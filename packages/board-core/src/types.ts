@@ -29,6 +29,8 @@ export type CardView = {
   description: string;
   status?: { id: string; name: string; state?: State };
   assignee?: { id: string; name: string };
+  /** Trello supports multiple members. Changes add/remove one member, preserving everyone else. */
+  assignees?: Opt[];
   due: string; labels: string[];
   /** the choices for the status and assignee pickers, once known; without them those two show as text */
   statuses?: Opt[]; people?: Opt[];
@@ -37,12 +39,19 @@ export type CardView = {
 };
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */
 export type Grouping<K extends string = string> = { id: string; label: K };
+/** A card's values a board filters on, per facet (names, as the cards carry them; `who` is the first name). */
+export type ViewFilters = Partial<Record<"state" | "status" | "who" | "folder" | "list" | "label", string[]>>;
+/** A view saved in the tracker (Productive's saved views), offered next to the app's own presets. `filters` is null
+ * when it asks for something the board can't filter on; `group` is the grouping it lays the columns out by, `layout`
+ * how it shows (absent: one the board doesn't have, the board stays as it is). */
+export type View = { id: string; name: string; filters: ViewFilters | null; group?: string; layout?: "kanban" | "list" };
 /** Which board a vault project maps to, settings.boards[vault project]. */
 export type BoardRef = { provider: string; project: string; board: string };
 
 /** What a provider gets for each call: its settings.integrations.<id>, and one API call through the backend. */
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
-  /** a file posted as a form to a URL the backend's `upload` allows (no secrets go along), resolves with its Location */
+  /** Upload to a backend-allowed URL. `fields` are Productive form fields, Linear signed headers, or empty for Trello.
+   * Authentication and transport are selected by the backend; secrets never come from the webview. */
   upload: (url: string, fields: Record<string, string>, file: File) => Promise<string>;
   /** a picture's preview from a URL the backend's `thumb` allows (no secrets go along), resolves with a data URL */
   thumb: (url: string) => Promise<string> };
@@ -91,6 +100,8 @@ export interface BoardProvider<K extends string = string> {
   cards(ctx: Ctx, ref: BoardRef): Promise<Card[]>;
   /** Move the card to another column, in the tracker right away. Resolves with the new placement when the API gives one. */
   move(ctx: Ctx, ref: BoardRef, card: Card, to: string, group?: string): Promise<number | void>;
+  /** The board's saved views in the tracker, read only. */
+  views?(ctx: Ctx, ref: BoardRef): Promise<View[]>;
   /** The card's page in the tracker's web app. */
   url(ctx: Ctx, ref: BoardRef, card: string): Promise<string>;
   detail?: CardDetail;
