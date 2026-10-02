@@ -16,7 +16,7 @@ import { useWorkspaceStore } from "./store";
 import { iconFromDataUrl } from "../../infrastructure/images";
 import { loadIcons, setIcon } from "./icons";
 
-// The vault as snapshot.py reads it, the notes that exist, the project icons and their favicons.
+// The vault as snapshot.rs reads it, the notes that exist, the project icons and their favicons.
 const ws = () => useWorkspaceStore.getState();
 
 // ---------- reading

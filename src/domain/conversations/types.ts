@@ -69,7 +69,7 @@ export type Sub = {
   input?: ToolInput;
   text?: string;
 };
-/** A session open in the terminal (not started by the app), with the project snapshot.py read from its transcript. */
+/** A session open in the terminal (not started by the app), with the project snapshot.rs read from its transcript. */
 export type TerminalSession = {
   key: string;
   sid: string;

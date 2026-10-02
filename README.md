@@ -33,7 +33,7 @@ Paths are relative to the vault (absolute ones work too). Picking a folder detec
 `System/` layout, the old `Resources/Meta/Claude/` one, else a search by file name; symlinks are
 resolved. Only `workState` is required; a missing `reminders` file is created by the first reminder you add (default `reminders.md` in the vault root).
 
-`pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py` and `packages/agent-claude/perm_server.py`
+`pnpm tauri build` builds the .app. Not used yet: the app reads `favicon.py` and `packages/agent-claude/perm_server.py`
 from this checkout, so a build only works on this machine.
 
 ## How it works
@@ -43,7 +43,7 @@ from this checkout, so a build only works on this machine.
 | `src-tauri/src/lib.rs` | All Tauri commands. Starts one process per conversation through its agent provider, with the vault as cwd and the login-shell PATH, and passes the provider's normalised events to the webview. See [Agent providers](#agent-providers). |
 | `src-tauri/src/agents.rs`, `src/shared/plugins.ts` | The registry of the agent providers, `settings.agents` and sessions.json. |
 | `packages/agent-claude/perm_server.py` | Stdio MCP server passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
-| `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
+| `src-tauri/src/snapshot.rs` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
 | `src/shared/` | What every layer uses: `i18n.ts` + `locales/` (UI strings in English, Dutch, French and German; `useT()` in a component, `t(key)` elsewhere, `tr()` in `lib.rs` for the menu bar and errors; the language follows macOS unless set in the settings), `plugins.ts` (the provider and agent registries), `icons.ts`, `markdown.ts`. |
 | `src/domain/<context>/` | Pure types and rules per bounded context (conversations, agents, workspace, navigation, mail, board, reminders, pull-requests, usage, settings), unit tested with `node --test`. The agent events go through one reducer, `applyAgentEvent`. |
 | `src/application/<context>/` | One Zustand + Immer store per context (`use<Context>Store`) and its use cases: loaders, actions, polls. `boot.ts` is the main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |

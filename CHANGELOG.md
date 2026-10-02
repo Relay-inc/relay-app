@@ -11,6 +11,10 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Fixed
+
+- The released app could not read the vault: it looked for a script in the build machine's checkout. Reading the vault is built into the app now, and no longer needs Python
+
 ## [0.0.3] - 2026-10-02
 
 ### Added

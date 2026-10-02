@@ -3372,6 +3372,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "portable-pty",
+ "regex",
  "rrule",
  "serde",
  "serde_json",

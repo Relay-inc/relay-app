@@ -28,6 +28,7 @@ mod pty;
 mod relay_config;
 mod reminders;
 mod scratch;
+mod snapshot;
 mod tray;
 mod vault;
 mod worktrees;
@@ -300,7 +301,7 @@ fn login_path() -> String {
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
-/// Everything the sidebar shows, read by snapshot.py from the mapped paths. Also returns the vault
+/// Everything the sidebar shows, read from the mapped paths (snapshot.rs). Also returns the vault
 /// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
 fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
@@ -308,18 +309,11 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
-    // the first time a vault is used, its .relay/config.json is written from what is detected (snapshot.py reads it)
+    // the first time a vault is used, its .relay/config.json is written from what is detected
     relay_config::ensure(v, &st["map"]);
     let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
-        .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
-        .env("VAULT_NOTES", path("notes"))
-        .output().map_err(|e| e.to_string())?;
-    let mut snap: Value = serde_json::from_slice(&out.stdout).map_err(|e| {
-        // a crash leaves stdout empty: its last stderr line says more than "EOF while parsing"
-        let err = String::from_utf8_lossy(&out.stderr);
-        format!("snapshot: {}", err.lines().rev().find(|l| !l.trim().is_empty()).map_or(e.to_string(), str::to_string))
-    })?;
+    let mut snap = snapshot::snapshot(v, &path("workState"), &path("notes"), chrono::Local::now().date_naive(), &state.path,
+        &data_dir(&app).join("topics.json"), &home())?;
     snap["vault"] = st;
     let (file, _, _) = rem_ctx(&app)?;
     snap["reminders"] = reminders::list(&file, chrono::Local::now().date_naive()).into();
