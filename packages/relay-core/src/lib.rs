@@ -3,6 +3,7 @@
 
 pub mod agents;
 pub mod broker;
+pub mod serve;
 
 use std::process::{Command, Stdio};
 
