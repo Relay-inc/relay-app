@@ -18,10 +18,20 @@ import { findProjects, project as vaultProject } from "../workspace/vault";
 import { setIcon } from "../workspace/icons";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
-import { chatsOf, displayTitle, label, projectOf, selectedProject, terminalOf, terminalSessions } from "./selectors";
+import {
+  chatsOf,
+  displayTitle,
+  label,
+  machineChoice,
+  projectOf,
+  selectedProject,
+  terminalOf,
+  terminalSessions,
+} from "./selectors";
 import { newChat, saveChats } from "./chats";
 import { prepImages, releaseImages } from "./images";
 import { flush } from "./events";
+import { pollAgents } from "./polls";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
 // to a project, closing and reopening, and Cmd-K. Most act on the open conversation.
@@ -181,6 +191,9 @@ async function deliver(key: string, text: string, images: Img[]) {
       model: picks("model", key).value,
       effort: picks("effort", key).value,
       provider: chatAgent(key),
+      projectName: conversation?.project ?? null,
+      // where it runs, as the composer shows it; the backend only reads it at the first spawn
+      machine: machineChoice(key).value,
       told: told || null,
       context: context || null,
     });
@@ -248,6 +261,32 @@ export function setAgent(id: string) {
     draft.chats[key].provider = id;
   });
   saveChats();
+}
+/** Moves the open conversation, between two turns, to another place: "" this Mac, or a machine id. Its next message
+ *  goes on there; a note says where it went, or the error why it did not. */
+export async function moveConversation(to: string) {
+  const key = selected();
+  const conversation = cs().chats[key];
+  if (!conversation) return;
+  const place = to
+    ? (cs().machineLists[conversation.project ?? ""]?.find(machine => machine.id === to)?.name ?? to)
+    : t("composer.thisMac");
+  try {
+    await backend.moveConversation(key, to, conversation.project ?? null, !!conversation.fromMail);
+    note(key, t("note.movedTo", { name: place }));
+  } catch (error) {
+    set(draft => {
+      push(draft, key, { kind: "err", text: String(error) });
+    });
+  }
+  await pollAgents();
+}
+/** Where the open conversation is to run, before it starts: "" this Mac, or a machine id. */
+export function setMachine(id: string) {
+  const key = selected();
+  setDrafts(draft => {
+    draft.machine[key] = id;
+  });
 }
 /** The open conversation's title, edited in place. Empty keeps the old one. */
 export function rename(title: string) {

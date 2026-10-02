@@ -3,7 +3,7 @@ import { useSettingsStore } from "../../application/settings/store";
 import { TABS, close, go, initSettingsWindow, openLink } from "../../application/settings/window";
 import { SettingsApp } from "../features/settings/SettingsApp";
 
-// the settings window's keys: Escape and Cmd-W close it, Cmd-1 to 4 jump to a page
+// the settings window's keys: Escape and Cmd-W close it, Cmd-1 to 5 jump to a page
 function onKey(e: KeyboardEvent) {
   if (e.key === "Escape" || (e.metaKey && e.key === "w")) close();
   const pageNumber = e.metaKey && !e.altKey && !e.shiftKey ? Number(e.key) : 0;

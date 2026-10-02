@@ -1,0 +1,5 @@
+# the relay-server image builds from the workspace (packages/relay-server/docker/Dockerfile): no build output, no node
+**/target
+**/node_modules
+dist
+.git

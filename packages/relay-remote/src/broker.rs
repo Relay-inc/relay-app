@@ -6,13 +6,14 @@
 // or `! <error>` when the agent did not start; then `o <line>` for the agent's stdout, `e <line>` for its stderr,
 // `x <code>` when it exited. App to broker: raw lines for the agent's stdin.
 //
-// Without the app the broker buffers the agent's output and replays it on reconnect. After GRACE without the app it
+// Without the app the broker buffers the agent's output and replays it on reconnect. After its grace without the app it
 // closes the agent's stdin and removes its socket: the agent finishes its turn and exits, as it did before brokers,
 // so nothing lingers when the app stays closed.
 
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::io::{BufRead, BufReader, Write};
+use std::sync::OnceLock;
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -21,7 +22,12 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
 
-const GRACE: Duration = Duration::from_secs(15 * 60);
+// how long a broker waits for the app before it winds its agent down; a relay-server sets RELAY_BROKER_GRACE_SECS
+// for its brokers, so a conversation there keeps its process while the laptop is closed for the night
+fn grace() -> Duration {
+    static G: OnceLock<Duration> = OnceLock::new();
+    *G.get_or_init(|| Duration::from_secs(std::env::var("RELAY_BROKER_GRACE_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(15 * 60)))
+}
 // output buffered while the app is away, at most this many bytes; the oldest lines go first (one Claude line can
 // carry a whole file, so a line count would not bound the memory)
 const MAX_BACKLOG: usize = 4 << 20;
@@ -29,11 +35,11 @@ const MAX_BACKLOG: usize = 4 << 20;
 const STACK: usize = 128 << 10;
 fn spawn<F: FnOnce() + Send + 'static>(f: F) -> thread::JoinHandle<()> { thread::Builder::new().stack_size(STACK).spawn(f).expect("broker thread") }
 
-/// The provider's command, owned, so it crosses into the broker process.
-#[derive(Serialize, Deserialize)]
-struct Spec { program: String, args: Vec<String>, env: Vec<(String, Option<String>)>, cwd: Option<String> }
+/// The provider's command, owned, so it crosses into the broker process (and over the wire to a relay-server).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Spec { pub program: String, pub args: Vec<String>, pub env: Vec<(String, Option<String>)>, pub cwd: Option<String> }
 impl Spec {
-    fn of(cmd: &Command) -> Spec {
+    pub fn of(cmd: &Command) -> Spec {
         let s = |o: &std::ffi::OsStr| o.to_string_lossy().into_owned();
         Spec { program: s(cmd.get_program()), args: cmd.get_args().map(s).collect(),
             env: cmd.get_envs().map(|(k, v)| (s(k), v.map(s))).collect(), cwd: cmd.get_current_dir().map(|d| d.to_string_lossy().into_owned()) }
@@ -56,8 +62,9 @@ pub struct Meta { pub key: String, pub provider: String, pub model: String, pub 
     #[serde(default = "one")] pub turns: u32 }
 fn one() -> u32 { 1 }
 
-/// The folder with the sockets: short, because a socket path has a 104-byte limit on macOS.
-pub fn dir() -> PathBuf { std::env::temp_dir().join("relay-agents") }
+/// The folder with the sockets: short, because a socket path has a 104-byte limit on macOS. A relay-server keeps its
+/// own (RELAY_AGENTS_DIR), so an app on the same Mac never takes over the server's conversations.
+pub fn dir() -> PathBuf { std::env::var_os("RELAY_AGENTS_DIR").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir().join("relay-agents")) }
 fn base(key: &str) -> PathBuf { dir().join(&sha1_smol::Sha1::from(key).digest().to_string()[..12]) }
 pub fn meta_path(key: &str) -> PathBuf { base(key).with_extension("json") }
 fn sock_path(key: &str) -> PathBuf { base(key).with_extension("sock") }
@@ -70,25 +77,37 @@ pub fn save_turns(key: &str, pid: u32, turns: u32) {
 /// The agent with this pid is gone: its file goes, unless a newer process of the conversation already wrote its own.
 pub fn forget(key: &str, pid: u32) { if load_meta(&meta_path(key)).is_some_and(|m| m.pid == pid) { fs::remove_file(meta_path(key)).ok(); } }
 
+/// How to stop an agent that runs on another machine: its relay-server kills it by pid.
+pub type Stop = std::sync::Arc<dyn Fn(u32) -> std::io::Result<()> + Send + Sync>;
 /// The agent a broker runs: its pid, for the app's "is this still the same process" checks, and to stop it.
-pub struct Agent { pid: u32 }
-impl From<u32> for Agent { fn from(pid: u32) -> Self { Agent { pid } } }
+pub struct Agent { pid: u32, stop: Option<Stop> }
+impl From<u32> for Agent { fn from(pid: u32) -> Self { Agent { pid, stop: None } } }
 impl Agent {
+    /// An agent on a work machine, stopped through its server.
+    pub fn remote(pid: u32, stop: Stop) -> Self { Agent { pid, stop: Some(stop) } }
     pub fn id(&self) -> u32 { self.pid }
     /// Stops the agent; its broker then reports the exit and quits too.
-    pub fn kill(&mut self) -> std::io::Result<()> { Command::new("/bin/kill").args(["-9", &self.pid.to_string()]).status().map(|_| ()) }
+    pub fn kill(&mut self) -> std::io::Result<()> {
+        match &self.stop {
+            Some(f) => f(self.pid),
+            // the system call, not /bin/kill: a minimal Linux install has no such file
+            None => if self.pid > 0 && unsafe { libc::kill(self.pid as libc::pid_t, libc::SIGKILL) } == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) },
+        }
+    }
 }
 /// A connection to a broker: the agent, where its stdin goes, and the frames to read (the first `backlog` were
-/// buffered while the app was away).
-pub struct Conn { pub agent: Agent, pub stdin: UnixStream, pub frames: BufReader<UnixStream>, pub backlog: usize }
+/// buffered while the app was away). Local brokers are a Unix socket, a work machine's a TLS stream.
+pub struct Conn { pub agent: Agent, pub stdin: Box<dyn Write + Send>, pub frames: Box<dyn BufRead + Send>, pub backlog: usize }
 
 /// Start a broker for `cmd` and connect to it.
-pub fn launch(meta: &Meta, cmd: &Command) -> Result<Conn, String> {
+pub fn launch(meta: &Meta, cmd: &Command) -> Result<Conn, String> { launch_spec(meta, &Spec::of(cmd)) }
+/// The same for a command as a Spec, the way a relay-server gets it from the app.
+pub fn launch_spec(meta: &Meta, spec: &Spec) -> Result<Conn, String> {
     fs::create_dir_all(dir()).map_err(|e| e.to_string())?;
     let sock = sock_path(&meta.key);
     fs::remove_file(&sock).ok();
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let spec = serde_json::to_string(&Spec::of(cmd)).unwrap();
+    let spec = serde_json::to_string(spec).unwrap();
     // its own process group, so a Ctrl-C on `tauri dev` does not reach it; waited for, so it leaves no zombie
     let mut b = Command::new(exe).arg("--broker").arg(&sock).arg(spec).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null())
         .process_group(0).spawn().map_err(|e| format!("broker: {e}"))?;
@@ -107,13 +126,17 @@ pub fn reattach(key: &str) -> Option<Conn> { connect(&sock_path(key)).ok()?.ok()
 
 fn connect(sock: &Path) -> std::io::Result<Result<Conn, String>> {
     let s = UnixStream::connect(sock)?;
-    let mut frames = BufReader::new(s.try_clone()?);
+    let frames = BufReader::new(s.try_clone()?);
+    open(Box::new(s), Box::new(frames))
+}
+/// Read a broker's first line from any stream: the agent and its backlog, or why it did not start.
+pub fn open(stdin: Box<dyn Write + Send>, mut frames: Box<dyn BufRead + Send>) -> std::io::Result<Result<Conn, String>> {
     let mut hello = String::new();
     frames.read_line(&mut hello)?;
     let mut w = hello.trim_end().splitn(3, ' ');
     Ok(match (w.next(), w.next(), w.next()) {
-        (Some("p"), Some(pid), Some(n)) => Ok(Conn { agent: Agent { pid: pid.parse().unwrap_or(0) }, stdin: s, frames, backlog: n.parse().unwrap_or(0) }),
-        (Some("!"), ..) => Err(hello[2..].trim().to_string()),
+        (Some("p"), Some(pid), Some(n)) => Ok(Conn { agent: Agent::from(pid.parse::<u32>().unwrap_or(0)), stdin, frames, backlog: n.parse().unwrap_or(0) }),
+        (Some("!"), ..) => Err(hello.get(2..).unwrap_or("").trim().to_string()),
         _ => Err(format!("broker: {}", hello.trim())),
     })
 }
@@ -177,7 +200,7 @@ pub fn main(sock: &str, spec: &str) {
     spawn(move || loop {
         thread::sleep(Duration::from_secs(30));
         let mut s = st3.lock().unwrap();
-        if s.client.is_none() && s.away.is_some_and(|t| t.elapsed() > GRACE) { s.winding = true; *in3.lock().unwrap() = None; fs::remove_file(&sock3).ok(); return; }
+        if s.client.is_none() && s.away.is_some_and(|t| t.elapsed() > grace()) { s.winding = true; *in3.lock().unwrap() = None; fs::remove_file(&sock3).ok(); return; }
     });
     for conn in listener.incoming() {
         let Ok(c) = conn else { continue };

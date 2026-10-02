@@ -8,13 +8,14 @@ import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
 // General holds the vault folder with its mapping and the language, Projects the projects the user customised,
-// Agents the coding-agent CLIs, Integrations the external services; each page's use cases are in <page>-page.ts and
-// integrations.ts. Saving emits "settings-changed" from the backend, the main window follows it.
+// Agents the coding-agent CLIs, Integrations the external services, Machines the computers running relay-server; each
+// page's use cases are in <page>-page.ts and integrations.ts. Saving emits "settings-changed" from the backend, the main window follows it.
 export const TABS = [
   ["general", "set.tab.general", "gear"],
   ["projects", "set.tab.projects", "folder"],
   ["agents", "set.tab.agents", "agent"],
   ["integrations", "set.tab.integrations", "plug"],
+  ["machines", "set.tab.machines", "server"],
 ] as const satisfies readonly (readonly [SettingsTab, Key, string])[];
 
 const st = () => useSettingsStore.getState();
