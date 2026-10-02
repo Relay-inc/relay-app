@@ -60,6 +60,7 @@ export type Chat = {
   mail?: string; // what goes in front of the first message: a mail or a card to read
   provider?: string; // its agent, set at the first message
   fromMail?: boolean; /* about a mail or has read mail */
+  told?: string; // the project the agent was last told this conversation is about
 };
 export type Img = { mt: string; data: string; url: string };
 /** A subagent a session spawned (Agent tool, background agents). */
@@ -99,6 +100,7 @@ export const chat = {
   queued: {} as Record<string, number>, // messages sent but not answered yet: one turn end each
   unseen: new Set<string>(),
   dismissed: new Set<string>(), // "is this about project X?" answered no
+  closing: new Set<string>(), // conversations being closed: the process stops and its worktrees go, which can take a while
   // what is typed but not sent, per conversation: survives switching and closing the app
   typed: ls.get<Record<string, string>>("typed", {}),
   attached: [] as Img[], // waiting in the composer until the next send

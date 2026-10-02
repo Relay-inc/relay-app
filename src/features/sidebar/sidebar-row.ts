@@ -15,7 +15,8 @@ declare global {
 
 const TINT = { "": "text-secondary", "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m", "ctx-p": "text-ctx-p" };
 
-/** One row of the sidebar: a view, a project, a conversation or terminal session, or the "n more" fold. The click, press and
+/** One row of the sidebar: a view, a project, a conversation or terminal session, or the "n more" fold; or a view as a
+ * square icon (`tile`) when the views are shown as a row of icons. The click, press and
  * context menu belong to the container (they bubble out of the host); only the two buttons are events of their own. */
 @customElement("relay-sidebar-row")
 export class SidebarRow extends LitElement {
@@ -29,10 +30,11 @@ export class SidebarRow extends LitElement {
     `,
   ];
 
-  @property() kind: "view" | "proj" | "conv" | "fold" = "view";
+  @property() kind: "view" | "tile" | "proj" | "conv" | "fold" = "view";
   @property() name = "";
   @property() icon = ""; // a named icon, or `svg`: a provider's own glyph
   @property() svg = "";
+  @property() box = "0 0 16 16"; // the grid `svg` is drawn on
   @property() img: string | null = null; // a project's icon: an image, else an emoji, else the folder
   @property() emoji = "";
   @property() tint: keyof typeof TINT = "";
@@ -40,6 +42,7 @@ export class SidebarRow extends LitElement {
   @property({ type: Boolean }) unseen = false;
   @property({ type: Boolean }) indent = false; // under its project
   @property({ type: Boolean }) closable = false;
+  @property({ type: Boolean }) closing = false; // being closed: greyed out and pulsing until it is gone
   @property() trail: Trail = "";
   @property({ type: Number }) subs = 0; // subagents working
   @property() subsTitle = "";
@@ -49,7 +52,7 @@ export class SidebarRow extends LitElement {
   @property() drop: "" | "before" | "after" = "";
 
   private glyph(classes: string) {
-    return this.svg ? glyphSvg(this.svg, classes) : icon(this.icon, classes);
+    return this.svg ? glyphSvg(this.svg, classes, this.box) : icon(this.icon, classes);
   }
   private emitFromButton(e: Event, name: "closechat" | "addchat") {
     e.stopPropagation();
@@ -57,6 +60,9 @@ export class SidebarRow extends LitElement {
   }
 
   private get dropLineClass() {
+    // tiles stand side by side: the line goes left or right of them
+    if (this.kind === "tile" && this.drop)
+      return `relative before:absolute before:inset-y-1 before:w-0.5 before:bg-accent ${this.drop === "before" ? "before:-left-0.5" : "before:-right-0.5"}`;
     if (this.drop === "before")
       return "relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent";
     if (this.drop === "after")
@@ -64,11 +70,13 @@ export class SidebarRow extends LitElement {
     return "";
   }
   private get rowClass() {
+    if (this.closing) return "text-tertiary";
     if (this.selected) return "bg-accent-soft";
     const subrowText = this.unseen ? "text-label" : "text-secondary hover:text-label";
     return `hover:bg-fill ${this.indent ? subrowText : ""}`;
   }
   private get glyphColor() {
+    if (this.closing) return "text-tertiary";
     if (this.selected) return "text-accent-text";
     return this.kind === "proj" ? TINT[this.tint] : "text-secondary";
   }
@@ -107,7 +115,7 @@ export class SidebarRow extends LitElement {
     return nothing;
   }
   private renderClose() {
-    if (!this.closable) return nothing;
+    if (!this.closable || this.closing) return nothing;
     return html`<button
       class="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default text-secondary hover:bg-fill-2 hover:text-label"
       title=${t("nav.close")}
@@ -127,12 +135,44 @@ export class SidebarRow extends LitElement {
     </button>`;
   }
 
+  // the count on a tile: the badge in its corner, small enough not to cover the icon
+  private renderTileMeta() {
+    const meta = this.meta;
+    if (!meta) return nothing;
+    const colour = {
+      badge: "bg-accent text-on-accent",
+      late: "bg-late text-white",
+      soon: "bg-soon text-white",
+      count: "bg-fill-2 text-secondary",
+    }[meta.kind];
+    return html`<span
+      class="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-1 rounded-full text-[10px] leading-none font-semibold grid place-items-center tabular-nums ${colour}"
+      >${meta.n}</span
+    >`;
+  }
+  private renderTile() {
+    const tip = this.meta?.title ? `${this.name} — ${this.meta.title}` : this.name;
+    return html`<div
+      role="button"
+      title=${tip}
+      aria-label=${tip}
+      aria-pressed=${this.selected ? "true" : "false"}
+      class="relative size-8 grid place-items-center rounded-md cursor-default transition-colors duration-150 ease-out
+      ${this.selected ? "bg-accent-soft" : "hover:bg-fill"} ${this.dropLineClass} ${this.dragging ? "opacity-40" : ""}"
+    >
+      ${this.glyph(`glyph size-4.5 ${this.glyphColor}`)}${this.renderTileMeta()}
+    </div>`;
+  }
+
   override render() {
+    if (this.kind === "tile") return this.renderTile();
     const sub = this.indent;
     const subClass = sub ? "ml-4.5" : "";
     return html`<div
       class="group flex ${sub ? "h-6.5 gap-2" : "h-7 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out
-      ${this.rowClass} ${subClass} ${this.dropLineClass} ${this.dragging ? "opacity-40" : ""}"
+      ${this.rowClass} ${subClass} ${this.dropLineClass} ${this.dragging ? "opacity-40" : ""}
+      ${this.closing ? "pointer-events-none animate-skel" : ""}"
+      aria-busy=${this.closing ? "true" : "false"}
     >
       ${this.kind === "fold" ? nothing : this.renderLead()}
       <span class="flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${this.unseen ? "font-semibold" : ""}"

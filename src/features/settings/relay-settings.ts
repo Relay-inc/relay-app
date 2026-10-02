@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { initI18n, t } from "../../core/i18n";
 import { applyTheme } from "../../core/theme";
-import type { Accent, Theme } from "../../domain/config";
+import type { Accent, SidebarCfg, Theme } from "../../domain/config";
 import type { Key } from "../../core/locales/en";
 import {
   KEYS,
@@ -161,6 +161,9 @@ export class RelaySettings extends SettingsElement {
     const favicons = { last: "", tried: {}, ...settings.favicons, on };
     return this.save({ settings: { ...settings, favicons }, done: "" });
   }
+  private saveSidebar(settings: Settings, patch: SidebarCfg) {
+    return this.save({ settings: { ...settings, sidebar: { ...settings.sidebar, ...patch } }, done: "" });
+  }
   private onSettingsChanged = (e: CustomEvent<Settings>) => {
     this.settings = e.detail;
   };
@@ -201,6 +204,7 @@ export class RelaySettings extends SettingsElement {
       @theme-change=${(e: CustomEvent<Theme>) => this.changeTheme(e.detail)}
       @accent-change=${(e: CustomEvent<Accent>) => this.changeAccent(e.detail)}
       @favicons-change=${(e: CustomEvent<boolean>) => this.saveFavicons(settings, e.detail)}
+      @sidebar-change=${(e: CustomEvent<SidebarCfg>) => this.saveSidebar(settings, e.detail)}
     ></relay-settings-general>`;
   }
 

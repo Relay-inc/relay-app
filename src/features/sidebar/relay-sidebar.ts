@@ -17,6 +17,11 @@ import {
   toggleSection,
   toggleUnfold,
   reorder,
+  setSidebar,
+  setViewHidden,
+  sidebarCfg,
+  viewsLayout,
+  hiddenViews,
   GENERAL,
   type ConvRow,
   type ProjectBlock,
@@ -33,24 +38,28 @@ import "./sidebar-head";
 import "./sidebar-menu";
 import "./sidebar-footer";
 
-type Kind = "sec" | "proj" | "conv";
+type Kind = "sec" | "proj" | "conv" | "view";
 type Drag = {
   kind: Kind;
   id: string;
   group: string; // the context a project is dragged in, the project a conversation is dragged in
+  startX: number;
   startY: number;
   active: boolean;
   target?: string;
   after?: boolean;
 };
 type Dropzone = { dragging: boolean; drop: "" | "before" | "after" };
-type MenuTarget = { x: number; y: number; chatKey: string; project: string | null; kind: "conv" | "proj" };
+// a view's menu has its key in `chatKey`
+type MenuTarget = { x: number; y: number; chatKey: string; project: string | null; kind: "conv" | "proj" | "view" };
 
 const SECTION_DROP_AFTER = "relative before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-accent";
 
-// what a dragged kind can be dropped on: the header's section, the other conversations of its project, the other projects of its section
+// what a dragged kind can be dropped on: the header's section, the other views, the other conversations of its project,
+// the other projects of its section
 const dropSelector = (kind: Kind, group: string) => {
   if (kind === "sec") return "[data-drop]";
+  if (kind === "view") return "relay-sidebar-row[data-view]";
   if (kind === "conv") return `relay-sidebar-row[kind="conv"][data-parent="${CSS.escape(group)}"]`;
   return `relay-sidebar-row[kind="proj"][data-context="${CSS.escape(group)}"]`;
 };
@@ -58,6 +67,7 @@ const dropSelector = (kind: Kind, group: string) => {
 // the id a drop target stands for
 const dropId = (kind: Kind, target: HTMLElement) => {
   if (kind === "sec") return target.dataset.drop;
+  if (kind === "view") return target.dataset.view;
   if (kind === "conv") return target.dataset.key;
   return target.dataset.project;
 };
@@ -114,7 +124,7 @@ export class RelaySidebar extends LitElement {
     (e: PointerEvent) => {
       if (e.button !== 0 || origin(e).closest("button")) return;
       e.preventDefault(); // no text selection starting from a row that can be dragged
-      this.drag = { kind, id, group, startY: e.clientY, active: false };
+      this.drag = { kind, id, group, startX: e.clientX, startY: e.clientY, active: false };
     };
   private setReordering(on: boolean) {
     this.toggleAttribute("reordering", on);
@@ -124,7 +134,7 @@ export class RelaySidebar extends LitElement {
     const drag = this.drag;
     if (!drag) return;
     if (!drag.active) {
-      if (Math.abs(e.clientY - drag.startY) < 5) return;
+      if (Math.max(Math.abs(e.clientX - drag.startX), Math.abs(e.clientY - drag.startY)) < 5) return;
       this.setReordering(true);
     }
     const hovered = this.shadowRoot!.elementFromPoint(e.clientX, e.clientY);
@@ -134,10 +144,12 @@ export class RelaySidebar extends LitElement {
       return;
     }
     const box = dropTarget.getBoundingClientRect();
+    // icons stand in a row: before or after is left or right of the middle
+    const sideways = drag.kind === "view" && viewsLayout() === "icons";
     this.drag = {
       ...drag,
       active: true,
-      after: e.clientY > box.top + box.height / 2,
+      after: sideways ? e.clientX > box.left + box.width / 2 : e.clientY > box.top + box.height / 2,
       target: dropId(drag.kind, dropTarget),
     };
   };
@@ -156,7 +168,7 @@ export class RelaySidebar extends LitElement {
   };
   // the ids of the rows that can be reordered among each other, in screen order (sections reorder without them)
   private visibleIds(drag: Drag) {
-    if (drag.kind === "sec") return [];
+    if (drag.kind === "sec" || drag.kind === "view") return [];
     const rows = this.shadowRoot!.querySelectorAll<HTMLElement>(dropSelector(drag.kind, drag.group));
     return [...rows].map(row => dropId(drag.kind, row)!);
   }
@@ -175,7 +187,31 @@ export class RelaySidebar extends LitElement {
     e.preventDefault();
     this.menuTarget = { ...target, x: e.clientX, y: e.clientY };
   };
+  private viewMenuItems(target: MenuTarget): MenuItem[] {
+    const name = sidebarModel().views.find(view => view.key === target.chatKey)?.name ?? "";
+    const hidden = hiddenViews();
+    return [
+      { id: "hide", label: t("nav.hide", { name }) },
+      { id: "layout", label: t(viewsLayout() === "icons" ? "nav.asList" : "nav.asIcons") },
+      ...(sidebarCfg().order?.length ? [{ id: "resetorder", label: t("nav.resetOrder") }] : []),
+      ...(hidden.length
+        ? [
+            { id: "", label: t("nav.hidden"), head: true },
+            ...hidden.map(view => ({ id: `show:${view.key}`, label: t("nav.show", { name: view.name }) })),
+          ]
+        : []),
+      { id: "sidebarsettings", label: t("nav.sidebarSettings") },
+    ];
+  }
+  private pickView(target: MenuTarget, itemId: string) {
+    if (itemId === "hide") setViewHidden(target.chatKey, true);
+    else if (itemId === "layout") setSidebar({ layout: viewsLayout() === "icons" ? "list" : "icons" });
+    else if (itemId === "resetorder") setSidebar({ order: [] });
+    else if (itemId === "sidebarsettings") invoke("open_settings_window");
+    else setViewHidden(itemId.slice("show:".length), false);
+  }
   private menuItems(target: MenuTarget): MenuItem[] {
+    if (target.kind === "view") return this.viewMenuItems(target);
     if (target.kind === "conv")
       return [
         { id: "assign", label: t("ctx.assign") },
@@ -200,7 +236,8 @@ export class RelaySidebar extends LitElement {
     const target = this.menuTarget!;
     const itemId = e.detail;
     this.menuTarget = null;
-    if (itemId === "assign") {
+    if (target.kind === "view") this.pickView(target, itemId);
+    else if (itemId === "assign") {
       await select(target.chatKey);
       openProjectPanel();
     } else if (itemId === "close") closeChat(target.chatKey);
@@ -225,15 +262,28 @@ export class RelaySidebar extends LitElement {
   };
 
   // ---------- rows
-  private renderView(view: ViewRow) {
+  private renderView(view: ViewRow, tile: boolean) {
+    const { dragging, drop } = this.dropzone("view", view.key);
     return html`<relay-sidebar-row
+      kind=${tile ? "tile" : "view"}
+      data-view=${view.key}
       .icon=${view.icon ?? ""}
-      .svg=${view.svg ?? ""}
+      .svg=${view.mark ?? ""}
+      .box=${"0 0 24 24"}
       .name=${view.name}
       .meta=${view.meta}
       .selected=${ui.selected === view.key}
+      .dragging=${dragging}
+      .drop=${drop}
+      @pointerdown=${this.press("view", view.key)}
       @click=${this.unlessDragged(() => select(view.key))}
+      @contextmenu=${this.openMenu({ chatKey: view.key, project: null, kind: "view" })}
     ></relay-sidebar-row>`;
+  }
+  // the views on top: rows with their names, or a row of icons
+  private renderViews(views: ViewRow[]) {
+    if (viewsLayout() !== "icons") return views.map(view => this.renderView(view, false));
+    return html`<div class="flex flex-wrap gap-1 px-0.5 pb-1">${views.map(view => this.renderView(view, true))}</div>`;
   }
   private renderConversation(row: ConvRow, indent: boolean) {
     const { dragging, drop } = this.dropzone("conv", row.key);
@@ -249,6 +299,7 @@ export class RelaySidebar extends LitElement {
       .unseen=${row.unseen}
       .indent=${indent}
       .closable=${row.closable}
+      .closing=${row.closing}
       .trail=${row.trail}
       .subs=${row.subs}
       .subsTitle=${row.subsTitle}
@@ -367,7 +418,7 @@ export class RelaySidebar extends LitElement {
       </div>
       ${this.renderSearch()}
       <nav class="flex-1 overflow-y-auto px-2 pt-1.5 pb-4 flex flex-col gap-px">
-        ${views.map(view => this.renderView(view))}${sections.map(section => this.renderSection(section))}
+        ${this.renderViews(views)}${sections.map(section => this.renderSection(section))}
       </nav>
       ${this.renderFooter()}
       ${

@@ -125,7 +125,7 @@ def topics(items, projs):
                     texts = [content] if isinstance(content, str) else [x.get("text", "") for x in content or [] if isinstance(x, dict) and x.get("type") == "text"]
                     for t in texts:
                         if t and not t.startswith(INJECTED):
-                            c["last"] = t[:80]
+                            c["last"] = re.sub(r"^<relay-project>.*?</relay-project>\s*", "", t, flags=re.S)[:80]  # the app's project line, see events.ts
                             c["last_at"] = e.get("timestamp", "")
                             c["hits"] += sorted(find(t))
                 elif e.get("type") == "assistant" and isinstance(content, list):
