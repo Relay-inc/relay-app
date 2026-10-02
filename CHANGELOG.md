@@ -13,7 +13,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Added
 
-- Right-click a conversation and pick "Copy session ID" to copy the agent's session ID, so you can point another conversation at it
+- Right-click a conversation and pick "Copy session ID" to copy the agent's session ID, so you can point another conversation at it (#72)
 
 ### Changed
 
