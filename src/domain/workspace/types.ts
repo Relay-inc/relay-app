@@ -1,8 +1,8 @@
 import type { Reminder } from "../reminders/types";
 
-// The vault as snapshot.py reads it (projects with their open items and status, reminders, the terminal sessions),
+// The vault as snapshot.rs reads it (projects with their open items and status, reminders, the terminal sessions),
 // the project icons from its .relay/config.json, and the vault mapping.
-/** A project from the vault index (work-state), with what snapshot.py read from its note. */
+/** A project from the vault index (work-state), with what snapshot.rs read from its note. */
 export type Project = {
   name: string;
   context: string;
@@ -14,9 +14,9 @@ export type Project = {
   stand: string | null; // the note's status section, markdown
   aliases: string[];
 };
-/** A Claude Code session in the transcripts, with the project snapshot.py guessed from what was asked in it. */
+/** A Claude Code session in the transcripts, with the project snapshot.rs guessed from what was asked in it. */
 export type SessionItem = { sessionId: string; project: string | null; last_user: string; last_at: string };
-/** One read of the vault (snapshot.py, plus the reminders and the vault mapping from lib.rs). */
+/** One read of the vault (snapshot.rs, plus the reminders and the vault mapping from lib.rs). */
 export type Snapshot = {
   today?: string;
   projects: Project[];

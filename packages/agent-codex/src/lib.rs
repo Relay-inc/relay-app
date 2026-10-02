@@ -1,5 +1,5 @@
 //! OpenAI Codex as an agent provider. Every conversation is one `codex app-server` (JSON-RPC over stdio) behind
-//! bridge.py, in the vault, on the ChatGPT login (OPENAI_API_KEY removed unless the settings say otherwise).
+//! the bridge (bridge.rs, run as `relay --codex-bridge`), in the vault, on the ChatGPT login (OPENAI_API_KEY removed unless the settings say otherwise).
 //! Command and patch approvals come in as server requests and go to the permission cards ([`Event::Permission`]),
 //! the answer back through [`AgentProvider::respond`]. History, the session list, token usage and rate limits are
 //! read from `$CODEX_HOME` (default `~/.codex`): the rollouts under sessions/ and the thread index state_5.sqlite.
@@ -11,11 +11,9 @@ use std::process::Command;
 use std::sync::Mutex;
 
 pub mod app_server;
+pub mod bridge;
 pub mod rollout;
 pub mod state;
-
-// ponytail: bridge.py is read from this checkout, like agent-claude's perm_server.py
-const BRIDGE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/bridge.py");
 
 pub struct Codex;
 pub static PROVIDER: Codex = Codex;
@@ -28,6 +26,20 @@ pub const AUTH: [&str; 2] = ["chatgpt", "api-key"];
 fn pick<'a>(env: &'a Env, key: &str, from: &[&'a str]) -> &'a str { from.iter().copied().find(|c| *c == env.opt(key)).unwrap_or(from[0]) }
 
 pub fn codex_home(home: &str) -> PathBuf { std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{home}/.codex"))) }
+/// Relay's own /compact and /review, then one `skill:<name>` per enabled skill (never shadowing a built-in).
+fn codex_commands(skills: &Value) -> Value {
+    let mut commands = vec![json!({"name": "compact", "description": "Compact the conversation context"}),
+        json!({"name": "review", "description": "Review uncommitted changes"})];
+    let mut names: Vec<String> = vec!["compact".into(), "review".into()];
+    for skill in skills["data"].as_array().into_iter().flatten().flat_map(|g| g["skills"].as_array().into_iter().flatten()) {
+        let name = format!("skill:{}", skill["name"].as_str().unwrap_or_default());
+        if skill["enabled"].as_bool().unwrap_or(true) && !names.contains(&name) {
+            commands.push(json!({"name": name, "description": skill["description"].as_str().unwrap_or(""), "argumentHint": "<instructions>"}));
+            names.push(name);
+        }
+    }
+    Value::Array(commands)
+}
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 
 static LOGS: Mutex<Option<rollout::Logs>> = Mutex::new(None);
@@ -72,15 +84,23 @@ impl AgentProvider for Codex {
     }
     fn models(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).0 }
     fn commands(&self, env: &Env) -> Value {
-        agent_core::discover_commands(env, include_str!("../commands.py"))
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.arg("app-server").current_dir(env.vault);
+            let c = p.start(cmd)?;
+            p.rpc(c, 0, "initialize", json!({"clientInfo": {"name": "relay", "version": "0.1.0"}}))?;
+            p.send(c, json!({"method": "initialized"}))?;
+            let skills = p.rpc(c, 1, "skills/list", json!({"cwds": [env.vault], "forceReload": true}))?;
+            Ok(codex_commands(&skills))
+        })
     }
     fn efforts(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).1 }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         let cfg = json!({"cwd": env.vault, "model": l.model, "effort": l.effort, "resume": l.resume,
             "sandbox": pick(env, "sandbox", &SANDBOX), "approval": pick(env, "approval", &APPROVAL), "instructions": agent_core::envelope::HINT});
-        let mut cmd = Command::new("/usr/bin/python3");
-        cmd.arg(BRIDGE).arg(env.bin).arg(cfg.to_string());
+        let mut cmd = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
+        cmd.arg("--codex-bridge").arg(env.bin).arg(cfg.to_string());
         if pick(env, "auth", &AUTH) == "chatgpt" { cmd.env_remove("OPENAI_API_KEY").env_remove("CODEX_API_KEY"); }
         Ok(cmd)
     }
@@ -138,9 +158,14 @@ impl AgentProvider for Codex {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn skills_exclude_disabled_and_keep_built_ins_distinct() {
+        let skills = json!({"data": [{"skills": [{"name": "review", "description": "Review skill"}, {"name": "hidden", "enabled": false}, {"name": "review"}]}]});
+        let names: Vec<_> = super::codex_commands(&skills).as_array().unwrap().iter().map(|c| c["name"].as_str().unwrap().to_string()).collect();
+        assert_eq!(names, ["compact", "review", "skill:review"]);
+    }
     use super::*;
     use std::io::{BufRead, BufReader, Write};
-    use std::process::Stdio;
     fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/codex", pending: p, opts } }
 
     #[test]
@@ -149,7 +174,7 @@ mod tests {
         let l = Launch { key: "c:1", name: "x", model: "gpt-6.1-sol", effort: "high", resume: Some("019a-1"), fork: None, turn: None };
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &l).unwrap();
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args[0].ends_with("agent-codex/bridge.py") && args[1] == "/opt/codex");
+        assert!(args[0] == "--codex-bridge" && args[1] == "/opt/codex");
         let cfg: Value = serde_json::from_str(&args[2]).unwrap();
         assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request", "instructions": agent_core::envelope::HINT}));
         assert!(cmd.get_envs().any(|(k, v)| k == "OPENAI_API_KEY" && v.is_none()));
@@ -178,16 +203,17 @@ mod tests {
         std::fs::remove_dir_all(d).ok();
     }
 
-    /// bridge.py against a stand-in for `codex app-server` (tests/fixtures/fake-app-server.py): the handshake, the
+    /// The bridge against a stand-in for `codex app-server` (tests/fixtures/fake-app-server.py): the handshake, the
     /// thread id filled in, an approval answered, an unknown server request declined.
     #[test]
     fn bridge_speaks_to_an_app_server() {
         let fake = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/fake-app-server.py");
+        if !Path::new("/usr/bin/python3").exists() { return; } // the stand-in is python: nothing to test
         let cfg = json!({"cwd": "/v", "model": "m1", "effort": "high", "resume": "019a-gone"});
-        let Ok(mut ch) = Command::new("/usr/bin/python3").arg(BRIDGE).arg(fake).arg(cfg.to_string())
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn() else { return }; // no python3: nothing to test
-        let mut stdin = ch.stdin.take().unwrap();
-        let mut lines = BufReader::new(ch.stdout.take().unwrap()).lines().map_while(Result::ok);
+        let (stdin_r, mut stdin) = std::io::pipe().unwrap();
+        let (out_r, out_w) = std::io::pipe().unwrap();
+        let bridge = std::thread::spawn(move || bridge::run(fake, &cfg, BufReader::new(stdin_r), out_w, |_| {}));
+        let mut lines = BufReader::new(out_r).lines().map_while(Result::ok);
         let mut st = app_server::State::default();
         let mut next = || { let l = lines.next().expect("bridge ended"); (serde_json::from_str::<Value>(&l).unwrap(), st.parse(&l)) };
         // the resume fails, so a new thread; its response is the session
@@ -208,6 +234,6 @@ mod tests {
         assert_eq!(got["params"], json!([{"id": 5, "result": {"decision": "accept"}}, {"id": 6, "error": {"code": -32601, "message": "not supported by the vault app"}}]));
         drop(stdin); // the app closed it: codex is stopped, the bridge ends
         assert!(lines.next().is_none());
-        ch.wait().unwrap();
+        bridge.join().unwrap();
     }
 }

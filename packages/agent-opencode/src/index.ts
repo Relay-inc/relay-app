@@ -7,7 +7,7 @@ const options: AgentOption<Key>[] = [
   { id: "permissions", label: "opt.permissions", choices: [{ id: "ask", label: "opt.permissions.ask" }, { id: "config", label: "opt.permissions.config" }] },
 ];
 
-// OpenCode in the webview: its name, glyph, strings and options. Everything that runs is in src/lib.rs and bridge.py.
+// OpenCode in the webview: its name, glyph, strings and options. Everything that runs is in src/lib.rs and src/bridge.rs.
 const opencode: AgentProvider<Key> = {
   id: "opencode",
   name: "OpenCode",
