@@ -241,6 +241,7 @@ export default {
   "due.today": "aujourd'hui",
   "note.forked": "Suite dans l'app. Le terminal reste tel quel.",
   "note.moved": "Rangée sous {name}",
+  "note.movedTo": "Déplacée vers {name}. Le prochain message continue là-bas.",
   "note.stopped": "Arrêté.",
   "toast.escStop": "Appuyez encore sur Échap pour annuler la requête",
   "toast.closed": "Fermée : {title}",
@@ -641,6 +642,8 @@ export default {
   "notes.empty": "Pas encore de notes.",
   "set.tab.machines": "Machines",
   "composer.onMachine": "sur {name}",
+  "composer.moveHelp":
+    "Où cette conversation s'exécute. Choisissez un autre endroit pour l'y déplacer entre deux tours : l'historique suit, les fichiers présents d'un seul côté non.",
   "composer.onMachineHelp": "Cette conversation tourne sur une autre machine et continue quand ce Mac est fermé.",
   "composer.runOn": "S'exécute sur",
   "composer.thisMac": "Ce Mac",

@@ -23,7 +23,7 @@ export type ConversationsState = {
   forked: string[]; // terminal sessions continued in the app, no longer listed
   appSids: string[];
   sidOf: SessionOf; // app conversation key: its provider and session id
-  machines: Record<string, { machine: string; cwd: string }>; // conversation key: the machine it runs on (`chat_machines`)
+  machines: Record<string, { machine: string; id: string; cwd: string }>; // conversation key: the machine it runs on (`chat_machines`)
   machineLists: Record<string, MachineChoice[]>; // the composer's machine pick per project ("" general), `machines_list`
   // app conversations whose turn runs in a process this page gets no events from (it outlived an app restart):
   // the transcript offset read so far. The page follows the transcript until the provider's sessions say the turn ended

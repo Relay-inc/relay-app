@@ -11,6 +11,7 @@ import {
   sendMsg,
   sendOrStop,
   setAgent,
+  moveConversation,
   setMachine,
   setTyped,
   unattach,
@@ -69,15 +70,17 @@ export function Composer({ className }: { className: string }) {
       inherited: { model: inherited("model"), effort: inherited("effort") },
     };
   });
-  // where a conversation without a session yet is to run: the machines are asked every few seconds while it shows
+  // where the conversation runs or is to start: the machines are asked every few seconds while it shows
+  const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const chatProject = useConversationsStore(s => s.chats[selected]?.project ?? null);
   const where = useDerived(() => machineChoice(selected));
+  const [moving, setMoving] = useState(false);
   useEffect(() => {
-    if (agentFixed) return;
+    if (!hasChat) return;
     pollMachines(chatProject);
     const timer = window.setInterval(() => pollMachines(chatProject), 3000);
     return () => window.clearInterval(timer);
-  }, [agentFixed, chatProject]);
+  }, [hasChat, chatProject]);
   // the open conversation's agent's slash commands and skills
   const commands = useDerived(() => commandsOf(selected));
   const [dropping, setDropping] = useState(false);
@@ -286,22 +289,21 @@ export function Composer({ className }: { className: string }) {
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
-          {machine ? (
+          {hasChat && where.value !== null ? (
             <>
-              <span className="px-1.5 text-xs text-secondary whitespace-nowrap" title={t("composer.onMachineHelp")}>
-                {t("composer.onMachine", { name: machine })}
-              </span>
-              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
-            </>
-          ) : !agentFixed && where.value !== null ? (
-            <>
-              {/* fixed once the conversation has a session: then the label above says where it runs */}
+              {/* before the first message: where it starts. After it: where it runs, and another pick moves it */}
               <span className="relative inline-flex items-center">
                 <select
-                  title={where.why ? t(where.why) : t("composer.runOn")}
+                  title={where.why ? t(where.why) : t(where.started ? "composer.moveHelp" : "composer.runOn")}
                   aria-label={t("composer.runOn")}
                   value={where.value}
-                  onChange={e => setMachine(e.target.value)}
+                  disabled={where.started && (busy || moving)}
+                  onChange={async e => {
+                    if (!where.started) return setMachine(e.target.value);
+                    setMoving(true);
+                    await moveConversation(e.target.value);
+                    setMoving(false);
+                  }}
                 >
                   <option value="">{t("composer.thisMac")}</option>
                   {where.list.map(option => (
@@ -311,6 +313,13 @@ export function Composer({ className }: { className: string }) {
                   ))}
                 </select>
                 {chevron}
+              </span>
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : machine ? (
+            <>
+              <span className="px-1.5 text-xs text-secondary whitespace-nowrap" title={t("composer.onMachineHelp")}>
+                {t("composer.onMachine", { name: machine })}
               </span>
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>

@@ -144,6 +144,17 @@ Known limits:
 
 Without a RAM disk the server logs a warning and Settings › Machines says the working copy is on disk.
 
+## Moving a conversation
+
+Between two turns a conversation can move between this Mac and a machine, or between machines: pick another place in
+the composer's machine list. Relay stops the agent, takes its transcript from where it ran (`session_get`), rewrites
+the vault's paths and its memory's to the other side's (only with the mirror on there), puts it where Claude Code on the
+other side looks for it (`session_put`), and the next message resumes the same session there.
+
+What moves is the conversation. Files that exist on one side only stay there: work not committed in a repo, or a vault
+note in a folder the mirror leaves out. A conversation that read mail stays on this Mac. Subagents' transcripts and the
+terminal's history do not move.
+
 ## Commands
 
 | Command | What it does |

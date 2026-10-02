@@ -197,7 +197,15 @@ pub trait Remote {
     fn put(&self, path: &str, data: &[u8], mtime: i64) -> Result<(), String>;
     /// delete only if the remote file still has `hash` (else Err: it changed meanwhile, the next round sees it)
     fn delete(&self, path: &str, hash: &str) -> Result<(), String>;
+    /// Several files at once (path, content, mtime), for a server one request instead of one per file. Per file: None
+    /// when it was written, else why not. Err: none of them was.
+    fn put_many(&self, files: &[(String, Vec<u8>, i64)]) -> Result<Vec<Option<String>>, String> {
+        Ok(files.iter().map(|(p, d, m)| self.put(p, d, *m).err()).collect())
+    }
 }
+/// A batch of pushes: at most this many files, and it closes once it holds this many bytes.
+const BATCH_FILES: usize = 500;
+const BATCH_BYTES: usize = 8 << 20;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Report {
@@ -242,8 +250,32 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         };
         if let Some(e) = keep { next.insert(p.clone(), e.clone()); }
     }
-    for (i, a) in acts.iter().enumerate() {
-        progress(i, acts.len());
+    // the pushes in batches: a first round sends thousands of files, one request each would take minutes
+    let pushes: Vec<&String> = acts.iter().filter_map(|a| match a { Action::Push(p) => Some(p), _ => None }).collect();
+    let mut done = 0;
+    while done < pushes.len() {
+        progress(done, acts.len());
+        let (mut batch, mut bytes) = (vec![], 0);
+        while done < pushes.len() && batch.len() < BATCH_FILES && bytes < BATCH_BYTES {
+            let p = pushes[done];
+            done += 1;
+            match fs::read(root.join(p)) {
+                Ok(d) => { bytes += d.len(); batch.push((p.clone(), d, local[p].mtime)); }
+                Err(e) => rep.errors.push(format!("{p}: {e}")),
+            }
+        }
+        match remote.put_many(&batch) {
+            Ok(res) => for ((p, d, _), err) in batch.iter().zip(res) {
+                match err {
+                    None => { next.insert(p.clone(), Entry { size: d.len() as u64, hash: sha256_hex(d), ..local[p].clone() }); rep.pushed.push(p.clone()); }
+                    Some(e) => rep.errors.push(format!("{p}: {e}")),
+                }
+            },
+            Err(e) => rep.errors.extend(batch.iter().map(|(p, ..)| format!("{p}: {e}"))),
+        }
+    }
+    for (i, a) in acts.iter().filter(|a| !matches!(a, Action::Push(_))).enumerate() {
+        progress(done + i, acts.len());
         match exec(root, &local, &rm, remote, walker, a) {
             Ok(ups) => {
                 for (p, e) in ups { match e { Some(e) => { next.insert(p, e); } None => { next.remove(&p); } } }
@@ -283,12 +315,7 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
     };
     let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
     match a {
-        Action::Push(p) => {
-            let d = fs::read(abs(p)).map_err(io)?;
-            let l = &local[p];
-            remote.put(p, &d, l.mtime)?;
-            Ok(vec![(p.clone(), Some(Entry { size: d.len() as u64, hash: sha256_hex(&d), ..l.clone() }))])
-        }
+        Action::Push(_) => unreachable!("pushes go in batches, in run()"),
         Action::Pull(p) => {
             let (d, e) = fetch(p)?;
             same(p)?;
@@ -482,6 +509,31 @@ mod tests {
     impl Mem {
         fn set(&self, p: &str, c: &str) { self.put(p, c.as_bytes(), 1_700_000_000).unwrap(); }
         fn read(&self, p: &str) -> Option<String> { self.files.borrow().get(p).map(|(d, _)| String::from_utf8(d.clone()).unwrap()) }
+    }
+
+    // a server's batches: counts the requests, refuses one file
+    struct Batches<'a> { mem: &'a Mem, calls: Cell<usize>, refuse: &'a str }
+    impl Remote for Batches<'_> {
+        fn manifest(&self) -> Result<Manifest, String> { self.mem.manifest() }
+        fn get(&self, p: &str) -> Result<Vec<u8>, String> { self.mem.get(p) }
+        fn put(&self, _: &str, _: &[u8], _: i64) -> Result<(), String> { Err("one by one".into()) }
+        fn delete(&self, p: &str, h: &str) -> Result<(), String> { self.mem.delete(p, h) }
+        fn put_many(&self, files: &[(String, Vec<u8>, i64)]) -> Result<Vec<Option<String>>, String> {
+            self.calls.set(self.calls.get() + 1);
+            Ok(files.iter().map(|(p, d, m)| if p == self.refuse { Some("refused".into()) } else { self.mem.put(p, d, *m).err() }).collect())
+        }
+    }
+    #[test]
+    fn pushes_go_in_batches() {
+        let (t, mut w, mem) = (Tmp::new("batches"), Walker::default(), Mem::default());
+        for i in 0..1100 { t.put(&format!("n/{i:04}.md"), "x"); }
+        let remote = Batches { mem: &mem, calls: Cell::new(0), refuse: "n/0007.md" };
+        let last = Cell::new((0, 0));
+        let (base, r) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut w, &Filter::vault_default(), &remote, &|p| p.into(), &|_| false, &|d, n| last.set((d, n)));
+        assert_eq!(remote.calls.get(), 3, "500 files a request");
+        assert_eq!((r.pushed.len(), r.errors.clone()), (1099, vec!["n/0007.md: refused".to_string()]));
+        assert!(!base.contains_key("n/0007.md") && base.contains_key("n/0008.md"), "the refused file is retried next round");
+        assert_eq!(last.get(), (1100, 1100));
     }
 
     const COPY: &str = "a (conflict srv 2026-10-02 1530).md";

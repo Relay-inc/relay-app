@@ -111,7 +111,10 @@ export const appSessions = () => invoke<SessionOf>("app_sessions");
 
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */
-export const chatMachines = () => invoke<Record<string, { machine: string; cwd: string }>>("chat_machines");
+export const chatMachines = () => invoke<Record<string, { machine: string; id: string; cwd: string }>>("chat_machines");
+/** Moves a conversation, between two turns, to another place: "" this Mac, or a machine id. */
+export const moveConversation = (key: string, to: string, projectName: string | null, mail: boolean) =>
+  invoke("move_conversation", { key, to, projectName, mail });
 /** Every paired machine as the backend last heard it, no network: for the composer's pick. */
 export const machinesList = (project: string | null) => invoke<MachineChoice[]>("machines_list", { project });
 /** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */

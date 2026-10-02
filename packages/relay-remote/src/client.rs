@@ -3,7 +3,7 @@
 //! a few milliseconds.
 
 use crate::broker::{self, Conn, Meta, Spec, Stop};
-use crate::proto::{self, Info, PairLine, MAX_REPLY, PROTO};
+use crate::proto::{self, Info, PairLine, MAX_REPLY, MAX_SESSION, PROTO};
 use crate::sync::{self, Manifest};
 use crate::tls::{self, Identity};
 use serde_json::{json, Value};
@@ -42,10 +42,10 @@ impl Client {
 
     /// One request and its answer, given up after ANSWER. The work runs on its own thread so a hung server never
     /// holds the caller longer than that.
-    pub fn call(&self, req: Value) -> Result<Value, String> { self.call_bin(req, None, false).map(|(v, _)| v) }
+    pub fn call(&self, req: Value) -> Result<Value, String> { self.call_bin(req, None, None).map(|(v, _)| v) }
     /// The same with raw bytes: `body` sent after the request line (`sync_put`), or the reply's `len` bytes read after
-    /// its line (`want_body`, `sync_get`). Files take longer than a request, so the wait grows with their size.
-    fn call_bin(&self, req: Value, body: Option<Vec<u8>>, want_body: bool) -> Result<(Value, Vec<u8>), String> {
+    /// its line, at most `want_body` (`sync_get`). Files take longer than a request, so the wait grows with their size.
+    fn call_bin(&self, req: Value, body: Option<Vec<u8>>, want_body: Option<u64>) -> Result<(Value, Vec<u8>), String> {
         let (tx, rx) = mpsc::channel();
         let me = self.clone();
         let wait = ANSWER + CONNECT + Duration::from_secs(body.as_ref().map_or(0, |b| b.len() as u64 >> 20));
@@ -55,7 +55,7 @@ impl Client {
                 proto::write_json(&mut w, &req).map_err(|e| e.to_string())?;
                 if let Some(b) = &body { std::io::Write::write_all(&mut w, b).map_err(|e| e.to_string())?; }
                 let v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
-                let data = if want_body && v["ok"] == true { proto::read_body(&mut r, v["len"].as_u64().unwrap_or(0), MAX_REPLY).map_err(|e| e.to_string())? } else { vec![] };
+                let data = match want_body { Some(max) if v["ok"] == true => proto::read_body(&mut r, v["len"].as_u64().unwrap_or(0), max).map_err(|e| e.to_string())?, _ => vec![] };
                 w.shutdown();
                 Ok::<(Value, Vec<u8>), String>((v, data))
             })();
@@ -68,6 +68,14 @@ impl Client {
     // ---------- the mirror (relay-server mirror.rs): this device's copies there, sealed with a key only it holds
     pub fn unlock(&self, key_hex: &str) -> Result<(), String> { self.call(json!({"op": "unlock", "key": key_hex})).map(|_| ()) }
     pub fn wipe(&self) -> Result<(), String> { self.call(json!({"op": "wipe"})).map(|_| ()) }
+    /// A Claude session's transcript there, to move its conversation to another place.
+    pub fn session_get(&self, sid: &str) -> Result<Vec<u8>, String> {
+        self.call_bin(json!({"op": "session_get", "sid": sid}), None, Some(MAX_SESSION)).map(|(_, b)| b)
+    }
+    /// Put a session's transcript there, for a conversation that moves there and goes on in `cwd`.
+    pub fn session_put(&self, sid: &str, cwd: &str, data: &[u8]) -> Result<(), String> {
+        self.call_bin(json!({"op": "session_put", "sid": sid, "cwd": cwd, "len": data.len()}), Some(data.to_vec()), None).map(|_| ())
+    }
     /// One mirrored folder there, as the other side of a sync round.
     pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
 
@@ -122,10 +130,16 @@ impl sync::Remote for RemoteRoot {
         serde_json::from_value(self.c.call(json!({"op": "sync_manifest", "root": self.root}))?["manifest"].clone()).map_err(|e| e.to_string())
     }
     fn get(&self, path: &str) -> Result<Vec<u8>, String> {
-        self.c.call_bin(json!({"op": "sync_get", "root": self.root, "path": path}), None, true).map(|(_, b)| b)
+        self.c.call_bin(json!({"op": "sync_get", "root": self.root, "path": path}), None, Some(MAX_REPLY)).map(|(_, b)| b)
     }
     fn put(&self, path: &str, data: &[u8], mtime: i64) -> Result<(), String> {
-        self.c.call_bin(json!({"op": "sync_put", "root": self.root, "path": path, "len": data.len(), "mtime": mtime}), Some(data.to_vec()), false).map(|_| ())
+        self.c.call_bin(json!({"op": "sync_put", "root": self.root, "path": path, "len": data.len(), "mtime": mtime}), Some(data.to_vec()), None).map(|_| ())
+    }
+    fn put_many(&self, files: &[(String, Vec<u8>, i64)]) -> Result<Vec<Option<String>>, String> {
+        let head: Vec<Value> = files.iter().map(|(p, d, m)| json!({"path": p, "len": d.len(), "mtime": m})).collect();
+        let body: Vec<u8> = files.iter().flat_map(|(_, d, _)| d.iter().copied()).collect();
+        let (v, _) = self.c.call_bin(json!({"op": "sync_put_many", "root": self.root, "files": head}), Some(body), None)?;
+        Ok(files.iter().map(|(p, ..)| v["errors"][p].as_str().map(String::from)).collect())
     }
     fn delete(&self, path: &str, hash: &str) -> Result<(), String> {
         self.c.call(json!({"op": "sync_delete", "root": self.root, "path": path, "hash": hash})).map(|_| ())

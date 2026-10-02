@@ -236,6 +236,7 @@ const en = {
   "due.today": "today",
   "note.forked": "Carried on in the app. The terminal stays as it is.",
   "note.moved": "Moved under {name}",
+  "note.movedTo": "Moved to {name}. The next message goes on there.",
   "note.stopped": "Stopped.",
   "toast.escStop": "Press Escape again to cancel the request",
   "toast.closed": "Closed: {title}",
@@ -633,6 +634,8 @@ const en = {
   "notes.empty": "No notes yet.",
   "set.tab.machines": "Machines",
   "composer.onMachine": "on {name}",
+  "composer.moveHelp":
+    "Where this conversation runs. Pick another place to move it there between two turns: its history goes along, files only on one side do not.",
   "composer.onMachineHelp": "This conversation runs on another machine and keeps running when this Mac is closed.",
   "composer.runOn": "Runs on",
   "composer.thisMac": "This Mac",

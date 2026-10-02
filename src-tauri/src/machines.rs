@@ -5,7 +5,8 @@
 //
 // A conversation is bound to a machine at its first spawn and stays bound (its transcript lives there): remote.json,
 // conversation key -> {machine, cwd}. Where it runs is picked in the composer before the first message ("" for this
-// Mac, or a machine id); without a pick, a project with a folder on a machine runs there. The folder: the project's
+// Mac, or a machine id); without a pick, a project with a folder on a machine runs there. Between two turns it can
+// move (move_conversation in lib.rs): its transcript goes along, with `rewrite` for the vault's paths. The folder: the project's
 // on that machine, else the machine's default folder, else its home.
 // Only Claude Code runs there, and never a conversation about a mail: the mail tools are answered by this app.
 
@@ -49,6 +50,40 @@ pub fn folder_ok(project: &str, dir: &Value) -> bool {
     !project.is_empty() && project.len() <= 120 && d.starts_with('/') && d.len() <= 500 && !d.contains(['\n', '\0'])
 }
 
+/// The folder a conversation of `project` runs in on machine `m`: the project's there, else the machine's default
+/// folder, else "" (`cwd_or_home` fills that in once the machine's Info is known).
+pub fn folder_on(m: &Value, project: Option<&str>) -> String {
+    project.and_then(|p| m["folders"][p].as_str()).or(m["default_folder"].as_str()).unwrap_or("").to_string()
+}
+/// No folder for it there: the vault's mirror when the machine has one, else the machine's home.
+pub fn cwd_or_home(cwd: String, m: &Value, info: &Info) -> String {
+    if !cwd.is_empty() { cwd } else if crate::mirror::on(m) { format!("{}/vault", info.work) } else { info.home.clone() }
+}
+/// The vault's folder and its memory's at a place where the vault is: this Mac, or a machine that mirrors it.
+pub fn roots_on(m: &Value, info: &Info) -> Option<[String; 2]> {
+    crate::mirror::on(m).then(|| [format!("{}/vault", info.work), format!("{}/memory", info.work)])
+}
+/// A transcript moving to another place: each `from` folder becomes its `to`, so the paths in the history point at
+/// files that exist where the conversation goes on. Whole folders only: not where a name goes on (`Vault2`, `Vault.bak`),
+/// anywhere else, also inside a tool's output quoted twice (`\"/Users/me/Vault\"`).
+pub fn rewrite(t: &str, from: &[String; 2], to: &[String; 2]) -> String {
+    let mut s = t.to_string();
+    for (a, b) in from.iter().zip(to) {
+        if a.is_empty() || a == b { continue; }
+        let (mut out, mut rest) = (String::with_capacity(s.len()), s.as_str());
+        while let Some(i) = rest.find(a.as_str()) {
+            let after = &rest[i + a.len()..];
+            let whole = !after.chars().next().is_some_and(|c| c.is_alphanumeric() || "-_.".contains(c));
+            out.push_str(&rest[..i]);
+            out.push_str(if whole { b } else { a });
+            rest = after;
+        }
+        out.push_str(rest);
+        s = out;
+    }
+    s
+}
+
 impl Machines {
     pub fn load(data: &Path) -> std::io::Result<Machines> {
         let id = Identity::load_or_create(data, "remote-identity")?;
@@ -83,7 +118,7 @@ impl Machines {
         if let Some(b) = self.bind_of(key) { return Some((Self::find(settings, &b.machine)?, b)); }
         if local_session { return None; }
         let m = match choice { Some("") => return None, Some(id) => Self::find(settings, id)?, None => Self::default_for(settings, project)? };
-        let cwd = project.and_then(|p| m["folders"][p].as_str()).or(m["default_folder"].as_str()).unwrap_or("").to_string();
+        let cwd = folder_on(&m, project);
         Some((m.clone(), Bind { machine: m["id"].as_str()?.into(), cwd }))
     }
     /// Every machine with what the poller last heard: {id, name, online, default: whether `project` runs there without
@@ -128,10 +163,10 @@ impl Machines {
         b.retain(|_, x| x.machine != id);
         self.save(&b);
     }
-    /// Conversation key -> machine name and folder, for the label in the composer.
+    /// Conversation key -> machine name, id and folder, for the composer's pick.
     pub fn chat_machines(&self, settings: &Value) -> Value {
         let b = self.binds.lock().unwrap();
-        json!(b.iter().filter_map(|(k, x)| Some((k.clone(), json!({"machine": Self::find(settings, &x.machine)?["name"], "cwd": x.cwd})))).collect::<serde_json::Map<_, _>>())
+        json!(b.iter().filter_map(|(k, x)| Some((k.clone(), json!({"machine": Self::find(settings, &x.machine)?["name"], "id": x.machine, "cwd": x.cwd})))).collect::<serde_json::Map<_, _>>())
     }
 
     /// One round of the poller: each machine's cards every time, its Info when there is none or it is a minute old.
@@ -155,6 +190,17 @@ impl Machines {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rewrite_moves_whole_paths_only() {
+        let mac = ["/Users/me/Vault".to_string(), "/Users/me/.claude/projects/-Users-me-Vault/memory".to_string()];
+        let srv = ["/w/ab/vault".to_string(), "/w/ab/memory".to_string()];
+        let t = r#"{"cwd":"/Users/me/Vault","input":{"file_path":"/Users/me/Vault/Notes/a.md"},"x":"/Users/me/Vault2/b /Users/me/Vault.bak","out":"{\"cwd\": \"/Users/me/Vault\"} in /Users/me/Vault","m":"/Users/me/.claude/projects/-Users-me-Vault/memory/MEMORY.md"}"#;
+        let out = rewrite(t, &mac, &srv);
+        assert!(out.contains(r#""cwd":"/w/ab/vault""#) && out.contains("/w/ab/vault/Notes/a.md") && out.contains("/w/ab/memory/MEMORY.md"));
+        assert!(out.contains(r#"\"/w/ab/vault\""#) && out.ends_with(r#"in /w/ab/vault","m":"/w/ab/memory/MEMORY.md"}"#), "quoted twice, and at a string's end");
+        assert!(out.contains("/Users/me/Vault2/b /Users/me/Vault.bak"), "a longer name that only starts the same stays");
+        assert_eq!(rewrite(&out, &srv, &mac), t, "and back again");
+    }
     #[test]
     fn machines_validate_and_bind() {
         let m = json!({"id": "0123456789ab", "name": "LServer", "host": "192.168.1.2", "port": 47800, "fp": "a".repeat(64), "folders": {"Weemaes": "/home/l/weemaes"}});

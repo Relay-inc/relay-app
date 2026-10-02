@@ -39,8 +39,12 @@
     // the stand-in claude echoes the prompt, possibly with a line in front
     await until("the machine's answer", () => /echo from relay-docker:[\s\S]*hi general/.test(text()), 20000);
     steps.push("answered by the machine");
-    label = await until("the composer label", () => !composer().querySelector("select[aria-label='Runs on']") && (composer().textContent.match(/on __MACHINE__/) || [])[0], 15000);
-    steps.push("label shown, pick gone");
+    // after the first message the pick stays, now saying where it runs (and moving it when changed)
+    label = await until("the composer pick on __MACHINE__", () => {
+      const shown = composer().querySelector("select[aria-label='Runs on']")?.selectedOptions[0]?.textContent || "";
+      return shown.startsWith("__MACHINE__ ") && shown;
+    }, 15000);
+    steps.push("pick shows the machine");
     report(true);
   } catch (e) {
     steps.push("error: " + e.message);

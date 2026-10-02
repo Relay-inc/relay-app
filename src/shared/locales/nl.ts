@@ -239,6 +239,7 @@ export default {
   "due.today": "vandaag",
   "note.forked": "Verder in de app. De terminal blijft zoals hij is.",
   "note.moved": "Onder {name} gezet",
+  "note.movedTo": "Verhuisd naar {name}. Het volgende bericht gaat daar verder.",
   "note.stopped": "Gestopt.",
   "toast.escStop": "Druk nogmaals op Escape om het verzoek te annuleren",
   "toast.closed": "Gesloten: {title}",
@@ -634,6 +635,8 @@ export default {
   "notes.empty": "Nog geen notities.",
   "set.tab.machines": "Machines",
   "composer.onMachine": "op {name}",
+  "composer.moveHelp":
+    "Waar dit gesprek loopt. Kies een andere plaats om het tussen twee beurten te verhuizen: de geschiedenis gaat mee, bestanden die maar aan één kant staan niet.",
   "composer.onMachineHelp": "Dit gesprek loopt op een andere machine en blijft draaien als deze Mac dicht is.",
   "composer.runOn": "Loopt op",
   "composer.thisMac": "Deze Mac",

@@ -31,6 +31,7 @@ import {
 import { newChat, saveChats } from "./chats";
 import { prepImages, releaseImages } from "./images";
 import { flush } from "./events";
+import { pollAgents } from "./polls";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
 // to a project, closing and reopening, and Cmd-K. Most act on the open conversation.
@@ -258,6 +259,25 @@ export function setAgent(id: string) {
     draft.chats[key].provider = id;
   });
   saveChats();
+}
+/** Moves the open conversation, between two turns, to another place: "" this Mac, or a machine id. Its next message
+ *  goes on there; a note says where it went, or the error why it did not. */
+export async function moveConversation(to: string) {
+  const key = selected();
+  const conversation = cs().chats[key];
+  if (!conversation) return;
+  const place = to
+    ? (cs().machineLists[conversation.project ?? ""]?.find(machine => machine.id === to)?.name ?? to)
+    : t("composer.thisMac");
+  try {
+    await backend.moveConversation(key, to, conversation.project ?? null, !!conversation.fromMail);
+    note(key, t("note.movedTo", { name: place }));
+  } catch (error) {
+    set(draft => {
+      push(draft, key, { kind: "err", text: String(error) });
+    });
+  }
+  await pollAgents();
 }
 /** Where the open conversation is to run, before it starts: "" this Mac, or a machine id. */
 export function setMachine(id: string) {

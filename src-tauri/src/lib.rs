@@ -209,6 +209,9 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
     ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
+    ("err.move_no_session", ["This conversation has not started yet: pick where it runs next to the model", "Dit gesprek is nog niet gestart: kies naast het model waar het loopt", "Cette conversation n'a pas encore commencé : choisissez où elle s'exécute à côté du modèle", "Dieses Gespräch hat noch nicht begonnen: Wähle neben dem Modell, wo es läuft"]),
+    ("err.move_only_claude", ["Only a Claude Code conversation can move to another machine", "Enkel een gesprek met Claude Code kan naar een andere machine", "Seule une conversation Claude Code peut changer de machine", "Nur ein Claude-Code-Gespräch kann auf eine andere Maschine wechseln"]),
+    ("err.move_busy", ["Wait until the turn ends and no card is open, then move it", "Wacht tot de beurt klaar is en er geen kaart openstaat, verhuis het dan", "Attendez la fin du tour et qu'aucune carte ne soit ouverte, puis déplacez-la", "Warte, bis die Runde endet und keine Karte offen ist, dann verschiebe es"]),
     ("err.machine_mail", ["A conversation about a mail runs on this Mac, not on a work machine", "Een gesprek over een mail loopt op deze Mac, niet op een werkmachine",
         "Une conversation sur un mail tourne sur ce Mac, pas sur une machine de travail", "Ein Gespräch über eine Mail läuft auf diesem Mac, nicht auf einer Arbeitsmaschine"]),
     ("err.machine_down", ["Work machine unreachable: {v}", "Werkmachine niet bereikbaar: {v}", "Machine de travail injoignable : {v}", "Arbeitsmaschine nicht erreichbar: {v}"]),
@@ -657,8 +660,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
         if from_mail { return Err(trc("err.machine_mail")); }
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
-        // no folder for it there: the vault's mirror when the machine has one, else the machine's home
-        if bind.cwd.is_empty() { bind.cwd = if mirror::on(&m) { format!("{}/vault", info.work) } else { info.home.clone() }; }
+        bind.cwd = machines::cwd_or_home(bind.cwd, &m, &info);
         let mut eb = env_of(app, state, p);
         // that machine's paths, its claude and its copy of perm_server.py; no mail tools there
         eb.opts["mail"] = json!(false);
@@ -1026,6 +1028,58 @@ fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Res
     save_sids(&app, &sids);
     let mut w = state.worktrees.lock().unwrap();
     if let Some(paths) = w.remove(&from) { w.insert(to, paths); save_worktrees(&app, &w); }
+    Ok(())
+}
+
+/// Moves a conversation between this Mac and a work machine (`to`: "" this Mac, else a machine id), between two turns:
+/// its agent stops, its transcript goes along with the vault's paths rewritten (machines::rewrite), and the next
+/// message resumes the session there. A conversation that read mail stays on this Mac. What is only on one side (work
+/// not committed in a repo there) does not move.
+#[tauri::command]
+async fn move_conversation(app: AppHandle, key: String, to: String, project_name: Option<String>, mail: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || move_to(&app, &key, &to, project_name.as_deref(), mail)).await.map_err(|e| e.to_string())?
+}
+fn move_to(app: &AppHandle, key: &str, to: &str, project_name: Option<&str>, mail: bool) -> Result<(), String> {
+    let state = app.state::<App>();
+    let sess = state.sids.lock().unwrap().get(key).cloned().ok_or_else(|| trc("err.move_no_session"))?;
+    if sess.provider != "claude" { return Err(trc("err.move_only_claude")); }
+    let from = state.machines.bind_of(key);
+    if from.as_ref().map_or("", |b| b.machine.as_str()) == to { return Ok(()); }
+    {
+        let procs = state.procs.lock().unwrap();
+        let x = procs.get(key);
+        if !to.is_empty() && (mail || x.is_some_and(|x| x.tainted)) { return Err(trc("err.machine_mail")); }
+        let card = pending::list(&pending_dir(app)).into_iter().chain(state.machines.pending()).any(|c| c["project"] == key);
+        if x.is_some_and(|x| x.turns > 0) || card { return Err(trc("err.move_busy")); }
+    }
+    let settings = state.settings.lock().unwrap().clone();
+    let vault = need_vault(&state)?;
+    let find = |id: &str| machines::Machines::find(&settings, id).ok_or_else(|| trc("err.no_machine"));
+    let up = |m: &Value| state.machines.info(m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))));
+    let p = agents::get_or_first(Some("claude"));
+    // this Mac's transcript folder for the session, on the account it was recorded on
+    let here = || { let mut eb = env_of(app, &state, p); eb.opts["account"] = json!(sess.account); eb };
+    let mac = [vault.clone(), format!("{}/.claude/projects/{}/memory", home(), agent_claude::slug(&vault))];
+    // the agent stops first, so the transcript is complete; a failed move leaves the conversation where it was
+    if let Some(mut x) = state.procs.lock().unwrap().remove(key) { x.child.kill().ok(); }
+    let (data, roots) = match &from {
+        None => (fs::read(PathBuf::from(agent_claude::transcripts_of(&here().env(), &sess.sid)).join(format!("{}.jsonl", sess.sid))).map_err(|e| format!("transcript: {e}"))?, Some(mac.clone())),
+        Some(b) => { let m = find(&b.machine)?; let info = up(&m)?; (state.machines.client(&m).session_get(&sess.sid)?, machines::roots_on(&m, &info)) }
+    };
+    let text = String::from_utf8(data).map_err(|_| "transcript: not UTF-8".to_string())?;
+    if to.is_empty() {
+        let text = roots.map_or(text.clone(), |r| machines::rewrite(&text, &r, &mac));
+        let to = PathBuf::from(agent_claude::transcripts(&here().env())).join(format!("{}.jsonl", sess.sid));
+        relay_remote::sync::write_atomic(&to, text.as_bytes(), None).map_err(|e| format!("transcript: {e}"))?;
+        state.machines.unbind(key);
+    } else {
+        let m = find(to)?;
+        let info = up(&m)?;
+        let cwd = machines::cwd_or_home(machines::folder_on(&m, project_name), &m, &info);
+        let text = match (roots, machines::roots_on(&m, &info)) { (Some(a), Some(b)) => machines::rewrite(&text, &a, &b), _ => text };
+        state.machines.client(&m).session_put(&sess.sid, &cwd, text.as_bytes())?;
+        state.machines.set_bind(key, machines::Bind { machine: to.into(), cwd });
+    }
     Ok(())
 }
 
@@ -1837,7 +1891,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, mirror_wipe, machines_list, set_machine_default_folder, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, mirror_wipe, move_conversation, machines_list, set_machine_default_folder, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

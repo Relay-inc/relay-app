@@ -5,8 +5,10 @@
 //! Requests: `info`, `list` (the brokers that run), `kill {key,pid}`, `pending` (open permission cards), `answer
 //! {id,decision}`, `history {sid,from,cwd}`, `exists {path}`, `launch {meta,spec}`, `attach {key}`, the mirror's
 //! `unlock {key}`, `sync_manifest {root}`, `sync_get {root,path}` (the reply line has `len`, the bytes follow),
-//! `sync_put {root,path,len,mtime}` (the bytes follow the request line), `sync_delete {root,path,hash}`, `wipe`, and
-//! from a device that is not paired yet only `pair {name,proof}`.
+//! `sync_put {root,path,len,mtime}` (the bytes follow the request line), `sync_put_many {root,files:[{path,len,mtime}]}`
+//! (the files' bytes follow one after the other, the reply has `errors` per path), `sync_delete {root,path,hash}`, `wipe`, moving
+//! a conversation's `session_get {sid}` (len and bytes like sync_get) and `session_put {sid,cwd,len}` (bytes follow),
+//! and from a device that is not paired yet only `pair {name,proof}`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -15,7 +17,7 @@ use std::io::{self, BufRead, Read, Write};
 /// The port a relay-server listens on unless told otherwise.
 pub const PORT: u16 = 47800;
 /// Bumped when a request changes shape; the app refuses a server that speaks another one.
-pub const PROTO: u32 = 1;
+pub const PROTO: u32 = 2;
 /// A request line is small; a line this long is refused before it fills memory. A launch carries the whole command
 /// (Claude's MCP config included), which stays well under this.
 pub const MAX_LINE: u64 = 1 << 20;
@@ -57,6 +59,8 @@ pub fn write_json<W: Write>(w: &mut W, v: &Value) -> io::Result<()> {
 
 /// A reply can be big (a manifest of a few thousand files); still bounded.
 pub const MAX_REPLY: u64 = 64 << 20;
+/// A Claude session's transcript, moved with its conversation: long sessions run to tens of MB.
+pub const MAX_SESSION: u64 = 512 << 20;
 /// Exactly `len` raw bytes after a JSON line: a file in `sync_get` and `sync_put`.
 pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8>> {
     if len > max { return Err(io::Error::new(io::ErrorKind::InvalidData, "file too big")); }

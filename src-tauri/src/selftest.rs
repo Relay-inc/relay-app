@@ -233,6 +233,37 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
         wait(Duration::from_secs(20), || fs::read_to_string(vault.join("Notes/Van de server.md")).ok().filter(|t| t == "hallo terug")).ok_or_else(|| "not here".to_string())
     }));
 
+    // moving a conversation: refused mid-turn, then to this Mac (its transcript comes along with this Mac's paths) and
+    // back to the machine (the machine's paths again), where it goes on in the same session
+    let msid = st.sids.lock().unwrap().get(MIRROR_KEY).map(|s| s.sid.clone()).unwrap_or_default();
+    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, Some(id.clone())).ok();
+    std::thread::sleep(Duration::from_millis(800));
+    r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", None, false) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
+    turn_of(ev, MIRROR_KEY, Duration::from_secs(20)).ok();
+    let v = vault.to_string_lossy().to_string();
+    let local = PathBuf::from(home()).join(".claude/projects").join(agent_claude::slug(&v)).join(format!("{msid}.jsonl"));
+    let m = machines::Machines::find(&st.settings.lock().unwrap(), &id).unwrap_or_default();
+    let work = st.machines.info(&m).map(|i| i.work).unwrap_or_default();
+    r.step("moved to this Mac", move_to(app, MIRROR_KEY, "", None, false).and_then(|_| {
+        let t = fs::read_to_string(&local).map_err(|e| format!("{}: {e}", local.display()))?;
+        // the vault's paths are this Mac's now; the machine's own (its plugins, its perm_server.py) stay as they were
+        let ok = st.machines.bind_of(MIRROR_KEY).is_none() && t.contains("read Notes/Uit de vault.md") && t.contains(&format!("{v}\"")) && !t.contains(&format!("{work}/vault"));
+        if ok { Ok(format!("{} bytes, this Mac's paths", t.len())) } else { Err(t) }
+    }));
+    r.step("moved back to the machine", move_to(app, MIRROR_KEY, &id, None, false).and_then(|_| {
+        let m = machines::Machines::find(&st.settings.lock().unwrap(), &id).ok_or("no machine")?;
+        let t = String::from_utf8(st.machines.client(&m).session_get(&msid)?).map_err(|e| e.to_string())?;
+        if t.contains(&format!("{work}/vault\"")) && !t.contains(&format!("{v}\"")) { Ok(format!("{} bytes, the machine's paths", t.len())) } else { Err(t) }
+    }));
+    // the agent the move stopped said "exit": not a turn of what follows
+    std::thread::sleep(Duration::from_millis(500));
+    while ev.lock().unwrap().try_recv().is_ok() {}
+    r.step("it goes on there in the same session", ask(app, ev, MIRROR_KEY, &id, "read Notes/Uit de vault.md").and_then(|t| {
+        let same = st.sids.lock().unwrap().get(MIRROR_KEY).map(|s| s.sid.clone()) == Some(msid.clone());
+        if t.contains("geheim 42") && same { Ok(t) } else { Err(format!("same session {same}: {t}")) }
+    }));
+    fs::remove_file(&local).ok();
+
     // quit with a turn running: phase 2 must find it again
     let sid = st.sids.lock().unwrap().get(KEY).map(|s| s.sid.clone()).unwrap_or_default();
     fs::write(r.dir.join("sid"), &sid).ok();

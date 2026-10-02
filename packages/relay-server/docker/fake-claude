@@ -25,7 +25,7 @@ def out(o):
 
 def log(o):
     with open(transcript, "a") as f:
-        f.write(json.dumps({**o, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())}) + "\n")
+        f.write(json.dumps({**o, "cwd": cwd, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())}) + "\n")
 
 def approve(tool, inp):
     """The permission tool, as Claude Code calls it: initialize, then tools/call approve."""

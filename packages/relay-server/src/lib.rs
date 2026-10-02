@@ -13,7 +13,7 @@
 pub mod mirror;
 
 use relay_remote::broker::{self, Meta, Spec};
-use relay_remote::proto::{self, Info, MAX_LINE, PROTO};
+use relay_remote::proto::{self, Info, MAX_LINE, MAX_SESSION, PROTO};
 use relay_remote::tls::{self, Acceptor, Identity};
 use serde_json::{json, Value};
 use std::io::{self, BufRead, BufReader, Write};
@@ -183,8 +183,26 @@ impl Server {
                 let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), mirror::MAX_FILE)?;
                 reply(&mut w, self.mirror.put(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or(""), &body, req["mtime"].as_i64().unwrap_or(0)).map(|_| json!({})))
             }
+            "sync_put_many" => {
+                let root = req["root"].as_str().unwrap_or("");
+                let mut errors = serde_json::Map::new();
+                for f in req["files"].as_array().into_iter().flatten() {
+                    let body = proto::read_body(&mut r, f["len"].as_u64().unwrap_or(0), mirror::MAX_FILE)?;
+                    let path = f["path"].as_str().unwrap_or("");
+                    if let Err(e) = self.mirror.put(ns, root, path, &body, f["mtime"].as_i64().unwrap_or(0)) { errors.insert(path.into(), json!(e)); }
+                }
+                reply(&mut w, Ok(json!({"errors": errors})))
+            }
             "sync_delete" => reply(&mut w, self.mirror.delete(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or(""), req["hash"].as_str().unwrap_or("")).map(|_| json!({}))),
             "wipe" => { self.mirror.wipe(ns); reply(&mut w, Ok(json!({}))) }
+            "session_get" => match self.session_find(req["sid"].as_str().unwrap_or("")).ok_or("no such session here").and_then(|p| fs::read(p).map_err(|_| "no such session here")) {
+                Ok(b) => { proto::write_json(&mut w, &json!({"ok": true, "len": b.len()}))?; w.write_all(&b)?; w.shutdown(); Ok(()) }
+                Err(e) => reply(&mut w, Err(e.into())),
+            },
+            "session_put" => {
+                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), MAX_SESSION)?;
+                reply(&mut w, self.session_put(ns, &req, &body))
+            }
             "list" => reply(&mut w, Ok(json!({"metas": metas(ns)}))),
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
@@ -238,6 +256,31 @@ impl Server {
         json!({"items": items, "next": next})
     }
 
+    /// Claude Code's transcripts here, one folder per working directory.
+    fn projects(&self) -> PathBuf {
+        std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|| Path::new(&self.info.home).join(".claude")).join("projects")
+    }
+    /// A session's transcript here, the newest when Claude Code left copies in several folders. None for a bad id.
+    fn session_find(&self, sid: &str) -> Option<PathBuf> {
+        if !sid_ok(sid) { return None; }
+        fs::read_dir(self.projects()).ok()?.flatten().map(|d| d.path().join(format!("{sid}.jsonl")))
+            .filter_map(|p| Some((fs::metadata(&p).ok()?.modified().ok()?, p))).max().map(|(_, p)| p)
+    }
+    /// A conversation moves here: its transcript goes where Claude Code looks for a session started in `cwd`, and any
+    /// older copy of it here goes, so `--resume` finds this one.
+    fn session_put(&self, ns: &str, req: &Value, body: &[u8]) -> Result<Value, String> {
+        let (sid, cwd) = (req["sid"].as_str().unwrap_or(""), req["cwd"].as_str().unwrap_or(""));
+        if !sid_ok(sid) { return Err("bad session id".into()); }
+        if !cwd.starts_with('/') || !Path::new(cwd).is_dir() { return Err(format!("folder {cwd} does not exist on {}", self.info.host)); }
+        if Path::new(cwd).starts_with(self.mirror.work_of(ns)) && !self.mirror.is_open(ns) {
+            return Err(format!("the vault on {} is locked: it opens when Relay on your laptop connects", self.info.host));
+        }
+        while let Some(old) = self.session_find(sid) { fs::remove_file(old).map_err(|e| e.to_string())?; }
+        let to = self.projects().join(agent_claude::slug(cwd)).join(format!("{sid}.jsonl"));
+        relay_remote::sync::write_atomic(&to, body, None).map_err(|e| e.to_string())?;
+        Ok(json!({}))
+    }
+
     fn launch(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
         let (mut meta, spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
@@ -276,6 +319,8 @@ fn metas(ns: &str) -> Vec<Meta> {
         .filter(|m| m.key.starts_with(&pre) && UnixStream::connect(sock_of(&m.key)).is_ok())
         .map(|m| Meta { key: m.key[pre.len()..].to_string(), ..m }).collect()
 }
+/// A Claude session id: a UUID, so it is safe in a file name.
+fn sid_ok(s: &str) -> bool { s.len() == 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-') }
 fn sock_of(key: &str) -> PathBuf { broker::meta_path(key).with_extension("sock") }
 /// After a crash or a restart the brokers are gone but their files are not: a socket nobody answers on, and its
 /// meta, would list a dead conversation as running. Swept at start.

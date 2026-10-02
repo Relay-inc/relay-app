@@ -104,16 +104,19 @@ export function chatBar(key: string) {
       : null,
   };
 }
-/** The composer's "runs on" pick of a conversation without a session yet: the machines, the one picked ("" this Mac,
- *  null nothing to pick) and why only this Mac can run it (null when a machine can). */
+/** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
+ *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
+ *  it where it runs: picking another place then moves it (`moveConversation`). */
 export function machineChoice(key: string) {
   const conversation = cs().chats[key];
   const list = cs().machineLists[conversation?.project ?? ""] ?? [];
+  const started = !!cs().sidOf[key];
   const why: Key | null =
     chatAgent(key) !== "claude"
       ? "composer.machineOnlyClaude"
       : conversation?.fromMail
         ? "composer.machineNoMail"
         : null;
-  return { list, value: machinePick(list, useDraftsStore.getState().machine[key], !why), why };
+  if (started) return { list, value: list.length ? (cs().machines[key]?.id ?? "") : null, why, started };
+  return { list, value: machinePick(list, useDraftsStore.getState().machine[key], !why), why, started };
 }

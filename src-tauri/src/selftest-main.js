@@ -34,8 +34,12 @@
     // the stand-in claude echoes the whole prompt, the project line in front included
     await until("the machine's answer", () => /echo from relay-docker:[\s\S]*hi from the UI/.test(text()), 20000);
     steps.push("answered by the machine");
-    label = await until("the composer label", () => (document.querySelector(".relay-composer")?.textContent.match(/on docker/) || [])[0], 15000);
-    steps.push("label shown");
+    // after the first message the pick says where it runs (and moves it when changed)
+    label = await until("the composer pick on the machine", () => {
+      const shown = document.querySelector(".relay-composer select[aria-label='Runs on']")?.selectedOptions[0]?.textContent || "";
+      return shown.startsWith("docker") && shown;
+    }, 15000);
+    steps.push("pick shows the machine");
     report(true);
   } catch (e) {
     steps.push("error: " + e.message);

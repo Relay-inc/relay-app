@@ -239,6 +239,7 @@ export default {
   "due.today": "heute",
   "note.forked": "Weiter in der App. Das Terminal bleibt, wie es ist.",
   "note.moved": "Unter {name} abgelegt",
+  "note.movedTo": "Verschoben nach {name}. Die nächste Nachricht geht dort weiter.",
   "note.stopped": "Gestoppt.",
   "toast.escStop": "Drücke erneut Escape, um die Anfrage abzubrechen",
   "toast.closed": "Geschlossen: {title}",
@@ -639,6 +640,8 @@ export default {
   "notes.empty": "Noch keine Notizen.",
   "set.tab.machines": "Maschinen",
   "composer.onMachine": "auf {name}",
+  "composer.moveHelp":
+    "Wo dieses Gespräch läuft. Wähle einen anderen Ort, um es zwischen zwei Runden dorthin zu verschieben: der Verlauf kommt mit, Dateien, die nur auf einer Seite liegen, nicht.",
   "composer.onMachineHelp":
     "Dieses Gespräch läuft auf einer anderen Maschine und läuft weiter, wenn dieser Mac zu ist.",
   "composer.runOn": "Läuft auf",
