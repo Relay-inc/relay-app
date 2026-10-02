@@ -13,7 +13,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Changed
 
-- Model and effort pickers show the inherited CLI values for every provider, including model-specific effort defaults.
+- Model and effort pickers show the inherited CLI values for every provider, including model-specific effort defaults. (#59)
 
 - Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
 - The views on top of the sidebar can be set up: right-click one to hide it, show it as a row of icons instead of a list, bring hidden ones back or reset the order, and drag them to reorder. Settings › General › Sidebar has the same switches. Trello, Linear and Productive now draw a monochrome icon there, like the rest of the sidebar (#53)
