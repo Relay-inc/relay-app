@@ -82,7 +82,7 @@ impl AgentProvider for Claude {
         if let Some(sid) = l.resume { cmd.args(["--resume", sid]); }
         // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
         else if let Some(f) = l.fork { cmd.args(["--resume", f, "--fork-session"]); }
-        // attached files are read from there without a permission prompt
+        // attached files are read from there without a permission prompt. --add-dir is variadic: keep it last
         cmd.arg("--add-dir").arg(agent_core::attachments());
         cmd.env_remove("ANTHROPIC_API_KEY").env("MCP_TOOL_TIMEOUT", "86400000"); // a permission may wait a day for the user
         Ok(cmd)

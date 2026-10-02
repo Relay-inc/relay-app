@@ -39,9 +39,8 @@ const note = (key: string, text: string, kind: "note" | "err" = "note") => {
 };
 
 // ---------- the composer: what is typed per conversation, images waiting for the next send
-/** What is typed in the open conversation; kept per conversation across switching and restarts. */
-export function setTyped(value: string) {
-  const key = selected();
+/** What is typed in the open conversation (or `key`); kept per conversation across switching and restarts. */
+export function setTyped(value: string, key = selected()) {
   setDrafts(draft => {
     if (value) draft.typed[key] = value;
     else delete draft.typed[key];
@@ -54,7 +53,7 @@ export function setTyped(value: string) {
     set(draft => {
       draft.chats[key].title = value.trim().slice(0, 48) || NEW;
     });
-  storage.set("sel", value ? key : WAIT);
+  if (key === selected()) storage.set("sel", value ? key : WAIT);
   saveChats();
 }
 /** Text into a conversation's composer from elsewhere (a card's "Start conversation"): the draft keeps its title. */
@@ -69,16 +68,17 @@ export function typeInto(key: string, value: string) {
   }
 }
 /** Files that are not pictures (a pdf, a spreadsheet), saved where the agent can read them: their paths. One that
- *  cannot be saved shows an error in the open conversation, or a toast when none is open (Cmd-K over a view). */
-export async function saveFiles(files: File[]) {
+ *  cannot be saved shows an error in conversation `key`, or a toast when that is no conversation (Cmd-K over a view). */
+export async function saveFiles(files: File[], key = selected()) {
   const paths = await Promise.all(
     files
       .filter(file => !file.type.startsWith("image/"))
       .map(async file => {
         try {
+          // checked before reading: a big file is not loaded into memory for nothing
+          if (file.size > 50e6) throw "> 50 MB";
           return await backend.saveAttachment(file.name, (await readUrl(file)).split(",")[1] ?? "");
         } catch (error) {
-          const key = selected();
           if (!cs().chats[key] && !isTerminal(key)) toast(`${file.name}: ${error}`);
           else note(key, `${file.name}: ${error}`, "err");
           return null;
@@ -90,12 +90,14 @@ export async function saveFiles(files: File[]) {
 /** Files pasted, dropped or picked in the composer: images wait as thumbnails, the other files' paths go after what
  *  is typed. True when a path was added. Cmd-K keeps its own list: it uses `prepImages` and `saveFiles` itself. */
 export async function attach(files: File[]) {
-  const [images, paths] = await Promise.all([prepImages(files), saveFiles(files)]);
+  // the conversation the files were dropped on, even when another one is open by the time they are saved
+  const key = selected();
+  const [images, paths] = await Promise.all([prepImages(files), saveFiles(files, key)]);
   if (images.length)
     setDrafts(draft => {
       draft.attached.push(...images);
     });
-  if (paths.length) setTyped(withPaths(drafts().typed[selected()] ?? "", paths));
+  if (paths.length) setTyped(withPaths(drafts().typed[key] ?? "", paths), key);
   return paths.length > 0;
 }
 export function unattach(i: number) {

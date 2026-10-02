@@ -1158,18 +1158,21 @@ async fn integration_upload(provider: String, url: String, fields: serde_json::M
 
 /// A file the user attached that is not a picture, saved where the agent can read it; the path goes in the message. 50 MB at most.
 #[tauri::command]
-fn save_attachment(name: String, data: String) -> Result<String, String> {
-    use base64::Engine;
-    let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| e.to_string())?;
-    if bytes.len() > 50_000_000 { return Err("> 50 MB".into()); } // the webview puts the name in front
-    // only the name's last part: the webview names the file, not where it goes
-    let file = std::path::Path::new(&name).file_name().ok_or("no file name")?;
-    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
-    let dir = agent_core::attachments().join(nanos.to_string());
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(file);
-    fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    Ok(path.to_string_lossy().into_owned())
+async fn save_attachment(name: String, data: String) -> Result<String, String> {
+    // the base64 of 50 MB, refused before decoding; the webview puts the name in front of the error
+    if data.len() > 50_000_000usize.div_ceil(3) * 4 { return Err("> 50 MB".into()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| e.to_string())?;
+        // only the name's last part: the webview names the file, not where it goes
+        let file = std::path::Path::new(&name).file_name().ok_or("no file name")?;
+        let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+        let dir = agent_core::attachments().join(nanos.to_string());
+        fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let path = dir.join(file);
+        fs::write(&path, bytes).map_err(|e| e.to_string())?;
+        Ok(path.to_string_lossy().into_owned())
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// A picture's preview for a card panel (providers::thumb), as a data URL.
