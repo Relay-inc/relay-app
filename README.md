@@ -214,8 +214,7 @@ own config folder (`CLAUDE_CONFIG_DIR`); `opts.active` is the one new conversati
 conversation in `sessions.json` (`{provider, sid, account}`) and reads every account's limits. With `auto` on, a
 conversation whose account is used up (a window at 100% that applies to its model, or a turn refused for its limit) moves
 to the next signed-in account with room on its next message, once idle: the process restarts there and the provider takes
-its transcript along. A conversation holding mail text never moves. A removed account keeps its conversations: they
-resume on the folder `sessions.json` recorded.
+its transcript along. A removed account keeps its conversations: they resume on the folder `sessions.json` recorded.
 
 **Events** (`agent_core::Event`, JSON with `type` in snake_case), sent as the Tauri event `agent` with
 `{project, provider, event}`: `session {id}`, `text {text, delta}`, `thinking {text, delta}`, `tool_call {id, name, input}`,
