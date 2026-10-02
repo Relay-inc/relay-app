@@ -196,8 +196,8 @@ async function deliver(key: string, conversation: Chat | undefined, text: string
       name,
       fork: conversation?.fork ?? null,
       mail: !!conversation?.fromMail,
-      model: picks("model").value,
-      effort: picks("effort").value,
+      model: picks("model", key).value,
+      effort: picks("effort", key).value,
       provider: chatAgent(key),
     });
     if (told && conversation?.project) {
