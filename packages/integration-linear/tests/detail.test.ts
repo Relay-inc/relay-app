@@ -8,7 +8,7 @@ const issue = { id: "issue", identifier: "ENG-12", title: "Ticket", description:
 const ref = { provider: "linear", project: "old-team", board: "project" };
 const calls: any[] = [];
 function context(): Ctx {
-  return { config: {}, thumb: async () => "", upload: async (url, headers, file) => { calls.push(["upload", url, headers, file.name]); return ""; },
+  return { config: {}, upload: async (url, headers, file) => { calls.push(["upload", url, headers, file.name]); return ""; },
     call: async (_m, _p, body: any) => {
       calls.push(body);
       const q = body.query;

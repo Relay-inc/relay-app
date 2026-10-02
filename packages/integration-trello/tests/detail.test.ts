@@ -5,7 +5,7 @@ import { markdown } from "@relay/board-core/detail";
 import type { Ctx } from "@relay/board-core";
 const ref = { provider: "trello", project: "workspace", board: "board" };
 const card = { id: "card", idBoard: "board", idShort: 12, name: "Ticket", desc: "**Bold**", idList: "list", list: { name: "Doing" }, board: { name: "Website" }, members: [{ id: "a", fullName: "Alice" }, { id: "b", fullName: "Bob" }], attachments: [{ id: "f", name: "File", bytes: 10, url: "https://trello.com/file" }] };
-const context = (call: Ctx["call"]): Ctx => ({ config: {}, call, upload: async () => "", thumb: async () => "" });
+const context = (call: Ctx["call"]): Ctx => ({ config: {}, call, upload: async () => "" });
 test("ticket mapping preserves all members, files, markdown and activity", () => {
   const v = mapDetail(card, [{ id: "list", name: "Doing" }], card.members, [{ type: "commentCard", date: "2026-01-01", data: { text: "hello **world**" }, memberCreator: { fullName: "Alice" } }], "workspace");
   assert.deepEqual(v.assignees?.map(p => p.id), ["a", "b"]);
