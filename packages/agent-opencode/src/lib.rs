@@ -74,7 +74,13 @@ impl AgentProvider for OpenCode {
     }
     fn models(&self) -> Vec<Choice> { models_of(&self.bin()).0 }
     fn commands(&self, env: &Env) -> Value {
-        agent_core::discover_commands(env, include_str!("../commands.py"))
+        agent_core::discover_commands(env, |p| {
+            let (addr, auth) = p.http_server(env.bin, env.vault)?;
+            let commands = agent_core::http_get(&addr, &auth, "/command")?;
+            Ok(Value::Array(commands.as_array().ok_or("Unexpected commands")?.iter().map(|c| json!({
+                "name": c["name"], "description": c["description"].as_str().unwrap_or(""),
+                "argumentHint": c["hints"].as_array().map_or(String::new(), |h| h.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(" "))})).collect()))
+        })
     }
     fn efforts(&self) -> Vec<Choice> { models_of(&self.bin()).1 }
     fn valid_session(&self, id: &str) -> bool { store::valid(id) }

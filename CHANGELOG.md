@@ -15,6 +15,9 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 - The released app could not read the vault: it looked for a script in the build machine's checkout. Reading the vault is built into the app now, and no longer needs Python
 - Permission prompts work in the released app: they ran a script from the machine that built it, and needed Python
+### Changed
+
+- Loading the slash commands of Claude Code, Codex, OpenCode and Pi no longer needs Python, so Macs without the Xcode Command Line Tools no longer get an install prompt.
 
 ## [0.0.3] - 2026-10-02
 

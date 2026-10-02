@@ -91,7 +91,16 @@ impl AgentProvider for Claude {
         [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
     fn commands(&self, env: &Env) -> Value {
-        agent_core::discover_commands(env, include_str!("../commands.py"))
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
+            let c = p.start(cmd)?;
+            p.send(c, json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize"}}))?;
+            let v = p.receive(c, |v| v["type"] == "control_response")?;
+            let commands = &v["response"]["response"]["commands"];
+            Ok(if commands.is_null() { json!([]) } else { commands.clone() })
+        })
     }
     fn efforts(&self) -> Vec<Choice> {
         [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")].iter().map(|(i, l)| Choice::new(i, l)).collect()

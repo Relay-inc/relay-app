@@ -28,6 +28,20 @@ pub const AUTH: [&str; 2] = ["chatgpt", "api-key"];
 fn pick<'a>(env: &'a Env, key: &str, from: &[&'a str]) -> &'a str { from.iter().copied().find(|c| *c == env.opt(key)).unwrap_or(from[0]) }
 
 pub fn codex_home(home: &str) -> PathBuf { std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("{home}/.codex"))) }
+/// Relay's own /compact and /review, then one `skill:<name>` per enabled skill (never shadowing a built-in).
+fn codex_commands(skills: &Value) -> Value {
+    let mut commands = vec![json!({"name": "compact", "description": "Compact the conversation context"}),
+        json!({"name": "review", "description": "Review uncommitted changes"})];
+    let mut names: Vec<String> = vec!["compact".into(), "review".into()];
+    for skill in skills["data"].as_array().into_iter().flatten().flat_map(|g| g["skills"].as_array().into_iter().flatten()) {
+        let name = format!("skill:{}", skill["name"].as_str().unwrap_or_default());
+        if skill["enabled"].as_bool().unwrap_or(true) && !names.contains(&name) {
+            commands.push(json!({"name": name, "description": skill["description"].as_str().unwrap_or(""), "argumentHint": "<instructions>"}));
+            names.push(name);
+        }
+    }
+    Value::Array(commands)
+}
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 
 static LOGS: Mutex<Option<rollout::Logs>> = Mutex::new(None);
@@ -72,7 +86,15 @@ impl AgentProvider for Codex {
     }
     fn models(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).0 }
     fn commands(&self, env: &Env) -> Value {
-        agent_core::discover_commands(env, include_str!("../commands.py"))
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.arg("app-server").current_dir(env.vault);
+            let c = p.start(cmd)?;
+            p.rpc(c, 0, "initialize", json!({"clientInfo": {"name": "relay", "version": "0.1.0"}}))?;
+            p.send(c, json!({"method": "initialized"}))?;
+            let skills = p.rpc(c, 1, "skills/list", json!({"cwds": [env.vault], "forceReload": true}))?;
+            Ok(codex_commands(&skills))
+        })
     }
     fn efforts(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).1 }
 
@@ -138,6 +160,12 @@ impl AgentProvider for Codex {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn skills_exclude_disabled_and_keep_built_ins_distinct() {
+        let skills = json!({"data": [{"skills": [{"name": "review", "description": "Review skill"}, {"name": "hidden", "enabled": false}, {"name": "review"}]}]});
+        let names: Vec<_> = super::codex_commands(&skills).as_array().unwrap().iter().map(|c| c["name"].as_str().unwrap().to_string()).collect();
+        assert_eq!(names, ["compact", "review", "skill:review"]);
+    }
     use super::*;
     use std::io::{BufRead, BufReader, Write};
     use std::process::Stdio;
