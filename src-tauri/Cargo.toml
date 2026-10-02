@@ -27,7 +27,6 @@ chrono = "0.4"
 regex = "1"
 sha1_smol = "1"
 # the favicon run (src/favicon.rs): domains in notes, accents folded, icon links resolved
-regex = "1"
 unicode-normalization = "0.1"
 url = "2"
 tauri-plugin-opener = "2"
