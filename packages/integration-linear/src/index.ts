@@ -1,5 +1,5 @@
 import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
-import { ISSUES, ISSUE_URL, MOVE, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapStates, mapTeams } from "./map";
+import { CREATE, ISSUES, ISSUE_URL, MOVE, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapIssues, mapStates, mapTeams } from "./map";
 import { linearTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
@@ -38,6 +38,14 @@ const linear: BoardProvider<Key> = {
     const r = (await gql(c, MOVE, { id: card.id, stateId: to }))?.issueUpdate;
     if (!r?.success) throw new Error(t("moveRefused"));
     return typeof r.issue?.sortOrder === "number" ? r.issue.sortOrder : undefined;
+  },
+  // in the lane's workflow state, in the board's Linear project when it is one
+  create: async (c, ref, { title, description, column }) => {
+    const r = (await gql(c, CREATE, { teamId: ref.project, stateId: column, title, description, projectId: ref.board && ref.board !== ref.project ? ref.board : null }))?.issueCreate;
+    if (!r?.success || !r.issue) throw new Error(t("createRefused"));
+    const made = mapIssues({ issues: { nodes: [r.issue] } });
+    for (const [id, url] of made.urls) links.set(id, url);
+    return made.cards[0];
   },
   url: async (c, _ref, id) => links.get(id) || (await gql(c, ISSUE_URL, { id }))?.issue?.url || "https://linear.app",
   detail: linearTicket.detail,

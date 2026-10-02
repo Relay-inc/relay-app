@@ -45,6 +45,12 @@ const trello: BoardProvider<Key> = {
     const r = await c.call("PUT", `/cards/${card.id}`, { idList: to, pos: "bottom" });
     return typeof r?.pos === "number" ? r.pos : undefined;
   },
+  // at the bottom of the lane's list
+  create: async (c, _ref, { title, description, column }) => {
+    const r = await c.call("POST", "/cards", { idList: column, name: title, desc: description, pos: "bottom" });
+    if (r?.shortUrl) links.set(r.id, r.shortUrl);
+    return mapCards([r])[0];
+  },
   url: async (_c, _ref, id) => links.get(id) || `https://trello.com/c/${id}`,
   detail: trelloTicket.detail,
   reset: () => { me = null; mine = null; links.clear(); trelloTicket.reset(); },

@@ -40,7 +40,7 @@ export function PresetRow({
     >
       <span className="flex-1 truncate">{name}</span>
       {count !== null && <span className="text-xs text-tertiary tabular-nums">{count}</span>}
-      {on && <Icon name="check" className="glyph size-3.5" />}
+      {on && <Icon name="check" className="glyph size-3.5 text-accent-text stroke-2" />}
       {onRemove && (
         <button
           className="hidden group-hover:inline-grid btn-icon size-5 rounded-sm"

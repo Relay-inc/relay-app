@@ -9,6 +9,8 @@ type BoardState = {
   states: Record<string, Board>; // per provider: what it shows, kept while switching views
   folded: Record<string, Record<string, boolean>>; // per provider: folded or open, per column id the user clicked
   resets: number; // bumped by resetBoard, so a board on screen loads again
+  composing: { provider: string; column: string } | null; // the New task dialog, for a column of that provider's board
+  ticketChats: Record<string, string[]>; // per card key: the conversations Start conversation began from it
 };
 
 const storedFolds = (key: string): Record<string, boolean> => {
@@ -40,4 +42,6 @@ export const useBoardStore = makeStore<BoardState>(() => ({
   states: Object.fromEntries(PROVIDERS.map(provider => [provider.id, storedBoard(provider)])),
   folded: Object.fromEntries(PROVIDERS.map(provider => [provider.id, storedFolds(`${storageKey(provider)}Fold`)])),
   resets: 0,
+  composing: null,
+  ticketChats: storage.get<Record<string, string[]>>("ticketChats", {}),
 }));

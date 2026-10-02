@@ -5,6 +5,10 @@ import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
 import { tintText, type Tint } from "../../../shared/tints";
+import { boardOf } from "../../../application/navigation/navigation";
+import { useNavigationStore } from "../../../application/navigation/store";
+import { BoardCrumb } from "../board/BoardCrumb";
+import { BoardActions } from "../board/BoardActions";
 
 /** What the bar offers for a project: its tools, the one that is open lit. */
 export type BarTools = {
@@ -14,7 +18,7 @@ export type BarTools = {
   active: "" | "board" | "prs"; // the project's board or PRs is what the centre shows
 };
 
-/** The title bar of the centre column: the project (or the view), the conversation's title and state, a view's own
+/** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
  *  buttons (`actions`), the project's tools (board, pull requests, terminal and notes drawers) and the external
  *  terminal button. The shell keys it by the selection, so a title being edited never carries over. */
 export function ChatBar({
@@ -63,6 +67,8 @@ export function ChatBar({
   onToggleDrawer: (tool: "terminal" | "notes") => void;
 }) {
   const { t } = useT();
+  // a board: its crumb (switch board or project) and its buttons (BoardCrumb, BoardActions)
+  const board = boardOf(useNavigationStore(s => s.selected));
   // the title while it is edited: a redraw must not take the text away from under the caret
   const [draft, setDraft] = useState<string | null>(null);
   // Escape blurs without saving
@@ -167,8 +173,10 @@ export function ChatBar({
           </span>
         </>
       ) : null}
+      {board ? <BoardCrumb provider={board} /> : null}
       <span className="flex-1" data-tauri-drag-region></span>
       {actions}
+      {board ? <BoardActions provider={board} /> : null}
       {tools ? (
         <>
           {tools.board ? (

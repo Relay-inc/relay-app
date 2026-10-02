@@ -19,8 +19,8 @@ export type CardGrab = {
 
 // priorities 1 and 2 are coloured, 3 and 4 only named
 const PRIORITY_CLASS: Record<number, string> = { 1: "text-late", 2: "text-soon", 3: "", 4: "" };
-const CARD_AT_REST = "shadow-sm border border-separator-strong hover:shadow-md";
-const CARD_SELECTED = "border border-accent ring-1 ring-accent shadow-[0_0_0_4px_var(--accent-soft)]";
+const CARD_AT_REST = "border border-card-edge shadow-card hover:border-card-edge-hover hover:shadow-card-hover";
+const CARD_SELECTED = "border border-accent shadow-[0_0_0_.5px_var(--accent),0_0_0_4px_var(--accent-soft)]";
 const CARD_DRAGGED = "fixed left-0 top-0 z-40 pointer-events-none opacity-95 shadow-lg";
 
 /** One card. Pressing it reports where it was grabbed (the board drags it with pointer events, the Mac webview does
@@ -62,10 +62,12 @@ export function BoardCard({
   const path = [card.folder, card.list].filter(Boolean).join(" › ");
   const dueDay = due(card.due, locale);
   const touched = updated(card.updated, locale);
-  const look = ghost ? CARD_DRAGGED : selected ? CARD_SELECTED : CARD_AT_REST;
+  const look = ghost ? `${CARD_DRAGGED} border border-card-edge` : selected ? CARD_SELECTED : CARD_AT_REST;
+  // a card made on the board that the tracker has not confirmed yet
+  const draft = card.id.startsWith("new:");
   return (
     <div
-      className={`bg-raised rounded-lg px-3 py-2.5 flex flex-col gap-1.5 cursor-grab select-none ${look}`}
+      className={`bg-raised rounded-[9px] px-3 py-2.5 flex flex-col gap-1.5 cursor-grab select-none transition-[box-shadow,border-color] duration-150 ${look} ${draft ? "opacity-60 pointer-events-none" : ""}`}
       style={ghost ? { width: `${ghost.width}px`, transform: `translate(${ghost.left}px,${ghost.top}px)` } : undefined}
       onPointerDown={ghost ? undefined : onDown}
       // a div, not a button, because it holds block content: the role and the keys make it one for the keyboard
@@ -73,21 +75,21 @@ export function BoardCard({
       tabIndex={ghost ? undefined : 0}
       onKeyDown={ghost ? undefined : onKey}
     >
-      <div className="flex items-center gap-1.5 h-5 font-mono text-xs text-secondary">
+      <div className="flex items-center gap-1.5 h-5 font-mono text-[11px] text-secondary">
         {number && <span>{numbered(number)}</span>}
         {!!priority && priority <= 4 && (
           <span className={PRIORITY_CLASS[priority] ?? ""}>{t(`kb.prio${priority}` as Key)}</span>
         )}
         <span className="flex-1"></span>
-        <Avatar name={card.who} />
+        <Avatar name={card.whoName || card.who} self={card.me} />
       </div>
       <div className="flex gap-2 items-start">
         {card.state && (
           <span className="mt-0.5 inline-flex">
-            <Ring state={card.state} />
+            <Ring state={card.state} tone={card.tone} />
           </span>
         )}
-        <div className="text-[13px] font-medium leading-snug">{card.title}</div>
+        <div className="text-[13px] font-medium leading-[1.4] text-pretty">{card.title}</div>
       </div>
       {path && <div className={`text-[11px] text-secondary ${card.state ? "pl-5.5" : ""}`}>{path}</div>}
       {(!!card.labels?.length || dueDay || touched) && (
@@ -95,10 +97,7 @@ export function BoardCard({
           className={`flex items-center gap-1.5 text-[11px] text-secondary tabular-nums ${card.state ? "pl-5.5" : ""}`}
         >
           {(card.labels ?? []).map((name, i) => (
-            <span
-              key={`${i}:${name}`}
-              className="h-4.5 px-1.5 rounded-sm bg-fill-2 text-label inline-flex items-center"
-            >
+            <span key={`${i}:${name}`} className="h-4.5 px-1.5 rounded-[5px] bg-fill-2 inline-flex items-center">
               {name}
             </span>
           ))}

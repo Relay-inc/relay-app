@@ -1,19 +1,19 @@
 import { useEffect } from "react";
 import type { BoardProvider } from "../../../domain/board/types";
 import { cardsIn, filtered, isFolded } from "../../../domain/board/rules";
-import { dropCard, openBoardCard, showBoard, toggleFold } from "../../../application/board/board";
+import { dropCard, openBoardCard, openComposer, showBoard, toggleFold } from "../../../application/board/board";
 import { useBoardStore } from "../../../application/board/store";
 import { cardOf } from "../../../application/navigation/panel";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { usePointerDrag } from "../../hooks/usePointerDrag";
 import { useT } from "../../hooks/useT";
-import { BoardHead } from "./BoardHead";
 import { BoardToolbar } from "./BoardToolbar";
 import { BoardChips } from "./BoardChips";
 import { BoardColumn } from "./BoardColumn";
 import { BoardList } from "./BoardList";
 import { BoardCard, type CardGrab } from "./BoardCard";
 import { BoardTicket } from "./BoardTicket";
+import { BoardNewTask } from "./BoardNewTask";
 
 /** What the board keeps of a pressed card: which one, where it was grabbed, and the column it hovers. */
 type Grab = { id: string; offsetX: number; offsetY: number; width: number; overColumn?: string };
@@ -22,13 +22,16 @@ type Grab = { id: string; offsetX: number; offsetY: number; width: number; overC
 const columnAt = (e: PointerEvent) =>
   document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-list]")?.dataset.list;
 
-/** A provider's board: the head row, the toolbar with its filter chips, the columns as a kanban or a list, and the
- *  ticket window over it. Dragging a card to another column moves it in the tracker, a click opens it. */
+/** A provider's board, the centre column's full width and height under the title bar (its crumb and buttons are
+ *  BoardCrumb and BoardActions): the toolbar with its filter chips, then the columns as a kanban or a list, which
+ *  scroll on their own, and the ticket window and the New task dialog over it. Dragging a card to another column moves it
+ *  in the tracker, a click opens it. */
 export function BoardView({ provider }: { provider: BoardProvider }) {
   const { t } = useT();
   const board = useBoardStore(s => s.states[provider.id]);
   const folds = useBoardStore(s => s.folded[provider.id]);
   const resets = useBoardStore(s => s.resets);
+  const composing = useBoardStore(s => (s.composing?.provider === provider.id ? s.composing : null));
   // the card open in the ticket window, marked on the board
   const modal = useNavigationStore(s => s.panel.modal);
   const open = modal ? cardOf(modal) : undefined;
@@ -59,7 +62,7 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
     if (!board.board) return null;
     if (!board.columns.length) {
       if (board.busy || board.err) return null;
-      return <div className="text-secondary text-sm text-center">{t("kb.noCols")}</div>;
+      return <div className="text-secondary text-sm text-center pt-7">{t("kb.noCols")}</div>;
     }
     const cards = filtered(board);
     return (
@@ -67,22 +70,27 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
         <BoardToolbar provider={provider} board={board} />
         <BoardChips provider={provider} filters={board.filters} />
         {board.view === "list" ? (
-          <BoardList provider={provider} board={board} cards={cards} folds={folds} selected={selected} />
+          <div className="flex-1 min-h-0 overflow-auto">
+            <BoardList provider={provider} board={board} cards={cards} folds={folds} selected={selected} />
+          </div>
         ) : (
-          <div className="flex gap-2.5 items-start overflow-x-auto pb-2">
-            {board.columns.map(column => (
-              <BoardColumn
-                key={column.id}
-                column={column}
-                cards={cardsIn(provider, board, cards, column.id)}
-                selected={selected}
-                over={!!drag?.moving && drag.overColumn === column.id}
-                folded={isFolded(folds, column)}
-                onFold={() => toggleFold(provider, column)}
-                onGrab={onGrab}
-                onOpen={id => openBoardCard(provider, id)}
-              />
-            ))}
+          <div className="flex-1 min-h-0 overflow-auto px-4 pt-3.5 pb-4">
+            <div className="flex gap-2.5 items-start min-w-max">
+              {board.columns.map(column => (
+                <BoardColumn
+                  key={column.id}
+                  column={column}
+                  cards={cardsIn(provider, board, cards, column.id)}
+                  selected={selected}
+                  over={!!drag?.moving && drag.overColumn === column.id}
+                  folded={isFolded(folds, column)}
+                  onFold={() => toggleFold(provider, column)}
+                  onAdd={provider.create ? () => openComposer(provider, column.id) : undefined}
+                  onGrab={onGrab}
+                  onOpen={id => openBoardCard(provider, id)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </>
@@ -90,9 +98,10 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
   };
 
   return (
-    <div>
-      <BoardHead provider={provider} board={board} />
-      {board.err && <div className="err-box mb-3">{board.err}</div>}
+    // the log around it pads and scrolls a conversation: the board takes the column's full width and the height under
+    // the 48px title bar, and scrolls its columns itself
+    <div className="-mx-5 -mt-7 -mb-3 h-[calc(100vh-48px)] flex flex-col">
+      {board.err && <div className="err-box mx-4 mt-3 flex-none">{board.err}</div>}
       {columns()}
       {drag && ghost && (
         <BoardCard
@@ -101,6 +110,7 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
         />
       )}
       <BoardTicket provider={provider} board={board} />
+      {composing && <BoardNewTask key={composing.column} provider={provider} board={board} column={composing.column} />}
     </div>
   );
 }

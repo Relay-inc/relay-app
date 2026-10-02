@@ -21,7 +21,7 @@ export function BoardList({
   selected: string;
 }) {
   return (
-    <div className="-mx-4">
+    <div className="pt-1 pb-5">
       {board.columns.map(column => {
         const inLane = cardsIn(provider, board, cards, column.id);
         const open = !isFolded(folds, column);
@@ -35,10 +35,10 @@ export function BoardList({
               <span
                 className={`inline-flex text-tertiary transition-transform duration-150 ease-out ${open ? "" : "-rotate-90"}`}
               >
-                <Icon name="down" className="glyph size-3" />
+                <Icon name="down" className="glyph size-3 stroke-2" />
               </span>
               {column.state ? (
-                <Ring state={column.state} />
+                <Ring state={column.state} tone={column.tone} />
               ) : (
                 <Icon name="folder" className="glyph size-3.5 text-secondary" />
               )}
