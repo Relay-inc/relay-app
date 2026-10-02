@@ -44,6 +44,7 @@ pub const PROVIDER: Provider = Provider {
     upload: |url| url.strip_prefix("https://").map(|r| r.split('/').next().unwrap_or(""))
         .is_some_and(|h| h.starts_with("productive-") && h.ends_with(".amazonaws.com") && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')),
     // an attachment's thumb (100×100) is public; the original wants a browser login, the API token gets the login page
+    upload_kind: board_core::UploadKind::Form,
     thumb: |url| url.strip_prefix("https://files.productive.io/attachments/").is_some_and(|r| r.contains("/thumb/")) && url.len() < 2000 && !url.chars().any(char::is_control),
     headers: |c, s| vec![format!("X-Auth-Token: {}", s[0]), format!("X-Organization-Id: {}", c["org"].as_str().unwrap_or("")),
         "Content-Type: application/vnd.api+json".into()],
