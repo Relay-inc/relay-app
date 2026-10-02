@@ -35,7 +35,7 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     let mut ev = vec![];
     match p["type"].as_str().unwrap_or("") {
         "message" if p["role"] == "user" => {
-            let texts: Vec<String> = text_of(&p["content"], "input_text").into_iter().filter(|t| !t.trim_start().starts_with('<')).collect();
+            let texts: Vec<String> = text_of(&p["content"], "input_text").into_iter().map(|t| agent_core::envelope::strip(t.trim_start()).to_string()).filter(|t| !t.starts_with('<')).collect();
             let images: Vec<Option<Image>> = p["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "input_image").map(|c| {
                 let url = c["image_url"].as_str().unwrap_or("");
                 let (mt, data) = url.strip_prefix("data:").and_then(|r| r.split_once(";base64,")).unwrap_or(("", ""));
@@ -252,6 +252,15 @@ mod tests {
         assert_eq!(ev.len(), 8); // no environment context, reasoning, event_msg copies or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn the_project_line_is_not_the_message() {
+        let text = agent_core::envelope::wrap("Relay", "", "waarom?");
+        let line = json!({"type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": text}]}});
+        let mut out = vec![];
+        history_line(&line, &mut out);
+        assert!(out.contains(&Event::User { text: "waarom?".into(), images: vec![] }));
     }
 
     #[test]

@@ -11,6 +11,7 @@ use serde_json::Value;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+pub mod envelope;
 pub mod pending;
 pub mod usage;
 

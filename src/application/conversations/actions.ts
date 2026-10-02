@@ -160,8 +160,8 @@ function queueMessage(key: string, text: string, images: Img[]) {
 async function deliver(key: string, text: string, images: Img[]) {
   const conversation = cs().chats[key];
   const name = `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`;
-  // the agent only hears the project through the message: in front of the first one, and again after a move
-  const { sent, told, tookMail } = outgoing(conversation, text, project => vaultProject(project)?.context);
+  // the agent only hears the project through the message: with the first one, and again after a move
+  const { sent, told, context, tookMail } = outgoing(conversation, text, project => vaultProject(project)?.context);
   if (tookMail) {
     set(draft => {
       delete draft.chats[key].mail;
@@ -181,6 +181,8 @@ async function deliver(key: string, text: string, images: Img[]) {
       model: picks("model", key).value,
       effort: picks("effort", key).value,
       provider: chatAgent(key),
+      told: told || null,
+      context: context || null,
     });
     if (told && cs().chats[key]) {
       set(draft => {

@@ -40,12 +40,16 @@ test("typing in a terminal session forks it", () =>
 // what the agent gets (Lit's quick-send.test.ts): the project line and a mail wait for the first ordinary message
 const contextOf = (project: string) => (project === "Relay" ? "Personal" : undefined);
 test("the project goes in front of the first message, once", () => {
-  const first = outgoing({ project: "Relay" }, "hi", contextOf);
-  assert.equal(first.told, "Relay");
-  assert.match(first.sent, /^<relay-project>.*"Relay" \(context Personal\).*<\/relay-project>\n\nhi$/);
+  assert.deepEqual(outgoing({ project: "Relay" }, "hi", contextOf), {
+    sent: "hi",
+    told: "Relay",
+    context: "Personal",
+    tookMail: false,
+  });
   assert.deepEqual(outgoing({ project: "Relay", told: "Relay" }, "hi", contextOf), {
     sent: "hi",
     told: "",
+    context: "",
     tookMail: false,
   });
 });
@@ -53,12 +57,14 @@ test("a mail to read goes in front of the message", () =>
   assert.deepEqual(outgoing({ project: null, mail: "Mail" }, "hi", contextOf), {
     sent: "Mail\n\nhi",
     told: "",
+    context: "",
     tookMail: true,
   }));
 test("slash commands keep their prefix and defer project and mail context", () =>
   assert.deepEqual(outgoing({ project: "Relay", mail: "Saved mail context" }, "/compact", contextOf), {
     sent: "/compact",
     told: "",
+    context: "",
     tookMail: false,
   }));
 test("commands without attachments", () => {

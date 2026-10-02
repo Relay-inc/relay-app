@@ -78,7 +78,7 @@ impl AgentProvider for Codex {
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         let cfg = json!({"cwd": env.vault, "model": l.model, "effort": l.effort, "resume": l.resume,
-            "sandbox": pick(env, "sandbox", &SANDBOX), "approval": pick(env, "approval", &APPROVAL)});
+            "sandbox": pick(env, "sandbox", &SANDBOX), "approval": pick(env, "approval", &APPROVAL), "instructions": agent_core::envelope::HINT});
         let mut cmd = Command::new("/usr/bin/python3");
         cmd.arg(BRIDGE).arg(env.bin).arg(cfg.to_string());
         if pick(env, "auth", &AUTH) == "chatgpt" { cmd.env_remove("OPENAI_API_KEY").env_remove("CODEX_API_KEY"); }
@@ -151,7 +151,7 @@ mod tests {
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[0].ends_with("agent-codex/bridge.py") && args[1] == "/opt/codex");
         let cfg: Value = serde_json::from_str(&args[2]).unwrap();
-        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request"}));
+        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "gpt-6.1-sol", "effort": "high", "resume": "019a-1", "sandbox": "workspace-write", "approval": "on-request", "instructions": agent_core::envelope::HINT}));
         assert!(cmd.get_envs().any(|(k, v)| k == "OPENAI_API_KEY" && v.is_none()));
         // the settings' choices, an unknown one is the default
         let o = json!({"sandbox": "read-only", "approval": "sometimes", "auth": "api-key"});

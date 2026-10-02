@@ -20,6 +20,7 @@ pub fn sessions_dir(home: &str) -> PathBuf {
 fn user(content: &Value) -> Event {
     let blocks = content.as_array().cloned().unwrap_or_default();
     let text: Vec<&str> = if let Some(s) = content.as_str() { vec![s] } else { blocks.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect() };
+    let text: Vec<&str> = text.into_iter().map(agent_core::envelope::strip).collect();
     let images = blocks.iter().filter(|b| b["type"] == "image").map(|b| {
         let mt = b["mimeType"].as_str().unwrap_or("");
         IMAGE_TYPES.contains(&mt).then(|| Image { media_type: mt.into(), data: b["data"].as_str().unwrap_or("").into() })
@@ -172,6 +173,13 @@ mod tests {
     const LIVE: &str = include_str!("../tests/fixtures/session-live.jsonl");
     const RESUMED: &str = include_str!("../tests/fixtures/session-resumed.jsonl");
     const FORK: &str = include_str!("../tests/fixtures/session-fork.jsonl");
+
+    #[test]
+    fn the_project_line_is_not_the_message() {
+        let text = agent_core::envelope::wrap("Relay", "", "waarom?");
+        assert_eq!(user(&serde_json::json!([{"type": "text", "text": text}])), Event::User { text: "waarom?".into(), images: vec![] });
+        assert_eq!(user(&serde_json::json!(text)), Event::User { text: "waarom?".into(), images: vec![] });
+    }
 
     #[test]
     fn history_of_a_live_session() {
