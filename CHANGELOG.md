@@ -26,6 +26,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Fixed
 
+- A conversation whose turn had already ended no longer stays "working" after Relay restarts (for example a `tauri dev` rebuild): the turns running are kept in the broker's file, not assumed
 - The first message of a project conversation (and the first one after a move) no longer disappears when Relay reopens the conversation after a restart or reload
 - Codex, Pi and OpenCode now hear about the `relay` actions too, as Claude already did (the hint goes into each CLI's system prompt)
 - Settings › Integrations › Mail, Agents and Projects have even spacing again. Mail lists your accounts with a "+ Add account" button (Gmail, another mail server, or a password already in the keychain) that opens the steps in place of the list, instead of showing them under it all the time (#68)
