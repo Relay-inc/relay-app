@@ -64,6 +64,9 @@ impl AgentProvider for Pi {
         Detect { installed, bin: env.bin.into(), version, logged_in: None, note }
     }
     fn models(&self) -> Vec<Choice> { models_of(&self.bin()) }
+    fn commands(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, include_str!("../commands.py"))
+    }
     fn efforts(&self) -> Vec<Choice> { EFFORTS.iter().map(|(i, l)| Choice::new(i, l)).collect() }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {

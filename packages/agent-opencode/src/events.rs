@@ -149,7 +149,7 @@ impl State {
                 // a prompt that could not be sent: no turn is coming to end on its own
                 if !self.busy { out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None }); }
             }
-            "session.status" => if p["status"]["type"] == "busy" { self.busy = true; },
+            "session.status" => if p["status"]["type"] == "busy" { self.busy = true; out.push(Event::Working); },
             "message.updated" => {
                 let info = &p["info"];
                 let id = info["id"].as_str().unwrap_or("").to_string();
@@ -159,6 +159,9 @@ impl State {
                     let (c, e) = (info["time"]["created"].as_i64().unwrap_or(0), info["time"]["completed"].as_i64().unwrap_or(0));
                     self.msgs.insert(id, (c, e, tokens(info)));
                     if let Some(e) = error_text(&info["error"]) { self.error.get_or_insert(e); }
+                    if let (Some(p), Some(m)) = (info["providerID"].as_str(), info["modelID"].as_str()) {
+                        out.push(Event::Resolved { model: format!("{p}/{m}"), effort: None });
+                    }
                 }
             }
             "message.part.updated" => {
