@@ -250,6 +250,7 @@ export default {
   "toast.closedAll_other": "{n} gesprekken gesloten",
   "toast.undo": "Ongedaan maken",
   "ctx.assign": "Wijzig project…",
+  "ctx.copyId": "Kopieer sessie-ID",
   "ctx.recent": "Onlangs gesloten",
   "ctx.none": "Niets gesloten",
   "ctx.closeAll": "Sluit alle gesprekken",

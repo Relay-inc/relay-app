@@ -250,6 +250,7 @@ export default {
   "toast.closedAll_other": "{n} Gespräche geschlossen",
   "toast.undo": "Widerrufen",
   "ctx.assign": "Projekt ändern…",
+  "ctx.copyId": "Sitzungs-ID kopieren",
   "ctx.recent": "Kürzlich geschlossen",
   "ctx.none": "Nichts geschlossen",
   "ctx.closeAll": "Alle Gespräche schließen",

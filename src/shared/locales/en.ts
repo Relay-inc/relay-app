@@ -247,6 +247,7 @@ const en = {
   "toast.closedAll_other": "{n} conversations closed",
   "toast.undo": "Undo",
   "ctx.assign": "Change project…",
+  "ctx.copyId": "Copy session ID",
   "ctx.recent": "Recently closed",
   "ctx.none": "Nothing closed",
   "ctx.closeAll": "Close all conversations",
