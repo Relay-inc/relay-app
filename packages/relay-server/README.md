@@ -111,6 +111,8 @@ The machine only ever stores ciphertext. The key stays with the laptop.
 - **The key.** Relay makes a random 256-bit key per machine the first time the mirror is switched on, and keeps it in
   its app data as `mirror-<machine>.key` (0600). It sends the key with an `unlock` request over the mutual-TLS
   connection at the start of every sync round. The server keeps it in memory only, never on disk.
+- **Two keys from one.** HKDF-SHA256 derives a key to encrypt and a key to name the blobs from it, so neither is
+  used for two jobs. A store from before HKDF is converted in place on its first unlock.
 - **One blob per file**, in `data/mirror/<device>/<root>/`:
   - the name is HMAC-SHA256 of `<root>\0<path>`, so the disk shows neither file names nor folders,
   - the content is ChaCha20-Poly1305 (`ring`) over the path plus the file, with a fresh random 96-bit nonce per write
@@ -134,8 +136,6 @@ What this protects, and what it does not:
 | Another device paired with the same server | Nothing: each device has its own store, working copy and key. |
 
 Known limits:
-- The one key is used both for ChaCha20-Poly1305 and as the HMAC key for the names. Not a known weakness for these two
-  primitives, but separate keys derived with HKDF would be cleaner.
 - The blobs are sealed one by one, nothing binds the set together. Someone who can write to the disk can delete a blob
   or put back an older one of the same file, and the server would unpack that older version.
 - A tmpfs can be swapped to disk when the machine has swap. Unraid has none by default.

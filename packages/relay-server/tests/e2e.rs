@@ -242,7 +242,7 @@ fn mirror_sealed_locked_and_synced() {
     let mut w = Walker::default();
     let copy = |p: &str| sync::conflict_copy(p, "server", "2026-10-02 1200");
     let merge = |p: &str| p.ends_with("MEMORY.md");
-    let (base, r) = sync::run(Mode::TwoWay, &local, &Default::default(), &mut w, &Filter::default(), &vault, &copy, &merge);
+    let (base, r) = sync::run(Mode::TwoWay, &local, &Default::default(), &mut w, &Filter::default(), &vault, &copy, &merge, &|_, _| {});
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     assert_eq!(r.pushed.len(), 2);
     assert_eq!(vault.get("Notes/Klant.md").unwrap(), b"geheime klantnotitie");
@@ -259,7 +259,7 @@ fn mirror_sealed_locked_and_synced() {
     // an agent there writes: the next round brings it here
     let info = c.info().unwrap();
     std::fs::write(PathBuf::from(&info.work).join("vault/Notes/Nieuw.md"), "van de server").unwrap();
-    let (base, r) = sync::run(Mode::TwoWay, &local, &base, &mut w, &Filter::default(), &vault, &copy, &merge);
+    let (base, r) = sync::run(Mode::TwoWay, &local, &base, &mut w, &Filter::default(), &vault, &copy, &merge, &|_, _| {});
     assert_eq!(r.pulled, vec!["Notes/Nieuw.md".to_string()], "{r:?}");
     assert_eq!(std::fs::read_to_string(local.join("Notes/Nieuw.md")).unwrap(), "van de server");
 
@@ -271,7 +271,7 @@ fn mirror_sealed_locked_and_synced() {
     c.unlock(&key).unwrap();
     let m = c.root("vault").manifest().unwrap();
     assert!(m.contains_key("Notes/Klant.md") && m.contains_key("Notes/Nieuw.md"), "{:?}", m.keys());
-    let (_, r) = sync::run(Mode::TwoWay, &local, &base, &mut w, &Filter::default(), &c.root("vault"), &copy, &merge);
+    let (_, r) = sync::run(Mode::TwoWay, &local, &base, &mut w, &Filter::default(), &c.root("vault"), &copy, &merge, &|_, _| {});
     assert!(r.pushed.is_empty() && r.pulled.is_empty() && r.errors.is_empty(), "nothing to do after the restart: {r:?}");
 
     // another device has no access to it

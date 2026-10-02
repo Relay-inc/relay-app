@@ -3,13 +3,14 @@
 //!
 //! On disk only ciphertext: each file is one blob in data/mirror/<device>/<root>/, named by an HMAC of its path,
 //! holding ChaCha20-Poly1305 over (path, content). The key belongs to the laptop: it sends it with `unlock` and the
-//! server keeps it in memory only. Unlocked, the blobs are unpacked into a working copy (RELAY_SERVER_WORKDIR, meant
+//! server keeps it in memory only. Two subkeys are derived from it with HKDF-SHA256, one to seal and one to name the
+//! blobs. A store from before (v1 sealed and named with the raw key) is migrated in place on the first unlock. Unlocked, the blobs are unpacked into a working copy (RELAY_SERVER_WORKDIR, meant
 //! to be a RAM disk) where the agents work; what they change is sealed back every few seconds. After a restart the
 //! mirror is locked until the laptop connects again: conversations in the vault wait for it, the rest runs.
 
 use relay_remote::sync::{self, Filter, Manifest, Walker};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
-use ring::hmac;
+use ring::{hkdf, hmac};
 use ring::rand::{SecureRandom, SystemRandom};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -23,7 +24,40 @@ pub const ROOTS: [&str; 4] = ["context", "plugins", "vault", "memory"];
 const FLUSH: Duration = Duration::from_secs(5);
 /// One file at most; the app skips bigger ones already (20 MB in the vault).
 pub const MAX_FILE: u64 = 64 << 20;
-const CHECK: &[u8] = b"relay mirror key check v1";
+const CHECK: &[u8] = b"relay mirror key check v2";
+const CHECK_V1: &[u8] = b"relay mirror key check v1";
+const SALT: &[u8] = b"relay mirror v2";
+
+/// The sealing key and the naming key, both derived from the device's raw key.
+fn derive(raw: &[u8]) -> (LessSafeKey, hmac::Key) {
+    let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, SALT).extract(raw);
+    // expand only fails above 255 hash lengths, 32 bytes never does
+    let enc = UnboundKey::from(prk.expand(&[b"enc"], &CHACHA20_POLY1305).unwrap());
+    let names = hmac::Key::from(prk.expand(&[b"names"], hmac::HMAC_SHA256).unwrap());
+    (LessSafeKey::new(enc), names)
+}
+fn blob_name(names: &hmac::Key, root: &str, rel: &str) -> String {
+    hmac::sign(names, format!("{root}\0{rel}").as_bytes()).as_ref().iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Reseal a v1 store (raw key for both sealing and naming) with the derived keys, blob by blob. The new blob is
+/// written before the old one goes, and the caller writes the v2 check last, so an interrupted run is simply redone.
+fn migrate(store: &Path, old: &LessSafeKey, key: &LessSafeKey, names: &hmac::Key) -> Result<(), String> {
+    for root in ROOTS {
+        let dir = store.join(root);
+        let blobs: Vec<PathBuf> = fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).collect();
+        for path in blobs {
+            let Ok(bytes) = fs::read(&path) else { continue };
+            // already migrated by an earlier run, or unreadable: the unlock that follows deals with it
+            let Some(plain) = open(old, root.as_bytes(), &bytes) else { continue };
+            let Some((rel, _)) = unpack(&plain) else { continue };
+            let new = dir.join(blob_name(names, root, &rel));
+            sync::write_atomic(&new, &seal(key, root.as_bytes(), &plain)?, None).map_err(|e| e.to_string())?;
+            if new != path { fs::remove_file(&path).map_err(|e| e.to_string())?; }
+        }
+    }
+    Ok(())
+}
 
 struct Open {
     key: LessSafeKey,
@@ -65,13 +99,18 @@ impl Mirror {
         if self.is_open(ns) { return Ok(()); }
         let raw: Vec<u8> = (0..key_hex.len()).step_by(2).filter_map(|i| key_hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect();
         if raw.len() != 32 { return Err("bad mirror key".into()); }
-        let key = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &raw).map_err(|_| "bad mirror key")?);
-        let names = hmac::Key::new(hmac::HMAC_SHA256, &raw);
+        let (key, names) = derive(&raw);
         let store = self.store(ns);
         fs::create_dir_all(&store).map_err(|e| e.to_string())?;
         let check = store.join("check");
         match fs::read(&check) {
-            Ok(c) => if open(&key, b"check", &c).as_deref() != Some(CHECK) { return Err("this mirror was made with another key: wipe it from Relay first".into()) },
+            Ok(c) if open(&key, b"check", &c).as_deref() == Some(CHECK) => {}
+            Ok(c) => {
+                let old = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &raw).map_err(|_| "bad mirror key")?);
+                if open(&old, b"check", &c).as_deref() != Some(CHECK_V1) { return Err("this mirror was made with another key: wipe it from Relay first".into()); }
+                migrate(&store, &old, &key, &names)?;
+                sync::write_atomic(&check, &seal(&key, b"check", CHECK)?, None).map_err(|e| e.to_string())?;
+            }
             Err(_) => fs::write(&check, seal(&key, b"check", CHECK)?).map_err(|e| e.to_string())?,
         }
         let mut o = Open { key, names, sealed: HashMap::new(), walkers: HashMap::new() };
@@ -151,8 +190,7 @@ impl Mirror {
         Ok(())
     }
     fn blob(&self, o: &Open, ns: &str, root: &str, rel: &str) -> PathBuf {
-        let tag = hmac::sign(&o.names, format!("{root}\0{rel}").as_bytes());
-        self.store(ns).join(root).join(tag.as_ref().iter().map(|b| format!("{b:02x}")).collect::<String>())
+        self.store(ns).join(root).join(blob_name(&o.names, root, rel))
     }
     fn seal_file(&self, o: &mut Open, ns: &str, root: &str, rel: &str, data: &[u8]) -> Result<(), String> {
         let blob = seal(&o.key, root.as_bytes(), &pack(rel, data))?;
@@ -211,4 +249,108 @@ fn open(key: &LessSafeKey, aad: &[u8], blob: &[u8]) -> Option<Vec<u8>> {
     let mut buf = c.to_vec();
     let plain = key.open_in_place(Nonce::try_assume_unique_for_key(n).ok()?, Aad::from(aad), &mut buf).ok()?;
     Some(plain.to_vec())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const RAW: [u8; 32] = [7; 32];
+
+    fn hex(k: &[u8]) -> String { k.iter().map(|b| format!("{b:02x}")).collect() }
+    // built by hand, not with new(), so no env var is read and no flush thread runs
+    fn mirror(name: &str) -> Mirror {
+        let base = std::env::temp_dir().join(format!("relay-mirror-{name}-{}", std::process::id()));
+        fs::remove_dir_all(&base).ok();
+        Mirror { data: base.join("data"), work: base.join("work"), in_ram: false, open: Mutex::new(HashMap::new()) }
+    }
+    fn names_in(dir: &Path) -> Vec<String> {
+        let mut v: Vec<String> = fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into()).collect();
+        v.sort();
+        v
+    }
+
+    #[test]
+    fn v1_store_is_migrated() {
+        let m = mirror("migrate");
+        let store = m.store("dev");
+        let v1 = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &RAW).unwrap());
+        let v1_names = hmac::Key::new(hmac::HMAC_SHA256, &RAW);
+        fs::create_dir_all(&store).unwrap();
+        fs::write(store.join("check"), seal(&v1, b"check", CHECK_V1).unwrap()).unwrap();
+        let files = [("vault", "a.md", &b"alpha"[..]), ("vault", "sub/b.md", b"beta"), ("memory", "m.md", b"mem")];
+        for (root, rel, data) in files {
+            let p = store.join(root).join(blob_name(&v1_names, root, rel));
+            sync::write_atomic(&p, &seal(&v1, root.as_bytes(), &pack(rel, data)).unwrap(), None).unwrap();
+        }
+
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        let (key, names) = derive(&RAW);
+        for (root, rel, data) in files {
+            assert_eq!(fs::read(m.work_of("dev").join(root).join(rel)).unwrap(), data);
+            assert!(!store.join(root).join(blob_name(&v1_names, root, rel)).exists(), "old blob gone");
+            let b = fs::read(store.join(root).join(blob_name(&names, root, rel))).unwrap();
+            assert_eq!(open(&key, root.as_bytes(), &b).unwrap(), pack(rel, data));
+        }
+        assert_eq!(names_in(&store.join("vault")).len(), 2);
+        assert_eq!(open(&key, b"check", &fs::read(store.join("check")).unwrap()).as_deref(), Some(CHECK));
+
+        // locked again (a restart), the working copy gone: the v2 store opens on its own
+        m.open.lock().unwrap().clear();
+        fs::remove_dir_all(m.work_of("dev")).unwrap();
+        let before = names_in(&store.join("vault"));
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        assert_eq!(fs::read(m.work_of("dev").join("vault/sub/b.md")).unwrap(), b"beta");
+        assert_eq!(names_in(&store.join("vault")), before);
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn interrupted_migration_keeps_migrated_blobs() {
+        let m = mirror("interrupted");
+        let store = m.store("dev");
+        let v1 = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &RAW).unwrap());
+        let v1_names = hmac::Key::new(hmac::HMAC_SHA256, &RAW);
+        let (key, names) = derive(&RAW);
+        fs::create_dir_all(&store).unwrap();
+        fs::write(store.join("check"), seal(&v1, b"check", CHECK_V1).unwrap()).unwrap();
+        // one blob already moved to v2, one still v1
+        sync::write_atomic(&store.join("vault").join(blob_name(&names, "vault", "done.md")), &seal(&key, b"vault", &pack("done.md", b"done")).unwrap(), None).unwrap();
+        sync::write_atomic(&store.join("vault").join(blob_name(&v1_names, "vault", "todo.md")), &seal(&v1, b"vault", &pack("todo.md", b"todo")).unwrap(), None).unwrap();
+
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        assert_eq!(fs::read(m.work_of("dev").join("vault/done.md")).unwrap(), b"done");
+        assert_eq!(fs::read(m.work_of("dev").join("vault/todo.md")).unwrap(), b"todo");
+        let mut want = vec![blob_name(&names, "vault", "done.md"), blob_name(&names, "vault", "todo.md")];
+        want.sort();
+        assert_eq!(names_in(&store.join("vault")), want);
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn wrong_key_is_refused() {
+        let m = mirror("wrongkey");
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        m.open.lock().unwrap().clear();
+        let err = m.unlock("dev", &hex(&[9; 32])).unwrap_err();
+        assert!(err.contains("another key"), "{err}");
+        // a v1 store under another key is refused too, and left as it was
+        let store = m.store("old");
+        fs::create_dir_all(&store).unwrap();
+        let v1 = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &RAW).unwrap());
+        let c = seal(&v1, b"check", CHECK_V1).unwrap();
+        fs::write(store.join("check"), &c).unwrap();
+        assert!(m.unlock("old", &hex(&[9; 32])).unwrap_err().contains("another key"));
+        assert_eq!(fs::read(store.join("check")).unwrap(), c);
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn fresh_store_gets_v2_check() {
+        let m = mirror("fresh");
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        let (key, _) = derive(&RAW);
+        assert_eq!(open(&key, b"check", &fs::read(m.store("dev").join("check")).unwrap()).as_deref(), Some(CHECK));
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
 }
