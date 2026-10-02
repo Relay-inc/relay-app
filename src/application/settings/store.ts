@@ -8,6 +8,7 @@ import {
   type MailCfg,
   type MailNew,
   type MachineStatus,
+  type MirrorProgress,
   type MirrorStatus,
   type Message,
   type Settings,
@@ -51,6 +52,7 @@ export type SettingsState = {
     messages: Record<string, Message | null>; // per machine: why the last save or forget failed, or that it saved
     mirror: Record<string, MirrorStatus | null>; // the last mirror round per machine, polled while the page shows
     mirrorMessages: Record<string, Message | null>; // per machine: why the last mirror change failed
+    mirrorProgress: Record<string, MirrorProgress | null>; // per machine: the running round, null between rounds
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
@@ -102,6 +104,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     messages: {},
     mirror: {},
     mirrorMessages: {},
+    mirrorProgress: {},
   },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {

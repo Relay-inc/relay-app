@@ -10,6 +10,7 @@ import type {
   Machine,
   MachineChoice,
   MachineStatus,
+  MirrorProgress,
   MirrorStatus,
   MailAcct,
   Settings,
@@ -126,6 +127,8 @@ export const setMachineMirror = (id: string, on: boolean, exclude: string[]) =>
   invoke("set_machine_mirror", { id, on, exclude });
 /** The last sync round of a machine's mirror, null before the first. */
 export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
+/** Where the running round of a machine's mirror is, null between rounds. */
+export const mirrorProgress = (id: string) => invoke<MirrorProgress | null>("mirror_progress", { id });
 /** Removes the copy on the machine and turns its mirror off. */
 export const mirrorWipe = (id: string) => invoke("mirror_wipe", { id });
 /** The folder used on the machine when a project has none there; "" the machine's home. */

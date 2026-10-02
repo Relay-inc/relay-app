@@ -212,8 +212,10 @@ pub struct Report {
 /// round). Per-action errors land in `report.errors` and the round goes on. Remote paths are filtered like local ones
 /// and unsafe ones dropped. A round refuses to start when a side is empty while the base is not (a missing disk or a
 /// wiped server, which would otherwise be mirrored as "delete everything"); a Replica only checks the local side.
+/// `progress(done, total)` follows the actions; (0, 0) while it scans and compares.
 #[allow(clippy::too_many_arguments)] // the round's inputs, each one needed
-pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter: &Filter, remote: &dyn Remote, copy_name: &dyn Fn(&str) -> String, mergeable: &dyn Fn(&str) -> bool) -> (Manifest, Report) {
+pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter: &Filter, remote: &dyn Remote, copy_name: &dyn Fn(&str) -> String, mergeable: &dyn Fn(&str) -> bool, progress: &dyn Fn(usize, usize)) -> (Manifest, Report) {
+    progress(0, 0);
     let mut rep = Report::default();
     let (mut local, mut skipped) = match walker.scan(root, filter) { Ok(x) => x, Err(e) => { rep.errors.push(format!("scan: {e}")); return (base.clone(), rep); } };
     let all = match remote.manifest() { Ok(m) => m, Err(e) => { rep.errors.push(format!("remote manifest: {e}")); return (base.clone(), rep); } };
@@ -240,7 +242,8 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         };
         if let Some(e) = keep { next.insert(p.clone(), e.clone()); }
     }
-    for a in &acts {
+    for (i, a) in acts.iter().enumerate() {
+        progress(i, acts.len());
         match exec(root, &local, &rm, remote, walker, a) {
             Ok(ups) => {
                 for (p, e) in ups { match e { Some(e) => { next.insert(p, e); } None => { next.remove(&p); } } }
@@ -254,6 +257,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
             Err(e) => rep.errors.push(format!("{}: {e}", target(a))),
         }
     }
+    progress(acts.len(), acts.len());
     skipped.extend(clashes);
     rep.skipped = skipped;
     (next, rep)
@@ -482,7 +486,7 @@ mod tests {
 
     const COPY: &str = "a (conflict srv 2026-10-02 1530).md";
     fn round(t: &Tmp, base: &Manifest, w: &mut Walker, mem: &Mem) -> (Manifest, Report) {
-        run(Mode::TwoWay, &t.0, base, w, &Filter::vault_default(), mem, &|p| conflict_copy(p, "srv", "2026-10-02 1530"), &|p| p.ends_with("MEMORY.md"))
+        run(Mode::TwoWay, &t.0, base, w, &Filter::vault_default(), mem, &|p| conflict_copy(p, "srv", "2026-10-02 1530"), &|p| p.ends_with("MEMORY.md"), &|_, _| {})
     }
     // a second round plans nothing, keeps the base and reads no file again
     fn noop(t: &Tmp, base: &Manifest, w: &mut Walker, mem: &Mem) {

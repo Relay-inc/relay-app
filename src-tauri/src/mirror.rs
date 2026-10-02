@@ -21,8 +21,12 @@ pub const ROOTS: [(&str, Mode); 4] = [("context", Mode::Replica), ("plugins", Mo
 #[derive(Default, Clone, serde::Serialize)]
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub skipped: Vec<String>, pub errors: Vec<String>, pub locked: bool, pub in_ram: bool }
 
+/// Where a running round is, per machine: root `step` of 4, `done` of `total` files (total 0: still comparing).
+#[derive(Clone, serde::Serialize)]
+pub struct Progress { pub root: &'static str, pub step: usize, pub done: usize, pub total: usize }
+
 #[derive(Default)]
-pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, busy: Mutex<std::collections::HashSet<String>> }
+pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, pub progress: Mutex<HashMap<String, Progress>>, busy: Mutex<std::collections::HashSet<String>> }
 
 pub fn on(m: &Value) -> bool { m["mirror"]["on"] == true }
 /// The machine's excluded vault folders (relative paths).
@@ -129,13 +133,14 @@ impl Mirrors {
             let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
             let copy = |p: &str| sync::conflict_copy(p, &name, &stamp);
             let mergeable = |p: &str| p.rsplit('/').next() == Some("MEMORY.md");
-            for (root, mode) in ROOTS {
+            for (step, (root, mode)) in ROOTS.into_iter().enumerate() {
                 let Some(src) = source(data, &id, root, vault) else { continue };
+                let progress = |done, total| { self.progress.lock().unwrap().insert(id.clone(), Progress { root, step: step + 1, done, total }); };
                 if mode == Mode::TwoWay { std::fs::create_dir_all(&src).ok(); }
                 let base = Self::load_base(data, &id, root);
                 let mut walkers = self.walkers.lock().unwrap();
                 let w = walkers.entry(format!("{id}/{root}")).or_default();
-                let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable);
+                let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable, &progress);
                 drop(walkers);
                 Self::save_base(data, &id, root, &next);
                 st.pushed += r.pushed.len() + r.deleted_remote.len();
@@ -145,6 +150,7 @@ impl Mirrors {
                 st.errors.extend(r.errors.into_iter().map(|c| format!("{root}: {c}")));
             }
         }
+        self.progress.lock().unwrap().remove(&id);
         self.busy.lock().unwrap().remove(&id);
         let mut all = self.status.lock().unwrap();
         // the counts add up over the rounds since the app started, conflicts stay listed

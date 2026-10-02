@@ -49,6 +49,13 @@ export type MirrorStatus = {
   locked: boolean;
   in_ram: boolean;
 };
+/** Where a running mirror round is (`mirror_progress`): root `step` of 4, `done` of `total` files, total 0 while comparing. */
+export type MirrorProgress = {
+  root: "context" | "plugins" | "vault" | "memory";
+  step: number;
+  done: number;
+  total: number;
+};
 /** What `machine_status` says about a machine. */
 export type MachineStatus = { ok: boolean; host?: string; version?: string; os?: string; error?: string };
 export type Settings = {

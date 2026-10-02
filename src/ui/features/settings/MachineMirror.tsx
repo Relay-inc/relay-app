@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { Machine } from "../../../domain/settings/types";
+import type { Machine, MirrorProgress } from "../../../domain/settings/types";
+import type { Key } from "../../../shared/i18n";
 import { agoParts, conflictPath } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
@@ -14,6 +15,13 @@ import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW } from "./blocks";
 import { StatusLine } from "./StatusLine";
 import { Switch } from "./Switch";
 
+const ROOT: Record<MirrorProgress["root"], Key> = {
+  context: "mc.mirrorRootContext",
+  plugins: "mc.mirrorRootPlugins",
+  vault: "mc.mirrorRootVault",
+  memory: "mc.mirrorRootMemory",
+};
+
 /** "Mirror this Mac" on a machine: the switch with its trade-off confirm, the vault folders that stay here, the last
  *  sync round and removing the copy on the machine. */
 export function MachineMirror({ machine }: { machine: Machine }) {
@@ -22,6 +30,7 @@ export function MachineMirror({ machine }: { machine: Machine }) {
   const exclude = machine.mirror?.exclude ?? [];
   const status = useSettingsStore(s => s.machinesPage.mirror[machine.id]);
   const message = useSettingsStore(s => s.machinesPage.mirrorMessages[machine.id]);
+  const progress = useSettingsStore(s => s.machinesPage.mirrorProgress[machine.id]);
   const [turningOn, setTurningOn] = useState(false);
   const [wiping, setWiping] = useState(false);
   const [path, setPath] = useState("");
@@ -108,6 +117,24 @@ export function MachineMirror({ machine }: { machine: Machine }) {
       ) : null}
       {on ? (
         <div className="grid gap-1">
+          {progress ? (
+            <div className="grid gap-1">
+              <span className="text-xs text-s-muted">
+                {t("mc.mirrorStep", { step: progress.step, root: t(ROOT[progress.root]) })}
+                {" · "}
+                {progress.total
+                  ? t("mc.mirrorFiles", { done: progress.done, total: progress.total })
+                  : t("mc.mirrorComparing")}
+              </span>
+              {/* without a value the bar runs on its own while the files are compared */}
+              <progress
+                className="h-1.5 w-full"
+                aria-label={t("mc.mirrorProgress")}
+                max={progress.total || undefined}
+                value={progress.total ? progress.done : undefined}
+              />
+            </div>
+          ) : null}
           {status ? (
             <>
               <span className="text-xs text-s-muted">
@@ -137,7 +164,7 @@ export function MachineMirror({ machine }: { machine: Machine }) {
                 </span>
               ))}
             </>
-          ) : (
+          ) : progress ? null : (
             <span className="text-xs text-s-muted">{t("mc.mirrorNever")}</span>
           )}
         </div>

@@ -133,14 +133,18 @@ const mirrorMessage = (id: string, text: string, ok = false) =>
   change(draft => {
     draft.mirrorMessages[id] = text ? { text, ok } : null;
   });
-/** Reads the last mirror round of every machine with the mirror on; a failing command keeps the last one. */
+/** Reads the last mirror round and the running one of every machine with the mirror on; a failing command keeps
+ *  what was there. */
 export async function pollMirrors() {
   for (const machine of machines().filter(machine => machine.mirror?.on)) {
-    const status = await backend.mirrorStatus(machine.id).catch(() => undefined);
-    if (status !== undefined)
-      change(draft => {
-        draft.mirror[machine.id] = status;
-      });
+    const [status, progress] = await Promise.all([
+      backend.mirrorStatus(machine.id).catch(() => undefined),
+      backend.mirrorProgress(machine.id).catch(() => undefined),
+    ]);
+    change(draft => {
+      if (status !== undefined) draft.mirror[machine.id] = status;
+      if (progress !== undefined) draft.mirrorProgress[machine.id] = progress;
+    });
   }
 }
 /** Saves the mirror switch and the excluded folders. True when it worked. */
