@@ -16,7 +16,7 @@ import {
   projectIcon,
 } from "./blocks";
 import { SettingsElement } from "./settings-element";
-import { tws } from "./styles";
+import { contents, tws } from "./styles";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -36,7 +36,7 @@ declare global {
  *  small buttons) and its repos as removable chips. */
 @customElement("relay-settings-project")
 export class SettingsProject extends SettingsElement {
-  static override styles = [tws];
+  static override styles = [tws, contents];
 
   /** The name in the vault, which the field falls back to */
   @property() name = "";

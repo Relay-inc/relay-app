@@ -57,7 +57,7 @@ export class SettingsFold extends SettingsElement {
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
-      ${this.open && !this.nav ? html`<div class="grid grid-cols-1 gap-3 px-3.5 pb-3.5 pl-13"><slot></slot></div>` : nothing}
+      ${this.open && !this.nav ? html`<div class="grid grid-cols-1 gap-3 px-3.5 pt-3 pb-3.5 pl-13"><slot></slot></div>` : nothing}
     </div>`;
   }
 }

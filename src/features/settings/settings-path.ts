@@ -1,11 +1,11 @@
-import { css, html, nothing } from "lit";
+import { html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
 import { appIcon, buttonClass, inputValue } from "./blocks";
 import { SettingsElement } from "./settings-element";
-import { tws } from "./styles";
+import { contents, tws } from "./styles";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -24,14 +24,7 @@ declare global {
 // padding and border come on top.
 @customElement("relay-settings-path")
 export class SettingsPath extends SettingsElement {
-  static override styles = [
-    tws,
-    css`
-      :host {
-        display: contents;
-      }
-    `,
-  ];
+  static override styles = [tws, contents];
 
   @property() value = "";
   @property() placeholder = "";

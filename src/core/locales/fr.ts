@@ -429,7 +429,8 @@ export default {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Afficher la boîte de réception",
-  "mail.account": "Compte par défaut, utilisé par Claude quand on ne précise pas :",
+  "mail.account": "Compte par défaut",
+  "mail.accountHint": "Utilisé par Claude quand on ne précise pas.",
   "mail.testOk": "Fonctionne : {n} mails dans la boîte",
   "mail.accounts": "{n} comptes",
   "mail.help":
@@ -467,7 +468,6 @@ export default {
     "Votre mot de passe est déjà dans le trousseau, par exemple via himalaya ? Utilisez alors Avancé en bas du même écran.",
   "mail.setupOpen": "Ouvrir les réglages",
   "mail.guideH": "Connecter votre Gmail en deux étapes",
-  "mail.guideMore": "Connecter un autre compte",
   "mail.step1H": "Étape 1. Créez un mot de passe d'application chez Google",
   "mail.step1":
     "Gmail n'accepte une app qu'avec un mot de passe d'application : un code de 16 lettres, distinct de votre mot de passe habituel. Vous en créez un par app et pouvez le révoquer à tout moment.",
@@ -484,7 +484,6 @@ export default {
     "Connecté à {email} : {n} mails dans la boîte. Enregistré, vous les trouvez sous Mail dans la barre latérale.",
   "mail.step2Hint":
     "Le code va directement dans le trousseau macOS, sous le service relay-mail. L'app ne le stocke nulle part ailleurs et ne l'affiche plus. S'il est faux, il est supprimé aussitôt.",
-  "mail.advH": "Avancé : le mot de passe est déjà dans le trousseau (par exemple via himalaya)",
   "mail.adv":
     "Ouvrez l'app Trousseaux d'accès et cherchez l'élément. Son nom est le service, son champ Compte est le compte du trousseau. Pour himalaya, le service est himalaya-&lt;nom&gt;-imap et le compte &lt;nom&gt;, avec le nom de compte de votre configuration himalaya. Par exemple le service himalaya-weareantenna-imap et le compte weareantenna. Si macOS demande l'autorisation de le lire, choisissez Toujours autoriser.",
   "mail.svcL": "Service",
@@ -493,6 +492,8 @@ export default {
   "mail.inKeychain": "mot de passe dans le trousseau : {svc}",
   "mail.kindGmail": "Gmail",
   "mail.kindImap": "Autre serveur de messagerie (IMAP)",
+  "mail.kindKeychain": "Mot de passe déjà dans le trousseau",
+  "mail.add": "+ Ajouter un compte",
   "mail.guideImap": "Connecter un serveur de messagerie",
   "mail.hostL": "Serveur",
   "mail.portL": "Port",
