@@ -11,8 +11,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@relay/board-core": "workspace:*",
-    "lit": "^3.3.3"
+    "@relay/board-core": "workspace:*"
   },
   "peerDependencies": {
     "@tauri-apps/api": "^2"

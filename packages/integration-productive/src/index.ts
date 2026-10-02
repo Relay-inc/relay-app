@@ -1,6 +1,4 @@
-import { html, nothing } from "lit";
-import { unsafeHTML } from "lit/directives/unsafe-html.js";
-import { currentLocale, translator, type BoardProvider, type BoardRef, type Ctx, type Opt } from "@relay/board-core";
+import { currentLocale, translator, type BoardProvider, type BoardRef, type CardFile, type CardView, type Ctx, type Opt } from "@relay/board-core";
 import strings, { type Key } from "./locales";
 import { toHtml, uploadFile } from "./write";
 
@@ -171,51 +169,33 @@ const productive: BoardProvider<Key> = {
       details.set(id, task);
       return task;
     },
-    /** The panel, in the same Tailwind utilities as the PR detail so both look alike (Tailwind scans the packages). */
-    // Description and feed are Productive's HTML, which the original trusted the same way (unsafeHTML); everything else is escaped by Lit.
-    // The package does not know the app: closing and acting go to the panel as bubbling, composed events ("detail-close", "detail-act").
-    render(tk: Task | null, err) {
-      const bar = html`<div class="flex items-center flex-wrap gap-2 mb-3"><button class="btn whitespace-nowrap flex-none" title=${t("close")} @click=${(e: Event) => e.target!.dispatchEvent(new CustomEvent("detail-close", { bubbles: true, composed: true }))}>×</button>
-        ${tk ? html`<span class="flex-1"></span><a class="btn whitespace-nowrap flex-none inline-flex items-center" href=${tk.url}>${t("open", { name: "Productive" })}</a>` : nothing}</div>`;
-      if (err) return html`${bar}<div class="err-box">${err}</div>`;
-      if (!tk) return html`${bar}<div class="text-secondary mb-3">${t("loading")}</div>`;
-      const act = (from: EventTarget, action: string, value: string, files: File[] = [], done?: () => void) =>
-        from.dispatchEvent(new CustomEvent("detail-act", { bubbles: true, composed: true, detail: { action, value, files, done } }));
-      const meta = "flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5 tabular-nums";
-      const sec = (title: string, n: number | string, body: unknown) => html`<section class="mt-4"><h3 class="text-xs font-semibold text-secondary uppercase tracking-wide mb-1.5 pb-1 border-b border-separator">${title}${n !== "" ? html` <span class="text-secondary tabular-nums">${n}</span>` : nothing}</h3>${body}</section>`;
-      // status and assignee change from the panel once the project's options are known, else they are text
+    /** The task as the panel shows it (board-core's CardView). Description and comments are Productive's HTML after
+     * clean(), everything else is text. Status and assignee are pickers once the project's options are known. */
+    view(tk: Task): CardView {
       const o = optsDone.get(tk.project);
-      const rows = tk.fields.filter(([, v, cd]) => v || (cd && o));
-      const picker = (cd: string, v: string) => {
-        const list = cd === "status" ? o?.statuses : o?.people, cur = cd === "status" ? tk.statusId : tk.assigneeId;
-        if (!list) return v;
+      const fileView = (f: File_): CardFile => ({ id: f.id, name: f.name, size: size(f.size), url: f.url });
+      const field = ([label, value, cd]: [string, string, string?]) => {
+        const list = cd === "status" ? o?.statuses : cd === "assignee" ? o?.people : undefined;
+        if (!cd || !list) return { label, value };
+        const current = cd === "status" ? tk.statusId : tk.assigneeId;
         // a value the list lacks (someone no longer on the project) still shows as it is
-        const opts_ = cur && !list.some(x => x.id === cur) ? [{ id: cur, name: v }, ...list] : list;
-        return html`<select class="field w-full" @change=${(e: Event) => act(e.target!, cd, (e.target as HTMLSelectElement).value)}>
-          ${cd === "assignee" ? html`<option value="" ?selected=${!cur}>${t("unassigned")}</option>` : nothing}
-          ${opts_.map(x => html`<option value=${x.id} ?selected=${x.id === cur}>${x.name}</option>`)}</select>`;
+        const options = current && !list.some(x => x.id === current) ? [{ id: current, name: value }, ...list] : list;
+        return { label, value, pick: { action: cd, current, options: options.map(({ id, name }) => ({ id, name })), ...(cd === "assignee" ? { none: t("unassigned") } : {}) } };
       };
-      // opening one needs the Productive session, so a link to the browser
-      const files = (fs: File_[]) => html`<ul class="flex flex-col gap-1 my-1.5 text-sm">${fs.map(f => html`<li class="flex items-baseline gap-2 min-w-0">
-        ${f.url ? html`<a class="truncate" href=${f.url}>${f.name}</a>` : html`<span class="truncate">${f.name}</span>`}<span class="text-xs text-secondary tabular-nums">${size(f.size)}</span></li>`)}</ul>`;
-      // files dropped anywhere on the task become its attachments
-      const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
-      const comment = (e: Event) => { const ta = (e.target as HTMLElement).closest("section")!.querySelector("textarea")!; act(e.target!, "comment", ta.value, [], () => { ta.value = ""; }); };
-      return html`${bar}<div @dragover=${(e: DragEvent) => { if (hasFiles(e)) e.preventDefault(); }} @drop=${(e: DragEvent) => { if (!hasFiles(e)) return; e.preventDefault(); act(e.target!, "attach", "", [...e.dataTransfer!.files]); }}>
-        <div class=${meta}>${[tk.board, tk.list, `#${tk.number}`].filter(Boolean).map(x => html`<span>${x}</span>`)}</div>
-        <h2 class="text-sm font-semibold mb-2 leading-snug">${tk.closed ? html`<span class="text-xs text-secondary border border-separator rounded-sm px-1 mr-1.5">${t("closed")}</span>` : nothing}${tk.title}</h2>
-        <div class=${meta}><span>${tk.creator}</span><span>${when(tk.created)}</span></div>
-        <dl class="grid grid-cols-[max-content_1fr] gap-x-3.5 gap-y-1 mt-3 text-sm items-center">${rows.map(([k, v, cd]) => html`<dt class="text-secondary">${k}</dt><dd class="wrap-anywhere">${cd ? picker(cd, v) : v}</dd>`)}</dl>
-        ${tk.files ? sec(t("files"), tk.files.length, html`${tk.files.length ? files(tk.files) : html`<div class="text-secondary mb-2">${t("noFiles")}</div>`}
-          <label class="btn inline-flex items-center cursor-pointer">${t("attach")}<input type="file" multiple hidden @change=${(e: Event) => {
-            const i = e.target as HTMLInputElement; if (i.files?.length) act(i, "attach", "", [...i.files]); i.value = ""; }}></label>`) : nothing}
-        ${sec(t("desc"), "", tk.description.trim() ? html`<div class="md-panel">${unsafeHTML(tk.description)}</div>` : html`<div class="text-secondary mb-3">${t("noDesc")}</div>`)}
-        ${sec(t("feed"), tk.feed.length, html`<div class="flex flex-col gap-1.5 mb-3"><textarea class="field w-full resize-y py-1.5" rows="3" placeholder=${t("commentPh")}></textarea>
-          <button class="btn primary self-end" @click=${comment}>${t("comment")}</button></div>
-          ${tk.feed.length ? tk.feed.map(f => html`<div class="py-2 border-b border-separator"><div class="flex items-center gap-2 text-sm mb-1"><b>${f.who || "Productive"}</b><span class="ml-auto text-xs text-secondary tabular-nums">${when(f.at)}</span></div>
-          ${f.html ? html`<div class="md-panel">${unsafeHTML(f.html)}</div>` : f.change ? html`<div class="text-secondary mb-3">${f.change}</div>` : nothing}${f.files.length ? files(f.files) : nothing}</div>`) : html`<div class="text-secondary mb-3">${t("nothing")}</div>`}`)}
-      </div>`;
+      return {
+        url: tk.url, title: tk.title, closed: !!tk.closed,
+        meta: [tk.board, tk.list, `#${tk.number}`].filter(Boolean),
+        byline: [tk.creator, when(tk.created)],
+        fields: tk.fields.filter(([, v, cd]) => v || (cd && o)).map(field),
+        files: tk.files && tk.files.map(fileView),
+        description: tk.description,
+        feed: tk.feed.map(f => ({ who: f.who || "Productive", at: when(f.at), html: f.html, change: f.change, files: f.files.map(fileView) })),
+        actions: ["comment", "attach"],
+      };
     },
+    labels: () => ({ close: t("close"), open: t("open", { name: "Productive" }), loading: t("loading"), closed: t("closed"), files: t("files"),
+      noFiles: t("noFiles"), attach: t("attach"), desc: t("desc"), noDesc: t("noDesc"), feed: t("feed"), commentPh: t("commentPh"),
+      comment: t("comment"), nothing: t("nothing") }),
     /** comment, status, assignee, attach: done in Productive, then the task read again */
     async act(c, ref, id, action, { value, files }) {
       const patch = (rel: any) => c.call("PATCH", `/tasks/${id}`, { data: { type: "tasks", id, relationships: rel } });

@@ -1,0 +1,28 @@
+/* The composer's field and picks drop the browser's look entirely (`all:unset`), which a utility can't say.
+   Unlayered, so it beats the Tailwind layers. */
+.relay-composer textarea {
+  all: unset;
+  display: block;
+  width: 100%;
+  min-height: 24px;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--label);
+}
+.relay-composer textarea::placeholder {
+  color: var(--secondary);
+}
+.relay-composer select {
+  all: unset;
+  font-size: 12px;
+  color: var(--secondary);
+  padding: 2px 4px;
+  border-radius: calc(var(--r) - 2px);
+  cursor: default;
+}
+.relay-composer select:hover:not(:disabled) {
+  background: var(--fill);
+}
+.relay-composer select:disabled {
+  opacity: 0.5;
+}

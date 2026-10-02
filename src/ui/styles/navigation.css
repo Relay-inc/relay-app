@@ -1,0 +1,40 @@
+/* The sidebar's and the right panel's own styles, scoped by the class on each root. */
+
+/* the frosted sidebar: the window is transparent with the macOS sidebar material behind it, only this lets it through */
+.relay-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.relay-sidebar[data-reordering],
+.relay-sidebar[data-reordering] * {
+  cursor: grabbing !important;
+  user-select: none;
+}
+
+.relay-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--inspector);
+}
+/* a vault note in the Status tab looks like one in a conversation: md-defaults' link colour would win otherwise */
+.relay-panel .md-panel a.vlink {
+  color: var(--accent);
+  text-decoration-color: var(--separator);
+}
+.relay-panel .md-panel a.vlink:hover {
+  text-decoration-color: currentColor;
+}
+/* the read-only checkboxes follow the theme: without it the dark theme draws them as light grey squares */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .relay-panel input[type="checkbox"] {
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] .relay-panel input[type="checkbox"] {
+  color-scheme: dark;
+}

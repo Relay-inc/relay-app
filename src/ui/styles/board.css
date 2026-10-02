@@ -1,0 +1,8 @@
+/* Links in a card's description and comments, like the app's other links (md-chat): md-defaults.css gives md-panel
+   links the browser's link blue, so this needs the card root in front to beat it. */
+.card-detail .md-panel a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--secondary);
+  text-underline-offset: 2px;
+}

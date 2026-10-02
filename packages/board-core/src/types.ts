@@ -1,4 +1,3 @@
-import type { TemplateResult } from "lit";
 import type { Locales } from "./i18n";
 
 // The contract a task tracker implements to show as a board in the sidebar (see README, "Integrations").
@@ -25,15 +24,61 @@ export type Ctx = { config: Record<string, any>; call: (method: string, path: st
   /** a file posted as a form to a URL the backend's `upload` allows (no secrets go along), resolves with its Location */
   upload: (url: string, fields: Record<string, string>, file: File) => Promise<string> };
 
+/** A file on a card or a comment. `size` is formatted ("1.2 MB"); `url` opens it in the browser, "" when there is none. */
+export type CardFile = { id: string; name: string; size: string; url: string };
+/** A field the panel can change with a picker: the action to ask for, the value now, and the choices. `none` is the
+ * label of an empty choice when the field can be cleared (Productive's "unassigned"). */
+export type CardPick = { action: string; current: string; options: Opt[]; none?: string };
+/** One row of the card's fields: a label and its value as text, or a picker. */
+export type CardField = { label: string; value: string; pick?: CardPick };
+/** One entry of the feed, newest first: a comment (`html`, after the provider's clean()) or a change (`change`, text). */
+export type CardEntry = { who: string; at: string; html: string; change: string; files: CardFile[] };
+/** A card as the right panel shows it: data only, the app draws it (ui/features/board). Every string is in the UI
+ * language and formatted; `description` and a comment's `html` are HTML the provider cleaned, the rest is text. */
+export type CardView = {
+  url: string;
+  title: string;
+  closed: boolean;
+  /** above the title: board, list, #number */
+  meta: string[];
+  /** under the title: the creator and when it was made */
+  byline: string[];
+  fields: CardField[];
+  /** the card's own files; null when the panel does not show files (not fetched yet) */
+  files: CardFile[] | null;
+  description: string;
+  feed: CardEntry[];
+  /** what the panel offers besides the pickers: "comment" (a text box and button), "attach" (a file input and dropping
+   * files on the card) */
+  actions: string[];
+};
+/** The panel's own texts in the UI language: the buttons, the section titles, the empty states. */
+export type CardLabels = {
+  close: string;
+  open: string;
+  loading: string;
+  closed: string;
+  files: string;
+  noFiles: string;
+  attach: string;
+  desc: string;
+  noDesc: string;
+  feed: string;
+  commentPh: string;
+  comment: string;
+  nothing: string;
+};
+
 /** The right panel for one card, optional: without it a click opens the card in the browser. */
 export interface CardDetail<D = any> {
   /** what a background load already has, so the panel opens at once */
   cached(id: string): D | undefined;
   fetch(ctx: Ctx, ref: BoardRef, id: string): Promise<D>;
-  /** A template in the PR detail's classes. Its close button fires a bubbling, composed "detail-close" event (the panel closes on it). */
-  render(d: D | null, err: string): TemplateResult;
-  /** An action from the panel, resolves with the card as it is now. The template asks for one with a bubbling, composed
-   * "detail-act" event, detail `{ action, value, files }`: a picker's value or the composer's text, and picked or dropped files. */
+  /** The card as the panel shows it, made when it is drawn (strings in the language of that moment). */
+  view(d: D): CardView;
+  labels(): CardLabels;
+  /** An action from the panel, resolves with the card as it is now: a picker's `action` with the picked value,
+   * "comment" with the composer's text, "attach" with picked or dropped files. */
   act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[] }): Promise<D>;
 }
 

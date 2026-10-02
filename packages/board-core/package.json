@@ -6,8 +6,5 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
-  },
-  "dependencies": {
-    "lit": "^3.3.3"
   }
 }
