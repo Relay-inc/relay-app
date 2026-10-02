@@ -5,18 +5,18 @@ import { md } from "../../core/markdown";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
-import { ui } from "../../domain/ui";
+import { ui, PRS } from "../../domain/ui";
 import { ghOn } from "../../domain/config";
-import { project, projectLabel } from "../../domain/vault";
+import { project } from "../../domain/vault";
 import { selectedProject } from "../../domain/chats/state";
-import { panel, setTab, cardOf, closeDetail, openDetail, cardAct, type CardAct } from "../../domain/panel";
+import { select } from "../../domain/navigation";
+import { panel, setTab, cardOf, closeDetail, openPr, cardAct, type CardAct } from "../../domain/panel";
+import { cardChat } from "../../domain/card-chat";
 import { prs, type PR } from "../../domain/prs";
 import { panelItem, prKey } from "../../domain/keys";
 import { reminders, urgency, type Reminder } from "../../domain/reminders";
 import "./todo-list";
 import "../pull-requests/pr-row";
-import "../pull-requests/relay-pr-detail";
-import "../mail/relay-mail-detail";
 import "../notes/relay-note-detail";
 
 type ProjectInfo = NonNullable<ReturnType<typeof project>>;
@@ -63,6 +63,7 @@ export class RelayInspector extends LitElement {
               class=${panel.acting ? "opacity-70" : ""}
               @detail-close=${closeDetail}
               @detail-act=${(e: CustomEvent<CardAct>) => cardAct(key, e.detail)}
+              @detail-chat=${() => cardChat(key)}
             >
               ${panel.actErr ? html`<div class="err-box mb-3">${panel.actErr}</div>` : nothing}${card.detail.render(panel.detail[key] ?? null, panel.err)}
             </div>`
@@ -70,10 +71,8 @@ export class RelayInspector extends LitElement {
       }
       case "note":
         return html`<relay-note-detail></relay-note-detail>`;
-      case "mail":
-        return html`<relay-mail-detail></relay-mail-detail>`;
       default:
-        return html`<relay-pr-detail></relay-pr-detail>`;
+        return nothing;
     }
   }
 
@@ -93,9 +92,11 @@ export class RelayInspector extends LitElement {
       compact
       .pr=${pr}
       ?mine=${mine}
-      .project=${pr.project ? projectLabel(pr.project) : ""}
-      ?selected=${panel.open === key}
-      @open-pr=${() => openDetail(key)}
+      ?selected=${panel.prOpen === key}
+      @open-pr=${() => {
+        openPr(key);
+        select(PRS);
+      }}
     ></relay-pr-row>`;
   }
 

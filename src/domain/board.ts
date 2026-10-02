@@ -10,6 +10,7 @@ import {
   type Card,
   type Column,
   type Opt,
+  type View,
 } from "./providers";
 import { config, type Settings } from "./config";
 import { ui } from "./ui";
@@ -27,6 +28,7 @@ export type Board = {
   boards: Opt[];
   columns: Column[];
   cards: Card[];
+  views: View[]; // the board's saved views in the tracker, shown with the presets
   project: string;
   board: string;
   err: string;
@@ -115,6 +117,14 @@ export function deletePreset(provider: BoardProvider, name: string) {
 }
 export const applyPreset = (provider: BoardProvider, preset: Preset) =>
   setFilter(provider, { filters: preset.filters });
+/** A saved view of the tracker: its filters, and its layout and grouping when the board has them. */
+export function applyView(provider: BoardProvider, view: View) {
+  if (!view.filters) return;
+  if (view.layout) setView(provider, view.layout);
+  setFilter(provider, { filters: view.filters });
+  if (view.group && view.group !== boardState(provider).group && provider.groupings?.some(g => g.id === view.group))
+    pickGroup(provider, view.group);
+}
 
 // folded columns: what the user chose per column id, kept across sessions; a column that is done starts folded
 const foldKey = (provider: BoardProvider) => `${lsKey(provider)}Fold`;
@@ -147,6 +157,7 @@ export function boardState(provider: BoardProvider): Board {
       boards: [],
       columns: [],
       cards: [],
+      views: [],
       project: lsGet(`${lsKey(provider)}Project`),
       board: lsGet(`${lsKey(provider)}Board`),
       err: "",
@@ -179,16 +190,19 @@ async function run(state: Board, load: (live: () => boolean) => Promise<void>) {
 }
 async function loadCards(provider: BoardProvider, state: Board, live: () => boolean, boardId: string) {
   const ref = { ...refOf(provider, state), board: boardId };
-  const [columns, cards] = boardId
+  // the views are extra: a board still shows when they don't load
+  const [columns, cards, views] = boardId
     ? await Promise.all([
         provider.columns(ctx(provider), ref, state.group || undefined),
         provider.cards(ctx(provider), ref),
+        provider.views?.(ctx(provider), ref).catch(() => []) ?? [],
       ])
-    : [[], []];
+    : [[], [], []];
   if (!live()) return;
   state.board = boardId;
   state.columns = columns;
   state.cards = cards;
+  state.views = views;
   lsSet(`${lsKey(provider)}Project`, state.project);
   lsSet(`${lsKey(provider)}Board`, state.board);
 }
@@ -203,6 +217,7 @@ function followLinkedBoard(provider: BoardProvider, state: Board) {
   state.boards = [];
   state.columns = [];
   state.cards = [];
+  state.views = [];
 }
 
 /** Show the provider's board fresh from the tracker: the board linked to the vault project last shown when there is one. */
@@ -234,6 +249,7 @@ export function pickProject(provider: BoardProvider, projectId: string) {
     state.boards = boardList;
     state.columns = [];
     state.cards = [];
+    state.views = [];
     await loadCards(provider, state, live, boardList[0]?.id || "");
   });
 }

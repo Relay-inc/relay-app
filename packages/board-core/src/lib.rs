@@ -33,6 +33,9 @@ pub struct Provider {
     pub headers: fn(cfg: &Value, secrets: &[String]) -> Vec<String>,
     /// whether a file may be posted as a form to this URL (Productive: its S3 bucket), never with the secrets
     pub upload: fn(url: &str) -> bool,
+    /// whether a picture's preview may be fetched from this URL for the card panel (Productive: its public thumbs),
+    /// never with the secrets
+    pub thumb: fn(url: &str) -> bool,
     /// whether a 2xx answer is a success: a GraphQL API (Linear) answers its errors with 200 and `errors`
     pub ok: fn(body: &Value) -> bool,
     /// an error answer as one line: HTTP status and the API's own message

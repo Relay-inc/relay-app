@@ -6,11 +6,13 @@ import { ctxOf, provider, type BoardProvider, type BoardRef } from "./providers"
 import { mail, type MailBody } from "./mail";
 import { panelItem, cardKey, type PanelItem } from "./keys";
 
-// The right panel's detail: a PR ("owner/repo#12"), a mail ("mail:…"), a vault note ("note:…") or a board card
-// ("card:<provider>:<id>"). While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
+// The right panel's detail: a mail ("mail:…"), a vault note ("note:…") or a board card ("card:<provider>:<id>"); a PR
+// ("owner/repo#12") opens in its own window. While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
 export const panel = {
   open: "", // the key of what is shown, "" for the tabs
   modal: "", // the card key shown in the ticket window over the board, "" for none
+  prOpen: "", // the PR key shown in the Pull requests view, "" for none
+  mailOpen: "", // the mail key shown in the Mail view, "" for none
   detail: {} as Record<string, unknown>, // the last answer per key: shown at once, a fresh one follows
   err: "",
   cardRefs: {} as Record<string, BoardRef>,
@@ -79,6 +81,23 @@ export async function openDetail(key: string) {
   }
   changed();
 }
+/** Show a mail in the Mail view next to the list: its headers at once, the body from the server. */
+export async function openMail(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "mail") return;
+  panel.mailOpen = key;
+  panel.err = "";
+  mail.link = "";
+  changed();
+  try {
+    panel.detail[key] = await fetchDetail(key, item);
+  } catch (e) {
+    // a mail that cannot be read is not shown from an older answer
+    delete panel.detail[key];
+    panel.err = String(e);
+  }
+  changed();
+}
 /** Show a card in the ticket window over the board: what is known at once, then fresh from the tracker. */
 export async function openTicket(key: string) {
   const item = panelItem(key);
@@ -88,6 +107,20 @@ export async function openTicket(key: string) {
   panel.err = "";
   panel.actErr = "";
   panel.detail[key] ??= card.detail.cached(card.id);
+  changed();
+  try {
+    panel.detail[key] = await fetchDetail(key, item);
+  } catch (e) {
+    if (!panel.detail[key]) panel.err = String(e);
+  }
+  changed();
+}
+/** Show a PR in the Pull requests view: what is known at once, then fresh from GitHub. */
+export async function openPr(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "pr") return;
+  panel.prOpen = key;
+  panel.err = "";
   changed();
   try {
     panel.detail[key] = await fetchDetail(key, item);

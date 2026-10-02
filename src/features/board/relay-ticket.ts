@@ -7,6 +7,8 @@ import { icon } from "../../core/icons";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
 import type { CardView, Opt } from "../../domain/providers";
+import "../../components/relay-modal";
+import { modalHeader, modalLink } from "../../components/relay-modal";
 import { avatar, due, ring } from "./format";
 
 declare global {
@@ -52,34 +54,20 @@ export class RelayTicket extends LitElement {
     emit(from as HTMLElement, "detail-act", { action, value, files, done });
   }
 
-  private iconButton(name: string, title: string, onClick: () => void, disabled = false) {
-    return html`<button class="btn-icon disabled:opacity-40" title=${title} ?disabled=${disabled} @click=${onClick}>
-      ${icon(name, "glyph size-4")}
-    </button>`;
-  }
-
   private renderHeader(v: CardView | null) {
     const where = [this.projectName, v?.board].filter(Boolean).join(" · ");
     const number = v?.number ?? this.number;
-    return html`<div class="h-13 flex-none flex items-center gap-2 pl-5 pr-3 border-b border-separator">
-      ${where ? html`<span class="inline-flex items-center gap-1.5 text-secondary">${icon("board", "glyph size-3.5")}${where}</span><span class="text-tertiary">/</span>` : nothing}
-      ${number ? html`<span class="font-mono text-xs">${/^\d+$/.test(number) ? "#" : ""}${number}</span>` : nothing}
-      <span class="flex-1"></span>
-      <span class="text-xs text-tertiary tabular-nums mr-0.5">${this.position}</span>
-      ${this.iconButton("left", t("kb.prev"), () => emit(this, "ticket-step", -1), this.first)}
-      ${this.iconButton("right", t("kb.next"), () => emit(this, "ticket-step", 1), this.last)}
-      <span class="w-px h-4 bg-separator-strong mx-1"></span>
-      ${
-        v?.url
-          ? html`<a
-              class="inline-flex items-center gap-1 h-7 px-2.5 rounded-[7px] text-xs text-secondary no-underline hover:bg-fill-2 hover:text-label"
-              href=${v.url}
-              >${t("kb.openIn", { name: this.providerName })}${icon("out", "glyph size-3")}</a
-            >`
-          : nothing
-      }
-      ${this.iconButton("close", t("kb.closeEsc"), () => emit(this, "ticket-close"))}
-    </div>`;
+    const left = html`${where ? html`<span class="inline-flex items-center gap-1.5 text-secondary">${icon("board", "glyph size-3.5")}${where}</span><span class="text-tertiary">/</span>` : nothing}
+    ${number ? html`<span class="font-mono text-xs">${/^\d+$/.test(number) ? "#" : ""}${number}</span>` : nothing}`;
+    return modalHeader({
+      left,
+      position: this.position,
+      first: this.first,
+      last: this.last,
+      onStep: by => emit(this, "ticket-step", by),
+      onClose: () => emit(this, "ticket-close"),
+      link: v?.url ? modalLink(v.url, t("kb.openIn", { name: this.providerName })) : nothing,
+    });
   }
 
   private files(list: NonNullable<CardView["files"]>) {
@@ -230,18 +218,9 @@ export class RelayTicket extends LitElement {
   }
 
   override render() {
-    return html`<div
-      class="fixed inset-0 z-50 grid place-items-center bg-black/30"
-      @click=${() => emit(this, "ticket-close")}
-    >
-      <div
-        class="w-240 max-w-[calc(100vw-48px)] h-175 max-h-[calc(100vh-48px)] flex flex-col bg-bg rounded-2xl shadow-md ring-1 ring-separator-strong overflow-hidden ${this.acting ? "opacity-70" : ""}"
-        .inert=${this.acting}
-        @click=${(e: Event) => e.stopPropagation()}
-      >
-        ${this.renderHeader(this.view)}${this.renderBody(this.view)}
-      </div>
-    </div>`;
+    return html`<relay-modal ?acting=${this.acting} @modal-close=${() => emit(this, "ticket-close")}>
+      ${this.renderHeader(this.view)}${this.renderBody(this.view)}
+    </relay-modal>`;
   }
 }
 

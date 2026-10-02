@@ -37,13 +37,21 @@ export type CardView = {
 };
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */
 export type Grouping<K extends string = string> = { id: string; label: K };
+/** A card's values a board filters on, per facet (names, as the cards carry them; `who` is the first name). */
+export type ViewFilters = Partial<Record<"state" | "status" | "who" | "folder" | "list" | "label", string[]>>;
+/** A view saved in the tracker (Productive's saved views), offered next to the app's own presets. `filters` is null
+ * when it asks for something the board can't filter on; `group` is the grouping it lays the columns out by, `layout`
+ * how it shows (absent: one the board doesn't have, the board stays as it is). */
+export type View = { id: string; name: string; filters: ViewFilters | null; group?: string; layout?: "kanban" | "list" };
 /** Which board a vault project maps to, settings.boards[vault project]. */
 export type BoardRef = { provider: string; project: string; board: string };
 
 /** What a provider gets for each call: its settings.integrations.<id>, and one API call through the backend. */
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
   /** a file posted as a form to a URL the backend's `upload` allows (no secrets go along), resolves with its Location */
-  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string> };
+  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string>;
+  /** a picture's preview from a URL the backend's `thumb` allows (no secrets go along), resolves with a data URL */
+  thumb: (url: string) => Promise<string> };
 
 /** The right panel for one card, optional: without it a click opens the card in the browser. */
 export interface CardDetail<D = any> {
@@ -57,6 +65,9 @@ export interface CardDetail<D = any> {
   /** An action from the panel, resolves with the card as it is now. The template asks for one with a bubbling, composed
    * "detail-act" event, detail `{ action, value, files }`: a picker's value or the composer's text, and picked or dropped files. */
   act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[] }): Promise<D>;
+  /** A conversation about the card: its title in the list, and what goes in front of the user's first message. The
+   * template asks for one with a bubbling, composed "detail-chat" event. */
+  chat?(d: D, id: string): { title: string; prompt: string };
 }
 
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).
@@ -84,6 +95,8 @@ export interface BoardProvider<K extends string = string> {
   cards(ctx: Ctx, ref: BoardRef): Promise<Card[]>;
   /** Move the card to another column, in the tracker right away. Resolves with the new placement when the API gives one. */
   move(ctx: Ctx, ref: BoardRef, card: Card, to: string, group?: string): Promise<number | void>;
+  /** The board's saved views in the tracker, read only. */
+  views?(ctx: Ctx, ref: BoardRef): Promise<View[]>;
   /** The card's page in the tracker's web app. */
   url(ctx: Ctx, ref: BoardRef, card: string): Promise<string>;
   detail?: CardDetail;

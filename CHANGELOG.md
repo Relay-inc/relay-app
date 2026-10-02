@@ -4,15 +4,20 @@ Every PR adds a line under **Unreleased**, in the group that fits (Added, Change
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
-`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Versions follow [semver](https://semver.org);
-the format follows [Keep a Changelog](https://keepachangelog.com).
+`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
+builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes; run
+the workflow by hand (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+[semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
 ### Added
 - Mail works with any IMAP mail server, not only Gmail: Settings › Integrations › Mail › Other mail server (IMAP) takes the address, server, port and password (stored in the macOS keychain). All accounts show in one inbox, newest first, with the account on each row. Claude searches the inbox of such an account and saves replies as drafts in its Drafts folder; nothing is ever sent (#41)
+- A Productive board's Presets menu also lists the project's saved views from Productive (read only), above the presets you keep in Relay; picking one applies its filters, grouping and layout (kanban or list). A view that uses a filter Relay can't apply shows greyed out (#42)
 - Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded (#39)
 - Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation" (#39)
+- Every version is a GitHub release with the macOS app to download and that version's changes as its notes (#36)
+- Productive's task panel shows a thumbnail of every picture attached to the task or a comment; a click opens the original in your browser. **Discuss** starts a conversation about the task: Claude reads the task and its comments itself and posts nothing in Productive unless you ask (#40)
 - Right-click on Algemeen or a project › Close all conversations closes every conversation and terminal session under it; one undo brings them all back (#38)
 - Closing a conversation removes the git worktrees it made in your `~/projects` repos; the branches stay, and a worktree with uncommitted changes or unsaved commits is kept. The undo bar says how many went (#37)
 - Settings › General › Appearance picks light or dark mode, or System (the default) to follow macOS; both windows switch right away (#27)
@@ -24,6 +29,8 @@ the format follows [Keep a Changelog](https://keepachangelog.com).
 - A macOS notification when a turn ends, a turn stops or something waits for you while Relay is in the background; clicking it opens that conversation (#18)
 
 ### Changed
+- Mail is laid out like the Pull requests view: the inbox on the left with search, read state and project filters, the mail you pick on the right at full width instead of in the side panel, so you can step through the inbox without closing anything (#39)
+- Pull requests get the new look, laid out like Mail: the list on the left (waiting for your review, yours) with state-coloured icons and CI and review status, the PR you pick on the right with its branch, checks, conversation, code comments and files, Open on GitHub and AI review. "Updated N min ago" with a refresh button sits in the title bar; a PR in the right panel opens there too (#39)
 - Waiting for you follows the redesign: each item has a header with the agent, project and conversation plus an "Open conversation" link, questions and blocked terminal sessions get the new cards, and the empty state is centered (#39)
 - Reminders get the new look: a New reminder button in the title bar opens the form as a card with date, project and repeat pills, groups have coloured headers, rows have a round done button, and finishing or moving a reminder shows an Undo bar (#39)
 - The right panel follows the redesign: it sits on the main background, the tabs span the full width, open items get round checkboxes, reminder dates colour by urgency, and pull requests show a state-coloured icon with the CI result as a dot (#39)

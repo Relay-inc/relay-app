@@ -9,6 +9,7 @@ import { chat, terminalOf, projectOf, label, aboutProject, waitCount } from "../
 import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
 import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
+import { prs, loadPrs } from "../../domain/prs";
 import { vault, projectLabel } from "../../domain/vault";
 import { contextTint } from "../../domain/sidebar";
 import "./chat-bar";
@@ -152,9 +153,7 @@ export class RelayChat extends LitElement {
   private renderView() {
     const selected = this.selected;
     if (this.board) return keyed(this.board.id, html`<relay-board .provider=${this.board}></relay-board>`);
-    if (selected === PRS) return html`<relay-prs></relay-prs>`;
     if (selected === USAGE) return html`<relay-usage></relay-usage>`;
-    if (selected === MAIL) return html`<relay-mail></relay-mail>`;
     if (selected === REM) return html`<relay-reminders></relay-reminders>`;
     if (selected === WAIT) return html`<relay-waiting></relay-waiting>`;
     return html`<relay-conversation></relay-conversation>`;
@@ -182,7 +181,11 @@ export class RelayChat extends LitElement {
       ?locked=${this.terminalLocked}
       ?panelOff=${ui.panelHidden}
       ?remNew=${this.selected === REM}
+      ?prs=${this.selected === PRS}
+      .prsAt=${prs.at}
+      ?prsBusy=${prs.busy}
       @new-reminder=${openReminderForm}
+      @reload-prs=${loadPrs}
       @edit-project=${openProjectPanel}
       @rename=${(e: CustomEvent<string>) => rename(e.detail)}
       @open-terminal=${openTerminal}
@@ -226,6 +229,9 @@ export class RelayChat extends LitElement {
   override render() {
     const hasSubagents = !this.onView && (chat.subs[this.selected] || []).length > 0;
     const messagesWidth = this.board ? "px-5" : this.selected === REM ? "max-w-180 px-8" : "max-w-170 px-8";
+    // the Pull requests and Mail views scroll their list and the open item apart, so it fills the pane instead of the log
+    if (this.selected === PRS) return html`${this.renderBar()}<relay-prs class="flex-1"></relay-prs>`;
+    if (this.selected === MAIL) return html`${this.renderBar()}<relay-mail class="flex-1"></relay-mail>`;
     return html` ${this.renderBar()} ${ui.projectPanel ? html`<relay-project-panel></relay-project-panel>` : nothing}
       <div id="log" class="flex-1 overflow-y-auto pt-7 pb-3" @scroll=${this.onScroll}>
         <div id="msgs" class="mx-auto flex flex-col gap-5 ${messagesWidth}">${this.renderView()}</div>
