@@ -264,6 +264,10 @@ const en = {
   "set.accentHelp": "Selection, primary buttons and what is waiting for you.",
   "set.accent.relay": "Relay blue",
   "set.accent.graphite": "Graphite",
+  "set.terminal": "Terminal",
+  "set.terminalAuto": "Automatic",
+  "set.terminalHelp":
+    "Where “Open in Terminal” continues a conversation. Automatic takes the first one installed: iTerm, WezTerm, then Terminal.",
   "set.favicons": "Project icons",
   "set.faviconsOn": "Use the website favicon as icon",
   "set.faviconsHelp":
