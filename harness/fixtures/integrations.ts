@@ -255,3 +255,37 @@ export const actions = [
   act("reminders", "push", "Move a reminder to another date.", true, "ask"),
 ];
 export const actionConfig = (): Record<string, unknown> => ({ productive: { "*": "ask", add_time: "auto" } });
+
+// ---------- calendar (calendar_meetings, src-tauri/src/calendar.rs): the meetings from an hour ago to 12 hours ahead.
+// Waiting shows the ones from 30 minutes before their start until 10 after: one running, one in 4 minutes (its banner
+// is due), one in 25; the one in 90 minutes and the one an hour ago are not shown yet or any more.
+const MIN = 60_000;
+const meeting = (id: string, title: string, from: number, minutes: number, extra: Partial<{ location: string; join: string; organizer: string; people: { name: string; email: string }[] }> = {}) => ({
+  id: `${id}@${iso(NOW + from * MIN)}`,
+  feed: MAIL_ACCOUNT,
+  title,
+  start: iso(NOW + from * MIN),
+  end: iso(NOW + (from + minutes) * MIN),
+  location: "",
+  join: "",
+  organizer: "",
+  people: [],
+  ...extra,
+});
+export const CALENDAR_URL = "https://calendar.google.com/calendar/ical/laurent%40example.com/private-0123456789abcdef/basic.ics";
+export const meetings = [
+  meeting("retro", "Retro Atlas Logistics", -60, 45, { people: [{ name: "Jonas Peeters", email: "jonas@atlas-logistics.example" }] }),
+  meeting("standup", "Daily standup", -5, 15, { join: "https://zoom.us/j/1234567890", people: [{ name: "Tom Willems", email: "tom@acme.example" }, { name: "", email: "dev@acme.example" }] }),
+  meeting("review", "Sprint review Northwind Portal", 4, 30, {
+    location: "Room Atlas, 2nd floor",
+    join: "https://meet.google.com/abc-defg-hij",
+    organizer: "sofie@northwind.example",
+    people: [{ name: "Sofie Claes", email: "sofie@northwind.example" }, { name: "Tom Willems", email: "tom@acme.example" }, { name: "", email: "qa@northwind.example" }],
+  }),
+  // a link that names a meeting host but goes elsewhere: no Join (the backend already drops it, the frontend checks again)
+  meeting("kickoff", "Harbor CRM kick-off", 25, 60, { join: "https://evil.example/?u=meet.google.com/x", people: [{ name: "", email: "support@harbor.example" }] }),
+  meeting("lunch", "Lunch with the accountant", 90, 60, { location: "Café Central", people: [{ name: "Accountant", email: "office@accounting.example" }] }),
+];
+/** The second calendar of the calendar fixture does not load, so Waiting says so. */
+export const calendarErrors = (feeds: string[]) =>
+  feeds.includes(MAIL_ACCOUNT_2) ? [`${MAIL_ACCOUNT_2}: Calendar unreachable: curl: (22) The requested URL returned error: 404`] : [];

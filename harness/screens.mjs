@@ -36,9 +36,9 @@ const intoView = async text => {
   await byText(page, text, false).scrollIntoViewIfNeeded();
   await settle(page);
 };
-const settingsPage = async (tab, sub) => {
+const settingsPage = async (tab, sub, fixture = "default") => {
   await page.setViewportSize({ width: 900, height: 700 });
-  await open(page, server.url, { path: "/settings.html" });
+  await open(page, server.url, { path: "/settings.html", fixture });
   await click(tab);
   if (sub) await click(sub);
 };
@@ -46,6 +46,12 @@ const settingsPage = async (tab, sub) => {
 const VIEWS = {
   waiting: async () => {
     await open(page, server.url);
+    await waitText(titles.permission);
+  },
+  // meetings about to start on top (one running, one in 4 minutes, one in 25) and a calendar that did not load
+  "waiting-calendar": async () => {
+    await open(page, server.url, { fixture: "calendar" });
+    await waitText("Sprint review Northwind Portal");
     await waitText(titles.permission);
   },
   "conversation-long-top": async () => {
@@ -266,6 +272,7 @@ const VIEWS = {
     await settle(page);
   },
   ...Object.fromEntries(["Productive", "GitHub", "Mail"].map(name => [`settings-integration-${name.toLowerCase()}`, () => settingsPage("Integrations", name)])),
+  "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");

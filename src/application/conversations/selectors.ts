@@ -13,6 +13,7 @@ import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent } from "../agents/agents";
 import { projectLabel } from "../workspace/vault";
+import { soonMeetings } from "../calendar/calendar";
 import { useConversationsStore } from "./store";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
@@ -36,7 +37,8 @@ export const selectedProject = () => {
   return isTerminal(selected) ? (terminalOf(selected)?.project ?? null) : projectOf(selected);
 };
 export const blockedAgents = () => rules.blockedAgents(cs());
-export const waitCount = () => rules.waitCount(cs());
+// meetings about to start count too: they sit at the top of Waiting (application/calendar)
+export const waitCount = () => rules.waitCount(cs()) + soonMeetings().length;
 export const isWaiting = (key: string) => rules.isWaiting(cs(), key);
 export const runningSubs = (key: string) => rules.runningSubs(cs(), key);
 /** What was closed under a project, newest first, for "Heropen". */

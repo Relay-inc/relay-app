@@ -5,6 +5,9 @@ import { blockedAgents, label, projectOf, waitCount } from "../../../application
 import { backgroundAction } from "../../../application/conversations/actions";
 import { chatAgent } from "../../../application/agents/agents";
 import { select } from "../../../application/navigation/navigation";
+import { useCalendarStore } from "../../../application/calendar/store";
+import { joinMeeting, meetingChat, soonMeetings, timeOf } from "../../../application/calendar/calendar";
+import { joinable, minutesLeft } from "../../../domain/calendar/rules";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
@@ -15,12 +18,16 @@ const ACTIONS = ["hide", "stop", "attach"] as const;
 type Action = (typeof ACTIONS)[number];
 const LABELS = { hide: "wait.hide", stop: "wait.stop", attach: "bar.openTerminal" } as const;
 
-/** The Waiting view: what agents ask, grouped per conversation, and background sessions that are blocked. */
+/** The Waiting view: meetings about to start, what agents ask (grouped per conversation), and background sessions
+ *  that are blocked. */
 export function WaitingView() {
-  const { t, locale } = useT();
+  const { t, tn, locale } = useT();
   const pendingList = useConversationsStore(s => s.pendingList);
   const count = useDerived(waitCount);
   const blocked = useDerived(blockedAgents);
+  const meetings = useDerived(soonMeetings);
+  const now = useCalendarStore(s => s.now);
+  const calendarErrors = useCalendarStore(s => s.errors);
   // the conversations the cards wait in, by key: their title, project and agent glyph for the header
   const chats = useDerived(() =>
     Object.fromEntries(
@@ -70,6 +77,11 @@ export function WaitingView() {
     </div>
   );
 
+  // a calendar that did not load, so a missing meeting is not a surprise
+  const calendarDown = calendarErrors.length ? (
+    <div className="text-xs text-secondary">{t("wait.calendarDown", { error: calendarErrors.join("; ") })}</div>
+  ) : null;
+
   if (!count)
     return (
       <div className="flex flex-col items-center gap-2.5 py-24 text-secondary">
@@ -78,6 +90,7 @@ export function WaitingView() {
         </span>
         <span className="text-base font-semibold text-label">{t("wait.none")}</span>
         <span className="text-[13px]">{t("wait.noneSub")}</span>
+        {calendarDown}
       </div>
     );
   const requestsByChat: Record<string, typeof pendingList> = {};
@@ -87,6 +100,48 @@ export function WaitingView() {
   }
   return (
     <div className="mx-auto flex max-w-170 flex-col gap-7 px-8 pt-7 pb-8">
+      {meetings.map(meeting => {
+        // a meeting from 30 minutes before its start: when, what, who, and a note or a briefing in a new conversation
+        const left = minutesLeft(meeting, now);
+        return (
+          <section key={meeting.id} className="flex flex-col gap-2.5">
+            {header(<Icon name="cal" className="glyph size-3.5" />, null, meeting.title || t("wait.meetingUntitled"))}
+            <div className="grid grid-cols-1 gap-2.5 rounded-xl border border-separator-strong bg-raised p-3.5">
+              <div className="flex items-center gap-2 text-[13px] text-secondary">
+                <span
+                  className={`grid place-items-center size-5.5 flex-none rounded-md bg-fill-2 ${left <= 5 ? "text-late" : "text-soon"}`}
+                >
+                  <Icon name="cal" className="glyph size-3.5" />
+                </span>
+                <span className="font-medium text-label">
+                  {left ? tn("wait.meetingIn", left) : t("wait.meetingNow")}
+                </span>
+                <span>
+                  {timeOf(meeting.start)}–{timeOf(meeting.end)}
+                </span>
+                {meeting.location ? <span className="truncate">· {meeting.location}</span> : null}
+                {meeting.people.length ? (
+                  <span className="flex-none">· {tn("wait.meetingPeople", meeting.people.length)}</span>
+                ) : null}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "prep")}>
+                  {t("wait.meetingPrep")}
+                </button>
+                <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "note")}>
+                  {t("wait.meetingNote")}
+                </button>
+                {joinable(meeting.join) ? (
+                  <button className="btn btn-primary cursor-pointer" onClick={() => joinMeeting(meeting.join)}>
+                    {t("wait.meetingJoin")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </section>
+        );
+      })}
+      {calendarDown}
       {Object.entries(requestsByChat).map(([chatKey, requests]) => {
         const { glyph, project, label: title } = chats[chatKey];
         return (

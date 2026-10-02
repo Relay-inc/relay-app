@@ -43,6 +43,7 @@ The folder names are the same in `domain/`, `application/` and `ui/features/`:
 | `reminders`     | Reminders, the draft form                                                                                                                                  |
 | `pull-requests` | PR list and detail                                                                                                                                         |
 | `usage`         | Plan limits and token usage                                                                                                                                |
+| `calendar`      | Meetings about to start (under Waiting), their banner, a conversation about one                                                                            |
 | `settings`      | Settings, both windows                                                                                                                                     |
 
 Ubiquitous language: the names in code follow the names in the app (conversation, card, reminder, project, vault).
