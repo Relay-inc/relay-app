@@ -47,6 +47,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - The model and effort pickers name the CLI's own defaults, for example "claude-opus-5-5 (default)", once a new conversation ran without a pick. Relay shows what the CLI reports it runs on instead of guessing from its settings. Claude Code doesn't report its effort, so that picker keeps "Default effort" (#63)
 - Linear issues open in Relay with descriptions, activity, comments, status and assignee changes, file attachments, and ticket conversations (#62).
 - Trello cards open in Relay with descriptions, activity, comments, list and member changes, file attachments, and ticket conversations (#60).
+- Mail can archive and delete, as an experimental switch in Settings › Mail: archive (E) or delete (#) the open mail or a selection (Cmd- or Shift-click, Cmd-A for all), mark a selection read or unread, and the list splits into Inbox and Other, where newsletters and notifications from people you never wrote to go. Archived mails go to the Archive folder (Gmail: All Mail), deleted ones to the Trash, for Gmail and other IMAP servers alike; Claude still cannot move or delete mail (#61)
 - Cmd-K can find projects by name, label, alias or context. Choose a result with the arrow keys and Enter, or click it, to open the project; Enter without a selection still asks a quick question (#58)
 
 ### Fixed

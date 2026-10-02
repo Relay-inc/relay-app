@@ -1,5 +1,10 @@
 import { isLang, setLanguage } from "../../shared/i18n";
-import { ghOn as githubOn, mailOn as mailIsOn, type Settings } from "../../domain/settings/types";
+import {
+  ghOn as githubOn,
+  mailOn as mailIsOn,
+  mailExperimental as mailIsExperimental,
+  type Settings,
+} from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { navigatorLang, setPageLang } from "../../infrastructure/window";
 import { useSettingsStore } from "./store";
@@ -8,6 +13,7 @@ import { useSettingsStore } from "./store";
 export const settings = () => useSettingsStore.getState().settings;
 export const ghOn = () => githubOn(settings());
 export const mailOn = () => mailIsOn(settings());
+export const mailExperimental = () => mailIsExperimental(settings());
 /** The settings as the backend sent them (merged over what is known, as an older backend may leave fields out). */
 export const setSettingsState = (next: Partial<Settings>) =>
   useSettingsStore.setState(draft => {

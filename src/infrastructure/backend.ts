@@ -110,6 +110,9 @@ export const githubStatus = () => invoke<string>("github_status");
 export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_list", { account, page });
 export const mailRead = (account: string, id: string) => invoke<MailBody>("mail_read", { account, id });
 export const mailSeen = (account: string, id: string, seen: boolean) => invoke("mail_seen", { account, id, seen });
+/** Archive (`trash` false) or move to Trash, the mails the user picked. The backend refuses with the experimental mail flag off. */
+export const mailMove = (account: string, ids: string[], trash: boolean) =>
+  invoke<void>("mail_move", { account, ids, trash });
 /** Gmail without a server; a generic IMAP account with its host and port. */
 export const mailConnect = (email: string, password: string, imap?: { host: string; port: number }) =>
   invoke<{ account: MailAcct; result: string }>("mail_connect", { email, password, ...imap });

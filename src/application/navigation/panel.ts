@@ -94,6 +94,11 @@ export async function openMail(key: string) {
     });
   }
 }
+/** No mail next to the Mail list (the open one was archived or deleted and none is left to show). */
+export const closeMail = () =>
+  set(draft => {
+    draft.panel.mailOpen = "";
+  });
 /** Show a card in the ticket window over the board: what is known at once, then fresh from the tracker. */
 export async function openTicket(key: string) {
   const item = panelItem(key);

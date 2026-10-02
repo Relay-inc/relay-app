@@ -4,10 +4,22 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { openMail } from "../../../application/navigation/panel";
 import { mailKey } from "../../../domain/navigation/keys";
 import { sender, unread } from "../../../domain/mail/rules";
-import { inbox, loadMails, mailSeen, moreMails, openMailSetup, setMailFilter } from "../../../application/mail/mail";
+import {
+  inbox,
+  loadMails,
+  mailSeen,
+  moreMails,
+  openMailSetup,
+  setMailFilter,
+  mailMove,
+  setMailPane,
+  toggleMailSelect,
+} from "../../../application/mail/mail";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { MailBar } from "./MailBar";
+import { MailBoxes } from "./MailBoxes";
+import { MailBulkBar } from "./MailBulkBar";
 import { MailDetail } from "./MailDetail";
 import { MailRow } from "./MailRow";
 import { MailSetup } from "./MailSetup";
@@ -23,7 +35,8 @@ export function MailView({ className = "" }: { className?: string }) {
   const more = useMailStore(s => s.more);
   const filter = useMailStore(s => s.filter);
   const open = useNavigationStore(s => s.panel.mailOpen);
-  const { shown, total, unread: unreadCount, ended, projects } = useDerived(inbox);
+  const selected = useMailStore(s => s.selected);
+  const { shown, split, boxUnread, total, unread: unreadCount, ended, projects } = useDerived(inbox);
   const root = `${className} grid grid-cols-[380px_minmax(0,1fr)] min-h-0`;
 
   if (!hasAccount)
@@ -38,7 +51,10 @@ export function MailView({ className = "" }: { className?: string }) {
   const notLoaded = busy ? null : <div className="text-secondary text-sm text-center">{t("pr.notLoaded")}</div>;
   return (
     <div className={root}>
-      <div className="min-h-0 overflow-y-auto border-r border-separator px-2 pt-3 pb-4">
+      <div
+        className="min-h-0 overflow-y-auto border-r border-separator px-2 pt-3 pb-4"
+        onPointerDown={() => setMailPane(true)}
+      >
         <MailBar
           className="block px-2"
           filter={filter}
@@ -50,10 +66,17 @@ export function MailView({ className = "" }: { className?: string }) {
         {err ? <div className="err-box">{err}</div> : null}
         {loaded ? (
           <section>
-            <h2 className="flex items-baseline gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary">
-              {t("mail.inbox")}
-              {unreadCount ? <span className="tabular-nums">{t("mail.unread", { n: unreadCount })}</span> : null}
-            </h2>
+            {/* with the experimental split: Inbox and Other as tabs, or what to do with the ticked mails */}
+            {!split ? (
+              <h2 className="flex items-baseline gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary">
+                {t("mail.inbox")}
+                {unreadCount ? <span className="tabular-nums">{t("mail.unread", { n: unreadCount })}</span> : null}
+              </h2>
+            ) : selected.size ? (
+              <MailBulkBar count={selected.size} />
+            ) : (
+              <MailBoxes box={filter.box} unread={boxUnread} onBox={box => setMailFilter({ box })} />
+            )}
             <div className="flex flex-col gap-0.5">
               {shown.length ? (
                 shown.map(({ mail, project, account }) => {
@@ -66,8 +89,13 @@ export function MailView({ className = "" }: { className?: string }) {
                       project={project}
                       account={account}
                       selected={open === key}
+                      selectable={split}
+                      checked={selected.has(key)}
                       onOpen={() => openMail(key)}
                       onFlip={() => mailSeen(key, unread(mail))}
+                      onSelect={range => toggleMailSelect(key, range)}
+                      onArchive={() => mailMove([key], false)}
+                      onTrash={() => mailMove([key], true)}
                     />
                   );
                 })
@@ -88,7 +116,7 @@ export function MailView({ className = "" }: { className?: string }) {
           </div>
         ) : null}
       </div>
-      <div className="min-h-0 overflow-y-auto">
+      <div className="min-h-0 overflow-y-auto" onPointerDown={() => setMailPane(false)}>
         {open ? (
           <MailDetail className="max-w-200 px-8 pt-5.5 pb-10 select-text cursor-auto" mailKey={open} />
         ) : (

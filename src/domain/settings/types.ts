@@ -11,7 +11,8 @@ export type MailAcct = {
   host?: string;
   port?: number;
 }; // no host: Gmail
-export type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
+/** `experimental`: archive, delete, the Inbox/Other split and bulk actions (Settings › Mail). */
+export type MailCfg = { on: boolean; account: string; accounts: MailAcct[]; experimental?: boolean };
 /** Google calendars read through their secret iCal address; the address itself sits in the keychain, never here. */
 export type CalendarCfg = { on: boolean; feeds: { email: string }[] };
 /** An agent provider's settings: switched on, the program, and its own options (Codex' sandbox, …). */
@@ -57,6 +58,7 @@ export const EMPTY_SETTINGS: Settings = {
 };
 export const ghOn = (settings: Settings) => !!settings.github?.on;
 export const mailOn = (settings: Settings) => !!settings.mail?.on;
+export const mailExperimental = (settings: Settings) => mailOn(settings) && !!settings.mail?.experimental;
 export const calendarOn = (settings: Settings) => !!settings.calendar?.on && !!settings.calendar.feeds?.length;
 /** A message under a settings section: what the last action said, and whether it worked. */
 export type Message = { text: string; ok: boolean };

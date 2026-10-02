@@ -285,6 +285,11 @@ export const setMailAccount = (email: string) =>
   change(draft => {
     draft.mail.edit.account = email;
   });
+// archive, delete, Inbox/Other and bulk actions, saved with Save like the account choice
+export const setMailExperimental = (on: boolean) =>
+  change(draft => {
+    draft.mail.edit.experimental = on;
+  });
 export const dropMailAccount = (account: MailAcct) =>
   change(draft => {
     delete draft.mail.tests[account.email];

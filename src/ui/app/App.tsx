@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { urlOk } from "../../shared/markdown";
-import { isView } from "../../domain/navigation/views";
+import { isView, MAIL } from "../../domain/navigation/views";
 import { noteKey } from "../../domain/navigation/keys";
 import { useNavigationStore } from "../../application/navigation/store";
 import { useConversationsStore } from "../../application/conversations/store";
@@ -9,6 +9,15 @@ import { escStop, ctrlC } from "../../application/conversations/actions";
 import { closeTool, toggleQuickAsk, zoom, openExternal } from "../../application/navigation/navigation";
 import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
+import { mailExperimental } from "../../application/settings/settings";
+import { useMailStore } from "../../application/mail/store";
+import {
+  clearMailSelection,
+  mailListActive,
+  mailMove,
+  mailTargets,
+  toggleMailSelectAll,
+} from "../../application/mail/mail";
 import { useT } from "../hooks/useT";
 import { Html } from "../components/Html";
 import { copyText } from "../components/copy";
@@ -69,7 +78,39 @@ function typesIntoComposer(e: KeyboardEvent) {
   const isCharacter = e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.isComposing;
   return isCharacter && !isView(selected) && !projectPanel && !quickAsk && !inField(e);
 }
+// the Mail view, experimental, as in Gmail and Keel: E archives, # or Delete deletes, Cmd-A ticks all, Esc unticks
+// before the app's Esc. Whether it handled the key.
+function onMailKey(e: KeyboardEvent) {
+  const { selected, zoom: zoomed, panel } = useNavigationStore.getState();
+  // an image or the ticket window over the view takes the keys (Esc closes it), not the mail behind it
+  if (selected !== MAIL || zoomed || panel.modal || !mailExperimental() || inField(e) || e.isComposing) return false;
+  const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key; // Caps Lock gives "E"
+  if (plain && (key === "e" || key === "#" || key === "Delete" || key === "Backspace")) {
+    // a held key would walk down the list, one mail per repeat
+    if (e.repeat) {
+      e.preventDefault();
+      return true;
+    }
+    const keys = mailTargets();
+    if (!keys.length) return false;
+    e.preventDefault();
+    mailMove(keys, key !== "e");
+    return true;
+  }
+  if (e.metaKey && key === "a" && mailListActive()) {
+    e.preventDefault();
+    toggleMailSelectAll();
+    return true;
+  }
+  if (e.key === "Escape" && useMailStore.getState().selected.size) {
+    clearMailSelection();
+    return true;
+  }
+  return false;
+}
 function onKey(e: KeyboardEvent) {
+  if (onMailKey(e)) return;
   if (isQuickAskKey(e)) {
     // Cmd-K: a question that starts a general conversation in the background
     e.preventDefault();

@@ -39,8 +39,16 @@ export const studioMails = STUDIO.map(([subject, name, email], i) => ({
   from: [{ name, email }], to: [{ name: "Laurent", email: MAIL_ACCOUNT_2 }], attachments: false,
 }));
 export const STUDIO_MAIL = studioMails[0];
-/** mail_list: one account's page of 50, newest first. */
-export const mailPage = (account: string, page: number) => (account === MAIL_ACCOUNT_2 ? studioMails : mails).slice((page - 1) * 50, page * 50);
+// the machine-sent senders the backend puts under Other with the experimental split (bulk headers, noreply-style, never written to)
+const OTHER = new Set(["noreply@github.com", "alerts@monitoring.example", "noreply@registrar.example", "noreply@books.example", "security@registrar.example"]);
+/** mail_list: one account's page of 50, newest first, without the mails archived or deleted (`gone`, "account:id"). Every
+ *  row says `other`, true only with the split on (the experimental mail flag). */
+export const mailPage = (account: string, page: number, gone = new Set<string>(), split = false) =>
+  (account === MAIL_ACCOUNT_2 ? studioMails : mails)
+    .filter(m => !gone.has(`${m.account}:${m.id}`))
+    .slice((page - 1) * 50, page * 50)
+    .map(m => ({ ...m, other: split && OTHER.has(m.from[0].email) }));
+export const OTHER_MAIL = mails[2]; // GitHub, under Other with the split
 export const PLAIN_MAIL = mails[0]; // plain text with a quoted reply
 export const HTML_MAIL = mails[1]; // html
 export function mailBody(id: string) {

@@ -10,6 +10,7 @@ import {
   dropMailAccount,
   saveMail,
   setMailAccount,
+  setMailExperimental,
   setMailDraft,
   testMail,
 } from "../../../application/settings/integrations";
@@ -32,6 +33,7 @@ import { Field } from "./Field";
 import { RemoveFooter } from "./RemoveFooter";
 import { Section } from "./Section";
 import { SettingsMenu } from "./SettingsMenu";
+import { Switch } from "./Switch";
 
 // a step of the account guide: a small grid of its own, the ones after the first below a line
 const STEP = "grid justify-items-start gap-2 [&>*]:max-w-full";
@@ -281,6 +283,17 @@ export function MailSettings({ onRemove }: { onRemove: () => void }) {
             value={config.account || emails[0]}
             onChange={setMailAccount}
           />
+        </Field>
+      )}
+      {/* archive, delete, Inbox/Other and bulk actions: off until switched on here */}
+      {accounts.length > 0 && (
+        <Field
+          label={t("mail.experimentalL")}
+          id="mailexp"
+          hint={t("mail.experimentalHint")}
+          className="border-t border-s-border pt-3.5"
+        >
+          <Switch id="mailexp" on={!!config.experimental} onToggle={setMailExperimental} />
         </Field>
       )}
       <RemoveFooter onRemove={onRemove} message={message} explain={explainError}>

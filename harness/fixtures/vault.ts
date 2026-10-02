@@ -127,7 +127,8 @@ const CLAUDE_ACCOUNTS = {
 export const MAIL_ACCOUNT_2 = "studio@example.org";
 /** default, dark, graphite (the accent), icons (the sidebar's views as a row of icons), onboarding, calendar (two
  * calendars switched on, the second one failing), accounts
- * (Claude Code on two extra logins, the work one active, auto-switch on) */
+ * (Claude Code on two extra logins, the work one active, auto-switch on), mailexp (the experimental mail flag:
+ * archive, delete, Inbox/Other) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   return {
@@ -141,7 +142,7 @@ export function settings(fixture: string) {
     mail: { on: true, account: MAIL_ACCOUNT, accounts: [
       { email: MAIL_ACCOUNT, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT },
       { email: MAIL_ACCOUNT_2, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT_2, host: "imap.example.org", port: 993 },
-    ] },
+    ], experimental: fixture === "mailexp" },
     calendar: fixture === "calendar" ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] } : { on: false, feeds: [] },
     language: "en",
     theme: fixture === "dark" ? "dark" : "light",

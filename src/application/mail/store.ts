@@ -11,6 +11,9 @@ type MailState = {
   end: Record<string, boolean>; // per account: the last one came back short
   more: boolean; // loading the next pages
   filter: MailFilter;
+  selected: Set<string>; // the mail keys ticked for a bulk action (experimental)
+  anchor: string; // the last key ticked, where a shift-click range starts
+  moves: number; // bumped when an archive/delete starts: a list fetched before it would bring the mails back
   link: string; // a link clicked inside a mail waits here for the user's go (one at a time)
   textView: Set<string>; // which open mails show the text instead of the html
 };
@@ -23,7 +26,10 @@ export const useMailStore = makeStore<MailState>(() => ({
   pages: {},
   end: {},
   more: false,
-  filter: { q: "", state: "all", project: "", ...storage.get<Partial<MailFilter>>("mailFilter", {}) },
+  filter: { q: "", state: "all", project: "", box: "inbox", ...storage.get<Partial<MailFilter>>("mailFilter", {}) },
+  selected: new Set(),
+  anchor: "",
+  moves: 0,
   link: "",
   textView: new Set(),
 }));

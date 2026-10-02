@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -45,6 +45,7 @@ let pending = [...conv.pending];
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
+const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -248,10 +249,16 @@ function handle(cmd: string, a: Args): unknown {
     case "github_pr":
       return integ.prDetail(a.repo, a.number);
     case "mail_list":
-      return integ.mailPage(a.account, a.page ?? 1);
+      return integ.mailPage(a.account, a.page ?? 1, movedMails, !!settings.mail?.experimental);
     case "mail_read":
       return integ.mailBody(a.id);
     case "mail_seen":
+      return null;
+    case "mail_move":
+      // the backend refuses with the experimental flag off, and takes 1 to 500 mails at a time
+      if (!settings.mail?.experimental) throw new Error("Archive and delete are experimental, switch them on in Settings › Mail");
+      if (!a.ids?.length || a.ids.length > 500) throw new Error("1 to 500 mails at a time");
+      for (const id of a.ids) movedMails.add(`${a.account}:${id}`);
       return null;
     case "mail_test":
       return "Connected: 1,204 mails in INBOX";
@@ -357,7 +364,7 @@ const harness = {
   now: NOW,
   keys: { long: conv.LONG_KEY, switchTo: conv.SWITCH_KEY, permission: conv.PERMISSION_KEY, question: conv.QUESTION_KEY, action: conv.ACTION_KEY, terminal: `t:${vault.terminalSessions[0].sessionId}` },
   titles: { long: conv.LONG_TITLE, switchTo: conv.SWITCH_TITLE, permission: conv.PERMISSION_TITLE, question: conv.QUESTION_TITLE, action: conv.ACTION_TITLE },
-  markers: { longEnd: conv.LONG_END, switchEnd: conv.endMarker(conv.SWITCH_KEY), card: integ.CARD_TITLE, plainMail: integ.PLAIN_MAIL.subject, htmlMail: integ.HTML_MAIL.subject, studioMail: integ.STUDIO_MAIL.subject },
+  markers: { longEnd: conv.LONG_END, switchEnd: conv.endMarker(conv.SWITCH_KEY), card: integ.CARD_TITLE, plainMail: integ.PLAIN_MAIL.subject, htmlMail: integ.HTML_MAIL.subject, studioMail: integ.STUDIO_MAIL.subject, otherMail: integ.OTHER_MAIL.subject },
   emit,
   emitAgent,
   stream,

@@ -141,6 +141,27 @@ const VIEWS = {
     await page.waitForFunction(() => window.__dom.all("iframe").some(f => f.srcdoc.includes("Balance report")));
     await settle(page, 400);
   },
+  // the experimental mail flag: Inbox/Other tabs, archive and delete in the mail's bar
+  "mail-experimental": async () => {
+    await open(page, server.url, { fixture: "mailexp" });
+    await click("Mail");
+    await click(markers.plainMail);
+    await waitText("The export should include the VAT column.");
+  },
+  "mail-other": async () => {
+    await VIEWS["mail-experimental"]();
+    await page.getByRole("button", { name: /^Other\b/ }).click();
+    await waitText(markers.otherMail);
+    await settle(page);
+  },
+  // three mails ticked (Cmd-click, then Shift-click a range): the bulk bar in place of the tabs
+  "mail-selection": async () => {
+    await VIEWS["mail-experimental"]();
+    await byText(page, markers.htmlMail).click({ modifiers: ["Meta"] });
+    await byText(page, "Intake form French translation").click({ modifiers: ["Shift"] });
+    await waitText("3 selected");
+    await settle(page);
+  },
   "prs-list": async () => {
     await open(page, server.url);
     await click("Pull requests");
@@ -277,6 +298,7 @@ const VIEWS = {
     await settle(page);
   },
   ...Object.fromEntries(["Productive", "GitHub", "Mail"].map(name => [`settings-integration-${name.toLowerCase()}`, () => settingsPage("Integrations", name)])),
+  "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
   // Claude Code's row folded open: no extra accounts yet, then two with the work one active
   "settings-agent-claude": async () => {

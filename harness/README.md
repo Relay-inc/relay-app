@@ -38,9 +38,9 @@ the installed Google Chrome.
 
 ## The mock
 
-URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts` (dark: settings theme dark; graphite: the graphite accent;
+URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp` (dark: settings theme dark; graphite: the graphite accent;
 icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; accounts: Claude Code
-on two extra logins, the work one active, auto-switch on), `?sel=<key>` the view or
+on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split), `?sel=<key>` the view or
 conversation the window opens on, `?link=<relay:// url>` the deep link the app was launched with (`plugin:deep-link|get_current`). On every load the mock resets localStorage to the fixture:
 the conversation list (`chats`), `sel`, and the Productive board choice (`pvProject`, `pvBoard`). The window is
 transparent over the macOS sidebar material in Tauri; the mock gives `html` the `--sidebar` token as its stand-in.
@@ -72,23 +72,26 @@ With state in memory: `reminder` (done drops a row or moves a repeating one on, 
 change the snapshot, so undo works; reminder ids are 8 hex characters as the backend makes them. `set_settings` keeps
 the settings but emits no `settings-changed`. `set_action_config` keeps the extension's entry, `action_config` returns
 the actions and the entries. `drop_worktrees` removes one worktree for the switch-to conversation, none for the others.
-`mail_list` answers per `account`. `calendar_meetings` gives five meetings around `NOW` (three under Waiting, the one in 4 minutes due a banner) while the calendar is on, `calendar_connect` refuses an address that is not a Google secret iCal one and counts 3 meetings otherwise. `agent_commands` per provider. `integration_thumb` returns a PNG for the fixture's
+`mail_list` answers per `account`, every row with `other` (true for the machine-sent senders, only with the experimental
+flag). `mail_move` refuses with the flag off, as the backend does, and otherwise drops the mails from later `mail_list` pages. `calendar_meetings` gives five meetings around `NOW` (three under Waiting, the one in 4 minutes due a banner) while the calendar is on, `calendar_connect` refuses an address that is not a Google secret iCal one and counts 3 meetings otherwise. `agent_commands` per provider. `integration_thumb` returns a PNG for the fixture's
 thumb URL. `integration_call` serves Productive only (Trello and Linear throw); writes (move, status, comment) patch the
 in-memory tasks loosely.
 
 ## Views (`screens.mjs`)
 
-62 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+66 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
-mail-second-account, mail-list, mail-plain, mail-html, prs-list, pr-detail (list and mail or PR side by side). Board:
+mail-second-account, mail-list, mail-plain, mail-html, mail-experimental (Inbox/Other tabs, archive and delete in the
+mail's bar), mail-other (the Other tab), mail-selection (three mails ticked, the bulk bar), prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity.
 Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, cmd-k, cmd-k-project,
 deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
-settings-integration-github, settings-integration-mail, settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
+settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
+settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding, dark-waiting,
 dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail.
 
@@ -105,15 +108,18 @@ the comment field's placeholder "Leave a comment…", and an HTML mail shown in 
 
 ## Behaviour (`behaviour.mjs`)
 
-26 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
+29 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
 send, stop, cards (permission, question, agent action), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
-mail (two accounts merged, read per account, load more, the link bar), prs (side by side, AI review), board (ticket
+mail (two accounts merged, read per account, load more, the link bar), mailTriage (experimental: Inbox/Other, E and #,
+a held key acting once, Cmd- and Shift-click, Cmd-A, Esc, bulk read and delete, a reload keeps moved mails gone),
+mailTriageFilter (mails a read filter hides after a bulk read leave the selection), mailTriageOff (without the flag: no
+tabs, no checkboxes, E does nothing), prs (side by side, AI review), board (ticket
 window, comment, status, Start conversation), boardTools (list view, filters, Productive's saved views, grouping),
 reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations on Claude), calendarNoClaude (refused with Claude off), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
 extension), agentAccounts (add a folder, pick it for new conversations, auto-switch, rename, remove), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
 typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
-split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: two Lit bugs (typingOutside,
-the mail link bar) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
+split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: three Lit bugs (typingOutside,
+the mail link bar, mailTriageFilter) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
 for Enter, Lit sends it at once). The mock leaves sessionStorage alone, as a webview reload does: a launch link handled
 once (React keeps them under `handledLinks`) is not handled again by a reload in the same page, a new page handles it. `DEBUG=1` prints the full error of a scenario. Two runs of the same build give identical files.
 

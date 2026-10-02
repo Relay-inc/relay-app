@@ -170,6 +170,8 @@ const byText = (page, text) => page.getByText(text, { exact: true });
 const nav = page => page.getByRole("navigation").first();
 const navHas = async (page, text) => (await visible(nav(page).getByText(text, { exact: true })).count()) > 0;
 const button = (page, name) => page.getByRole("button", { name, exact: true });
+/** a visible element whose whole text is `text` (a mail row's subject, not a longer subject that contains it) */
+const listed = async (page, text) => (await visible(byText(page, text)).count()) > 0;
 /** a settings section in the window's sidebar: its name and its shortcut (⌘1…) */
 const navButton = (page, name) => page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
 async function typeInComposer(page, text) {
@@ -428,6 +430,101 @@ const SCENARIOS = {
     void keys;
   },
 
+  // the experimental mail flag: Inbox/Other, archive and delete by key, button and selection, bulk read
+  async mailTriage(s) {
+    await s.load({ fixture: "mailexp" });
+    const { page } = s;
+    const markers = await page.evaluate(() => window.__harness.markers);
+    await click(nav(page).getByText("Mail", { exact: true }), 300);
+    s.check("list shown", await waitText(page, markers.plainMail));
+    s.check("Other mails left out of the Inbox", !(await listed(page, markers.otherMail)));
+    await click(page.getByRole("button", { name: /^Other( \d+)?$/ }), 300);
+    s.check("Other tab shows them", (await listed(page, markers.otherMail)) && !(await listed(page, markers.plainMail)));
+    s.fact("filter after Other", (await s.local(["mailFilter"])).mailFilter);
+    await click(page.getByRole("button", { name: /^Inbox( \d+)?$/ }), 300);
+    await click(byText(page, markers.plainMail), 300);
+    s.check("opening does not mark it read", (await s.calls("mail_seen")).length === 0);
+    await page.keyboard.press("e");
+    s.check("E archives the open mail", await s.waitCall("mail_move"));
+    await settle(page, 300);
+    const first = (await s.calls("mail_move"))[0]?.args;
+    s.check("archive asks one mail, no trash", JSON.stringify(first) === JSON.stringify({ account: "laurent@example.com", ids: ["5000"], trash: false }));
+    s.check("the archived mail left the list", !(await listed(page, markers.plainMail)));
+    s.fact("opened next", (await s.calls("mail_read")).at(-1)?.args);
+    // a held key acts once
+    await page.keyboard.down("e");
+    await page.keyboard.down("e");
+    await page.keyboard.up("e");
+    await settle(page, 300);
+    s.check("a held E archives once", (await s.calls("mail_move")).length === 2);
+    // Cmd-click, Shift-click a range, Esc clears
+    await click(byText(page, markers.htmlMail), 300);
+    await byText(page, "Depot coordinates").first().click({ modifiers: ["Meta"] });
+    await byText(page, "Intake form French translation").first().click({ modifiers: ["Shift"] });
+    await settle(page);
+    s.check("Shift-click ticks the range", await waitText(page, "2 selected", 2000));
+    await page.keyboard.press("Escape");
+    await settle(page);
+    s.check("Esc clears the selection", !(await hasText(page, "2 selected")));
+    await page.keyboard.press("Meta+a");
+    await settle(page);
+    s.fact("Cmd-A ticks", await page.evaluate(() => window.__dom.all("span").map(x => x.textContent.trim()).find(t => /^\d+ selected$/.test(t)) ?? null));
+    await page.keyboard.press("Escape");
+    await settle(page);
+    await byText(page, markers.htmlMail).first().click({ modifiers: ["Meta"] });
+    await byText(page, "Depot coordinates").first().click({ modifiers: ["Meta"] });
+    await settle(page);
+    await click(button(page, "Mark as read").first(), 300);
+    const seen = (await s.calls("mail_seen")).map(c => c.args);
+    s.check("bulk read marks both", seen.length === 2 && seen.every(a => a.seen === true));
+    s.fact("bulk read", seen.map(a => a.id).sort());
+    await click(button(page, "Delete (#)").first(), 300);
+    const trash = (await s.calls("mail_move")).at(-1)?.args;
+    s.check("bulk delete trashes both", trash?.trash === true && JSON.stringify([...(trash?.ids ?? [])].sort()) === JSON.stringify(["4997", "4999"]));
+    s.check("both left the list", !(await listed(page, markers.htmlMail)) && !(await listed(page, "Depot coordinates")));
+    // # on the open mail of the other account
+    await click(byText(page, "Quote request intranet"), 300);
+    await page.keyboard.press("#");
+    await settle(page, 300);
+    const hash = (await s.calls("mail_move")).at(-1)?.args;
+    s.check("# deletes the open mail from its own account", JSON.stringify(hash) === JSON.stringify({ account: "studio@example.org", ids: ["699"], trash: true }));
+    // a reload does not bring them back
+    await click(button(page, "Refresh").first(), 300);
+    s.check("moved mails stay gone after a reload", !(await listed(page, markers.plainMail)) && !(await listed(page, markers.htmlMail)));
+  },
+  // a read filter hides mails once marked read: they leave the selection, so E or # cannot act on mails out of sight
+  async mailTriageFilter(s) {
+    await s.load({ fixture: "mailexp" });
+    const { page } = s;
+    await click(nav(page).getByText("Mail", { exact: true }), 300);
+    await click(button(page, "Unread"), 300);
+    await byText(page, "Invoice September").first().click({ modifiers: ["Meta"] });
+    await byText(page, "Re: Planner demo").first().click({ modifiers: ["Meta"] });
+    await settle(page);
+    s.check("two ticked", await waitText(page, "2 selected", 2000));
+    await click(button(page, "Mark as read").first(), 300);
+    s.check("bulk read marks both", (await s.calls("mail_seen")).length === 2);
+    s.check("the hidden mails left the selection", !(await hasText(page, "2 selected")) && !(await hasText(page, "1 selected")));
+    await page.keyboard.press("e");
+    await settle(page, 300);
+    s.check("E has nothing to act on", (await s.calls("mail_move")).length === 0);
+  },
+  // without the flag nothing of it shows and E does nothing
+  async mailTriageOff(s) {
+    await s.load();
+    const { page } = s;
+    const markers = await page.evaluate(() => window.__harness.markers);
+    await click(nav(page).getByText("Mail", { exact: true }), 300);
+    await click(byText(page, markers.plainMail), 300);
+    s.check("no Other tab", (await visible(page.getByRole("button", { name: /^Other( \d+)?$/ })).count()) === 0);
+    s.check("no checkboxes", (await visible(page.getByRole("checkbox")).count()) === 0);
+    s.check("no archive button", (await visible(button(page, "Archive")).count()) === 0);
+    await page.keyboard.press("e");
+    await page.keyboard.press("Meta+a");
+    await settle(page, 300);
+    s.check("E does nothing", (await s.calls("mail_move")).length === 0);
+    s.check("the mail stays", await listed(page, markers.plainMail));
+  },
   async prs(s) {
     await s.load();
     const { page } = s;
@@ -860,6 +957,7 @@ const OVERRIDES = { typingOutside: { outside: "switchTo" }, calendar: { agents: 
 const KNOWN = {
   typingOutside: "Lit loses the text: takeText runs before the outside check (src/domain/chats/actions.ts)",
   mail: "Lit drops a link clicked in a mail: mailLinkClicked checks panel.open, the Mail view keeps the mail in panel.mailOpen (src/domain/mail.ts)",
+  mailTriageFilter: "Lit keeps mails hidden by the read filter in the selection after marking them read (mailSeen in src/domain/mail.ts does not prune), E then moves mails out of sight",
   // an intended difference, not a Lit bug to port: React fixed it on review (security)
   // Lit bugs from the review of #54, fixed in the React port
   calendar: "Lit keys a meeting's banner on Waiting (a second meeting's replaces it), checks only https:// before Join, and starts the meeting conversation on the default agent, which only Claude runs restricted",

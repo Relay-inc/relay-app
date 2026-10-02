@@ -1,4 +1,4 @@
-import type { Mail, MailFilter } from "./types";
+import type { Mail, MailBox, MailFilter } from "./types";
 import { newestFirst } from "./merge.ts";
 
 export const PAGE_SIZE = 50;
@@ -9,8 +9,11 @@ export const projectText = (message: Mail) => {
   const domain = message.from[0]?.email.split("@")[1]?.split(".")[0] ?? "";
   return `${message.subject} ${sender(message)} ${domain}`;
 };
-/** The mails that pass the search, read state and project filter. `projectOf` is the project a mail is about, or null. */
-export function filtered(list: Mail[], filter: MailFilter, projectOf: (message: Mail) => string | null) {
+/** Which box a mail sits in, Inbox when the split is off. */
+export const mailBox = (message: Mail, split: boolean): MailBox => (split && message.other ? "other" : "inbox");
+/** The mails that pass the search, read state and project filter, and with `split` the box. `projectOf` is the project
+ *  a mail is about, or null. */
+export function filtered(list: Mail[], filter: MailFilter, projectOf: (message: Mail) => string | null, split = false) {
   const query = filter.q.trim().toLowerCase();
   const matchesState = (message: Mail) => filter.state === "all" || unread(message) === (filter.state === "unread");
   const matchesProject = (message: Mail) => {
@@ -19,7 +22,35 @@ export function filtered(list: Mail[], filter: MailFilter, projectOf: (message: 
   };
   const matchesText = (message: Mail) =>
     !query || `${message.subject} ${sender(message)} ${message.from[0]?.email ?? ""}`.toLowerCase().includes(query);
-  return list.filter(message => matchesState(message) && matchesProject(message) && matchesText(message));
+  return list.filter(
+    message =>
+      (!split || mailBox(message, split) === filter.box) &&
+      matchesState(message) &&
+      matchesProject(message) &&
+      matchesText(message),
+  );
+}
+/** The selection after a click on `key`: ticked or unticked, or with `range` (shift) everything between `anchor` (the
+ *  last one ticked) and `key` in `shown` ticked. */
+export function toggleSelection(selected: Set<string>, anchor: string, key: string, range: boolean, shown: string[]) {
+  const next = new Set(selected);
+  const from = shown.indexOf(anchor);
+  const to = shown.indexOf(key);
+  if (range && from >= 0 && to >= 0) {
+    for (const k of shown.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(k);
+  } else if (next.has(key)) next.delete(key);
+  else next.add(key);
+  return next;
+}
+/** Whether every mail in `shown` is ticked (none shown: no). */
+export const allSelected = (selected: Set<string>, shown: string[]) =>
+  shown.length > 0 && shown.every(k => selected.has(k));
+/** The mail that opens when the open one leaves the list: the next one in `shown` that does not leave, else the one
+ *  above it; "" for none. */
+export function nextOpen(shown: string[], open: string, gone: Set<string>) {
+  const at = shown.indexOf(open);
+  if (at < 0) return "";
+  return [...shown.slice(at + 1), ...shown.slice(0, at).reverse()].find(k => !gone.has(k)) ?? "";
 }
 /** One account's newest page replaces what it covers, its older pages loaded with "more" stay below it, other
  *  accounts' rows stay. Newest first. */

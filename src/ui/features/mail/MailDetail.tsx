@@ -4,7 +4,9 @@ import { useMailStore } from "../../../application/mail/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
-import { mailChat, mailLinkGo, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { mailChat, mailLinkGo, mailMove, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { useSettingsStore } from "../../../application/settings/store";
+import { mailExperimental } from "../../../domain/settings/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
@@ -50,17 +52,39 @@ export function MailDetail({ mailKey: key, className }: { mailKey: string; class
   const link = useMailStore(s => s.link);
   const body = useNavigationStore(s => s.panel.detail[key]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
+  const experimental = useSettingsStore(s => mailExperimental(s.settings));
 
   // two groups: reading this mail on the left, the ways into a conversation on the right
   const isUnread = item ? unread(item) : false;
   const bar = (
     <div className="flex items-center flex-wrap gap-2 mb-3">
       <span className="flex items-center gap-2">
-        {item
-          ? iconButton(isUnread ? "read" : "unread", isUnread ? t("mail.markRead") : t("mail.markUnread"), () =>
+        {item ? (
+          <>
+            {/* experimental: archive and delete, the next mail opens in its place */}
+            {experimental ? (
+              <>
+                {iconButton(
+                  "archive",
+                  t("mail.archive"),
+                  () => mailMove([key], false),
+                  "btn btn-icon",
+                  `${t("mail.archive")} (E)`,
+                )}
+                {iconButton(
+                  "trash",
+                  t("mail.trash"),
+                  () => mailMove([key], true),
+                  "btn btn-icon",
+                  `${t("mail.trash")} (#)`,
+                )}
+              </>
+            ) : null}
+            {iconButton(isUnread ? "read" : "unread", isUnread ? t("mail.markRead") : t("mail.markUnread"), () =>
               mailSeen(key, isUnread),
-            )
-          : null}
+            )}
+          </>
+        ) : null}
         {body?.html
           ? textView
             ? iconButton("html", t("mail.showMail"), toggleMailText)
