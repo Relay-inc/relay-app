@@ -11,6 +11,10 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Changed
+
+- Loading the slash commands of Claude Code, Codex, OpenCode and Pi no longer needs Python, so Macs without the Xcode Command Line Tools no longer get an install prompt.
+
 ## [0.0.3] - 2026-10-02
 
 ### Added
