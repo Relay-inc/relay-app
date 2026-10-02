@@ -117,6 +117,7 @@ export default {
   "usage.estimate":
     "Bedragen zijn schattingen tegen API-prijzen: het abonnement zelf is een vast bedrag. Tokens tellen cache mee.",
   "bar.openTerminal": "Hervatten in externe terminal",
+  "bar.linkRepo": "Koppel een GitHub-repo aan dit project in Instellingen",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notities",
   "drawer.detail": "Details",

@@ -10,7 +10,7 @@ import { ui, isView } from "../../domain/ui";
 import { vault } from "../../domain/vault";
 import { chat } from "../../domain/chats/state";
 import { escStop, ctrlC } from "../../domain/chats/actions";
-import { toggleQuickAsk, zoom } from "../../domain/navigation";
+import { closeTool, toggleQuickAsk, zoom } from "../../domain/navigation";
 import { panel, closeDrawer, closeTicket, openDetail } from "../../domain/panel";
 import { noteKey } from "../../domain/keys";
 import "../sidebar/relay-sidebar";
@@ -139,6 +139,12 @@ export class RelayApp extends LitElement {
     if (ui.drawer && !ui.projectPanel && !inField(e)) {
       e.preventDefault();
       closeDrawer();
+      return;
+    }
+    // a project's board or PRs opened from the title bar: back to the conversation
+    if (ui.tool && isView(ui.selected) && !inField(e)) {
+      e.preventDefault();
+      closeTool();
       return;
     }
     // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)

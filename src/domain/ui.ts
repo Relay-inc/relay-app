@@ -16,6 +16,8 @@ export const ui = {
   toast: null as { text: string; undo?: () => void; btn?: string } | null,
   zoom: "", // the image shown large
   quickAsk: false, // Cmd-K
+  // the project's board or PRs opened from the title bar: whose they are, and the conversation to go back to
+  tool: null as { project: string; back: string } | null,
   lastProject: null as string | null, // the vault project last shown, so its linked board opens with the board view
 };
 

@@ -117,6 +117,7 @@ export default {
   "usage.estimate":
     "Beträge sind Schätzungen zu API-Listenpreisen: das Abo selbst ist pauschal. Tokens enthalten den Cache.",
   "bar.openTerminal": "In externem Terminal fortsetzen",
+  "bar.linkRepo": "Ein GitHub-Repo in den Einstellungen mit diesem Projekt verknüpfen",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notizen",
   "drawer.detail": "Details",
@@ -543,7 +544,8 @@ export default {
   "kb.presetName": "Name",
   "kb.presetDelete": "Voreinstellung löschen",
   "kb.noPresets": "Noch keine Voreinstellungen",
-  "kb.viewUnsupported": "Nutzt einen Filter, den Relay hier nicht anwenden kann (oder eine Aufgabenliste auf einem anderen Board)",
+  "kb.viewUnsupported":
+    "Nutzt einen Filter, den Relay hier nicht anwenden kann (oder eine Aufgabenliste auf einem anderen Board)",
   "kb.save": "Speichern",
   "kb.filters": "Filter",
   "kb.clearAll": "Alle Filter löschen",

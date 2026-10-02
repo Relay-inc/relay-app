@@ -15,12 +15,16 @@ function dropAbandonedDraft(leaving: string, next: string) {
   if (leaving !== next && isEmptyDraft) delete chat.chats[leaving];
 }
 
-export async function select(key: string) {
+export async function select(key: string, tool: typeof ui.tool = null) {
+  ui.tool = tool;
   dropAbandonedDraft(ui.selected, key);
   ui.projectPanel = false;
   if (ui.selected !== key && panel.open) closeDrawer();
   ui.selected = key;
   if (!isView(key)) ui.lastProject = selectedProject();
+  // a project's terminals and notes only stay open while that project's tools are in the bar
+  const toolsShown = isView(key) ? tool?.project : selectedProject();
+  if ((ui.drawer === "terminal" || ui.drawer === "notes") && !toolsShown) ui.drawer = "";
   chat.unseen.delete(key);
   chat.routeChoice = chat.routeChoice?.key === key ? chat.routeChoice : null;
   ls.set("sel", chat.chats[key]?.draft && !chat.typed[key] ? WAIT : key);
@@ -54,6 +58,18 @@ export const hideToast = () => {
   changed();
 };
 
+/** The board or PRs button of a project: shows that view as the project's, the same button (or Esc) goes back. */
+export async function openTool(project: string, key: string) {
+  if (ui.tool?.project === project && ui.selected === key) return closeTool();
+  const back = ui.tool?.back ?? ui.selected;
+  // the board view follows the project last shown (src/domain/board.ts followLinkedBoard)
+  ui.lastProject = project;
+  await select(key, { project, back });
+}
+export function closeTool() {
+  const back = ui.tool?.back;
+  if (back) select(back);
+}
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
 export const toggleDrawer = (tool: "terminal" | "notes") => {
   ui.drawer = ui.drawer === tool ? "" : tool;

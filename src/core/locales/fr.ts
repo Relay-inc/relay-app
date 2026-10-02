@@ -118,6 +118,7 @@ export default {
   "usage.estimate":
     "Montants estimés aux tarifs de l’API : l’abonnement lui-même est forfaitaire. Les tokens incluent le cache.",
   "bar.openTerminal": "Reprendre dans un terminal externe",
+  "bar.linkRepo": "Associer un dépôt GitHub à ce projet dans les Réglages",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notes",
   "drawer.detail": "Détails",
@@ -544,7 +545,8 @@ export default {
   "kb.presetName": "Nom",
   "kb.presetDelete": "Supprimer le préréglage",
   "kb.noPresets": "Aucun préréglage",
-  "kb.viewUnsupported": "Utilise un filtre que Relay ne peut pas appliquer ici (ou une liste de tâches d'un autre tableau)",
+  "kb.viewUnsupported":
+    "Utilise un filtre que Relay ne peut pas appliquer ici (ou une liste de tâches d'un autre tableau)",
   "kb.save": "Enregistrer",
   "kb.filters": "Filtres",
   "kb.clearAll": "Effacer tous les filtres",

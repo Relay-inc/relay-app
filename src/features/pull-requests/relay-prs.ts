@@ -6,6 +6,7 @@ import { tw } from "../../core/styles";
 import { openPr, panel } from "../../domain/panel";
 import { prs, type PR } from "../../domain/prs";
 import { prKey } from "../../domain/keys";
+import { ui } from "../../domain/ui";
 import "./pr-row";
 import "./relay-pr-detail";
 
@@ -25,11 +26,23 @@ export class RelayPrs extends LitElement {
   ];
   protected store = new StoreController(this);
 
-  override updated() {
-    // with nothing picked yet, the first PR of the list
+  // opened from a project's title bar: only that project's PRs
+  private get list() {
     const list = prs.list;
+    const project = ui.tool?.project;
+    if (!list || !project) return list;
+    const own = (pr: PR) => pr.project === project;
+    return { ...list, review: list.review.filter(own), mine: list.mine.filter(own) };
+  }
+
+  override updated() {
+    // with nothing picked yet (or a PR of another project), the first PR of the list
+    const list = this.list;
     const first = list?.review[0] || list?.mine[0];
-    if (!panel.prOpen && first) openPr(prKey(first.repo, first.number));
+    const shown = [...(list?.review ?? []), ...(list?.mine ?? [])].some(
+      pr => prKey(pr.repo, pr.number) === panel.prOpen,
+    );
+    if (!shown && first) openPr(prKey(first.repo, first.number));
   }
 
   private renderGroup(name: unknown, list: PR[], mine: boolean) {
@@ -54,7 +67,8 @@ export class RelayPrs extends LitElement {
     </section>`;
   }
   private renderLists() {
-    const { list, busy } = prs;
+    const { busy } = prs;
+    const list = this.list;
     if (list)
       return html`${this.renderGroup(th("nav.prsReview"), list.review, false)}${this.renderGroup(th("pr.mine"), list.mine, true)}`;
     if (busy) return nothing;

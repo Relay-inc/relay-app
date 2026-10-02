@@ -15,7 +15,7 @@ import { pollPending, pollAgents, pollSubs, agentsStale } from "../domain/chats/
 import { closeChat } from "../domain/chats/actions";
 import { select, newHere } from "../domain/navigation";
 import { boards, checkBoards, resetBoard } from "../domain/board";
-import { loadPrs, resetPrs } from "../domain/prs";
+import { loadPrs, resetPrs, loadProjectRepos } from "../domain/prs";
 import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
 import { panel, closeDrawer } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
@@ -47,6 +47,7 @@ async function settingsChanged(next: Settings) {
     resetPrs();
     if (!ghOn() && ui.selected === PRS) select(WAIT);
     loadPrs();
+    loadProjectRepos();
   }
   if (mailChanged) {
     resetMail();
@@ -109,6 +110,7 @@ async function loadSettingsAndVault() {
   await loadSnapshot();
   await refreshIcons();
   listen("icons-changed", reloadIcons);
+  listen("repos-changed", loadProjectRepos);
 }
 
 // conversations from earlier versions: general:<id>, plain project names
@@ -194,6 +196,7 @@ function startPolls() {
   listen("reminders-changed", loadSnapshot);
   setInterval(checkFavicons, 60 * 60000); // a project new in work-state gets its icon within the hour
   if (ui.selected !== PRS) loadPrs(); // select() already loads it when the view is open
+  loadProjectRepos(); // the title bar's PRs button, before any select()
   setInterval(loadPrs, 5 * 60000);
   startUsage(); // plan limits for the sidebar, tokens while the view is open
   if (ui.selected !== MAIL) loadMails();

@@ -51,14 +51,15 @@ export class ChatBar extends LitElement {
   @property({ type: Boolean }) prsBusy = false;
   @property({ type: Boolean }) tools = false; // a vault project is open: its tool icons show on the right
   @property({ attribute: false }) board?: { name: string; mark: string }; // the board linked to the project
-  @property({ type: Boolean }) gh = false; // GitHub is on and the project has repos
+  @property({ type: Boolean }) gh = false; // GitHub is on: the PRs button shows
+  @property({ type: Boolean }) ghLinked = false; // the project has repos; without them the button offers to link one
+  @property() active: "" | "board" | "prs" = ""; // the project's board or PRs is what the centre shows
   @property() drawer = ""; // what the right drawer shows, the active tool lights up
   // the conversation title while it is edited: a redraw must not take the text away from under the caret
   private draft: string | null = null;
 
   private resetTitle(input: HTMLInputElement) {
     input.value = this.value;
-    input.size = Math.max(4, this.value.length);
     this.draft = null;
   }
   private onTitleKey(e: KeyboardEvent) {
@@ -85,7 +86,7 @@ export class ChatBar extends LitElement {
   private onTitleInput(e: Event) {
     const input = e.target as HTMLInputElement;
     this.draft = input.value;
-    input.size = Math.max(4, input.value.length);
+    this.requestUpdate();
   }
 
   private renderState() {
@@ -120,40 +121,60 @@ export class ChatBar extends LitElement {
       </button>`;
   }
 
+  // resumes the conversation in iTerm or WezTerm: it belongs to the conversation, so it sits by its title
+  private renderExternalTerminal() {
+    return html`<button
+      class="btn-icon disabled:opacity-40"
+      ?hidden=${this.noTerm}
+      ?disabled=${this.locked}
+      title=${t(this.locked ? "bar.termMail" : "bar.openTerminal")}
+      aria-label=${t("bar.openTerminal")}
+      @click=${() => emit(this, "open-terminal")}
+    >
+      ${icon("term", "glyph size-4")}
+    </button>`;
+  }
+
+  // one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer
+  private renderTool(on: boolean, label: string, glyph: unknown, event: () => void, dim = false) {
+    return html`<button
+      class="btn-icon ${on ? "text-accent!" : dim ? "opacity-40 hover:opacity-100" : ""}"
+      title=${label}
+      aria-label=${label}
+      aria-pressed=${on ? "true" : "false"}
+      @click=${event}
+    >
+      ${glyph}
+    </button>`;
+  }
+
   private renderTools() {
     if (!this.tools) return nothing;
-    const toggle = (tool: "terminal" | "notes", glyph: string) =>
-      html`<button
-        class="btn-icon ${this.drawer === tool ? "text-accent!" : ""}"
-        title=${t(`drawer.${tool}`)}
-        aria-label=${t(`drawer.${tool}`)}
-        @click=${() => emit(this, "toggle-drawer", tool)}
-      >
-        ${icon(glyph, "glyph size-4")}
-      </button>`;
+    const board = this.board;
     return html`${
-      this.board
-        ? html`<button
-            class="btn-icon"
-            title=${this.board.name}
-            aria-label=${this.board.name}
-            @click=${() => emit(this, "open-board")}
-          >
-            ${glyphSvg(this.board.mark, "glyph size-4", "0 0 24 24")}
-          </button>`
+      board
+        ? this.renderTool(this.active === "board", board.name, glyphSvg(board.mark, "glyph size-4", "0 0 24 24"), () =>
+            emit(this, "open-board"),
+          )
         : nothing
     }${
       this.gh
-        ? html`<button
-            class="btn-icon"
-            title=${t("nav.prs")}
-            aria-label=${t("nav.prs")}
-            @click=${() => emit(this, "open-prs")}
-          >
-            ${icon("github", "glyph size-4")}
-          </button>`
+        ? this.renderTool(
+            this.active === "prs",
+            this.ghLinked ? t("nav.prs") : t("bar.linkRepo"),
+            icon("github", "glyph size-4"),
+            () => emit(this, "open-prs"),
+            !this.ghLinked,
+          )
         : nothing
-    }${toggle("terminal", "drawerTerm")}${toggle("notes", "notes")}`;
+    }${(["terminal", "notes"] as const).map(tool =>
+      this.renderTool(
+        this.drawer === tool,
+        t(`drawer.${tool}`),
+        icon(tool === "terminal" ? "drawerTerm" : "notes", "glyph size-4"),
+        () => emit(this, "toggle-drawer", tool),
+      ),
+    )}`;
   }
 
   override render() {
@@ -180,18 +201,24 @@ export class ChatBar extends LitElement {
       ${
         this.editable
           ? html`<span class="text-tertiary">/</span>
-              <input
-                class=${"text-sm font-semibold text-label bg-transparent border-0 rounded-md px-1.5 py-0.75 min-w-0 max-w-2/5 outline-0 text-ellipsis focus:bg-fill" + (this.readonly ? "" : " hover:bg-fill")}
-                spellcheck="false"
-                aria-label=${t("bar.chatTitle")}
-                ?readonly=${this.readonly}
-                title=${this.readonly ? t("chat.titleFromTerm") : t("chat.titleEdit")}
-                size=${Math.max(4, shown.length)}
-                .value=${live(shown)}
-                @input=${this.onTitleInput}
-                @keydown=${this.onTitleKey}
-                @change=${this.onTitleChange}
-              />`
+              <span class="inline-grid min-w-0 max-w-2/5">
+                <span
+                  class="col-start-1 row-start-1 invisible whitespace-pre overflow-hidden text-sm font-semibold px-1.5"
+                  aria-hidden="true"
+                  >${shown || " "}</span
+                >
+                <input
+                  class=${"col-start-1 row-start-1 w-full text-sm font-semibold text-label bg-transparent border-0 rounded-md px-1.5 py-0.75 min-w-0 outline-0 text-ellipsis focus:bg-fill" + (this.readonly ? "" : " hover:bg-fill")}
+                  spellcheck="false"
+                  aria-label=${t("bar.chatTitle")}
+                  ?readonly=${this.readonly}
+                  title=${this.readonly ? t("chat.titleFromTerm") : t("chat.titleEdit")}
+                  .value=${live(shown)}
+                  @input=${this.onTitleInput}
+                  @keydown=${this.onTitleKey}
+                  @change=${this.onTitleChange}
+                /> </span
+              >${this.renderExternalTerminal()}`
           : nothing
       }
       <span class="text-secondary whitespace-nowrap overflow-hidden text-ellipsis">${this.sub}</span
@@ -206,16 +233,6 @@ export class ChatBar extends LitElement {
             </button>`
           : nothing
       }${this.renderPrs()}
-      <button
-        class="btn-icon disabled:opacity-40"
-        ?hidden=${this.noTerm}
-        ?disabled=${this.locked}
-        title=${t(this.locked ? "bar.termMail" : "bar.openTerminal")}
-        aria-label=${t("bar.openTerminal")}
-        @click=${() => emit(this, "open-terminal")}
-      >
-        ${icon("term", "glyph size-4")}
-      </button>
       ${this.renderTools()}
     </div>`;
   }

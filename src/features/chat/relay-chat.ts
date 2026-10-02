@@ -7,7 +7,8 @@ import { tw } from "../../core/styles";
 import { ui, WAIT, REM, PRS, MAIL, USAGE, isView, isTerminal, boardOf, boardKey } from "../../domain/ui";
 import { chat, terminalOf, projectOf, label, aboutProject, waitCount } from "../../domain/chats/state";
 import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
-import { openProjectPanel, select, toggleDrawer } from "../../domain/navigation";
+import { invoke } from "@tauri-apps/api/core";
+import { openProjectPanel, openTool, closeTool, toggleDrawer } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
 import { prs, loadPrs, projectRepos } from "../../domain/prs";
 import { config, ghOn } from "../../domain/config";
@@ -115,7 +116,13 @@ export class RelayChat extends LitElement {
     if (this.terminalSession) return this.terminalSession.project;
     return this.onView ? null : projectOf(this.selected);
   }
+  /** Whose tools the bar shows: the open conversation's project, or the project whose board or PRs is open. */
+  private get toolProject() {
+    return this.projectName ?? (this.onView ? (ui.tool?.project ?? null) : null);
+  }
   private get heading() {
+    // a project's board or PRs reads as that project's: its name first, the view as the subtitle
+    if (ui.tool && this.onView) return projectLabel(ui.tool.project);
     if (this.board) return this.board.name;
     switch (this.selected) {
       case PRS:
@@ -133,6 +140,7 @@ export class RelayChat extends LitElement {
     }
   }
   private get subheading() {
+    if (ui.tool && this.onView) return this.board?.name ?? "Pull requests";
     return this.selected === WAIT ? `${waitCount()}` : "";
   }
   // the terminal would resume a conversation that touched mail without the app's restrictions
@@ -166,20 +174,16 @@ export class RelayChat extends LitElement {
     return context ? contextTint(context) : "";
   }
 
-  // the board view follows the project last shown (ui.lastProject): make it this one before opening
-  private openLinkedBoard(projectName: string, providerId: string) {
-    ui.lastProject = projectName;
-    select(boardKey(providerId));
-  }
-
   private renderBar() {
     const session = this.terminalSession;
-    const projectName = this.projectName;
-    const linkedRef = projectName ? config.value.boards?.[projectName] : undefined;
+    const toolProject = this.toolProject;
+    const linkedRef = toolProject ? config.value.boards?.[toolProject] : undefined;
     const linked = linkedRef && provider(linkedRef.provider);
+    const active = !ui.tool || !this.onView ? "" : this.board ? "board" : this.selected === PRS ? "prs" : "";
+    const ghLinked = !!projectRepos.map[toolProject ?? ""]?.length;
     return html`<relay-chat-bar
       .heading=${this.heading}
-      .img=${!this.onView && projectName ? (vault.icons[projectName]?.img ?? "") : ""}
+      .img=${toolProject ? (vault.icons[toolProject]?.img ?? "") : ""}
       .tint=${this.projectTint}
       .state=${chat.chats[this.selected] ? (chat.status[this.selected] ?? "idle") : ""}
       ?editable=${!this.onView}
@@ -189,9 +193,11 @@ export class RelayChat extends LitElement {
       ?renamable=${!!chat.chats[this.selected]}
       ?noTerm=${this.terminalHidden}
       ?locked=${this.terminalLocked}
-      ?tools=${!!projectName}
+      ?tools=${!!toolProject}
       .board=${linked}
-      ?gh=${ghOn() && !!projectRepos.map[projectName ?? ""]?.length}
+      ?gh=${ghOn()}
+      ?ghLinked=${ghLinked}
+      .active=${active}
       .drawer=${ui.drawer}
       ?remNew=${this.selected === REM}
       ?prs=${this.selected === PRS}
@@ -199,11 +205,11 @@ export class RelayChat extends LitElement {
       ?prsBusy=${prs.busy}
       @new-reminder=${openReminderForm}
       @reload-prs=${loadPrs}
-      @edit-project=${openProjectPanel}
+      @edit-project=${() => (ui.tool && this.onView ? closeTool() : openProjectPanel())}
       @rename=${(e: CustomEvent<string>) => rename(e.detail)}
       @open-terminal=${openTerminal}
-      @open-board=${() => linked && this.openLinkedBoard(projectName!, linked.id)}
-      @open-prs=${() => select(PRS)}
+      @open-board=${() => linked && openTool(toolProject!, boardKey(linked.id))}
+      @open-prs=${() => (ghLinked ? openTool(toolProject!, PRS) : invoke("open_settings_window"))}
       @toggle-drawer=${(e: CustomEvent<"terminal" | "notes">) => toggleDrawer(e.detail)}
     ></relay-chat-bar>`;
   }

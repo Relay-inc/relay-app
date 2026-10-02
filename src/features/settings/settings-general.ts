@@ -290,7 +290,7 @@ export class SettingsGeneral extends SettingsElement {
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
       <relay-settings-actions .ext=${"reminders"} .name=${t("act.reminders")}></relay-settings-actions>
-    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()} ${this.renderTerminal()}`)}
-    ${this.renderSidebar()}`;
+      ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()} ${this.renderTerminal()}`)}
+      ${this.renderSidebar()}`;
   }
 }

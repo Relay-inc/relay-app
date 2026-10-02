@@ -394,8 +394,11 @@ fn project_repos(state: State<App>) -> Value {
 }
 /// A project's repos in the vault's .relay/config.json.
 #[tauri::command]
-fn set_project_repos(state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
-    relay_config::set_repos(&need_vault(&state)?, &project, &repos)
+fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
+    relay_config::set_repos(&need_vault(&state)?, &project, &repos)?;
+    // the main window's title bar shows the PRs button by them
+    app.emit("repos-changed", ()).ok();
+    Ok(())
 }
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
