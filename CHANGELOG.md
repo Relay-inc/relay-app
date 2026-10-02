@@ -14,9 +14,11 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 ### Added
 
 - Right-click a conversation and pick "Copy session ID" to copy the agent's session ID, so you can point another conversation at it (#72)
+- Agents can read your calendar with `relay calendar.meetings` (an hour ago to 12 hours ahead), with an Agent access section on Settings › Integrations › Calendar
 
 ### Changed
 
+- Settings › Integrations › Calendar works like Mail: your calendars in a list with a "+ Add calendar" button that opens the steps in place of the list. Every integration page now ends with its own "Remove" section, so Remove no longer sits under the last calendar or account as if it removed that one
 - The interface is rebuilt on React with domain-driven layers: it looks and behaves as before, a streaming answer only redraws itself, text typed while a turn runs outside Relay is no longer lost, a language switch redraws everything, a note created during a turn turns the links in earlier answers into links, links in a mail reach the confirmation bar again, and a relay://ask link fills in Cmd-K instead of sending on its own
 - The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The board and pull requests open as the project's, with the same icon, the project name or Esc to go back to the conversation. The button that resumes the conversation in iTerm or WezTerm moved next to its title. (#70)
 
