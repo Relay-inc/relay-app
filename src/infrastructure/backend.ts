@@ -4,7 +4,15 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { AgentSession, Pending, SessionOf, Sub, Transcript } from "../domain/conversations/types";
-import type { ActionConfig, ActionEntry, Machine, MachineStatus, MailAcct, Settings } from "../domain/settings/types";
+import type {
+  ActionConfig,
+  ActionEntry,
+  Machine,
+  MachineChoice,
+  MachineStatus,
+  MailAcct,
+  Settings,
+} from "../domain/settings/types";
 import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus } from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
@@ -73,6 +81,7 @@ type SendArgs = {
   effort: string;
   provider: string;
   projectName: string | null; // the conversation's project: a project bound to a machine runs there
+  machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the project's machine
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });
@@ -101,12 +110,19 @@ export const appSessions = () => invoke<SessionOf>("app_sessions");
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */
 export const chatMachines = () => invoke<Record<string, { machine: string; cwd: string }>>("chat_machines");
+/** Every paired machine as the backend last heard it, no network: for the composer's pick. */
+export const machinesList = (project: string | null) => invoke<MachineChoice[]>("machines_list", { project });
 /** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */
 export const machinePair = (line: string, name: string) => invoke<Machine>("machine_pair", { line, name });
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
 export const machineForget = (id: string) => invoke("machine_forget", { id });
 export const setMachineFolders = (id: string, folders: Record<string, string>) =>
   invoke("set_machine_folders", { id, folders });
+/** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
+export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
+/** The folder used on the machine when a project has none there; "" the machine's home. */
+export const setMachineDefaultFolder = (id: string, folder: string) =>
+  invoke("set_machine_default_folder", { id, folder });
 
 // ---------- usage
 export const usageLimits = () => invoke<ProvLimits[]>("usage_limits");

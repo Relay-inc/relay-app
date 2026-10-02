@@ -634,8 +634,18 @@ const en = {
   "set.tab.machines": "Machines",
   "composer.onMachine": "on {name}",
   "composer.onMachineHelp": "This conversation runs on another machine and keeps running when this Mac is closed.",
+  "composer.runOn": "Runs on",
+  "composer.thisMac": "This Mac",
+  "composer.available": "available",
+  "composer.unavailable": "not available",
+  "composer.machineOnlyClaude": "Only Claude Code runs on a work machine.",
+  "composer.machineNoMail": "A conversation about a mail stays on this Mac: the mail tools run here.",
   "mc.intro":
-    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Mail, the vault and general conversations stay on this Mac.",
+    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Another conversation can run there too: pick the machine next to the model before its first message. Mail and the vault stay on this Mac.",
+  "mc.runDefaultTitle": "Where conversations run",
+  "mc.runDefault": "New conversations run on",
+  "mc.runDefaultHelp":
+    "A project with a folder on a machine runs there. Each new conversation can still pick another place next to the model.",
   "mc.pairTitle": "Pair a machine",
   "mc.line": "Pairing line",
   "mc.lineHelp":
@@ -664,6 +674,10 @@ const en = {
   "mc.path": "Folder on the machine",
   "mc.save": "Save",
   "mc.errPath": "Every row needs a project and an absolute path starting with /.",
+  "mc.defaultFolder": "Default folder",
+  "mc.defaultFolderHelp":
+    "Where a conversation runs on this machine when its project has no folder here. Empty: the machine's home folder.",
+  "mc.errDefaultFolder": "Use an absolute path starting with /, or leave it empty for the machine's home folder.",
 };
 export type Key = keyof typeof en;
 export default en;

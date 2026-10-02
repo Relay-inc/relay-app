@@ -103,3 +103,26 @@ export async function saveFolders(machine: Machine) {
     });
   }
 }
+/** The folder used on the machine when a project has none there: an absolute path, or empty for its home. Resolves with
+ *  an error to show, or "". */
+export async function saveDefaultFolder(machine: Machine, folder: string) {
+  const path = folder.trim();
+  if (path && !path.startsWith("/")) return t("mc.errDefaultFolder");
+  try {
+    await backend.setMachineDefaultFolder(machine.id, path);
+    await reload();
+    return "";
+  } catch (error) {
+    return String(error);
+  }
+}
+/** Where new conversations run without a pick: "" this Mac, or a machine id. Resolves with an error to show, or "". */
+export async function setRunDefault(id: string) {
+  try {
+    await backend.setMachinesDefault(id);
+    await reload();
+    return "";
+  } catch (error) {
+    return String(error);
+  }
+}

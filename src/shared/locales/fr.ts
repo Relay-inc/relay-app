@@ -642,8 +642,18 @@ export default {
   "set.tab.machines": "Machines",
   "composer.onMachine": "sur {name}",
   "composer.onMachineHelp": "Cette conversation tourne sur une autre machine et continue quand ce Mac est fermé.",
+  "composer.runOn": "S'exécute sur",
+  "composer.thisMac": "Ce Mac",
+  "composer.available": "disponible",
+  "composer.unavailable": "injoignable",
+  "composer.machineOnlyClaude": "Seul Claude Code s'exécute sur une machine de travail.",
+  "composer.machineNoMail": "Une conversation sur un e-mail reste sur ce Mac : les outils de courrier tournent ici.",
   "mc.intro":
-    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Le courrier, le vault et les conversations générales restent sur ce Mac.",
+    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Une autre conversation peut aussi s'y exécuter : choisissez la machine à côté du modèle avant son premier message. Le courrier et le vault restent sur ce Mac.",
+  "mc.runDefaultTitle": "Où s'exécutent les conversations",
+  "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
+  "mc.runDefaultHelp":
+    "Un projet avec un dossier sur une machine s'y exécute. Chaque nouvelle conversation peut encore choisir un autre endroit à côté du modèle.",
   "mc.pairTitle": "Associer une machine",
   "mc.line": "Ligne d'association",
   "mc.lineHelp":
@@ -673,4 +683,9 @@ export default {
   "mc.path": "Dossier sur la machine",
   "mc.save": "Enregistrer",
   "mc.errPath": "Chaque ligne demande un projet et un chemin absolu commençant par /.",
+  "mc.defaultFolder": "Dossier par défaut",
+  "mc.defaultFolderHelp":
+    "Où une conversation s'exécute sur cette machine quand son projet n'y a pas de dossier. Vide : le dossier personnel de la machine.",
+  "mc.errDefaultFolder":
+    "Indiquez un chemin absolu commençant par /, ou laissez vide pour le dossier personnel de la machine.",
 } satisfies Record<Key, string>;

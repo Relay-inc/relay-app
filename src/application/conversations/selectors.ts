@@ -14,7 +14,9 @@ import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent } from "../agents/agents";
 import { projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
+import { machinePick } from "../../domain/settings/machines";
 import { useConversationsStore } from "./store";
+import { useDraftsStore } from "./drafts";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
 // `useDerived` (ui/hooks), which redraws when what they return changes.
@@ -101,4 +103,17 @@ export function chatBar(key: string) {
         }
       : null,
   };
+}
+/** The composer's "runs on" pick of a conversation without a session yet: the machines, the one picked ("" this Mac,
+ *  null nothing to pick) and why only this Mac can run it (null when a machine can). */
+export function machineChoice(key: string) {
+  const conversation = cs().chats[key];
+  const list = cs().machineLists[conversation?.project ?? ""] ?? [];
+  const why: Key | null =
+    chatAgent(key) !== "claude"
+      ? "composer.machineOnlyClaude"
+      : conversation?.fromMail
+        ? "composer.machineNoMail"
+        : null;
+  return { list, value: machinePick(list, useDraftsStore.getState().machine[key], !why), why };
 }

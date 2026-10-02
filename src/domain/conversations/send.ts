@@ -14,7 +14,7 @@ type SendPlan =
 /** `forced` text, or what is typed in the open conversation (`selected`) with its images; `to` a conversation that is
  *  not open (Cmd-K) with `toImages` of its own. */
 export function planSend(
-  state: DraftsState & Pick<ConversationsState, "outside">,
+  state: Pick<DraftsState, "typed" | "attached"> & Pick<ConversationsState, "outside">,
   selected: string,
   forced?: string,
   to?: string,

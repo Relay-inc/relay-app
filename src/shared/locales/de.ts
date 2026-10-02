@@ -641,8 +641,18 @@ export default {
   "composer.onMachine": "auf {name}",
   "composer.onMachineHelp":
     "Dieses Gespräch läuft auf einer anderen Maschine und läuft weiter, wenn dieser Mac zu ist.",
+  "composer.runOn": "Läuft auf",
+  "composer.thisMac": "Dieser Mac",
+  "composer.available": "verfügbar",
+  "composer.unavailable": "nicht erreichbar",
+  "composer.machineOnlyClaude": "Nur Claude Code läuft auf einer Arbeitsmaschine.",
+  "composer.machineNoMail": "Ein Gespräch über eine Mail bleibt auf diesem Mac: Die Mail-Werkzeuge laufen hier.",
   "mc.intro":
-    "Gespräche eines Projekts, das mit einer Maschine verknüpft ist, laufen dort und laufen weiter, wenn dieser Mac zu ist. Mail, der Vault und allgemeine Gespräche bleiben auf diesem Mac.",
+    "Gespräche eines Projekts, das mit einer Maschine verknüpft ist, laufen dort und laufen weiter, wenn dieser Mac zu ist. Ein anderes Gespräch kann dort auch laufen: Wähle die Maschine neben dem Modell vor der ersten Nachricht. Mail und der Vault bleiben auf diesem Mac.",
+  "mc.runDefaultTitle": "Wo Gespräche laufen",
+  "mc.runDefault": "Neue Gespräche laufen auf",
+  "mc.runDefaultHelp":
+    "Ein Projekt mit einem Ordner auf einer Maschine läuft dort. Jedes neue Gespräch kann neben dem Modell noch einen anderen Ort wählen.",
   "mc.pairTitle": "Maschine koppeln",
   "mc.line": "Kopplungszeile",
   "mc.lineHelp":
@@ -672,4 +682,9 @@ export default {
   "mc.path": "Ordner auf der Maschine",
   "mc.save": "Speichern",
   "mc.errPath": "Jede Zeile braucht ein Projekt und einen absoluten Pfad, der mit / beginnt.",
+  "mc.defaultFolder": "Standardordner",
+  "mc.defaultFolderHelp":
+    "Wo ein Gespräch auf dieser Maschine läuft, wenn sein Projekt hier keinen Ordner hat. Leer: der Home-Ordner der Maschine.",
+  "mc.errDefaultFolder":
+    "Gib einen absoluten Pfad an, der mit / beginnt, oder lass das Feld leer für den Home-Ordner der Maschine.",
 } satisfies Record<Key, string>;

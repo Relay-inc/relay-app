@@ -39,7 +39,7 @@
     await until("online", () => page().textContent.includes("Online"), 10000);
     steps.push("online");
     button("Add folder").click();
-    const select = await until("project select", () => page().querySelector("select"));
+    const select = await until("project select", () => page().querySelector('select[aria-label="Project"]'));
     await until("the project in the list", () => [...select.options].some(o => o.value === "__PROJECT__"));
     await set(select, "__PROJECT__", "change");
     const path = await until("path field", () => [...page().querySelectorAll("input")].find(i => i.placeholder.startsWith("/home/")));

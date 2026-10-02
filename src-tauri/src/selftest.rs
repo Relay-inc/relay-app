@@ -69,7 +69,7 @@ fn turn(ev: &Events, timeout: Duration) -> Result<(Vec<String>, bool), String> {
     }
 }
 fn say(app: &AppHandle, text: &str) -> Result<(), String> {
-    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, Some(PROJECT.into()))
+    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, Some(PROJECT.into()), None)
 }
 fn expect(app: &AppHandle, ev: &Events, text: &str, want: &str) -> Result<String, String> {
     say(app, text)?;
@@ -123,6 +123,34 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| { w.show().ok(); w.eval(&js).map_err(|e| e.to_string()) });
     let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(40)).map_err(|_| "the page did not report back".to_string()));
     r.step("main window: a conversation in the project runs on the machine", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+
+    // a general conversation sent to the machine through the composer's pick: it runs in the machine's home there
+    let js = include_str!("selftest-general.js").replace("__MACHINE__", "docker");
+    let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| w.eval(&js).map_err(|e| e.to_string()));
+    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(60)).map_err(|_| "the page did not report back".to_string()));
+    r.step("main window: a general conversation picked onto the machine", said.and_then(|s| {
+        if !s.contains("\"ok\":true") { return Err(s); }
+        let c = chat_machines(app.state::<App>());
+        // the project's conversation runs in its folder, the general one in the machine's home
+        let home = c.as_object().into_iter().flatten().find(|(_, b)| b["machine"] == "docker" && b["cwd"] != "/home/relay/repos/testproject");
+        home.map(|(k, b)| format!("{s}, {k} bound {b}")).ok_or(format!("no general conversation bound: {c}"))
+    }));
+
+    // Settings › Machines: new conversations run on the machine; a new general conversation's pick then shows it
+    let ui_ok = |s: String| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) };
+    open_settings(app);
+    std::thread::sleep(Duration::from_secs(3));
+    let js = include_str!("selftest-default.js").replace("__MACHINE__", "docker");
+    let ran = app.get_webview_window("settings").ok_or("no settings window".to_string()).and_then(|w| w.eval(js.replace("__STEP__", "settings")).map_err(|e| e.to_string()));
+    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(20)).map_err(|_| "the page did not report back".to_string())).and_then(ui_ok);
+    r.step("settings page: new conversations run on the machine", said.and_then(|s| {
+        let d = st.settings.lock().unwrap()["machines_default"].clone();
+        if d == m["id"] { Ok(format!("{s}, machines_default {d}")) } else { Err(format!("{s}, machines_default {d}")) }
+    }));
+    if let Some(w) = app.get_webview_window("settings") { w.close().ok(); }
+    let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| w.eval(js.replace("__STEP__", "main")).map_err(|e| e.to_string()));
+    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(20)).map_err(|_| "the page did not report back".to_string()));
+    r.step("main window: a new general conversation starts on the default machine", said.and_then(ui_ok));
 
     r.step("first turn on the machine", expect(app, ev, "hallo", "echo from relay-docker: hallo"));
     r.step("bound to the machine", { let c = chat_machines(app.state::<App>()); if c[KEY]["machine"].is_string() { Ok(c[KEY].to_string()) } else { Err(c.to_string()) } });
@@ -178,7 +206,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     proxy.cut(Duration::from_secs(8));
     std::thread::sleep(Duration::from_secs(3)); // a poller round or two
     let t = Instant::now();
-    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, Some(PROJECT.into()));
+    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, Some(PROJECT.into()), None);
     let took = t.elapsed();
     r.step("machine away: refused fast", match res { Err(e) if took < Duration::from_millis(1000) => Ok(format!("{took:?}: {e}")), other => Err(format!("{took:?}: {other:?}")) });
     std::thread::sleep(Duration::from_secs(7)); // back, and the poller sees it again
@@ -188,7 +216,10 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     let gone = wait(Duration::from_secs(10), || st.machines.client(&m).list().ok().filter(|l| !l.iter().any(|x| x.key == KEY)));
     r.step("stopped on the machine", match gone { Some(l) => Ok(format!("gone there, {} other conversation(s) still run", l.len())), None => Err("still listed".into()) });
     let id = m["id"].as_str().unwrap_or("").to_string();
-    r.step("forget the machine", machine_forget(app.clone(), app.state::<App>(), id).map(|_| format!("binds left: {}", st.machines.binds.lock().unwrap().len())));
+    r.step("forget the machine", machine_forget(app.clone(), app.state::<App>(), id).and_then(|_| {
+        let (binds, d) = (st.machines.binds.lock().unwrap().len(), st.settings.lock().unwrap()["machines_default"].clone());
+        if d == "" { Ok(format!("binds left: {binds}, new conversations back on this Mac")) } else { Err(format!("machines_default still {d}")) }
+    }));
     let none = wait(Duration::from_secs(10), || st.machines.client(&m).list().ok().filter(|l| l.is_empty()));
     r.step("forgetting stopped its conversations there", if none.is_some() { Ok("nothing of this Mac runs there".into()) } else { Err("still running there".into()) });
 }

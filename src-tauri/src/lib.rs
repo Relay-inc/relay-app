@@ -104,6 +104,9 @@ fn norm(mut v: Value) -> Value {
     // work machines (machines.rs): only complete ones, a broken entry is dropped rather than half used
     if !v["machines"].is_array() { v["machines"] = json!([]); }
     v["machines"].as_array_mut().unwrap().retain(machines::valid);
+    // where new conversations run: "" this Mac, or a paired machine's id
+    let known = v["machines"].as_array().unwrap().iter().any(|m| m["id"] == v["machines_default"]);
+    if !known { v["machines_default"] = json!(""); }
     v
 }
 
@@ -637,7 +640,7 @@ fn pipe_init(mail_on: bool) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str, project_name: Option<&str>) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str, project_name: Option<&str>, machine: Option<&str>) -> Result<Proc, String> {
     let dir = need_vault(state)?;
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
@@ -645,13 +648,14 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let claude = p.id() == "claude";
     let settings = state.settings.lock().unwrap().clone();
     // a project with a folder on a work machine runs there (machines.rs); a fork copies a session of this Mac, so stays
-    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, project_name, resume.is_some()) } else { None };
+    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, project_name, resume.is_some(), machine) } else { None };
     // a work machine has its own login: no account of this Mac goes along
     let account = if remote.is_some() { "" } else { account };
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into() };
-    let (c, mail_on, remote) = if let Some((m, bind)) = remote {
+    let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
         if from_mail { return Err(trc("err.machine_mail")); }
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
+        if bind.cwd.is_empty() { bind.cwd = info.home.clone(); } // no folder for it there: the machine's home
         let mut eb = env_of(app, state, p);
         // that machine's paths, its claude and its copy of perm_server.py; no mail tools there
         eb.opts["mail"] = json!(false);
@@ -907,7 +911,7 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, project_name: Option<String>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, project_name: Option<String>, machine: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
@@ -928,7 +932,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account, project_name.as_deref())?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account, project_name.as_deref(), machine.as_deref())?;
         procs.insert(project, x);
         return Ok(());
     }
@@ -937,7 +941,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
     if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || (x.account != account && !x.remote)) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &account, project_name.as_deref())?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &account, project_name.as_deref(), machine.as_deref())?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -1622,6 +1626,7 @@ fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), S
     for k in state.machines.keys_on(&id) { if let Some(mut p) = state.procs.lock().unwrap().remove(&k) { p.child.kill().ok(); } }
     let mut s = state.settings.lock().unwrap();
     s["machines"].as_array_mut().unwrap().retain(|m| m["id"] != id.as_str());
+    if s["machines_default"] == id.as_str() { s["machines_default"] = json!(""); }
     state.machines.forget(&id);
     save_settings(&app, &s)
 }
@@ -1633,6 +1638,28 @@ fn set_machine_folders(app: AppHandle, state: State<App>, id: String, folders: s
     let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
     m["folders"] = Value::Object(folders);
     if !machines::valid(m) { return Err(trc("err.machine")); }
+    save_settings(&app, &s)
+}
+/// The machines for the composer's pick, from the poller (no network): [{id, name, online, default}], `default` the one
+/// the project runs on without a pick.
+#[tauri::command]
+fn machines_list(state: State<App>, project: Option<String>) -> Value { state.machines.status_list(&state.settings.lock().unwrap(), project.as_deref()) }
+/// Where new conversations run when nothing is picked: "" this Mac, or a machine's id (Settings › Machines).
+#[tauri::command]
+fn set_machines_default(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
+    let mut s = state.settings.lock().unwrap();
+    if !id.is_empty() && machines::Machines::find(&s, &id).is_none() { return Err(trc("err.no_machine")); }
+    s["machines_default"] = json!(id);
+    save_settings(&app, &s)
+}
+/// The folder a conversation runs in on this machine when its project has none there ("" its home).
+#[tauri::command]
+fn set_machine_default_folder(app: AppHandle, state: State<App>, id: String, folder: String) -> Result<(), String> {
+    let folder = folder.trim().to_string();
+    if !folder.is_empty() && !machines::folder_ok("default", &json!(folder)) { return Err(trc_v("err.machine_folder", &folder)); }
+    let mut s = state.settings.lock().unwrap();
+    let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
+    m["default_folder"] = json!(folder);
     save_settings(&app, &s)
 }
 /// Conversation key -> machine name and folder, for the conversations that run on one.
@@ -1757,7 +1784,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, machines_list, set_machine_default_folder, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

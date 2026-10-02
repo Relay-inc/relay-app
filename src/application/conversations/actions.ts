@@ -18,7 +18,16 @@ import { findProjects, project as vaultProject } from "../workspace/vault";
 import { setIcon } from "../workspace/icons";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
-import { chatsOf, displayTitle, label, projectOf, selectedProject, terminalOf, terminalSessions } from "./selectors";
+import {
+  chatsOf,
+  displayTitle,
+  label,
+  machineChoice,
+  projectOf,
+  selectedProject,
+  terminalOf,
+  terminalSessions,
+} from "./selectors";
 import { newChat, saveChats } from "./chats";
 import { prepImages, releaseImages } from "./images";
 import { flush } from "./events";
@@ -182,6 +191,8 @@ async function deliver(key: string, text: string, images: Img[]) {
       effort: picks("effort", key).value,
       provider: chatAgent(key),
       projectName: conversation?.project ?? null,
+      // where it runs, as the composer shows it; the backend only reads it at the first spawn
+      machine: machineChoice(key).value,
     });
     if (told && cs().chats[key]) {
       set(draft => {
@@ -247,6 +258,13 @@ export function setAgent(id: string) {
     draft.chats[key].provider = id;
   });
   saveChats();
+}
+/** Where the open conversation is to run, before it starts: "" this Mac, or a machine id. */
+export function setMachine(id: string) {
+  const key = selected();
+  setDrafts(draft => {
+    draft.machine[key] = id;
+  });
 }
 /** The open conversation's title, edited in place. Empty keeps the old one. */
 export function rename(title: string) {

@@ -635,8 +635,18 @@ export default {
   "set.tab.machines": "Machines",
   "composer.onMachine": "op {name}",
   "composer.onMachineHelp": "Dit gesprek loopt op een andere machine en blijft draaien als deze Mac dicht is.",
+  "composer.runOn": "Loopt op",
+  "composer.thisMac": "Deze Mac",
+  "composer.available": "beschikbaar",
+  "composer.unavailable": "niet bereikbaar",
+  "composer.machineOnlyClaude": "Enkel Claude Code loopt op een werkmachine.",
+  "composer.machineNoMail": "Een gesprek over een mail blijft op deze Mac, want de mailtools draaien hier.",
   "mc.intro":
-    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Mail, de vault en algemene gesprekken blijven op deze Mac.",
+    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Een ander gesprek kan er ook lopen: kies de machine naast het model, vóór het eerste bericht. Mail en de vault blijven op deze Mac.",
+  "mc.runDefaultTitle": "Waar gesprekken draaien",
+  "mc.runDefault": "Nieuwe gesprekken draaien op",
+  "mc.runDefaultHelp":
+    "Een project met een map op een machine draait daar. Elk nieuw gesprek kan naast het model nog een andere plek kiezen.",
   "mc.pairTitle": "Machine koppelen",
   "mc.line": "Koppelregel",
   "mc.lineHelp":
@@ -666,4 +676,8 @@ export default {
   "mc.path": "Map op de machine",
   "mc.save": "Opslaan",
   "mc.errPath": "Elke rij heeft een project en een absoluut pad dat met / begint nodig.",
+  "mc.defaultFolder": "Standaardmap",
+  "mc.defaultFolderHelp":
+    "Waar een gesprek op deze machine loopt als zijn project hier geen map heeft. Leeg: de thuismap van de machine.",
+  "mc.errDefaultFolder": "Gebruik een absoluut pad dat met / begint, of laat het leeg voor de thuismap van de machine.",
 } satisfies Record<Key, string>;

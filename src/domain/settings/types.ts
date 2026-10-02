@@ -33,7 +33,10 @@ export type Machine = {
   port: number;
   fp: string;
   folders: Record<string, string>;
+  default_folder?: string; // where a conversation runs when its project has no folder there; "" or none: the home
 };
+/** A machine in the composer's pick (`machines_list`): `default` when the project runs there without a pick. */
+export type MachineChoice = { id: string; name: string; online: boolean; default: boolean };
 /** What `machine_status` says about a machine. */
 export type MachineStatus = { ok: boolean; host?: string; version?: string; os?: string; error?: string };
 export type Settings = {
@@ -54,6 +57,7 @@ export type Settings = {
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;
   machines?: Machine[];
+  machines_default?: string; // where new conversations run without a pick: "" this Mac, or a machine id
 };
 
 /** The settings before the backend answered. */
