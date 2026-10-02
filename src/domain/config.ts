@@ -13,6 +13,8 @@ export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 export type Theme = "system" | "light" | "dark";
 /** The accent: Relay blue, or graphite (the text colour). */
 export type Accent = "relay" | "graphite";
+/** The views on top of the sidebar: rows with names or a row of icons, the order they were dragged in, the ones switched off. */
+export type SidebarCfg = { layout?: "list" | "icons"; order?: string[]; hidden?: string[] };
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
@@ -27,6 +29,7 @@ export type Settings = {
   accent?: Accent;
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
+  sidebar?: SidebarCfg;
 };
 
 export const config = {

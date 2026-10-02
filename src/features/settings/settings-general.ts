@@ -5,6 +5,7 @@ import { t, th } from "../../core/i18n";
 import type { Key } from "../../core/locales/en";
 import type { MapKey, VaultMap, VaultStatus } from "../../domain/vault-setup";
 import {
+  appIcon,
   buttonClass,
   field,
   footer,
@@ -14,12 +15,17 @@ import {
   toggleSwitch,
   inputValue,
   withoutColon,
+  TILE,
 } from "./blocks";
+import { glyphSvg } from "../../core/icons";
+import { PROVIDERS } from "../../domain/providers";
+import { viewItems, type ViewItem } from "../../domain/sidebar-views";
+import { arranged, isHidden } from "../../domain/sidebar-order";
 import "./settings-path";
 import { SettingsElement } from "./settings-element";
 import { page, tws } from "./styles";
 import type { Settings } from "./types";
-import type { Accent, Theme } from "../../domain/config";
+import type { Accent, SidebarCfg, Theme } from "../../domain/config";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -34,6 +40,7 @@ declare global {
     "theme-change": CustomEvent<Theme>;
     "accent-change": CustomEvent<Accent>;
     "favicons-change": CustomEvent<boolean>;
+    "sidebar-change": CustomEvent<SidebarCfg>;
   }
 }
 
@@ -205,8 +212,61 @@ export class SettingsGeneral extends SettingsElement {
     return field(t("set.faviconsOn"), toggle, { id: "favon", hint: th("set.faviconsHelp") });
   }
 
+  private renderSidebarLayout(cfg: SidebarCfg) {
+    const current = cfg.layout ?? "list";
+    const layouts = [
+      ["list", t("set.sidebarList")],
+      ["icons", t("set.sidebarIcons")],
+    ] as const;
+    const control = html`<div class="seg" role="radiogroup" aria-label=${t("set.sidebarLayout")}>
+      ${layouts.map(
+        ([value, name]) =>
+          html`<button
+            role="radio"
+            aria-checked=${current === value}
+            class=${current === value ? "on" : ""}
+            @click=${() => emit(this, "sidebar-change", { layout: value })}
+          >
+            ${name}
+          </button>`,
+      )}
+    </div>`;
+    return field(t("set.sidebarLayout"), control, { hint: th("set.sidebarLayoutHelp") });
+  }
+
+  // one switch per view, in the order of the sidebar
+  private renderSidebarItem(item: ViewItem, cfg: SidebarCfg) {
+    const id = `sb-${item.key}`;
+    const shown = !isHidden(item.key, cfg);
+    const glyph = item.mark ? glyphSvg(item.mark, TILE, "0 0 24 24") : appIcon(item.icon ?? "", TILE);
+    const toggle = toggleSwitch(id, shown, e => {
+      const on = (e.target as HTMLInputElement).checked;
+      const hidden = (cfg.hidden ?? []).filter(key => key !== item.key);
+      emit(this, "sidebar-change", { hidden: on ? hidden : [...hidden, item.key] });
+    });
+    return field(html`<span class="inline-flex items-center gap-2">${glyph}${item.name}</span>`, toggle, { id });
+  }
+
+  private renderSidebar() {
+    const { settings } = this;
+    const cfg = settings.sidebar ?? {};
+    const boards = PROVIDERS.filter(board => settings.integrations[board.id]?.on);
+    const items = arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on), cfg);
+    const reset = cfg.order?.length
+      ? html`<button class=${buttonClass()} @click=${() => emit(this, "sidebar-change", { order: [] })}>
+          ${t("nav.resetOrder")}
+        </button>`
+      : nothing;
+    return section(
+      t("set.sec.sidebar"),
+      html`${this.renderSidebarLayout(cfg)} ${field(t("set.sidebarItems"), reset, { hint: th("set.sidebarItemsHelp") })}
+      ${items.map(item => this.renderSidebarItem(item, cfg))}`,
+    );
+  }
+
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
-    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()}`)}`;
+    ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()}`)}
+    ${this.renderSidebar()}`;
   }
 }
