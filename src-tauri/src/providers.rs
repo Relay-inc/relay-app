@@ -89,10 +89,14 @@ pub fn curl_quote(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\")
 /// One API call for the provider, blocking: the caller runs it off the main thread.
 pub fn call(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Value>) -> Result<Value, String> {
     let url = (p.url)(cfg, method, path, &body).ok_or_else(|| trc_v("err.call", p.name))?;
+    send(p, cfg, method, &url, body)
+}
+/// A request to a URL the provider built or allowed (an agent action builds its own), with the secrets.
+pub fn send(p: &Provider, cfg: &Value, method: &str, url: &str, body: Option<Value>) -> Result<Value, String> {
     if !(p.ready)(cfg) { return Err(board_core::t(p.text, p.not_ready)); }
     let token = token(p).ok_or_else(|| trc_v("err.no_token", p.name))?;
     // globoff: the [ ] in filter[...] are not curl ranges
-    let mut conf = format!("globoff\nurl = {}\nrequest = {method}\n", curl_quote(&url));
+    let mut conf = format!("globoff\nurl = {}\nrequest = {method}\n", curl_quote(url));
     for h in (p.headers)(cfg, &token) { conf += &format!("header = {}\n", curl_quote(&h)); }
     if let Some(b) = body { conf += &format!("data-binary = {}\n", curl_quote(&b.to_string())); }
     let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "20", "-K", "-", "-w", "\n%{http_code}"])
@@ -108,18 +112,41 @@ pub fn call(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Va
 }
 
 /// A file posted as a form to a URL the provider's `upload` allows (an S3 policy: `fields` first, the file last, as S3
-/// wants it). No secrets go along. Resolves with where the file now is: the Location header, or the one in S3's XML answer.
+/// wants it). Trello uses its exact card attachment endpoint and backend-held credentials instead.
+/// Linear uses a raw PUT with signed headers and no API key. Resolves with Location (or empty); callers reload the ticket.
 pub fn upload(p: &Provider, url: &str, fields: &serde_json::Map<String, Value>, name: &str, mime: &str, data: &[u8]) -> Result<String, String> {
     // the URL and the fields come from the API's answer: a control character would start a new curl config line
     let clean = |s: &str| !s.chars().any(char::is_control);
     if !(p.upload)(url) || !clean(url) || !fields.iter().all(|(k, v)| clean(k) && v.as_str().map_or(true, clean)) { return Err(trc_v("err.call", p.name)); }
+    let headers = if p.upload_kind == board_core::UploadKind::Trello {
+        if !fields.is_empty() { return Err(trc_v("err.call", p.name)); }
+        (p.headers)(&json!({}), &token(p).ok_or_else(|| trc_v("err.no_token", p.name))?).into_iter()
+            .filter(|h| !h.to_ascii_lowercase().starts_with("content-type:")).collect()
+    } else if p.upload_kind == board_core::UploadKind::Put {
+        if !fields.iter().all(|(key, value)| {
+            let key = key.to_ascii_lowercase();
+            key.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') &&
+            (["content-type", "cache-control", "content-disposition"].contains(&key.as_str()) || key.starts_with("x-goog-") || key.starts_with("x-amz-")) && value.is_string()
+        }) { return Err(trc_v("err.call", p.name)); }
+        fields.iter().map(|(k, v)| format!("{k}: {}", v.as_str().unwrap())).collect()
+    } else { vec![] };
+    upload_file(p, url, fields, name, mime, data, &headers)
+}
+
+fn upload_file(p: &Provider, url: &str, fields: &serde_json::Map<String, Value>, name: &str, mime: &str, data: &[u8], headers: &[String]) -> Result<String, String> {
     let tmp = std::env::temp_dir().join(format!("relay-upload-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())));
     std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
     // form-string: a value starting with @ or < stays text. The file name loses what would break curl's field syntax
     let mut conf = format!("url = {}\n", curl_quote(url));
-    for (k, v) in fields { conf += &format!("form-string = {}\n", curl_quote(&format!("{k}={}", v.as_str().map_or_else(|| v.to_string(), str::to_string)))); }
-    let safe = |s: &str| s.chars().map(|c| if c.is_control() || "\";\\".contains(c) { '_' } else { c }).collect::<String>();
-    conf += &format!("form = {}\n", curl_quote(&format!("File=@\"{}\";type={};filename=\"{}\"", tmp.display(), safe(mime), safe(name))));
+    for h in headers { conf += &format!("header = {}\n", curl_quote(h)); }
+    if p.upload_kind != board_core::UploadKind::Put {
+        for (k, v) in fields { conf += &format!("form-string = {}\n", curl_quote(&format!("{k}={}", v.as_str().map_or_else(|| v.to_string(), str::to_string)))); }
+        let safe = |s: &str| s.chars().map(|c| if c.is_control() || "\";\\".contains(c) { '_' } else { c }).collect::<String>();
+        let field = if p.upload_kind == board_core::UploadKind::Trello { "file" } else { "File" };
+        conf += &format!("form = {}\n", curl_quote(&format!("{field}=@\"{}\";type={};filename=\"{}\"", tmp.display(), safe(mime), safe(name))));
+    } else {
+        conf += &format!("request = PUT\ndata-binary = {}\n", curl_quote(&format!("@{}", tmp.display())));
+    }
     let out = (|| {
         let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "120", "-K", "-", "-w", "\n%{http_code} %header{location}"])
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
@@ -132,7 +159,7 @@ pub fn upload(p: &Provider, url: &str, fields: &serde_json::Map<String, Value>, 
     let out = String::from_utf8_lossy(&o.stdout);
     let (body, tail) = out.rsplit_once('\n').unwrap_or(("", &out));
     let (code, location) = tail.split_once(' ').unwrap_or((tail, ""));
-    if !(code.starts_with('2') || code.starts_with('3')) { return Err(format!("{} upload {code}: {}", p.name, body.trim().chars().take(200).collect::<String>())); }
+    if !code.starts_with('2') { return Err(format!("{} upload {code}: {}", p.name, body.trim().chars().take(200).collect::<String>())); }
     let xml = body.split_once("<Location>").and_then(|(_, r)| r.split_once("</Location>")).map(|(l, _)| l.replace("&amp;", "&"));
     Ok(if location.trim().is_empty() { xml.unwrap_or_default() } else { location.trim().to_string() })
 }
@@ -191,6 +218,51 @@ mod tests {
         let (k, f) = (req.find("name=\"key\"").unwrap(), req.find("name=\"File\"").unwrap());
         assert!(k < f && req.contains("filename=\"a_b_.png\"") && req.contains("Content-Type: image/png"));
         assert!(!(integration_productive::PROVIDER.upload)(&url), "the real allowlist refuses it");
+    }
+    #[test]
+    fn trello_upload_is_authenticated_multipart_with_lowercase_file() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", l.local_addr().unwrap());
+        let srv = std::thread::spawn(move || {
+            let (mut c, _) = l.accept().unwrap();
+            c.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+            let (mut got, mut buf) = (vec![], [0u8; 4096]);
+            while let Ok(n) = c.read(&mut buf) { if n == 0 { break; } got.extend_from_slice(&buf[..n]); if String::from_utf8_lossy(&got).contains("FILEDATA\r\n--") { break; } }
+            c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}").unwrap();
+            String::from_utf8_lossy(&got).into_owned()
+        });
+        let p = integration_trello::PROVIDER;
+        upload_file(&p, &url, &serde_json::Map::new(), "a.txt", "text/plain", b"FILEDATA", &["Authorization: test-token".into()]).unwrap();
+        let req = srv.join().unwrap();
+        assert!(req.starts_with("POST "));
+        assert!(req.contains("Authorization: test-token"));
+        assert!(req.contains("multipart/form-data") && req.contains("name=\"file\"") && req.contains("FILEDATA"));
+    }
+    #[test]
+    fn linear_upload_puts_raw_bytes_and_signed_headers() {
+        use std::io::{Read, Write};
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/", l.local_addr().unwrap());
+        let srv = std::thread::spawn(move || {
+            let (mut c, _) = l.accept().unwrap();
+            c.set_read_timeout(Some(std::time::Duration::from_secs(2))).unwrap();
+            let (mut got, mut buf) = (vec![], [0u8; 4096]);
+            while let Ok(n) = c.read(&mut buf) { if n == 0 { break; } got.extend_from_slice(&buf[..n]); if got.ends_with(b"RAWFILE") { break; } }
+            c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").unwrap();
+            String::from_utf8_lossy(&got).into_owned()
+        });
+        let p = integration_linear::PROVIDER;
+        let headers = vec!["Content-Type: text/plain".into(), "x-goog-test: signed-value".into()];
+        upload_file(&p, &url, &serde_json::Map::new(), "a.txt", "text/plain", b"RAWFILE", &headers).unwrap();
+        let req = srv.join().unwrap();
+        assert!(req.starts_with("PUT "));
+        assert!(req.contains("x-goog-test: signed-value") && req.contains("Content-Type: text/plain"));
+        assert!(req.ends_with("\r\n\r\nRAWFILE"));
+        assert!(!req.contains("multipart") && !req.contains("Authorization"));
+        for fields in [json!({ "Authorization": "secret" }), json!({ "Host": "evil" }), json!({ "x-goog-test": "x\nurl=https://evil.com" }), json!({ "x-goog-test": 1 })] {
+            assert!(upload(&p, "https://uploads.linear.app/file", fields.as_object().unwrap(), "a.txt", "text/plain", b"x").is_err());
+        }
     }
     #[test]
     fn old_productive_settings_move_to_integrations() {

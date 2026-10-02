@@ -11,6 +11,7 @@
     "opener:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-title",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "deep-link:default"
   ]
 }
