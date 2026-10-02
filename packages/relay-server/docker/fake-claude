@@ -56,6 +56,21 @@ for line in sys.stdin:
     if "slow" in text:
         time.sleep(6)
     reply = f"echo from {host}: {text}"
+    # the mirror's tests: the last line of the prompt can be `read <path>`, `write <path> <text>` or `flags`
+    last = text.strip().splitlines()[-1] if text.strip() else ""
+    if last.startswith("read "):
+        try:
+            reply = "content: " + open(os.path.join(cwd, last[5:].strip())).read()
+        except OSError as e:
+            reply = f"read failed: {e}"
+    elif last.startswith("write "):
+        rel, _, body = last[6:].partition(" | ")
+        os.makedirs(os.path.dirname(os.path.join(cwd, rel)) or cwd, exist_ok=True)
+        with open(os.path.join(cwd, rel), "w") as f:
+            f.write(body)
+        reply = f"wrote {rel}"
+    elif last == "flags":
+        reply = "flags: " + json.dumps({"args": args, "cwd": cwd, "claude_md_from_dirs": os.environ.get("CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "")})
     if "perm" in text:
         inp = {"file_path": os.path.join(cwd, "note.txt"), "content": "relay"}
         out({"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "toolu_fake", "name": "Write", "input": inp}]}, "session_id": sid})

@@ -3532,6 +3532,7 @@ dependencies = [
  "agent-claude",
  "agent-core",
  "relay-remote",
+ "ring",
  "serde",
  "serde_json",
 ]

@@ -9,6 +9,9 @@ services:
     hostname: ${RELAY_HOST:-relay-docker}
     ports:
       - "${RELAY_PORT:-47800}:47800"
+    # the mirror's working copy (plaintext of the vault while unlocked) on a RAM disk, never on the volume
+    tmpfs:
+      - /home/relay/work:uid=1000,gid=1000,mode=0700,size=2g
     volumes:
       - data:/home/relay/data
       - claude:/home/relay/.claude

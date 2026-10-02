@@ -68,6 +68,36 @@ fn turn(ev: &Events, timeout: Duration) -> Result<(Vec<String>, bool), String> {
         }
     }
 }
+/// The texts of `key`'s next turn, like turn() for KEY.
+fn turn_of(ev: &Events, key: &str, timeout: Duration) -> Result<Vec<String>, String> {
+    let (rx, end, mut texts) = (ev.lock().unwrap(), Instant::now() + timeout, vec![]);
+    loop {
+        let e = rx.recv_timeout(end.saturating_duration_since(Instant::now())).map_err(|_| format!("no turn end, texts {texts:?}"))?;
+        if e["project"] != key { continue; }
+        match e["event"]["type"].as_str().unwrap_or("") {
+            "text" => texts.push(e["event"]["text"].as_str().unwrap_or("").to_string()),
+            "turn_end" => return Ok(texts),
+            "exit" => return Err(format!("exited, texts {texts:?}")),
+            "stderr" => texts.push(format!("stderr: {}", e["event"]["text"])),
+            _ => {}
+        }
+    }
+}
+/// One message in a general conversation on the machine `id`.
+fn ask(app: &AppHandle, ev: &Events, key: &str, id: &str, text: &str) -> Result<String, String> {
+    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, Some(id.into()))?;
+    Ok(turn_of(ev, key, Duration::from_secs(30))?.join("\n"))
+}
+/// The mirror's next round that has run without errors.
+fn mirror_round(app: &AppHandle, id: &str, after: i64) -> Result<Value, String> {
+    wait(Duration::from_secs(40), || {
+        let s = mirror_status(app.state::<App>(), id.into());
+        (s["at"].as_i64().unwrap_or(0) > after && s["errors"].as_array().is_some_and(|e| e.is_empty()) && s["locked"] == false).then_some(s)
+    }).ok_or_else(|| format!("no clean round: {}", mirror_status(app.state::<App>(), id.into())))
+}
+fn now_s() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0) }
+const MIRROR_KEY: &str = "c:mirror";
+
 fn say(app: &AppHandle, text: &str) -> Result<(), String> {
     send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, Some(PROJECT.into()), None)
 }
@@ -184,6 +214,25 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     r.step("dropped connection taken back", dropped);
     r.step("talk after the drop", expect(app, ev, "after the drop", "echo from relay-docker: after the drop"));
 
+    // the mirror: switched on, the vault and the context reach the machine, a session there reads the vault, gets the
+    // context flags, writes a note, and the note comes back here
+    let id = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
+    let started = now_s();
+    r.step("mirror switched on", set_machine_mirror(app.clone(), app.state::<App>(), id.clone(), true, vec![]).map(|_| "on".into()));
+    r.step("first mirror round", mirror_round(app, &id, started - 1).map(|s| s.to_string()));
+    r.step("a session there reads the vault", ask(app, ev, MIRROR_KEY, &id, "read Notes/Uit de vault.md")
+        .and_then(|t| if t.contains("content: geheim 42") { Ok(t) } else { Err(t) }));
+    r.step("it gets the context, plugins, permissions and memory", ask(app, ev, MIRROR_KEY, &id, "flags").and_then(|t| {
+        let ok = t.contains("--add-dir") && t.contains("/context") && t.contains("--settings") && t.contains("autoMemoryDirectory") && t.contains("\"claude_md_from_dirs\": \"1\"");
+        if ok { Ok("flags present".into()) } else { Err(t) }
+    }));
+    let wrote = now_s();
+    r.step("it writes a note there", ask(app, ev, MIRROR_KEY, &id, "write Notes/Van de server.md | hallo terug").and_then(|t| if t.contains("wrote") { Ok(t) } else { Err(t) }));
+    let vault = PathBuf::from(st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string());
+    r.step("the note comes back to this Mac", mirror_round(app, &id, wrote).and_then(|_| {
+        wait(Duration::from_secs(20), || fs::read_to_string(vault.join("Notes/Van de server.md")).ok().filter(|t| t == "hallo terug")).ok_or_else(|| "not here".to_string())
+    }));
+
     // quit with a turn running: phase 2 must find it again
     let sid = st.sids.lock().unwrap().get(KEY).map(|s| s.sid.clone()).unwrap_or_default();
     fs::write(r.dir.join("sid"), &sid).ok();
@@ -210,6 +259,17 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     let took = t.elapsed();
     r.step("machine away: refused fast", match res { Err(e) if took < Duration::from_millis(1000) => Ok(format!("{took:?}: {e}")), other => Err(format!("{took:?}: {other:?}")) });
     std::thread::sleep(Duration::from_secs(7)); // back, and the poller sees it again
+    // the server restarts (its RAM disk empties, the key is gone): locked until this Mac unlocks it again, then the
+    // vault is readable there as before
+    let id = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
+    let restart = std::env::var("RELAY_SELFTEST_RESTART").unwrap_or_default();
+    let before = now_s();
+    let restarted = Command::new("/bin/sh").args(["-c", &restart]).status().map_err(|e| e.to_string()).and_then(|s| if s.success() { Ok(()) } else { Err(format!("{s}")) });
+    r.step("server restarted", restarted.map(|_| "restarted".into()));
+    r.step("unlocked again by this Mac", mirror_round(app, &id, before + 2).map(|s| format!("in_ram {}", s["in_ram"])));
+    r.step("the vault is readable there after the restart", ask(app, ev, "c:mirror2", &id, "read Notes/Van de server.md")
+        .and_then(|t| if t.contains("content: hallo terug") { Ok(t) } else { Err(t) }));
+    // the conversations on it ended with the restart: the next ones start fresh
     // stop it: through the server, and the server lists nothing for this Mac any more
     let m = st.settings.lock().unwrap()["machines"][0].clone();
     stop(app.state::<App>(), KEY.into());

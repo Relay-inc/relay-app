@@ -21,6 +21,7 @@ pub use relay_remote::broker;
 mod calendar;
 mod commits;
 mod machines;
+mod mirror;
 mod mail;
 pub mod notify;
 mod providers;
@@ -289,6 +290,7 @@ struct App {
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
     asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
     machines: machines::Machines,          // work machines, this Mac's certificate and which conversation runs where
+    mirrors: mirror::Mirrors,              // what this Mac keeps in sync on each work machine (mirror.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -655,7 +657,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
         if from_mail { return Err(trc("err.machine_mail")); }
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
-        if bind.cwd.is_empty() { bind.cwd = info.home.clone(); } // no folder for it there: the machine's home
+        // no folder for it there: the vault's mirror when the machine has one, else the machine's home
+        if bind.cwd.is_empty() { bind.cwd = if mirror::on(&m) { format!("{}/vault", info.work) } else { info.home.clone() }; }
         let mut eb = env_of(app, state, p);
         // that machine's paths, its claude and its copy of perm_server.py; no mail tools there
         eb.opts["mail"] = json!(false);
@@ -663,6 +666,11 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
         let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
         let mut cmd = p.command(&eb.env(), &l)?;
         cmd.current_dir(&bind.cwd).env("PATH", &info.path);
+        // the mirror gives the session there what Claude Code here has: context, plugins, permissions, the vault's memory
+        if mirror::on(&m) {
+            let (args, env) = mirror::session_args(&info, &bind.cwd);
+            cmd.args(args).envs(env);
+        }
         let c = state.machines.client(&m).launch(&meta, &broker::Spec::of(&cmd)).map_err(|e| format!("{} start ({}): {e}", p.id(), m["name"].as_str().unwrap_or("")))?;
         state.machines.set_bind(project, bind);
         (c, false, true)
@@ -1625,9 +1633,37 @@ async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, Stri
 fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
     for k in state.machines.keys_on(&id) { if let Some(mut p) = state.procs.lock().unwrap().remove(&k) { p.child.kill().ok(); } }
     let mut s = state.settings.lock().unwrap();
+    // its mirror there goes too, when it still answers
+    if let Some(m) = machines::Machines::find(&s, &id).filter(mirror::on) { state.machines.client(&m).wipe().ok(); }
     s["machines"].as_array_mut().unwrap().retain(|m| m["id"] != id.as_str());
     if s["machines_default"] == id.as_str() { s["machines_default"] = json!(""); }
+    state.mirrors.forget(&data_dir(&app), &id);
     state.machines.forget(&id);
+    save_settings(&app, &s)
+}
+/// Mirror this Mac's Claude context, plugins, vault and the vault's memory on a machine, or stop. `exclude`: vault
+/// folders that stay here. Stopping keeps the copy there (sealed); `mirror_wipe` removes it.
+#[tauri::command]
+fn set_machine_mirror(app: AppHandle, state: State<App>, id: String, on: bool, exclude: Vec<String>) -> Result<(), String> {
+    let exclude: Vec<String> = exclude.into_iter().map(|e| e.trim().trim_matches('/').to_string()).filter(|e| !e.is_empty()).collect();
+    if let Some(e) = exclude.iter().find(|e| !relay_remote::sync::safe_rel(e)) { return Err(trc_v("err.machine_folder", e)); }
+    let mut s = state.settings.lock().unwrap();
+    let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
+    m["mirror"] = json!({"on": on, "exclude": exclude});
+    save_settings(&app, &s)
+}
+/// What the mirror of a machine did lately: {at, pushed, pulled, conflicts, skipped, errors, locked, in_ram}, or null.
+#[tauri::command]
+fn mirror_status(state: State<App>, id: String) -> Value { json!(state.mirrors.status.lock().unwrap().get(&id)) }
+/// Remove a machine's mirror there and the sync state here, and stop mirroring. The vault here is not touched.
+#[tauri::command]
+async fn mirror_wipe(app: AppHandle, state: State<'_, App>, id: String) -> Result<(), String> {
+    let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    let c = state.machines.client(&m);
+    tauri::async_runtime::spawn_blocking(move || c.wipe()).await.map_err(|e| e.to_string())??;
+    state.mirrors.forget(&data_dir(&app), &id);
+    let mut s = state.settings.lock().unwrap();
+    if let Some(m) = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()) { m["mirror"]["on"] = json!(false); }
     save_settings(&app, &s)
 }
 /// A machine's folders: vault project -> absolute folder there.
@@ -1763,7 +1799,7 @@ pub fn run() {
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default() });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
             actions::start(app.handle());
@@ -1779,12 +1815,26 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 }
             });
+            // the mirrors: a round every 5 s for each machine that has one and answers, on a thread of their own so a
+            // first big copy never holds up the cards
+            let h = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let st = h.state::<App>();
+                let s = st.settings.lock().unwrap().clone();
+                let vault = s["vault"].as_str().unwrap_or("").to_string();
+                for m in s["machines"].as_array().into_iter().flatten().filter(|m| mirror::on(m)) {
+                    let id = m["id"].as_str().unwrap_or("");
+                    let Some(info) = st.machines.seen.lock().unwrap().get(id).filter(|x| x.error.is_none()).and_then(|x| x.info.clone()) else { continue };
+                    st.mirrors.round(&data_dir(&h), m, &st.machines.client(m), &info, &vault);
+                }
+            });
             tray::init(app.handle())?;
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, machines_list, set_machine_default_folder, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_wipe, machines_list, set_machine_default_folder, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

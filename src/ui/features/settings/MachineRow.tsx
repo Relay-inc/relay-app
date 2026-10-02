@@ -6,6 +6,7 @@ import { editRows, forgetMachine, saveDefaultFolder, saveFolders } from "../../.
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, OK_MESSAGE, PILL, SELECT } from "./blocks";
+import { MachineMirror } from "./MachineMirror";
 import { StatusLine } from "./StatusLine";
 
 /** A paired machine on Settings › Machines: its name, address, whether it is online and its fingerprint, Forget (with
@@ -117,6 +118,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
           {message ? <span className={message.ok ? OK_MESSAGE : ERROR_MESSAGE}>{message.text}</span> : null}
         </div>
       </div>
+      <MachineMirror machine={machine} />
       <div className="grid gap-1.5">
         <label className="text-xs font-medium text-s-fg" htmlFor={`mcdef-${machine.id}`}>
           {t("mc.defaultFolder")}

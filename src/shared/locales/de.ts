@@ -687,4 +687,27 @@ export default {
     "Wo ein Gespräch auf dieser Maschine läuft, wenn sein Projekt hier keinen Ordner hat. Leer: der Home-Ordner der Maschine.",
   "mc.errDefaultFolder":
     "Gib einen absoluten Pfad an, der mit / beginnt, oder lass das Feld leer für den Home-Ordner der Maschine.",
+  "mc.mirror": "Diesen Mac spiegeln",
+  "mc.mirrorHelp":
+    "Dein Claude-Kontext, Plugins, Vault und dessen Gedächtnis, synchron gehalten und verschlüsselt auf der Maschine. Gespräche dort wissen, was Claude hier weiß.",
+  "mc.mirrorConfirm":
+    "Eine Kopie deines Vaults geht auf diese Maschine, verschlüsselt auf ihrer Festplatte. Ausgeschlossene Ordner bleiben hier.",
+  "mc.mirrorTurnOn": "Einschalten",
+  "mc.mirrorExclude": "Ordner, die auf diesem Mac bleiben",
+  "mc.mirrorNoExclude": "Keine ausgeschlossenen Ordner. Der ganze Vault wird kopiert.",
+  "mc.mirrorExcludePath": "Auszuschließender Vault-Ordner",
+  "mc.mirrorAdd": "Hinzufügen",
+  "mc.mirrorErrExclude":
+    "Nimm einen Ordner im Vault, relativ zu dessen Wurzel und ohne .. (zum Beispiel Contexts/Personal).",
+  "mc.mirrorErrSave": "Der Ordner konnte nicht gespeichert werden.",
+  "mc.mirrorLast": "Zuletzt synchronisiert {when}",
+  "mc.mirrorNever": "Noch keine Synchronisierungsrunde.",
+  "mc.mirrorCounts": "{sent} gesendet, {received} empfangen",
+  "mc.mirrorLocked": "Gesperrt: öffnet sich, sobald dieser Mac verbindet",
+  "mc.mirrorNotInRam": "Die Arbeitskopie liegt auf der Festplatte der Maschine, nicht im RAM",
+  "mc.mirrorConflicts_one": "{n} Konflikt. Beide Versionen wurden behalten:",
+  "mc.mirrorConflicts_other": "{n} Konflikte. Beide Versionen wurden behalten:",
+  "mc.mirrorConflict": "Konfliktkopie: {path}",
+  "mc.mirrorWipe": "Kopie auf dieser Maschine entfernen",
+  "mc.mirrorWipeSure": "Die Kopie entfernen und den Spiegel ausschalten?",
 } satisfies Record<Key, string>;

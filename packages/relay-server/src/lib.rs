@@ -10,6 +10,8 @@
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
 //! port the running server listens on), perm_server.py, pending/.
 
+pub mod mirror;
+
 use relay_remote::broker::{self, Meta, Spec};
 use relay_remote::proto::{self, Info, MAX_LINE, PROTO};
 use relay_remote::tls::{self, Acceptor, Identity};
@@ -64,6 +66,8 @@ pub fn revoke(data: &Path, who: &str) -> io::Result<Vec<Client>> {
     let hit = |c: &Client| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()));
     let (gone, keep): (Vec<Client>, Vec<Client>) = clients(data).into_iter().partition(hit);
     if !gone.is_empty() { save_clients(data, &keep)?; }
+    // a revoked device's mirror goes too; a running server also drops its key and working copy (see Server::run)
+    for c in &gone { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
     Ok(gone)
 }
 
@@ -113,27 +117,34 @@ pub fn info(data: &Path, path: &str) -> Info {
         if Path::new(&def).is_file() { def } else { agent_core::which("claude", path).unwrap_or(def) }
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
-        pending: data.join("pending").to_string_lossy().into(), perm: data.join("perm_server.py").to_string_lossy().into() }
+        pending: data.join("pending").to_string_lossy().into(), perm: data.join("perm_server.py").to_string_lossy().into(), ..Default::default() }
 }
 
 // ---------- serving
 
-pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info }
+pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror> }
 
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
         fs::create_dir_all(data.join("pending"))?;
         fs::write(data.join("perm_server.py"), agent_claude::PERM_SERVER_PY)?;
         let id = identity(data)?;
-        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()) })
+        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data) })
     }
     pub fn fingerprint(&self) -> &str { &self.fp }
 
     /// Accept forever, a thread per connection. Writes serve.json with the port, for `relay-server pair`.
     pub fn run(self, listener: TcpListener) -> io::Result<()> {
         let port = listener.local_addr()?.port();
+        sweep_brokers();
         fs::write(self.data.join("serve.json"), json!({"port": port}).to_string())?;
         let me = Arc::new(self);
+        let m2 = me.clone();
+        thread::spawn(move || loop {
+            thread::sleep(Duration::from_secs(5));
+            let known: Vec<String> = clients(&m2.data).iter().map(|c| c.fp[..16].to_string()).collect();
+            m2.mirror.drop_unknown(&known);
+        });
         for tcp in listener.incoming() {
             let Ok(tcp) = tcp else { continue };
             let me = me.clone();
@@ -160,7 +171,20 @@ impl Server {
         let pending = self.data.join("pending").join(ns);
         match op {
             "pair" => { let res = self.pair(&fp, &req); if res.is_ok() { eprintln!("relay-server: paired {} ({peer})", req["name"]); } reply(&mut w, res) }
-            "info" => reply(&mut w, Ok(json!({"info": Info { pending: pending.to_string_lossy().into(), ..self.info.clone() }}))),
+            "info" => reply(&mut w, Ok(json!({"info": Info { pending: pending.to_string_lossy().into(), work: self.mirror.work_of(ns).to_string_lossy().into(),
+                mirror_open: self.mirror.is_open(ns), in_ram: self.mirror.in_ram, ..self.info.clone() }}))),
+            "unlock" => reply(&mut w, self.mirror.unlock(ns, req["key"].as_str().unwrap_or("")).map(|_| json!({"in_ram": self.mirror.in_ram}))),
+            "sync_manifest" => reply(&mut w, self.mirror.manifest(ns, req["root"].as_str().unwrap_or("")).map(|m| json!({"manifest": m}))),
+            "sync_get" => match self.mirror.get(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or("")) {
+                Ok(b) => { proto::write_json(&mut w, &json!({"ok": true, "len": b.len()}))?; w.write_all(&b)?; w.shutdown(); Ok(()) }
+                Err(e) => reply(&mut w, Err(e)),
+            },
+            "sync_put" => {
+                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), mirror::MAX_FILE)?;
+                reply(&mut w, self.mirror.put(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or(""), &body, req["mtime"].as_i64().unwrap_or(0)).map(|_| json!({})))
+            }
+            "sync_delete" => reply(&mut w, self.mirror.delete(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or(""), req["hash"].as_str().unwrap_or("")).map(|_| json!({}))),
+            "wipe" => { self.mirror.wipe(ns); reply(&mut w, Ok(json!({}))) }
             "list" => reply(&mut w, Ok(json!({"metas": metas(ns)}))),
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
@@ -218,6 +242,9 @@ impl Server {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
         let (mut meta, spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
         meta.key = format!("{ns}:{}", meta.key);
+        if spec.cwd.as_deref().is_some_and(|d| Path::new(d).starts_with(self.mirror.work_of(ns))) && !self.mirror.is_open(ns) {
+            return bang(&mut w, &format!("the vault on {} is locked: it opens when Relay on your laptop connects", self.info.host));
+        }
         if let Some(cwd) = spec.cwd.as_deref().filter(|d| !Path::new(d).is_dir()) { return bang(&mut w, &format!("folder {cwd} does not exist on {}", self.info.host)); }
         // its broker still runs (the app asked before it had taken the conversation back after a restart): that one
         // goes on, a second agent on the same session would write the transcript twice
@@ -246,10 +273,18 @@ fn metas(ns: &str) -> Vec<Meta> {
     let Ok(dir) = fs::read_dir(broker::dir()) else { return vec![] };
     let pre = format!("{ns}:");
     dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).filter_map(|p| broker::load_meta(&p))
-        .filter(|m| m.key.starts_with(&pre) && sock_of(&m.key).exists())
+        .filter(|m| m.key.starts_with(&pre) && UnixStream::connect(sock_of(&m.key)).is_ok())
         .map(|m| Meta { key: m.key[pre.len()..].to_string(), ..m }).collect()
 }
 fn sock_of(key: &str) -> PathBuf { broker::meta_path(key).with_extension("sock") }
+/// After a crash or a restart the brokers are gone but their files are not: a socket nobody answers on, and its
+/// meta, would list a dead conversation as running. Swept at start.
+pub fn sweep_brokers() {
+    for f in fs::read_dir(broker::dir()).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
+        let sock = f.with_extension("sock");
+        if UnixStream::connect(&sock).is_err() { fs::remove_file(&sock).ok(); fs::remove_file(&f).ok(); }
+    }
+}
 
 /// Stop a conversation's agent: only the pid its broker file names, so a stale request never kills another process.
 fn kill(key: &str, pid: u32) -> Result<Value, String> {

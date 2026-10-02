@@ -3,8 +3,10 @@
 //! `launch` and `attach` then carry the broker's own frames (broker.rs) both ways, untouched, until either side goes.
 //!
 //! Requests: `info`, `list` (the brokers that run), `kill {key,pid}`, `pending` (open permission cards), `answer
-//! {id,decision}`, `history {sid,from,cwd}`, `exists {path}`, `launch {meta,spec}`, `attach {key}`, and from a device
-//! that is not paired yet only `pair {name,proof}`.
+//! {id,decision}`, `history {sid,from,cwd}`, `exists {path}`, `launch {meta,spec}`, `attach {key}`, the mirror's
+//! `unlock {key}`, `sync_manifest {root}`, `sync_get {root,path}` (the reply line has `len`, the bytes follow),
+//! `sync_put {root,path,len,mtime}` (the bytes follow the request line), `sync_delete {root,path,hash}`, `wipe`, and
+//! from a device that is not paired yet only `pair {name,proof}`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -31,6 +33,13 @@ pub struct Info {
     pub claude: String,
     pub pending: String,
     pub perm: String,
+    /// The device's mirror working copy (`<work>/<root>`), whether its key is there, and whether it is on a RAM disk.
+    #[serde(default)]
+    pub work: String,
+    #[serde(default)]
+    pub mirror_open: bool,
+    #[serde(default)]
+    pub in_ram: bool,
 }
 
 /// One JSON line, at most `max` bytes. EOF before any byte is an error too: a request or an answer always comes.
@@ -44,6 +53,16 @@ pub fn read_json<R: BufRead>(r: &mut R, max: u64) -> io::Result<Value> {
 pub fn write_json<W: Write>(w: &mut W, v: &Value) -> io::Result<()> {
     writeln!(w, "{v}")?;
     w.flush()
+}
+
+/// A reply can be big (a manifest of a few thousand files); still bounded.
+pub const MAX_REPLY: u64 = 64 << 20;
+/// Exactly `len` raw bytes after a JSON line: a file in `sync_get` and `sync_put`.
+pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8>> {
+    if len > max { return Err(io::Error::new(io::ErrorKind::InvalidData, "file too big")); }
+    let mut v = vec![0; len as usize];
+    r.read_exact(&mut v)?;
+    Ok(v)
 }
 
 /// The line `relay-server pair` prints: where the server is, the fingerprint of its certificate and the one-time code.

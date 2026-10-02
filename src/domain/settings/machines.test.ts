@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { foldersOf, machinePick, projectChoices } from "./machines.ts";
+import { agoParts, conflictPath, excludePath, foldersOf, machinePick, projectChoices } from "./machines.ts";
 
 test("folders: empty rows drop out, paths are trimmed", () => {
   assert.deepEqual(
@@ -39,4 +39,22 @@ test("machine pick: this Mac only for another agent or a mail, nothing without m
   assert.equal(machinePick(list, "a", false), "");
   assert.equal(machinePick([], "a", true), null);
   assert.equal(machinePick(undefined, undefined, true), null);
+});
+
+test("exclude: trimmed, trailing slash dropped, nested paths kept", () => {
+  assert.equal(excludePath("  Contexts/Personal/ "), "Contexts/Personal");
+});
+test("exclude: empty, absolute and climbing paths are refused", () => {
+  for (const bad of ["", "  ", "/etc", "../x", "a/../b", "a//b"]) assert.equal(excludePath(bad), null);
+});
+test("ago: picks the unit, never in the future", () => {
+  assert.equal(agoParts(0), null);
+  assert.deepEqual(agoParts(1000, 1_030_000), { value: -30, unit: "second" });
+  assert.deepEqual(agoParts(1000, 1_000_000 + 600_000), { value: -10, unit: "minute" });
+  assert.deepEqual(agoParts(1000, 1_000_000 + 2 * 3600_000), { value: -2, unit: "hour" });
+  assert.deepEqual(agoParts(1000, 1_000_000 + 3 * 86400_000), { value: -3, unit: "day" });
+  assert.deepEqual(agoParts(2000, 1_000_000), { value: -0, unit: "second" });
+});
+test("conflict path loses its vault/ prefix", () => {
+  assert.equal(conflictPath("vault/Notes/a (conflict).md"), "Notes/a (conflict).md");
 });

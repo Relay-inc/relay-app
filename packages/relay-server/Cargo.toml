@@ -10,5 +10,6 @@ serde_json.workspace = true
 relay-remote = { path = "../relay-remote" }
 agent-core.workspace = true
 agent-claude = { path = "../agent-claude" }
+ring = "0.17"
 
 [dev-dependencies]

@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import type { Machine } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { checkAll, pairMachine, setRunDefault, showMachinesPage } from "../../../application/settings/machines-page";
+import {
+  checkAll,
+  pairMachine,
+  pollMirrors,
+  setRunDefault,
+  showMachinesPage,
+} from "../../../application/settings/machines-page";
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, EMPTY_LIST, ERROR_MESSAGE, FIELD, HINT, SELECT } from "./blocks";
@@ -25,6 +31,14 @@ export function MachinesPage({ active }: { active: boolean }) {
   useEffect(() => {
     if (active) showMachinesPage();
   }, [active]);
+  // the mirror status of the machines that have it on, every 5 s while the page shows
+  const mirrored = machines.some(machine => machine.mirror?.on);
+  useEffect(() => {
+    if (!active || !mirrored) return;
+    pollMirrors();
+    const timer = setInterval(pollMirrors, 5000);
+    return () => clearInterval(timer);
+  }, [active, mirrored]);
 
   // a machine that paired clears the fields; a failed pairing keeps them to fix
   const pair = async () => {

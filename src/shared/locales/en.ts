@@ -678,6 +678,29 @@ const en = {
   "mc.defaultFolderHelp":
     "Where a conversation runs on this machine when its project has no folder here. Empty: the machine's home folder.",
   "mc.errDefaultFolder": "Use an absolute path starting with /, or leave it empty for the machine's home folder.",
+  "mc.mirror": "Mirror this Mac",
+  "mc.mirrorHelp":
+    "Your Claude context, plugins, vault and its memory, kept in sync and encrypted on the machine. Conversations there know what Claude knows here.",
+  "mc.mirrorConfirm":
+    "A copy of your vault goes to this machine, encrypted on its disk. Folders you exclude stay here.",
+  "mc.mirrorTurnOn": "Turn on",
+  "mc.mirrorExclude": "Folders that stay on this Mac",
+  "mc.mirrorNoExclude": "No excluded folders. The whole vault is copied.",
+  "mc.mirrorExcludePath": "Vault folder to exclude",
+  "mc.mirrorAdd": "Add",
+  "mc.mirrorErrExclude":
+    "Use a folder inside the vault, relative to its root, without .. (for example Contexts/Personal).",
+  "mc.mirrorErrSave": "The folder could not be saved.",
+  "mc.mirrorLast": "Last sync {when}",
+  "mc.mirrorNever": "No sync round yet.",
+  "mc.mirrorCounts": "{sent} sent, {received} received",
+  "mc.mirrorLocked": "Locked: opens when this Mac connects",
+  "mc.mirrorNotInRam": "The working copy is on the machine's disk, not in RAM",
+  "mc.mirrorConflicts_one": "{n} conflict. Both versions were kept:",
+  "mc.mirrorConflicts_other": "{n} conflicts. Both versions were kept:",
+  "mc.mirrorConflict": "conflict copy: {path}",
+  "mc.mirrorWipe": "Remove the copy on this machine",
+  "mc.mirrorWipeSure": "Remove the copy and turn the mirror off?",
 };
 export type Key = keyof typeof en;
 export default en;

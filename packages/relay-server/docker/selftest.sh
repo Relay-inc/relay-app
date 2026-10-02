@@ -22,6 +22,7 @@ cat > "$DIR/vault/System/rules/core/work-state.md" <<'MD'
 |---|---|---|---|
 | [[Testproject]] | Active | 2026-10-01 | The selftest's project. |
 MD
+mkdir -p "$DIR/vault/Notes" && printf 'geheim 42' > "$DIR/vault/Notes/Uit de vault.md"
 printf '{"vault": "%s", "language": "en"}' "$DIR/vault" > "$DATA/settings.json"
 
 echo "== relay-server in Docker (test target)"
@@ -34,6 +35,7 @@ pnpm -s build >/dev/null
 TAURI_CONFIG="{\"identifier\":\"$ID\",\"productName\":\"Relay Selftest\"}" CARGO_TARGET_DIR=target/selftest \
   cargo build -q -p relay --features "selftest tauri/custom-protocol"
 APP=target/selftest/debug/relay
+export RELAY_SELFTEST_RESTART="docker compose -p relay-selftest -f packages/relay-server/docker/compose.yml restart relay-server"
 run() { RELAY_AGENTS_DIR="$DIR/agents" RELAY_SELFTEST=$1 RELAY_SELFTEST_LINE="$LINE" RELAY_SELFTEST_DIR="$DIR" "$APP" 2>"$DIR/app-$1.log" | grep '^selftest' || true; }
 
 # PHASES=forget runs only the Forget-through-the-page check
@@ -41,6 +43,11 @@ for phase in ${PHASES:-1 2}; do echo "== phase $phase"; run "$phase"; done
 if [ "${PHASES:-1 2}" = "1 2" ]; then
 NOTE=$("${COMPOSE[@]}" exec -T relay-server cat /home/relay/repos/testproject/note.txt 2>/dev/null || true)
 if [ "$NOTE" = relay ]; then echo "PASS the allowed Write landed on the machine" >> "$DIR/report.txt"; else echo "FAIL note.txt on the machine: '$NOTE'" >> "$DIR/report.txt"; fi
+fi
+# the mirror's store on the server's disk: ciphertext only
+if [ "${PHASES:-1 2}" = "1 2" ]; then
+  if "${COMPOSE[@]}" exec -T relay-server grep -rl "geheim 42" /home/relay/data >/dev/null 2>&1; then echo "FAIL plaintext of the vault in the server's data volume" >> "$DIR/report.txt"
+  else echo "PASS no plaintext of the vault in the server's data volume" >> "$DIR/report.txt"; fi
 fi
 "${COMPOSE[@]}" logs --no-color > "$DIR/server.log" 2>&1
 [ "${KEEP:-}" = 1 ] || "${COMPOSE[@]}" down -v >/dev/null 2>&1

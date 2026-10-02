@@ -218,3 +218,97 @@ fn real_claude_through_the_server() {
     std::fs::remove_dir_all(&cwd).ok();
     std::fs::remove_dir_all(format!("{}/.claude/projects/{}", info.home, agent_claude::slug(&cwd))).ok();
 }
+
+/// The mirror: sealed on disk, open only with this device's key, gone after a restart until the key comes back, a
+/// sync round both ways, and a wipe.
+#[test]
+fn mirror_sealed_locked_and_synced() {
+    use relay_remote::sync::{self, Filter, Mode, Remote, Walker};
+    let mut s = start("mirror");
+    let c = paired(&s, "laptop");
+    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
+    let _live = c.launch(&meta("c:before-restart"), &spec(&tmp)).unwrap();
+    let key = relay_remote::tls::random_key();
+    let vault = c.root("vault");
+    assert!(vault.manifest().unwrap_err().contains("locked"), "no key, no mirror");
+    c.unlock(&key).unwrap();
+
+    // a sync round from a local folder
+    let local = std::env::temp_dir().join(format!("relay-e2e-mirror-local-{}", std::process::id()));
+    std::fs::remove_dir_all(&local).ok();
+    std::fs::create_dir_all(local.join("Notes")).unwrap();
+    std::fs::write(local.join("Notes/Klant.md"), "geheime klantnotitie").unwrap();
+    std::fs::write(local.join("MEMORY.md"), "- [a](a.md)\n").unwrap();
+    let mut w = Walker::default();
+    let copy = |p: &str| sync::conflict_copy(p, "server", "2026-10-02 1200");
+    let merge = |p: &str| p.ends_with("MEMORY.md");
+    let (base, r) = sync::run(Mode::TwoWay, &local, &Default::default(), &mut w, &Filter::default(), &vault, &copy, &merge);
+    assert!(r.errors.is_empty(), "{:?}", r.errors);
+    assert_eq!(r.pushed.len(), 2);
+    assert_eq!(vault.get("Notes/Klant.md").unwrap(), b"geheime klantnotitie");
+
+    // on the server's disk: ciphertext only, no file names either
+    let store = s.data.join("mirror");
+    let mut plain = false;
+    for e in walk(&store) {
+        let b = std::fs::read(&e).unwrap();
+        if b.windows(8).any(|x| x == b"geheime ") || e.to_string_lossy().contains("Klant") { plain = true; }
+    }
+    assert!(!plain, "plaintext or a file name in the store");
+
+    // an agent there writes: the next round brings it here
+    let info = c.info().unwrap();
+    std::fs::write(PathBuf::from(&info.work).join("vault/Notes/Nieuw.md"), "van de server").unwrap();
+    let (base, r) = sync::run(Mode::TwoWay, &local, &base, &mut w, &Filter::default(), &vault, &copy, &merge);
+    assert_eq!(r.pulled, vec!["Notes/Nieuw.md".to_string()], "{r:?}");
+    assert_eq!(std::fs::read_to_string(local.join("Notes/Nieuw.md")).unwrap(), "van de server");
+
+    // the server restarts: locked, the working copy is not trusted, a wrong key is refused, the right one opens it
+    std::thread::sleep(Duration::from_secs(6)); // a flush round seals the agent's file
+    s = restart(s);
+    assert!(c.root("vault").manifest().unwrap_err().contains("locked"));
+    assert!(c.unlock(&relay_remote::tls::random_key()).unwrap_err().contains("another key"));
+    c.unlock(&key).unwrap();
+    let m = c.root("vault").manifest().unwrap();
+    assert!(m.contains_key("Notes/Klant.md") && m.contains_key("Notes/Nieuw.md"), "{:?}", m.keys());
+    let (_, r) = sync::run(Mode::TwoWay, &local, &base, &mut w, &Filter::default(), &c.root("vault"), &copy, &merge);
+    assert!(r.pushed.is_empty() && r.pulled.is_empty() && r.errors.is_empty(), "nothing to do after the restart: {r:?}");
+
+    // another device has no access to it
+    let other = paired(&s, "kristof");
+    assert!(other.root("vault").manifest().unwrap_err().contains("locked"));
+    // a conversation's broker that died with the server is not listed as running after the restart
+    assert!(c.list().unwrap().is_empty(), "stale brokers listed after a restart");
+
+    // wipe: gone there, also after a new unlock
+    c.wipe().unwrap();
+    c.unlock(&relay_remote::tls::random_key()).unwrap();
+    assert!(c.root("vault").manifest().unwrap().is_empty());
+    std::fs::remove_dir_all(&local).ok();
+}
+
+fn walk(dir: &std::path::Path) -> Vec<PathBuf> {
+    let mut out = vec![];
+    for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+        let p = e.path();
+        if p.is_dir() { out.extend(walk(&p)); } else { out.push(p); }
+    }
+    out
+}
+/// Stop the server and start it again on the same data and port, as a reboot would (the working copy is wiped too,
+/// like a RAM disk).
+fn restart(mut s: Server) -> Server {
+    s.child.kill().ok();
+    s.child.wait().ok();
+    // a reboot takes the brokers along (a plain process restart would not): their sockets stay behind, stale
+    Command::new("pkill").args(["-9", "-f", &s.agents.to_string_lossy()]).status().ok();
+    std::thread::sleep(Duration::from_millis(300));
+    let port: u16 = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(s.data.join("serve.json")).unwrap()).unwrap()["port"].as_u64().unwrap() as u16;
+    std::fs::remove_dir_all(s.data.join("work")).ok();
+    std::fs::remove_file(s.data.join("serve.json")).ok();
+    s.child = bin().args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &s.data).env("RELAY_AGENTS_DIR", &s.agents)
+        .stderr(Stdio::null()).spawn().unwrap();
+    let t = Instant::now();
+    while !s.data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10)); std::thread::sleep(Duration::from_millis(50)); }
+    s
+}

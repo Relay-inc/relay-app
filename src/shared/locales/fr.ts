@@ -688,4 +688,27 @@ export default {
     "Où une conversation s'exécute sur cette machine quand son projet n'y a pas de dossier. Vide : le dossier personnel de la machine.",
   "mc.errDefaultFolder":
     "Indiquez un chemin absolu commençant par /, ou laissez vide pour le dossier personnel de la machine.",
+  "mc.mirror": "Mettre ce Mac en miroir",
+  "mc.mirrorHelp":
+    "Votre contexte Claude, vos plugins, votre vault et sa mémoire, synchronisés et chiffrés sur la machine. Les conversations qui s'y déroulent savent ce que Claude sait ici.",
+  "mc.mirrorConfirm":
+    "Une copie de votre vault est envoyée sur cette machine, chiffrée sur son disque. Les dossiers exclus restent ici.",
+  "mc.mirrorTurnOn": "Activer",
+  "mc.mirrorExclude": "Dossiers qui restent sur ce Mac",
+  "mc.mirrorNoExclude": "Aucun dossier exclu. Tout le vault est copié.",
+  "mc.mirrorExcludePath": "Dossier du vault à exclure",
+  "mc.mirrorAdd": "Ajouter",
+  "mc.mirrorErrExclude":
+    "Utilisez un dossier du vault, relatif à sa racine et sans .. (par exemple Contexts/Personal).",
+  "mc.mirrorErrSave": "Le dossier n'a pas pu être enregistré.",
+  "mc.mirrorLast": "Dernière synchronisation {when}",
+  "mc.mirrorNever": "Aucune synchronisation pour le moment.",
+  "mc.mirrorCounts": "{sent} envoyés, {received} reçus",
+  "mc.mirrorLocked": "Verrouillé : s'ouvre quand ce Mac se connecte",
+  "mc.mirrorNotInRam": "La copie de travail est sur le disque de la machine, pas en RAM",
+  "mc.mirrorConflicts_one": "{n} conflit. Les deux versions ont été conservées :",
+  "mc.mirrorConflicts_other": "{n} conflits. Les deux versions ont été conservées :",
+  "mc.mirrorConflict": "copie en conflit : {path}",
+  "mc.mirrorWipe": "Supprimer la copie sur cette machine",
+  "mc.mirrorWipeSure": "Supprimer la copie et désactiver le miroir ?",
 } satisfies Record<Key, string>;

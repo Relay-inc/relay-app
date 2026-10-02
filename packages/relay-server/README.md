@@ -61,6 +61,30 @@ use is not touched. The app pairs through Settings › Machines and starts a con
 the pages themselves, then answers a permission card, reads the history, survives a dropped connection, quits mid-turn
 and takes the conversation back after a restart. The report is in `/tmp/relay-selftest/report.txt`.
 
+## The mirror
+
+Switch on Settings › Machines › Mirror this Mac and Relay keeps four folders in sync on the machine, so a conversation
+there knows what Claude Code knows on the laptop:
+
+| Folder | From the laptop | Direction |
+|---|---|---|
+| `context` | `~/.claude/CLAUDE.md`, `skills/`, `agents/`, `commands/` | laptop to machine |
+| `plugins` | the switched-on plugins | laptop to machine |
+| `vault` | the vault, without `.obsidian`, `.git`, `.trash`, `.relay` and the excluded folders | both ways |
+| `memory` | the vault's auto memory | both ways, `MEMORY.md` merged line by line |
+
+A file changed on both sides keeps both versions: the machine's becomes `Name (conflict <machine> <date>).md`. Hooks,
+transcripts, MCP servers and repos never go along: what a repo needs for Claude belongs in the repo.
+
+**On the machine's disk the mirror is sealed.** Every file is a blob in `data/mirror/<device>/`, named by an HMAC of its
+path, encrypted with ChaCha20-Poly1305. The key stays on the laptop and comes with every connection; the server keeps
+it in memory only. Unlocked, the server unpacks the mirror into `RELAY_SERVER_WORKDIR`, which should be a RAM disk
+(compose.yml mounts a tmpfs at `/home/relay/work`). After a restart the mirror is locked until the laptop connects:
+conversations in the vault wait for it, conversations in a repo run. `relay-server revoke` removes a device's mirror.
+
+With `docker run`, add the RAM disk yourself: `--tmpfs /home/relay/work:uid=1000,gid=1000,mode=0700,size=2g`. Without
+one the server logs a warning and Settings › Machines says the working copy is on disk.
+
 ## Commands
 
 | Command | What it does |

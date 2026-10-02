@@ -1,6 +1,6 @@
 import { t } from "../../shared/i18n";
 import type { Machine } from "../../domain/settings/types";
-import { folderRows, foldersOf, type FolderRow } from "../../domain/settings/machines";
+import { excludePath, folderRows, foldersOf, type FolderRow } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
 import { commit } from "./window";
 import { useSettingsStore } from "./store";
@@ -124,5 +124,62 @@ export async function setRunDefault(id: string) {
     return "";
   } catch (error) {
     return String(error);
+  }
+}
+
+// "Mirror this Mac": the machine keeps a sealed copy of the Claude context, plugins, vault and its memory. A failed
+// command shows under the mirror section and leaves the page as it was.
+const mirrorMessage = (id: string, text: string, ok = false) =>
+  change(draft => {
+    draft.mirrorMessages[id] = text ? { text, ok } : null;
+  });
+/** Reads the last mirror round of every machine with the mirror on; a failing command keeps the last one. */
+export async function pollMirrors() {
+  for (const machine of machines().filter(machine => machine.mirror?.on)) {
+    const status = await backend.mirrorStatus(machine.id).catch(() => undefined);
+    if (status !== undefined)
+      change(draft => {
+        draft.mirror[machine.id] = status;
+      });
+  }
+}
+/** Saves the mirror switch and the excluded folders. True when it worked. */
+export async function saveMirror(machine: Machine, on: boolean, exclude: string[]) {
+  mirrorMessage(machine.id, "");
+  try {
+    await backend.setMachineMirror(machine.id, on, exclude);
+    await reload();
+    pollMirrors();
+    return true;
+  } catch (error) {
+    mirrorMessage(machine.id, String(error));
+    return false;
+  }
+}
+/** Adds a vault folder to the ones that stay on this Mac. Resolves with an error to show, or "". */
+export async function addMirrorExclude(machine: Machine, input: string) {
+  const path = excludePath(input);
+  if (!path) return t("mc.mirrorErrExclude");
+  const current = machine.mirror?.exclude ?? [];
+  if (current.includes(path)) return "";
+  return (await saveMirror(machine, !!machine.mirror?.on, [...current, path])) ? "" : t("mc.mirrorErrSave");
+}
+export const removeMirrorExclude = (machine: Machine, path: string) =>
+  saveMirror(
+    machine,
+    !!machine.mirror?.on,
+    (machine.mirror?.exclude ?? []).filter(item => item !== path),
+  );
+/** Removes the copy on the machine, which turns the mirror off. */
+export async function wipeMirror(machine: Machine) {
+  mirrorMessage(machine.id, "");
+  try {
+    await backend.mirrorWipe(machine.id);
+    await reload();
+    change(draft => {
+      delete draft.mirror[machine.id];
+    });
+  } catch (error) {
+    mirrorMessage(machine.id, String(error));
   }
 }

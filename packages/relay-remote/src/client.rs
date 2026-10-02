@@ -3,7 +3,8 @@
 //! a few milliseconds.
 
 use crate::broker::{self, Conn, Meta, Spec, Stop};
-use crate::proto::{self, Info, PairLine, MAX_LINE, PROTO};
+use crate::proto::{self, Info, PairLine, MAX_REPLY, PROTO};
+use crate::sync::{self, Manifest};
 use crate::tls::{self, Identity};
 use serde_json::{json, Value};
 use std::io::BufReader;
@@ -41,22 +42,34 @@ impl Client {
 
     /// One request and its answer, given up after ANSWER. The work runs on its own thread so a hung server never
     /// holds the caller longer than that.
-    pub fn call(&self, req: Value) -> Result<Value, String> {
+    pub fn call(&self, req: Value) -> Result<Value, String> { self.call_bin(req, None, false).map(|(v, _)| v) }
+    /// The same with raw bytes: `body` sent after the request line (`sync_put`), or the reply's `len` bytes read after
+    /// its line (`want_body`, `sync_get`). Files take longer than a request, so the wait grows with their size.
+    fn call_bin(&self, req: Value, body: Option<Vec<u8>>, want_body: bool) -> Result<(Value, Vec<u8>), String> {
         let (tx, rx) = mpsc::channel();
         let me = self.clone();
+        let wait = ANSWER + CONNECT + Duration::from_secs(body.as_ref().map_or(0, |b| b.len() as u64 >> 20));
         std::thread::spawn(move || {
             let res = (|| {
                 let (mut r, mut w) = me.open()?;
                 proto::write_json(&mut w, &req).map_err(|e| e.to_string())?;
-                let v = proto::read_json(&mut r, MAX_LINE).map_err(|e| e.to_string())?;
+                if let Some(b) = &body { std::io::Write::write_all(&mut w, b).map_err(|e| e.to_string())?; }
+                let v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
+                let data = if want_body && v["ok"] == true { proto::read_body(&mut r, v["len"].as_u64().unwrap_or(0), MAX_REPLY).map_err(|e| e.to_string())? } else { vec![] };
                 w.shutdown();
-                Ok::<Value, String>(v)
+                Ok::<(Value, Vec<u8>), String>((v, data))
             })();
             tx.send(res).ok();
         });
-        let v = rx.recv_timeout(ANSWER + CONNECT).map_err(|_| format!("{}: no answer", self.addr))??;
-        if v["ok"] == true { Ok(v) } else { Err(v["error"].as_str().unwrap_or("refused").to_string()) }
+        let (v, data) = rx.recv_timeout(wait).map_err(|_| format!("{}: no answer", self.addr))??;
+        if v["ok"] == true { Ok((v, data)) } else { Err(v["error"].as_str().unwrap_or("refused").to_string()) }
     }
+
+    // ---------- the mirror (relay-server mirror.rs): this device's copies there, sealed with a key only it holds
+    pub fn unlock(&self, key_hex: &str) -> Result<(), String> { self.call(json!({"op": "unlock", "key": key_hex})).map(|_| ()) }
+    pub fn wipe(&self) -> Result<(), String> { self.call(json!({"op": "wipe"})).map(|_| ()) }
+    /// One mirrored folder there, as the other side of a sync round.
+    pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
 
     pub fn info(&self) -> Result<Info, String> {
         let info: Info = serde_json::from_value(self.call(json!({"op": "info"}))?["info"].clone()).map_err(|e| e.to_string())?;
@@ -99,5 +112,22 @@ impl Client {
     fn stop(&self, key: &str) -> Stop {
         let (me, key) = (self.clone(), key.to_string());
         std::sync::Arc::new(move |pid| me.kill(&key, pid).map_err(std::io::Error::other))
+    }
+}
+
+/// A mirrored folder on the server, for sync::run.
+pub struct RemoteRoot { c: Client, root: String }
+impl sync::Remote for RemoteRoot {
+    fn manifest(&self) -> Result<Manifest, String> {
+        serde_json::from_value(self.c.call(json!({"op": "sync_manifest", "root": self.root}))?["manifest"].clone()).map_err(|e| e.to_string())
+    }
+    fn get(&self, path: &str) -> Result<Vec<u8>, String> {
+        self.c.call_bin(json!({"op": "sync_get", "root": self.root, "path": path}), None, true).map(|(_, b)| b)
+    }
+    fn put(&self, path: &str, data: &[u8], mtime: i64) -> Result<(), String> {
+        self.c.call_bin(json!({"op": "sync_put", "root": self.root, "path": path, "len": data.len(), "mtime": mtime}), Some(data.to_vec()), false).map(|_| ())
+    }
+    fn delete(&self, path: &str, hash: &str) -> Result<(), String> {
+        self.c.call(json!({"op": "sync_delete", "root": self.root, "path": path, "hash": hash})).map(|_| ())
     }
 }

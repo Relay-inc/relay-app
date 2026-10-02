@@ -252,6 +252,13 @@ pub fn random_secret() -> String {
     hex(&b)
 }
 
+/// A fresh 32-byte key as 64 lowercase hex chars (the mirror's, kept by the app).
+pub fn random_key() -> String {
+    let mut k = [0u8; 32];
+    ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut k).expect("system randomness");
+    k.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -395,3 +402,4 @@ mod tests {
         assert!(!verify_proof(&s, &a, &b, "zz"));
     }
 }
+

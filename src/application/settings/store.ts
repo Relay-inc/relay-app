@@ -8,6 +8,7 @@ import {
   type MailCfg,
   type MailNew,
   type MachineStatus,
+  type MirrorStatus,
   type Message,
   type Settings,
 } from "../../domain/settings/types";
@@ -48,6 +49,8 @@ export type SettingsState = {
     pairError: string;
     drafts: Record<string, FolderRow[]>; // folder rows being edited per machine, until Save
     messages: Record<string, Message | null>; // per machine: why the last save or forget failed, or that it saved
+    mirror: Record<string, MirrorStatus | null>; // the last mirror round per machine, polled while the page shows
+    mirrorMessages: Record<string, Message | null>; // per machine: why the last mirror change failed
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
@@ -89,7 +92,17 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   message: null,
   agentsPage: { detected: null, message: null },
   projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
-  machinesPage: { checked: false, projects: [], status: {}, pairing: false, pairError: "", drafts: {}, messages: {} },
+  machinesPage: {
+    checked: false,
+    projects: [],
+    status: {},
+    pairing: false,
+    pairError: "",
+    drafts: {},
+    messages: {},
+    mirror: {},
+    mirrorMessages: {},
+  },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {
     loaded: false,

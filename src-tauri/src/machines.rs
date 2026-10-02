@@ -41,6 +41,7 @@ pub fn valid(m: &Value) -> bool {
         && s("host").chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c)) && m["port"].as_u64().is_some_and(|p| (1..=65535).contains(&p))
         && s("name").chars().count() <= 60 && m["folders"].as_object().is_some_and(|f| f.len() <= 200 && f.iter().all(|(p, d)| folder_ok(p, d)))
         && (m["default_folder"].is_null() || s("default_folder").is_empty() || folder_ok("default", &m["default_folder"]))
+        && crate::mirror::valid(m)
 }
 /// A vault project and an absolute folder on the machine.
 pub fn folder_ok(project: &str, dir: &Value) -> bool {

@@ -680,4 +680,27 @@ export default {
   "mc.defaultFolderHelp":
     "Waar een gesprek op deze machine loopt als zijn project hier geen map heeft. Leeg: de thuismap van de machine.",
   "mc.errDefaultFolder": "Gebruik een absoluut pad dat met / begint, of laat het leeg voor de thuismap van de machine.",
+  "mc.mirror": "Deze Mac spiegelen",
+  "mc.mirrorHelp":
+    "Je Claude-context, plugins, vault en het geheugen ervan, gesynchroniseerd en versleuteld op de machine. Gesprekken daar weten wat Claude hier weet.",
+  "mc.mirrorConfirm":
+    "Een kopie van je vault gaat naar deze machine, versleuteld op de schijf. Mappen die je uitsluit blijven hier.",
+  "mc.mirrorTurnOn": "Aanzetten",
+  "mc.mirrorExclude": "Mappen die op deze Mac blijven",
+  "mc.mirrorNoExclude": "Geen uitgesloten mappen. De hele vault wordt gekopieerd.",
+  "mc.mirrorExcludePath": "Vaultmap om uit te sluiten",
+  "mc.mirrorAdd": "Toevoegen",
+  "mc.mirrorErrExclude":
+    "Gebruik een map in de vault, relatief ten opzichte van de root en zonder .. (bijvoorbeeld Contexts/Personal).",
+  "mc.mirrorErrSave": "De map kon niet worden opgeslagen.",
+  "mc.mirrorLast": "Laatst gesynchroniseerd {when}",
+  "mc.mirrorNever": "Nog geen synchronisatieronde.",
+  "mc.mirrorCounts": "{sent} verstuurd, {received} ontvangen",
+  "mc.mirrorLocked": "Vergrendeld: opent zodra deze Mac verbindt",
+  "mc.mirrorNotInRam": "De werkkopie staat op de schijf van de machine, niet in het RAM",
+  "mc.mirrorConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
+  "mc.mirrorConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
+  "mc.mirrorConflict": "conflictkopie: {path}",
+  "mc.mirrorWipe": "Kopie op deze machine verwijderen",
+  "mc.mirrorWipeSure": "De kopie verwijderen en de spiegel uitzetten?",
 } satisfies Record<Key, string>;

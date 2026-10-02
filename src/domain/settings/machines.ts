@@ -33,3 +33,27 @@ export function machinePick(list: MachineChoice[] | undefined, picked: string | 
   if (picked === "" || list.some(machine => machine.id === picked)) return picked!;
   return list.find(machine => machine.default)?.id ?? "";
 }
+
+/** An excluded vault folder as it is saved: trimmed, slashes at the ends dropped. Null when it is empty, absolute or
+ *  climbs out of the vault with "..". */
+export function excludePath(input: string): string | null {
+  const path = input.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!path || path.startsWith("/") || path.split("/").some(part => part === ".." || part === "")) return null;
+  return path;
+}
+
+/** How long ago a round was, as a number and an Intl unit; null for a round that never ran (`at` 0). */
+export function agoParts(
+  at: number,
+  now = Date.now(),
+): { value: number; unit: "second" | "minute" | "hour" | "day" } | null {
+  if (!at) return null;
+  const seconds = Math.max(0, Math.round(now / 1000 - at));
+  if (seconds < 60) return { value: -seconds, unit: "second" };
+  if (seconds < 3600) return { value: -Math.round(seconds / 60), unit: "minute" };
+  if (seconds < 86400) return { value: -Math.round(seconds / 3600), unit: "hour" };
+  return { value: -Math.round(seconds / 86400), unit: "day" };
+}
+
+/** A conflict as the backend names it, "vault/<path>", without its "vault/" prefix. */
+export const conflictPath = (conflict: string) => conflict.replace(/^vault\//, "");
