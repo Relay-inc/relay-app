@@ -2,7 +2,7 @@ import { t, type Key } from "../../shared/i18n";
 import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
-import { isTerminal } from "../../domain/navigation/keys";
+import { isTerminal, termSid } from "../../domain/navigation/keys";
 import { WAIT, REM, PRS, MAIL, USAGE, isView } from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
@@ -23,6 +23,8 @@ const cs = () => useConversationsStore.getState();
 export const displayTitle = (title: string) => rules.displayTitle(title, t);
 export const projectOf = (key: string) => rules.projectOf(cs(), key);
 export const label = (key: string) => rules.label(cs(), key, t);
+/** The agent's session id behind a conversation (`claude --resume <id>`); empty while a new chat has none yet. */
+export const sessionIdOf = (key: string) => cs().sidOf[key]?.sid ?? termSid(key);
 /** A project's open conversations (null: the general ones), newest first. */
 export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 /** The sessions open in the terminal that the app did not start; `hidden` the ones closed here. */

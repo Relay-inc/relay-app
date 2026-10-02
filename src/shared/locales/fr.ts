@@ -252,6 +252,7 @@ export default {
   "toast.closedAll_other": "{n} conversations fermées",
   "toast.undo": "Annuler",
   "ctx.assign": "Changer de projet…",
+  "ctx.copyId": "Copier l'ID de session",
   "ctx.recent": "Fermées récemment",
   "ctx.none": "Rien de fermé",
   "ctx.closeAll": "Fermer toutes les conversations",
