@@ -26,6 +26,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
 
 ### Added
+- Drop files from Finder anywhere on the window, pick them with +, or paste them after Cmd-C in Finder: the agent gets their path and reads them where they are, nothing is copied. They wait as chips next to the pictures, and in the conversation a click opens the file in its own app (Option-click shows it in Finder). Reading a file you attached needs no permission card in that conversation, anything else still asks. Pictures still go inline
 
 - Claude Code can run on more than one account: Settings › Agents › Claude Code › Accounts adds a login as its own config folder (sign in once with `CLAUDE_CONFIG_DIR=<folder> claude /login`) and picks the one new conversations use. Each conversation stays on its account. Switch on **Switch accounts automatically** and a conversation whose account hit its plan limit moves to the next account with room on your next message, history included (#45)
 - A project conversation that commits to a repo no project has asks whether to link it to the project (the PRs and the GitHub button pick it up); "Not now" is remembered in the vault's `.relay/config.json` so it is not asked again. (#70)

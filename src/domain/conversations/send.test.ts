@@ -5,6 +5,7 @@ import { outgoing, planSend, refusesImages } from "./send.ts";
 const state = (typed: Record<string, string>, outside: Record<string, number> = {}) => ({
   typed,
   attached: [],
+  files: [],
   outside,
 });
 

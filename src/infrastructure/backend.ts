@@ -1,5 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
@@ -13,6 +14,24 @@ import type { AllTokens, ProvLimits } from "../domain/usage/types";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
+
+// ---------- files attached by their path (src-tauri/src/files.rs)
+/** The files picked in the open dialog, as paths. */
+export const pickFiles = () => invoke<string[]>("pick_files");
+/** A picture at a path as [media type, base64], to send it inline. */
+export const readImage = (path: string) => invoke<[string, string]>("read_image", { path });
+/** An attached file in its default app, or shown in Finder (`reveal`). Rejects when it is gone. */
+export const openFile = (path: string, reveal: boolean) => invoke("open_file", { path, reveal });
+/** The files copied in Finder, as paths: empty when the clipboard holds none. */
+export const pastedFiles = () => invoke<string[]>("pasted_files");
+/** Files dragged over the window from Finder: `over` while they hover, then the dropped paths. */
+export const onFileDrop = (handler: (event: { over: boolean; paths?: string[] }) => void) =>
+  getCurrentWebview().onDragDropEvent(e => {
+    const { type } = e.payload;
+    if (type === "enter" || type === "over") handler({ over: true });
+    else if (type === "leave") handler({ over: false });
+    else handler({ over: false, paths: e.payload.paths });
+  });
 
 // ---------- settings, language, windows
 export const getSettings = () => invoke<Settings>("get_settings");

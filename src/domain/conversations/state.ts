@@ -66,4 +66,5 @@ export const initialConversations = (stored: {
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is
  *  typed but not sent per conversation (survives switching and closing the app), and the images waiting for the
  *  next send. */
-export type DraftsState = { typed: Record<string, string>; attached: Img[] };
+/** `files`: the paths attached by drop, + or paste, waiting with the images for the next send. */
+export type DraftsState = { typed: Record<string, string>; attached: Img[]; files: string[] };

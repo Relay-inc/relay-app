@@ -950,6 +950,94 @@ const SCENARIOS = {
     s.check("text not lost", value === text || ((await s.local(["typed"])).typed?.[s.keys.switchTo] ?? "") === text);
     s.check("no second process on the session", (await s.calls("send")).length === 0);
   },
+
+  // Files attached by their path: + picker, Finder drop (Tauri's drag events), chips, the <relay-files> block, auto-allowed reads
+  async attachFiles(s) {
+    await s.load();
+    await s.load({ sel: s.keys.switchTo });
+    const { page } = s;
+    const pdf = "/Users/demo/Downloads/Q3 report.pdf";
+    const png = "/Users/demo/Pictures/site photo.png";
+    const xlsx = "/Users/demo/Downloads/Budget 2027.xlsx";
+    const notes = "/Users/demo/Documents/notes draft.txt";
+    const gone = "/Users/demo/Downloads/missing file.pdf";
+    const chip = name => visible(page.getByRole("button", { name: new RegExp(`^${name.replace(".", "\\.")}`) })).first();
+    const pictures = () => visible(page.locator("img")).count();
+    const set = (key, value) => page.evaluate(([k, v]) => (window.__harness[k] = v), [key, value]);
+    const dropPaths = paths => page.evaluate(paths => window.__harness.dropPaths(paths), paths).then(() => settle(page, 300));
+    const pick = async path => {
+      await set("pickFiles", [path]);
+      await click(button(page, "Attach files"), 300);
+    };
+    const chips = name => visible(page.getByRole("button", { name: new RegExp(`^${name}`) })).count();
+    // the picker (the hidden <input type=file> is gone)
+    const picturesBefore = await pictures();
+    await pick(pdf);
+    s.check("pick_files called", (await s.calls("pick_files")).length === 1);
+    s.check("a picked pdf shows as a chip", (await chips("Q3 report.pdf")) === 1);
+    // a Finder drop: the picture inline, the other files as chips
+    await dropPaths([png, xlsx, notes]);
+    s.check("the dropped picture was read", (await s.calls("read_image")).some(c => c.args.path === png));
+    s.check("a non-picture is never read as an image", (await s.calls("read_image")).every(c => c.args.path === png));
+    s.check("the picture became a thumbnail", (await pictures()) === picturesBefore + 1);
+    s.check("the picture has no chip", (await chips("site photo.png")) === 0);
+    s.check("xlsx and txt are chips", (await chips("Budget 2027.xlsx")) === 1 && (await chips("notes draft.txt")) === 1);
+    s.check("the chip's title holds the full path", (await chip("notes draft.txt").getAttribute("title"))?.startsWith(notes));
+    // × removes a chip
+    await chip("notes draft.txt").hover();
+    await click(button(page, "Remove file"), 200);
+    s.check("× removes the chip", (await chips("notes draft.txt")) === 0 && (await chips("Budget 2027.xlsx")) === 1 && (await chips("Q3 report.pdf")) === 1);
+    // a click opens the file, Option-click shows it in Finder, a file that is gone says so
+    await chip("Q3 report.pdf").click({ timeout: 4000 });
+    await settle(page, 200);
+    await chip("Budget 2027.xlsx").click({ modifiers: ["Alt"], timeout: 4000 });
+    await settle(page, 200);
+    const opens = await s.calls("open_file");
+    s.check("a click opens, reveal false", opens[0]?.args.path === pdf && opens[0]?.args.reveal === false);
+    s.check("Option-click reveals", opens[1]?.args.path === xlsx && opens[1]?.args.reveal === true);
+    await pick(gone);
+    await chip("missing file.pdf").click({ timeout: 4000 });
+    s.check("a missing file shows the toast", await waitText(page, "missing file.pdf is no longer where it was", 3000));
+    await chip("missing file.pdf").hover();
+    await click(button(page, "Remove file"), 200);
+    s.check("the missing chip is removed", (await chips("missing file.pdf")) === 0);
+    // send
+    const text = "Compare these with the plan";
+    await typeInComposer(page, text);
+    await page.keyboard.press("Enter");
+    s.check("send called", await s.waitCall("send"));
+    const sends = await s.calls("send");
+    const block = `\n\n<relay-files>\nAttached files, read them from these paths:\n${pdf}\n${xlsx}\n</relay-files>`;
+    s.check("send text ends with the files block listing the remaining paths", sends.length === 1 && String(sends[0].args.text).endsWith(`${text}${block}`));
+    s.check("the picture goes as one inline image", sends[0]?.args.images?.length === 1 && sends[0].args.images[0].media_type === "image/png");
+    await settle(page, 300);
+    s.check("composer chips cleared", (await chips("Q3 report.pdf")) === 1 && (await chips("Budget 2027.xlsx")) === 1); // only the message's own
+    s.check("the message shows the text without the block", (await waitText(page, text)) && !(await hasText(page, "<relay-files>")));
+    s.fact("send text", sends[0]?.args.text);
+    // a Read of an attached path needs no card, a Read of another path does
+    const request = (id, file) => ({ id, project: s.keys.switchTo, provider: "claude", kind: "tool", tool_name: "Read", input: { file_path: file }, tool_use_id: `toolu_${id}`, relay: false, at: Date.now() });
+    await page.evaluate(r => window.__harness.addPending(r), request("read-0001", xlsx));
+    s.check("answer called for the attached path", await s.waitCall("answer", 1, 6000));
+    await settle(page, 600);
+    const answers = await s.calls("answer");
+    s.check("answered once, allow", answers.length === 1 && answers[0].args.id === "read-0001" && answers[0].args.decision?.behavior === "allow");
+    s.check("no card shown, an allowed line instead", (await visible(button(page, "Allow")).count()) === 0 && (await hasText(page, "Allowed")) && (await hasText(page, xlsx)));
+    await page.evaluate(r => window.__harness.addPending(r), request("read-0002", "/Users/demo/Documents/other secrets.txt"));
+    s.check("a Read of another path still shows a card", await waitText(page, "other secrets.txt", 6000) && (await visible(button(page, "Allow")).count()) === 1);
+    s.check("the other card is not answered", (await s.calls("answer")).length === 1);
+    // Cmd-K takes the drop while it is open
+    await s.load({ sel: s.keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page, 300);
+    await dropPaths([pdf]);
+    const dialog = page.getByRole("dialog");
+    s.check("the chip is in the Cmd-K dialog", (await dialog.getByRole("button", { name: /^Q3 report\.pdf/ }).count()) === 1);
+    s.check("not in the composer behind it", (await visible(page.getByRole("button", { name: /^Q3 report\.pdf/ })).count()) === 1);
+    await page.keyboard.press("Enter");
+    s.check("Cmd-K sends the path", await s.waitCall("send"));
+    const quick = await s.calls("send");
+    s.check("the quick question carries the files block", String(quick[0]?.args.text).includes(`<relay-files>\nAttached files, read them from these paths:\n${pdf}\n</relay-files>`));
+  },
 };
 // calendar: Codex is the default agent, a meeting conversation still runs on Claude; calendarNoClaude: Claude is off
 const OVERRIDES = { typingOutside: { outside: "switchTo" }, calendar: { agents: { default: "codex" } }, calendarNoClaude: { agents: { default: "codex", off: ["claude"] } } };

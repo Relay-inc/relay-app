@@ -7,6 +7,7 @@
 /** What a tool call carries, as far as the app reads it (the tool line, the permission card, the project guess). */
 export type ToolInput = {
   file_path?: string;
+  path?: string;
   content?: string;
   command?: string;
   pattern?: string;
@@ -39,6 +40,7 @@ export type Item = {
   state?: "run" | "ok" | "err";
   path?: string;
   imgs?: string[];
+  files?: string[]; // a user message's attached paths
   tool?: { name: string; input: ToolInput };
 };
 export type Chat = {

@@ -1,18 +1,38 @@
 import { t } from "../../shared/i18n";
 import { WAIT } from "../../domain/navigation/views";
+import { decisionOf } from "../../domain/conversations/rules";
+import { attachedIn, readsAttached } from "../../domain/conversations/files";
+import { push } from "../../domain/conversations/events";
+import type { Pending } from "../../domain/conversations/types";
 import * as backend from "../../infrastructure/backend";
 import { useConversationsStore, type ConversationsState } from "./store";
 import { terminalSessions } from "./selectors";
-import { notify } from "./events";
+import { flush, notify } from "./events";
 import { syncBusy } from "./history";
 
 // Polling, started once at boot: pending questions often, sessions and the vault now and then.
 const cs = () => useConversationsStore.getState();
 const set = useConversationsStore.setState;
 
+// cards answered by the app itself, so a poll before their files are gone does not answer them twice
+const autoAnswered = new Set<string>();
+// reading what the user attached in that conversation needs no card: the drop was the ask. It shows as allowed.
+function allowAttachedReads(pending: Pending[]) {
+  return pending.filter(request => {
+    if (autoAnswered.has(request.id)) return false;
+    if (!readsAttached(request, attachedIn(cs().messages[request.project]))) return true;
+    autoAnswered.add(request.id);
+    backend.answer(request.id, decisionOf(request, "allow")!).catch(() => autoAnswered.delete(request.id));
+    flush();
+    set(draft => {
+      push(draft, request.project, { kind: "allowed", text: String(request.input.file_path ?? request.input.path) });
+    });
+    return false;
+  });
+}
 /** Permission cards and questions waiting; a new one gives a banner (not the ones already waiting at start). */
 export async function pollPending() {
-  const next = await backend.pending();
+  const next = allowAttachedReads(await backend.pending());
   if (JSON.stringify(next.map(x => x.id)) === JSON.stringify(cs().pendingList.map(x => x.id))) return;
   const known = new Set(cs().pendingList.map(x => x.id));
   if (cs().pendingPolled) {

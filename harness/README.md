@@ -58,13 +58,16 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 | `resolved(key, model?, effort?)` | The `resolved` agent event: what a fresh session ran on when model and effort were left to the CLI. |
 | `liveTail(key?)` | Live events on the long conversation: a running tool, a failed one, an error, a draft note. |
 | `pickFolder` | What `pick_folder` answers (null, the default, is cancelled). |
+| `pickFiles`, `pastedFiles` | What `pick_files` (the + dialog) and `pasted_files` (Finder copy) answer; `[]` by default. |
+| `dropPaths(paths)` | A Finder drop as Tauri sends it: `tauri://drag-enter`, then `tauri://drag-drop` with `{ paths, position }`. Emit `tauri://drag-leave` (no payload) to end a hover. |
+| `addPending(request)` | Puts a permission card in the next `pending` poll. |
 | `autoReply` | `send` answers with a short stream (on by default, perf turns it off). |
 | `keys`, `titles`, `markers` | The fixture's special conversations and texts to wait for. |
 | `nextTask()`, `nextPaint()` | A task after the current one; a task after the next animation frame (the frame has painted). |
 
 `pty_*` is a fake shell that prints a prompt and echoes what is written to it, over the Channel the frontend passes; `scratch_*` keeps the notes in memory.
 
-Commands answered with stubs (no real effect): `pick_folder` (`pickFolder`, cancelled by default), `pick_path` (cancelled), `mail_connect`, `mail_test`,
+Commands answered with stubs (no real effect): `pick_folder` (`pickFolder`, cancelled by default), `pick_path` (cancelled), `open_file` (recorded in `calls`, rejects "not found" for a path containing `missing`), `read_image` (a small PNG for png/jpg/jpeg/gif/webp, rejects otherwise), `mail_connect`, `mail_test`,
 `integration_token`, `integration_import`, `favicons`, `find_icon_sites` (nothing found), `set_project_icon`,
 `set_project_repos`, `ignore_repo`, `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
 `reset`, `move_chat`, `plugin:opener|open_url`, `running` (`{}`: no process of the app runs a turn).
@@ -79,14 +82,14 @@ in-memory tasks loosely.
 
 ## Views (`screens.mjs`)
 
-66 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+69 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
-defaults), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
+defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
 mail-second-account, mail-list, mail-plain, mail-html, mail-experimental (Inbox/Other tabs, archive and delete in the
 mail's bar), mail-other (the Other tab), mail-selection (three mails ticked, the bulk bar), prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity.
-Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, cmd-k, cmd-k-project,
+Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
 deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
@@ -108,8 +111,8 @@ the comment field's placeholder "Leave a comment…", and an HTML mail shown in 
 
 ## Behaviour (`behaviour.mjs`)
 
-29 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
-send, stop, cards (permission, question, agent action), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
+30 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
+send, stop, cards (permission, question, agent action), attachFiles (+ picker, Finder drop, chips, the `<relay-files>` block, open and reveal, auto-allowed Reads of attached paths, Cmd-K takes the drop), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
 mail (two accounts merged, read per account, load more, the link bar), mailTriage (experimental: Inbox/Other, E and #,
 a held key acting once, Cmd- and Shift-click, Cmd-A, Esc, bulk read and delete, a reload keeps moved mails gone),
 mailTriageFilter (mails a read filter hides after a bulk read leave the selection), mailTriageOff (without the flag: no
