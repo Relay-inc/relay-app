@@ -104,17 +104,18 @@ the comment field's placeholder "Leave a comment…", and an HTML mail shown in 
 
 ## Behaviour (`behaviour.mjs`)
 
-24 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
+25 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
 send, stop, cards (permission, question, agent action), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
 mail (two accounts merged, read per account, load more, the link bar), mailTriage (experimental: Inbox/Other, E and #,
 a held key acting once, Cmd- and Shift-click, Cmd-A, Esc, bulk read and delete, a reload keeps moved mails gone),
-mailTriageOff (without the flag: no tabs, no checkboxes, E does nothing), prs (side by side, AI review), board (ticket
+mailTriageFilter (mails a read filter hides after a bulk read leave the selection), mailTriageOff (without the flag: no
+tabs, no checkboxes, E does nothing), prs (side by side, AI review), board (ticket
 window, comment, status, Start conversation), boardTools (list view, filters, Productive's saved views, grouping),
 reminders, reminderUndo, settings (theme, accent, GitHub owners, language), agentAccess (policy and access per
 extension), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
 typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
-split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: two Lit bugs (typingOutside,
-the mail link bar) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
+split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: three Lit bugs (typingOutside,
+the mail link bar, mailTriageFilter) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
 for Enter, Lit sends it at once). The mock leaves sessionStorage alone, as a webview reload does: a launch link handled
 once (React keeps them under `handledLinks`) is not handled again by a reload in the same page, a new page handles it. `DEBUG=1` prints the full error of a scenario. Two runs of the same build give identical files.
 

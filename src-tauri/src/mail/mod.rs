@@ -38,6 +38,8 @@ const STALE: &str = "The mailbox changed on the server, reload the list";
 const SUBJECT_MAX: usize = 500;
 // ponytail: "someone you wrote to" = the recipients of your newest 500 sent mails, a full scan when that misses people
 const SENT_SCAN: usize = 500;
+// who the account wrote to changes slowly: read again after an hour, not with every session (one lives IDLE, the list refreshes every 5 minutes)
+const KNOWN_TTL: Duration = Duration::from_secs(3600);
 const MOVE_MAX: usize = 500;
 // Finder runs these on a double-click, Mail refuses them too
 const RUNS: &[&str] = &["terminal", "command", "tool", "fileloc", "inetloc", "webloc", "app", "pkg", "scpt", "applescript", "workflow", "jar"];
@@ -75,11 +77,11 @@ pub fn pick_account(accts: &[Account], want: &str) -> Option<Account> {
 
 type Imap = async_imap::Session<async_native_tls::TlsStream<TcpStream>>;
 // `used` is wall-clock time: Instant stands still while the Mac sleeps, and a session that slept is dead
-// `known`: who the account wrote to (lowercase), for the Inbox/Other split, read once per session
-struct Conn { s: Imap, email: String, gmail: bool, all: String, drafts: Option<String>, archive: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime, known: Option<HashSet<String>> }
+struct Conn { s: Imap, email: String, gmail: bool, all: String, drafts: Option<String>, archive: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime }
 /// A session plus the UIDVALIDITY it was opened with: ids from before a change would point at other mails.
+/// `known`: who the account wrote to (lowercase) and when that was read, for the Inbox/Other split. It outlives the session.
 #[derive(Default)]
-struct Slot { conn: Option<Conn>, validity: Option<u32> }
+struct Slot { conn: Option<Conn>, validity: Option<u32>, known: Known }
 
 /// Net: drop the session, reconnect and retry once. Imap: the server refused, drop the session (its state is
 /// unknown), no retry. User: our own check failed, the session stays. Auth: Gmail refused the login, the
@@ -166,7 +168,7 @@ async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {
     let archive = if gmail { None } else { find(NameAttribute::Archive).or_else(|| named(&names, ARCHIVE)) };
     let trash = find(NameAttribute::Trash).or_else(|| named(&names, TRASH));
     let validity = t(s.examine(&all)).await?.uid_validity;
-    Ok(Conn { s, email: a.email.clone(), gmail, all, drafts, archive, trash, validity, used: SystemTime::now(), known: None })
+    Ok(Conn { s, email: a.email.clone(), gmail, all, drafts, archive, trash, validity, used: SystemTime::now() })
 }
 
 // folder names for servers without special-use flags, matched on the last segment of the name
@@ -229,15 +231,13 @@ async fn inbox(c: &mut Conn) -> Result<Vec<u32>, Fail> {
 
 /// UI rows, newest first. The fetch stream also carries unsolicited FETCHes (flag updates for these or other
 /// mails), so only the ones with our headers count, once per uid.
-/// `split`: each row also says whether it belongs under Other (see `other`).
-async fn rows(c: &mut Conn, uids: &[u32], split: bool) -> Result<Vec<Value>, Fail> {
+/// `known` (the split on): each row also says whether it belongs under Other (see `other`).
+async fn rows(c: &mut Conn, uids: &[u32], known: Option<&HashSet<String>>) -> Result<Vec<Value>, Fail> {
     if uids.is_empty() { return Ok(vec![]); }
-    if split && c.known.is_none() { c.known = Some(known(c).await?); }
     let mut f = fetch(c, &set(uids), "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE LIST-ID LIST-UNSUBSCRIBE PRECEDENCE AUTO-SUBMITTED)])").await?;
     f.retain(|f| f.header().is_some() && f.uid.is_some_and(|u| uids.contains(&u)));
     f.sort_by_key(|f| std::cmp::Reverse(f.uid));
     f.dedup_by_key(|f| f.uid);
-    let known = if split { c.known.as_ref() } else { None };
     Ok(f.iter().map(|f| row(f, &c.email, known)).collect())
 }
 /// The addresses in To and Cc of the newest sent mails.
@@ -251,6 +251,18 @@ async fn known(c: &mut Conn) -> Result<HashSet<String>, Fail> {
         .filter_map(|f| MessageParser::default().parse(f.header()?))
         .flat_map(|m| [m.to(), m.cc()].into_iter().flatten().flat_map(|a| a.iter().filter_map(|x| x.address.as_deref().map(str::to_lowercase))).collect::<Vec<_>>())
         .collect())
+}
+type Known = Option<(SystemTime, Arc<HashSet<String>>)>;
+/// The cached correspondents while younger than KNOWN_TTL.
+fn fresh(k: &Known, now: SystemTime) -> Option<Arc<HashSet<String>>> {
+    k.as_ref().filter(|(at, _)| now.duration_since(*at).is_ok_and(|d| d < KNOWN_TTL)).map(|(_, k)| k.clone())
+}
+/// What the split uses and what the slot keeps: a failed read gives nobody known and keeps nothing.
+fn known_or_empty(read: Result<HashSet<String>, String>, now: SystemTime) -> (Arc<HashSet<String>>, Known) {
+    match read {
+        Ok(k) => { let k = Arc::new(k); (k.clone(), Some((now, k))) }
+        Err(_) => (Arc::default(), None),
+    }
 }
 /// Newsletters, notifications and other machine-sent mail (Keel's rule).
 fn is_bulk(m: &Message) -> bool {
@@ -280,14 +292,14 @@ fn row(f: &Fetch, email: &str, known: Option<&HashSet<String>>) -> Value {
         "other": known.zip(m.as_ref()).is_some_and(|(k, m)| other(m, k)) })
 }
 
-async fn page(c: &mut Conn, page: u32, split: bool) -> Result<Vec<Value>, Fail> {
+async fn page(c: &mut Conn, page: u32, known: Option<&HashSet<String>>) -> Result<Vec<Value>, Fail> {
     let u = inbox(c).await?;
     let from = (page as usize - 1) * PAGE;
-    rows(c, u.get(from..u.len().min(from + PAGE)).unwrap_or(&[]), split).await
+    rows(c, u.get(from..u.len().min(from + PAGE)).unwrap_or(&[]), known).await
 }
 async fn search_rows(c: &mut Conn, q: &str, limit: usize) -> Result<Vec<Value>, Fail> {
     let u = search(c, q).await?;
-    rows(c, &u[..u.len().min(limit)], false).await
+    rows(c, &u[..u.len().min(limit)], None).await
 }
 
 /// The whole raw mail, size-checked first.
@@ -485,6 +497,17 @@ impl Mail {
         if let Err(Fail::Auth(_)) = r { *entry(&self.pws, a.email.to_ascii_lowercase()).lock().await = None; }
         r
     }
+    /// Who the account wrote to, kept on the UI slot for KNOWN_TTL. When the Sent mail cannot be read the list still
+    /// loads with nobody known (bulk mail all goes under Other), and the next refresh tries again.
+    async fn known(&self, acct: &Account) -> Arc<HashSet<String>> {
+        let slot = self.slot(acct, false);
+        let cached = fresh(&slot.lock().await.known, SystemTime::now());
+        if let Some(k) = cached { return k; }
+        let read: Result<HashSet<String>, String> = async { run!(self, acct, false, c => known(c)) }.await;
+        let (k, keep) = known_or_empty(read, SystemTime::now());
+        if keep.is_some() { slot.lock().await.known = keep; }
+        k
+    }
     fn slot(&self, a: &Account, tool: bool) -> Arc<tokio::sync::Mutex<Slot>> {
         entry(&self.slots, format!("{}{}", a.email.to_ascii_lowercase(), if tool { "/tool" } else { "" }))
     }
@@ -492,9 +515,11 @@ impl Mail {
     /// One page of 50 inbox rows, page 1 is the newest. `split` marks the rows that go under Other.
     pub async fn list(&self, acct: &Account, page: u32, split: bool) -> Result<Value, String> {
         let p = page.clamp(1, 10_000);
+        let known = if split { Some(self.known(acct).await) } else { None };
+        let known = known.as_deref();
         // a changed mailbox is exactly what a reload repairs, so the list retries once instead of failing
-        match run!(self, acct, false, c => self::page(c, p, split)) {
-            Err(e) if e == STALE => run!(self, acct, false, c => self::page(c, p, split)),
+        match run!(self, acct, false, c => self::page(c, p, known)) {
+            Err(e) if e == STALE => run!(self, acct, false, c => self::page(c, p, known)),
             r => r,
         }.map(Value::from)
     }
@@ -669,6 +694,17 @@ mod tests {
         assert!(is_other("From: no-reply@bank.be\r\n\r\n"));
         // someone you wrote to stays in the Inbox, newsletter or not
         assert!(!is_other("From: Friend@Shop.be\r\nList-Id: <l.shop.be>\r\n\r\n"));
+    }
+
+    #[test]
+    fn known_falls_back_and_expires() {
+        let now = SystemTime::now();
+        let (k, keep) = known_or_empty(Err("IMAP: in:sent failed".into()), now);
+        assert!(k.is_empty() && keep.is_none(), "a failed read lists the inbox with nobody known and is not kept");
+        let (k, keep) = known_or_empty(Ok(["a@b.be".to_string()].into()), now);
+        assert!(k.contains("a@b.be"));
+        assert!(fresh(&keep, now + Duration::from_secs(600)).is_some(), "kept across a session's 5 minutes");
+        assert!(fresh(&keep, now + KNOWN_TTL).is_none(), "read again after the hour");
     }
 
     #[test]

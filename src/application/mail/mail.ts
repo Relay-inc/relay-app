@@ -191,6 +191,8 @@ export async function mailSeen(key: string, seen: boolean) {
       draft.list = draft.list!.map(x => (mailKey(x) === key ? { ...x, unread } : x));
     });
   flag(!seen);
+  // the read filter can hide the mail now: a ticked one leaves the selection, E and # never act on what is hidden
+  pruneSelection();
   try {
     await backend.mailSeen(target.account, target.id, seen);
     set(draft => {
@@ -198,6 +200,7 @@ export async function mailSeen(key: string, seen: boolean) {
     });
   } catch (e) {
     flag(seen);
+    pruneSelection();
     set(draft => {
       draft.err = String(e);
     });
@@ -242,9 +245,9 @@ export function clearMailSelection() {
     draft.selected = new Set();
   });
 }
-/** Read or unread for every ticked mail. */
+/** Read or unread for every ticked mail, one after the other (the backend takes one mail per call). */
 export async function mailSeenSelected(seen: boolean) {
-  await Promise.all([...ms().selected].map(key => mailSeen(key, seen)));
+  for (const key of [...ms().selected]) await mailSeen(key, seen);
 }
 /** What a key acts on: the ticked mails, else the open one. */
 export const mailTargets = () => {
@@ -270,23 +273,36 @@ export async function mailMove(keys: string[], trash: boolean) {
     draft.list = draft.list!.filter(x => !gone.has(mailKey(x)));
     for (const k of keys) draft.selected.delete(k);
   });
-  const byAccount = new Map<string, string[]>();
-  for (const x of moving) byAccount.set(x.account, [...(byAccount.get(x.account) ?? []), x.id]);
-  const accounts = [...byAccount.keys()];
-  const results = await Promise.allSettled(
-    [...byAccount].map(([account, ids]) => backend.mailMove(account, ids, trash)),
+  // per account, at most MOVE_MAX mails per call (the backend's limit): Cmd-A over several pages can tick more
+  const byAccount = new Map<string, Mail[]>();
+  for (const x of moving) byAccount.set(x.account, [...(byAccount.get(x.account) ?? []), x]);
+  const chunks = [...byAccount.values()].flatMap(mails =>
+    Array.from({ length: Math.ceil(mails.length / MOVE_MAX) }, (_, i) => mails.slice(i * MOVE_MAX, (i + 1) * MOVE_MAX)),
   );
-  const failed = accounts.filter((_, i) => results[i].status === "rejected");
+  const results = await Promise.allSettled(
+    chunks.map(mails =>
+      backend.mailMove(
+        mails[0].account,
+        mails.map(x => x.id),
+        trash,
+      ),
+    ),
+  );
+  const back = chunks.filter((_, i) => results[i].status === "rejected").flat();
   const error = results.find((r): r is PromiseRejectedResult => r.status === "rejected");
+  const failure = error ? String(error.reason) : "";
   set(draft => {
-    if (error && draft.list) {
+    if (failure && draft.list) {
       const known = new Set(draft.list.map(mailKey));
-      const back = moving.filter(x => failed.includes(x.account) && !known.has(mailKey(x)));
-      draft.list = newestFirst([...draft.list, ...back]);
-      draft.err = String(error.reason);
-    } else draft.err = "";
+      draft.list = newestFirst([...draft.list, ...back.filter(x => !known.has(mailKey(x)))]);
+      draft.err = failure;
+    } else if (draft.err && draft.err === moveError) draft.err = ""; // only our own last failure, not a load error
   });
+  if (failure) moveError = failure;
 }
+const MOVE_MAX = 500;
+// the error the last failed move showed, which a move that works clears again
+let moveError = "";
 // the last click was in the list, not the mail: Cmd-A ticks mails instead of selecting text
 let inList = true;
 export const setMailPane = (list: boolean) => {

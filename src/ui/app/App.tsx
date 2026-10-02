@@ -72,10 +72,12 @@ function typesIntoComposer(e: KeyboardEvent) {
 // the Mail view, experimental, as in Gmail and Keel: E archives, # or Delete deletes, Cmd-A ticks all, Esc unticks
 // before the app's Esc. Whether it handled the key.
 function onMailKey(e: KeyboardEvent) {
-  if (useNavigationStore.getState().selected !== MAIL || !mailExperimental() || inField(e) || e.isComposing)
-    return false;
+  const { selected, zoom: zoomed, panel } = useNavigationStore.getState();
+  // an image or the ticket window over the view takes the keys (Esc closes it), not the mail behind it
+  if (selected !== MAIL || zoomed || panel.modal || !mailExperimental() || inField(e) || e.isComposing) return false;
   const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
-  if (plain && (e.key === "e" || e.key === "#" || e.key === "Delete" || e.key === "Backspace")) {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key; // Caps Lock gives "E"
+  if (plain && (key === "e" || key === "#" || key === "Delete" || key === "Backspace")) {
     // a held key would walk down the list, one mail per repeat
     if (e.repeat) {
       e.preventDefault();
@@ -84,10 +86,10 @@ function onMailKey(e: KeyboardEvent) {
     const keys = mailTargets();
     if (!keys.length) return false;
     e.preventDefault();
-    mailMove(keys, e.key !== "e");
+    mailMove(keys, key !== "e");
     return true;
   }
-  if (e.metaKey && e.key === "a" && mailListActive()) {
+  if (e.metaKey && key === "a" && mailListActive()) {
     e.preventDefault();
     toggleMailSelectAll();
     return true;

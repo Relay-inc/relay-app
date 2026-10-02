@@ -487,6 +487,23 @@ const SCENARIOS = {
     await click(button(page, "Refresh").first(), 300);
     s.check("moved mails stay gone after a reload", !(await listed(page, markers.plainMail)) && !(await listed(page, markers.htmlMail)));
   },
+  // a read filter hides mails once marked read: they leave the selection, so E or # cannot act on mails out of sight
+  async mailTriageFilter(s) {
+    await s.load({ fixture: "mailexp" });
+    const { page } = s;
+    await click(nav(page).getByText("Mail", { exact: true }), 300);
+    await click(button(page, "Unread"), 300);
+    await byText(page, "Invoice September").first().click({ modifiers: ["Meta"] });
+    await byText(page, "Re: Planner demo").first().click({ modifiers: ["Meta"] });
+    await settle(page);
+    s.check("two ticked", await waitText(page, "2 selected", 2000));
+    await click(button(page, "Mark as read").first(), 300);
+    s.check("bulk read marks both", (await s.calls("mail_seen")).length === 2);
+    s.check("the hidden mails left the selection", !(await hasText(page, "2 selected")) && !(await hasText(page, "1 selected")));
+    await page.keyboard.press("e");
+    await settle(page, 300);
+    s.check("E has nothing to act on", (await s.calls("mail_move")).length === 0);
+  },
   // without the flag nothing of it shows and E does nothing
   async mailTriageOff(s) {
     await s.load();
@@ -809,6 +826,7 @@ const OVERRIDES = { typingOutside: { outside: "switchTo" } };
 const KNOWN = {
   typingOutside: "Lit loses the text: takeText runs before the outside check (src/domain/chats/actions.ts)",
   mail: "Lit drops a link clicked in a mail: mailLinkClicked checks panel.open, the Mail view keeps the mail in panel.mailOpen (src/domain/mail.ts)",
+  mailTriageFilter: "Lit keeps mails hidden by the read filter in the selection after marking them read (mailSeen in src/domain/mail.ts does not prune), E then moves mails out of sight",
   // an intended difference, not a Lit bug to port: React fixed it on review (security)
   deepLinks: "Lit sends relay://ask?q=<text> at once (quickSend in src/app/deep-links.ts); React opens Cmd-K with the text and waits for Enter",
 };
