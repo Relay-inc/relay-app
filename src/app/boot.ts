@@ -21,6 +21,7 @@ import { panel, closeDetail } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
 import { onboard } from "../features/onboarding/onboard";
 import { applyTheme } from "../core/theme";
+import { listenToLinks } from "./deep-links";
 import type { AgentSession } from "../domain/chats/state";
 
 // a board the sidebar no longer shows: its integration was switched off or lost its token
@@ -71,6 +72,7 @@ export async function boot() {
   await loadSettingsAndVault();
   await adoptEarlierConversations();
   await pickStartView();
+  listenToLinks();
   startPolls();
 }
 
