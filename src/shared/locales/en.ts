@@ -641,7 +641,7 @@ const en = {
   "composer.machineOnlyClaude": "Only Claude Code runs on a work machine.",
   "composer.machineNoMail": "A conversation about a mail stays on this Mac: the mail tools run here.",
   "mc.intro":
-    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Another conversation can run there too: pick the machine next to the model before its first message. Mail and the vault stay on this Mac.",
+    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Another conversation can run there too: pick the machine next to the model before its first message. Mail stays on this Mac. The vault goes along only when you mirror this Mac to a machine, below.",
   "mc.runDefaultTitle": "Where conversations run",
   "mc.runDefault": "New conversations run on",
   "mc.runDefaultHelp":

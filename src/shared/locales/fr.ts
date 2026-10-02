@@ -649,7 +649,7 @@ export default {
   "composer.machineOnlyClaude": "Seul Claude Code s'exécute sur une machine de travail.",
   "composer.machineNoMail": "Une conversation sur un e-mail reste sur ce Mac : les outils de courrier tournent ici.",
   "mc.intro":
-    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Une autre conversation peut aussi s'y exécuter : choisissez la machine à côté du modèle avant son premier message. Le courrier et le vault restent sur ce Mac.",
+    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Une autre conversation peut aussi s'y exécuter : choisissez la machine à côté du modèle avant son premier message. Le courrier reste sur ce Mac. Le vault ne suit que si vous mettez ce Mac en miroir sur une machine, plus bas.",
   "mc.runDefaultTitle": "Où s'exécutent les conversations",
   "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
   "mc.runDefaultHelp":

@@ -642,7 +642,7 @@ export default {
   "composer.machineOnlyClaude": "Enkel Claude Code loopt op een werkmachine.",
   "composer.machineNoMail": "Een gesprek over een mail blijft op deze Mac, want de mailtools draaien hier.",
   "mc.intro":
-    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Een ander gesprek kan er ook lopen: kies de machine naast het model, vóór het eerste bericht. Mail en de vault blijven op deze Mac.",
+    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Een ander gesprek kan er ook lopen: kies de machine naast het model, vóór het eerste bericht. Mail blijft op deze Mac. De vault gaat enkel mee als je deze Mac naar een machine spiegelt, hieronder.",
   "mc.runDefaultTitle": "Waar gesprekken draaien",
   "mc.runDefault": "Nieuwe gesprekken draaien op",
   "mc.runDefaultHelp":
