@@ -78,6 +78,11 @@ export function applyAgentEvent(
       }
       return [];
     }
+    case "patch": {
+      const item = state.messages[key]?.find(x => x.id === event.id);
+      if (item) item.hunks = event.hunks;
+      return [];
+    }
     case "turn_end":
       return onTurnEnd(state, key, event, env);
     case "error":
@@ -176,6 +181,11 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
       items.push({ kind: "me", text: entry.text, ...(imgs.length ? { imgs } : {}) });
     } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok", at));
+    else if (entry.type === "patch") {
+      // ponytail: a followed transcript read in pieces loses the patch whose call was in an earlier piece (it shows without line numbers)
+      const tool = items.find(x => x.id === entry.id);
+      if (tool) tool.hunks = entry.hunks;
+    }
   }
   settle();
   return items;

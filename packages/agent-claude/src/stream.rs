@@ -1,7 +1,7 @@
 //! Claude Code's stream-json, in and out, and its transcripts, as the contract's events.
 
 use agent_core::envelope::strip;
-use agent_core::{Event, Image, Turn, TurnUsage, IMAGE_TYPES};
+use agent_core::{Event, Hunk, Image, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -21,6 +21,15 @@ fn assistant(content: &Value, out: &mut Vec<Event>) {
     }
 }
 
+/// The diff an Edit or Write made, from the result Claude Code keeps next to a tool result (`tool_use_result` in
+/// stream-json, `toolUseResult` in the transcript). Only for a message with one tool result, the one it belongs to.
+fn patch(content: &Value, result: &Value, out: &mut Vec<Event>) {
+    let results: Vec<&Value> = content.as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result").collect();
+    let [r] = results[..] else { return };
+    let Ok(hunks) = serde_json::from_value::<Vec<Hunk>>(result["structuredPatch"].clone()) else { return };
+    if !hunks.is_empty() { out.push(Event::Patch { id: r["tool_use_id"].as_str().unwrap_or("").into(), hunks }); }
+}
+
 /// One stdout line of `claude -p --output-format stream-json`.
 pub fn parse(line: &str) -> Vec<Event> {
     let Ok(ev) = serde_json::from_str::<Value>(line) else { return vec![] };
@@ -32,9 +41,12 @@ pub fn parse(line: &str) -> Vec<Event> {
         }
         "conversation_reset" => out.push(Event::Reset),
         "assistant" => assistant(&ev["message"]["content"], &mut out),
-        "user" => for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
-            out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
-        },
+        "user" => {
+            for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
+                out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
+            }
+            patch(&ev["message"]["content"], &ev["tool_use_result"], &mut out);
+        }
         "result" => {
             let ok = ev["is_error"] != true && ev["subtype"] == "success";
             let error = (!ok).then(|| ev["result"].as_str().filter(|s| !s.is_empty()).or(ev["subtype"].as_str()).unwrap_or("").to_string());
@@ -52,12 +64,13 @@ pub fn parse(line: &str) -> Vec<Event> {
 /// Text the harness put in the user's turn: `<…>` lines, and a subagent's or teammate's message.
 fn harness(t: &str) -> bool { t.starts_with('<') || t.starts_with("Another Claude session sent a message") }
 
-/// One transcript line as history: the user's messages (not the harness's ones) and Claude's blocks.
+/// One transcript line as history: the user's messages (not the harness's ones), Claude's blocks and the diffs of its edits.
 pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true || e["isMeta"] == true { return; }
     if let Some(at) = e["timestamp"].as_str() { out.push(Event::Time { at: at.into() }); }
     let c = &e["message"]["content"];
     if e["type"] == "assistant" { return assistant(c, out); }
+    patch(c, &e["toolUseResult"], out);
     if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
     let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).map(strip).filter(|t| !harness(t)).collect();
@@ -101,7 +114,10 @@ mod tests {
         assert_eq!(ev[5], Event::Reset);
         assert!(matches!(&ev[6], Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(4200) } if u.input == 12 && u.cache_read == 300 && u.cost == Some(0.25)));
         assert_eq!(ev[7], Event::TurnEnd { ok: false, error: Some("error_max_turns".into()), usage: None, duration_ms: None });
-        assert_eq!(ev.len(), 8); // blank text, rate-limit and unknown lines give nothing
+        assert_eq!(ev[8], Event::ToolResult { id: "toolu_3".into(), error: false });
+        let lines = [" line one", " line two", "-line three", "+line 3", " line four", " line five"].map(String::from).to_vec();
+        assert_eq!(ev[9], Event::Patch { id: "toolu_3".into(), hunks: vec![Hunk { old_start: 1, new_start: 1, lines }] });
+        assert_eq!(ev.len(), 10); // blank text, rate-limit and unknown lines give nothing, a Read's result no patch
     }
 
     #[test]
@@ -134,7 +150,11 @@ mod tests {
         assert_eq!(ev[1], Event::User { text: "en dit".into(), images: vec![Some(Image { media_type: "image/png".into(), data: "AA==".into() }), None] });
         assert_eq!(ev[2], Event::Text { text: "Drie dingen.".into(), delta: false });
         assert!(matches!(&ev[3], Event::ToolCall { name, .. } if name == "Bash"));
-        assert_eq!(ev.len(), 4); // no <command>, meta or teammate lines, tool results, sidechains or other types
+        assert!(matches!(&ev[4], Event::ToolCall { name, .. } if name == "Edit"));
+        let Event::Patch { id, hunks } = &ev[5] else { panic!("{:?}", ev[5]) };
+        assert_eq!((id.as_str(), hunks.len(), hunks[0].old_start, hunks[1].new_start), ("toolu_10", 2, 40, 90));
+        assert_eq!(hunks[0].lines[3], "-Contract until Q3.");
+        assert_eq!(ev.len(), 6); // no <command>, meta or teammate lines, other tool results, sidechains or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_file(p).ok();
     }
