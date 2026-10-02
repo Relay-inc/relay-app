@@ -2,9 +2,14 @@
 name = "relay-core"
 version = "0.1.0"
 edition = "2021"
-description = "What runs an agent without the app: the broker. Shared by the app and `relay serve`."
+description = "What runs an agent without the app: the broker, the provider registry, sessions.json. Shared by the app and `relay serve`."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
 sha1_smol = "1"
+agent-core.workspace = true
+agent-claude = { path = "../agent-claude" }
+agent-codex = { path = "../agent-codex" }
+agent-opencode = { path = "../agent-opencode" }
+agent-pi = { path = "../agent-pi" }

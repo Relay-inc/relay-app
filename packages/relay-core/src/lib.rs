@@ -1,5 +1,7 @@
-//! What runs an agent without the app around it: the broker that holds an agent's pipes. No Tauri, so the app and the headless `relay serve` share it.
+//! What runs an agent without the app around it: the broker that holds an agent's pipes, the provider registry and
+//! sessions.json. No Tauri, so the app and the headless `relay serve` share it.
 
+pub mod agents;
 pub mod broker;
 
 use std::process::{Command, Stdio};
