@@ -125,8 +125,9 @@ const CLAUDE_ACCOUNTS = {
 };
 /** A second account on a non-Gmail IMAP server: the inbox merges both (mail_list per account). */
 export const MAIL_ACCOUNT_2 = "studio@example.org";
-/** default, dark, graphite (the accent), icons (the sidebar's views as a row of icons), onboarding, accounts (Claude Code
- *  on two extra logins, the work one active, auto-switch on) */
+/** default, dark, graphite (the accent), icons (the sidebar's views as a row of icons), onboarding, calendar (two
+ * calendars switched on, the second one failing), accounts
+ * (Claude Code on two extra logins, the work one active, auto-switch on) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   return {
@@ -141,6 +142,7 @@ export function settings(fixture: string) {
       { email: MAIL_ACCOUNT, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT },
       { email: MAIL_ACCOUNT_2, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT_2, host: "imap.example.org", port: 993 },
     ] },
+    calendar: fixture === "calendar" ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] } : { on: false, feeds: [] },
     language: "en",
     theme: fixture === "dark" ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",

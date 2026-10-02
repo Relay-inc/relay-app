@@ -1,4 +1,4 @@
-import { pt, t } from "../../shared/i18n";
+import { pt, t, tn } from "../../shared/i18n";
 import { PROVIDERS, provider as providerById } from "../../shared/plugins";
 import type { BoardProvider } from "../../domain/board/types";
 import {
@@ -17,7 +17,7 @@ import { commit } from "./window";
 import { useSettingsStore, type SettingsState } from "./store";
 
 // Settings › Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on),
-// the others are in the Add menu. In the list means in the sidebar; a row opens the integration's own page, Remove
+// the others are in the Add menu (Calendar too: it shows under Waiting). In the list means in the sidebar; a row opens the integration's own page, Remove
 // switches it off and keeps the token. The state lives here, so it survives going back to the list. That includes what is typed (the board form,
 // the GitHub owners, the mail add fields): kept as typed, read and emptied by the save use cases.
 const st = () => useSettingsStore.getState();
@@ -64,6 +64,7 @@ export async function switchIntegration(id: string, on: boolean) {
   const next = structuredClone(current());
   if (id === "github") next.github.on = on;
   else if (id === "mail") next.mail = { ...next.mail, on };
+  else if (id === "calendar") next.calendar = { ...next.calendar, on };
   else next.integrations[id] = { ...next.integrations[id], on };
   try {
     commit(await backend.setSettings(next));
@@ -377,5 +378,46 @@ export async function saveMail() {
     mailSaid({ text: t("set.saved"), ok: true });
   } catch (error) {
     mailSaid(fail(error));
+  }
+}
+
+// ---------- Calendar: per calendar its email in the settings, its secret iCal address in the keychain
+const calendarSaid = (message: Message | null) =>
+  change(draft => {
+    draft.calendar.message = message;
+  });
+const feeds = () => current().calendar?.feeds ?? [];
+const saveCalendarFeeds = async (list: { email: string }[]) =>
+  commit(await backend.setSettings({ ...current(), calendar: { on: true, feeds: list } }));
+/** Add a calendar: the backend tries the address, keeps it in the keychain and counts the meetings; only then the email
+ *  goes in the settings. Resolves to whether it was added. */
+export async function connectCalendar(typed: string, url: string) {
+  const email = typed.toLowerCase(); // the backend keeps the keychain entry under the email in lower case
+  change(draft => {
+    draft.calendar.busy = true;
+  });
+  calendarSaid(null);
+  let added = true;
+  try {
+    const count = await backend.calendarConnect(email, url);
+    const others = feeds().filter(feed => feed.email.toLowerCase() !== email);
+    await saveCalendarFeeds([...others, { email }]);
+    calendarSaid({ text: tn("cal.connected", count, { email }), ok: true });
+  } catch (error) {
+    calendarSaid(fail(error));
+    added = false;
+  }
+  change(draft => {
+    draft.calendar.busy = false;
+  });
+  return added;
+}
+export async function dropCalendar(email: string) {
+  try {
+    await backend.calendarConnect(email, ""); // an empty address removes it from the keychain
+    await saveCalendarFeeds(feeds().filter(feed => feed.email !== email));
+    calendarSaid(null);
+  } catch (error) {
+    calendarSaid(fail(error));
   }
 }

@@ -10,16 +10,19 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{LazyLock, Mutex};
 use tauri::{AppHandle, Emitter};
 
-/// conversation key -> the process of its latest banner
+/// banner slot (the conversation key, or the caller's own slot) -> the process of its latest banner
 static BANNERS: LazyLock<Mutex<HashMap<String, Child>>> = LazyLock::new(Default::default);
 
+/// `key` is what a click opens. `slot` is which earlier banner this one replaces, the key when left out: a meeting's
+/// banner has its own slot and opens Waiting, so two meetings close together both keep their banner.
 #[tauri::command]
-pub fn notify(app: AppHandle, key: String, title: String, body: String) {
+pub fn notify(app: AppHandle, key: String, title: String, body: String, slot: Option<String>) {
+    let slot = slot.unwrap_or_else(|| key.clone());
     std::thread::spawn(move || {
         let Some(exe) = helper(&app) else { return };
         let Ok(mut child) = Command::new(exe).args(["--notify", &title, &body]).stdout(Stdio::piped()).spawn() else { return };
         let (pid, mut stdout) = (child.id(), child.stdout.take().unwrap());
-        if let Some(mut old) = BANNERS.lock().unwrap().insert(key.clone(), child) {
+        if let Some(mut old) = BANNERS.lock().unwrap().insert(slot.clone(), child) {
             old.kill().ok();
             old.wait().ok();
         }
@@ -27,8 +30,8 @@ pub fn notify(app: AppHandle, key: String, title: String, body: String) {
         let mut out = Vec::new();
         stdout.read_to_end(&mut out).ok();
         let mut banners = BANNERS.lock().unwrap();
-        if banners.get(&key).is_some_and(|c| c.id() == pid) {
-            if let Some(mut done) = banners.remove(&key) { done.wait().ok(); }
+        if banners.get(&slot).is_some_and(|c| c.id() == pid) {
+            if let Some(mut done) = banners.remove(&slot) { done.wait().ok(); }
         }
         drop(banners);
         if out.starts_with(b"click") {

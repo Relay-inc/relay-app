@@ -7,6 +7,7 @@ import type { AgentSession, Pending, SessionOf, Sub, Transcript } from "../domai
 import type { ActionConfig, ActionEntry, MailAcct, Settings } from "../domain/settings/types";
 import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus } from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
+import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 
@@ -24,8 +25,10 @@ export const uiLocale = () => invoke<string>("ui_locale");
 export const openSettingsWindow = () => invoke("open_settings_window");
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openUrl = (url: string) => invoke("plugin:opener|open_url", { url });
-/** A banner while the window is in the background; a click opens that conversation (src-tauri/src/notify.rs). */
-export const notify = (key: string, title: string, body: string) => invoke("notify", { key, title, body });
+/** A banner; a click opens `key` (src-tauri/src/notify.rs). A newer banner replaces the one in its `slot`, the key
+ *  when left out. */
+export const notify = (key: string, title: string, body: string, slot?: string) =>
+  invoke("notify", { key, title, body, ...(slot ? { slot } : {}) });
 
 // ---------- the vault
 export const vaultStatus = () => invoke<VaultStatus>("vault_status");
@@ -111,6 +114,13 @@ export const mailSeen = (account: string, id: string, seen: boolean) => invoke("
 export const mailConnect = (email: string, password: string, imap?: { host: string; port: number }) =>
   invoke<{ account: MailAcct; result: string }>("mail_connect", { email, password, ...imap });
 export const mailTest = (account: MailAcct) => invoke<string>("mail_test", { account });
+
+// ---------- calendar (read-only; the secret iCal address goes to the keychain and never comes back)
+/** Save a calendar's secret iCal address in the keychain after a test fetch: the meetings in the next 7 days. An empty
+ *  address removes it. */
+export const calendarConnect = (email: string, url: string) => invoke<number>("calendar_connect", { email, url });
+/** The meetings of every switched-on calendar from an hour ago to 12 hours ahead. */
+export const calendarMeetings = () => invoke<Meetings>("calendar_meetings");
 
 // ---------- board integrations (the token never reaches the webview)
 export const integrationCall = (provider: string, method: string, path: string, body: unknown) =>

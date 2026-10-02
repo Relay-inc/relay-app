@@ -12,6 +12,8 @@ export type MailAcct = {
   port?: number;
 }; // no host: Gmail
 export type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
+/** Google calendars read through their secret iCal address; the address itself sits in the keychain, never here. */
+export type CalendarCfg = { on: boolean; feeds: { email: string }[] };
 /** An agent provider's settings: switched on, the program, and its own options (Codex' sandbox, …). */
 export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 /** The colour scheme: macOS's, or always light or dark. */
@@ -31,6 +33,7 @@ export type Settings = {
   boards: Record<string, BoardRef>; // the board linked to a vault project
   github: { on: boolean; owners: string };
   mail: MailCfg;
+  calendar: CalendarCfg;
   language?: string;
   theme?: Theme;
   accent?: Accent;
@@ -49,10 +52,12 @@ export const EMPTY_SETTINGS: Settings = {
   boards: {},
   github: { on: false, owners: "" },
   mail: { on: false, account: "", accounts: [] },
+  calendar: { on: false, feeds: [] },
   agents: { default: "claude", providers: {} },
 };
 export const ghOn = (settings: Settings) => !!settings.github?.on;
 export const mailOn = (settings: Settings) => !!settings.mail?.on;
+export const calendarOn = (settings: Settings) => !!settings.calendar?.on && !!settings.calendar.feeds?.length;
 /** A message under a settings section: what the last action said, and whether it worked. */
 export type Message = { text: string; ok: boolean };
 /** What the integrations page has typed for a board provider, by id: `tok-<provider>` for the token,

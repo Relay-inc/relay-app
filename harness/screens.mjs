@@ -53,6 +53,12 @@ const VIEWS = {
     await open(page, server.url);
     await waitText(titles.permission);
   },
+  // meetings about to start on top (one running, one in 4 minutes, one in 25) and a calendar that did not load
+  "waiting-calendar": async () => {
+    await open(page, server.url, { fixture: "calendar" });
+    await waitText("Sprint review Northwind Portal");
+    await waitText(titles.permission);
+  },
   "conversation-long-top": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
@@ -271,6 +277,7 @@ const VIEWS = {
     await settle(page);
   },
   ...Object.fromEntries(["Productive", "GitHub", "Mail"].map(name => [`settings-integration-${name.toLowerCase()}`, () => settingsPage("Integrations", name)])),
+  "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
   // Claude Code's row folded open: no extra accounts yet, then two with the work one active
   "settings-agent-claude": async () => {
     await settingsPage("Agents");
