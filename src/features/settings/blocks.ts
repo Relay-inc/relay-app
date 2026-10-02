@@ -1,5 +1,6 @@
 import { html, nothing } from "lit";
 import { glyphSvg, iconPaths, iconImg } from "../../core/icons";
+import { t } from "../../core/i18n";
 import type { ProjectIcon } from "../../domain/icons";
 import type { Renderable } from "./types";
 
@@ -118,6 +119,18 @@ export const footer = (message: Renderable, good: boolean, buttons: Renderable) 
     >${buttons}`;
 /** The footer of a section inside a folded-open row */
 export const FOOTER_IN_ROW = `${FOOTER} mt-0.5`;
+/** The footer of something that can leave its list (an integration, an agent): Remove on the left, its text in line
+ *  with the content above, then the message and the buttons on the right. */
+export const removeFooter = (
+  remove: () => void,
+  message: Renderable = "",
+  good = false,
+  buttons: Renderable = nothing,
+) =>
+  html`<div class=${FOOTER_IN_ROW}>
+    <button class="${buttonClass("ghost")} -ml-3" @click=${remove}>${t("ag.remove")}</button
+    >${footer(message, good, buttons)}
+  </div>`;
 /** A form value kept as text: what was typed, else the fallback (a switch's value is not text) */
 export const formText = (form: Record<string, string | boolean>, id: string, fallback: unknown = "") => {
   const value = form[id];

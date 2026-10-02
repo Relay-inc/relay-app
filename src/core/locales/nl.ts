@@ -419,7 +419,8 @@ export default {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Inbox tonen",
-  "mail.account": "Standaardaccount, door Claude gebruikt als je niet zegt welk:",
+  "mail.account": "Standaardaccount",
+  "mail.accountHint": "Door Claude gebruikt als je niet zegt welk.",
   "mail.testOk": "Werkt: {n} mails in de inbox",
   "mail.accounts": "{n} accounts",
   "mail.help":
@@ -456,7 +457,6 @@ export default {
     "Staat je wachtwoord al in de sleutelhanger, bijvoorbeeld van himalaya? Gebruik dan Geavanceerd onderaan hetzelfde scherm.",
   "mail.setupOpen": "Open de instellingen",
   "mail.guideH": "Je Gmail koppelen, in twee stappen",
-  "mail.guideMore": "Nog een account koppelen",
   "mail.step1H": "Stap 1. Maak een app-wachtwoord bij Google",
   "mail.step1":
     "Gmail laat een app enkel binnen met een app-wachtwoord: een code van 16 letters, los van je gewone wachtwoord. Je maakt er één per app en kan ze altijd weer intrekken.",
@@ -472,7 +472,6 @@ export default {
   "mail.connected": "Verbonden met {email}: {n} mails in de inbox. Opgeslagen, je ziet ze in Mail in de zijbalk.",
   "mail.step2Hint":
     "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
-  "mail.advH": "Geavanceerd: het wachtwoord staat al in de sleutelhanger (bijvoorbeeld van himalaya)",
   "mail.adv":
     "Open de app Sleutelhangertoegang en zoek het item. De naam van het item is de dienst, het veld Account is het sleutelhanger-account. Voor himalaya is de dienst himalaya-&lt;naam&gt;-imap en het account &lt;naam&gt;, met de accountnaam uit je himalaya-config. Bijvoorbeeld dienst himalaya-weareantenna-imap en account weareantenna. Vraagt macOS toestemming om het te lezen, kies dan Altijd toestaan.",
   "mail.svcL": "Dienst",
@@ -481,6 +480,8 @@ export default {
   "mail.inKeychain": "wachtwoord in sleutelhanger: {svc}",
   "mail.kindGmail": "Gmail",
   "mail.kindImap": "Andere mailserver (IMAP)",
+  "mail.kindKeychain": "Wachtwoord staat al in de sleutelhanger",
+  "mail.add": "+ Account toevoegen",
   "mail.guideImap": "Een mailserver koppelen",
   "mail.hostL": "Server",
   "mail.portL": "Poort",

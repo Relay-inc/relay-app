@@ -3,7 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
 import { t, th } from "../../core/i18n";
-import { buttonClass, field, FIELD, footer, FOOTER_IN_ROW, HINT_IN_ROW, withoutColon, inputValue } from "./blocks";
+import { buttonClass, field, FIELD, HINT_IN_ROW, removeFooter, withoutColon, inputValue } from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 
@@ -33,9 +33,6 @@ export class SettingsGithub extends SettingsElement {
   override render() {
     return html`<p class=${HINT_IN_ROW}>${th("gh.help")}</p>
       ${field(withoutColon(t("gh.owners")), html`<input class=${FIELD} id="ghowners" .value=${live(this.owners)} @input=${(e: Event) => emit(this, "owners-input", inputValue(e))} spellcheck="false" placeholder=${t("gh.ownersPh")} />`, { id: "ghowners" })}
-      <div class=${FOOTER_IN_ROW}>
-        <button class=${buttonClass("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button
-        >${footer(this.message, this.ok, html`<button class=${buttonClass()} @click=${() => emit(this, "gh-recheck")}>${t("gh.recheck")}</button><button class=${buttonClass("primary")} @click=${() => emit(this, "gh-save")}>${t("set.save")}</button>`)}
-      </div>`;
+      ${removeFooter(() => emit(this, "int-remove"), this.message, this.ok, html`<button class=${buttonClass()} @click=${() => emit(this, "gh-recheck")}>${t("gh.recheck")}</button><button class=${buttonClass("primary")} @click=${() => emit(this, "gh-save")}>${t("set.save")}</button>`)}`;
   }
 }

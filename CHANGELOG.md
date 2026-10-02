@@ -21,6 +21,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Fixed
 
+- Settings › Integrations › Mail, Agents and Projects have even spacing again. Mail lists your accounts with a "+ Add account" button (Gmail, another mail server, or a password already in the keychain) that opens the steps in place of the list, instead of showing them under it all the time (#68)
 - Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
 
 ### Added

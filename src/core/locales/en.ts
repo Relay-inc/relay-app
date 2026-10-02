@@ -416,7 +416,8 @@ const en = {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Show the inbox",
-  "mail.account": "Default account, used by Claude when not told which:",
+  "mail.account": "Default account",
+  "mail.accountHint": "Used by Claude when not told which.",
   "mail.testOk": "Works: {n} mails in the inbox",
   "mail.accounts": "{n} accounts",
   "mail.help":
@@ -454,7 +455,6 @@ const en = {
     "Is your password already in the keychain, for example from himalaya? Then use Advanced at the bottom of the same screen.",
   "mail.setupOpen": "Open the settings",
   "mail.guideH": "Connect your Gmail in two steps",
-  "mail.guideMore": "Connect another account",
   "mail.step1H": "Step 1. Create an app password at Google",
   "mail.step1":
     "Gmail only lets an app in with an app password: a 16-letter code, separate from your normal password. You make one per app and can revoke it at any time.",
@@ -470,7 +470,6 @@ const en = {
   "mail.connected": "Connected to {email}: {n} mails in the inbox. Saved, you find them under Mail in the sidebar.",
   "mail.step2Hint":
     "The code goes straight into the macOS keychain, under the service relay-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
-  "mail.advH": "Advanced: the password is already in the keychain (for example from himalaya)",
   "mail.adv":
     "Open the Keychain Access app and find the item. The item's name is the service, its Account field is the keychain account. For himalaya the service is himalaya-&lt;name&gt;-imap and the account &lt;name&gt;, with the account name from your himalaya config. For example service himalaya-weareantenna-imap and account weareantenna. If macOS asks to allow reading it, choose Always Allow.",
   "mail.svcL": "Service",
@@ -479,6 +478,8 @@ const en = {
   "mail.inKeychain": "password in keychain: {svc}",
   "mail.kindGmail": "Gmail",
   "mail.kindImap": "Other mail server (IMAP)",
+  "mail.kindKeychain": "Password already in the keychain",
+  "mail.add": "+ Add account",
   "mail.guideImap": "Connect a mail server",
   "mail.hostL": "Server",
   "mail.portL": "Port",
