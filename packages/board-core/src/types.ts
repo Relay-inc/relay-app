@@ -29,6 +29,8 @@ export type CardView = {
   description: string;
   status?: { id: string; name: string; state?: State };
   assignee?: { id: string; name: string };
+  /** Trello supports multiple members. Changes add/remove one member, preserving everyone else. */
+  assignees?: Opt[];
   due: string; labels: string[];
   /** the choices for the status and assignee pickers, once known; without them those two show as text */
   statuses?: Opt[]; people?: Opt[];
@@ -42,7 +44,8 @@ export type BoardRef = { provider: string; project: string; board: string };
 
 /** What a provider gets for each call: its settings.integrations.<id>, and one API call through the backend. */
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
-  /** a file posted as a form to a URL the backend's `upload` allows (no secrets go along), resolves with its Location */
+  /** Upload to a backend-allowed URL. `fields` are Productive form fields, Linear signed headers, or empty for Trello.
+   * Authentication and transport are selected by the backend; secrets never come from the webview. */
   upload: (url: string, fields: Record<string, string>, file: File) => Promise<string>;
   /** a picture's preview from a URL the backend's `thumb` allows (no secrets go along), resolves with a data URL */
   thumb: (url: string) => Promise<string> };

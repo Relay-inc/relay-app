@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// Native strings in the app's language order (en, nl, fr, de): an integration's error messages.
 pub type Text = &'static [(&'static str, [&'static str; 4])];
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum UploadKind { Form, Trello, Put }
+
 pub struct Provider {
     /// "productive": the key in settings.integrations, in the keychain service and in the webview's registry
     pub id: &'static str,
@@ -31,8 +34,9 @@ pub struct Provider {
     pub url: fn(cfg: &Value, method: &str, path: &str, body: &Option<Value>) -> Option<String>,
     /// the headers that carry the secrets (in the order of `secrets`), and anything else the API wants
     pub headers: fn(cfg: &Value, secrets: &[String]) -> Vec<String>,
-    /// whether a file may be posted as a form to this URL (Productive: its S3 bucket), never with the secrets
+    /// whether a file may be uploaded to this URL; upload_kind selects the transport and authentication
     pub upload: fn(url: &str) -> bool,
+    pub upload_kind: UploadKind,
     /// whether a picture's preview may be fetched from this URL for the card panel (Productive: its public thumbs),
     /// never with the secrets
     pub thumb: fn(url: &str) -> bool,
