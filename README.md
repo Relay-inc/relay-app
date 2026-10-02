@@ -34,6 +34,7 @@ Paths are relative to the vault (absolute ones work too). Picking a folder detec
 resolved. Only `workState` is required; a missing `reminders` file is created by the first reminder you add (default `reminders.md` in the vault root).
 
 `pnpm tauri build` builds the .app. Not used yet: the app reads `favicon.py` and `packages/agent-claude/perm_server.py`
+`pnpm tauri build` builds the .app. Not used yet: the app reads `snapshot.py`
 from this checkout, so a build only works on this machine.
 
 ## How it works
@@ -44,6 +45,8 @@ from this checkout, so a build only works on this machine.
 | `src-tauri/src/agents.rs`, `src/shared/plugins.ts` | The registry of the agent providers, `settings.agents` and sessions.json. |
 | `packages/agent-claude/perm_server.py` | Stdio MCP server passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
 | `src-tauri/src/snapshot.rs` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
+| `packages/agent-claude/src/perm_server.rs` | Stdio MCP server (the Relay binary run as `relay --perm-server`) passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
+| `snapshot.py` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
 | `src/shared/` | What every layer uses: `i18n.ts` + `locales/` (UI strings in English, Dutch, French and German; `useT()` in a component, `t(key)` elsewhere, `tr()` in `lib.rs` for the menu bar and errors; the language follows macOS unless set in the settings), `plugins.ts` (the provider and agent registries), `icons.ts`, `markdown.ts`. |
 | `src/domain/<context>/` | Pure types and rules per bounded context (conversations, agents, workspace, navigation, mail, board, reminders, pull-requests, usage, settings), unit tested with `node --test`. The agent events go through one reducer, `applyAgentEvent`. |
 | `src/application/<context>/` | One Zustand + Immer store per context (`use<Context>Store`) and its use cases: loaders, actions, polls. `boot.ts` is the main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |
@@ -179,7 +182,7 @@ own transcripts and logs, and reports its limits and tokens.
 |---|---|---|---|---|
 | Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) | [`agent-pi`](packages/agent-pi/README.md) |
 | Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` | `pi --mode rpc` (JSON lines over stdio), no bridge |
-| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
+| Permissions | cards, through `relay --perm-server` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
 | Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no |
 | Thinking, images | –, yes | yes, yes | yes, yes | yes, yes |
 | Resume, fork | yes, yes | yes, – | yes, yes | yes (`--session-id`), yes (`--fork`) |
@@ -228,7 +231,7 @@ file_path, command, pattern, query, url, description), so the webview words them
 **Permissions** go through one folder for every provider (`agent_core::pending`): a request is `pending/<id>.json`
 (`{id, project, provider, kind: "tool" | "question", tool_name, input, relay, at}`), the answer `<id>.answer.json`
 (`{behavior: "allow", updatedInput}` or `{behavior: "deny", message}`; a question has `input.questions` and is answered with
-`updatedInput.answers`). A provider either writes and polls the files itself (Claude's `perm_server.py`, `relay: false`),
+`updatedInput.answers`). A provider either writes and polls the files itself (Claude's `relay --perm-server`, `relay: false`),
 or raises `Event::Permission`: the app writes the file with `relay: true` and passes the user's decision to `respond`,
 writing its line to the process's stdin. Files from before the providers read as Claude's.
 
