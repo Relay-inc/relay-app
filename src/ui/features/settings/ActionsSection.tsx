@@ -31,6 +31,7 @@ export function ActionsSection({ ext, name }: { ext: string; name: string }) {
     <Section
       title={t("act.title")}
       desc={t("act.help", { name })}
+      rows
       footer={error ? <span className={ERROR_MESSAGE}>{error}</span> : null}
     >
       <Field label={t("act.access", { name })} id={`acc-${ext}`} hint={ext === "mail" ? t("act.mailOnly") : undefined}>

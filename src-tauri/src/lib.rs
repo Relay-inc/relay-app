@@ -1509,7 +1509,7 @@ fn open_settings(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
     let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
     tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
-        .title(title).inner_size(860.0, 620.0).min_inner_size(720.0, 480.0)
+        .title(title).inner_size(900.0, 660.0).min_inner_size(720.0, 480.0)
         .minimizable(false).maximizable(false).build().ok();
 }
 /// The settings row at the bottom of the sidebar: the same window as Relay › Settings….

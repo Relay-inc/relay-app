@@ -44,6 +44,7 @@ export function ProjectsPage({ active }: { active: boolean }) {
     return (
       <SettingsFold
         key={name}
+        id={name}
         open={open}
         onToggle={() => folds.toggle(name)}
         icon={<ProjectIcon icon={icons[name]} where="row" />}
@@ -70,17 +71,19 @@ export function ProjectsPage({ active }: { active: boolean }) {
       title={t("set.tab.projects")}
       desc={<Html html={th("pc.desc")} />}
       list
-      footer={message && <Footer message={message} />}
-      action={
-        <button className={buttonClass()} onClick={findIcons} title={t("pi.findHelp")} disabled={finding}>
-          {finding ? (
-            <>
-              <span className="spinner"></span> {t("pi.finding")}
-            </>
-          ) : (
-            t("pi.find")
-          )}
-        </button>
+      footer={
+        <>
+          <button className={buttonClass()} onClick={findIcons} title={t("pi.findHelp")} disabled={finding}>
+            {finding ? (
+              <>
+                <span className="spinner"></span> {t("pi.finding")}
+              </>
+            ) : (
+              t("pi.find")
+            )}
+          </button>
+          {message && <Footer message={message} />}
+        </>
       }
     >
       {names.length ? names.map(row) : <div className={EMPTY_LIST}>{t("set.none")}</div>}

@@ -60,13 +60,13 @@ export default {
     "Quand la limite du forfait d’un compte est atteinte, le message suivant déplace la conversation vers le compte suivant qui a de la marge.",
   "ag.empty": "Aucun agent pour l'instant. Ajoutez-en un pour démarrer des conversations.",
   "ag.listHelp":
-    "Seuls les agents de cette liste apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
+    "Seuls les agents activés apparaissent dans le compositeur. Cliquez sur l'un d'eux pour modifier ses réglages.",
   "ag.isDefault": "par défaut",
   "int.add": "+ Ajouter une intégration",
   "int.empty":
     "Aucune intégration pour l'instant. Ajoutez-en une pour voir son tableau, ses pull requests ou vos mails dans la barre latérale.",
   "int.listHelp":
-    "Les intégrations de cette liste apparaissent dans la barre latérale. Cliquez sur l'une d'elles pour la configurer ou la modifier.",
+    "Les intégrations activées apparaissent dans la barre latérale. Cliquez sur l'une d'elles pour la configurer ou la modifier.",
   "int.foundClaude": "Trouvé dans Claude Code",
   "int.foundClaudeLong": "Claude Code a des identifiants {name} dans sa config MCP. Les utiliser ici ?",
   "int.import": "Importer",
@@ -329,6 +329,7 @@ export default {
   "set.faviconsHelp":
     "Une fois par jour, l'app cherche un site web dans les notes de chaque projet sans icône et utilise son favicon. Chaque site n'est essayé qu'une fois par projet, une icône réinitialisée ne revient pas.",
   "set.system": "Système (par défaut)",
+  "set.themeSystem": "Système",
   "set.sec.folders": "Dossiers",
   "set.sec.interface": "Affichage",
   "nav.hide": "Masquer {name}",
