@@ -59,13 +59,13 @@ export default {
     "Ist das Planlimit eines Kontos aufgebraucht, verschiebt die nächste Nachricht die Unterhaltung zum nächsten Konto mit Luft.",
   "ag.empty": "Noch keine Agents. Füge einen hinzu, um Gespräche damit zu starten.",
   "ag.listHelp":
-    "Nur die Agents in dieser Liste erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
+    "Nur eingeschaltete Agents erscheinen im Composer. Klicke auf einen, um seine Einstellungen zu ändern.",
   "ag.isDefault": "Standard",
   "int.add": "+ Integration hinzufügen",
   "int.empty":
     "Noch keine Integrationen. Füge eine hinzu, um ihr Board, Pull Requests oder Mail in der Seitenleiste zu sehen.",
   "int.listHelp":
-    "Die Integrationen in dieser Liste erscheinen in der Seitenleiste. Klicke auf eine, um sie einzurichten oder zu ändern.",
+    "Eingeschaltete Integrationen erscheinen in der Seitenleiste. Klicke auf eine, um sie einzurichten oder zu ändern.",
   "int.foundClaude": "In Claude Code gefunden",
   "int.foundClaudeLong": "Claude Code hat {name}-Zugangsdaten in seiner MCP-Konfiguration. Hier verwenden?",
   "int.import": "Übernehmen",
@@ -328,6 +328,7 @@ export default {
   "set.faviconsHelp":
     "Einmal am Tag sucht die App in den Notizen jedes Projekts ohne Symbol eine Website und nutzt deren Favicon. Pro Website wird ein Projekt einmal versucht, ein zurückgesetztes Symbol kommt nicht wieder.",
   "set.system": "System (Standard)",
+  "set.themeSystem": "System",
   "set.sec.folders": "Ordner",
   "set.sec.interface": "Darstellung",
   "nav.hide": "{name} ausblenden",

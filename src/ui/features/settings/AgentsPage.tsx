@@ -14,7 +14,6 @@ import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
 import { Section } from "./Section";
 import { SettingsFold } from "./SettingsFold";
-import { SettingsMenu } from "./SettingsMenu";
 import { StatusLine } from "./StatusLine";
 import { useToggleSet } from "./useToggleSet";
 
@@ -25,7 +24,7 @@ const agentGlyph = (id: string) => {
   return provider ? <Glyph svg={provider.glyph} className={TILE} /> : null;
 };
 
-/** Agents: only the ones switched on are listed, the others are in the Add menu. A row folds open to its program and
+/** Agents: every known agent is listed, a switch turns it on or off (off ones are dimmed). A row folds open to its program and
  *  options. Every change saves at once. What is installed is checked when the window opens. */
 export function AgentsPage() {
   const { t, th } = useT();
@@ -40,7 +39,7 @@ export function AgentsPage() {
   if (!detected) return <LoadingSection title={t("set.tab.agents")} text={message?.text || t("ag.checking")} />;
 
   const config = (id: string) => agents?.providers[id] ?? OFF;
-  // add (folded open, to set it up) and remove
+  // switch on (folded open, to set it up) and off
   const switchTo = (id: string, on: boolean) => {
     folds.setOpen(id, on);
     saveAgent(id, { on });
@@ -57,15 +56,17 @@ export function AgentsPage() {
   };
 
   const listed = detected.providers.filter(provider => config(provider.id).on);
-  const unused = detected.providers.filter(provider => !config(provider.id).on);
-  const rows = listed.length ? (
-    listed.map(provider => {
+  const rows = detected.providers.length ? (
+    detected.providers.map(provider => {
       const id = provider.id;
-      const open = folds.isOpen(id);
+      const open = folds.isOpen(id) && config(id).on;
       return (
         <SettingsFold
           key={id}
+          id={id}
           open={open}
+          on={config(id).on}
+          onSwitch={on => switchTo(id, on)}
           onToggle={() => folds.toggle(id)}
           icon={agentGlyph(id)}
           status={status(provider)}
@@ -102,11 +103,10 @@ export function AgentsPage() {
         title={t("set.tab.agents")}
         desc={<Html html={th("ag.listHelp")} />}
         list
-        footer={message && <Footer message={message} />}
-        action={
+        footer={
           <>
             <button
-              className={buttonClass("ghost")}
+              className={buttonClass()}
               onClick={() => {
                 clearAgentsMessage();
                 checkAgents(true);
@@ -114,16 +114,7 @@ export function AgentsPage() {
             >
               {t("ag.recheck")}
             </button>
-            <SettingsMenu
-              label={t("ag.add")}
-              items={unused.map(provider => ({
-                id: provider.id,
-                icon: agentGlyph(provider.id),
-                name: provider.name,
-                status: status(provider),
-              }))}
-              onPick={id => switchTo(id, true)}
-            />
+            {message && <Footer message={message} />}
           </>
         }
       >

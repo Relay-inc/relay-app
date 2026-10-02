@@ -57,11 +57,11 @@ const en = {
   "ag.accountAutoHelp":
     "When an account’s plan limit is used up, the next message moves the conversation to the next account that has room.",
   "ag.empty": "No agents yet. Add one to start conversations with it.",
-  "ag.listHelp": "Only the agents in this list show up in the composer. Click one to change its settings.",
+  "ag.listHelp": "Only agents that are switched on show up in the composer. Click one to change its settings.",
   "ag.isDefault": "default",
   "int.add": "+ Add integration",
   "int.empty": "No integrations yet. Add one to see its board, pull requests or mail in the sidebar.",
-  "int.listHelp": "The integrations in this list show up in the sidebar. Click one to set it up or change it.",
+  "int.listHelp": "Integrations that are switched on show up in the sidebar. Click one to set it up or change it.",
   "int.foundClaude": "Found in Claude Code",
   "int.foundClaudeLong": "Claude Code has {name} credentials in its MCP config. Use them here?",
   "int.import": "Import",
@@ -325,6 +325,7 @@ const en = {
   "set.faviconsHelp":
     "Once a day the app looks for a website in the notes of each project without an icon and uses its favicon. A project is tried once per website, a reset icon does not come back.",
   "set.system": "System (default)",
+  "set.themeSystem": "System",
   "set.sec.folders": "Folders",
   "set.sec.interface": "Interface",
   "nav.hide": "Hide {name}",

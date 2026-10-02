@@ -59,12 +59,12 @@ export default {
     "Is de planlimiet van een account op, dan verhuist het volgende bericht het gesprek naar het volgende account met ruimte.",
   "ag.empty": "Nog geen agents. Voeg er een toe om er gesprekken mee te starten.",
   "ag.listHelp":
-    "Enkel de agents in deze lijst verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
+    "Enkel agents die aanstaan verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",
   "ag.isDefault": "standaard",
   "int.add": "+ Integratie toevoegen",
   "int.empty": "Nog geen integraties. Voeg er een toe om het bord, de pull requests of de mail in de zijbalk te zien.",
   "int.listHelp":
-    "De integraties in deze lijst verschijnen in de zijbalk. Klik er een aan om ze in te stellen of te wijzigen.",
+    "Integraties die aanstaan verschijnen in de zijbalk. Klik er een aan om ze in te stellen of te wijzigen.",
   "int.foundClaude": "Gevonden in Claude Code",
   "int.foundClaudeLong": "Claude Code heeft inloggegevens voor {name} in zijn MCP-config. Hier gebruiken?",
   "int.import": "Overnemen",
@@ -327,6 +327,7 @@ export default {
   "set.faviconsHelp":
     "Eén keer per dag zoekt de app in de notities van elk project zonder icoon een website en gebruikt de favicon. Per website wordt een project één keer geprobeerd, een hersteld icoon komt niet terug.",
   "set.system": "Systeem (standaard)",
+  "set.themeSystem": "Systeem",
   "set.sec.folders": "Mappen",
   "set.sec.interface": "Weergave",
   "nav.hide": "{name} verbergen",

@@ -4,7 +4,7 @@
 // a <code> in a translated text
 export const CODE =
   "[&_code]:rounded-sm [&_code]:bg-s-mutedbg [&_code]:px-1 [&_code]:py-px [&_code]:font-mono [&_code]:text-xs";
-export const HINT = `mt-0.5 text-xs leading-snug text-s-muted ${CODE}`;
+export const HINT = `mt-[3px] text-xs leading-[1.45] text-s-muted ${CODE}`;
 /** A hint straight in a folded-open row, which has its own gap. */
 export const HINT_IN_ROW = `text-xs leading-snug text-s-faint ${CODE}`;
 export const OPTIONAL_TEXT = "text-[11px] text-s-faint";
@@ -27,7 +27,7 @@ const BUTTON_KIND = {
 };
 /** A button; `square` makes it a square holding a glyph. */
 export const buttonClass = (kind: keyof typeof BUTTON_KIND = "plain", square = false) =>
-  `${BUTTON} ${square ? "w-7.5 p-0" : "px-3"} ${BUTTON_KIND[kind]}`;
+  `${BUTTON} ${square ? "w-7.5 p-0" : kind === "primary" ? "px-3.5" : "px-3"} ${BUTTON_KIND[kind]}`;
 /** The glyph in an icon button. */
 export const BUTTON_GLYPH = "size-4 fill-none stroke-current stroke-2 glyph";
 /** The glyph on a tile (menu items, rows). */

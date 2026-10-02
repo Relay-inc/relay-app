@@ -4,13 +4,14 @@ import { FOOTER, HINT } from "./blocks";
 const CARD = "grid min-w-0 grid-cols-1 rounded-xl border border-s-border bg-raised [&>*]:min-w-0";
 
 /** A section: a title and hint (`desc`) above a card, an action on the right of the title, a footer below.
- *  `list` packs the card for rows that bring their own padding. Without a body there is no card. */
+ *  `list` packs the card for rows that bring their own padding, `rows` gives each child that padding and a hairline. Without a body there is no card. */
 export function Section({
   title,
   desc,
   action,
   footer,
   list = false,
+  rows = false,
   children,
 }: {
   title: ReactNode;
@@ -18,9 +19,15 @@ export function Section({
   action?: ReactNode;
   footer?: ReactNode;
   list?: boolean;
+  /** The card is a stack of rows (Fields), each with its own padding and a hairline above it */
+  rows?: boolean;
   children?: ReactNode;
 }) {
-  const cardPadding = list ? "gap-0 py-0" : "gap-3.5 px-3.5 py-3";
+  const cardPadding = list
+    ? "gap-0 py-0"
+    : rows
+      ? "gap-0 p-0 [&>*]:px-3.5 [&>*]:py-3 [&>*+*]:border-t [&>*+*]:border-s-border"
+      : "gap-3.5 px-3.5 py-3";
   return (
     <section className="grid min-w-0 grid-cols-1 gap-2.5 [&>*]:min-w-0">
       <header className="flex items-start justify-between gap-4">
