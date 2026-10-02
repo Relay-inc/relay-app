@@ -17,7 +17,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - A conversation you close greys out and pulses in the sidebar until it is gone, so a slow close (stopping the agent, removing its worktrees) shows that it is working. Close all greys out every conversation it closes at once (#48)
 
 ### Added
-- Mail can archive and delete, as an experimental switch in Settings › Mail: archive (E) or delete (#) the open mail or a selection (Cmd- or Shift-click, Cmd-A for all), mark a selection read or unread, and the list splits into Inbox and Other, where newsletters and notifications from people you never wrote to go. Deleted mails go to Gmail's Trash; Claude still cannot move or delete mail
+- Mail can archive and delete, as an experimental switch in Settings › Mail: archive (E) or delete (#) the open mail or a selection (Cmd- or Shift-click, Cmd-A for all), mark a selection read or unread, and the list splits into Inbox and Other, where newsletters and notifications from people you never wrote to go. Deleted mails go to Gmail's Trash; Claude still cannot move or delete mail (#61)
 - Cmd-K can find projects by name, label, alias or context. Choose a result with the arrow keys and Enter, or click it, to open the project; Enter without a selection still asks a quick question (#58)
 
 ### Fixed
