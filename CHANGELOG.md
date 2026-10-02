@@ -11,6 +11,10 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Fixed
+
+- Permission prompts work in the released app: they ran a script from the machine that built it, and needed Python
+
 ## [0.0.3] - 2026-10-02
 
 ### Added
