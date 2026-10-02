@@ -152,7 +152,7 @@ export default {
   "tool.read": "{file} gelesen",
   "tool.write": "{file} geschrieben",
   "tool.edit": "{file} bearbeitet",
-  "tool.grep": "gesucht nach {p}",
+  "tool.grep": "Gesucht nach {p}",
   "tool.glob": "Dateien gesucht: {p}",
   "tool.webSearch": "im Web gesucht: {q}",
   "tool.webFetchHost": "Seite gelesen: {host}",
