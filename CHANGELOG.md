@@ -11,6 +11,10 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Fixed
+
+- Project icons from websites work in the released app and on Macs without Python (the favicon lookup is built in now)
+
 ## [0.0.3] - 2026-10-02
 
 ### Added

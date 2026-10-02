@@ -75,14 +75,14 @@ export async function loadSnapshot() {
   }
 }
 
-// ---------- favicons: projects without an icon entry in the vault get one. favicon.py guesses the site from the
+// ---------- favicons: projects without an icon entry in the vault get one. the favicon run guesses the site from the
 // notes (a website set as the icon wins) and fetches its icon; the icon goes into the vault as a file, a project
 // without a site gets "" (none, not guessed again). `tried` (this Mac) keeps a site that had no favicon from being
 // fetched again and again.
 let favBusy = false;
 let favAgain = false;
 type Found = Record<string, { site: string; data: string | null }>;
-// store what favicon.py found: an icon file per project, "none" for a project without one, and the sites tried
+// store what the favicon run found: an icon file per project, "none" for a project without one, and the sites tried
 async function storeFound(found: Found, tried: Record<string, string>) {
   for (const [name, result] of Object.entries(found)) {
     tried[name] = result.site;

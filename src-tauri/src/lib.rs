@@ -20,6 +20,7 @@ mod actions;
 mod agents;
 mod calendar;
 mod commits;
+mod favicon;
 pub mod broker;
 mod mail;
 pub mod notify;
@@ -327,7 +328,7 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     Ok(snap)
 }
 
-/// The favicon of each project's website, guessed from its notes by favicon.py, for the projects
+/// The favicon of each project's website, guessed from its notes (favicon.rs), for the projects
 /// ([{name, aliases}]) whose guess is not in favicons.tried yet: {name: {site, data}}, data the raw icon or null.
 #[tauri::command]
 async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, String> {
@@ -335,15 +336,11 @@ async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, Strin
     if st["ok"] != true { return Ok(json!({})); }
     let v = st["vault"].as_str().unwrap();
     let notes = if st["found"]["notes"] == true { vault::resolve(v, st["map"]["notes"].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
-        .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
     // a website set as a project's icon in the vault's .relay/config.json wins over a guess
     let sites: serde_json::Map<String, Value> = relay_config::icons(v).into_iter()
         .filter_map(|(n, i)| match relay_config::icon_kind(i["value"].as_str()?) { relay_config::Icon::Site(s) => Some((n, json!(s))), _ => None }).collect();
-    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried, "sites": sites}).to_string().as_bytes()).map_err(|e| e.to_string())?;
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
+    let v = v.to_string();
+    tauri::async_runtime::spawn_blocking(move || favicon::run(&v, &notes, &projects, &tried, &sites)).await.map_err(|e| e.to_string())
 }
 
 /// The project icons from the vault's .relay/config.json: {project: {value, img | icon}}. The first call for a vault
