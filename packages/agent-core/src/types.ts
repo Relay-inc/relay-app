@@ -21,6 +21,7 @@ export type Decision = { behavior: "allow"; updatedInput: any } | { behavior: "d
 
 /** The normalised events, the Tauri event `agent` as `{project, provider, event}`, and history items. */
 export type AgentEvent =
+  | { type: "working" }
   | { type: "session"; id: string }
   | { type: "user"; text: string; images: (Image | null)[] }
   | { type: "text"; text: string; delta: boolean }

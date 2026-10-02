@@ -30,6 +30,7 @@ export const loadAgents = () =>
     .then(status => {
       agents.status = status;
       agents.loaded = true;
+      loadCommands();
       changed();
     })
     .catch(e => console.error(e));
@@ -89,14 +90,29 @@ export function setPick(kind: "model" | "effort", value: string) {
   changed();
 }
 
-// ---------- Claude Code's slash commands and skills, from its last start: kept, so the composer completes before one runs
-export const commands = { list: ls.get<SlashCommand[]>("commands", []) };
-export function setCommands(list: SlashCommand[]) {
-  commands.list = list.map(({ name, description, argumentHint }) => ({ name, description, argumentHint }));
-  ls.set("commands", commands.list);
+// Commands belong to a provider and the current vault, never a shared localStorage cache.
+export const commands = { byProvider: {} as Record<string, SlashCommand[]> };
+let commandsGeneration = 0;
+export function setCommands(list: SlashCommand[], provider = "claude") {
+  commands.byProvider[provider] = list
+    .filter(command => typeof command.name === "string" && command.name.length > 0)
+    .map(({ name, description, argumentHint }) => ({ name, description: description ?? "", argumentHint }));
+  changed();
 }
-/** Asked once at the start, without waiting for a conversation; a Claude start updates it too (src/domain/chats/events.ts). */
-export const loadCommands = () =>
-  invoke<SlashCommand[]>("claude_commands")
-    .then(setCommands)
-    .catch(e => console.error(e));
+export function loadCommands() {
+  const generation = ++commandsGeneration;
+  commands.byProvider = {};
+  changed();
+  return Promise.all(
+    agents.status.providers
+      .filter(p => p.on && p.detect.installed)
+      .map(async provider => {
+        try {
+          const list = await invoke<SlashCommand[]>("agent_commands", { provider: provider.id });
+          if (generation === commandsGeneration) setCommands(list, provider.id);
+        } catch (e) {
+          console.error(e);
+        }
+      }),
+  );
+}

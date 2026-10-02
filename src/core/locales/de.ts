@@ -188,7 +188,7 @@ export default {
   "pop.icon": "Symbol",
   "pop.cancel": "Abbrechen",
   "pop.save": "Sichern",
-  "work.working": "Claude arbeitet",
+  "work.working": "{agent} arbeitet",
   "work.thinking": "Claude denkt nach",
   "insp.today": "Heute",
   "insp.nothingDue": "Nichts überfällig, nichts für heute.",

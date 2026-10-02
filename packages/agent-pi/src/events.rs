@@ -10,9 +10,18 @@ use std::collections::HashSet;
 pub fn input(turn: &Turn) -> String {
     let images: Vec<Value> = turn.images.iter().filter(|i| IMAGE_TYPES.contains(&i.media_type.as_str()))
         .map(|i| json!({"type": "image", "data": i.data, "mimeType": i.media_type})).collect();
+    if let Some(args) = turn.text.strip_prefix("/compact").filter(|s| s.is_empty() || s.starts_with(char::is_whitespace)) {
+        if turn.images.is_empty() {
+            return format!("{}\n{}", json!({"type": "get_state"}), json!({"type": "compact", "customInstructions": args.trim()}));
+        }
+    }
     let mut prompt = json!({"type": "prompt", "message": turn.text, "streamingBehavior": "followUp"});
+    if let Some(name) = turn.text.strip_prefix('/').and_then(|s| s.split_whitespace().next()) {
+        prompt["id"] = json!(format!("relay-slash:{name}"));
+    }
     if !images.is_empty() { prompt["images"] = json!(images); }
-    format!("{}\n{prompt}", json!({"type": "get_state"}))
+    let discovery = if prompt["id"].is_string() { format!("{}\n", json!({"type": "get_commands"})) } else { String::new() };
+    format!("{}\n{discovery}{prompt}", json!({"type": "get_state"}))
 }
 
 /// pi's tool names as the canonical ones, and its `path` as the contract's `file_path`.
@@ -40,6 +49,8 @@ pub fn tokens(usage: &Value) -> TurnUsage {
 #[derive(Default)]
 pub struct State {
     session: Option<String>,
+    extensions: HashSet<String>,
+    running: bool,
     /// "text0", "thinking1": the blocks of this message that streamed
     streamed: HashSet<String>,
     called: HashSet<String>,
@@ -86,7 +97,20 @@ impl State {
                         out.push(Event::Resolved { model: format!("{p}/{id}"), effort: d["thinkingLevel"].as_str().map(Into::into) });
                     }
                 }
-                ("prompt", true) => self.sent += 1,
+                ("get_commands", true) => {
+                    self.extensions = m["data"]["commands"].as_array().into_iter().flatten()
+                        .filter(|c| c["source"] == "extension").filter_map(|c| c["name"].as_str().map(String::from)).collect();
+                },
+                ("compact", ok) => {
+                    if let Some(summary) = m["data"]["summary"].as_str() { out.push(Event::Text { text: summary.into(), delta: false }); }
+                    out.push(Event::TurnEnd { ok, error: m["error"].as_str().map(String::from), usage: None, duration_ms: None });
+                },
+                ("prompt", true) => {
+                    let extension = m["id"].as_str().and_then(|id| id.strip_prefix("relay-slash:")).is_some_and(|name| self.extensions.contains(name));
+                    if extension && !self.running {
+                        out.push(Event::TurnEnd { ok: true, error: None, usage: None, duration_ms: None });
+                    } else { self.sent += 1; }
+                },
                 // a prompt that was not accepted: no run is coming to end on its own
                 ("prompt", false) => {
                     let text = m["error"].as_str().unwrap_or("pi refused the message").to_string();
@@ -95,6 +119,7 @@ impl State {
                 }
                 _ => {}
             },
+            "agent_start" => { self.running = true; out.push(Event::Working); },
             "message_start" => self.streamed.clear(),
             "message_update" => {
                 let e = &m["assistantMessageEvent"];
@@ -136,7 +161,7 @@ impl State {
                 }
             }
             "tool_execution_end" => out.push(Event::ToolResult { id: m["toolCallId"].as_str().unwrap_or("").into(), error: m["isError"] == true }),
-            "agent_settled" => self.end(&mut out),
+            "agent_settled" => { self.running = false; self.end(&mut out); },
             _ => {}
         }
         out
@@ -155,6 +180,22 @@ mod tests {
     }
     fn calls(ev: &[Event]) -> Vec<(&str, &Value, &str)> {
         ev.iter().filter_map(|e| if let Event::ToolCall { name, input, id } = e { Some((name.as_str(), input, id.as_str())) } else { None }).collect()
+    }
+
+    #[test]
+    fn slash_compaction_and_extension_completion() {
+        let compact = input(&Turn { text: "/compact keep decisions".into(), images: vec![] });
+        let command: Value = serde_json::from_str(compact.lines().last().unwrap()).unwrap();
+        assert_eq!(command, json!({"type": "compact", "customInstructions": "keep decisions"}));
+        let mut st = State::default();
+        let ev = st.parse(r#"{"type":"response","command":"compact","success":true,"data":{"summary":"Summary"}}"#);
+        assert!(matches!(ev.last(), Some(Event::TurnEnd { ok: true, .. })));
+        st.parse(r#"{"type":"response","command":"get_commands","success":true,"data":{"commands":[{"name":"hello","source":"extension"}]}}"#);
+        let ev = st.parse(r#"{"type":"response","command":"prompt","id":"relay-slash:hello","success":true}"#);
+        assert!(matches!(ev.last(), Some(Event::TurnEnd { ok: true, .. })));
+        st.parse(r#"{"type":"agent_start"}"#);
+        assert!(st.parse(r#"{"type":"response","command":"prompt","id":"relay-slash:hello","success":true}"#).is_empty());
+        assert!(matches!(st.parse(r#"{"type":"agent_settled"}"#).last(), Some(Event::TurnEnd { ok: true, .. })));
     }
 
     #[test]

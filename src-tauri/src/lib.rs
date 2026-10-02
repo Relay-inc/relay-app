@@ -572,6 +572,11 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                 }
             }
             for ev in parse(&line) {
+                // Replayed activity restores turns surviving an app restart. Repeated model steps never
+                // count as extra user messages; Claude's assistant blocks also provide this signal.
+                if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
+                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.max(1); }
+                }
                 match &ev {
                     Event::Session { id: sid } => {
                         let st = a.state::<App>();
@@ -836,7 +841,9 @@ fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<
 }
 
 #[tauri::command]
-fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys().cloned().collect() }
+fn running(state: State<App>) -> HashMap<String, u32> {
+    state.procs.lock().unwrap().iter().map(|(key, proc)| (key.clone(), proc.turns)).collect()
+}
 
 /// The open permission requests and questions of every provider.
 #[tauri::command]
@@ -911,26 +918,16 @@ async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, S
     }).await.map_err(|e| e.to_string())
 }
 
-/// Claude Code's slash commands and skills for the vault, from a Claude that only answers `initialize` (hooks off, no
-/// message, so no session): the composer completes before any conversation has started a process of its own.
+/// Provider-specific discovery in the active vault; only commands executable by Relay are returned.
 #[tauri::command]
-async fn claude_commands(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
-    let dir = need_vault(&state)?;
-    let eb = env_of(&app, &state, agents::get_or_first(Some("claude")));
+async fn agent_commands(app: AppHandle, state: State<'_, App>, provider: String) -> Result<Value, String> {
+    need_vault(&state)?;
+    let p = agents::PROVIDERS.iter().copied().find(|p| p.id() == provider).ok_or("unknown provider")?;
+    let eb = env_of(&app, &state, p);
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new(&eb.bin)
-            .args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--settings", r#"{"disableAllHooks":true}"#])
-            .current_dir(&dir).env("PATH", &eb.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
-            .spawn().map_err(|e| format!("claude start: {e}"))?;
-        // stdin closes after the request: Claude answers it and exits
-        writeln!(child.stdin.take().unwrap(), "{}", pipe_init(false)).map_err(|e| e.to_string())?;
-        let out = std::io::BufReader::new(child.stdout.take().unwrap());
-        let commands = out.lines().map_while(Result::ok).filter_map(|l| serde_json::from_str::<Value>(&l).ok())
-            .find(|ev| ev["type"] == "control_response").map(|ev| ev["response"]["response"]["commands"].clone());
-        child.kill().ok();
-        child.wait().ok();
-        commands.filter(Value::is_array).ok_or_else(|| "claude: no commands".to_string())
-    }).await.map_err(|e| e.to_string())?
+        let commands = p.commands(&eb.env());
+        if commands.is_array() { commands } else { json!([]) }
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Token usage per switched-on provider and over all of them. `today` and `week` are the local starts of the
@@ -1387,7 +1384,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

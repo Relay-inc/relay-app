@@ -84,11 +84,11 @@ export class RelayComposer extends LitElement {
     if (this.field && this.field.value !== this.grown) this.grow();
   }
 
-  // Claude Code's slash commands and skills while the field is a `/` and a name
+  // The active provider's slash commands and skills while the field is a `/` and a name
   private get completions() {
     const typed = chat.typed[ui.selected] ?? "";
-    if (chatAgent(ui.selected) !== "claude" || typed === this.dismissed) return [];
-    return matchCommands(commands.list, typed);
+    if (typed === this.dismissed) return [];
+    return matchCommands(commands.byProvider[chatAgent(ui.selected)] ?? [], typed);
   }
   private complete(command: SlashCommand) {
     setTyped(`/${command.name} `);
@@ -119,6 +119,7 @@ export class RelayComposer extends LitElement {
     }
   }
   private onInput(e: Event) {
+    this.dismissed = "";
     setTyped((e.target as HTMLTextAreaElement).value);
     this.picked = 0;
     this.grow();

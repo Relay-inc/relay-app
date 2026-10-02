@@ -185,7 +185,7 @@ const en = {
   "pop.icon": "Icon",
   "pop.cancel": "Cancel",
   "pop.save": "Save",
-  "work.working": "Claude is working",
+  "work.working": "{agent} is working",
   "work.thinking": "Claude is thinking",
   "insp.today": "Today",
   "insp.nothingDue": "Nothing overdue, nothing due today.",
