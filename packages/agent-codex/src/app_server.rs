@@ -117,7 +117,7 @@ impl State {
         match method {
             "thread/started" => self.session(p["thread"]["id"].as_str(), &mut out),
             // a resumed thread reports its old total first: the turn's tokens are what it adds
-            "turn/started" => self.base = self.total.clone(),
+            "turn/started" => { self.base = self.total.clone(); out.push(Event::Working); },
             "item/agentMessage/delta" => out.extend(self.piece(p["itemId"].as_str().unwrap_or(""), p["delta"].as_str().unwrap_or(""), false)),
             "item/reasoning/summaryTextDelta" | "item/reasoning/textDelta" =>
                 out.extend(self.piece(p["itemId"].as_str().unwrap_or(""), p["delta"].as_str().unwrap_or(""), true)),
@@ -130,6 +130,8 @@ impl State {
                 let it = &p["item"];
                 let id = it["id"].as_str().unwrap_or("");
                 match it["type"].as_str().unwrap_or("") {
+                    "contextCompaction" => out.push(Event::Text { text: "Conversation context compacted.".into(), delta: false }),
+                    "exitedReviewMode" => if let Some(text) = it["review"].as_str() { out.push(Event::Text { text: text.into(), delta: false }); },
                     // not streamed (or only in part): the whole message
                     "agentMessage" if !self.streamed.contains_key(id) => out.extend(self.piece(id, it["text"].as_str().unwrap_or(""), false)),
                     "reasoning" if !self.streamed.contains_key(id) => {
@@ -198,6 +200,7 @@ mod tests {
         let mut it = ev.iter();
         assert_eq!(it.next(), Some(&Event::Session { id: "019a0000-aaaa-7000-8000-000000000001".into() })); // once, not again for thread/started
         assert_eq!(it.next(), Some(&Event::Resolved { model: "gpt-6.1-sol".into(), effort: Some("medium".into()) }));
+        assert_eq!(it.next(), Some(&Event::Working));
         assert_eq!(it.next(), Some(&Event::Thinking { text: "Looking at".into(), delta: false }));
         assert_eq!(it.next(), Some(&Event::Thinking { text: " the notes".into(), delta: true }));
         assert!(matches!(it.next(), Some(Event::ToolCall { id, name, input }) if id == "call_1" && name == "Bash" && input["command"] == "ls -la"));
@@ -218,6 +221,7 @@ mod tests {
         let Some(Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(5100) }) = it.next() else { panic!() };
         assert_eq!((u.input, u.cache_read, u.output), (800, 1200, 150));
         // a second turn: only what it added, a message that came whole, and a failure
+        assert_eq!(it.next(), Some(&Event::Working));
         assert_eq!(it.next(), Some(&Event::Text { text: "Klaar.".into(), delta: false }));
         let Some(Event::TurnEnd { ok: false, error: Some(e), usage: Some(u), .. }) = it.next() else { panic!() };
         assert_eq!((e.as_str(), u.input, u.output), ("stream disconnected", 100, 10));

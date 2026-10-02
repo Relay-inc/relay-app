@@ -17,6 +17,8 @@ for line in sys.stdin:
     seen.append(m["method"])
     if m["method"] == "initialize":
         say({"id": m["id"], "result": {"userAgent": "fake"}})
+    elif m["method"] == "skills/list":
+        say({"id": m["id"], "result": {"data": []}})
     elif m["method"] == "thread/resume":
         say({"id": m["id"], "error": {"code": -32600, "message": "no rollout found for thread id " + m["params"]["threadId"]}})
     elif m["method"] == "thread/start":

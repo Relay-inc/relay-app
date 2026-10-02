@@ -71,6 +71,9 @@ impl AgentProvider for Codex {
         Detect { installed, bin: env.bin.into(), version, logged_in: Some(logged_in), note }
     }
     fn models(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).0 }
+    fn commands(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, include_str!("../commands.py"))
+    }
     fn efforts(&self) -> Vec<Choice> { cached_models(&codex_home(&home())).1 }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
@@ -197,7 +200,7 @@ mod tests {
         assert_eq!(echo["params"]["threadId"], "019a0000-ffff-7000-8000-00000000000f");
         assert_eq!((echo["params"]["model"].as_str(), echo["params"]["effort"].as_str()), (Some("m1"), Some("high")));
         assert_eq!(echo["params"]["input"][0]["text"], "hoi");
-        assert_eq!(echo["seen"], json!(["initialize", "initialized", "thread/resume", "thread/start", "turn/start"]));
+        assert_eq!(echo["seen"], json!(["initialize", "initialized", "thread/resume", "thread/start", "skills/list", "turn/start"]));
         let (_, ev) = next();
         let Some(Event::Permission { request }) = ev.first() else { panic!("{ev:?}") };
         writeln!(stdin, "{}", PROVIDER.respond(request, &json!({"behavior": "allow", "updatedInput": {}})).unwrap()).unwrap();

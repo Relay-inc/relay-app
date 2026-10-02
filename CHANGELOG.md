@@ -10,6 +10,15 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+
+### Fixed
+
+- Working animations recover active conversations after a reload for every provider and identify the agent that is running.
+
+### Added
+
+- Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs.
+
 - Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
 - The views on top of the sidebar can be set up: right-click one to hide it, show it as a row of icons instead of a list, bring hidden ones back or reset the order, and drag them to reorder. Settings › General › Sidebar has the same switches. Trello, Linear and Productive now draw a monochrome icon there, like the rest of the sidebar (#53)
 - A conversation under a project now tells the agent which project it is about, in front of its first message and again after you move it to another project, so it no longer has to guess from what you typed. The line stays out of the conversation view (#50)

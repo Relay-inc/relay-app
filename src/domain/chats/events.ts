@@ -62,10 +62,18 @@ export async function notify(key: string, body: string) {
   });
 }
 
-export function onEvent(key: string, agentEvent: AgentEvent) {
+export function onEvent(key: string, agentEvent: AgentEvent, provider = "claude") {
+  // Activity can arrive after a reload before the first status poll. It does not enqueue another turn.
+  if (["working", "text", "thinking", "tool_call"].includes(agentEvent.type)) {
+    chat.status[key] = "busy";
+    chat.queued[key] = Math.max(1, chat.queued[key] || 0);
+  }
   switch (agentEvent.type) {
+    case "working":
+    case "thinking":
+      break;
     case "commands":
-      setCommands(agentEvent.commands);
+      setCommands(agentEvent.commands, provider);
       break;
     case "draft_saved":
       onDraftSaved(key, agentEvent);
@@ -213,22 +221,30 @@ function trackTimes(key: string, rows: AgentEvent[]) {
 }
 export async function syncBusy() {
   const liveAgents = new Map(chat.agentsList.map(agent => [`${agent.provider}:${agent.sessionId}`, agent]));
-  const ownedKeys = new Set(await invoke<string[]>("running").catch(() => []));
-  for (const [key, { provider, sid }] of Object.entries(chat.sidOf)) {
-    const conversation = chat.chats[key];
-    if (!conversation || conversation.closed) continue;
+  const owned = await invoke<Record<string, number>>("running").catch(() => ({}) as Record<string, number>);
+  for (const [key, conversation] of Object.entries(chat.chats)) {
+    if (conversation.closed) continue;
+    // CLI session catalogs describe persisted history; Relay's own process table knows active turns,
+    // including a fresh process which hasn't reported its session id yet.
+    if (key in owned) {
+      if (owned[key] > 0 && chat.status[key] === undefined) {
+        chat.status[key] = "busy";
+        chat.queued[key] = owned[key];
+        if (!chat.messages[key]) await ensureHistory(key);
+      }
+      continue;
+    }
+    const session = chat.sidOf[key];
+    if (!session) continue;
+    const { provider, sid } = session;
     const busy = liveAgents.get(`${provider}:${sid}`)?.status === "busy";
-    if (busy && chat.status[key] === undefined) await adoptRunningTurn(key, provider, sid, ownedKeys.has(key));
+    if (busy && chat.status[key] === undefined) await adoptRunningTurn(key, provider, sid);
     else if (!busy && key in chat.outside) await finishOutsideTurn(key);
   }
 }
-async function adoptRunningTurn(key: string, provider: string, sid: string, ownedByApp: boolean) {
+
+async function adoptRunningTurn(key: string, provider: string, sid: string) {
   chat.status[key] = "busy";
-  if (ownedByApp) {
-    // the events that follow land on top of the transcript
-    if (!chat.messages[key]) await ensureHistory(key);
-    return;
-  }
   const transcript = await invoke<{ items: AgentEvent[]; next: number }>("history_sid", { sid, from: 0, provider });
   chat.messages[key] = toItems(transcript.items);
   chat.outside[key] = transcript.next;
