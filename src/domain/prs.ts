@@ -75,6 +75,14 @@ export type PrDetail = {
 
 export const prs = { list: null as PRs | null, err: "", busy: false, at: 0 /* when the list arrived, ms */ };
 
+/** The GitHub repos per vault project ({project: ["owner/repo"]}): the title bar shows the PRs icon for a project that has some. */
+export const projectRepos = { map: {} as Record<string, string[]> };
+export async function loadProjectRepos() {
+  if (!ghOn()) return;
+  projectRepos.map = await invoke<Record<string, string[]>>("project_repos").catch(() => projectRepos.map);
+  changed();
+}
+
 // once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view
 export async function loadPrs() {
   if (!ghOn() || prs.busy) return;

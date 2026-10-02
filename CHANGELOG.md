@@ -11,6 +11,14 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Changed
+
+- The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The terminal button that resumes in iTerm or WezTerm keeps its place.
+
+### Removed
+
+- The right panel's tabs (open items, status, reminders, pull requests), its "today" list and the ⌥⌘I shortcut.
+
 ### Fixed
 
 - Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)

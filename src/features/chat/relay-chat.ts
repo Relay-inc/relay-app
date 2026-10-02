@@ -4,12 +4,14 @@ import { keyed } from "lit/directives/keyed.js";
 import { t, th } from "../../core/i18n";
 import { StoreController, ui as bus } from "../../core/store";
 import { tw } from "../../core/styles";
-import { ui, WAIT, REM, PRS, MAIL, USAGE, isView, isTerminal, boardOf } from "../../domain/ui";
+import { ui, WAIT, REM, PRS, MAIL, USAGE, isView, isTerminal, boardOf, boardKey } from "../../domain/ui";
 import { chat, terminalOf, projectOf, label, aboutProject, waitCount } from "../../domain/chats/state";
 import { rename, openTerminal, moveTo } from "../../domain/chats/actions";
-import { openProjectPanel, setPanelHidden } from "../../domain/navigation";
+import { openProjectPanel, select, toggleDrawer } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
-import { prs, loadPrs } from "../../domain/prs";
+import { prs, loadPrs, projectRepos } from "../../domain/prs";
+import { config, ghOn } from "../../domain/config";
+import { provider } from "../../domain/providers";
 import { vault, projectLabel } from "../../domain/vault";
 import { contextTint } from "../../domain/sidebar";
 import "./chat-bar";
@@ -164,9 +166,17 @@ export class RelayChat extends LitElement {
     return context ? contextTint(context) : "";
   }
 
+  // the board view follows the project last shown (ui.lastProject): make it this one before opening
+  private openLinkedBoard(projectName: string, providerId: string) {
+    ui.lastProject = projectName;
+    select(boardKey(providerId));
+  }
+
   private renderBar() {
     const session = this.terminalSession;
     const projectName = this.projectName;
+    const linkedRef = projectName ? config.value.boards?.[projectName] : undefined;
+    const linked = linkedRef && provider(linkedRef.provider);
     return html`<relay-chat-bar
       .heading=${this.heading}
       .img=${!this.onView && projectName ? (vault.icons[projectName]?.img ?? "") : ""}
@@ -179,7 +189,10 @@ export class RelayChat extends LitElement {
       ?renamable=${!!chat.chats[this.selected]}
       ?noTerm=${this.terminalHidden}
       ?locked=${this.terminalLocked}
-      ?panelOff=${ui.panelHidden}
+      ?tools=${!!projectName}
+      .board=${linked}
+      ?gh=${ghOn() && !!projectRepos.map[projectName ?? ""]?.length}
+      .drawer=${ui.drawer}
       ?remNew=${this.selected === REM}
       ?prs=${this.selected === PRS}
       .prsAt=${prs.at}
@@ -189,7 +202,9 @@ export class RelayChat extends LitElement {
       @edit-project=${openProjectPanel}
       @rename=${(e: CustomEvent<string>) => rename(e.detail)}
       @open-terminal=${openTerminal}
-      @toggle-panel=${() => setPanelHidden(!ui.panelHidden)}
+      @open-board=${() => linked && this.openLinkedBoard(projectName!, linked.id)}
+      @open-prs=${() => select(PRS)}
+      @toggle-drawer=${(e: CustomEvent<"terminal" | "notes">) => toggleDrawer(e.detail)}
     ></relay-chat-bar>`;
   }
 

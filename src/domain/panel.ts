@@ -1,15 +1,15 @@
 import { invoke } from "@tauri-apps/api/core";
-import { changed, ls } from "../core/store";
+import { changed } from "../core/store";
 import { ui } from "./ui";
 import { config } from "./config";
 import { ctxOf, provider, type BoardProvider, type BoardRef } from "./providers";
 import { mail, type MailBody } from "./mail";
 import { panelItem, cardKey, type PanelItem } from "./keys";
 
-// The right panel's detail: a mail ("mail:…"), a vault note ("note:…") or a board card ("card:<provider>:<id>"); a PR
-// ("owner/repo#12") opens in its own window. While one is open the panel widens; its tabs (open, status, reminders, PRs) are behind it.
+// The right drawer's detail: a mail ("mail:…"), a vault note ("note:…") or a board card ("card:<provider>:<id>"); a PR
+// ("owner/repo#12") opens in its own window. `ui.drawer` says what the drawer shows, `open` is the key behind "detail".
 export const panel = {
-  open: "", // the key of what is shown, "" for the tabs
+  open: "", // the key of the detail shown in the drawer, "" for none
   modal: "", // the card key shown in the ticket window over the board, "" for none
   prOpen: "", // the PR key shown in the Pull requests view, "" for none
   mailOpen: "", // the mail key shown in the Mail view, "" for none
@@ -59,7 +59,7 @@ function fetchDetail(key: string, item: PanelItem): Promise<unknown> {
       return invoke("github_pr", { repo: item.repo, number: item.number });
   }
 }
-/** Show a PR, mail, note or card in the right panel: what is known at once, then fresh from the backend. */
+/** Show a PR, mail, note or card in the right drawer: what is known at once, then fresh from the backend. */
 export async function openDetail(key: string) {
   const item = panelItem(key);
   if (!item) return;
@@ -69,8 +69,7 @@ export async function openDetail(key: string) {
   mail.link = "";
   const card = cardOf(key);
   if (card) panel.detail[key] ??= card.detail.cached(card.id);
-  ui.panelHidden = false;
-  ls.set("noinsp", false);
+  ui.drawer = "detail";
   changed();
   try {
     panel.detail[key] = await fetchDetail(key, item);
@@ -157,13 +156,9 @@ export async function cardAct(key: string, a: CardAct) {
   panel.acting = false;
   changed();
 }
-export function closeDetail() {
-  if (!panel.open) return;
+export function closeDrawer() {
+  if (!ui.drawer) return;
+  ui.drawer = "";
   panel.open = "";
   changed();
-}
-export function setTab(tab: string) {
-  ui.tab = tab;
-  if (panel.open) closeDetail();
-  else changed();
 }

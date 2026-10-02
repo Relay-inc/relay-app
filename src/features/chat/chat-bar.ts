@@ -12,7 +12,9 @@ declare global {
     "edit-project": CustomEvent<void>;
     rename: CustomEvent<string>;
     "open-terminal": CustomEvent<void>;
-    "toggle-panel": CustomEvent<void>;
+    "open-board": CustomEvent<void>;
+    "open-prs": CustomEvent<void>;
+    "toggle-drawer": CustomEvent<"terminal" | "notes">;
     "new-reminder": CustomEvent<void>;
     "reload-prs": CustomEvent<void>;
   }
@@ -20,7 +22,7 @@ declare global {
 
 const TINT = { "": "text-tertiary", "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m", "ctx-p": "text-ctx-p" };
 
-/** The title bar of the centre column: the project (or the view), the conversation's title and state, the terminal and the right panel buttons. */
+/** The title bar of the centre column: the project (or the view), the conversation's title and state, the project's tools (board, pull requests, drawer) and the external terminal button. */
 @customElement("relay-chat-bar")
 export class ChatBar extends LitElement {
   static override styles = [
@@ -47,7 +49,10 @@ export class ChatBar extends LitElement {
   @property({ type: Boolean }) prs = false; // the pull requests view: when the list arrived, and a reload button
   @property({ type: Number }) prsAt = 0;
   @property({ type: Boolean }) prsBusy = false;
-  @property({ type: Boolean }) panelOff = false;
+  @property({ type: Boolean }) tools = false; // a vault project is open: its tool icons show on the right
+  @property({ attribute: false }) board?: { name: string; mark: string }; // the board linked to the project
+  @property({ type: Boolean }) gh = false; // GitHub is on and the project has repos
+  @property() drawer = ""; // what the right drawer shows, the active tool lights up
   // the conversation title while it is edited: a redraw must not take the text away from under the caret
   private draft: string | null = null;
 
@@ -115,6 +120,42 @@ export class ChatBar extends LitElement {
       </button>`;
   }
 
+  private renderTools() {
+    if (!this.tools) return nothing;
+    const toggle = (tool: "terminal" | "notes", glyph: string) =>
+      html`<button
+        class="btn-icon ${this.drawer === tool ? "text-accent!" : ""}"
+        title=${t(`drawer.${tool}`)}
+        aria-label=${t(`drawer.${tool}`)}
+        @click=${() => emit(this, "toggle-drawer", tool)}
+      >
+        ${icon(glyph, "glyph size-4")}
+      </button>`;
+    return html`${
+      this.board
+        ? html`<button
+            class="btn-icon"
+            title=${this.board.name}
+            aria-label=${this.board.name}
+            @click=${() => emit(this, "open-board")}
+          >
+            ${glyphSvg(this.board.mark, "glyph size-4", "0 0 24 24")}
+          </button>`
+        : nothing
+    }${
+      this.gh
+        ? html`<button
+            class="btn-icon"
+            title=${t("nav.prs")}
+            aria-label=${t("nav.prs")}
+            @click=${() => emit(this, "open-prs")}
+          >
+            ${icon("github", "glyph size-4")}
+          </button>`
+        : nothing
+    }${toggle("terminal", "drawerTerm")}${toggle("notes", "notes")}`;
+  }
+
   override render() {
     const shown = this.draft ?? this.value;
     const lead = this.img
@@ -175,14 +216,7 @@ export class ChatBar extends LitElement {
       >
         ${icon("term", "glyph size-4")}
       </button>
-      <button
-        class="btn-icon ${this.panelOff ? "text-accent!" : ""}"
-        title=${t("bar.togglePanelTitle")}
-        aria-label=${t("bar.togglePanel")}
-        @click=${() => emit(this, "toggle-panel")}
-      >
-        ${glyphSvg('<rect x="2.5" y="3" width="11" height="10" rx="1.5"/><path d="M10 3v10"/>', "glyph size-4")}
-      </button>
+      ${this.renderTools()}
     </div>`;
   }
 }

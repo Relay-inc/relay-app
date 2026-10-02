@@ -5,7 +5,7 @@ import { md } from "../../core/markdown";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { mdDefaults } from "../../components/md-defaults";
-import { panel, closeDetail, openDetail } from "../../domain/panel";
+import { panel, closeDrawer, openDetail } from "../../domain/panel";
 import { noteOf, noteKnown } from "../../domain/notes";
 import { noteKey, panelItem } from "../../domain/keys";
 
@@ -44,7 +44,7 @@ export class RelayNoteDetail extends LitElement {
 
   private renderBar(note: Note | undefined) {
     return html`<div class="flex items-center flex-wrap gap-2 mb-3">
-      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closeDetail}>×</button>
+      <button class="btn whitespace-nowrap flex-none" title=${t("pr.close")} @click=${closeDrawer}>×</button>
       <span class="text-secondary overflow-hidden text-ellipsis whitespace-nowrap flex-1 min-w-0"
         >${note?.path ?? noteTarget(panel.open)}</span
       >

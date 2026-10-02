@@ -3,11 +3,11 @@ import { changed, ls, request } from "../core/store";
 import { ui, WAIT, PRS, MAIL, isView, isTerminal } from "./ui";
 import { chat, chatsOf, newChat, selectedProject } from "./chats/state";
 import { ensureHistory } from "./chats/events";
-import { panel } from "./panel";
-import { loadPrs } from "./prs";
+import { panel, closeDrawer } from "./panel";
+import { loadPrs, loadProjectRepos } from "./prs";
 import { loadMails } from "./mail";
 
-// Moving around the main window: which conversation or view is open, the toast, the right panel and the overlays.
+// Moving around the main window: which conversation or view is open, the toast, the right drawer and the overlays.
 
 // an empty draft that is left behind disappears, one with typed text stays
 function dropAbandonedDraft(leaving: string, next: string) {
@@ -18,7 +18,7 @@ function dropAbandonedDraft(leaving: string, next: string) {
 export async function select(key: string) {
   dropAbandonedDraft(ui.selected, key);
   ui.projectPanel = false;
-  if (ui.selected !== key && panel.open) panel.open = "";
+  if (ui.selected !== key && panel.open) closeDrawer();
   ui.selected = key;
   if (!isView(key)) ui.lastProject = selectedProject();
   chat.unseen.delete(key);
@@ -26,6 +26,7 @@ export async function select(key: string) {
   ls.set("sel", chat.chats[key]?.draft && !chat.typed[key] ? WAIT : key);
   changed();
   if (!isView(key) && !chat.chats[key]?.draft) await ensureHistory(key, isTerminal(key));
+  if (!isView(key)) loadProjectRepos();
   if (key === PRS) loadPrs();
   if (key === MAIL) loadMails();
   changed();
@@ -53,9 +54,10 @@ export const hideToast = () => {
   changed();
 };
 
-export const setPanelHidden = (hide: boolean) => {
-  ui.panelHidden = hide;
-  ls.set("noinsp", hide);
+/** A drawer tool's button: opens it, or closes it when it is the one shown. */
+export const toggleDrawer = (tool: "terminal" | "notes") => {
+  ui.drawer = ui.drawer === tool ? "" : tool;
+  panel.open = "";
   changed();
 };
 export const openProjectPanel = () => {

@@ -10,20 +10,19 @@ import { ui, isView } from "../../domain/ui";
 import { vault } from "../../domain/vault";
 import { chat } from "../../domain/chats/state";
 import { escStop, ctrlC } from "../../domain/chats/actions";
-import { setPanelHidden, toggleQuickAsk, zoom } from "../../domain/navigation";
-import { panel, closeDetail, closeTicket, openDetail } from "../../domain/panel";
+import { toggleQuickAsk, zoom } from "../../domain/navigation";
+import { panel, closeDrawer, closeTicket, openDetail } from "../../domain/panel";
 import { noteKey } from "../../domain/keys";
 import "../sidebar/relay-sidebar";
 import "../chat/relay-chat";
-import "../inspector/relay-inspector";
+import "../drawer/relay-drawer";
 import "../quick/relay-quick";
 
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes("Files");
 const isQuickAskKey = (e: KeyboardEvent) => e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK";
-const isFoldPanelKey = (e: KeyboardEvent) => e.metaKey && e.altKey && e.code === "KeyI";
 const isCtrlCKey = (e: KeyboardEvent) => e.ctrlKey && !e.metaKey && !e.altKey && e.code === "KeyC";
 
-/** The main window: sidebar, the open conversation or view, the right panel. The shortcuts that work anywhere live here. */
+/** The main window: sidebar, the open conversation or view, the right drawer. The shortcuts that work anywhere live here. */
 @customElement("relay-app")
 export class RelayApp extends LitElement {
   static override styles = [
@@ -32,22 +31,17 @@ export class RelayApp extends LitElement {
       :host {
         display: grid;
         height: 100%;
-        grid-template-columns: 240px minmax(0, 1fr) 300px;
+        grid-template-columns: 240px minmax(0, 1fr) 0px;
         min-width: 900px;
         transition: grid-template-columns 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
       }
-      /* the right panel slides away: the column animates to 0 while the content keeps its width and fades */
-      :host([noinsp]) {
-        grid-template-columns: 240px minmax(0, 1fr) 0px;
-      }
-      /* a PR, mail or card open: the right panel grows */
-      :host([wide]) {
+      /* the drawer exists while open: the column grows from 0 */
+      :host([drawer]) {
         grid-template-columns: 240px minmax(0, 1fr) 460px;
       }
       @media (max-width: 1100px) {
         :host,
-        :host([noinsp]),
-        :host([wide]) {
+        :host([drawer]) {
           grid-template-columns: 220px minmax(0, 1fr);
         }
       }
@@ -77,7 +71,7 @@ export class RelayApp extends LitElement {
   // links in a conversation, a PR or a mail open in the default browser or mail app, a webview window cannot open them itself
   private onLink = (e: MouseEvent) => {
     const path = e.composedPath();
-    // a vault note named in markdown opens in the right panel (src/core/markdown.ts)
+    // a vault note named in markdown opens in the right drawer (src/core/markdown.ts)
     const noteLink = path.find(
       (target): target is HTMLElement => target instanceof HTMLElement && !!target.dataset.note,
     );
@@ -107,10 +101,6 @@ export class RelayApp extends LitElement {
       // Cmd-K: a question that starts a general conversation in the background
       e.preventDefault();
       toggleQuickAsk();
-    } else if (isFoldPanelKey(e)) {
-      // Cmd-Alt-I folds the right panel
-      e.preventDefault();
-      setPanelHidden(!ui.panelHidden);
     } else if (isCtrlCKey(e)) {
       // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
       e.preventDefault();
@@ -121,7 +111,7 @@ export class RelayApp extends LitElement {
       request("focus-composer");
     }
   };
-  // Esc closes the image, then the right panel, then stops the running turn
+  // Esc closes the image, then the right drawer, then stops the running turn
   private onEscape(e: KeyboardEvent) {
     if (ui.zoom) {
       e.preventDefault();
@@ -133,9 +123,9 @@ export class RelayApp extends LitElement {
       closeTicket();
       return;
     }
-    if (panel.open && !ui.projectPanel && !inField(e)) {
+    if (ui.drawer && !ui.projectPanel && !inField(e)) {
       e.preventDefault();
-      closeDetail();
+      closeDrawer();
       return;
     }
     // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)
@@ -153,8 +143,7 @@ export class RelayApp extends LitElement {
   }
 
   override willUpdate() {
-    this.toggleAttribute("noinsp", ui.panelHidden);
-    this.toggleAttribute("wide", !!panel.open);
+    this.toggleAttribute("drawer", !!ui.drawer);
   }
 
   private renderSnapshotError() {
@@ -177,13 +166,10 @@ export class RelayApp extends LitElement {
   }
 
   override render() {
-    const inspectorHidden = ui.panelHidden ? "opacity-0 border-l-transparent pointer-events-none" : "";
     return html` ${this.renderSnapshotError()}
       <relay-sidebar class="min-h-0 min-w-0 border-r border-separator"></relay-sidebar>
       <relay-chat class="min-h-0 min-w-0"></relay-chat>
-      <relay-inspector
-        class="min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${inspectorHidden}"
-      ></relay-inspector>
+      ${ui.drawer ? html`<relay-drawer class="min-h-0 min-w-0 overflow-hidden max-lg:hidden"></relay-drawer>` : nothing}
       ${ui.quickAsk ? html`<relay-quick></relay-quick>` : nothing} ${this.renderZoom()}`;
   }
 }

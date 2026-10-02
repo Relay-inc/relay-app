@@ -2,15 +2,16 @@ import { ls } from "../core/store";
 import { provider } from "./providers";
 import { VIEW, opened, boardKey, isTerminal } from "./keys";
 
-// What the main window shows: the open conversation or view (`sel`), the right panel's tab, and the overlays.
+// What the main window shows: the open conversation or view (`sel`), the right drawer, and the overlays.
 
 export const { wait: WAIT, reminders: REM, prs: PRS, mail: MAIL, usage: USAGE } = VIEW;
 export { boardKey, isTerminal };
 
+export type Drawer = "" | "detail" | "terminal" | "notes";
+
 export const ui = {
   selected: ls.get<string>("sel", "") || WAIT,
-  tab: "open", // the right panel: open | stand | rem | prs
-  panelHidden: ls.get<boolean>("noinsp", false), // the right panel folded away
+  drawer: "" as Drawer, // the right drawer: what it shows, "" while closed
   projectPanel: false, // the conversation's project panel under the title
   toast: null as { text: string; undo?: () => void; btn?: string } | null,
   zoom: "", // the image shown large

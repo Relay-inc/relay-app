@@ -17,7 +17,7 @@ import { select, newHere } from "../domain/navigation";
 import { boards, checkBoards, resetBoard } from "../domain/board";
 import { loadPrs, resetPrs } from "../domain/prs";
 import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
-import { panel, closeDetail } from "../domain/panel";
+import { panel, closeDrawer } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
 import { onboard } from "../features/onboarding/onboard";
 import { applyTheme } from "../core/theme";
@@ -50,7 +50,7 @@ async function settingsChanged(next: Settings) {
   }
   if (mailChanged) {
     resetMail();
-    if (isMailKey(panel.open)) closeDetail();
+    if (isMailKey(panel.open)) closeDrawer();
     if (!mailOn() && ui.selected === MAIL) select(WAIT);
     loadMails();
   }
