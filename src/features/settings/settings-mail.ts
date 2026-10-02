@@ -1,4 +1,4 @@
-import { html, nothing } from "lit";
+import { html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
@@ -16,11 +16,14 @@ import {
   HINT_IN_ROW,
   withoutColon,
   OK_MESSAGE,
+  removeFooter,
+  section,
   SELECT,
   inputValue,
 } from "./blocks";
+import "./settings-menu";
 import { SettingsElement } from "./settings-element";
-import { tws } from "./styles";
+import { contents, tws } from "./styles";
 import type { MailAcct, MailCfg, Message } from "./types";
 
 export type MailNew = {
@@ -44,14 +47,18 @@ declare global {
     "mail-connect": CustomEvent<boolean>; // whether it is a server other than Gmail
     "mail-add": CustomEvent<void>;
     "mail-save": CustomEvent<void>;
+    /** a new add step starts without the last try's message */
+    "mail-message-clear": CustomEvent<void>;
   }
 }
 
-// a step of the account guide: a small grid of its own
-const STEP = "grid justify-items-start gap-2";
-const PARA = `text-sm leading-normal ${CODE}`;
-const HINT_STEP = `mt-0.5 text-sm leading-normal text-s-faint ${CODE}`;
-const SUB = "mt-2 grid gap-0.5 border-t border-s-border pt-3";
+// a step of the account guide: a small grid of its own, the ones after the first below a line
+const STEP = "grid justify-items-start gap-2 [&>*]:max-w-full";
+const NEXT_STEP = `${STEP} border-t border-s-border pt-3.5`;
+const STEP_TITLE = "text-[13px] font-medium text-s-fg";
+const PARA = `text-[13px] leading-snug text-s-fg ${CODE}`;
+
+type AddKind = "gmail" | "imap" | "keychain";
 
 // the backend's errors we know what to do about, each with the text that says it
 const KNOWN_ERRORS: [RegExp, Key][] = [
@@ -66,7 +73,8 @@ const KNOWN_ERRORS: [RegExp, Key][] = [
  *  the app reads the app password from the macOS keychain. Edits stay local until Save. */
 @customElement("relay-settings-mail")
 export class SettingsMail extends SettingsElement {
-  static override styles = [tws];
+  // its sections sit in the page's column, like the page's own
+  static override styles = [tws, contents];
 
   @property({ attribute: false }) config!: MailCfg;
   /** What sits in the add fields */
@@ -76,8 +84,13 @@ export class SettingsMail extends SettingsElement {
   @property() busy = "";
   @property() message = "";
   @property({ type: Boolean }) ok = false;
-  /** which connect steps show */
-  @state() private kind: "gmail" | "imap" = "gmail";
+  /** the kind of account being added, its steps shown instead of the list; "" for the list */
+  @state() private adding: "" | AddKind = "";
+
+  // a step that ends well (the account connected and saved) brings the list back, with its message
+  override willUpdate(changed: PropertyValues<this>) {
+    if (changed.get("busy") && !this.busy && this.ok) this.adding = "";
+  }
 
   // a backend error as what to do about it, with the raw message small below for when it is something else
   private explainError(error: string) {
@@ -103,7 +116,9 @@ export class SettingsMail extends SettingsElement {
   }
 
   private renderAccount(account: MailAcct) {
-    return html`<div class="group flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0">
+    return html`<div
+      class="group flex items-center gap-3 border-t border-s-border py-2.5 first:border-t-0 first:pt-0 last:pb-0"
+    >
       <span class="min-w-0 flex-1"
         ><b class="block truncate font-medium">${account.email}</b
         ><span class="block truncate text-xs text-s-muted"
@@ -121,11 +136,8 @@ export class SettingsMail extends SettingsElement {
   }
 
   private renderAccounts() {
-    if (!this.config.accounts.length) return nothing;
-    return html`<div class=${SUB}><b class="text-xs font-semibold">${t("mail.accountsH")}</b></div>
-      <div class="rounded-md border border-s-border px-3">
-        ${this.config.accounts.map(account => this.renderAccount(account))}
-      </div>`;
+    if (!this.config.accounts.length) return html`<p class=${HINT_IN_ROW}>${t("mail.setupIntro")}</p>`;
+    return html`<div>${this.config.accounts.map(account => this.renderAccount(account))}</div>`;
   }
 
   // which account the app reads, when there are several
@@ -142,7 +154,11 @@ export class SettingsMail extends SettingsElement {
         entry => html`<option value=${entry.email} ?selected=${entry.email === current}>${entry.email}</option>`,
       )}
     </select>`;
-    return field(withoutColon(t("mail.account")), select, { id: "mailacct" });
+    return field(t("mail.account"), select, {
+      id: "mailacct",
+      hint: t("mail.accountHint"),
+      classes: "border-t border-s-border pt-3.5",
+    });
   }
 
   private renderEmailField(id: string) {
@@ -190,54 +206,35 @@ export class SettingsMail extends SettingsElement {
     const save = html`<button class=${buttonClass("primary")} @click=${() => emit(this, "mail-save")}>
       ${t("set.save")}
     </button>`;
-    return html`<div class=${FOOTER_IN_ROW}>
-      <button class=${buttonClass("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button
-      >${footer(message, this.ok, save)}
-    </div>`;
+    return removeFooter(() => emit(this, "int-remove"), message, this.ok, save);
   }
 
-  private renderKindChoice() {
-    const kinds = [
-      ["gmail", t("mail.kindGmail")],
-      ["imap", t("mail.kindImap")],
-    ] as const;
-    return html`<div class="seg w-fit" role="radiogroup">
-      ${kinds.map(
-        ([kind, name]) =>
-          html`<button
-            role="radio"
-            aria-checked=${this.kind === kind}
-            class=${this.kind === kind ? "on" : ""}
-            @click=${() => (this.kind = kind)}
-          >
-            ${name}
-          </button>`,
-      )}
-    </div>`;
+  // the add steps' button, with the busy spinner or the message of the last try before it
+  private renderAddButton(step: string, label: Key, click: () => void) {
+    const message = this.busy === step ? this.renderBusy(step) : this.message && this.explainError(this.message);
+    const button = html`<button class=${buttonClass("primary")} @click=${click} ?disabled=${!!this.busy}>
+      ${t(label)}
+    </button>`;
+    return html`<div class="${FOOTER_IN_ROW} justify-self-stretch">${footer(message, this.ok, button)}</div>`;
   }
-
   private renderConnectButton(imap: boolean) {
-    return html`<div class="flex items-center gap-2">
-      <button class=${buttonClass("primary")} @click=${() => emit(this, "mail-connect", imap)} ?disabled=${!!this.busy}>
-        ${t("mail.connect")}</button
-      >${this.renderBusy("connect")}
-    </div>`;
+    return this.renderAddButton("connect", "mail.connect", () => emit(this, "mail-connect", imap));
   }
 
   private renderGmailSteps() {
     return html`<div class=${STEP}>
-        <b class="font-medium">${t("mail.step1H")}</b>
+        <b class=${STEP_TITLE}>${t("mail.step1H")}</b>
         <p class=${PARA}>${th("mail.step1")}</p>
+        <p class=${HINT_IN_ROW}>${th("mail.step1Hint")}</p>
         <a class=${buttonClass()} href="https://myaccount.google.com/apppasswords" target="_blank"
           >${t("mail.step1Btn")}</a
         >
-        <p class=${HINT_STEP}>${th("mail.step1Hint")}</p>
       </div>
-      <div class=${STEP}>
-        <b class="font-medium">${t("mail.step2H")}</b>
+      <div class=${NEXT_STEP}>
+        <b class=${STEP_TITLE}>${t("mail.step2H")}</b>
         ${this.renderEmailField("mailnew")} ${this.renderPasswordField("mail.pwL", "mail.pwPh")}
+        <p class=${HINT_IN_ROW}>${th("mail.step2Hint")}</p>
         ${this.renderConnectButton(false)}
-        <p class=${HINT_STEP}>${th("mail.step2Hint")}</p>
       </div>`;
   }
 
@@ -246,39 +243,62 @@ export class SettingsMail extends SettingsElement {
       ${this.renderEmailField("mailnew")}
       ${this.renderTextField("mailhost", t("mail.hostL"), "host", "mail.example.com")}
       ${this.renderTextField("mailport", t("mail.portL"), "port", "993")} ${this.renderPasswordField("mail.imapPwL")}
+      <p class=${HINT_IN_ROW}>${th("mail.imapHint")}</p>
       ${this.renderConnectButton(true)}
-      <p class=${HINT_STEP}>${th("mail.imapHint")}</p>
     </div>`;
   }
 
-  private renderConnectSteps() {
-    const imap = this.kind === "imap";
-    const heading = this.config.accounts.length ? t("mail.guideMore") : imap ? t("mail.guideImap") : t("mail.guideH");
-    return html`<div class=${SUB}><b class="text-xs font-semibold">${heading}</b></div>
-      ${this.renderKindChoice()} ${imap ? this.renderImapSteps() : this.renderGmailSteps()}`;
+  // the steps to add an account of the picked kind, in place of the list until it is added or cancelled
+  private renderAdding(kind: AddKind) {
+    const titles: Record<AddKind, Key> = {
+      gmail: "mail.guideH",
+      imap: "mail.guideImap",
+      keychain: "mail.kindKeychain",
+    };
+    const steps = {
+      gmail: this.renderGmailSteps(),
+      imap: this.renderImapSteps(),
+      keychain: this.renderKeychainSteps(),
+    };
+    const cancel = html`<button class=${buttonClass("ghost")} @click=${() => (this.adding = "")}>
+      ${t("pop.cancel")}
+    </button>`;
+    const desc = kind === "keychain" ? th("mail.adv") : undefined;
+    return section(t(titles[kind]), steps[kind], { desc, action: cancel });
   }
 
-  // the same without the app password: an account whose password already sits in the keychain
-  private renderAdvanced() {
-    return html`<details class=${STEP} ?open=${!!this.newAccount.keychain_service}>
-      <summary class="font-medium">${t("mail.advH")}</summary>
-      <p class=${HINT_STEP}>${th("mail.adv")}</p>
+  // without the app password: an account whose password already sits in the keychain (himalaya's, say)
+  private renderKeychainSteps() {
+    return html`<div class=${STEP}>
       ${this.renderEmailField("mailemail2")}
       ${this.renderTextField("mailhost2", t("mail.advHostL"), "host", "mail.example.com")}
       ${this.renderTextField("mailport2", t("mail.portL"), "port", "993")}
       ${this.renderTextField("mailsvc", t("mail.svcL"), "keychain_service", "himalaya-weareantenna-imap")}
       ${this.renderTextField("mailkacc", t("mail.kaccL"), "keychain_account", "weareantenna")}
-      <div class="flex items-center gap-2">
-        <button class=${buttonClass()} @click=${() => emit(this, "mail-add")} ?disabled=${!!this.busy}>
-          ${t("mail.addTest")}</button
-        >${this.renderBusy("advanced")}
-      </div>
-    </details>`;
+      ${this.renderAddButton("advanced", "mail.addTest", () => emit(this, "mail-add"))}
+    </div>`;
+  }
+
+  // the kinds of account to add, like the Add menus of integrations and agents
+  private renderAddMenu() {
+    const items = [
+      { id: "gmail", name: t("mail.kindGmail") },
+      { id: "imap", name: t("mail.kindImap") },
+      { id: "keychain", name: t("mail.kindKeychain") },
+    ];
+    return html`<relay-settings-menu
+      .label=${t("mail.add")}
+      .items=${items}
+      @menu-pick=${(e: CustomEvent<string>) => {
+        emit(this, "mail-message-clear");
+        this.adding = e.detail as AddKind;
+      }}
+    ></relay-settings-menu>`;
   }
 
   override render() {
-    return html`<p class=${HINT_IN_ROW}>${t("mail.help")}</p>
-      ${this.renderAccounts()} ${this.renderAccountChoice()} ${this.renderSaveRow()} ${this.renderConnectSteps()}
-      ${this.renderAdvanced()}`;
+    if (this.adding) return this.renderAdding(this.adding);
+    const accounts = html`${this.renderAccounts()} ${this.renderAccountChoice()} ${this.renderSaveRow()}`;
+    return section(t("mail.accountsH"), accounts, { desc: t("mail.help"), action: this.renderAddMenu() });
   }
 }

@@ -12,12 +12,20 @@ export const tws = [
   `,
 ];
 
-/** A page of the window: it lays its sections out in the window's column itself, and only the shown one takes part. */
-export const page = css`
+/** A component whose parts take part in the layout around it: its sections in the page's column, its rows in the
+ *  folded-open row's grid. Without it the host is one box and the surrounding gap never reaches its parts. */
+export const contents = css`
   :host {
     display: contents;
   }
-  :host(:not([active])) {
-    display: none;
-  }
 `;
+
+/** A page of the window: it lays its sections out in the window's column itself, and only the shown one takes part. */
+export const page = [
+  contents,
+  css`
+    :host(:not([active])) {
+      display: none;
+    }
+  `,
+];

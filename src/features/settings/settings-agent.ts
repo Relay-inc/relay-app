@@ -4,9 +4,9 @@ import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
 import { at, ath, t } from "../../core/i18n";
 import type { AgentProvider, AgentStatus } from "../../domain/agents";
-import { buttonClass, field, FIELD, HINT_IN_ROW, withoutColon, PILL, SELECT, inputValue } from "./blocks";
+import { field, FIELD, HINT_IN_ROW, withoutColon, PILL, removeFooter, SELECT, inputValue } from "./blocks";
 import { SettingsElement } from "./settings-element";
-import { tws } from "./styles";
+import { contents, tws } from "./styles";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -22,7 +22,8 @@ declare global {
 /** One coding agent's settings, in its folded-open row: help, the program, its options and what it can do. */
 @customElement("relay-settings-agent")
 export class SettingsAgent extends SettingsElement {
-  static override styles = [tws];
+  // its parts are rows of the folded-open row's grid, so they get its gap
+  static override styles = [tws, contents];
 
   @property({ attribute: false }) status!: AgentStatus;
   @property({ attribute: false }) config!: { on: boolean; bin: string; [opt: string]: unknown };
@@ -34,10 +35,11 @@ export class SettingsAgent extends SettingsElement {
     const pills = names
       .filter(name => this.status.caps[name])
       .map(name => html`<span class=${PILL}>${t(`ag.cap.${name}`)}</span>`);
-    return field(
-      withoutColon(t("ag.caps")),
-      html`<span class="flex max-w-2xs flex-wrap justify-end gap-1">${pills}</span>`,
-    );
+    // the label above the pills: a row of them on the right would wrap into a ragged column
+    return html`<div class="grid gap-1.5">
+      <span class="text-[13px] text-s-fg">${withoutColon(t("ag.caps"))}</span>
+      <div class="flex flex-wrap gap-1">${pills}</div>
+    </div>`;
   }
 
   private renderBin() {
@@ -52,7 +54,10 @@ export class SettingsAgent extends SettingsElement {
       spellcheck="false"
       @change=${(e: Event) => emit(this, "agent-bin", inputValue(e).trim())}
     />`;
-    return field(withoutColon(t("ag.bin")), input, { id: `agbin-${id}`, hint: note ? html`<code>${note}</code>` : "" });
+    return field(withoutColon(t("ag.bin")), input, {
+      id: `agbin-${id}`,
+      hint: note ? html`<span class="block truncate font-mono" title=${note}>${note}</span>` : "",
+    });
   }
 
   private renderOption(provider: AgentProvider, option: NonNullable<AgentProvider["options"]>[number]) {
@@ -75,11 +80,7 @@ export class SettingsAgent extends SettingsElement {
   override render() {
     const provider = this.agent;
     return html`${provider ? html`<p class=${HINT_IN_ROW}>${ath(provider, "set.help")}</p>` : nothing}
-      ${this.renderBin()} ${(provider?.options ?? []).map(option => this.renderOption(provider!, option))}
-      ${this.renderCapabilities()}
-      <div class="mt-0.5 flex flex-wrap items-center gap-2">
-        <span class="flex-1"></span
-        ><button class=${buttonClass("ghost")} @click=${() => emit(this, "agent-remove")}>${t("ag.remove")}</button>
-      </div>`;
+    ${this.renderBin()} ${(provider?.options ?? []).map(option => this.renderOption(provider!, option))}
+    ${this.renderCapabilities()} ${removeFooter(() => emit(this, "agent-remove"))}`;
   }
 }

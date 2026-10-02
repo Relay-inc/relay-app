@@ -1,4 +1,4 @@
-import { css, html, nothing } from "lit";
+import { html, nothing } from "lit";
 import { ifDefined } from "lit/directives/if-defined.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
@@ -14,8 +14,6 @@ import {
   ERROR_MESSAGE,
   field,
   FIELD,
-  footer,
-  FOOTER_IN_ROW,
   HINT_IN_ROW,
   withoutColon,
   SELECT,
@@ -23,12 +21,13 @@ import {
   toggleSwitch,
   inputValue,
   formText,
+  removeFooter,
 } from "./blocks";
 import "./settings-menu";
 import { matchBoard } from "./board-match";
 import type { BoardLink } from "./board-controller";
 import { SettingsElement } from "./settings-element";
-import { tws } from "./styles";
+import { contents, tws } from "./styles";
 import type { Message } from "./types";
 import type { IntegrationConfig } from "../../domain/config";
 
@@ -55,14 +54,7 @@ export type BoardRow = { vaultProject: string; board?: string; other?: string };
 @customElement("relay-settings-board")
 export class SettingsBoard extends SettingsElement {
   // its sections sit in the page's column, like the page's own
-  static override styles = [
-    tws,
-    css`
-      :host {
-        display: contents;
-      }
-    `,
-  ];
+  static override styles = [tws, contents];
 
   @property({ attribute: false }) provider!: BoardProvider;
   @property({ attribute: false }) config: IntegrationConfig = {};
@@ -329,10 +321,8 @@ export class SettingsBoard extends SettingsElement {
     const save = html`<button class=${buttonClass("primary")} @click=${() => emit(this, "board-save")}>
       ${t("int.save")}
     </button>`;
-    return html`<div class=${FOOTER_IN_ROW}>
-      <button class=${buttonClass("ghost")} @click=${() => emit(this, "int-remove")}>${t("ag.remove")}</button
-      >${this.renderMore()}${footer(message ? message.text : "", !!message?.ok, save)}
-    </div>`;
+    const buttons = html`${this.renderMore()}${save}`;
+    return removeFooter(() => emit(this, "int-remove"), message ? message.text : "", !!message?.ok, buttons);
   }
 
   override render() {

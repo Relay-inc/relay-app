@@ -428,7 +428,8 @@ export default {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Posteingang anzeigen",
-  "mail.account": "Standardkonto, das Claude nutzt, wenn nichts anderes gesagt wird:",
+  "mail.account": "Standardkonto",
+  "mail.accountHint": "Nutzt Claude, wenn nichts anderes gesagt wird.",
   "mail.testOk": "Funktioniert: {n} Mails im Posteingang",
   "mail.accounts": "{n} Konten",
   "mail.help":
@@ -466,7 +467,6 @@ export default {
     "Liegt dein Passwort schon im Schlüsselbund, zum Beispiel von himalaya? Dann nimm Erweitert unten auf derselben Seite.",
   "mail.setupOpen": "Einstellungen öffnen",
   "mail.guideH": "Gmail in zwei Schritten verbinden",
-  "mail.guideMore": "Ein weiteres Konto verbinden",
   "mail.step1H": "Schritt 1. Leg bei Google ein App-Passwort an",
   "mail.step1":
     "Gmail lässt eine App nur mit einem App-Passwort herein: einem 16-stelligen Code, getrennt von deinem normalen Passwort. Du legst eins pro App an und kannst es jederzeit widerrufen.",
@@ -483,7 +483,6 @@ export default {
     "Verbunden mit {email}: {n} Mails im Posteingang. Gespeichert, du findest sie unter Mail in der Seitenleiste.",
   "mail.step2Hint":
     "Der Code geht direkt in den macOS-Schlüsselbund, unter dem Dienst relay-mail. Die App speichert ihn nirgends sonst und zeigt ihn nicht mehr an. Stimmt er nicht, wird er sofort wieder entfernt.",
-  "mail.advH": "Erweitert: das Passwort liegt schon im Schlüsselbund (zum Beispiel von himalaya)",
   "mail.adv":
     "Öffne die App Schlüsselbundverwaltung und such den Eintrag. Sein Name ist der Dienst, sein Feld Account ist das Schlüsselbund-Konto. Für himalaya ist der Dienst himalaya-&lt;name&gt;-imap und das Konto &lt;name&gt;, mit dem Kontonamen aus deiner himalaya-Konfiguration. Zum Beispiel Dienst himalaya-weareantenna-imap und Konto weareantenna. Fragt macOS nach der Erlaubnis zum Lesen, wähl Immer erlauben.",
   "mail.svcL": "Dienst",
@@ -492,6 +491,8 @@ export default {
   "mail.inKeychain": "Passwort im Schlüsselbund: {svc}",
   "mail.kindGmail": "Gmail",
   "mail.kindImap": "Anderer Mailserver (IMAP)",
+  "mail.kindKeychain": "Passwort schon im Schlüsselbund",
+  "mail.add": "+ Konto hinzufügen",
   "mail.guideImap": "Einen Mailserver verbinden",
   "mail.hostL": "Server",
   "mail.portL": "Port",

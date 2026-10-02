@@ -223,6 +223,9 @@ export class SettingsIntegrations extends SettingsElement {
       @mail-connect=${(e: CustomEvent<boolean>) => mail.connect(e.detail)}
       @mail-add=${() => mail.add()}
       @mail-save=${() => mail.save()}
+      @mail-message-clear=${() => {
+        mail.message = "";
+      }}
     ></relay-settings-mail>`;
   }
 
@@ -256,7 +259,7 @@ export class SettingsIntegrations extends SettingsElement {
         name: "Mail",
         status: this.mailStatus(),
         on: !!this.settings.mail?.on,
-        page: () => html`${section(t("int.connection"), this.mailBody())}${this.actionsBody("mail", "Mail")}`,
+        page: () => html`${this.mailBody()}${this.actionsBody("mail", "Mail")}`,
       },
     ];
   }
