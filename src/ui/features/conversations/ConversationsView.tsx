@@ -5,7 +5,14 @@ import { useConversationsStore } from "../../../application/conversations/store"
 import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
 import { openTerminal, rename } from "../../../application/conversations/actions";
-import { openProjectPanel, setPanelHidden } from "../../../application/navigation/navigation";
+import {
+  closeTool,
+  openProjectPanel,
+  openSettings,
+  openTool,
+  toggleDrawer,
+} from "../../../application/navigation/navigation";
+import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
 import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
@@ -15,6 +22,7 @@ import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
 import { MoveBar } from "./MoveBar";
+import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { PrsReload } from "./PrsReload";
@@ -23,7 +31,7 @@ import { column, strip } from "./layout";
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
   const selected = useNavigationStore(s => s.selected);
-  const panelHidden = useNavigationStore(s => s.panelHidden);
+  const drawer = useNavigationStore(s => s.drawer);
   const projectPanel = useNavigationStore(s => s.projectPanel);
   const toast = useNavigationStore(s => s.toast);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
@@ -83,12 +91,17 @@ export function ConversationsView({ className }: { className: string }) {
       renamable={bar.renamable}
       noTerm={bar.noTerm}
       locked={bar.locked}
-      panelOff={panelHidden}
+      tools={bar.tools}
+      drawer={drawer}
+      back={!!bar.tools?.back}
       actions={selected === REM ? <NewReminder /> : selected === PRS ? <PrsReload /> : null}
-      onEditProject={openProjectPanel}
+      onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
       onRename={rename}
       onOpenTerminal={openTerminal}
-      onTogglePanel={() => setPanelHidden(!panelHidden)}
+      onOpenBoard={() => bar.tools?.board && openTool(bar.tools.project, boardKey(bar.tools.board.id))}
+      // a project without repos sends you to the settings to link one
+      onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
+      onToggleDrawer={toggleDrawer}
     />
   );
   if (ownScroll)
@@ -125,6 +138,7 @@ export function ConversationsView({ className }: { className: string }) {
           </div>
         </div>
       ) : null}
+      <RepoBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
       {onView ? null : <Composer className={`${column} mt-2 mb-4.5`} />}
     </div>

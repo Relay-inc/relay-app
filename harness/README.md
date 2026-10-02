@@ -60,9 +60,11 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 | `keys`, `titles`, `markers` | The fixture's special conversations and texts to wait for. |
 | `nextTask()`, `nextPaint()` | A task after the current one; a task after the next animation frame (the frame has painted). |
 
+`pty_*` is a fake shell that prints a prompt and echoes what is written to it, over the Channel the frontend passes; `scratch_*` keeps the notes in memory.
+
 Commands answered with stubs (no real effect): `pick_folder`/`pick_path` (cancelled), `mail_connect`, `mail_test`,
 `integration_token`, `integration_import`, `favicons`, `find_icon_sites` (nothing found), `set_project_icon`,
-`set_project_repos`, `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
+`set_project_repos`, `ignore_repo`, `ai_title` (first five words), `stop`, `bg`, `open_terminal`, `notify`, `open_settings_window`,
 `reset`, `move_chat`, `plugin:opener|open_url`, `running` (`{}`: no process of the app runs a turn).
 With state in memory: `reminder` (done drops a row or moves a repeating one on, push moves it) and `reminder_add`
 change the snapshot, so undo works; reminder ids are 8 hex characters as the backend makes them. `set_settings` keeps
@@ -74,14 +76,14 @@ in-memory tasks loosely.
 
 ## Views (`screens.mjs`)
 
-59 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+60 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
 mail-second-account, mail-list, mail-plain, mail-html, prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity.
 Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, cmd-k, cmd-k-project,
-deep-link-ask, deep-link-open, sidebar-menu, closed-toast, panel-open, panel-status, panel-reminders, panel-prs. Settings
+deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-calendar, settings-agent-access. Other: onboarding, dark-waiting,
@@ -100,11 +102,11 @@ the comment field's placeholder "Leave a comment…", and an HTML mail shown in 
 
 ## Behaviour (`behaviour.mjs`)
 
-24 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
+25 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
 send, stop, cards (permission, question, agent action), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
 mail (two accounts merged, read per account, load more, the link bar), prs (side by side, AI review), board (ticket
 window, comment, status, Start conversation), boardTools (list view, filters, Productive's saved views, grouping),
-reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
+reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations on Claude), calendarNoClaude (refused with Claude off), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
 extension), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
 typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
 split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: two Lit bugs (typingOutside,

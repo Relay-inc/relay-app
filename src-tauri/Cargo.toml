@@ -42,6 +42,8 @@ base64 = "0.23"
 # the calendar feeds (src/calendar.rs): recurring meetings and their time zones
 rrule = "0.14"
 chrono-tz = "0.10"
+# the shells of the embedded terminals (src/pty.rs)
+portable-pty = "0.9"
 
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true

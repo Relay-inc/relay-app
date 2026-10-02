@@ -10,6 +10,7 @@ import { useNavigationStore } from "../navigation/store";
 import { select } from "../navigation/navigation";
 import { startChat } from "../conversations/chats";
 import { sendMsg } from "../conversations/actions";
+import { projectOf } from "../conversations/selectors";
 import { usePullRequestsStore } from "./store";
 
 const set = usePullRequestsStore.setState;
@@ -35,6 +36,15 @@ export async function loadPrs() {
   set(draft => {
     draft.busy = false;
   });
+}
+/** The GitHub repos per vault project, for the title bar's PRs button. */
+export async function loadProjectRepos() {
+  if (!ghOn()) return;
+  const repos = await backend.projectRepos().catch(() => undefined);
+  if (repos)
+    set(draft => {
+      draft.repos = repos;
+    });
 }
 export const resetPrs = () =>
   set(draft => {
@@ -67,4 +77,31 @@ export function prHeading(key: string) {
     repo: item.repo,
     project: known ? { label: projectLabel(known.name), tint: contextTint(known.context) } : null,
   };
+}
+
+// ---------- a conversation that committed to a repo no project has asks to link it to its project
+/** The backend's `repo-unlinked`: the ask waits per conversation until answered, and shows in a project conversation. */
+export function askRepo(key: string, repo: string) {
+  const { repos, asks } = usePullRequestsStore.getState();
+  if (Object.values(repos).some(linked => linked.includes(repo)) || asks[key]?.includes(repo)) return;
+  set(draft => {
+    (draft.asks[key] ??= []).push(repo);
+  });
+}
+/** The repo to ask about in this conversation, with the project it would join. Read it with `useDerived`. */
+export function repoAskFor(key: string) {
+  const project = projectOf(key);
+  const repo = usePullRequestsStore.getState().asks[key]?.[0];
+  return project && repo ? { project, repo } : null;
+}
+/** Link: the repo joins the project's. Not now: it is unlinked on purpose, no conversation asks again. */
+export async function answerRepo(key: string, link: boolean) {
+  const ask = repoAskFor(key);
+  if (!ask) return;
+  set(draft => {
+    for (const k of Object.keys(draft.asks)) draft.asks[k] = draft.asks[k].filter(repo => repo !== ask.repo);
+  });
+  if (!link) return void backend.ignoreRepo(ask.repo);
+  await backend.setProjectRepos(ask.project, [...(usePullRequestsStore.getState().repos[ask.project] ?? []), ask.repo]);
+  loadPrs();
 }

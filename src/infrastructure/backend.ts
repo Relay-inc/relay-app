@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
@@ -48,6 +48,8 @@ export const findIconSites = (projects: { name: string; context: string; summary
   invoke<Record<string, string>>("find_icon_sites", { projects });
 export const projectRepos = () => invoke<Record<string, string[]>>("project_repos");
 export const setProjectRepos = (project: string, repos: string[]) => invoke("set_project_repos", { project, repos });
+/** A GitHub repo no project has, an answered "not now": no conversation asks about it again. */
+export const ignoreRepo = (repo: string) => invoke("ignore_repo", { repo });
 export const reminder = (action: "done" | "push", id: string, date: string | null) =>
   invoke("reminder", { action, id, date });
 export const reminderAdd = (text: string, date: string, project: string | null, repeat: string | null) =>
@@ -148,6 +150,30 @@ export const actionConfig = () => invoke<ActionConfig>("action_config");
 export const setActionConfig = (ext: string, entry: ActionEntry) =>
   invoke<ActionConfig["config"]>("set_action_config", { ext, entry });
 
+// ---------- the embedded terminals (src-tauri/src/pty.rs) and the scratch notes (scratch.rs)
+/** A shell in the project's vault folder. `onData` gets its output bytes, `onExit` its exit code; resolves with the
+ *  shell's id. */
+export const ptySpawn = (
+  project: string,
+  cols: number,
+  rows: number,
+  onData: (bytes: Uint8Array) => void,
+  onExit: (code: number) => void,
+) => {
+  const channel = new Channel<ArrayBuffer | number>();
+  channel.onmessage = msg => (msg instanceof ArrayBuffer ? onData(new Uint8Array(msg)) : onExit(msg));
+  return invoke<number>("pty_spawn", { project, cols, rows, onData: channel });
+};
+export const ptyWrite = (id: number, data: string) => invoke("pty_write", { id, data });
+export const ptyResize = (id: number, cols: number, rows: number) => invoke("pty_resize", { id, cols, rows });
+export const ptyKill = (id: number) => invoke("pty_kill", { id });
+export type ScratchFile = { id: string; text: string; modified: number };
+export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_list", { project });
+/** Writes the note, `id` null for a new one; resolves with its id. */
+export const scratchSave = (project: string, id: string | null, text: string) =>
+  invoke<string>("scratch_save", { project, id, text });
+export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
+
 // ---------- events from the backend
 /** One normalised event of an agent process. */
 export const onAgent = (handler: (key: string, event: AgentEvent, provider: string) => void) =>
@@ -164,6 +190,11 @@ export const onSettingsChanged = (handler: (settings: Settings) => void) =>
 /** An item of the app menu (new-general, new-project, close-chat). */
 export const onMenu = (handler: (item: string) => void) => listen<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());
+/** The GitHub repos of a project changed (the settings, or a link answered in a conversation). */
+export const onReposChanged = (handler: () => void) => listen("repos-changed", () => handler());
+/** A conversation committed to a repo no project has. */
+export const onRepoUnlinked = (handler: (key: string, repo: string) => void) =>
+  listen<{ key: string; repo: string }>("repo-unlinked", e => handler(e.payload.key, e.payload.repo));
 export const onRemindersChanged = (handler: () => void) => listen("reminders-changed", () => handler());
 /** The relay:// links that launched the app: they arrive before anything listens. */
 export const launchLinks = async () => (await getCurrent()) ?? [];
