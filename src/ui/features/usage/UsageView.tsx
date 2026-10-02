@@ -143,7 +143,7 @@ export function UsageView() {
     ];
   };
   // the breakdowns per model and per conversation: folded until asked for
-  const details = (id: string, rows: ReactNode[]) =>
+  const breakdown = (id: string, rows: ReactNode[]) =>
     rows.length
       ? [
           <details key={`${id}-details`}>
@@ -164,7 +164,7 @@ export function UsageView() {
       headRow(`${id}-head`),
       usageRow(`${id}-all`, t("usage.all", { name }), entry.today, entry.week, splitText(entry.week)),
       usageRow(`${id}-vault`, t("usage.vault"), entry.vaultToday, entry.vaultWeek, splitText(entry.vaultWeek)),
-      ...details(id, [...modelRows(provider, entry), ...conversationRows(entry)]),
+      ...breakdown(id, [...modelRows(provider, entry), ...conversationRows(entry)]),
     ];
   };
   // one provider's limits and tokens. `tag`: the heading level, h2 for a single provider, h3 under its name
