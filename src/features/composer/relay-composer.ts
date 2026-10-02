@@ -10,7 +10,7 @@ import { chat, terminalOf, projectOf } from "../../domain/chats/state";
 import { project } from "../../domain/vault";
 import { chatAgent, agentOf, onAgents, picks, setPick, commands, inherited } from "../../domain/agents";
 import { matchCommands, type SlashCommand } from "../../domain/commands";
-import { setTyped, sendMsg, sendOrStop, attach, unattach, setAgent } from "../../domain/chats/actions";
+import { setTyped, sendMsg, sendOrStop, attach, unattach, setAgent, withPaths } from "../../domain/chats/actions";
 import { zoom } from "../../domain/navigation";
 import { pastedImages, hasFiles } from "../../components/image-files";
 import "../../components/image-thumbs";
@@ -125,7 +125,14 @@ export class RelayComposer extends LitElement {
   }
   private onPaste(e: ClipboardEvent) {
     const files = pastedImages(e);
-    if (files.length) attach(files);
+    if (files.length) this.attachFiles(files);
+  }
+  // images wait as thumbnails, other files go in the message as their saved path
+  private async attachFiles(files: File[]) {
+    const paths = await attach(files);
+    if (!paths.length) return;
+    setTyped(withPaths(chat.typed[ui.selected] ?? "", paths));
+    this.focusInput();
   }
   private onDragOver(e: DragEvent) {
     if (!hasFiles(e)) return;
@@ -139,7 +146,7 @@ export class RelayComposer extends LitElement {
     this.dropping = false;
     if (!hasFiles(e)) return;
     e.preventDefault();
-    attach([...e.dataTransfer!.files]);
+    this.attachFiles([...e.dataTransfer!.files]);
   }
   private onRemoveImage(e: CustomEvent<number>) {
     unattach(e.detail);
@@ -248,7 +255,7 @@ export class RelayComposer extends LitElement {
     >`;
   }
 
-  // the + opens the file dialog for images; they join the ones pasted or dropped
+  // the + opens the file dialog; what it picks joins what is pasted or dropped
   private renderAttach() {
     return html`<button
         class="grid place-items-center size-7 rounded-[7px] border-0 bg-transparent text-secondary hover:bg-fill-2 hover:text-label"
@@ -260,12 +267,11 @@ export class RelayComposer extends LitElement {
       </button>
       <input
         type="file"
-        accept="image/*"
         multiple
         hidden
         @change=${(e: Event) => {
           const input = e.target as HTMLInputElement;
-          attach([...(input.files ?? [])]);
+          this.attachFiles([...(input.files ?? [])]);
           input.value = "";
         }}
       />`;

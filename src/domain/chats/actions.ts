@@ -90,17 +90,35 @@ async function prepImage(file: File): Promise<Img | null> {
   const parts = dataUrl.match(/^data:(image\/[a-z]+);base64,(.+)$/);
   return parts && IMG_OK.includes(parts[1]) ? toImg(parts[1], parts[2]) : null;
 }
-/** Images pasted or dropped: into the composer's list, or the Cmd-K field's. */
-export async function attach(files: File[], list: Img[] = chat.attached) {
-  const images = (
-    await Promise.all(
-      files.filter(file => file.type.startsWith("image/")).map(file => prepImage(file).catch(() => null)),
-    )
-  ).filter((image): image is Img => !!image);
-  if (!images.length) return;
-  list.push(...images);
-  changed();
+// any other file (a pdf, a spreadsheet) is saved for the agent to read; null when it could not be
+async function saveFile(file: File): Promise<string | null> {
+  try {
+    const data = (await readUrl(file)).split(",")[1] ?? "";
+    return await invoke<string>("save_attachment", { name: file.name, data });
+  } catch (error) {
+    push(ui.selected, { kind: "err", text: `${file.name}: ${error}` });
+    changed();
+    return null;
+  }
 }
+/** Files pasted or dropped: images into the composer's list (or the Cmd-K field's), the paths of the other files
+ *  saved to send as text. */
+export async function attach(files: File[], list: Img[] = chat.attached): Promise<string[]> {
+  const isImage = (file: File) => file.type.startsWith("image/");
+  const [images, paths] = await Promise.all([
+    Promise.all(files.filter(isImage).map(file => prepImage(file).catch(() => null))),
+    Promise.all(files.filter(file => !isImage(file)).map(saveFile)),
+  ]);
+  const ready = images.filter((image): image is Img => !!image);
+  if (ready.length) {
+    list.push(...ready);
+    changed();
+  }
+  return paths.filter((path): path is string => !!path);
+}
+/** The text with the saved files' paths on their own lines after it. */
+export const withPaths = (text: string, paths: string[]) =>
+  [text.replace(/\s+$/, ""), ...paths].filter(Boolean).join("\n");
 export function unattach(i: number, list: Img[] = chat.attached) {
   const [gone] = list.splice(i, 1);
   if (gone) URL.revokeObjectURL(gone.url);

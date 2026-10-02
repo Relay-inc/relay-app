@@ -6,7 +6,7 @@ import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { ui } from "../../domain/ui";
 import type { Img } from "../../domain/chats/state";
-import { attach, unattach, quickSend } from "../../domain/chats/actions";
+import { attach, unattach, quickSend, withPaths } from "../../domain/chats/actions";
 import { toggleQuickAsk, zoom, openProject } from "../../domain/navigation";
 import { vault, projectLabel } from "../../domain/vault";
 import { config } from "../../domain/config";
@@ -102,7 +102,11 @@ export class RelayQuick extends LitElement {
     if (!hasFiles(e)) return;
     e.preventDefault();
     this.picked = -1;
-    attach([...e.dataTransfer!.files], this.images);
+    attach([...e.dataTransfer!.files], this.images).then(paths => {
+      if (!paths.length) return;
+      this.field.value = withPaths(this.field.value, paths);
+      this.grow();
+    });
   }
 
   // the textarea keeps the browser's own 2px padding and grey placeholder, as it always had

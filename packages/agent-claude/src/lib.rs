@@ -72,6 +72,8 @@ impl AgentProvider for Claude {
         if let Some(sid) = l.resume { cmd.args(["--resume", sid]); }
         // continue a terminal conversation as a copy: full history, new session id, the terminal one untouched
         else if let Some(f) = l.fork { cmd.args(["--resume", f, "--fork-session"]); }
+        // attached files are read from there without a permission prompt
+        cmd.arg("--add-dir").arg(agent_core::attachments());
         cmd.env_remove("ANTHROPIC_API_KEY").env("MCP_TOOL_TIMEOUT", "86400000"); // a permission may wait a day for the user
         Ok(cmd)
     }
@@ -152,11 +154,12 @@ mod tests {
         assert!(!args[9].contains("relay-mail"));
         assert_eq!(args[10], "--allowedTools");
         assert_eq!(args[16], "--disallowedTools");
-        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        let dir = agent_core::attachments().to_string_lossy().into_owned();
+        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1", "--add-dir", dir.as_str()]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[19..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session", "--add-dir", dir.as_str()]);
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[9].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));

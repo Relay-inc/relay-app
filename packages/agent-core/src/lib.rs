@@ -82,6 +82,9 @@ impl Choice { pub fn new(id: &str, label: &str) -> Self { Choice { id: id.into()
 pub struct Image { pub media_type: String, pub data: String }
 /// The media types the webview pastes, base64 in `data`.
 pub const IMAGE_TYPES: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/// Where attached files that are not pictures wait for the agent to read them: their path goes in the message.
+// ponytail: the OS temp dir, so macOS purges a file untouched for ~3 days; an app-data dir if old chats need them back
+pub fn attachments() -> std::path::PathBuf { std::env::temp_dir().join("relay-attachments") }
 
 /// One user message.
 #[derive(Clone, Debug, Default, PartialEq)]

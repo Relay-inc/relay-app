@@ -1088,6 +1088,22 @@ async fn integration_upload(provider: String, url: String, fields: serde_json::M
     tauri::async_runtime::spawn_blocking(move || providers::upload(p, &url, &fields, &name, &mime, &bytes)).await.map_err(|e| e.to_string())?
 }
 
+/// A file the user attached that is not a picture, saved where the agent can read it; the path goes in the message. 50 MB at most.
+#[tauri::command]
+fn save_attachment(name: String, data: String) -> Result<String, String> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| e.to_string())?;
+    if bytes.len() > 50_000_000 { return Err(format!("{name}: > 50 MB")); }
+    // only the name's last part: the webview names the file, not where it goes
+    let file = std::path::Path::new(&name).file_name().ok_or("no file name")?;
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    let dir = agent_core::attachments().join(nanos.to_string());
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(file);
+    fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
 /// A picture's preview for a card panel (providers::thumb), as a data URL.
 #[tauri::command]
 async fn integration_thumb(provider: String, url: String) -> Result<String, String> {
@@ -1387,7 +1403,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, save_attachment, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
