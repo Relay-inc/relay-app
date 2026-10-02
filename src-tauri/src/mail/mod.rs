@@ -1,7 +1,8 @@
 // Native Gmail access for the app and its Claude sessions, see /tmp/vaultmail-build/SPEC.md. One IMAP session
 // per account, shared by the UI and Claude. Everything reads All Mail through EXAMINE and BODY.PEEK, so reading
-// never changes a flag. Only set_seen (a UI click) and save_draft (APPEND to Drafts) write. There is no path to
-// send, move or delete. The app password comes from the macOS keychain and only lives in memory.
+// never changes a flag. Only set_seen (a UI click), save_draft (APPEND to Drafts) and, behind the experimental
+// mail flag, archive/trash (UI clicks only, no Claude tool) write. There is no path to send. The app password
+// comes from the macOS keychain and only lives in memory.
 // ponytail: Gmail only (X-GM-RAW, All Mail as the one folder), generic IMAP when a non-Gmail account appears.
 
 mod render;
@@ -14,7 +15,7 @@ use futures::TryStreamExt;
 use mail_parser::{Address, HeaderName, HeaderValue, Message, MessageParser, MimeHeaders};
 use render::cap;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -35,6 +36,9 @@ const DRAFT_MAX: usize = 5 * 1024 * 1024;
 const KEYCHAIN_WAIT: Duration = Duration::from_secs(60);
 const STALE: &str = "The mailbox changed on the server, reload the list";
 const SUBJECT_MAX: usize = 500;
+// ponytail: "someone you wrote to" = the recipients of your newest 500 sent mails, a full scan when that misses people
+const SENT_SCAN: usize = 500;
+const MOVE_MAX: usize = 500;
 // Finder runs these on a double-click, Mail refuses them too
 const RUNS: &[&str] = &["terminal", "command", "tool", "fileloc", "inetloc", "webloc", "app", "pkg", "scpt", "applescript", "workflow", "jar"];
 
@@ -67,7 +71,8 @@ pub fn pick_account(accts: &[Account], want: &str) -> Option<Account> {
 
 type Imap = async_imap::Session<async_native_tls::TlsStream<TcpStream>>;
 // `used` is wall-clock time: Instant stands still while the Mac sleeps, and a session that slept is dead
-struct Conn { s: Imap, email: String, all: String, drafts: Option<String>, validity: Option<u32>, used: SystemTime }
+// `known`: who the account wrote to (lowercase), for the Inbox/Other split, read once per session
+struct Conn { s: Imap, email: String, all: String, drafts: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime, known: Option<HashSet<String>> }
 /// A session plus the UIDVALIDITY it was opened with: ids from before a change would point at other mails.
 #[derive(Default)]
 struct Slot { conn: Option<Conn>, validity: Option<u32> }
@@ -146,9 +151,9 @@ async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {
     let find = |attr: NameAttribute| names.iter().find(|n| n.attributes().contains(&attr)).map(|n| n.name().to_string())
         .filter(|n| n.len() <= 256 && !n.chars().any(char::is_control));
     let all = find(NameAttribute::All).ok_or_else(|| user("No \\All mailbox (Gmail All Mail) found"))?;
-    let drafts = find(NameAttribute::Drafts);
+    let (drafts, trash) = (find(NameAttribute::Drafts), find(NameAttribute::Trash));
     let validity = t(s.examine(&all)).await?.uid_validity;
-    Ok(Conn { s, email: a.email.clone(), all, drafts, validity, used: SystemTime::now() })
+    Ok(Conn { s, email: a.email.clone(), all, drafts, trash, validity, used: SystemTime::now(), known: None })
 }
 
 /// Run `$body` (an expression using `$c: &mut Conn`) on the account's cached session (the UI's or, `$tool`
@@ -193,32 +198,63 @@ async fn search(c: &mut Conn, q: &str) -> Result<Vec<u32>, Fail> {
 
 /// UI rows, newest first. The fetch stream also carries unsolicited FETCHes (flag updates for these or other
 /// mails), so only the ones with our headers count, once per uid.
-async fn rows(c: &mut Conn, uids: &[u32]) -> Result<Vec<Value>, Fail> {
+/// `split`: each row also says whether it belongs under Other (see `other`).
+async fn rows(c: &mut Conn, uids: &[u32], split: bool) -> Result<Vec<Value>, Fail> {
     if uids.is_empty() { return Ok(vec![]); }
-    let mut f = fetch(c, &set(uids), "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE)])").await?;
+    if split && c.known.is_none() { c.known = Some(known(c).await?); }
+    let mut f = fetch(c, &set(uids), "(UID FLAGS INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE CONTENT-TYPE LIST-ID LIST-UNSUBSCRIBE PRECEDENCE AUTO-SUBMITTED)])").await?;
     f.retain(|f| f.header().is_some() && f.uid.is_some_and(|u| uids.contains(&u)));
     f.sort_by_key(|f| std::cmp::Reverse(f.uid));
     f.dedup_by_key(|f| f.uid);
-    Ok(f.iter().map(|f| row(f, &c.email)).collect())
+    let known = if split { c.known.as_ref() } else { None };
+    Ok(f.iter().map(|f| row(f, &c.email, known)).collect())
+}
+/// The addresses in To and Cc of the newest sent mails.
+async fn known(c: &mut Conn) -> Result<HashSet<String>, Fail> {
+    let u = search(c, "in:sent").await?;
+    let u = &u[..u.len().min(SENT_SCAN)];
+    if u.is_empty() { return Ok(HashSet::new()); }
+    Ok(fetch(c, &set(u), "(UID BODY.PEEK[HEADER.FIELDS (TO CC)])").await?.iter()
+        .filter_map(|f| MessageParser::default().parse(f.header()?))
+        .flat_map(|m| [m.to(), m.cc()].into_iter().flatten().flat_map(|a| a.iter().filter_map(|x| x.address.as_deref().map(str::to_lowercase))).collect::<Vec<_>>())
+        .collect())
+}
+/// Newsletters, notifications and other machine-sent mail (Keel's rule).
+fn is_bulk(m: &Message) -> bool {
+    let h = |n: &str| m.header_raw(n).map(|v| v.trim().to_lowercase());
+    if h("List-Id").is_some() || h("List-Unsubscribe").is_some() { return true; }
+    if matches!(h("Precedence").as_deref(), Some("bulk" | "list" | "junk")) { return true; }
+    if h("Auto-Submitted").is_some_and(|v| v != "no") { return true; }
+    let local = from_addr(m);
+    let local = local.split('@').next().unwrap_or("");
+    ["noreply", "no-reply", "donotreply", "do-not-reply", "notification", "newsletter", "mailer-daemon", "bounce"].iter().any(|p| local.contains(p))
+}
+fn from_addr(m: &Message) -> String { m.from().and_then(|a| a.first()).and_then(|a| a.address.as_deref()).unwrap_or("").to_lowercase() }
+/// Other: machine-sent mail from someone you never wrote to. Person-to-person mail, or anything from a
+/// correspondent, stays in the Inbox.
+fn other(m: &Message, known: &HashSet<String>) -> bool {
+    let from = from_addr(m);
+    is_bulk(m) && !from.is_empty() && !known.contains(&from)
 }
 /// A row, id-only (empty subject and addresses) when the headers do not parse, so a page never shrinks.
-fn row(f: &Fetch, email: &str) -> Value {
+fn row(f: &Fetch, email: &str, known: Option<&HashSet<String>>) -> Value {
     let m = f.header().and_then(|h| MessageParser::default().parse(h));
     let date = f.internal_date().map(|d| d.to_rfc3339()).or_else(|| m.as_ref()?.date().map(|d| d.to_rfc3339()));
     // ponytail: a top-level multipart/mixed stands for "has attachments", BODYSTRUCTURE when that misleads
     let att = m.as_ref().and_then(|m| m.content_type()).is_some_and(|c| c.ctype().eq_ignore_ascii_case("multipart") && c.subtype().is_some_and(|s| s.eq_ignore_ascii_case("mixed")));
     json!({ "account": email, "id": f.uid.unwrap_or(0).to_string(), "subject": m.as_ref().and_then(|m| m.subject()).unwrap_or(""), "date": date,
-        "unread": !f.flags().any(|x| x == Flag::Seen), "from": addrs(m.as_ref().and_then(|m| m.from())), "to": addrs(m.as_ref().and_then(|m| m.to())), "attachments": att })
+        "unread": !f.flags().any(|x| x == Flag::Seen), "from": addrs(m.as_ref().and_then(|m| m.from())), "to": addrs(m.as_ref().and_then(|m| m.to())), "attachments": att,
+        "other": known.zip(m.as_ref()).is_some_and(|(k, m)| other(m, k)) })
 }
 
-async fn page(c: &mut Conn, page: u32) -> Result<Vec<Value>, Fail> {
+async fn page(c: &mut Conn, page: u32, split: bool) -> Result<Vec<Value>, Fail> {
     let u = search(c, "in:inbox").await?;
     let from = (page as usize - 1) * PAGE;
-    rows(c, u.get(from..u.len().min(from + PAGE)).unwrap_or(&[])).await
+    rows(c, u.get(from..u.len().min(from + PAGE)).unwrap_or(&[]), split).await
 }
 async fn search_rows(c: &mut Conn, q: &str, limit: usize) -> Result<Vec<Value>, Fail> {
     let u = search(c, q).await?;
-    rows(c, &u[..u.len().min(limit)]).await
+    rows(c, &u[..u.len().min(limit)], false).await
 }
 
 /// The whole raw mail, size-checked first.
@@ -278,6 +314,22 @@ async fn store(c: &mut Conn, uid: u32, seen: bool) -> Result<(), Fail> {
     let r = t(async { c.s.uid_store(uid.to_string(), q).await?.try_collect::<Vec<_>>().await }).await;
     t(c.s.examine(&all)).await?;
     r.map(|_| ())
+}
+
+/// Archive (Gmail: drop the Inbox label, the mail stays in All Mail) or move to Trash (Gmail empties it after 30 days).
+async fn move_to(c: &mut Conn, uids: &[u32], trash: bool) -> Result<(), Fail> {
+    let all = c.all.clone();
+    let dest = if trash { Some(c.trash.clone().ok_or_else(|| user("No \\Trash mailbox found"))?) } else { None };
+    t(c.s.select(&all)).await?;
+    let r = match &dest {
+        Some(d) => t(c.s.uid_mv(set(uids), d)).await,
+        None => t(async { c.s.uid_store(set(uids), "-X-GM-LABELS (\\Inbox)").await?.try_collect::<Vec<_>>().await }).await.map(|_| ()),
+    };
+    // moved but the session did not go back to EXAMINE: a network error, so it reconnects and retries (a no-op now)
+    match (r, t(c.s.examine(&all)).await) {
+        (Ok(()), Err(_)) => Err(Fail::Net("IMAP: back to read-only failed".into())),
+        (r, _) => r,
+    }
 }
 
 async fn append(c: &mut Conn, raw: &[u8]) -> Result<String, Fail> {
@@ -402,12 +454,12 @@ impl Mail {
         entry(&self.slots, format!("{}{}", a.email.to_ascii_lowercase(), if tool { "/tool" } else { "" }))
     }
 
-    /// One page of 50 inbox rows, page 1 is the newest.
-    pub async fn list(&self, acct: &Account, page: u32) -> Result<Value, String> {
+    /// One page of 50 inbox rows, page 1 is the newest. `split` marks the rows that go under Other.
+    pub async fn list(&self, acct: &Account, page: u32, split: bool) -> Result<Value, String> {
         let p = page.clamp(1, 10_000);
         // a changed mailbox is exactly what a reload repairs, so the list retries once instead of failing
-        match run!(self, acct, false, c => self::page(c, p)) {
-            Err(e) if e == STALE => run!(self, acct, false, c => self::page(c, p)),
+        match run!(self, acct, false, c => self::page(c, p, split)) {
+            Err(e) if e == STALE => run!(self, acct, false, c => self::page(c, p, split)),
             r => r,
         }.map(Value::from)
     }
@@ -424,6 +476,14 @@ impl Mail {
     pub async fn set_seen(&self, acct: &Account, id: &str, seen: bool) -> Result<(), String> {
         let u = uid(&json!(id))?;
         run!(self, acct, false, c => store(c, u, seen))
+    }
+
+    /// Archive or trash mails, only from a click in the UI (experimental). Safe to retry after a lost connection:
+    /// archiving twice is a no-op, a uid already moved is simply gone from All Mail.
+    pub async fn move_to(&self, acct: &Account, ids: &[String], trash: bool) -> Result<(), String> {
+        if ids.is_empty() || ids.len() > MOVE_MAX { return Err(format!("1 to {MOVE_MAX} mails at a time")); }
+        let u = ids.iter().map(|i| uid(&json!(i))).collect::<Result<Vec<_>, _>>()?;
+        run!(self, acct, false, c => move_to(c, &u, trash))
     }
 
     /// A fresh login outside the cache, so the settings pane tests exactly what it shows.
@@ -547,6 +607,21 @@ mod tests {
     }
 
     #[test]
+    fn inbox_or_other() {
+        let known: HashSet<String> = ["friend@shop.be".to_string()].into();
+        let is_other = |raw: &str| other(&MessageParser::default().parse(raw.as_bytes()).unwrap(), &known);
+        assert!(!is_other("From: Jan <jan@client.be>\r\nSubject: hi\r\n\r\n"));
+        assert!(is_other("From: news@shop.be\r\nList-Unsubscribe: <mailto:x@y.be>\r\n\r\n"));
+        assert!(is_other("From: x@y.be\r\nPrecedence: Bulk\r\n\r\n"));
+        assert!(is_other("From: x@y.be\r\nAuto-Submitted: auto-generated\r\n\r\n"));
+        assert!(!is_other("From: x@y.be\r\nAuto-Submitted: no\r\n\r\n"));
+        assert!(is_other("From: GitHub <notifications@github.com>\r\n\r\n"));
+        assert!(is_other("From: no-reply@bank.be\r\n\r\n"));
+        // someone you wrote to stays in the Inbox, newsletter or not
+        assert!(!is_other("From: Friend@Shop.be\r\nList-Id: <l.shop.be>\r\n\r\n"));
+    }
+
+    #[test]
     fn filenames() {
         assert_eq!(safe_name("../../etc/passwd"), "_.._etc_passwd");
         assert_eq!(safe_name(".bashrc"), "bashrc");
@@ -653,7 +728,7 @@ mod tests {
             seen
         };
 
-        assert!(m.list(&a, 1).await.unwrap().as_array().unwrap().len() <= PAGE);
+        assert!(m.list(&a, 1, true).await.unwrap().as_array().unwrap().len() <= PAGE);
         let found = ok(m.tool(&accts, "", "search", &json!({ "query": "in:inbox", "limit": 3 }), &d).await);
         let id = found["results"][0]["id"].as_str().expect("an empty inbox").to_string();
         let before = seen(id.parse().unwrap()).await;

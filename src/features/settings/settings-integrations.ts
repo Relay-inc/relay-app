@@ -217,6 +217,10 @@ export class SettingsIntegrations extends SettingsElement {
       @mail-account=${(e: CustomEvent<string>) => {
         mail.edit.account = e.detail;
       }}
+      @mail-experimental=${(e: CustomEvent<boolean>) => {
+        mail.edit.experimental = e.detail;
+        this.requestUpdate();
+      }}
       @mail-test=${(e: CustomEvent) => mail.test(e.detail)}
       @mail-drop=${(e: CustomEvent) => mail.drop(e.detail)}
       @mail-connect=${() => mail.connect()}

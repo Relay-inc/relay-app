@@ -18,6 +18,7 @@ import {
   OK_MESSAGE,
   SELECT,
   inputValue,
+  toggleSwitch,
 } from "./blocks";
 import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
@@ -32,6 +33,7 @@ declare global {
   interface HTMLElementEventMap {
     "mail-new": CustomEvent<{ key: keyof MailNew; value: string }>;
     "mail-account": CustomEvent<string>;
+    "mail-experimental": CustomEvent<boolean>;
     "mail-test": CustomEvent<MailAcct>;
     "mail-drop": CustomEvent<MailAcct>;
     "mail-connect": CustomEvent<void>;
@@ -136,6 +138,15 @@ export class SettingsMail extends SettingsElement {
     return field(withoutColon(t("mail.account")), select, { id: "mailacct" });
   }
 
+  // archive, delete, Inbox/Other and bulk actions: off until switched on here
+  private renderExperimental() {
+    if (!this.config.accounts.length) return nothing;
+    const toggle = toggleSwitch("mailexp", !!this.config.experimental, (e: Event) =>
+      emit(this, "mail-experimental", (e.target as HTMLInputElement).checked),
+    );
+    return field(t("mail.experimentalL"), toggle, { id: "mailexp", hint: t("mail.experimentalHint") });
+  }
+
   private renderEmailField(id: string) {
     const input = html`<input
       class=${FIELD}
@@ -228,7 +239,7 @@ export class SettingsMail extends SettingsElement {
 
   override render() {
     return html`<p class=${HINT_IN_ROW}>${t("mail.help")}</p>
-      ${this.renderAccounts()} ${this.renderAccountChoice()} ${this.renderSaveRow()} ${this.renderConnectSteps()}
-      ${this.renderAdvanced()}`;
+      ${this.renderAccounts()} ${this.renderAccountChoice()} ${this.renderExperimental()} ${this.renderSaveRow()}
+      ${this.renderConnectSteps()} ${this.renderAdvanced()}`;
   }
 }

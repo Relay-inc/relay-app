@@ -78,6 +78,7 @@ fn norm(mut v: Value) -> Value {
     if !v["mail"]["on"].is_boolean() { v["mail"]["on"] = json!(false); }
     if !v["mail"]["account"].is_string() { v["mail"]["account"] = json!(""); }
     if !v["mail"]["accounts"].is_array() { v["mail"]["accounts"] = json!([]); }
+    if !v["mail"]["experimental"].is_boolean() { v["mail"]["experimental"] = json!(false); }
     // the old himalaya account names are no emails: those fall back to the first account
     let known = v["mail"]["accounts"].as_array().unwrap().iter().any(|a| a["email"] == v["mail"]["account"]);
     if !known { v["mail"]["account"] = json!(""); }
@@ -1219,8 +1220,8 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
 }
 
 // ---------- Mail: Gmail over IMAP in mail/, the app password stays in the macOS keychain.
-// Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
-// click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
+// Listing and reading never change a flag (EXAMINE and BODY.PEEK). The writes are read/unread and, with the
+// experimental flag on, archive/trash, all on the user's click. Nothing here sends: a reply only becomes a draft.
 
 /// A configured account by email, "" for the one the sidebar shows (chosen in the settings, else the first).
 fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
@@ -1233,7 +1234,7 @@ fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
 #[tauri::command]
 async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
     let a = mail_acct(&state, "")?;
-    state.mail.list(&a, page.clamp(1, 1000)).await
+    state.mail.list(&a, page.clamp(1, 1000), mail_experimental(&state)).await
 }
 
 /// One mail for the panel: its text, the sanitized HTML as a srcdoc document (or null), the attachments.
@@ -1248,6 +1249,16 @@ async fn mail_read(state: State<'_, App>, account: String, id: String) -> Result
 async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: bool) -> Result<(), String> {
     let a = mail_acct(&state, &account)?;
     state.mail.set_seen(&a, &id, seen).await
+}
+
+fn mail_experimental(state: &App) -> bool { state.settings.lock().unwrap()["mail"]["experimental"] == true }
+
+/// Archive (`trash` false) or move to Trash, the mails the user picked. Only with the experimental mail flag on.
+#[tauri::command]
+async fn mail_move(state: State<'_, App>, account: String, ids: Vec<String>, trash: bool) -> Result<(), String> {
+    if !mail_experimental(&state) { return Err("Archive and delete are experimental, switch them on in Settings › Mail".into()); }
+    let a = mail_acct(&state, &account)?;
+    state.mail.move_to(&a, &ids, trash).await
 }
 
 /// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
@@ -1375,7 +1386,7 @@ pub fn run() {
             tray::init(app.handle())?;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, notify::notify])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

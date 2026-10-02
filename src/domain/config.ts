@@ -6,7 +6,8 @@ import type { VaultMap } from "./vault-setup";
 /** One integration's settings.integrations.<id>: whether it is on, and its provider's own fields (strings, a checkbox). */
 export type IntegrationConfig = { on?: boolean; [field: string]: string | boolean | undefined };
 export type MailAcct = { email: string; keychain_service: string; keychain_account: string };
-export type MailCfg = { on: boolean; account: string; accounts: MailAcct[] };
+/** `experimental`: archive, delete, the Inbox/Other split and bulk actions (Settings › Mail). */
+export type MailCfg = { on: boolean; account: string; accounts: MailAcct[]; experimental?: boolean };
 /** An agent provider's settings: switched on, the program, and its own options (Codex' sandbox, …). */
 export type AgentCfg = { on: boolean; bin: string; [opt: string]: unknown };
 /** The colour scheme: macOS's, or always light or dark. */
@@ -47,6 +48,7 @@ export const config = {
 };
 export const ghOn = () => !!config.value.github?.on;
 export const mailOn = () => !!config.value.mail?.on;
+export const mailExperimental = () => mailOn() && !!config.value.mail?.experimental;
 
 export async function saveSettings(next: Settings) {
   try {

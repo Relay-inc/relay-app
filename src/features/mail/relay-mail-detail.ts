@@ -5,6 +5,7 @@ import { icon } from "../../core/icons";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
 import { panel } from "../../domain/panel";
+import { mailExperimental } from "../../domain/config";
 import {
   mail,
   mailKey,
@@ -12,6 +13,8 @@ import {
   mailChat,
   toggleMailText,
   mailLinkGo,
+  mailMove,
+  shownMailKeys,
   unread,
   type Mail,
   type MailBody,
@@ -88,6 +91,17 @@ export class RelayMailDetail extends LitElement {
     const label = isUnread ? t("mail.markRead") : t("mail.markUnread");
     return iconButton(isUnread ? "read" : "unread", label, () => mailSeen(key, isUnread));
   }
+  // experimental: archive and delete, the next mail opens in its place
+  private renderMoveButtons(key: string) {
+    if (!mailExperimental()) return nothing;
+    return html`${iconButton("archive", t("mail.archive"), () => mailMove([key], false, shownMailKeys()), "btn btn-icon", `${t("mail.archive")} (E)`)}${iconButton(
+      "trash",
+      t("mail.trash"),
+      () => mailMove([key], true, shownMailKeys()),
+      "btn btn-icon",
+      `${t("mail.trash")} (#)`,
+    )}`;
+  }
   private renderConversationButtons(key: string) {
     return html`<span class="flex items-center gap-2 ml-auto"
       >${iconButton("reply", t("mail.draft"), () => mailChat(key, "draft"), "btn btn-icon", `${t("mail.draft")}: ${t("mail.draftTitle")}`)}${iconButton(
@@ -103,7 +117,8 @@ export class RelayMailDetail extends LitElement {
   private renderBar(key: string, item: Mail | undefined, body: MailBody | undefined, textView: boolean) {
     return html`<div class="flex items-center flex-wrap gap-2 mb-3">
       <span class="flex items-center gap-2"
-        >${item ? this.renderReadToggle(key, item) : nothing} ${this.renderViewToggle(body, textView)}</span
+        >${item ? html`${this.renderMoveButtons(key)}${this.renderReadToggle(key, item)}` : nothing}
+        ${this.renderViewToggle(body, textView)}</span
       >
       ${item ? this.renderConversationButtons(key) : nothing}
     </div>`;
