@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.0.2"
+version = "0.0.3"
 description = "Relay control room"
 authors = []
 edition = "2021"
