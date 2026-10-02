@@ -371,7 +371,7 @@ const SCENARIOS = {
     s.fact("secOrder", order);
     await click(head("AGENCY"));
     s.check("section open again", await navHas(page, "Push the portal fix"));
-    const search = page.getByPlaceholder("Search projects");
+    const search = page.getByPlaceholder("Search", { exact: true });
     await search.fill("Harbor");
     await settle(page);
     s.check("search keeps the match", await navHas(page, "Contact sync strategy"));

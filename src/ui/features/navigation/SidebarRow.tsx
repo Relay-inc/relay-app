@@ -128,7 +128,7 @@ export function SidebarRow({
     );
   }
 
-  const glyphClass = `glyph ${indent ? "size-3.5" : "size-4"} flex-none ${glyphColor}`;
+  const glyphClass = `glyph ${kind === "conv" ? (indent ? "size-3.25" : "size-3.75") : indent ? "size-3.5" : "size-4"} flex-none ${glyphColor}`;
   let lead: ReactNode = glyph(glyphClass);
   if (kind === "fold") lead = null;
   else if (kind === "proj") {
@@ -152,7 +152,9 @@ export function SidebarRow({
       className={`group flex ${indent ? "h-6.5 gap-2" : "h-7 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
     >
       {lead}
-      <span className={`flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${unseen ? "font-semibold" : ""}`}>
+      <span
+        className={`flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${unseen ? "font-semibold" : selected ? "font-medium" : ""}`}
+      >
         {name}
       </span>
       {meta ? (

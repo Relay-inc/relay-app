@@ -26,6 +26,7 @@ import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { PrsReload } from "./PrsReload";
+import { MailReload } from "../mail/MailReload";
 import { column, strip } from "./layout";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
@@ -83,9 +84,9 @@ export function ConversationsView({ className }: { className: string }) {
       heading={bar.heading}
       img={bar.img}
       tint={bar.tint}
-      state={bar.state}
+      icon={bar.icon}
       editable={!onView}
-      sub={bar.waiting}
+      sub={bar.sub}
       value={bar.title}
       readonly={!!bar.session}
       renamable={bar.renamable}
@@ -94,7 +95,15 @@ export function ConversationsView({ className }: { className: string }) {
       tools={bar.tools}
       drawer={drawer}
       back={!!bar.tools?.back}
-      actions={selected === REM ? <NewReminder /> : selected === PRS ? <PrsReload /> : null}
+      actions={
+        selected === REM ? (
+          <NewReminder />
+        ) : selected === PRS ? (
+          <PrsReload />
+        ) : selected === MAIL ? (
+          <MailReload />
+        ) : null
+      }
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
       onRename={rename}
       onOpenTerminal={openTerminal}
