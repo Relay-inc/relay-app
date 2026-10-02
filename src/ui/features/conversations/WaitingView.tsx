@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { agent } from "../../../shared/plugins";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { blockedAgents, label, projectOf, waitCount } from "../../../application/conversations/selectors";
@@ -23,6 +23,13 @@ const LABELS = { hide: "wait.hide", stop: "wait.stop", attach: "bar.openTerminal
 export function WaitingView() {
   const { t, tn, locale } = useT();
   const pendingList = useConversationsStore(s => s.pendingList);
+  const pendingAt = useConversationsStore(s => s.pendingAt);
+  // a clock for "2 min ago"
+  const [clock, setClock] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const count = useDerived(waitCount);
   const blocked = useDerived(blockedAgents);
   const meetings = useDerived(soonMeetings);
@@ -54,7 +61,7 @@ export function WaitingView() {
     }
   };
   // glyph, project / title, and (for a conversation) the link into it
-  const header = (glyph: ReactNode, project: string | null, title: string, chatKey?: string) => (
+  const header = (glyph: ReactNode, project: string | null, title: string, chatKey?: string, since?: number) => (
     <div className="flex items-center gap-2 text-[13px]">
       <span className="text-secondary flex-none">{glyph}</span>
       {project ? (
@@ -64,10 +71,11 @@ export function WaitingView() {
         </>
       ) : null}
       <span className="font-semibold truncate">{title}</span>
+      {since ? <span className="text-xs text-tertiary flex-none">· {ago(since)}</span> : null}
       <span className="flex-1"></span>
       {chatKey ? (
         <button
-          className="inline-flex items-center gap-1 text-xs text-secondary px-1.5 py-0.5 rounded-md cursor-pointer hover:bg-fill-2 hover:text-label"
+          className="inline-flex items-center gap-1 text-xs text-secondary px-1.5 py-[3px] rounded-md cursor-pointer hover:bg-fill-2 hover:text-label"
           onClick={() => select(chatKey)}
         >
           {t("wait.open")}
@@ -76,6 +84,13 @@ export function WaitingView() {
       ) : null}
     </div>
   );
+
+  // how long ago, from the minute up
+  const ago = (since: number) => {
+    const minutes = Math.floor((clock - since) / 60_000);
+    if (minutes < 1) return t("wait.agoNow");
+    return minutes < 60 ? t("wait.agoMin", { n: minutes }) : t("wait.agoHour", { n: Math.floor(minutes / 60) });
+  };
 
   // a calendar that did not load, so a missing meeting is not a surprise
   const calendarDown = calendarErrors.length ? (
@@ -88,7 +103,7 @@ export function WaitingView() {
         <span className="grid place-items-center size-10 rounded-full bg-add-bg text-add-fg">
           <Icon name="check" className="glyph size-5" />
         </span>
-        <span className="text-base font-semibold text-label">{t("wait.none")}</span>
+        <span className="text-[15px] font-semibold text-label">{t("wait.none")}</span>
         <span className="text-[13px]">{t("wait.noneSub")}</span>
         {calendarDown}
       </div>
@@ -155,6 +170,7 @@ export function WaitingView() {
               project,
               title,
               chatKey,
+              Math.min(...requests.map(request => pendingAt[request.id] ?? clock)),
             )}
             {requests.map(request => (
               <PendingRequest key={request.id} request={request} where={request.project ? title : ""} />
@@ -178,9 +194,10 @@ export function WaitingView() {
               {ACTIONS.map(action => (
                 <button
                   key={action}
-                  className={`${action === "attach" ? "btn btn-primary" : "btn"} cursor-pointer ${action === "stop" ? "text-late" : ""}`}
+                  className={`${action === "attach" ? "btn btn-primary inline-flex items-center" : "btn"} cursor-pointer ${action === "stop" ? "text-late" : ""}`}
                   onClick={() => act(action, session.id)}
                 >
+                  {action === "attach" ? <Icon name="term" className="glyph size-3.5 mr-1.5" /> : null}
                   {errors[action + ":" + session.id] ?? t(LABELS[action])}
                 </button>
               ))}
