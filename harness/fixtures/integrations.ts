@@ -282,7 +282,8 @@ export const meetings = [
     organizer: "sofie@northwind.example",
     people: [{ name: "Sofie Claes", email: "sofie@northwind.example" }, { name: "Tom Willems", email: "tom@acme.example" }, { name: "", email: "qa@northwind.example" }],
   }),
-  meeting("kickoff", "Harbor CRM kick-off", 25, 60, { people: [{ name: "", email: "support@harbor.example" }] }),
+  // a link that names a meeting host but goes elsewhere: no Join (the backend already drops it, the frontend checks again)
+  meeting("kickoff", "Harbor CRM kick-off", 25, 60, { join: "https://evil.example/?u=meet.google.com/x", people: [{ name: "", email: "support@harbor.example" }] }),
   meeting("lunch", "Lunch with the accountant", 90, 60, { location: "Café Central", people: [{ name: "Accountant", email: "office@accounting.example" }] }),
 ];
 /** The second calendar of the calendar fixture does not load, so Waiting says so. */

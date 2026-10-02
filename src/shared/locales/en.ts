@@ -174,6 +174,8 @@ const en = {
   "note.meetingStarted": "About the meeting: {title}",
   "cal.banner": "Meeting at {time}",
   "cal.prepTitle": "Prep: ",
+  "cal.needClaude":
+    "Meeting notes and briefings run on Claude Code, which is switched off. Switch it on under Settings › Agents.",
   "cal.name": "Calendar",
   "cal.feeds_one": "{n} calendar",
   "cal.feeds_other": "{n} calendars",

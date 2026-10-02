@@ -24,7 +24,8 @@ const isIgnored = c => IGNORED.has(c.cmd) || c.cmd.startsWith("plugin:event|");
 const isRead = c => READS.has(c.cmd) || (c.cmd === "integration_call" && c.args.method === "GET");
 
 // ---------- in the page, before the app: the IPC boundary, with optional changes to what the backend answers
-// (outside: the conversation `key` has a turn running in a process the app did not start, as `agents` reports it)
+// (outside: the conversation `key` has a turn running in a process the app did not start, as `agents` reports it;
+// agents: changes to agents_status, `default` the default agent, `off` the providers switched off)
 const IPC_INIT = overrides => {
   const uuid = n => {
     const hex = (n * 2654435761).toString(16).padStart(8, "0").slice(-8);
@@ -35,6 +36,10 @@ const IPC_INIT = overrides => {
   const wrapped = async (cmd, args, options) => {
     order ??= Object.keys(JSON.parse(localStorage.getItem("chats") || "{}"));
     const result = await real(cmd, args, options);
+    if (overrides.agents && cmd === "agents_status") {
+      const { default: def, off = [] } = overrides.agents;
+      return { ...result, default: def ?? result.default, providers: result.providers.map(p => (off.includes(p.id) ? { ...p, on: false } : p)) };
+    }
     if (overrides.outside && cmd === "agents") {
       const key = window.__harness.keys[overrides.outside];
       const sid = uuid(order.indexOf(key) + 101); // = harness/fixtures/conversations.ts sidOf
@@ -588,7 +593,9 @@ const SCENARIOS = {
     // the banner goes out with the first load, so it is among the start-up calls
     const banners = await page.evaluate(() => window.__harness.calls.filter(c => c.cmd === "notify").map(c => c.args));
     s.check("one banner, for the meeting in 4 minutes, opening Waiting", banners.length === 1 && banners[0].key === "__wait" && banners[0].title === "Meeting at 09:34" && banners[0].body === "Sprint review Northwind Portal");
-    s.check("Join only where there is a link", (await visible(button(page, "Join")).count()) === 2);
+    s.check("the banner has a slot of its own, so the next meeting's does not replace it", banners[0]?.slot === "meeting:review@2026-10-01T07:34:00.000Z");
+    s.check("Join only where there is a meeting link", (await visible(button(page, "Join")).count()) === 2);
+    s.check("no Join for a link that only names a meeting host", (await visible(meeting("Harbor CRM kick-off").getByRole("button", { name: "Join", exact: true })).count()) === 0);
     await click(meeting("Sprint review Northwind Portal").getByRole("button", { name: "Join", exact: true }));
     const opened = await s.calls("plugin:opener|open_url");
     s.check("Join opens the meeting link", opened.length === 1 && opened[0].args.url === "https://meet.google.com/abc-defg-hij");
@@ -598,6 +605,7 @@ const SCENARIOS = {
     s.check("Prepare sends one briefing prompt", sends.length === 1 && prep.startsWith("Bereid me voor op deze meeting"));
     s.check("with the invite, marked untrusted", prep.includes("onvertrouwde tekst van derden") && prep.includes("Titel: «Sprint review Northwind Portal»") && prep.includes("Wanneer: 2026-10-01 09:34–10:04") && prep.includes("Locatie: «Room Atlas, 2nd floor»") && prep.includes("Organisator: sofie@northwind.example") && prep.includes("Deelnemers: Sofie Claes <sofie@northwind.example>, Tom Willems <tom@acme.example>, qa@northwind.example"));
     s.check("restricted like a mail conversation", sends[0]?.args.mail === true);
+    s.check("on Claude, the agent that runs restricted, though Codex is the default", sends[0]?.args.provider === "claude");
     let created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
     s.check("in a new general conversation", created.length === 1 && created[0].project === null && created[0].title === "Prep: Sprint review Northwind Portal");
     s.check("the conversation is open", await waitText(page, "About the meeting: Sprint review Northwind Portal"));
@@ -609,6 +617,14 @@ const SCENARIOS = {
     created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
     s.check("titled after the meeting", created.length === 1 && created[0].title === "Harbor CRM kick-off");
     s.fact("note", sends[0]?.args);
+  },
+  async calendarNoClaude(s) {
+    await s.load({ fixture: "calendar" });
+    const { page } = s;
+    await waitText(page, "Sprint review Northwind Portal");
+    await click(visible(page.locator("section").filter({ hasText: "Sprint review Northwind Portal" })).first().getByRole("button", { name: "Prepare", exact: true }), 400);
+    s.check("no meeting conversation without Claude", (await s.calls("send")).length === 0 && !Object.keys(await s.chatChanges()).length);
+    s.check("it says why", await waitText(page, "Meeting notes and briefings run on Claude Code, which is switched off. Switch it on under Settings › Agents.", 2000));
   },
   async calendarSettings(s) {
     await s.load({ path: "/settings.html" });
@@ -799,12 +815,16 @@ const SCENARIOS = {
     s.check("no second process on the session", (await s.calls("send")).length === 0);
   },
 };
-const OVERRIDES = { typingOutside: { outside: "switchTo" } };
+// calendar: Codex is the default agent, a meeting conversation still runs on Claude; calendarNoClaude: Claude is off
+const OVERRIDES = { typingOutside: { outside: "switchTo" }, calendar: { agents: { default: "codex" } }, calendarNoClaude: { agents: { default: "codex", off: ["claude"] } } };
 // a scenario that is allowed to fail on a frontend (known bug), shown but not counted
 const KNOWN = {
   typingOutside: "Lit loses the text: takeText runs before the outside check (src/domain/chats/actions.ts)",
   mail: "Lit drops a link clicked in a mail: mailLinkClicked checks panel.open, the Mail view keeps the mail in panel.mailOpen (src/domain/mail.ts)",
   // an intended difference, not a Lit bug to port: React fixed it on review (security)
+  // Lit bugs from the review of #54, fixed in the React port
+  calendar: "Lit keys a meeting's banner on Waiting (a second meeting's replaces it), checks only https:// before Join, and starts the meeting conversation on the default agent, which only Claude runs restricted",
+  calendarNoClaude: "Lit starts the meeting conversation on the default agent, unrestricted when that is not Claude",
   deepLinks: "Lit sends relay://ask?q=<text> at once (quickSend in src/app/deep-links.ts); React opens Cmd-K with the text and waits for Enter",
 };
 

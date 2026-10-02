@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { soon, bannerDue, minutesLeft, meetingDay, meetingPrompt } from "./rules.ts";
+import { soon, bannerDue, minutesLeft, meetingDay, meetingPrompt, joinable } from "./rules.ts";
 import type { Meeting } from "./types";
 
 const now = Date.parse("2026-10-01T10:00:00Z");
@@ -80,4 +80,28 @@ test("the prompt leaves out what the invite does not have", () => {
   const text = meetingPrompt(at("x", 5), "note", () => "t", "UTC");
   assert.match(text, /^Maak een meeting note/);
   assert.doesNotMatch(text, /Locatie|Organisator|Deelnemers/);
+});
+
+test("Join only opens a meeting service, matched on the host", () => {
+  for (const link of [
+    "https://meet.google.com/abc-defg-hij",
+    "https://zoom.us/j/1",
+    "https://us02web.zoom.us/j/123?pwd=x",
+    "https://teams.microsoft.com/l/meetup-join/1",
+    "https://teams.live.com/meet/9",
+  ])
+    assert.ok(joinable(link), link);
+  for (const link of [
+    "https://evil.example/meet.google.com/x",
+    "https://evil.example/?u=zoom.us/",
+    "https://meet.google.com.evil.example/x",
+    "https://meet.google.com@evil.example/x",
+    "https://user@meet.google.com/x",
+    "https://evilzoom.us/j/1",
+    "http://meet.google.com/x",
+    "https://meet.google.com:8443/x",
+    "javascript:alert(1)//meet.google.com",
+    "",
+  ])
+    assert.ok(!joinable(link), link);
 });

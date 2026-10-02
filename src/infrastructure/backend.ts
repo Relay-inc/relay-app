@@ -25,8 +25,10 @@ export const uiLocale = () => invoke<string>("ui_locale");
 export const openSettingsWindow = () => invoke("open_settings_window");
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openUrl = (url: string) => invoke("plugin:opener|open_url", { url });
-/** A banner while the window is in the background; a click opens that conversation (src-tauri/src/notify.rs). */
-export const notify = (key: string, title: string, body: string) => invoke("notify", { key, title, body });
+/** A banner; a click opens `key` (src-tauri/src/notify.rs). A newer banner replaces the one in its `slot`, the key
+ *  when left out. */
+export const notify = (key: string, title: string, body: string, slot?: string) =>
+  invoke("notify", { key, title, body, ...(slot ? { slot } : {}) });
 
 // ---------- the vault
 export const vaultStatus = () => invoke<VaultStatus>("vault_status");

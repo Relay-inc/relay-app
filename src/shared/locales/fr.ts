@@ -178,6 +178,8 @@ export default {
   "note.meetingStarted": "À propos de la réunion : {title}",
   "cal.banner": "Réunion à {time}",
   "cal.prepTitle": "Préparation : ",
+  "cal.needClaude":
+    "Les notes de réunion et les briefings passent par Claude Code, qui est désactivé. Activez-le dans Réglages › Agents.",
   "cal.name": "Agenda",
   "cal.feeds_one": "{n} agenda",
   "cal.feeds_other": "{n} agendas",

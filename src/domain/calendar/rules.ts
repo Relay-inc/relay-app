@@ -25,6 +25,23 @@ export const bannerDue = (list: Meeting[], now: number, sent: ReadonlySet<string
 export const minutesLeft = (meeting: Meeting, now: number) =>
   Math.max(0, Math.ceil((Date.parse(meeting.start) - now) / MIN));
 
+// ---------- Join
+const HOSTS = ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com"];
+/** Whether a link goes to a meeting service: https, its host exactly one of them (or a zoom.us subdomain), no user,
+ *  password or port. The invite's author writes the link, so a host's name in the path or query is no match. The
+ *  backend applies the same rule (meeting_link in src-tauri/src/calendar.rs); this one is checked again on Join. */
+export function joinable(link: string) {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return false;
+  }
+  const { protocol, hostname, username, password, port } = url;
+  if (protocol !== "https:" || username || password || port) return false;
+  return HOSTS.includes(hostname) || hostname.endsWith(".zoom.us");
+}
+
 // ---------- a conversation about a meeting: a meeting note in the vault, or a briefing before it
 export type MeetingChat = "note" | "prep";
 const PROMPTS: Record<MeetingChat, string> = {

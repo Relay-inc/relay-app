@@ -177,6 +177,8 @@ export default {
   "note.meetingStarted": "Zum Meeting: {title}",
   "cal.banner": "Meeting um {time}",
   "cal.prepTitle": "Vorbereitung: ",
+  "cal.needClaude":
+    "Meeting-Notizen und Briefings laufen über Claude Code, und das ist ausgeschaltet. Schalte es unter Einstellungen › Agenten ein.",
   "cal.name": "Kalender",
   "cal.feeds_one": "{n} Kalender",
   "cal.feeds_other": "{n} Kalender",

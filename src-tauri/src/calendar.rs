@@ -109,7 +109,15 @@ fn parse_line(raw: &str) -> Option<Prop> {
     let params = parts.into_iter().filter_map(|p| p.split_once('=').map(|(k, v)| (k.to_ascii_uppercase(), v.to_string()))).collect();
     Some(Prop { name, params, value: value[1..].to_string(), raw: raw.to_string() })
 }
-fn unescape(s: &str) -> String { s.replace("\\n", "\n").replace("\\N", "\n").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\") }
+/// TEXT escapes in one pass, so an escaped backslash before an n stays a backslash and an n.
+fn unescape(s: &str) -> String {
+    let (mut out, mut chars) = (String::with_capacity(s.len()), s.chars());
+    while let Some(c) = chars.next() {
+        if c != '\\' { out.push(c); continue; }
+        match chars.next() { Some('n' | 'N') => out.push('\n'), Some(x) => out.push(x), None => out.push('\\') }
+    }
+    out
+}
 
 /// A DTSTART/DTEND/RECURRENCE-ID as a moment: UTC (…Z), in its TZID, or floating (local). None for a date (all day).
 fn when(p: &Prop) -> Option<DateTime<Utc>> {
@@ -138,24 +146,52 @@ fn events(ics: &str) -> Vec<Ev> {
     let (mut out, mut cur, mut depth) = (vec![], None::<Vec<Prop>>, 0);
     for l in &lines {
         match l.as_str() {
-            "BEGIN:VEVENT" => cur = Some(vec![]),
-            "END:VEVENT" => { if let Some(p) = cur.take() { out.push(Ev { props: p }); } }
+            // the depth starts over per event, so an unbalanced block in one does not hide the next one's properties
+            "BEGIN:VEVENT" => { cur = Some(vec![]); depth = 0; }
+            "END:VEVENT" => { if let Some(p) = cur.take() { out.push(Ev { props: p }); } depth = 0; }
             // a VALARM inside the event has its own properties (DESCRIPTION, TRIGGER), not the event's
             x if x.starts_with("BEGIN:") && cur.is_some() => depth += 1,
-            x if x.starts_with("END:") && cur.is_some() => depth -= 1,
+            x if x.starts_with("END:") && cur.is_some() => depth = (depth - 1).max(0),
             _ => if let (Some(c), 0) = (cur.as_mut(), depth) { if let Some(p) = parse_line(l) { c.push(p); } },
         }
     }
     out
 }
 
+/// An https link whose host is a meeting service: the host itself, compared exactly (no other site with one of these
+/// names in its path, query or user part), and no user or password in it. Same rule as src/domain/calendar/rules.ts.
+fn meeting_link(w: &str) -> bool {
+    let Ok(u) = tauri::Url::parse(w) else { return false };
+    let host = u.host_str().unwrap_or("");
+    u.scheme() == "https" && u.username().is_empty() && u.password().is_none() && u.port().is_none()
+        && (["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com"].contains(&host) || host.ends_with(".zoom.us"))
+}
 /// Where to join: the first Meet/Zoom/Teams link in Google's conference field, the location or the description.
 fn join(e: &Ev) -> String {
     // the invite's author fills these in, Google's field too: only a link to a known meeting host goes behind Join
     let text = format!("{} {} {}", e.get("X-GOOGLE-CONFERENCE").map_or("", |p| p.value.as_str()), e.text("LOCATION"), e.text("DESCRIPTION"));
-    text.split(|c: char| c.is_whitespace() || "<>\"()".contains(c))
-        .find(|w| w.starts_with("https://") && ["meet.google.com/", "zoom.us/", "teams.microsoft.com/"].iter().any(|h| w.contains(h)))
-        .unwrap_or("").to_string()
+    text.split(|c: char| c.is_whitespace() || "<>\"()".contains(c)).find(|w| meeting_link(w)).unwrap_or("").to_string()
+}
+
+/// An iCal DURATION (`PT30M`, `P1DT2H`, `P1W`), for an event without DTEND. None when it does not read as one.
+fn duration(v: &str) -> Option<Duration> {
+    let (neg, v) = v.strip_prefix('-').map_or((false, v.trim_start_matches('+')), |r| (true, r));
+    let v = v.strip_prefix('P')?;
+    let (mut total, mut n, mut time) = (Duration::zero(), String::new(), false);
+    for c in v.chars() {
+        let unit = match c {
+            '0'..='9' => { n.push(c); continue; }
+            'T' if n.is_empty() => { time = true; continue; }
+            'W' if !time => Duration::weeks(1),
+            'D' if !time => Duration::days(1),
+            'H' if time => Duration::hours(1),
+            'M' if time => Duration::minutes(1),
+            'S' if time => Duration::seconds(1),
+            _ => return None,
+        };
+        total += unit * std::mem::take(&mut n).parse::<i32>().ok()?;
+    }
+    (n.is_empty() && total > Duration::zero()).then_some(if neg { -total } else { total })
 }
 fn mailto(p: &Prop) -> String { p.value.trim_start_matches("mailto:").trim_start_matches("MAILTO:").to_ascii_lowercase() }
 
@@ -202,8 +238,8 @@ pub fn meetings(ics: &str, me: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> 
     for e in &evs {
         let Some(start) = e.get("DTSTART").and_then(when) else { continue }; // all day, or unreadable
         let end = e.get("DTEND").and_then(when);
-        let len = end.map_or(Duration::hours(1), |x| x - start);
-        let rule: Vec<&str> = e.props.iter().filter(|p| ["RRULE", "EXDATE", "RDATE"].contains(&p.name.as_str())).map(|p| p.raw.as_str()).collect();
+        let len = end.map(|x| x - start).or_else(|| e.get("DURATION").and_then(|d| duration(&d.value))).unwrap_or(Duration::hours(1));
+        let rule: Vec<&Prop> = e.props.iter().filter(|p| ["RRULE", "EXDATE", "RDATE"].contains(&p.name.as_str())).collect();
         if rule.is_empty() || e.get("RECURRENCE-ID").is_some() {
             if start >= from && start < to { out.extend(meeting(e, me, start, len)); }
             continue;
@@ -215,7 +251,8 @@ pub fn meetings(ics: &str, me: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> 
         // an EXDATE that is only a date takes out that day's occurrence; rrule only knows them with a time
         let days: HashSet<NaiveDate> = e.all("EXDATE").filter(|x| x.param("VALUE") == Some("DATE"))
             .flat_map(|x| x.value.split(',').filter_map(|d| NaiveDate::parse_from_str(d, "%Y%m%d").ok()).collect::<Vec<_>>()).collect();
-        let rule: Vec<String> = rule.iter().filter(|r| !r.contains("VALUE=DATE")).map(|r| until_utc(r, dtstart)).collect();
+        // the date-only ones (VALUE=DATE exactly, not DATE-TIME) are the days above; rrule takes the rest as written
+        let rule: Vec<String> = rule.iter().filter(|r| r.param("VALUE") != Some("DATE")).map(|r| until_utc(&r.raw, dtstart)).collect();
         let set = format!("{}\n{}", dtstart.raw, rule.join("\n"));
         let Ok(set) = set.parse::<rrule::RRuleSet>() else { continue }; // ponytail: a rule rrule refuses (an Outlook TZID) is skipped
         let tz = |d: DateTime<Utc>| d.with_timezone(&rrule::Tz::UTC);
@@ -285,6 +322,43 @@ mod tests {
         let join = |conf: &str| meetings(&ics(conf), ME, bxl("2026-10-01", "00:00"), bxl("2026-10-02", "00:00"))[0]["join"].clone();
         assert_eq!(join("https://meet.google.com/abc-defg-hij"), "https://meet.google.com/abc-defg-hij");
         assert_eq!(join("https://evil.example/login"), "");
+        assert_eq!(join("https://us02web.zoom.us/j/123"), "https://us02web.zoom.us/j/123");
+        assert_eq!(join("https://teams.live.com/meet/9"), "https://teams.live.com/meet/9");
+        // a meeting host's name anywhere but in the host is not one
+        for bad in ["https://evil.example/meet.google.com/x", "https://evil.example/?u=zoom.us/", "https://meet.google.com.evil.example/x",
+            "https://meet.google.com@evil.example/x", "https://evilzoom.us/j/1", "http://meet.google.com/x", "https://user@meet.google.com/x",
+            "https://meet.google.com:8443/x", "https://teams.microsoft.com.evil.example/l"] {
+            assert_eq!(join(bad), "", "{bad}");
+        }
+    }
+    #[test]
+    fn text_unescapes_in_one_pass() {
+        assert_eq!(unescape("a\\,b\\;c\\nd"), "a,b;c\nd");
+        assert_eq!(unescape("C:\\\\new"), "C:\\new", "an escaped backslash before n is no newline");
+        assert_eq!(unescape("end\\"), "end\\");
+    }
+    #[test]
+    fn durations_read_as_iso_8601() {
+        assert_eq!(duration("PT30M"), Some(Duration::minutes(30)));
+        assert_eq!(duration("P1DT2H"), Some(Duration::hours(26)));
+        assert_eq!(duration("P1W"), Some(Duration::weeks(1)));
+        assert_eq!(duration("PT"), None);
+        assert_eq!(duration("P1H"), None, "hours need the T");
+        assert_eq!(duration("30M"), None);
+    }
+    #[test]
+    fn duration_alarms_and_date_time_exdates() {
+        let one = |body: &str| format!("BEGIN:VCALENDAR\nBEGIN:VEVENT\nDTSTART;TZID=Europe/Brussels:20261001T100000\n{body}\nUID:d\nSUMMARY:D\nATTENDEE:mailto:x@y.be\nEND:VEVENT\nEND:VCALENDAR\n");
+        let get = |ics: &str| meetings(ics, ME, bxl("2026-10-01", "00:00"), bxl("2026-10-30", "00:00"));
+        // no DTEND: the DURATION gives the end
+        assert_eq!(get(&one("DURATION:PT30M"))[0]["end"], bxl("2026-10-01", "10:30").to_rfc3339());
+        // an EXDATE with VALUE=DATE-TIME is an exception like any other, not a date-only one to drop
+        let days: Vec<String> = get(&one("RRULE:FREQ=WEEKLY\nEXDATE;VALUE=DATE-TIME;TZID=Europe/Brussels:20261008T100000")).iter()
+            .map(|m| m["start"].as_str().unwrap()[5..10].to_string()).collect();
+        assert_eq!(days, ["10-01", "10-15", "10-22", "10-29"]);
+        // an unbalanced block in one event does not hide the next event's properties
+        let ics = "BEGIN:VCALENDAR\nBEGIN:VEVENT\nBEGIN:VALARM\nTRIGGER:-PT5M\nEND:VEVENT\nBEGIN:VEVENT\nDTSTART:20261001T120000Z\nUID:n\nSUMMARY:Next\nATTENDEE:mailto:x@y.be\nEND:VEVENT\nEND:VCALENDAR\n";
+        assert_eq!(get(ics).iter().map(|m| m["title"].as_str().unwrap()).collect::<Vec<_>>(), ["Next"]);
     }
     #[test]
     fn only_a_google_address_is_kept() {

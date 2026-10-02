@@ -177,6 +177,8 @@ export default {
   "note.meetingStarted": "Over de meeting: {title}",
   "cal.banner": "Meeting om {time}",
   "cal.prepTitle": "Voorbereiding: ",
+  "cal.needClaude":
+    "Meeting notes en briefings lopen via Claude Code, en dat staat uit. Zet het aan bij Instellingen › Agents.",
   "cal.name": "Agenda",
   "cal.feeds_one": "{n} agenda",
   "cal.feeds_other": "{n} agenda's",

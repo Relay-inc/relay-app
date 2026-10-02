@@ -4,10 +4,10 @@ import { useConversationsStore } from "../../../application/conversations/store"
 import { blockedAgents, label, projectOf, waitCount } from "../../../application/conversations/selectors";
 import { backgroundAction } from "../../../application/conversations/actions";
 import { chatAgent } from "../../../application/agents/agents";
-import { openExternal, select } from "../../../application/navigation/navigation";
+import { select } from "../../../application/navigation/navigation";
 import { useCalendarStore } from "../../../application/calendar/store";
-import { meetingChat, soonMeetings } from "../../../application/calendar/calendar";
-import { minutesLeft } from "../../../domain/calendar/rules";
+import { joinMeeting, meetingChat, soonMeetings } from "../../../application/calendar/calendar";
+import { joinable, minutesLeft } from "../../../domain/calendar/rules";
 import { clockTime } from "../../../shared/format";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -133,8 +133,8 @@ export function WaitingView() {
                 <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "note")}>
                   {t("wait.meetingNote")}
                 </button>
-                {meeting.join.startsWith("https://") ? (
-                  <button className="btn btn-primary cursor-pointer" onClick={() => openExternal(meeting.join)}>
+                {joinable(meeting.join) ? (
+                  <button className="btn btn-primary cursor-pointer" onClick={() => joinMeeting(meeting.join)}>
                     {t("wait.meetingJoin")}
                   </button>
                 ) : null}
