@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|mailexp, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|mailexp, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -263,6 +263,16 @@ function handle(cmd: string, a: Args): unknown {
       return "Connected: 1,204 mails in INBOX";
     case "mail_connect":
       return { account: { email: a.email, keychain_service: "relay-mail", keychain_account: a.email }, result: "Connected" };
+    // calendar: the secret address is checked like calendar.rs's url_ok, then "fetched" (3 meetings in the next 7 days)
+    case "calendar_connect":
+      if (!a.url) return 0;
+      if (!a.url.startsWith("https://calendar.google.com/calendar/ical/") || !a.url.endsWith(".ics"))
+        return Promise.reject("That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.");
+      return 3;
+    case "calendar_meetings": {
+      const feeds: string[] = settings.calendar?.on ? settings.calendar.feeds.map((f: { email: string }) => f.email) : [];
+      return { meetings: feeds.length ? structuredClone(integ.meetings) : [], errors: integ.calendarErrors(feeds) };
+    }
     case "integration_status":
     case "integration_has_token":
       return a.provider === "productive";

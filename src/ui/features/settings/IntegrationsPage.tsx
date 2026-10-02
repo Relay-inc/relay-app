@@ -17,6 +17,7 @@ import { useT } from "../../hooks/useT";
 import { ActionsSection } from "./ActionsSection";
 import { BUTTON_GLYPH, buttonClass, EMPTY_LIST, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
+import { CalendarSettings } from "./CalendarSettings";
 import { Footer } from "./Footer";
 import { GithubSettings } from "./GithubSettings";
 import { MailSettings } from "./MailSettings";
@@ -44,7 +45,7 @@ const GITHUB_MARK = (
 type Entry = { id: string; icon: ReactNode; name: string; status: ReactNode; on: boolean; page: () => ReactNode };
 
 /** Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on), the
- *  others are in the Add menu. In the list means in the sidebar; a row opens the integration's own page, Remove
+ *  others are in the Add menu (Calendar too: it shows under Waiting). In the list means in the sidebar; a row opens the integration's own page, Remove
  *  switches it off and keeps the token. A page reads its own state; this one only knows which rows are listed and
  *  which page is open. */
 export function IntegrationsPage({ active }: { active: boolean }) {
@@ -56,6 +57,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const mailCount = useSettingsStore(s => s.integrations.mail.edit.accounts.length);
   const githubOn = useSettingsStore(s => !!s.settings.github.on);
   const mailOn = useSettingsStore(s => !!s.settings.mail?.on);
+  const calendarCount = useSettingsStore(s => s.settings.calendar?.feeds.length ?? 0);
+  const calendarOn = useSettingsStore(s => !!s.settings.calendar?.on);
   // per provider: set up, and in the list
   const boardsState = useDerived(() =>
     Object.fromEntries(
@@ -126,6 +129,18 @@ export function IntegrationsPage({ active }: { active: boolean }) {
           <MailSettings onRemove={() => switchTo("mail", false)} />
           <ActionsSection ext="mail" name="Mail" />
         </>
+      ),
+    },
+    {
+      id: "calendar",
+      icon: <Icon name="cal" className={TILE} />,
+      name: t("cal.name"),
+      status: <StatusLine level={calendarCount ? "ok" : "off"}>{tn("cal.feeds", calendarCount)}</StatusLine>,
+      on: calendarOn,
+      page: () => (
+        <Section title={t("int.connection")}>
+          <CalendarSettings onRemove={() => switchTo("calendar", false)} />
+        </Section>
       ),
     },
   ];

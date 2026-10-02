@@ -17,14 +17,15 @@ const IGNORED = new Set(["pending", "subagents", "history_sid", "agents", "app_s
 const READS = new Set([
   "get_settings", "ui_lang", "ui_locale", "vault_status", "snapshot", "vault_notes", "read_note", "project_icons", "project_repos",
   "agents_status", "agent_commands", "action_config", "integration_thumb", "plugin:deep-link|get_current", "chats", "chat_providers", "history", "agent_log", "usage_limits", "usage_tokens",
-  "github_status", "github_prs", "github_pr", "mail_list", "mail_read", "integration_status", "integration_has_token",
+  "github_status", "github_prs", "github_pr", "mail_list", "mail_read", "calendar_meetings", "integration_status", "integration_has_token",
   "integration_mcp", "favicons", "find_icon_sites", "detect_vault", "check_vault", "plugin:window|theme",
 ]);
 const isIgnored = c => IGNORED.has(c.cmd) || c.cmd.startsWith("plugin:event|");
 const isRead = c => READS.has(c.cmd) || (c.cmd === "integration_call" && c.args.method === "GET");
 
 // ---------- in the page, before the app: the IPC boundary, with optional changes to what the backend answers
-// (outside: the conversation `key` has a turn running in a process the app did not start, as `agents` reports it)
+// (outside: the conversation `key` has a turn running in a process the app did not start, as `agents` reports it;
+// agents: changes to agents_status, `default` the default agent, `off` the providers switched off)
 const IPC_INIT = overrides => {
   const uuid = n => {
     const hex = (n * 2654435761).toString(16).padStart(8, "0").slice(-8);
@@ -35,6 +36,10 @@ const IPC_INIT = overrides => {
   const wrapped = async (cmd, args, options) => {
     order ??= Object.keys(JSON.parse(localStorage.getItem("chats") || "{}"));
     const result = await real(cmd, args, options);
+    if (overrides.agents && cmd === "agents_status") {
+      const { default: def, off = [] } = overrides.agents;
+      return { ...result, default: def ?? result.default, providers: result.providers.map(p => (off.includes(p.id) ? { ...p, on: false } : p)) };
+    }
     if (overrides.outside && cmd === "agents") {
       const key = window.__harness.keys[overrides.outside];
       const sid = uuid(order.indexOf(key) + 101); // = harness/fixtures/conversations.ts sidOf
@@ -673,6 +678,92 @@ const SCENARIOS = {
   },
 
   // Agent access per extension: the vault's .relay/config.json `actions`, through action_config / set_action_config
+  async calendar(s) {
+    await s.load({ fixture: "calendar" });
+    const { page } = s;
+    const meeting = title => visible(page.locator("section").filter({ hasText: title })).first();
+    s.check("meetings on top of Waiting", await waitText(page, "Sprint review Northwind Portal"));
+    s.check("running and about to start", (await hasText(page, "Daily standup")) && (await hasText(page, "Starts in 4 min")) && (await hasText(page, "Starts in 25 min")));
+    s.check("not an hour ago, not in 90 minutes", !(await hasText(page, "Retro Atlas Logistics")) && !(await hasText(page, "Lunch with the accountant")));
+    s.check("the calendar that failed is named", await hasText(page, "studio@example.org: Calendar unreachable"));
+    s.check("place and people", (await hasText(page, "Room Atlas, 2nd floor")) && (await hasText(page, "3 people")));
+    // the banner goes out with the first load, so it is among the start-up calls
+    const banners = await page.evaluate(() => window.__harness.calls.filter(c => c.cmd === "notify").map(c => c.args));
+    s.check("one banner, for the meeting in 4 minutes, opening Waiting", banners.length === 1 && banners[0].key === "__wait" && banners[0].title === "Meeting at 09:34" && banners[0].body === "Sprint review Northwind Portal");
+    s.check("the banner has a slot of its own, so the next meeting's does not replace it", banners[0]?.slot === "meeting:review@2026-10-01T07:34:00.000Z");
+    s.check("Join only where there is a meeting link", (await visible(button(page, "Join")).count()) === 2);
+    s.check("no Join for a link that only names a meeting host", (await visible(meeting("Harbor CRM kick-off").getByRole("button", { name: "Join", exact: true })).count()) === 0);
+    await click(meeting("Sprint review Northwind Portal").getByRole("button", { name: "Join", exact: true }));
+    const opened = await s.calls("plugin:opener|open_url");
+    s.check("Join opens the meeting link", opened.length === 1 && opened[0].args.url === "https://meet.google.com/abc-defg-hij");
+    await click(meeting("Sprint review Northwind Portal").getByRole("button", { name: "Prepare", exact: true }), 400);
+    let sends = await s.calls("send");
+    const prep = String(sends[0]?.args.text ?? "");
+    s.check("Prepare sends one briefing prompt", sends.length === 1 && prep.startsWith("Bereid me voor op deze meeting"));
+    s.check("with the invite, marked untrusted", prep.includes("onvertrouwde tekst van derden") && prep.includes("Titel: «Sprint review Northwind Portal»") && prep.includes("Wanneer: 2026-10-01 09:34–10:04") && prep.includes("Locatie: «Room Atlas, 2nd floor»") && prep.includes("Organisator: sofie@northwind.example") && prep.includes("Deelnemers: Sofie Claes <sofie@northwind.example>, Tom Willems <tom@acme.example>, qa@northwind.example"));
+    s.check("restricted like a mail conversation", sends[0]?.args.mail === true);
+    s.check("on Claude, the agent that runs restricted, though Codex is the default", sends[0]?.args.provider === "claude");
+    let created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
+    s.check("in a new general conversation", created.length === 1 && created[0].project === null && created[0].title === "Prep: Sprint review Northwind Portal");
+    s.check("the conversation is open", await waitText(page, "About the meeting: Sprint review Northwind Portal"));
+    s.fact("prep", sends[0]?.args);
+    await s.load({ fixture: "calendar" });
+    await click(meeting("Harbor CRM kick-off").getByRole("button", { name: "Meeting note", exact: true }), 400);
+    sends = await s.calls("send");
+    s.check("Meeting note sends the note prompt", sends.length === 1 && String(sends[0].args.text).startsWith("Maak een meeting note in de vault") && sends[0].args.mail === true);
+    created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
+    s.check("titled after the meeting", created.length === 1 && created[0].title === "Harbor CRM kick-off");
+    s.fact("note", sends[0]?.args);
+  },
+  async calendarNoClaude(s) {
+    await s.load({ fixture: "calendar" });
+    const { page } = s;
+    await waitText(page, "Sprint review Northwind Portal");
+    await click(visible(page.locator("section").filter({ hasText: "Sprint review Northwind Portal" })).first().getByRole("button", { name: "Prepare", exact: true }), 400);
+    s.check("no meeting conversation without Claude", (await s.calls("send")).length === 0 && !Object.keys(await s.chatChanges()).length);
+    s.check("it says why", await waitText(page, "Meeting notes and briefings run on Claude Code, which is switched off. Switch it on under Settings › Agents.", 2000));
+  },
+  async calendarSettings(s) {
+    await s.load({ path: "/settings.html" });
+    const { page } = s;
+    const field = id => visible(page.locator(`#${id}`)).first();
+    const add = () => visible(button(page, "Add calendar")).first();
+    await click(navButton(page, "Integrations"), 300);
+    await click(button(page, "+ Add integration"), 300);
+    await click(visible(page.getByRole("button", { name: /^Calendar/ })).first(), 400);
+    let saves = await s.calls("set_settings");
+    s.check("added from the menu, switched on", saves.length === 1 && saves[0].args.settings?.calendar?.on === true);
+    s.check("its page opens", await waitText(page, "Add a calendar"));
+    s.check("Add calendar waits for both fields", await add().isDisabled());
+    await field("calemail").fill("laurent@example.com");
+    await field("calurl").fill("https://example.com/calendar.ics");
+    await click(add(), 300);
+    let connects = await s.calls("calendar_connect");
+    s.check("the address goes to the backend as typed", connects.length === 1 && connects[0].args.email === "laurent@example.com" && connects[0].args.url === "https://example.com/calendar.ics");
+    s.check("a refused address shows why", await waitText(page, "That is no secret iCal address", 2000));
+    s.check("and saves nothing", (await s.calls("set_settings")).length === 1);
+    s.check("the fields stay to fix", (await field("calemail").inputValue()) === "laurent@example.com");
+    const url = "https://calendar.google.com/calendar/ical/laurent%40example.com/private-0123456789abcdef/basic.ics";
+    await field("calurl").fill(url);
+    await click(add(), 300);
+    saves = await s.calls("set_settings"); // args come normalised, keys sorted
+    s.check("a calendar that loads is saved by its email only", saves.length === 2 && JSON.stringify(saves[1].args.settings?.calendar) === JSON.stringify({ feeds: [{ email: "laurent@example.com" }], on: true }));
+    s.check("the address never reaches the settings", !JSON.stringify(saves.map(c => c.args)).includes("calendar.google.com"));
+    s.check("it says how many meetings", await waitText(page, "laurent@example.com added: 3 meetings in the next 7 days", 2000));
+    s.check("the fields empty", (await field("calemail").inputValue()) === "" && (await field("calurl").inputValue()) === "");
+    // the calendar's own Remove comes before the integration's in the page
+    await click(visible(button(page, "Remove")).first(), 300);
+    connects = await s.calls("calendar_connect");
+    saves = await s.calls("set_settings");
+    s.check("removing a calendar empties its keychain entry", connects.length === 3 && connects[2].args.url === "");
+    s.check("and drops it from the settings", JSON.stringify(saves.at(-1)?.args.settings?.calendar) === JSON.stringify({ feeds: [], on: true }));
+    await click(visible(button(page, "Remove")).last(), 300);
+    saves = await s.calls("set_settings");
+    s.check("Remove switches the integration off", saves.at(-1)?.args.settings?.calendar?.on === false);
+    s.check("back on the list", await waitText(page, "+ Add integration", 2000));
+    s.fact("calendar_connect", connects.map(c => c.args));
+    s.fact("saved", saves.map(c => c.args.settings?.calendar));
+  },
   async agentAccess(s) {
     await s.load({ path: "/settings.html" });
     const { page } = s;
@@ -821,13 +912,17 @@ const SCENARIOS = {
     s.check("no second process on the session", (await s.calls("send")).length === 0);
   },
 };
-const OVERRIDES = { typingOutside: { outside: "switchTo" } };
+// calendar: Codex is the default agent, a meeting conversation still runs on Claude; calendarNoClaude: Claude is off
+const OVERRIDES = { typingOutside: { outside: "switchTo" }, calendar: { agents: { default: "codex" } }, calendarNoClaude: { agents: { default: "codex", off: ["claude"] } } };
 // a scenario that is allowed to fail on a frontend (known bug), shown but not counted
 const KNOWN = {
   typingOutside: "Lit loses the text: takeText runs before the outside check (src/domain/chats/actions.ts)",
   mail: "Lit drops a link clicked in a mail: mailLinkClicked checks panel.open, the Mail view keeps the mail in panel.mailOpen (src/domain/mail.ts)",
   mailTriageFilter: "Lit keeps mails hidden by the read filter in the selection after marking them read (mailSeen in src/domain/mail.ts does not prune), E then moves mails out of sight",
   // an intended difference, not a Lit bug to port: React fixed it on review (security)
+  // Lit bugs from the review of #54, fixed in the React port
+  calendar: "Lit keys a meeting's banner on Waiting (a second meeting's replaces it), checks only https:// before Join, and starts the meeting conversation on the default agent, which only Claude runs restricted",
+  calendarNoClaude: "Lit starts the meeting conversation on the default agent, unrestricted when that is not Claude",
   deepLinks: "Lit sends relay://ask?q=<text> at once (quickSend in src/app/deep-links.ts); React opens Cmd-K with the text and waits for Enter",
 };
 

@@ -18,6 +18,7 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 
 mod actions;
 mod agents;
+mod calendar;
 mod commits;
 pub mod broker;
 mod mail;
@@ -78,6 +79,7 @@ fn norm(mut v: Value) -> Value {
     for k in ["projects", "overrides", "vaults", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
     providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
     agents::migrate(&mut v);    // agents.default and agents.providers.<id>: on, bin
+    calendar::norm(&mut v);     // calendar.on and calendar.feeds[].email, the addresses are in the keychain
     if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
     if !v["mail"]["on"].is_boolean() { v["mail"]["on"] = json!(false); }
@@ -196,6 +198,11 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
     ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
+    ("err.cal_email", ["Calendar: enter the calendar's email address", "Agenda: vul het e-mailadres van de agenda in", "Agenda : saisissez l'adresse e-mail de l'agenda", "Kalender: Gib die E-Mail-Adresse des Kalenders ein"]),
+    ("err.cal_url", ["That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.", "Dat is geen geheim iCal-adres. In Google Agenda: Instellingen › je agenda › Agenda integreren › Geheim adres in iCal-indeling.", "Ce n'est pas une adresse iCal secrète. Dans Google Agenda : Paramètres › votre agenda › Intégrer l'agenda › Adresse secrète au format iCal.", "Das ist keine geheime iCal-Adresse. In Google Kalender: Einstellungen › dein Kalender › Kalender integrieren › Geheime Adresse im iCal-Format."]),
+    ("err.cal_keychain", ["Could not save the calendar address in the keychain", "Kon het agenda-adres niet in de sleutelhanger bewaren", "Impossible d'enregistrer l'adresse de l'agenda dans le trousseau", "Die Kalenderadresse konnte nicht im Schlüsselbund gespeichert werden"]),
+    ("err.cal_down", ["Calendar unreachable: {v}", "Agenda niet bereikbaar: {v}", "Agenda injoignable : {v}", "Kalender nicht erreichbar: {v}"]),
+    ("err.cal_no_url", ["no address in the keychain, add {v} again under Settings › Integrations › Calendar", "geen adres in de sleutelhanger, voeg {v} opnieuw toe bij Instellingen › Integraties › Agenda", "pas d'adresse dans le trousseau, ajoutez {v} à nouveau dans Réglages › Intégrations › Agenda", "keine Adresse im Schlüsselbund, füge {v} unter Einstellungen › Integrationen › Kalender neu hinzu"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
     let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
@@ -1377,6 +1384,19 @@ async fn mail_test(state: State<'_, App>, account: Value) -> Result<String, Stri
     state.mail.test(&a).await
 }
 
+/// Settings › Calendar: save a calendar's secret iCal address in the keychain and try it (calendar::connect).
+#[tauri::command]
+async fn calendar_connect(email: String, url: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || calendar::connect(&email, &url)).await.map_err(|e| e.to_string())?
+}
+
+/// The meetings of the next hours, for Waiting: { meetings, errors }.
+#[tauri::command]
+async fn calendar_meetings(state: State<'_, App>) -> Result<Value, String> {
+    let s = state.settings.lock().unwrap().clone();
+    tauri::async_runtime::spawn_blocking(move || calendar::upcoming(&s)).await.map_err(|e| e.to_string())
+}
+
 /// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
 #[tauri::command]
 async fn pick_folder(app: AppHandle) -> Option<String> {
@@ -1482,7 +1502,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

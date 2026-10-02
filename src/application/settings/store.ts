@@ -63,6 +63,8 @@ export type SettingsState = {
       message: Message | null;
       tests: Record<string, Message | "busy">;
     };
+    // Calendar: the feeds are saved as soon as one connects, the address itself only goes to the keychain
+    calendar: { busy: boolean; message: Message | null };
   };
 };
 
@@ -89,5 +91,6 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     form: {},
     github: { login: "", error: "", message: null, owners: null },
     mail: { edit: EMPTY_SETTINGS.mail, draft: NO_MAIL_DRAFT, busy: "", message: null, tests: {} },
+    calendar: { busy: false, message: null },
   },
 }));

@@ -31,6 +31,7 @@ import { checkBoards, resetBoard } from "./board/board";
 import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
+import { loadMeetings, tick } from "./calendar/calendar";
 import { listenToLinks } from "./deep-links";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
@@ -52,6 +53,7 @@ async function settingsChanged(next: Settings) {
   const integrationsChanged = !sameJson(next.integrations, was.integrations);
   const githubChanged = !sameJson(next.github, was.github);
   const mailChanged = !sameJson(next.mail, was.mail);
+  const calendarChanged = !sameJson(next.calendar, was.calendar);
   setSettingsState(next);
   applyTheme(next.theme, next.accent);
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
@@ -69,6 +71,7 @@ async function settingsChanged(next: Settings) {
     if (!mailOn() && selected() === MAIL) select(WAIT);
     loadMails();
   }
+  if (calendarChanged) loadMeetings();
   checkBoards().then(() => {
     if (boardDown(selected())) select(WAIT);
     loadSnapshot();
@@ -222,4 +225,7 @@ function startPolls() {
   startUsage(); // plan limits for the sidebar, tokens while the view is open
   if (selected() !== MAIL) loadMails();
   setInterval(loadMails, 5 * 60000);
+  loadMeetings(); // the meetings about to start, under Waiting, with a banner 5 minutes before
+  setInterval(loadMeetings, 5 * 60000);
+  setInterval(tick, 30000);
 }

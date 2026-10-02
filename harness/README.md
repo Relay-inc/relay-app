@@ -10,7 +10,7 @@ harness measures the Lit frontend and a rewrite that keeps the same commands, ev
 |---|---|
 | `vite.config.ts` | The root `vite.config.ts` plus a plugin that puts `<script type="module" src="/harness/mock-backend.ts">` first in `index.html` and `settings.html`. Port 1430 (dev), 1431 (preview of a production build in `harness/dist`). |
 | `mock-backend.ts` | `mockIPC` + `mockWindows`: answers every command in `src-tauri/src/lib.rs`'s `generate_handler!` plus `plugin:event|*`, `plugin:window|*`, `plugin:opener|open_url`. Exposes `window.__harness`. |
-| `fixtures/` | Deterministic data, all fictional: 12 projects, 60 conversations (one with 300 items), a permission card, a question and an agent-action card (`relay productive.create_task`), subagents, two terminal sessions and a blocked background one, two mail accounts (60 Gmail mails, plain and HTML, and 8 on a generic IMAP server), PRs with checks, a Productive board (JSON:API) with saved views and a picture attachment, reminders, usage, agents (Claude, Codex, OpenCode, Pi), the agent actions and their policies. Dates are relative to `NOW` = 2026-10-01 09:30 Brussels. |
+| `fixtures/` | Deterministic data, all fictional: 12 projects, 60 conversations (one with 300 items), a permission card, a question and an agent-action card (`relay productive.create_task`), subagents, two terminal sessions and a blocked background one, two mail accounts (60 Gmail mails, plain and HTML, and 8 on a generic IMAP server), PRs with checks, a Productive board (JSON:API) with saved views and a picture attachment, reminders, calendar meetings, usage, agents (Claude, Codex, OpenCode, Pi), the agent actions and their policies. Dates are relative to `NOW` = 2026-10-01 09:30 Brussels. |
 | `lib.mjs` | Server (dev or production build), browser launch, page helpers that only use the DOM. |
 | `screens.mjs` | Screenshots of every view. |
 | `diff.mjs` | Pixel diff of two screenshot sets. |
@@ -38,8 +38,8 @@ the installed Google Chrome.
 
 ## The mock
 
-URL query: `?fixture=default|dark|graphite|icons|onboarding|mailexp` (dark: settings theme dark; graphite: the graphite accent;
-icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; mailexp: the experimental mail
+URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|mailexp` (dark: settings theme dark; graphite: the graphite accent;
+icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; mailexp: the experimental mail
 flag on, so archive, delete and the Inbox/Other split), `?sel=<key>` the view or
 conversation the window opens on, `?link=<relay:// url>` the deep link the app was launched with (`plugin:deep-link|get_current`). On every load the mock resets localStorage to the fixture:
 the conversation list (`chats`), `sel`, and the Productive board choice (`pvProject`, `pvBoard`). The window is
@@ -72,13 +72,13 @@ change the snapshot, so undo works; reminder ids are 8 hex characters as the bac
 the settings but emits no `settings-changed`. `set_action_config` keeps the extension's entry, `action_config` returns
 the actions and the entries. `drop_worktrees` removes one worktree for the switch-to conversation, none for the others.
 `mail_list` answers per `account`, every row with `other` (true for the machine-sent senders, only with the experimental
-flag). `mail_move` refuses with the flag off, as the backend does, and otherwise drops the mails from later `mail_list` pages. `agent_commands` per provider. `integration_thumb` returns a PNG for the fixture's
+flag). `mail_move` refuses with the flag off, as the backend does, and otherwise drops the mails from later `mail_list` pages. `calendar_meetings` gives five meetings around `NOW` (three under Waiting, the one in 4 minutes due a banner) while the calendar is on, `calendar_connect` refuses an address that is not a Google secret iCal one and counts 3 meetings otherwise. `agent_commands` per provider. `integration_thumb` returns a PNG for the fixture's
 thumb URL. `integration_call` serves Productive only (Trello and Linear throw); writes (move, status, comment) patch the
 in-memory tasks loosely.
 
 ## Views (`screens.mjs`)
 
-62 views. Conversation: waiting, conversation-long-top, conversation-long-bottom (after `liveTail`),
+64 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
@@ -90,7 +90,7 @@ deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a proj
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
-settings-agent-access. Other: onboarding, dark-waiting,
+settings-integration-calendar, settings-agent-access. Other: onboarding, dark-waiting,
 dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail.
 
 1440x900 at device scale 2, page clock fixed to `NOW`, reduced motion, animations disabled, caret hidden. Navigation
@@ -106,14 +106,14 @@ the comment field's placeholder "Leave a comment…", and an HTML mail shown in 
 
 ## Behaviour (`behaviour.mjs`)
 
-25 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
+28 scenarios, each on fresh page loads, driven by visible text, roles, the composer, the keyboard and localStorage:
 send, stop, cards (permission, question, agent action), cmdk, newGeneral, renameClose (with the worktree toast), sidebar,
 mail (two accounts merged, read per account, load more, the link bar), mailTriage (experimental: Inbox/Other, E and #,
 a held key acting once, Cmd- and Shift-click, Cmd-A, Esc, bulk read and delete, a reload keeps moved mails gone),
 mailTriageFilter (mails a read filter hides after a bulk read leave the selection), mailTriageOff (without the flag: no
 tabs, no checkboxes, E does nothing), prs (side by side, AI review), board (ticket
 window, comment, status, Start conversation), boardTools (list view, filters, Productive's saved views, grouping),
-reminders, reminderUndo, settings (theme, accent, GitHub owners, language), agentAccess (policy and access per
+reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations on Claude), calendarNoClaude (refused with Claude off), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
 extension), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
 typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
 split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: three Lit bugs (typingOutside,
