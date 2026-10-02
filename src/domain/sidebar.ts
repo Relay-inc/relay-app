@@ -1,6 +1,6 @@
 import { t, tn } from "../core/i18n";
 import { changed, ls } from "../core/store";
-import { ui, WAIT, REM, PRS, MAIL, boardKey } from "./ui";
+import { ui, WAIT, REM, PRS, MAIL } from "./ui";
 import {
   chat,
   chatsOf,
@@ -14,12 +14,16 @@ import {
   type TerminalSession,
 } from "./chats/state";
 import { vault, contexts, projectLabel } from "./vault";
-import { config, ghOn, mailOn } from "./config";
+import { config, ghOn, mailOn, saveSettings, type SidebarCfg } from "./config";
 import { readyBoards } from "./board";
 import { agent, chatAgent } from "./agents";
 import { mail, unread } from "./mail";
 import { prs } from "./prs";
 import type { Project } from "./vault";
+import { viewItems, type ViewItem } from "./sidebar-views";
+import { arranged, isHidden, place, ordered } from "./sidebar-order";
+
+export { place, ordered };
 
 // The sidebar's own state: the search text, folded sections and projects, and the order the user dragged.
 export const sidebar = {
@@ -44,23 +48,27 @@ export function toggleUnfold(project: string) {
   else sidebar.unfolded.add(project);
   changed();
 }
-/** `list` with `id` moved before or after `ref` (to the end when `ref` is not in it). */
-export const place = (list: string[], id: string, ref: string, after: boolean) => {
-  const rest = list.filter(x => x !== id);
-  const refIndex = rest.indexOf(ref);
-  const at = refIndex < 0 ? rest.length : refIndex + (after ? 1 : 0);
-  rest.splice(at, 0, id);
-  return rest;
-};
 /** A drop after dragging: `visible` is the order as shown, the dragged `id` goes before or after `ref`. */
 export function reorder(
-  kind: "sec" | "proj" | "conv",
+  kind: "sec" | "proj" | "conv" | "view",
   scope: string,
   visible: string[],
   id: string,
   ref: string,
   after: boolean,
 ) {
+  if (kind === "view") {
+    // among all views, the switched-off ones too, so they come back where they were
+    setSidebar({
+      order: place(
+        allViews().map(view => view.key),
+        id,
+        ref,
+        after,
+      ),
+    });
+    return;
+  }
   if (kind === "sec") {
     sidebar.secOrder = place(sidebar.secOrder, id, ref, after);
     ls.set("secOrder", sidebar.secOrder);
@@ -73,30 +81,11 @@ export function reorder(
   }
   changed();
 }
-/** Rows in the user's dragged order first, the rest after them in their own order. */
-export const ordered = <T>(
-  rows: T[],
-  key: (row: T) => string,
-  order: string[] = [],
-  byRest: (a: T, b: T) => number = () => 0,
-) =>
-  rows
-    .map((row, index) => ({ row, index }))
-    .sort((a, b) => {
-      const posA = order.indexOf(key(a.row));
-      const posB = order.indexOf(key(b.row));
-      if (posA >= 0 && posB >= 0) return posA - posB;
-      if (posA >= 0) return -1;
-      if (posB >= 0) return 1;
-      return byRest(a.row, b.row) || a.index - b.index;
-    })
-    .map(x => x.row);
-
 // ---------- what the sidebar shows, built from the state: the view rows on top, then the sections with their rows
 export type Trail = "" | "dot" | "spin";
 /** The badge or count at the end of a view row. */
 export type Meta = { kind: "badge" | "count" | "late" | "soon"; n: number; title?: string };
-export type ViewRow = { key: string; icon?: string; svg?: string; name: string; meta?: Meta };
+export type ViewRow = ViewItem & { meta?: Meta };
 export type ConvRow = {
   key: string;
   parent: string;
@@ -227,49 +216,51 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
   };
 }
 
-// ---------- the view rows: waiting, reminders, the boards, pull requests and mail
-const waitingRow = (): ViewRow => {
+// ---------- the view rows: waiting, reminders, the boards, pull requests and mail, in the user's order
+const waitingMeta = (): Meta | undefined => {
   const waiting = waitCount();
-  return { key: WAIT, icon: "bell", name: t("nav.waiting"), meta: waiting ? { kind: "badge", n: waiting } : undefined };
+  return waiting ? { kind: "badge", n: waiting } : undefined;
 };
-const remindersRow = (): ViewRow => {
+const remindersMeta = (): Meta | undefined => {
   const reminders = vault.snap.reminders;
   const due = reminders.filter(reminder => reminder.days <= 0).length;
   const overdue = reminders.some(reminder => reminder.days < 0);
-  return {
-    key: REM,
-    icon: "list",
-    name: t("nav.reminders"),
-    meta: due ? { kind: overdue ? "late" : "soon", n: due } : undefined,
-  };
+  return due ? { kind: overdue ? "late" : "soon", n: due } : undefined;
 };
-const boardRows = (): ViewRow[] =>
-  readyBoards().map(board => ({ key: boardKey(board.id), svg: board.glyph, name: board.name }));
-const prsRow = (): ViewRow => {
+const prsMeta = (): Meta | undefined => {
   const review = prs.list?.review.length ?? 0;
-  return {
-    key: PRS,
-    icon: "pr",
-    name: t("nav.prs"),
-    meta: review ? { kind: "count", n: review, title: t("nav.prsReview") } : undefined,
-  };
+  return review ? { kind: "count", n: review, title: t("nav.prsReview") } : undefined;
 };
-const mailRow = (): ViewRow => {
+const mailMeta = (): Meta | undefined => {
   const unreadCount = mail.list?.filter(unread).length ?? 0;
-  return {
-    key: MAIL,
-    icon: "mail",
-    name: t("nav.mail"),
-    meta: unreadCount ? { kind: "count", n: unreadCount } : undefined,
-  };
+  return unreadCount ? { kind: "count", n: unreadCount } : undefined;
 };
-const viewRows = (): ViewRow[] => [
-  waitingRow(),
-  remindersRow(),
-  ...boardRows(),
-  ...(ghOn() ? [prsRow()] : []),
-  ...(mailOn() ? [mailRow()] : []),
-];
+const META: Record<string, () => Meta | undefined> = {
+  [WAIT]: waitingMeta,
+  [REM]: remindersMeta,
+  [PRS]: prsMeta,
+  [MAIL]: mailMeta,
+};
+
+export const sidebarCfg = (): SidebarCfg => config.value.sidebar ?? {};
+export const viewsLayout = () => sidebarCfg().layout ?? "list";
+/** Every view there is now, in the user's order, the switched-off ones included. */
+export const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn()), sidebarCfg());
+export const hiddenViews = () => allViews().filter(view => isHidden(view.key, sidebarCfg()));
+const viewRows = (): ViewRow[] =>
+  allViews()
+    .filter(view => !isHidden(view.key, sidebarCfg()))
+    .map(view => ({ ...view, meta: META[view.key]?.() }));
+
+/** Changes the sidebar's settings: shown at once, then saved (the settings window follows). */
+export function setSidebar(patch: SidebarCfg) {
+  const next = { ...config.value, sidebar: { ...sidebarCfg(), ...patch } };
+  config.value = next;
+  changed();
+  saveSettings(next).then(changed);
+}
+export const setViewHidden = (key: string, hidden: boolean) =>
+  setSidebar({ hidden: [...(sidebarCfg().hidden ?? []).filter(x => x !== key), ...(hidden ? [key] : [])] });
 
 // ---------- the sections
 const section = (id: string, query: string, rest: Omit<Section, "id" | "collapsed" | "open">): Section => ({
