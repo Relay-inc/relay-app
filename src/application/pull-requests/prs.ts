@@ -67,6 +67,11 @@ export async function reviewPr(key: string) {
   await select(chatKey);
   sendMsg(reviewPrompt(pr, repo));
 }
+/** The label of the project a PR row belongs to, or "" when the vault does not know it. */
+export function prProjectLabel(name: string): string {
+  const known = project(name);
+  return known ? projectLabel(known.name) : "";
+}
 /** The PR detail's header: its repo and, when the vault knows the project of its row in the lists, that project's
  *  label and context tint. Read it with `useDerived`. */
 export function prHeading(key: string) {

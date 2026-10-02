@@ -535,9 +535,9 @@ const SCENARIOS = {
     const pr = await s.calls("github_pr");
     s.check("github_pr for the PR", pr.some(c => c.args.repo === "acme/northwind-portal" && c.args.number === 412));
     s.check("list and PR side by side", await hasText(page, "Replace balance instead of adding it"));
-    await click(button(page, "AI review"), 400);
+    await click(button(page, "Review with Claude"), 400);
     const sends = await s.calls("send");
-    s.check("AI review sends one review prompt", sends.length === 1 && String(sends[0].args.text).includes("Review PR https://github.com/acme/northwind-portal/pull/412"));
+    s.check("Review with Claude sends one review prompt", sends.length === 1 && String(sends[0].args.text).includes("Review PR https://github.com/acme/northwind-portal/pull/412"));
     const created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
     s.check("in a new conversation under the PR's project", created.length === 1 && created[0].project === "Northwind Portal" && created[0].title === "Review northwind-portal #412");
     s.fact("sel", (await s.local(["sel"])).sel);
