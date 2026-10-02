@@ -34,8 +34,6 @@ mod tray;
 mod vault;
 mod worktrees;
 
-// ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
-const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
