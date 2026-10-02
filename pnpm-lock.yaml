@@ -122,6 +122,9 @@ importers:
       lit:
         specifier: ^3.3.3
         version: 3.3.3
+      marked:
+        specifier: ^18.0.14
+        version: 18.0.14
 
   packages/integration-linear:
     dependencies:

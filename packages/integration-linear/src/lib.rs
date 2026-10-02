@@ -42,6 +42,7 @@ pub const PROVIDER: Provider = Provider {
     },
     headers: |_, s| vec![format!("Authorization: {}", s[0]), "Content-Type: application/json".into()],
     upload: |_| false,
+    upload_kind: board_core::UploadKind::Form,
     thumb: |_| false,
     ok: |v| v["errors"].as_array().is_none_or(|e| e.is_empty()),
     error: |code, v| {

@@ -29,6 +29,8 @@ export type CardView = {
   description: string;
   status?: { id: string; name: string; state?: State };
   assignee?: { id: string; name: string };
+  /** Trello supports multiple members. Changes add/remove one member, preserving everyone else. */
+  assignees?: Opt[];
   due: string; labels: string[];
   /** the choices for the status and assignee pickers, once known; without them those two show as text */
   statuses?: Opt[]; people?: Opt[];

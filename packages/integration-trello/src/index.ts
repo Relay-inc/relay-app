@@ -1,5 +1,6 @@
 import { currentLocale, translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
 import { mapBoards, mapCards, mapColumns } from "./map";
+import { trelloTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
 const t = translator<Key>("trello");
@@ -45,7 +46,8 @@ const trello: BoardProvider<Key> = {
     return typeof r?.pos === "number" ? r.pos : undefined;
   },
   url: async (_c, _ref, id) => links.get(id) || `https://trello.com/c/${id}`,
-  reset: () => { me = null; mine = null; links.clear(); },
+  detail: trelloTicket.detail,
+  reset: () => { me = null; mine = null; links.clear(); trelloTicket.reset(); },
 
   settings: {
     tokenLabel: "token",

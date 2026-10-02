@@ -170,7 +170,7 @@ export class RelayTicket extends LitElement {
       ${v.status ? this.field(t("kb.fStatus"), this.picker("status", v.status.id, v.statuses, html`${ring(v.status.state)}${v.status.name}`)) : nothing}
       ${v.list ? this.field(t("kb.fList"), html`<span class="inline-flex items-center gap-1.5 text-[13px]">${icon("folder", "glyph size-3.5 text-secondary")}${v.list}</span>`) : nothing}
       ${
-        v.people || v.assignee
+        !v.assignees && (v.people || v.assignee)
           ? this.field(
               t("kb.fWho"),
               this.picker(
@@ -182,6 +182,25 @@ export class RelayTicket extends LitElement {
                   : html`<span class="text-secondary font-normal">${t("kb.unassigned")}</span>`,
                 t("kb.unassigned"),
               ),
+            )
+          : nothing
+      }
+      ${
+        v.assignees
+          ? this.field(
+              t("kb.fWho"),
+              html`<div class="flex flex-col gap-1">
+                ${[...new Map([...(v.people || []), ...v.assignees].map(p => [p.id, p])).values()].map(
+                  p =>
+                    html`<label class="flex items-center gap-2 text-[13px]">
+                      <input
+                        type="checkbox"
+                        .checked=${v.assignees!.some(a => a.id === p.id)}
+                        @change=${(e: Event) => this.act(e.target!, (e.target as HTMLInputElement).checked ? "member-add" : "member-remove", p.id)}
+                      />${p.name}
+                    </label>`,
+                )}
+              </div>`,
             )
           : nothing
       }
