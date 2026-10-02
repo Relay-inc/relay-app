@@ -37,20 +37,48 @@ the repos in another folder (for example `~/repos`), or give `relay-server` Full
 
 ## In Docker (a home server such as Unraid)
 
-`packages/relay-server/docker/` has an image with relay-server and the real Claude Code, and a compose file. From the
-repo root:
+Every Relay release also publishes `ghcr.io/laurentme/relay-server` for amd64 and arm64, tagged with the same version
+(`:latest` is the newest), so a server and an app of the same version speak the same protocol. Claude Code is not in the
+image: the first start installs it with Anthropic's installer into the `.local` volume, where its own updates stay.
 
-1. `docker compose -f packages/relay-server/docker/compose.yml up -d --build`
-2. Log in once: `docker compose -f packages/relay-server/docker/compose.yml exec relay-server claude`, then `/login`
-   (it shows a URL to open on your laptop). The login stays in the `claude` volume.
-3. Clone the repos into the `repos` volume, e.g. `… exec relay-server git clone <url> /home/relay/repos/<name>`.
-   Private repos need a deploy key or a token inside the container.
-4. Pair: `… exec relay-server relay-server pair --host <the server's LAN address>`. Inside a container the server
-   cannot see its LAN address itself, so `--host` is needed.
-5. In Relay, link the project to `/home/relay/repos/<name>`.
+1. The package is private. Log in once with a GitHub token that has `read:packages`:
+   `docker login ghcr.io -u <your GitHub user>`, the token as the password.
+2. Make the folders, owned by the container's user (uid 1000):
+   ```sh
+   mkdir -p /mnt/user/appdata/relay-server/{data,claude,repos,local}
+   chown -R 1000:1000 /mnt/user/appdata/relay-server
+   ```
+3. Run it:
+   ```sh
+   docker run -d --name relay-server --hostname lserver --restart unless-stopped -p 47800:47800 \
+     --tmpfs /home/relay/work:uid=1000,gid=1000,mode=0700,size=2g \
+     -v /mnt/user/appdata/relay-server/data:/home/relay/data \
+     -v /mnt/user/appdata/relay-server/claude:/home/relay/.claude \
+     -v /mnt/user/appdata/relay-server/repos:/home/relay/repos \
+     -v /mnt/user/appdata/relay-server/local:/home/relay/.local \
+     ghcr.io/laurentme/relay-server:latest
+   ```
+   `docker logs relay-server` shows Claude Code being installed, then `listening on 0.0.0.0:47800`.
+4. Log in to Claude once: `docker exec -it relay-server claude`, then `/login` (it shows a URL to open on your laptop).
+   The login stays in the `claude` folder.
+5. Clone the repos into `repos`, e.g. `docker exec relay-server git clone <url> /home/relay/repos/<name>`. Private repos
+   need a deploy key or a token inside the container.
+6. Pair: `docker exec relay-server relay-server pair --host 192.168.1.2` with the server's LAN address. Inside a
+   container the server cannot see that address itself.
+7. In Relay, link the project to `/home/relay/repos/<name>`.
 
-Port 47800 is published on the host. The data (certificate, paired devices), Claude's state and the repos are volumes,
-so a rebuild keeps the pairing and the conversations.
+**Update:** `docker pull ghcr.io/laurentme/relay-server:latest`, then `docker rm -f relay-server` and the same
+`docker run`. The folders keep the pairing, the login, Claude Code and the repos; the mirror is locked until Relay
+connects again.
+
+**From the source**, without the registry: `docker compose -f packages/relay-server/docker/compose.yml up -d --build`
+on the machine itself, or build on your laptop and load the image over ssh, so the source never goes there:
+```sh
+docker buildx build --platform linux/amd64 -f packages/relay-server/docker/Dockerfile --target server -t relay-server --load .
+docker save relay-server | gzip | ssh root@192.168.1.2 'gunzip | docker load'
+```
+Then run it as above with `relay-server` as the image. On an Apple-silicon Mac the amd64 build takes about a minute
+and a half.
 
 ## Testing on one Mac
 
@@ -82,8 +110,8 @@ it in memory only. Unlocked, the server unpacks the mirror into `RELAY_SERVER_WO
 (compose.yml mounts a tmpfs at `/home/relay/work`). After a restart the mirror is locked until the laptop connects:
 conversations in the vault wait for it, conversations in a repo run. `relay-server revoke` removes a device's mirror.
 
-With `docker run`, add the RAM disk yourself: `--tmpfs /home/relay/work:uid=1000,gid=1000,mode=0700,size=2g`. Without
-one the server logs a warning and Settings › Machines says the working copy is on disk.
+The `docker run` above mounts that RAM disk (`--tmpfs`). Without one the server logs a warning and Settings › Machines
+says the working copy is on disk.
 
 ## Commands
 
