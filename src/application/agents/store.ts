@@ -1,4 +1,4 @@
-import type { AgentsStatus, Seen } from "../../domain/agents/types";
+import type { AgentsStatus, Seen, ServerStatus } from "../../domain/agents/types";
 import { pickKey } from "../../domain/agents/rules";
 import { AGENTS } from "../../shared/plugins";
 import { storage } from "../../infrastructure/storage";
@@ -11,6 +11,7 @@ type AgentsState = {
   loaded: boolean;
   picked: Record<string, string>; // by pick key (`model`, `effort.codex`, …), as stored
   seen: Record<string, Seen>; // by provider, stored as `defaults.<id>`
+  server: ServerStatus; // where a conversation can run besides here
 };
 
 export const seenKey = (id: string) => `defaults.${id}`;
@@ -24,4 +25,5 @@ export const useAgentsStore = makeStore<AgentsState>(() => ({
     ),
   ),
   seen: Object.fromEntries(AGENTS.map(agent => [agent.id, storage.get<Seen>(seenKey(agent.id), {})])),
+  server: { configured: false, online: false },
 }));

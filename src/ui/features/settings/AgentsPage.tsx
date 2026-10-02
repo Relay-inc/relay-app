@@ -3,12 +3,22 @@ import { agent } from "../../../shared/plugins";
 import type { AgentStatus } from "../../../domain/agents/types";
 import type { AgentCfg } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
-import { checkAgents, clearAgentsMessage, saveAgent, setDefaultAgent } from "../../../application/settings/agents-page";
+import {
+  checkAgents,
+  checkServer,
+  clearAgentsMessage,
+  saveAgent,
+  saveServerAddr,
+  saveServerToken,
+  setDefaultAgent,
+} from "../../../application/settings/agents-page";
 import { Glyph } from "../../components/Glyph";
 import { Html } from "../../components/Html";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, DEFAULT_PILL, EMPTY_LIST, SELECT, TILE } from "./blocks";
+import { buttonClass, DEFAULT_PILL, EMPTY_LIST, FIELD, SELECT, TILE } from "./blocks";
+import { ChangeInput } from "./ChangeInput";
+import { Field } from "./Field";
 import { AgentSettings } from "./AgentSettings";
 import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
@@ -32,9 +42,12 @@ export function AgentsPage() {
   const detected = useSettingsStore(s => s.agentsPage.detected);
   const message = useSettingsStore(s => s.agentsPage.message);
   const agents = useSettingsStore(s => s.settings.agents);
+  const serverAddr = useSettingsStore(s => s.settings.server?.addr ?? "");
+  const server = useSettingsStore(s => s.agentsPage.server);
   const folds = useToggleSet();
   useEffect(() => {
     checkAgents();
+    checkServer();
   }, []);
 
   if (!detected) return <LoadingSection title={t("set.tab.agents")} text={message?.text || t("ag.checking")} />;
@@ -146,6 +159,48 @@ export function AgentsPage() {
           }
         />
       )}
+      <Section
+        title={t("srv.title")}
+        desc={<Html html={th("srv.help")} />}
+        action={
+          <button className={buttonClass("ghost")} onClick={checkServer}>
+            {t("srv.check")}
+          </button>
+        }
+      >
+        <Field label={t("srv.addr")} hint={t("srv.addrHint")} id="srvaddr">
+          <ChangeInput
+            id="srvaddr"
+            className={FIELD}
+            value={serverAddr}
+            placeholder="100.64.0.1:7311"
+            spellCheck={false}
+            onCommit={saveServerAddr}
+          />
+        </Field>
+        <Field label={t("srv.token")} hint={t("srv.tokenHint")} id="srvtoken">
+          <ChangeInput
+            id="srvtoken"
+            type="password"
+            className={FIELD}
+            value=""
+            placeholder={server?.configured ? t("srv.tokenSaved") : ""}
+            onCommit={(token, input) => {
+              saveServerToken(token);
+              input.value = "";
+            }}
+          />
+        </Field>
+        {server && (
+          <StatusLine level={server.online ? "ok" : server.configured ? "warn" : "off"}>
+            {server.online
+              ? t("srv.online", { version: server.version ?? "" })
+              : server.configured
+                ? t("srv.offline", { error: server.error ?? "" })
+                : t("srv.none")}
+          </StatusLine>
+        )}
+      </Section>
     </>
   );
 }

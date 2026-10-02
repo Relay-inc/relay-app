@@ -51,6 +51,7 @@ export type Chat = {
   closed?: number;
   mail?: string; // what goes in front of the first message: a mail or a card to read
   provider?: string; // its agent, set at the first message
+  host?: string; // "server": it runs on the server (Settings › Agents), set at the first message
   fromMail?: boolean; /* about a mail or has read mail */
   told?: string; // the project the agent was last told this conversation is about
 };

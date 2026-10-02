@@ -1,7 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
-import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
+import type { AgentEvent, AgentsStatus, Decision, ServerStatus } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { AgentSession, Pending, SessionOf, Sub, Transcript } from "../domain/conversations/types";
 import type { ActionConfig, ActionEntry, MailAcct, Settings } from "../domain/settings/types";
@@ -69,8 +69,13 @@ type SendArgs = {
   model: string;
   effort: string;
   provider: string;
+  host: string;
 };
 export const send = (args: SendArgs) => invoke("send", args);
+/** The server's status; `fresh` asks it now instead of giving the last check. */
+export const serverStatus = (fresh = false) => invoke<ServerStatus>("server_status", { fresh });
+/** Save the server's token in the keychain (empty removes it); the status after. */
+export const serverToken = (token: string) => invoke<ServerStatus>("server_token", { token });
 export const stop = (project: string) => invoke("stop", { project });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
@@ -171,6 +176,8 @@ export const onAgent = (handler: (key: string, event: AgentEvent, provider: stri
     handler(e.payload.project, e.payload.event, e.payload.provider),
   );
 /** A notification banner was clicked: open that conversation. */
+export const onServer = (handler: (status: ServerStatus) => void) =>
+  listen<ServerStatus>("server", e => handler(e.payload));
 export const onOpenChat = (handler: (key: string) => void) => listen<string>("open-chat", e => handler(e.payload));
 /** A link clicked inside a mail's sandboxed frame. */
 export const onMailLink = (handler: (url: string) => void) => listen<string>("mail-link", e => handler(e.payload));

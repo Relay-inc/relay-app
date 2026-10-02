@@ -152,6 +152,9 @@ function handle(cmd: string, a: Args): unknown {
     // agents and conversations
     case "agents_status":
       return integ.agentsStatus;
+    case "server_status":
+    case "server_token":
+      return { configured: false, online: false }; // no server: the composer and Settings show none
     case "agent_commands":
       return integ.agentCommands(a.provider);
     case "action_config":

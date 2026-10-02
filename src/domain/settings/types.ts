@@ -37,6 +37,7 @@ export type Settings = {
   terminal?: TerminalApp;
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
+  server?: { addr: string }; // relay-serve's host:port; its token is in the keychain
   sidebar?: SidebarCfg;
 };
 

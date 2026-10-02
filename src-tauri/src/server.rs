@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use std::fs;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 
 pub const HOST: &str = "server";
 const SECRET: &str = "vault-app.relay-serve";
@@ -138,10 +138,4 @@ pub fn server_token(app: AppHandle, token: String) -> Result<Value, String> {
         if saved_token().as_deref() != Some(t) { return Err(crate::trc("err.token_save")); }
     }
     Ok(check(&app))
-}
-
-/// Where each app conversation runs, for the ones on the server.
-#[tauri::command]
-pub fn chat_hosts(state: State<App>) -> Value {
-    state.sids.lock().unwrap().iter().filter(|(_, s)| !s.host.is_empty()).map(|(k, s)| (k.clone(), json!(s.host))).collect()
 }

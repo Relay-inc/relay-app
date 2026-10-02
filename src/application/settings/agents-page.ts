@@ -46,3 +46,26 @@ export const setDefaultAgent = (id: string) =>
     agents.default = id;
   });
 export const clearAgentsMessage = () => page({ message: null });
+
+// ---------- the server (relay-serve): its address in the settings, its token in the keychain
+/** Ask the server now how it is. */
+export async function checkServer() {
+  page({ server: await backend.serverStatus(true) });
+}
+export async function saveServerAddr(addr: string) {
+  const settings = useSettingsStore.getState().settings;
+  try {
+    commit(await backend.setSettings({ ...settings, server: { addr: addr.trim() } }));
+    page({ message: null });
+    await checkServer();
+  } catch (error) {
+    page({ message: { text: String(error), ok: false } });
+  }
+}
+export async function saveServerToken(token: string) {
+  try {
+    page({ server: await backend.serverToken(token), message: null });
+  } catch (error) {
+    page({ message: { text: String(error), ok: false } });
+  }
+}

@@ -6,8 +6,16 @@ import { useDraftsStore } from "../../../application/conversations/drafts";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
 import { chatBar, commandsOf } from "../../../application/conversations/selectors";
-import { attach, sendMsg, sendOrStop, setAgent, setTyped, unattach } from "../../../application/conversations/actions";
-import { agentOf, chatAgent, inherited, onAgents, picks, setPick } from "../../../application/agents/agents";
+import {
+  attach,
+  sendMsg,
+  sendOrStop,
+  setAgent,
+  setHost,
+  setTyped,
+  unattach,
+} from "../../../application/conversations/actions";
+import { agentOf, chatAgent, inherited, onAgents, picks, serverOf, setPick } from "../../../application/agents/agents";
 import { project } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -53,6 +61,8 @@ export function Composer({ className }: { className: string }) {
       agentId,
       agent: agentOf(agentId),
       agents: onAgents(),
+      server: serverOf(),
+      host: useConversationsStore.getState().chats[selected]?.host ?? "",
       model: picks("model"),
       effort: picks("effort"),
       inherited: { model: inherited("model"), effort: inherited("effort") },
@@ -262,6 +272,37 @@ export function Composer({ className }: { className: string }) {
                   ))}
                 </select>
                 {chevron}
+              </span>
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : null}
+          {/* where it runs: picked before the first message, shown after; only with a server set up */}
+          {view.server.configured && !isTerminal(selected) && !agentFixed ? (
+            <>
+              <span className="relative inline-flex items-center rounded-[7px] bg-fill-2 text-label">
+                <select
+                  className="text-label!"
+                  title={t("composer.host")}
+                  aria-label={t("composer.host")}
+                  value={view.host}
+                  onChange={e => setHost(e.target.value)}
+                >
+                  <option value="">{t("composer.hostLocal")}</option>
+                  <option value="server">
+                    {t(view.server.online ? "composer.hostServer" : "composer.hostOffline")}
+                  </option>
+                </select>
+                {chevron}
+              </span>
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : view.host ? (
+            <>
+              <span
+                className={`px-1.5 text-xs ${view.server.online ? "text-secondary" : "text-late"}`}
+                title={t("composer.host")}
+              >
+                {t(view.server.online ? "composer.hostServer" : "composer.hostOffline")}
               </span>
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>

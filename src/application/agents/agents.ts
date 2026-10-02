@@ -1,4 +1,4 @@
-import type { AgentEvent, PickKind } from "../../domain/agents/types";
+import type { AgentEvent, PickKind, ServerStatus } from "../../domain/agents/types";
 import { inheritedOf, picksOf, pickKey, seeDefaults } from "../../domain/agents/rules";
 import { isTerminal } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
@@ -12,6 +12,19 @@ import { seenKey, useAgentsStore } from "./store";
 const as = () => useAgentsStore.getState();
 
 /** Detection runs each CLI once: not awaited at the start. */
+const setServer = (status: ServerStatus) =>
+  useAgentsStore.setState(draft => {
+    draft.server = status;
+  });
+/** The server's status now, and every change after (the backend checks it every 15 s). */
+export function watchServer() {
+  backend
+    .serverStatus()
+    .then(setServer)
+    .catch(() => {});
+  backend.onServer(setServer);
+}
+export const serverOf = () => useAgentsStore.getState().server;
 export const loadAgents = () =>
   backend
     .agentsStatus()

@@ -181,6 +181,7 @@ async function deliver(key: string, text: string, images: Img[]) {
       model: picks("model", key).value,
       effort: picks("effort", key).value,
       provider: chatAgent(key),
+      host: conversation?.host ?? "",
     });
     if (told && cs().chats[key]) {
       set(draft => {
@@ -244,6 +245,16 @@ export function setAgent(id: string) {
   if (!cs().chats[key]) return;
   set(draft => {
     draft.chats[key].provider = id;
+  });
+  saveChats();
+}
+/** Where the open conversation runs, before it starts: "" here, "server" on the server. */
+export function setHost(host: string) {
+  const key = selected();
+  if (!cs().chats[key]) return;
+  set(draft => {
+    if (host) draft.chats[key].host = host;
+    else delete draft.chats[key].host;
   });
   saveChats();
 }

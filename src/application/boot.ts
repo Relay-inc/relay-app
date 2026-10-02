@@ -22,7 +22,7 @@ import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
 import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./conversations/polls";
 import { closeChat } from "./conversations/actions";
-import { loadAgents, sawDefaults } from "./agents/agents";
+import { loadAgents, sawDefaults, watchServer } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere } from "./navigation/navigation";
 import { closeDrawer } from "./navigation/panel";
@@ -159,6 +159,7 @@ async function adoptEarlierConversations() {
   await adoptProviders();
   saveChats();
   loadAgents();
+  watchServer();
   const untitled = Object.values(cs().chats).filter(conversation =>
     ["Gesprek", "Algemeen gesprek"].includes(conversation.title),
   );

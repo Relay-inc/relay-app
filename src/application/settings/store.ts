@@ -10,7 +10,7 @@ import {
   type Message,
   type Settings,
 } from "../../domain/settings/types";
-import type { AgentsStatus } from "../../domain/agents/types";
+import type { AgentsStatus, ServerStatus } from "../../domain/agents/types";
 import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
@@ -28,7 +28,7 @@ export type SettingsState = {
   vaultStatus: VaultStatus | null;
   tab: SettingsTab;
   message: Message | null; // the last save's result on General and Projects
-  agentsPage: { detected: AgentsStatus | null; message: Message | null };
+  agentsPage: { detected: AgentsStatus | null; message: Message | null; server: ServerStatus | null };
   projectsPage: {
     icons: Record<string, ProjectIcon> | null; // null until the page first shows
     loading: boolean; // the first load started
@@ -74,7 +74,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   vaultStatus: null,
   tab: "general",
   message: null,
-  agentsPage: { detected: null, message: null },
+  agentsPage: { detected: null, message: null, server: null },
   projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {
