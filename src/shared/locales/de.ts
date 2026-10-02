@@ -119,6 +119,7 @@ export default {
   "usage.week": "Diese Woche",
   "usage.all": "Ganz {name}",
   "usage.vault": "In diesem Vault",
+  "usage.details": "Details",
   "usage.byModel": "Nach Modell",
   "usage.byConversation": "Gespräche in diesem Vault, diese Woche",
   "usage.otherSession": "Terminal-Sitzung {id}",

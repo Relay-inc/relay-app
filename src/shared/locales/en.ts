@@ -116,6 +116,7 @@ const en = {
   "usage.week": "This week",
   "usage.all": "All of {name}",
   "usage.vault": "In this vault",
+  "usage.details": "Details",
   "usage.byModel": "By model",
   "usage.byConversation": "Conversations in this vault, this week",
   "usage.otherSession": "Terminal session {id}",
