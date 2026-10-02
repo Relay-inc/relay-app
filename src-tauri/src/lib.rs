@@ -259,6 +259,12 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
 // account: the config folder it runs on ("" the CLI's own), see agents::accounts
 struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, account: String }
+impl Proc {
+    /// The turns running, also in the broker's file: a restart takes them from there.
+    fn set_turns(&mut self, turns: u32) {
+        if turns != self.turns { self.turns = turns; broker::save_turns(&self.key, self.child.id(), turns); }
+    }
+}
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -632,7 +638,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
     let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
     cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into() };
+    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: u32::from(turn.is_some()) };
     let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
@@ -693,7 +699,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                 // Replayed activity restores turns surviving an app restart. Repeated model steps never
                 // count as extra user messages; Claude's assistant blocks also provide this signal.
                 if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
-                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.max(1); }
+                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.max(1)); }
                 }
                 match &ev {
                     Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
@@ -734,7 +740,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                     Event::TurnEnd { error, .. } => {
                         let e = error.as_deref().unwrap_or("").to_lowercase();
                         if e.contains("usage limit") || e.contains("hit your limit") { spend(&a); }
-                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
+                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.saturating_sub(1)); }
                     }
                     _ => {}
                 }
@@ -761,13 +767,15 @@ fn quit(app: &AppHandle) {
 }
 
 /// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
+/// Each with the turns its file says are running: a turn that ended before the restart is not running again, one that
+/// ended while the app was away ends with its replayed turn end.
 fn reattach(app: &AppHandle) {
     let Ok(dir) = fs::read_dir(broker::dir()) else { return };
     for f in dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
         let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let Ok(stdin) = c.stdin.try_clone() else { continue };
-        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1, account: m.account.clone() };
+        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, account: m.account.clone() };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
         read_agent(app, &m.key, p, c, (false, false), &m.account);
     }
@@ -858,7 +866,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
     let x = procs.get_mut(&project).unwrap();
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
-    x.turns += 1;
+    x.set_turns(x.turns + 1);
     Ok(())
 }
 
