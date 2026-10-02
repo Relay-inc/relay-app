@@ -230,12 +230,36 @@ const VIEWS = {
     await waitText(`Closed: ${titles.switchTo}`, 10000).catch(() => waitText("Closed:", 1000));
     await settle(page);
   },
-  ...Object.fromEntries(["Open", "Status", "Reminders", "PRs"].map(tab => [`panel-${tab.toLowerCase()}`, async () => {
+  // a project conversation: its tools in the title bar; the drawer with the terminal, with notes; the board and the PRs
+  // opened from the bar as the project's own
+  "project-tools": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
-    await page.getByRole("button", { name: tab, exact: true }).last().click(); // the right panel comes after the sidebar
-    await settle(page);
-  }])),
+  },
+  "drawer-terminal": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Terminal", exact: true, pressed: false }).click();
+    await page.waitForSelector(".xterm-screen");
+    await page.keyboard.type("git status");
+    await settle(page, 500);
+    await page.waitForFunction(() => document.querySelector(".xterm-rows")?.textContent?.includes("git status"));
+  },
+  "drawer-notes": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Notes", exact: true, pressed: false }).click();
+    await click("+ New note");
+    await page.getByRole("textbox").last().fill("Ask Mara about the VAT column\n- export: viewers see no button\n- check the staging seed");
+  },
+  "tool-board": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Productive", exact: true, pressed: false }).last().click(); // the sidebar row comes first
+    await waitText(markers.card);
+  },
+  "tool-prs": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Pull requests", exact: true, pressed: false }).click();
+    await settle(page, 400);
+  },
   ...Object.fromEntries(["General", "Projects", "Agents", "Integrations"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
   "settings-interface": async () => {
     await settingsPage("General");

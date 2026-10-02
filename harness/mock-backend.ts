@@ -54,6 +54,20 @@ function emit(event: string, payload: unknown) {
 }
 const emitAgent = (project: string, event: unknown, provider = "claude") => emit("agent", { project, provider, event });
 
+// ---------- the embedded terminals: output goes to the Channel the frontend passed, as the backend does (raw bytes)
+const PROMPT = "kristof@mac ~/vault % ";
+const ptys = new Map<number, { channel: number; index: number }>();
+let ptyId = 0;
+function ptyOut(id: number, text: string) {
+  const pty = ptys.get(id);
+  if (!pty) return;
+  const bytes = new TextEncoder().encode(text);
+  internals().runCallback(pty.channel, { index: pty.index++, message: bytes.buffer });
+}
+const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
+let scratchId = 0;
+const NOW_S = Math.floor(NOW / 1000);
+
 // ---------- commands
 const thumb = `data:image/png;base64,${pngBase64(100, 100, "#dfe7f7", "#2f6fdb")}`;
 const calls: Call[] = [];
@@ -127,6 +141,7 @@ function handle(cmd: string, a: Args): unknown {
       return {};
     case "set_project_icon":
     case "set_project_repos":
+    case "ignore_repo":
       return null;
     case "reminder":
       reminders = vault.remindersAfter(reminders, a.action, a, 0);
@@ -181,6 +196,37 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "ai_title":
       return String(a.text).split(/\s+/).slice(0, 5).join(" ");
+    // the embedded terminals: a shell that prints a prompt and echoes what is typed
+    case "pty_spawn": {
+      const id = ++ptyId;
+      const channel = typeof a.onData === "object" ? a.onData.id : Number(String(a.onData).split(":")[1]);
+      ptys.set(id, { channel, index: 0 });
+      setTimeout(() => ptyOut(id, `${PROMPT}`), 20);
+      return id;
+    }
+    case "pty_write":
+      ptyOut(a.id, String(a.data).replace(/\r/g, `\r\n${PROMPT}`));
+      return null;
+    case "pty_resize":
+      return null;
+    case "pty_kill":
+      ptys.delete(a.id);
+      return null;
+    // scratch notes per project, in memory
+    case "scratch_list":
+      return (scratch.get(a.project) ?? []).map(n => ({ ...n }));
+    case "scratch_save": {
+      const list = scratch.get(a.project) ?? [];
+      const id = a.id ?? `note-${++scratchId}`;
+      const note = list.find(n => n.id === id);
+      if (note) Object.assign(note, { text: a.text, modified: NOW_S });
+      else list.unshift({ id, text: a.text, modified: NOW_S });
+      scratch.set(a.project, list);
+      return id;
+    }
+    case "scratch_delete":
+      scratch.set(a.project, (scratch.get(a.project) ?? []).filter(n => n.id !== a.id));
+      return null;
     case "stop":
     case "bg":
     case "open_terminal":

@@ -1,23 +1,23 @@
 import type { BoardRef } from "../../domain/board/types";
-import { WAIT, type PanelTab, type Toast } from "../../domain/navigation/views";
+import { WAIT, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
 import { storage } from "../../infrastructure/storage";
 import { makeStore } from "../make-store";
 
-/** Moving around the main window: what is open, the right panel and its detail, the overlays, and the sidebar's own state. */
+/** Moving around the main window: what is open, the right drawer and its detail, the overlays, and the sidebar's own state. */
 type NavigationState = {
   selected: string; // the open conversation or view (`sel`)
-  tab: PanelTab; // the right panel's tab
-  panelHidden: boolean; // the right panel folded away
+  drawer: Drawer; // the right drawer: what it shows, "" while closed
+  tool: Tool | null; // set while a project's board or PRs, opened from its title bar, is what the middle column shows
   projectPanel: boolean; // the conversation's project panel under the title
   toast: Toast | null;
   zoom: string; // the image shown large
   quickAsk: boolean; // Cmd-K
   quickText: string; // what Cmd-K opens with typed (a relay://ask link), "" for an empty field
   lastProject: string | null; // the vault project last shown, so its linked board opens with the board view
-  // The right panel's detail: a vault note ("note:…") or a board card ("card:<provider>:<id>"). While one is open the
-  // panel widens; its tabs are behind it. A PR and a mail open next to their list, a card with a view in the ticket window.
+  // The details: a vault note ("note:…") in the right drawer. A PR and a mail open next to their list, a card in the
+  // ticket window over the board.
   panel: {
-    open: string; // the key of what is shown, "" for the tabs
+    open: string; // the key of the note shown in the drawer, "" for none
     modal: string; // the card key shown in the ticket window over the board, "" for none
     prOpen: string; // the PR key shown in the Pull requests view, "" for none
     mailOpen: string; // the mail key shown in the Mail view, "" for none
@@ -40,8 +40,8 @@ type NavigationState = {
 
 export const useNavigationStore = makeStore<NavigationState>(() => ({
   selected: storage.get<string>("sel", "") || WAIT,
-  tab: "open",
-  panelHidden: storage.get<boolean>("noinsp", false),
+  drawer: "",
+  tool: null,
   projectPanel: false,
   toast: null,
   zoom: "",

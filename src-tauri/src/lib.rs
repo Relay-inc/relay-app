@@ -18,12 +18,15 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 
 mod actions;
 mod agents;
+mod commits;
 pub mod broker;
 mod mail;
 pub mod notify;
 mod providers;
+mod pty;
 mod relay_config;
 mod reminders;
+mod scratch;
 mod tray;
 mod vault;
 mod worktrees;
@@ -258,6 +261,7 @@ struct App {
     spent: Mutex<std::collections::HashSet<String>>, // limit_keys a turn was refused on, until their limits read below 100% again
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
+    asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -401,8 +405,27 @@ fn project_repos(state: State<App>) -> Value {
 }
 /// A project's repos in the vault's .relay/config.json.
 #[tauri::command]
-fn set_project_repos(state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
-    relay_config::set_repos(&need_vault(&state)?, &project, &repos)
+fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
+    relay_config::set_repos(&need_vault(&state)?, &project, &repos)?;
+    // the main window's title bar shows the PRs button by them
+    app.emit("repos-changed", ()).ok();
+    Ok(())
+}
+/// "Not now" on a repo a conversation committed to: unlinked on purpose, it is not offered again.
+#[tauri::command]
+fn ignore_repo(state: State<App>, repo: String) -> Result<(), String> { relay_config::ignore_repo(&need_vault(&state)?, &repo) }
+/// The repos a conversation committed to that no project has, and that the vault did not unlink on purpose, each
+/// only once per conversation and run (a general conversation, which never asks, must not use up a project's ask).
+/// `dirs`: checkouts or their main repos, found by commits.rs.
+fn unlinked_repos(app: &AppHandle, key: &str, dirs: Vec<PathBuf>) -> Vec<String> {
+    let st = app.state::<App>();
+    let vault = st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    let Some(cfg) = relay_config::load(&vault) else { return vec![] };
+    let known = repo_projects(&vault);
+    let mut asked = st.asked.lock().unwrap();
+    dirs.iter().filter_map(|d| gh_repo(&d.to_string_lossy())).filter(|r| {
+        !known.contains_key(r) && !cfg["repos"].as_object().is_some_and(|m| m.keys().any(|k| k.to_lowercase() == *r)) && asked.insert(format!("{key}\n{r}"))
+    }).collect()
 }
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
@@ -413,6 +436,17 @@ fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: St
     app.emit("icons-changed", ()).ok();
     Ok(())
 }
+
+/// A project's scratch notes, newest first: [{id, text, modified}].
+#[tauri::command]
+fn scratch_list(state: State<App>, project: String) -> Result<Value, String> { scratch::list(&need_vault(&state)?, &project) }
+/// Create (no id) or overwrite a scratch note; returns its id.
+#[tauri::command]
+fn scratch_save(state: State<App>, project: String, id: Option<String>, text: String) -> Result<String, String> {
+    scratch::save(&need_vault(&state)?, &project, id, &text)
+}
+#[tauri::command]
+fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { scratch::delete(&need_vault(&state)?, &project, &id) }
 
 /// A vault note a conversation links to, for the right panel: {path (relative to the vault), text}.
 #[tauri::command]
@@ -621,6 +655,8 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
         let mut err: Vec<String> = vec![];
         // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
         let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
+        // the same for the repos' reflogs around a tool call that may commit (see commits.rs)
+        let mut commit_before = HashMap::<String, commits::Snapshot>::new();
         for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
             let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => break };
             let replay = n < backlog;
@@ -651,6 +687,14 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                 // count as extra user messages; Claude's assistant blocks also provide this signal.
                 if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
                     if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.max(1); }
+                }
+                match &ev {
+                    Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
+                    Event::ToolResult { id: call, .. } if commit_before.contains_key(call) => {
+                        let before = commit_before.remove(call).unwrap_or_default();
+                        for repo in unlinked_repos(&a, &k, commits::changed(&before, &commits::snapshot(&wt_root))) { a.emit("repo-unlinked", json!({"key": k, "repo": repo})).ok(); }
+                    }
+                    _ => {}
                 }
                 match &ev {
                     Event::Session { id: sid } => {
@@ -1493,7 +1537,8 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), spent: Default::default(), mail: mail::Mail::new() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new() });
+            app.manage(pty::Ptys::default());
             reattach(app.handle());
             actions::start(app.handle());
             tray::init(app.handle())?;
@@ -1501,13 +1546,13 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
         .run(|app, e| match e {
             tauri::RunEvent::Reopen { .. } => tray::show_main(app),
-            tauri::RunEvent::Exit => quit(app),
+            tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); }
             _ => {}
         });
 }
