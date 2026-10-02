@@ -76,10 +76,16 @@ impl State {
         let mut out = vec![];
         match m["type"].as_str().unwrap_or("") {
             "response" => match (m["command"].as_str().unwrap_or(""), m["success"] == true) {
-                ("get_state", true) => if let Some(id) = m["data"]["sessionId"].as_str().filter(|i| self.session.as_deref() != Some(*i)) {
-                    self.session = Some(id.into());
-                    out.push(Event::Session { id: id.into() });
-                },
+                ("get_state", true) => {
+                    let d = &m["data"];
+                    if let Some(id) = d["sessionId"].as_str().filter(|i| self.session.as_deref() != Some(*i)) {
+                        self.session = Some(id.into());
+                        out.push(Event::Session { id: id.into() });
+                    }
+                    if let (Some(p), Some(id)) = (d["model"]["provider"].as_str(), d["model"]["id"].as_str()) {
+                        out.push(Event::Resolved { model: format!("{p}/{id}"), effort: d["thinkingLevel"].as_str().map(Into::into) });
+                    }
+                }
                 ("prompt", true) => self.sent += 1,
                 // a prompt that was not accepted: no run is coming to end on its own
                 ("prompt", false) => {

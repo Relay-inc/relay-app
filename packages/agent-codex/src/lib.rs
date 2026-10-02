@@ -189,7 +189,7 @@ mod tests {
         let mut next = || { let l = lines.next().expect("bridge ended"); (serde_json::from_str::<Value>(&l).unwrap(), st.parse(&l)) };
         // the resume fails, so a new thread; its response is the session
         let (_, ev) = next();
-        assert_eq!(ev, [Event::Session { id: "019a0000-ffff-7000-8000-00000000000f".into() }]);
+        assert_eq!(ev, [Event::Session { id: "019a0000-ffff-7000-8000-00000000000f".into() }, Event::Resolved { model: "m1".into(), effort: None }]);
         writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "hoi".into(), images: vec![] }).unwrap()).unwrap();
         // the fake echoes the turn/start it got, then asks for an approval
         let (echo, _) = next();

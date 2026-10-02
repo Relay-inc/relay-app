@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { initI18n } from "../core/i18n";
 import { changed, ls } from "../core/store";
 import type { AgentEvent } from "../domain/agents";
-import { loadAgents, loadCommands } from "../domain/agents";
+import { loadAgents, loadCommands, sawDefaults } from "../domain/agents";
 import type { VaultStatus } from "../domain/vault-setup";
 import { ui, PRS, MAIL, WAIT, isView, isTerminal, boardKey } from "../domain/ui";
 import { opened, chatTime, isLegacyGeneral, isMailKey, LEGACY_BOARD } from "../domain/keys";
@@ -76,7 +76,9 @@ export async function boot() {
 
 function listenToBackend() {
   listen<{ project: string; provider: string; event: AgentEvent }>("agent", e =>
-    onEvent(e.payload.project, e.payload.event),
+    e.payload.event.type === "resolved"
+      ? sawDefaults(e.payload.provider, e.payload.event)
+      : onEvent(e.payload.project, e.payload.event),
   );
   listen<string>("open-chat", e => select(e.payload));
   listen<string>("mail-link", e => mailLinkClicked(e.payload));

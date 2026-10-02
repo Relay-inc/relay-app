@@ -8,7 +8,7 @@ import { tw } from "../../core/styles";
 import { ui, isTerminal } from "../../domain/ui";
 import { chat, terminalOf, projectOf } from "../../domain/chats/state";
 import { project } from "../../domain/vault";
-import { chatAgent, agentOf, onAgents, picks, setPick, commands } from "../../domain/agents";
+import { chatAgent, agentOf, onAgents, picks, setPick, commands, inherited } from "../../domain/agents";
 import { matchCommands, type SlashCommand } from "../../domain/commands";
 import { setTyped, sendMsg, sendOrStop, attach, unattach, setAgent } from "../../domain/chats/actions";
 import { zoom } from "../../domain/navigation";
@@ -226,6 +226,13 @@ export class RelayComposer extends LitElement {
     >`;
   }
 
+  private defaultLabel(kind: "model" | "effort") {
+    const value = inherited(kind);
+    return value
+      ? t("composer.resolvedDefault", { value })
+      : t(kind === "model" ? "composer.defaultModel" : "composer.defaultEffort");
+  }
+
   private renderPick(kind: "model" | "effort", options: Pick[], value: string, defaultLabel: string, show: boolean) {
     return html`<span class="relative items-center ${show ? "inline-flex" : "hidden"}"
       ><select
@@ -300,8 +307,8 @@ export class RelayComposer extends LitElement {
       <div class="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
         ${this.renderAttach()} ${this.renderAgentPick()}
         <!-- a switch restarts the process, so not while a turn runs -->
-        ${this.renderPick("model", model.list, model.value, t("composer.defaultModel"), true)}
-        ${this.renderPick("effort", effort.list, effort.value, t("composer.defaultEffort"), showEffort)}
+        ${this.renderPick("model", model.list, model.value, this.defaultLabel("model"), true)}
+        ${this.renderPick("effort", effort.list, effort.value, this.defaultLabel("effort"), showEffort)}
         <span class="flex-1"></span>
         ${this.renderSendButton()}
       </div>

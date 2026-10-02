@@ -524,8 +524,11 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
     if claude { writeln!(stdin, "{}", pipe_init(eb.opts["mail"] == true)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
+    // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
+    let fresh = resume.is_none() && fork.is_none();
+    let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
     let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()) };
-    read_agent(app, project, p, c);
+    read_agent(app, project, p, c, inherit);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if claude && from_mail { write_taint(&mut proc, &dir); }
     Ok(proc)
@@ -534,8 +537,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
 /// The agent's output, from its broker: each stdout line through the provider's parser to the webview as `agent`
 /// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
 /// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
-/// end, it reads the rest from the transcript.
-fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn) {
+/// end, it reads the rest from the transcript. `inherit`: whether the model and the effort were left to the CLI.
+fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn, inherit: (bool, bool)) {
     let (a, k, pid, id, claude, pend, mut parse) = (app.clone(), key.to_string(), c.agent.id(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
     let (frames, backlog) = (c.frames, c.backlog);
     std::thread::spawn(move || {
@@ -592,6 +595,10 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                             save_worktrees(&a, &w);
                         }
                     }
+                    Event::Resolved { model, effort } => {
+                        if !replay { emit(json!({"type": "resolved", "model": model, "effort": effort, "default_model": inherit.0, "default_effort": inherit.1})); }
+                        continue;
+                    }
                     Event::TurnEnd { .. } => {
                         if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
                     }
@@ -628,7 +635,7 @@ fn reattach(app: &AppHandle) {
         let Ok(stdin) = c.stdin.try_clone() else { continue };
         let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1 };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        read_agent(app, &m.key, p, c);
+        read_agent(app, &m.key, p, c, (false, false));
     }
 }
 

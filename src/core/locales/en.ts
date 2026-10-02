@@ -307,6 +307,7 @@ const en = {
   "vault.snapErr": "Could not read the vault: {e}",
   "bar.chatTitle": "Conversation title",
   "composer.model": "Model",
+  "composer.resolvedDefault": "{value} (default)",
   "composer.defaultModel": "Default model",
   "composer.effort": "Effort",
   "composer.defaultEffort": "Default effort",
