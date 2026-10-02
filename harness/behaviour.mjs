@@ -760,11 +760,13 @@ const SCENARIOS = {
     const field = id => visible(page.locator(`#${id}`)).first();
     const add = () => visible(button(page, "Add calendar")).first();
     await click(navButton(page, "Integrations"), 300);
-    await click(button(page, "+ Add integration"), 300);
-    await click(visible(page.getByRole("button", { name: /^Calendar/ })).first(), 400);
+    // switching a row on opens its page
+    await click(visible(page.getByRole("switch", { name: "Calendar" })).first(), 400);
     let saves = await s.calls("set_settings");
-    s.check("added from the menu, switched on", saves.length === 1 && saves[0].args.settings?.calendar?.on === true);
-    s.check("its page opens", await waitText(page, "Add a calendar"));
+    s.check("switched on from its row", saves.length === 1 && saves[0].args.settings?.calendar?.on === true);
+    s.check("its page opens on the list of calendars", await waitText(page, "Calendars"));
+    await click(button(page, "+ Add calendar"), 300);
+    s.check("+ Add calendar opens the form", await waitText(page, "Add a calendar"));
     s.check("Add calendar waits for both fields", await add().isDisabled());
     await field("calemail").fill("laurent@example.com");
     await field("calurl").fill("https://example.com/calendar.ics");
@@ -781,7 +783,7 @@ const SCENARIOS = {
     s.check("a calendar that loads is saved by its email only", saves.length === 2 && JSON.stringify(saves[1].args.settings?.calendar) === JSON.stringify({ feeds: [{ email: "laurent@example.com" }], on: true }));
     s.check("the address never reaches the settings", !JSON.stringify(saves.map(c => c.args)).includes("calendar.google.com"));
     s.check("it says how many meetings", await waitText(page, "laurent@example.com added: 3 meetings in the next 7 days", 2000));
-    s.check("the fields empty", (await field("calemail").inputValue()) === "" && (await field("calurl").inputValue()) === "");
+    s.check("back on the list with the calendar", await waitText(page, "laurent@example.com", 2000));
     // the calendar's own Remove comes before the integration's in the page
     await click(visible(button(page, "Remove")).first(), 300);
     connects = await s.calls("calendar_connect");
@@ -791,7 +793,7 @@ const SCENARIOS = {
     await click(visible(button(page, "Remove")).last(), 300);
     saves = await s.calls("set_settings");
     s.check("Remove switches the integration off", saves.at(-1)?.args.settings?.calendar?.on === false);
-    s.check("back on the list", await waitText(page, "+ Add integration", 2000));
+    s.check("back on the list, switched off", !(await visible(page.getByRole("switch", { name: "Calendar" })).first().isChecked()));
     s.fact("calendar_connect", connects.map(c => c.args));
     s.fact("saved", saves.map(c => c.args.settings?.calendar));
   },

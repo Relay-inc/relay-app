@@ -46,7 +46,9 @@ export function SettingsFold({
             <div className="mt-px flex">{status}</div>
           </span>
         </button>
-        {onSwitch && <Switch id={`row-${id}`} on={on} onToggle={onSwitch} />}
+        {onSwitch && (
+          <Switch id={`row-${id}`} on={on} label={typeof name === "string" ? name : undefined} onToggle={onSwitch} />
+        )}
         <svg
           className={`size-3.5 flex-none fill-none stroke-tertiary stroke-2 transition-transform duration-150 ease-in-out glyph group-hover:stroke-s-fg ${open ? "rotate-90" : ""}`}
           viewBox="0 0 24 24"
