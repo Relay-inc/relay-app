@@ -11,6 +11,15 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Added
+
+- New task on the board, from the title bar or a lane's +, for Productive, Linear and Trello: the card shows at once and is made in the tracker
+- The ticket window lists the conversations started from it and the pull requests that name its number, and a Productive ticket takes new labels
+- Code in conversations is coloured by language (TypeScript, JSON, shell, PHP, Python, Rust, CSS, HTML, SQL, YAML), the command on a permission card too
+- An edit in a Claude Code conversation shows its diff with line numbers and the surrounding lines, also when the conversation is reopened
+- A group of steps says how long it took ("3 steps · 4 s"), and Waiting for you says how long a request has waited
+- Enter allows a permission card when it is the only one waiting and nothing is typed, the Allow button shows ↵ then
+
 ### Fixed
 
 - The released app works again: it looked for its scripts in the checkout of the machine that built it, so reading the vault, permission prompts, Codex and OpenCode all failed (#79)
@@ -18,6 +27,14 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 ### Changed
 
 - Relay no longer needs Python: reading the vault, project icons, permission prompts, slash commands and the Codex and OpenCode bridges are built into the app, so Macs without the Xcode Command Line Tools no longer get an install prompt (#79)
+- The Relay redesign: view title bars show an icon and a summary ("3 waiting", "2 due · 7 total", "2 to review", "21 unread"), the board's project and board pickers, its last sync, New task and refresh moved into the title bar, lanes and cards have the new look with a status ring per workflow status and both initials on avatars
+- The agent picker in the composer is a menu with each agent's icon, the ticket window's status and assignee open a menu, due dates read Yesterday, Today or Tomorrow, Reminders show "Fri 2/10" and undo as a compact chip, pull requests show their project and "Review with Claude"
+- Settings opens at 900 x 660 with hairline rows, and Agents and Integrations list every item with an on/off switch, switched-off ones stay visible, dimmed
+- Smaller polish from the redesign: the sidebar search reads "Search", step lines start with a capital, Answer stays disabled until you pick an answer, darker raised surfaces in dark mode
+
+### Removed
+
+- The Working/Ready pill in the conversation title bar: the sidebar already shows whether a turn runs
 
 ## [0.0.3] - 2026-10-02
 
