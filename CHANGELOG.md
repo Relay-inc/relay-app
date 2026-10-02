@@ -17,7 +17,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - A conversation you close greys out and pulses in the sidebar until it is gone, so a slow close (stopping the agent, removing its worktrees) shows that it is working. Close all greys out every conversation it closes at once (#48)
 
 ### Added
-- Attach any file to a message, not just images: drop it on the composer or Cmd-K, or pick it with +. A PDF, spreadsheet or other file is saved for the agent and its path goes in the message, so every agent can read it; images still go inline. A file that can't be saved now shows an error instead of vanishing
+- Attach any file to a message, not just images: drop it on the composer or Cmd-K, or pick it with +. A PDF, spreadsheet or other file is saved for the agent and its path goes in the message, so every agent can read it; images still go inline. A file that can't be saved now shows an error instead of vanishing (#66)
 - Relay opens `relay://` links, so Raycast, Alfred or a browser can reach Cmd-K from outside the app: `relay://ask` opens Cmd-K, `relay://ask?q=…` asks a quick question, `relay://open?q=…` opens the best matching project. The window comes forward either way (#65)
 - The model and effort pickers name the CLI's own defaults, for example "claude-opus-5-5 (default)", once a new conversation ran without a pick. Relay shows what the CLI reports it runs on instead of guessing from its settings. Claude Code doesn't report its effort, so that picker keeps "Default effort" (#63)
 - Linear issues open in Relay with descriptions, activity, comments, status and assignee changes, file attachments, and ticket conversations (#62).
