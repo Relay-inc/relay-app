@@ -121,6 +121,7 @@ export default {
   "usage.week": "Cette semaine",
   "usage.all": "Tout {name}",
   "usage.vault": "Dans ce coffre",
+  "usage.details": "Détails",
   "usage.byModel": "Par modèle",
   "usage.byConversation": "Conversations de ce coffre, cette semaine",
   "usage.otherSession": "Session Terminal {id}",

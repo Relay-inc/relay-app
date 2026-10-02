@@ -20,6 +20,7 @@ const H3 = "text-sm font-semibold text-secondary mt-4 pb-1.5 border-b border-sep
 const NOTE = "text-sm text-secondary mt-2.5";
 const CONVERSATION_LINK = "text-inherit no-underline cursor-default hover:text-accent text-left";
 const PROVIDER_GLYPH = "glyph w-4 h-4 self-center stroke-1";
+const DETAILS_SUMMARY = "text-sm text-secondary cursor-default py-2 list-outside ml-3.5 hover:text-label";
 const MAX_CONVERSATIONS = 12;
 
 type Heading = "h2" | "h3";
@@ -141,6 +142,16 @@ export function UsageView() {
       }),
     ];
   };
+  // the breakdowns per model and per conversation: folded until asked for
+  const details = (id: string, rows: ReactNode[]) =>
+    rows.length
+      ? [
+          <details key={`${id}-details`}>
+            <summary className={DETAILS_SUMMARY}>{t("usage.details")}</summary>
+            {rows}
+          </details>,
+        ]
+      : [];
   const renderTokens = (id: string, tag: Heading) => {
     const provider = agent(id);
     const name = provider?.name ?? id;
@@ -153,8 +164,7 @@ export function UsageView() {
       headRow(`${id}-head`),
       usageRow(`${id}-all`, t("usage.all", { name }), entry.today, entry.week, splitText(entry.week)),
       usageRow(`${id}-vault`, t("usage.vault"), entry.vaultToday, entry.vaultWeek, splitText(entry.vaultWeek)),
-      ...modelRows(provider, entry),
-      ...conversationRows(entry),
+      ...details(id, [...modelRows(provider, entry), ...conversationRows(entry)]),
     ];
   };
   // one provider's limits and tokens. `tag`: the heading level, h2 for a single provider, h3 under its name
