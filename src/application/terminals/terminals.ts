@@ -87,6 +87,15 @@ export function closeTerminal(project: string, id: number) {
   });
 }
 
+// the projects that got their first terminal: closing the last tab leaves a project empty, not a fresh shell
+const opened = new Set<string>();
+/** The first time a project shows its terminals it gets one. */
+export function firstTerminal(project: string) {
+  if (!project || opened.has(project)) return;
+  opened.add(project);
+  if (!useTerminalsStore.getState().byProject[project]?.tabs.length) addTerminal(project);
+}
+
 export const showTerminal = (project: string, id: number) =>
   set(draft => {
     if (draft.byProject[project]) draft.byProject[project].active = id;

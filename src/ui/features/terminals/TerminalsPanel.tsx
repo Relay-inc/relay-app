@@ -5,6 +5,7 @@ import {
   addTerminal,
   allScreens,
   closeTerminal,
+  firstTerminal,
   screenOf,
   showTerminal,
 } from "../../../application/terminals/terminals";
@@ -32,14 +33,8 @@ export function TerminalsPanel({ project }: { project: string }) {
   const screen = useRef<HTMLDivElement>(null);
   const shown = useRef<number>(0);
   const active = entry?.active ?? 0;
-  const empty = !entry?.tabs.length;
 
-  // the first time a project shows terminals it gets one; closing the last tab leaves it empty
-  useEffect(() => {
-    if (project && empty) addTerminal(project);
-    // only when the project changes: closing the last tab must not start another
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [project]);
+  useEffect(() => firstTerminal(project), [project]);
 
   // attach the shown terminal; the ResizeObserver keeps it fitted
   useEffect(() => {
