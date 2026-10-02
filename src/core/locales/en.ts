@@ -449,7 +449,7 @@ const en = {
   "mail.clearSelection": "Clear selection",
   "mail.experimentalL": "Archive, delete and Inbox/Other (experimental)",
   "mail.experimentalHint":
-    "Archive (E) and delete (#) a mail or a selection, Cmd- or Shift-click to select. Newsletters and notifications from people you never wrote to move to Other. Deleted mails go to Gmail's Trash. Claude still cannot move or delete mail.",
+    "Archive (E) and delete (#) a mail or a selection, Cmd- or Shift-click to select. Newsletters and notifications from people you never wrote to move to Other. Archived mails go to the Archive folder (Gmail: All Mail), deleted ones to the Trash. Claude still cannot move or delete mail.",
   "work.done": "Done",
   "work.doneIn": "Done · {d}",
   "notify.isWaiting": "Waiting for you: permission for {tool}.",

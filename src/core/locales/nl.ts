@@ -452,7 +452,7 @@ export default {
   "mail.clearSelection": "Selectie wissen",
   "mail.experimentalL": "Archiveren, verwijderen en Inbox/Overige (experimenteel)",
   "mail.experimentalHint":
-    "Archiveer (E) en verwijder (#) een mail of een selectie, Cmd- of Shift-klik om te selecteren. Nieuwsbrieven en meldingen van mensen naar wie je nooit schreef gaan naar Overige. Verwijderde mails gaan naar Gmails prullenbak. Claude kan nog altijd niets verplaatsen of verwijderen.",
+    "Archiveer (E) en verwijder (#) een mail of een selectie, Cmd- of Shift-klik om te selecteren. Nieuwsbrieven en meldingen van mensen naar wie je nooit schreef gaan naar Overige. Gearchiveerde mails gaan naar de map Archief (Gmail: Alle berichten), verwijderde naar de prullenbak. Claude kan nog altijd niets verplaatsen of verwijderen.",
   "work.done": "Klaar",
   "work.doneIn": "Klaar · {d}",
   "notify.isWaiting": "Wacht op jou: toestemming voor {tool}.",

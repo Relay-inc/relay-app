@@ -213,9 +213,9 @@ export async function mailSeenSelected(seen: boolean) {
   await Promise.all([...mail.selected].map(key => mailSeen(key, seen)));
 }
 
-/** Archive (Gmail drops the Inbox label) or delete (to Trash, Gmail keeps it 30 days) the given mails. The list
+/** Archive (Gmail drops the Inbox label, other servers move to Archive) or delete (to Trash) the given mails. The list
  *  follows at once and the open mail makes way for the next one in `shown`; a failure puts the mails back.
- *  ponytail: no undo toast, Gmail's Archive/Trash hold them if one was wrong. */
+ *  ponytail: no undo toast, the server's Archive/Trash hold them if one was wrong. */
 export async function mailMove(keys: string[], trash: boolean, shown: string[]) {
   const gone = new Set(keys);
   const moving = (mail.list || []).filter(x => gone.has(mailKey(x)));

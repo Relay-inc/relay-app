@@ -1,7 +1,7 @@
 // Native mail access (Gmail and any IMAP server) for the app and its Claude sessions, see /tmp/vaultmail-build/SPEC.md. One IMAP session
 // per account, shared by the UI and Claude. Everything reads All Mail through EXAMINE and BODY.PEEK, so reading
 // never changes a flag. Only set_seen (a UI click), save_draft (APPEND to Drafts) and, behind the experimental
-// mail flag, archive/trash (UI clicks only, no Claude tool, Gmail only) write. There is no path to send. The app
+// mail flag, archive/trash (UI clicks only, no Claude tool) write. There is no path to send. The app
 // password comes from the macOS keychain and only lives in memory.
 // Gmail reads All Mail through X-GM-RAW; any other server reads INBOX only.
 
@@ -76,7 +76,7 @@ pub fn pick_account(accts: &[Account], want: &str) -> Option<Account> {
 type Imap = async_imap::Session<async_native_tls::TlsStream<TcpStream>>;
 // `used` is wall-clock time: Instant stands still while the Mac sleeps, and a session that slept is dead
 // `known`: who the account wrote to (lowercase), for the Inbox/Other split, read once per session
-struct Conn { s: Imap, email: String, gmail: bool, all: String, drafts: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime, known: Option<HashSet<String>> }
+struct Conn { s: Imap, email: String, gmail: bool, all: String, drafts: Option<String>, archive: Option<String>, trash: Option<String>, validity: Option<u32>, used: SystemTime, known: Option<HashSet<String>> }
 /// A session plus the UIDVALIDITY it was opened with: ids from before a change would point at other mails.
 #[derive(Default)]
 struct Slot { conn: Option<Conn>, validity: Option<u32> }
@@ -160,18 +160,25 @@ async fn connect(a: &Account, pw: &str) -> Result<Conn, Fail> {
     let (all, drafts) = if gmail {
         (find(NameAttribute::All).ok_or_else(|| user("No \\All mailbox (Gmail All Mail) found"))?, find(NameAttribute::Drafts))
     } else {
-        ("INBOX".to_string(), find(NameAttribute::Drafts).or_else(|| drafts_named(names.iter().map(|n| n.name())).map(str::to_string)))
+        ("INBOX".to_string(), find(NameAttribute::Drafts).or_else(|| named(&names, DRAFTS)))
     };
-    let trash = find(NameAttribute::Trash);
+    // Gmail archives by label, other servers move to a folder
+    let archive = if gmail { None } else { find(NameAttribute::Archive).or_else(|| named(&names, ARCHIVE)) };
+    let trash = find(NameAttribute::Trash).or_else(|| named(&names, TRASH));
     let validity = t(s.examine(&all)).await?.uid_validity;
-    Ok(Conn { s, email: a.email.clone(), gmail, all, drafts, trash, validity, used: SystemTime::now(), known: None })
+    Ok(Conn { s, email: a.email.clone(), gmail, all, drafts, archive, trash, validity, used: SystemTime::now(), known: None })
 }
 
-/// The Drafts folder of a server without special-use flags: a name whose last segment says drafts.
-fn drafts_named<'a>(mut names: impl Iterator<Item = &'a str>) -> Option<&'a str> {
+// folder names for servers without special-use flags, matched on the last segment of the name
+const DRAFTS: &[&str] = &["drafts", "concepten", "brouillons", "entwürfe"];
+const ARCHIVE: &[&str] = &["archive", "archives", "archief", "archiv"];
+const TRASH: &[&str] = &["trash", "deleted items", "deleted messages", "prullenbak", "corbeille", "papierkorb"];
+/// A folder of a server without special-use flags: a name whose last segment is one of `want`.
+fn folder_named<'a>(mut names: impl Iterator<Item = &'a str>, want: &[&str]) -> Option<&'a str> {
     names.find(|n| n.len() <= 256 && !n.chars().any(char::is_control) && n.rsplit(['/', '.']).next()
-        .is_some_and(|l| ["drafts", "concepten", "brouillons", "entwürfe"].iter().any(|d| l.eq_ignore_ascii_case(d))))
+        .is_some_and(|l| want.iter().any(|d| l.eq_ignore_ascii_case(d))))
 }
+fn named(names: &[Name], want: &[&str]) -> Option<String> { folder_named(names.iter().map(|n| n.name()), want).map(str::to_string) }
 
 /// Run `$body` (an expression using `$c: &mut Conn`) on the account's cached session (the UI's or, `$tool`
 /// true, Claude's own, so the UI never waits behind a long tool call): connect when there is none or it sat
@@ -342,11 +349,12 @@ async fn store(c: &mut Conn, uid: u32, seen: bool) -> Result<(), Fail> {
     r.map(|_| ())
 }
 
-/// Archive (Gmail: drop the Inbox label, the mail stays in All Mail) or move to Trash (Gmail empties it after 30 days).
+/// Archive (Gmail: drop the Inbox label, the mail stays in All Mail; other servers: move to the Archive folder) or move
+/// to Trash (Gmail empties it after 30 days). ponytail: needs the MOVE extension (RFC 6851) off Gmail, COPY+EXPUNGE when a server lacks it.
 async fn move_to(c: &mut Conn, uids: &[u32], trash: bool) -> Result<(), Fail> {
-    if !c.gmail { return Err(user("Archive and delete only work for Gmail accounts")); }
     let all = c.all.clone();
-    let dest = if trash { Some(c.trash.clone().ok_or_else(|| user("No \\Trash mailbox found"))?) } else { None };
+    let dest = if trash { Some(c.trash.clone().ok_or_else(|| user("No Trash folder found on the server"))?) }
+        else if c.gmail { None } else { Some(c.archive.clone().ok_or_else(|| user("No Archive folder found on the server"))?) };
     t(c.s.select(&all)).await?;
     let r = match &dest {
         Some(d) => t(c.s.uid_mv(set(uids), d)).await,
@@ -616,9 +624,11 @@ mod tests {
 
     #[test]
     fn drafts_folder_by_name() {
-        assert_eq!(drafts_named(["INBOX", "INBOX.Sent", "INBOX.Concepten"].into_iter()), Some("INBOX.Concepten"));
-        assert_eq!(drafts_named(["INBOX", "Mail/DRAFTS"].into_iter()), Some("Mail/DRAFTS"));
-        assert_eq!(drafts_named(["INBOX", "Drafts-old", "Sent"].into_iter()), None);
+        assert_eq!(folder_named(["INBOX", "INBOX.Sent", "INBOX.Concepten"].into_iter(), DRAFTS), Some("INBOX.Concepten"));
+        assert_eq!(folder_named(["INBOX", "Mail/DRAFTS"].into_iter(), DRAFTS), Some("Mail/DRAFTS"));
+        assert_eq!(folder_named(["INBOX", "Drafts-old", "Sent"].into_iter(), DRAFTS), None);
+        assert_eq!(folder_named(["INBOX", "INBOX.Archief", "INBOX.Deleted Items"].into_iter(), ARCHIVE), Some("INBOX.Archief"));
+        assert_eq!(folder_named(["INBOX", "INBOX.Archief", "INBOX.Deleted Items"].into_iter(), TRASH), Some("INBOX.Deleted Items"));
     }
 
     #[test]

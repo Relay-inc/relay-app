@@ -454,7 +454,7 @@ export default {
   "mail.clearSelection": "Effacer la sélection",
   "mail.experimentalL": "Archiver, supprimer et Boîte/Autres (expérimental)",
   "mail.experimentalHint":
-    "Archivez (E) et supprimez (#) un mail ou une sélection, Cmd- ou Maj-clic pour sélectionner. Les newsletters et notifications de gens à qui vous n'avez jamais écrit vont dans Autres. Les mails supprimés vont dans la corbeille de Gmail. Claude ne peut toujours ni déplacer ni supprimer.",
+    "Archivez (E) et supprimez (#) un mail ou une sélection, Cmd- ou Maj-clic pour sélectionner. Les newsletters et notifications de gens à qui vous n'avez jamais écrit vont dans Autres. Les mails archivés vont dans le dossier Archives (Gmail : Tous les messages), les mails supprimés dans la corbeille. Claude ne peut toujours ni déplacer ni supprimer.",
   "work.done": "Terminé",
   "work.doneIn": "Terminé · {d}",
   "notify.isWaiting": "En attente : autorisation pour {tool}.",

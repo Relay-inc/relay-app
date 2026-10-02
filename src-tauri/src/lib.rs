@@ -1253,7 +1253,7 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
 
 // ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
 // Listing and reading never change a flag (EXAMINE and BODY.PEEK). The writes are read/unread and, with the
-// experimental flag on, archive/trash (Gmail), all on the user's click. Nothing here sends: a reply only becomes a draft.
+// experimental flag on, archive/trash, all on the user's click. Nothing here sends: a reply only becomes a draft.
 
 /// A configured account by email, "" for the one the sidebar shows (chosen in the settings, else the first).
 fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {

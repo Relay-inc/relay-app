@@ -453,7 +453,7 @@ export default {
   "mail.clearSelection": "Auswahl aufheben",
   "mail.experimentalL": "Archivieren, löschen und Posteingang/Sonstige (experimentell)",
   "mail.experimentalHint":
-    "Archiviere (E) und lösche (#) eine Mail oder eine Auswahl, Cmd- oder Shift-Klick zum Auswählen. Newsletter und Benachrichtigungen von Leuten, denen du nie geschrieben hast, landen unter Sonstige. Gelöschte Mails gehen in den Gmail-Papierkorb. Claude kann weiterhin nichts verschieben oder löschen.",
+    "Archiviere (E) und lösche (#) eine Mail oder eine Auswahl, Cmd- oder Shift-Klick zum Auswählen. Newsletter und Benachrichtigungen von Leuten, denen du nie geschrieben hast, landen unter Sonstige. Archivierte Mails landen im Archiv-Ordner (Gmail: Alle Nachrichten), gelöschte im Papierkorb. Claude kann weiterhin nichts verschieben oder löschen.",
   "work.done": "Fertig",
   "work.doneIn": "Fertig · {d}",
   "notify.isWaiting": "Wartet auf dich: Erlaubnis für {tool}.",
