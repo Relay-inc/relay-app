@@ -1,14 +1,12 @@
 import { provider } from "../../shared/plugins";
 import type { BoardProvider, BoardRef } from "../../domain/board/types";
 import { panelItem, cardKey, type PanelItem } from "../../domain/navigation/keys";
-import type { PanelTab } from "../../domain/navigation/views";
 import * as backend from "../../infrastructure/backend";
-import { storage } from "../../infrastructure/storage";
 import { ctxOf } from "../board/ctx";
 import { clearMailLink } from "../mail/mail";
 import { useNavigationStore } from "./store";
 
-// The details: a note or card in the right panel, a PR or mail next to its list, a card in the ticket window over the
+// The details: a note in the right drawer, a PR or mail next to its list, a card in the ticket window over the
 // board. Each is shown from what is known at once, then fresh.
 const nav = () => useNavigationStore.getState();
 const set = useNavigationStore.setState;
@@ -51,7 +49,7 @@ function fetchDetail(key: string, item: PanelItem): Promise<unknown> {
       return backend.githubPr(item.repo, item.number);
   }
 }
-/** Show a vault note in the right panel: what is known at once, then fresh from the backend. */
+/** Show a vault note in the right drawer: what is known at once, then fresh from the backend. */
 export async function openDetail(key: string) {
   const item = panelItem(key);
   if (!item) return;
@@ -60,9 +58,8 @@ export async function openDetail(key: string) {
     draft.panel.open = key;
     draft.panel.err = "";
     draft.panel.actErr = "";
-    draft.panelHidden = false;
+    draft.drawer = "detail";
   });
-  storage.set("noinsp", false);
   try {
     const detail = await fetchDetail(key, item);
     set(draft => {
@@ -176,15 +173,11 @@ export const forgetDetails = (match: (key: string) => boolean) =>
   set(draft => {
     for (const key of Object.keys(draft.panel.detail)) if (match(key)) delete draft.panel.detail[key];
   });
-export function closeDetail() {
-  if (!nav().panel.open) return;
+/** Close the right drawer, whatever it shows. */
+export function closeDrawer() {
+  if (!nav().drawer) return;
   set(draft => {
-    draft.panel.open = "";
-  });
-}
-export function setTab(tab: PanelTab) {
-  set(draft => {
-    draft.tab = tab;
+    draft.drawer = "";
     draft.panel.open = "";
   });
 }

@@ -6,8 +6,8 @@ import { useNavigationStore } from "../../application/navigation/store";
 import { useConversationsStore } from "../../application/conversations/store";
 import { useWorkspaceStore } from "../../application/workspace/store";
 import { escStop, ctrlC } from "../../application/conversations/actions";
-import { setPanelHidden, toggleQuickAsk, zoom, openExternal } from "../../application/navigation/navigation";
-import { closeDetail, closeTicket, openDetail } from "../../application/navigation/panel";
+import { closeTool, toggleQuickAsk, zoom, openExternal } from "../../application/navigation/navigation";
+import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
 import { mailExperimental } from "../../application/settings/settings";
 import { useMailStore } from "../../application/mail/store";
@@ -24,12 +24,11 @@ import { copyText } from "../components/copy";
 import { hasFiles } from "../components/image-files";
 import { NavigationView } from "../features/navigation/NavigationView";
 import { ConversationsView } from "../features/conversations/ConversationsView";
-import { PanelView } from "../features/navigation/PanelView";
+import { DrawerView } from "../features/drawer/DrawerView";
 import { QuickAskView } from "../features/navigation/QuickAskView";
 import { WorkspaceView } from "../features/workspace/WorkspaceView";
 
 const isQuickAskKey = (e: KeyboardEvent) => e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK";
-const isFoldPanelKey = (e: KeyboardEvent) => e.metaKey && e.altKey && e.code === "KeyI";
 const isCtrlCKey = (e: KeyboardEvent) => e.ctrlKey && !e.metaKey && !e.altKey && e.code === "KeyC";
 /** Whether an event started in a text field, wherever it sits. */
 const inField = (e: Event, sel = "input, textarea, select, [contenteditable]") =>
@@ -38,9 +37,10 @@ const closest = <T extends HTMLElement>(e: Event, match: (node: HTMLElement) => 
   e.composedPath().find((node): node is T => node instanceof HTMLElement && match(node));
 
 // ---------- the shortcuts that work anywhere in the main window, registered once
-// Esc closes the image, then the ticket window, then the right panel, then stops the running turn
+// Esc closes the image, then the ticket window, then the right drawer, then a project's board or PRs, then stops the
+// running turn
 function onEscape(e: KeyboardEvent) {
-  const { zoom: zoomed, panel, projectPanel, quickAsk, selected } = useNavigationStore.getState();
+  const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected } = useNavigationStore.getState();
   if (zoomed) {
     e.preventDefault();
     zoom("");
@@ -51,9 +51,18 @@ function onEscape(e: KeyboardEvent) {
     closeTicket();
     return;
   }
-  if (panel.open && !projectPanel && !inField(e)) {
+  // Esc in a terminal or a note is theirs (vim, a shell prompt): it neither closes the drawer nor stops the turn
+  if (inField(e) && e.composedPath().some(node => node instanceof HTMLElement && node.matches(".relay-drawer"))) return;
+  if (drawer && !projectPanel && !inField(e)) {
     e.preventDefault();
-    closeDetail();
+    closeDrawer();
+    return;
+  }
+  // a project's board or PRs opened from the title bar: back to the conversation (a popover that took the key first
+  // has called preventDefault)
+  if (tool && isView(selected) && !inField(e) && !e.defaultPrevented) {
+    e.preventDefault();
+    closeTool();
     return;
   }
   // the search and the title are inputs: Esc in them is theirs (the composer is a textarea, Esc there stops the turn)
@@ -106,10 +115,6 @@ function onKey(e: KeyboardEvent) {
     // Cmd-K: a question that starts a general conversation in the background
     e.preventDefault();
     toggleQuickAsk();
-  } else if (isFoldPanelKey(e)) {
-    // Cmd-Alt-I folds the right panel
-    e.preventDefault();
-    setPanelHidden(!useNavigationStore.getState().panelHidden);
   } else if (isCtrlCKey(e)) {
     // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
     e.preventDefault();
@@ -122,7 +127,7 @@ function onKey(e: KeyboardEvent) {
 }
 // links in a conversation, a PR or a mail open in the default browser or mail app, a webview window cannot open them itself
 function onLink(e: MouseEvent) {
-  // a vault note named in markdown opens in the right panel (shared/markdown.ts)
+  // a vault note named in markdown opens in the right drawer (shared/markdown.ts)
   const noteLink = closest(e, node => !!node.dataset.note);
   if (noteLink) {
     e.preventDefault();
@@ -146,11 +151,10 @@ function noDrop(e: DragEvent) {
   if (hasFiles(e)) e.preventDefault();
 }
 
-/** The main window: sidebar, the open conversation or view, the right panel, and the overlays. */
+/** The main window: sidebar, the open conversation or view, the right drawer, and the overlays. */
 export function App() {
   const { th } = useT();
-  const panelHidden = useNavigationStore(s => s.panelHidden);
-  const wide = useNavigationStore(s => !!s.panel.open);
+  const drawer = useNavigationStore(s => s.drawer);
   const quickAsk = useNavigationStore(s => s.quickAsk);
   const quickText = useNavigationStore(s => s.quickText);
   const zoomed = useNavigationStore(s => s.zoom);
@@ -169,9 +173,8 @@ export function App() {
     };
   }, []);
 
-  const panelHiddenClasses = panelHidden ? "opacity-0 border-l-transparent pointer-events-none" : "";
   return (
-    <div className="relay-app" data-noinsp={panelHidden || undefined} data-wide={wide || undefined}>
+    <div className="relay-app" data-drawer={drawer || undefined}>
       {snapErr ? (
         <Html
           as="div"
@@ -181,9 +184,7 @@ export function App() {
       ) : null}
       <NavigationView className="min-h-0 min-w-0 border-r border-separator" />
       <ConversationsView className="min-h-0 min-w-0" />
-      <PanelView
-        className={`min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${panelHiddenClasses}`}
-      />
+      {drawer ? <DrawerView className="min-h-0 min-w-0 overflow-hidden" drawer={drawer} /> : null}
       {quickAsk ? <QuickAskView key={quickText} /> : null}
       {zoomed ? (
         <div
