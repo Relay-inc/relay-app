@@ -5,10 +5,11 @@
 //!
 //! The server stays dumb: the app builds each agent's command with this machine's paths (Info) and sends it; the
 //! server starts a broker for it, the same one the app uses locally, and passes the broker's frames through. The
-//! agents' permission cards are perm_server.py files in this machine's pending folder, listed and answered on request.
+//! agents' permission cards are files in this machine's pending folder, written by `relay-server --perm-server` (the
+//! permission tool the agents here run), listed and answered on request.
 //!
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
-//! port the running server listens on), perm_server.py, pending/.
+//! port the running server listens on), pending/.
 
 pub mod mirror;
 
@@ -117,7 +118,7 @@ pub fn info(data: &Path, path: &str) -> Info {
         if Path::new(&def).is_file() { def } else { agent_core::which("claude", path).unwrap_or(def) }
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
-        pending: data.join("pending").to_string_lossy().into(), perm: data.join("perm_server.py").to_string_lossy().into(), ..Default::default() }
+        pending: data.join("pending").to_string_lossy().into(), perm: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(), ..Default::default() }
 }
 
 // ---------- serving
@@ -127,7 +128,7 @@ pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, m
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
         fs::create_dir_all(data.join("pending"))?;
-        fs::write(data.join("perm_server.py"), agent_claude::PERM_SERVER_PY)?;
+        fs::remove_file(data.join("perm_server.py")).ok(); // the Python tool of before
         let id = identity(data)?;
         Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data) })
     }

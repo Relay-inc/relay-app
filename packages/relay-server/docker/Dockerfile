@@ -9,8 +9,8 @@ RUN cargo build --release -p relay-server
 
 FROM debian:stable-slim AS base
 LABEL org.opencontainers.image.source="https://github.com/LaurentMe/vault-app"
-# python3 for perm_server.py, git for the repos, curl for the Claude Code installer
-RUN apt-get update && apt-get install -y --no-install-recommends python3 git ca-certificates curl \
+# git for the repos, curl for the Claude Code installer
+RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* && useradd -m relay
 COPY --from=build /src/target/release/relay-server /usr/local/bin/relay-server
 COPY packages/relay-server/docker/entrypoint.sh /usr/local/bin/relay-entrypoint
@@ -31,6 +31,10 @@ FROM base AS server
 ENV CLAUDE_CONFIG_DIR=/home/relay/.claude
 
 FROM base AS test
+# python3 for the stand-in claude only
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+USER relay
 # outside ~/.local, so the volume there never hides it or keeps an old copy
 COPY --chmod=755 packages/relay-server/docker/fake-claude /usr/local/bin/claude
 RUN mkdir -p /home/relay/repos/testproject

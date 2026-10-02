@@ -56,7 +56,11 @@ impl Spec {
 /// What the app keeps next to the socket, to take a conversation back after a restart.
 #[derive(Serialize, Deserialize, Clone)]
 /// `pid`: the agent's, so the end of one process never removes the file of the one that replaced it.
-pub struct Meta { pub key: String, pub provider: String, pub model: String, pub effort: String, pub tainted: bool, #[serde(default)] pub pid: u32, #[serde(default)] pub account: String }
+/// `turns`: the turns running (see Proc in lib.rs), so a restart only shows the ones that really are; a file from
+/// before it was kept counts one, as every reattached agent did.
+pub struct Meta { pub key: String, pub provider: String, pub model: String, pub effort: String, pub tainted: bool, #[serde(default)] pub pid: u32, #[serde(default)] pub account: String,
+    #[serde(default = "one")] pub turns: u32 }
+fn one() -> u32 { 1 }
 
 /// The folder with the sockets: short, because a socket path has a 104-byte limit on macOS. A relay-server keeps its
 /// own (RELAY_AGENTS_DIR), so an app on the same Mac never takes over the server's conversations.
@@ -66,6 +70,10 @@ pub fn meta_path(key: &str) -> PathBuf { base(key).with_extension("json") }
 fn sock_path(key: &str) -> PathBuf { base(key).with_extension("sock") }
 pub fn save_meta(m: &Meta) { fs::write(meta_path(&m.key), serde_json::to_string(m).unwrap()).ok(); }
 pub fn load_meta(path: &Path) -> Option<Meta> { serde_json::from_str(&fs::read_to_string(path).ok()?).ok() }
+/// The turns the agent with this pid has running, for after a restart.
+pub fn save_turns(key: &str, pid: u32, turns: u32) {
+    if let Some(m) = load_meta(&meta_path(key)).filter(|m| m.pid == pid) { save_meta(&Meta { turns, ..m }); }
+}
 /// The agent with this pid is gone: its file goes, unless a newer process of the conversation already wrote its own.
 pub fn forget(key: &str, pid: u32) { if load_meta(&meta_path(key)).is_some_and(|m| m.pid == pid) { fs::remove_file(meta_path(key)).ok(); } }
 
@@ -216,5 +224,24 @@ pub fn main(sock: &str, spec: &str) {
             let mut s = st4.lock().unwrap();
             if s.gen == gen { s.client = None; s.away = Some(Instant::now()); }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn turns_survive_a_restart() {
+        // a file from before turns were kept: one running, as before
+        let old: Meta = serde_json::from_str(r#"{"key":"k","provider":"claude","model":"","effort":"","tainted":false,"pid":7}"#).unwrap();
+        assert_eq!(old.turns, 1);
+        fs::create_dir_all(dir()).unwrap();
+        let key = format!("test-turns-{}", std::process::id());
+        save_meta(&Meta { key: key.clone(), provider: "claude".into(), model: String::new(), effort: String::new(), tainted: false, pid: 7, account: String::new(), turns: 1 });
+        save_turns(&key, 7, 0);
+        assert_eq!(load_meta(&meta_path(&key)).unwrap().turns, 0);
+        save_turns(&key, 8, 3); // another process of the conversation: not this file
+        assert_eq!(load_meta(&meta_path(&key)).unwrap().turns, 0);
+        fs::remove_file(meta_path(&key)).ok();
     }
 }

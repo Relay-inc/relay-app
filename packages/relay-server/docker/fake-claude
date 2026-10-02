@@ -3,7 +3,7 @@
 
 It answers the initialize request, gives each user turn a session id, an echo and a result, and writes a transcript
 in ~/.claude/projects/<cwd slug>/<session>.jsonl so history works. A turn with "perm" in it calls the real permission
-tool (perm_server.py from --mcp-config, over MCP stdio) for a Write, and writes the file when the card is allowed.
+tool (the one from --mcp-config, over MCP stdio) for a Write, and writes the file when the card is allowed.
 "slow" waits 6 s before answering, to test a connection that drops mid-turn.
 """
 import json, os, re, subprocess, sys, time, uuid

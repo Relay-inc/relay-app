@@ -1,6 +1,6 @@
 //! Claude Code as an agent provider. Every conversation is one `claude -p` process in stream-json mode, in the
 //! vault, on the user's subscription (ANTHROPIC_API_KEY removed). Permission requests and questions come in
-//! through perm_server.py (the --permission-prompt-tool) as files in the pending folder. Transcripts, subagents
+//! through `relay --perm-server` (perm_server.rs, the --permission-prompt-tool) as files in the pending folder. Transcripts, subagents
 //! and token usage are read from ~/.claude/projects/<vault-slug>/, and from the same folder in every other
 //! account's config folder (CLAUDE_CONFIG_DIR).
 
@@ -10,14 +10,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 
+pub mod perm_server;
 pub mod stream;
 pub mod subagents;
 pub mod usage_log;
 
-// ponytail: perm_server.py is read from this checkout, fine as long as the app runs from its own checkout. A
-// relay-server writes its own copy (PERM_SERVER_PY) and the app passes that path as opts.perm_server.
-const PERM_SERVER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/perm_server.py");
-pub const PERM_SERVER_PY: &str = include_str!("../perm_server.py");
 
 /// Tools no app session may call: mail only ever becomes a draft (hard wall) and the mailbox is never touched, so
 /// the whole Gmail connector goes, and in the app mail goes through relay-mail, never himalaya.
@@ -35,7 +32,6 @@ fn on_account(cmd: &mut Command, account: &str) {
 /// The app's `relay` command (src-tauri/src/actions.rs) runs without a Bash card: each action has its own policy,
 /// and the app asks on a card for the ones that need it.
 pub const RELAY_TOOL: &str = "Bash(relay *)";
-const RELAY_HINT: &str = "The Relay app gives you its extensions as a shell command: `relay help` lists the actions available in this conversation (creating tickets in Productive, Trello or Linear, booking time in Productive, vault reminders, mail drafts), `relay <action> key=value ...` runs one. Use it instead of other tools for these when an action fits. Some actions ask the user first; a denied one stays denied, do not work around it.";
 
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
@@ -95,15 +91,27 @@ impl AgentProvider for Claude {
         [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
     fn commands(&self, env: &Env) -> Value {
-        agent_core::discover_commands(env, include_str!("../commands.py"))
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+                "--settings", r#"{"disableAllHooks":true}"#, "--no-session-persistence"]).current_dir(env.vault).env_remove("ANTHROPIC_API_KEY");
+            let c = p.start(cmd)?;
+            p.send(c, json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize"}}))?;
+            let v = p.receive(c, |v| v["type"] == "control_response")?;
+            let commands = &v["response"]["response"]["commands"];
+            Ok(if commands.is_null() { json!([]) } else { commands.clone() })
+        })
     }
     fn efforts(&self) -> Vec<Choice> {
         [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
+        // the permission tool is this binary again, `relay --perm-server` (src-tauri/src/main.rs); on a work machine
+        // relay-server's own binary there (opts.perm_server, relay-server main.rs)
+        let perm = match env.opt("perm_server") { "" => std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().into_owned(), p => p.to_string() };
         let mut mcp = json!({"mcpServers": {"vaultperm": {
-            "command": "/usr/bin/python3", "args": [if env.opt("perm_server").is_empty() { PERM_SERVER } else { env.opt("perm_server") }],
+            "command": perm, "args": ["--perm-server"],
             "env": {"PENDING": env.pending.to_string_lossy(), "PROJECT": l.key}}}});
         // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
         if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
@@ -111,7 +119,7 @@ impl AgentProvider for Claude {
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
             .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg(RELAY_TOOL).arg("--disallowedTools").args(DENIED)
-            .args(["--append-system-prompt", RELAY_HINT, "-n", l.name]);
+            .args(["--append-system-prompt", agent_core::envelope::HINT, "-n", l.name]);
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }
@@ -198,7 +206,7 @@ mod tests {
         let cmd = PROVIDER.command(&env(&p), &l).unwrap();
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert_eq!(&args[..8], ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-prompt-tool", "mcp__vaultperm__approve"]);
-        assert!(args[9].contains("perm_server.py") && args[9].contains("\"PROJECT\":\"c:1\""));
+        assert!(args[9].contains("\"args\":[\"--perm-server\"]") && args[9].contains("\"PROJECT\":\"c:1\""));
         assert!(!args[9].contains("relay-mail"));
         assert_eq!(args[10], "--allowedTools");
         assert_eq!((args[16].as_str(), args[17].as_str(), args[21].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));

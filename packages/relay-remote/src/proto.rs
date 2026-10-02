@@ -23,7 +23,8 @@ pub const PROTO: u32 = 2;
 pub const MAX_LINE: u64 = 1 << 20;
 
 /// What a server tells the app about itself, so the app can build commands for that machine: its paths, its login
-/// PATH, where its `claude` is, its pending folder and its copy of perm_server.py.
+/// PATH, where its `claude` is, its pending folder and its permission tool (`perm`: the relay-server binary, run with
+/// `--perm-server`).
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Info {
     pub host: String,

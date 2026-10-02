@@ -85,7 +85,7 @@ fn turn_of(ev: &Events, key: &str, timeout: Duration) -> Result<Vec<String>, Str
 }
 /// One message in a general conversation on the machine `id`.
 fn ask(app: &AppHandle, ev: &Events, key: &str, id: &str, text: &str) -> Result<String, String> {
-    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, Some(id.into()))?;
+    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, None, Some(id.into()))?;
     Ok(turn_of(ev, key, Duration::from_secs(30))?.join("\n"))
 }
 /// The mirror's next round that has run without errors.
@@ -99,7 +99,7 @@ fn now_s() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_
 const MIRROR_KEY: &str = "c:mirror";
 
 fn say(app: &AppHandle, text: &str) -> Result<(), String> {
-    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, Some(PROJECT.into()), None)
+    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, Some(PROJECT.into()), None)
 }
 fn expect(app: &AppHandle, ev: &Events, text: &str, want: &str) -> Result<String, String> {
     say(app, text)?;
@@ -236,7 +236,7 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     // moving a conversation: refused mid-turn, then to this Mac (its transcript comes along with this Mac's paths) and
     // back to the machine (the machine's paths again), where it goes on in the same session
     let msid = st.sids.lock().unwrap().get(MIRROR_KEY).map(|s| s.sid.clone()).unwrap_or_default();
-    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, Some(id.clone())).ok();
+    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, None, Some(id.clone())).ok();
     std::thread::sleep(Duration::from_millis(800));
     r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", None, false) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
     turn_of(ev, MIRROR_KEY, Duration::from_secs(20)).ok();
@@ -246,7 +246,7 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     let work = st.machines.info(&m).map(|i| i.work).unwrap_or_default();
     r.step("moved to this Mac", move_to(app, MIRROR_KEY, "", None, false).and_then(|_| {
         let t = fs::read_to_string(&local).map_err(|e| format!("{}: {e}", local.display()))?;
-        // the vault's paths are this Mac's now; the machine's own (its plugins, its perm_server.py) stay as they were
+        // the vault's paths are this Mac's now; the machine's own (its plugins, its permission tool) stay as they were
         let ok = st.machines.bind_of(MIRROR_KEY).is_none() && t.contains("read Notes/Uit de vault.md") && t.contains(&format!("{v}\"")) && !t.contains(&format!("{work}/vault"));
         if ok { Ok(format!("{} bytes, this Mac's paths", t.len())) } else { Err(t) }
     }));
@@ -286,7 +286,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     proxy.cut(Duration::from_secs(8));
     std::thread::sleep(Duration::from_secs(3)); // a poller round or two
     let t = Instant::now();
-    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, Some(PROJECT.into()), None);
+    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, Some(PROJECT.into()), None);
     let took = t.elapsed();
     r.step("machine away: refused fast", match res { Err(e) if took < Duration::from_millis(1000) => Ok(format!("{took:?}: {e}")), other => Err(format!("{took:?}: {other:?}")) });
     std::thread::sleep(Duration::from_secs(7)); // back, and the poller sees it again

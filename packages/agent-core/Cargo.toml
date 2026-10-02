@@ -7,3 +7,5 @@ description = "The contract an agent provider (Claude Code, Codex, OpenCode, …
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json.workspace = true
+libc = "0.2"
+base64 = "0.23"

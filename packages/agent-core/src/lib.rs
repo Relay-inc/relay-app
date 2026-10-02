@@ -11,6 +11,9 @@ use serde_json::Value;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+pub mod discover;
+pub use discover::{discover_commands, http_get, Probe};
+pub mod envelope;
 pub mod pending;
 pub mod usage;
 
@@ -236,13 +239,4 @@ mod tests {
         assert!(safe_id("36099ce4-d17c-482a") && !safe_id("") && !safe_id("a b"));
         assert!(safe_model("opus") && safe_model("claude-opus-5-5[1m]") && safe_model("openai/gpt-5") && !safe_model("--x") && !safe_model("a b"));
     }
-}
-
-/// Discover commands with a shared deadline and child-process cleanup, without an inference turn.
-pub fn discover_commands(env: &Env, script: &str) -> Value {
-    if env.vault.is_empty() || !Path::new(env.bin).is_file() { return Value::Null; }
-    let script = format!("{}\n{}\nmain()", include_str!("../discover.py"), script);
-    Command::new("/usr/bin/python3").args(["-c", &script, env.bin, env.vault, ""])
-        .env("PATH", env.path).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()
-        .filter(|o| o.status.success()).and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(Value::Null)
 }

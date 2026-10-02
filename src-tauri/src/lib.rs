@@ -22,6 +22,7 @@ mod calendar;
 mod commits;
 mod machines;
 mod mirror;
+mod favicon;
 mod mail;
 pub mod notify;
 mod providers;
@@ -31,12 +32,11 @@ mod reminders;
 mod scratch;
 #[cfg(feature = "selftest")]
 mod selftest;
+mod snapshot;
 mod tray;
 mod vault;
 mod worktrees;
 
-// ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
-const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
@@ -281,6 +281,12 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // account: the config folder it runs on ("" the CLI's own), see agents::accounts
 // remote: on a work machine (machines.rs), stopped and taken back through its relay-server
 struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, account: String, remote: bool }
+impl Proc {
+    /// The turns running, also in the broker's file: a restart takes them from there.
+    fn set_turns(&mut self, turns: u32) {
+        if turns != self.turns { self.turns = turns; broker::save_turns(&self.key, self.child.id(), turns); }
+    }
+}
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -318,7 +324,7 @@ fn login_path() -> String {
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
-/// Everything the sidebar shows, read by snapshot.py from the mapped paths. Also returns the vault
+/// Everything the sidebar shows, read from the mapped paths (snapshot.rs). Also returns the vault
 /// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
 fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
@@ -326,18 +332,11 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
-    // the first time a vault is used, its .relay/config.json is written from what is detected (snapshot.py reads it)
+    // the first time a vault is used, its .relay/config.json is written from what is detected
     relay_config::ensure(v, &st["map"]);
     let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
-        .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
-        .env("VAULT_NOTES", path("notes"))
-        .output().map_err(|e| e.to_string())?;
-    let mut snap: Value = serde_json::from_slice(&out.stdout).map_err(|e| {
-        // a crash leaves stdout empty: its last stderr line says more than "EOF while parsing"
-        let err = String::from_utf8_lossy(&out.stderr);
-        format!("snapshot: {}", err.lines().rev().find(|l| !l.trim().is_empty()).map_or(e.to_string(), str::to_string))
-    })?;
+    let mut snap = snapshot::snapshot(v, &path("workState"), &path("notes"), chrono::Local::now().date_naive(), &state.path,
+        &data_dir(&app).join("topics.json"), &home())?;
     snap["vault"] = st;
     let (file, _, _) = rem_ctx(&app)?;
     snap["reminders"] = reminders::list(&file, chrono::Local::now().date_naive()).into();
@@ -345,7 +344,7 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     Ok(snap)
 }
 
-/// The favicon of each project's website, guessed from its notes by favicon.py, for the projects
+/// The favicon of each project's website, guessed from its notes (favicon.rs), for the projects
 /// ([{name, aliases}]) whose guess is not in favicons.tried yet: {name: {site, data}}, data the raw icon or null.
 #[tauri::command]
 async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, String> {
@@ -353,15 +352,11 @@ async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, Strin
     if st["ok"] != true { return Ok(json!({})); }
     let v = st["vault"].as_str().unwrap();
     let notes = if st["found"]["notes"] == true { vault::resolve(v, st["map"]["notes"].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
-        .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
     // a website set as a project's icon in the vault's .relay/config.json wins over a guess
     let sites: serde_json::Map<String, Value> = relay_config::icons(v).into_iter()
         .filter_map(|(n, i)| match relay_config::icon_kind(i["value"].as_str()?) { relay_config::Icon::Site(s) => Some((n, json!(s))), _ => None }).collect();
-    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried, "sites": sites}).to_string().as_bytes()).map_err(|e| e.to_string())?;
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
+    let v = v.to_string();
+    tauri::async_runtime::spawn_blocking(move || favicon::run(&v, &notes, &projects, &tried, &sites)).await.map_err(|e| e.to_string())
 }
 
 /// The project icons from the vault's .relay/config.json: {project: {value, img | icon}}. The first call for a vault
@@ -656,13 +651,13 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, project_name, resume.is_some(), machine) } else { None };
     // a work machine has its own login: no account of this Mac goes along
     let account = if remote.is_some() { "" } else { account };
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into() };
+    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: u32::from(turn.is_some()) };
     let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
         if from_mail { return Err(trc("err.machine_mail")); }
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
         bind.cwd = machines::cwd_or_home(bind.cwd, &m, &info);
         let mut eb = env_of(app, state, p);
-        // that machine's paths, its claude and its copy of perm_server.py; no mail tools there
+        // that machine's paths, its claude and its permission tool (relay-server --perm-server); no mail tools there
         eb.opts["mail"] = json!(false);
         eb.opts["perm_server"] = json!(info.perm);
         let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
@@ -745,7 +740,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                 // Replayed activity restores turns surviving an app restart. Repeated model steps never
                 // count as extra user messages; Claude's assistant blocks also provide this signal.
                 if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
-                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.max(1); }
+                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.max(1)); }
                 }
                 match &ev {
                     Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
@@ -786,7 +781,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                     Event::TurnEnd { error, .. } => {
                         let e = error.as_deref().unwrap_or("").to_lowercase();
                         if e.contains("usage limit") || e.contains("hit your limit") { spend(&a); }
-                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
+                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.saturating_sub(1)); }
                     }
                     _ => {}
                 }
@@ -860,6 +855,8 @@ fn reattach_remote(app: &AppHandle) {
 }
 
 /// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
+/// Each with the turns its file says are running: a turn that ended before the restart is not running again, one that
+/// ended while the app was away ends with its replayed turn end.
 fn reattach(app: &AppHandle) {
     let Ok(dir) = fs::read_dir(broker::dir()) else { return };
     for f in dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
@@ -867,7 +864,7 @@ fn reattach(app: &AppHandle) {
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let broker::Conn { agent, stdin, frames, backlog } = c;
         let pid = agent.id();
-        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1, account: m.account.clone(), remote: false };
+        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, account: m.account.clone(), remote: false };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
         read_agent(app, &m.key, p, pid, frames, backlog, (false, false), &m.account);
     }
@@ -921,8 +918,10 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, project_name: Option<String>, machine: Option<String>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, project_name: Option<String>, machine: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
+    // the project the agent is told about: the line in front of the message (agent_core::envelope)
+    let text = match told.filter(|t| !t.is_empty()) { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
         images.unwrap_or_default().into_iter().filter_map(|i| Some(Image { media_type: i["media_type"].as_str()?.into(), data: i["data"].as_str()?.into() }))
@@ -957,7 +956,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
     let x = procs.get_mut(&project).unwrap();
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
-    x.turns += 1;
+    x.set_turns(x.turns + 1);
     Ok(())
 }
 
@@ -1153,7 +1152,7 @@ fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Res
     if !pending::valid_id(&id) { return Err("bad id".into()); }
     let dir = pending_dir(&app);
     let req = pending::read(&dir, &id);
-    // a card of a work machine: its perm_server.py waits for the answer file there
+    // a card of a work machine: its permission tool waits for the answer file there
     if req.is_none() {
         if let Some(m) = state.machines.pending_owner(&id).and_then(|m| machines::Machines::find(&state.settings.lock().unwrap(), &m)) {
             state.machines.client(&m).answer(&id, &decision)?;

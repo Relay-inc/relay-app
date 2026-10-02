@@ -55,7 +55,7 @@ fn spec(cwd: &str) -> Spec {
     Spec { program: "/bin/sh".into(), args: vec!["-c".into(), "while IFS= read -r l; do if [ \"$l\" = later ]; then sleep 1; echo late; else echo \"got $l\"; fi; done".into()],
         env: vec![], cwd: Some(cwd.into()) }
 }
-fn meta(key: &str) -> Meta { Meta { key: key.into(), provider: "claude".into(), model: String::new(), effort: String::new(), tainted: false, pid: 0, account: String::new() } }
+fn meta(key: &str) -> Meta { Meta { key: key.into(), provider: "claude".into(), model: String::new(), effort: String::new(), tainted: false, pid: 0, account: String::new(), turns: 0 } }
 fn next(frames: &mut dyn BufRead) -> String {
     let mut l = String::new();
     frames.read_line(&mut l).unwrap();
@@ -109,7 +109,7 @@ fn pair_launch_reattach_and_walls() {
     let stranger = Client::new("127.0.0.1", c.addr.rsplit(':').next().unwrap().parse().unwrap(), &c.fp, device("stranger"));
     assert!(stranger.info().is_err());
 
-    // its cards: perm_server.py writes them in this device's own pending folder
+    // its cards: the permission tool writes them in this device's own pending folder
     let info = c.info().unwrap();
     assert_ne!(info.pending, other.info().unwrap().pending, "a pending folder per device");
     std::fs::create_dir_all(&info.pending).unwrap();
@@ -183,7 +183,7 @@ fn real_claude_through_the_server() {
     let text = "Use the Write tool to create the file note.txt in the current directory, containing the single word relay. Then answer with only: done";
     send(&mut conn.stdin, agent_claude::stream::user_message(&Turn { text: text.into(), images: vec![] }));
 
-    // the card: perm_server.py's file there, seen and answered over the network
+    // the card: the permission tool's file there, seen and answered over the network
     let c2 = c.clone();
     let answered = std::thread::spawn(move || {
         let t = Instant::now();

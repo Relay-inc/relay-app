@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.0.2"
+version = "0.0.3"
 description = "Relay control room"
 authors = []
 edition = "2021"
@@ -28,7 +28,11 @@ serde_json.workspace = true
 tauri-plugin-dialog = "2"
 sys-locale = "0.3.2"
 chrono = "0.4"
+regex = "1"
 sha1_smol = "1"
+# the favicon run (src/favicon.rs): domains in notes, accents folded, icon links resolved
+unicode-normalization = "0.1"
+url = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
 # the board integrations, registered in src/providers.rs (PROVIDERS)

@@ -29,9 +29,6 @@ come to Relay. Mail never runs here (Relay answers the mail tools itself), and n
 5. Pair: `relay-server pair` on this machine, paste the line in Relay › Settings › Machines.
 6. In the same settings page, link a project to its folder here. New conversations of that project run here.
 
-`/usr/bin/python3` must exist (the permission tool is a small Python script). On a Mac it comes with the command line
-tools (`xcode-select --install`).
-
 **On a Mac:** a LaunchAgent may not read `~/Documents`, `~/Desktop` or `~/Downloads` without Full Disk Access. Keep
 the repos in another folder (for example `~/repos`), or give `relay-server` Full Disk Access in System Settings.
 
@@ -176,7 +173,6 @@ In `~/Library/Application Support/relay-server` (Mac) or `~/.local/share/relay-s
 | `clients.json` | Paired devices: name, fingerprint, date |
 | `pairing.json` | The open pairing code, while there is one |
 | `serve.json` | The port the running server listens on |
-| `perm_server.py` | The permission tool the agents here use |
 | `pending/<device>/` | Open permission cards, per device |
 
 The agents' transcripts are Claude Code's own, in `~/.claude/projects/`. The brokers' sockets are in

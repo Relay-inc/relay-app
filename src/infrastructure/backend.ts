@@ -85,6 +85,9 @@ type SendArgs = {
   provider: string;
   projectName: string | null; // the conversation's project: a project bound to a machine runs there
   machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the project's machine
+  /** The project to tell the agent about; the backend puts the project line in front of `text`. */
+  told: string | null;
+  context: string | null;
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });

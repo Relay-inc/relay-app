@@ -16,8 +16,8 @@ status and the other install commands in its hint. The program defaults to the f
 
 ## How it runs
 
-- **Runs** `/usr/bin/python3 bridge.py <opencode> '<config>'` in the vault, one process per conversation
-  (`caps.persistent`). `bridge.py` starts a private `opencode serve --hostname 127.0.0.1 --port 0` with a random
+- **Runs** `relay --opencode-bridge <opencode> '<config>'` (the app's own binary, src/bridge.rs) in the vault, one process per conversation
+  (`caps.persistent`). The bridge starts a private `opencode serve --hostname 127.0.0.1 --port 0` with a random
   `OPENCODE_SERVER_PASSWORD` (HTTP basic auth, user `opencode`), subscribes to `GET /event`, opens the session
   (`GET /session/<id>` to resume, `POST /session/<id>/fork` to fork, else `POST /session`; a resume opencode no longer
   has starts a new one) and writes `bridge.session`. Then it passes the events of that session to stdout and turns the
@@ -61,7 +61,7 @@ Tests: `cargo test -p agent-opencode`, `pnpm test`. Fixtures in `tests/fixtures/
 the bridge wrote them (`serve-live.jsonl`: a bash command asked for and allowed; `serve-live-resume.jsonl`: the same
 session resumed with a variant; `serve-live-reject.jsonl`: a write asked for through the "ask" setting and rejected),
 `history.json` and `usage.json` (the queries of `src/store.rs` on the resulting database), `models-verbose.txt`
-(`opencode models --verbose`, three models), and `fake-serve.py`, a stand-in server for `bridge.py`.
+(`opencode models --verbose`, three models), and `fake-serve.py`, a stand-in server for the bridge (still python).
 
 ## What ran live, what did not
 
@@ -69,7 +69,7 @@ Ran with opencode-ai 1.18.33 from a throwaway `npm install` in `/tmp`, with `HOM
 that temp folder (nothing of the user's `~/.local/share/opencode` or config was read or written, no login), on OpenCode
 Zen's free `opencode/big-pickle`:
 
-- `bridge.py` driven by a small script: a new session, a bash permission answered `once`, streamed text, turn end with
+- the bridge (then python) driven by a small script: a new session, a bash permission answered `once`, streamed text, turn end with
   tokens; the same session resumed (the model remembered the first turn) with variant `high`; a write asked for
   through `OPENCODE_CONFIG_CONTENT` and rejected (no file was written, the tool part ended in `error`, the turn ended).
 - The history, usage and sessions queries on the resulting `opencode.db`; `opencode models --verbose`; `/doc`.
@@ -89,4 +89,4 @@ cost 0, so a non-zero `cost` is only in a hand-written test row); the terminal c
 - Efforts are one global list of variants; a model without the chosen variant is left to OpenCode.
 - The event names are those of 1.18.33 (`message.part.delta`, `permission.asked`, `question.asked`, `session.idle`);
   older versions with `permission.updated` are not handled.
-- `bridge.py` needs `/usr/bin/python3` and is read from this checkout, like agent-codex's.
+- The bridge is Rust, run as a subcommand of the app; only the test's stand-in server needs python3.
