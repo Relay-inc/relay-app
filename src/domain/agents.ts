@@ -57,9 +57,9 @@ const FALLBACK: Record<"model" | "effort", { id: string; label: string }[]> = {
     ["max", "Max"],
   ].map(([id, label]) => ({ id, label })),
 };
-/** The model or effort choices of the open conversation's agent, and the one picked (a stale pick reads as the default). */
-export function picks(kind: "model" | "effort") {
-  const id = chatAgent(ui.selected);
+/** The choices and saved pick for a conversation's agent; the composer defaults to the open conversation. */
+export function picks(kind: "model" | "effort", chatKey = ui.selected) {
+  const id = chatAgent(chatKey);
   const status = agentOf(id);
   const own = kind === "model" ? status?.models : status?.efforts;
   const list = status ? own! : FALLBACK[kind];
