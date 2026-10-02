@@ -182,13 +182,22 @@ function projectContext(conversation: Chat | undefined): string {
 }
 async function deliver(key: string, conversation: Chat | undefined, text: string, images: Img[]) {
   const name = `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`;
-  const told = projectContext(conversation);
-  const sent = told + (conversation?.mail ? `${conversation.mail}\n\n${text}` : text);
-  if (conversation?.mail) {
+  // Slash commands must stay at the start. Defer project/mail context to the next ordinary prompt.
+  const command = /^\/\S+/.test(text);
+  const told = command ? "" : projectContext(conversation);
+  const sent = command ? text : told + (conversation?.mail ? `${conversation.mail}\n\n${text}` : text);
+  if (conversation?.mail && !command) {
     delete conversation.mail;
     saveChats();
   }
   try {
+    if (
+      images.length &&
+      ((chatAgent(key) === "codex" && /^\/(compact|review)(?:\s|$)/.test(text)) ||
+        (chatAgent(key) === "pi" && /^\/compact(?:\s|$)/.test(text)))
+    ) {
+      throw new Error("This command does not accept attachments.");
+    }
     await invoke("send", {
       project: key,
       text: sent,
@@ -196,8 +205,8 @@ async function deliver(key: string, conversation: Chat | undefined, text: string
       name,
       fork: conversation?.fork ?? null,
       mail: !!conversation?.fromMail,
-      model: picks("model").value,
-      effort: picks("effort").value,
+      model: picks("model", key).value,
+      effort: picks("effort", key).value,
       provider: chatAgent(key),
     });
     if (told && conversation?.project) {

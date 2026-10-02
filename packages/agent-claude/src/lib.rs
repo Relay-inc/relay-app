@@ -59,6 +59,9 @@ impl AgentProvider for Claude {
     fn models(&self) -> Vec<Choice> {
         [("fable", "Fable"), ("opus", "Opus"), ("sonnet", "Sonnet"), ("haiku", "Haiku")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }
+    fn commands(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, include_str!("../commands.py"))
+    }
     fn efforts(&self) -> Vec<Choice> {
         [("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")].iter().map(|(i, l)| Choice::new(i, l)).collect()
     }

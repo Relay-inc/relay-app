@@ -143,6 +143,8 @@ const productive: BoardProvider<Key> = {
   strings,
   // Productive's favicon (productive.io), as vector: its own colours, not the glyph stroke
   glyph: '<defs><linearGradient id="pvg" x1="0" y1="0" x2="16" y2="16" gradientUnits="userSpaceOnUse"><stop stop-color="#AB40FF"/><stop offset="1" stop-color="#5D2BFF"/></linearGradient></defs><rect width="16" height="16" rx="3.6" fill="url(#pvg)" stroke="none"/><g transform="translate(2.5 1.6) scale(.357)" fill="#fff" stroke="none"><path d="M6.036 28.89L.17 18.977a1.217 1.217 0 01.426-1.667l4.633-2.74a1.217 1.217 0 011.666.426l3.3 5.579 3.424-5.89c4.28-7.018 8.712.738 6.693 4.034l-5.89 10.139a2.836 2.836 0 01-2.443 1.412l-3.492.015a2.838 2.838 0 01-2.451-1.393z"/><path d="M30.847 21.445a4.4 4.4 0 11-8.802.001 4.4 4.4 0 018.802 0zm-18.259 3.176c.966 1.64 3.34 1.632 4.297-.014l3.429-5.9c1.787-2.917 3.807-4.476 6.333-4.82.612-.083 1.211-.224 1.374-1.145l.938-5.259a1.234 1.234 0 00-1.207-1.485c-4.603 0-9.956 1.825-14.131 8.672l-3.426 5.892 2.393 4.059z"/></g>',
+  // the sidebar's mark: bb's outline of the favicon; its own stroke width, as the group scales it down
+  mark: '<g transform="scale(.75) translate(.34 .87) scale(.0753)" stroke-width="25.24"><path d="M140 347c51-2 42-5 80-69l41-71q31-51 76-58c7-1 14-2 16-13l12-64q2-15-15-17c-55 0-119 22-170 104l-41 70-18-31c-23-40-25-53-52-35l-39 24c-9 4-19 11-11 26 8 14 62 108 73 121 11 12 25 13 48 13z"/><path d="M355 302a52 52 0 1 1 0-104 52 52 0 0 1 0 104z"/></g>',
 
   groupings: [{ id: "list", label: "groupList" }, { id: "status", label: "groupStatus" }],
   projects: async c => (await all(c, `/projects?filter[status]=1${c.config.user ? `&filter[person_id]=${c.config.user}` : ""}`)).data
