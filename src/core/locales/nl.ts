@@ -265,6 +265,16 @@ export default {
   "set.terminalHelp":
     "Waar “Openen in Terminal” een gesprek verderzet. Automatisch neemt de eerste die geïnstalleerd is: iTerm, WezTerm, dan Terminal.",
   "set.favicons": "Projecticonen",
+  "act.reminders": "Herinneringen",
+  "act.title": "Toegang voor de agent",
+  "act.help":
+    "Wat de agent in een gesprek met {name} mag doen via het relay-commando. Bewaard in .relay/config.json van de vault, dat de agent niet kan aanpassen.",
+  "act.access": "De agent mag {name} gebruiken",
+  "act.mailOnly": "Enkel gesprekken met Claude Code krijgen mail.",
+  "act.default": "Standaard ({p})",
+  "act.auto": "Voert uit",
+  "act.ask": "Vraagt eerst",
+  "act.deny": "Nooit",
   "set.faviconsOn": "Favicon van de website als icoon",
   "set.faviconsHelp":
     "Eén keer per dag zoekt de app in de notities van elk project zonder icoon een website en gebruikt de favicon. Per website wordt een project één keer geprobeerd, een hersteld icoon komt niet terug.",
@@ -409,7 +419,7 @@ export default {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Inbox tonen",
-  "mail.account": "Zijbalk toont:",
+  "mail.account": "Standaardaccount, door Claude gebruikt als je niet zegt welk:",
   "mail.testOk": "Werkt: {n} mails in de inbox",
   "mail.accounts": "{n} accounts",
   "mail.help":
@@ -437,7 +447,7 @@ export default {
   "mail.showMail": "Mail",
   "mail.showText": "Wat Claude leest",
   "mail.accountsH": "Accounts",
-  "mail.setupTitle": "Koppel je Gmail",
+  "mail.setupTitle": "Koppel je mail",
   "mail.setupIntro": "Er is nog geen mailaccount. Koppelen duurt een minuut.",
   "mail.setupStep1": "Klik hieronder op Open de instellingen, je komt meteen bij Mail.",
   "mail.setupStep2": "Maak bij Google een app-wachtwoord aan, de knop daarvoor staat in stap 1 van het scherm.",
@@ -458,7 +468,7 @@ export default {
   "mail.pwL": "App-wachtwoord",
   "mail.pwPh": "de 16 letters, spaties mogen",
   "mail.connect": "Verbind",
-  "mail.connecting": "Code in de sleutelhanger zetten en inloggen bij Gmail…",
+  "mail.connecting": "Wachtwoord in de sleutelhanger zetten en inloggen…",
   "mail.connected": "Verbonden met {email}: {n} mails in de inbox. Opgeslagen, je ziet ze in Mail in de zijbalk.",
   "mail.step2Hint":
     "De code gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De app bewaart ze nergens anders en toont ze niet meer. Klopt ze niet, dan wordt ze meteen weer verwijderd.",
@@ -469,14 +479,24 @@ export default {
   "mail.kaccL": "Sleutelhanger-account",
   "mail.addTest": "Test en voeg toe",
   "mail.inKeychain": "wachtwoord in sleutelhanger: {svc}",
+  "mail.kindGmail": "Gmail",
+  "mail.kindImap": "Andere mailserver (IMAP)",
+  "mail.guideImap": "Een mailserver koppelen",
+  "mail.hostL": "Server",
+  "mail.portL": "Poort",
+  "mail.imapPwL": "Wachtwoord",
+  "mail.advHostL": "Server (leeg voor Gmail)",
+  "mail.imapHint":
+    "Het wachtwoord gaat rechtstreeks naar de macOS-sleutelhanger, onder de dienst relay-mail. De server moet IMAP over SSL/TLS toelaten (meestal poort 993) met je e-mailadres als login. Lukt het inloggen niet, dan wordt het wachtwoord meteen weer verwijderd.",
   "mail.errLogin":
-    "Gmail weigerde de login. Kijk na of het app-wachtwoord bij dit e-mailadres hoort en of je de hele code kopieerde. Lukt het niet, maak dan in stap 1 een nieuwe code aan en probeer opnieuw.",
+    "De mailserver weigerde de login. Kijk het e-mailadres en het wachtwoord na. Bij Gmail moet dat het app-wachtwoord zijn, de hele code: lukt het niet, maak dan in stap 1 een nieuwe code aan en probeer opnieuw.",
   "mail.errNoPw":
     "Onder die dienst en dat account staat geen wachtwoord in de sleutelhanger. Kijk de namen na in Sleutelhangertoegang, ze moeten exact kloppen, of gebruik stap 1 en 2 met een nieuw app-wachtwoord.",
   "mail.errKeychain":
     "macOS vroeg toestemming om de sleutelhanger te lezen en kreeg geen antwoord. Probeer opnieuw en kies Altijd toestaan.",
-  "mail.errGmail": "Dit adres is geen Gmail- of Google Workspace-account. De app ondersteunt voorlopig enkel Gmail.",
-  "mail.errNet": "Gmail is niet bereikbaar. Kijk je internetverbinding na en probeer opnieuw.",
+  "mail.errGmail":
+    "Dit adres is geen Gmail- of Google Workspace-account. Kies voor een andere provider Andere mailserver (IMAP) en vul de server in.",
+  "mail.errNet": "De mailserver is niet bereikbaar. Kijk je internetverbinding en de servernaam na en probeer opnieuw.",
   "mail.test": "Test",
   "mail.remove": "Verwijder",
   "mail.invalid": "Vul een geldig e-mailadres in (en bij Geavanceerd ook de dienst en het account).",
@@ -518,6 +538,7 @@ export default {
   "kb.presetName": "Naam",
   "kb.presetDelete": "Preset verwijderen",
   "kb.noPresets": "Nog geen presets",
+  "kb.viewUnsupported": "Gebruikt een filter dat Relay hier niet kan toepassen (of een takenlijst op een ander bord)",
   "kb.save": "Bewaren",
   "kb.filters": "Filters",
   "kb.clearAll": "Alle filters wissen",

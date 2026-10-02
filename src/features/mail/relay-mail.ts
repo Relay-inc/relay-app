@@ -15,6 +15,8 @@ import {
   filtered,
   loadMails,
   moreMails,
+  mailEnded,
+  visibleMails,
   mailSeen,
   setMailFilter,
   openMailSetup,
@@ -48,6 +50,7 @@ export class RelayMail extends LitElement {
       .mail=${item}
       .sender=${sender(item)}
       .project=${project ? projectLabel(project) : ""}
+      .account=${config.value.mail.accounts.length > 1 ? item.account : ""}
       ?selected=${panel.mailOpen === key}
       @open-mail=${() => openMail(key)}
       @flip-mail=${() => mailSeen(key, unread(item))}
@@ -105,7 +108,7 @@ export class RelayMail extends LitElement {
       return html`<div class="col-span-2 max-w-170 w-full mx-auto px-8 pt-7">
         <relay-mail-setup @setup=${openMailSetup}></relay-mail-setup>
       </div>`;
-    const list = mail.list;
+    const list = mail.list && visibleMails();
     return html`<div class="min-h-0 overflow-y-auto border-r border-separator px-2 pt-3 pb-4">
         <relay-mail-bar
           class="block px-2"
@@ -115,7 +118,7 @@ export class RelayMail extends LitElement {
           @filter=${(e: CustomEvent) => setMailFilter(e.detail)}
           @reload=${loadMails}
         ></relay-mail-bar>
-        ${this.renderList(list)}${list && !mail.end ? this.renderMore() : nothing}
+        ${this.renderList(list)}${list && !mailEnded() ? this.renderMore() : nothing}
       </div>
       <div class="min-h-0 overflow-y-auto">
         ${

@@ -263,6 +263,16 @@ const en = {
   "set.terminalHelp":
     "Where “Open in Terminal” continues a conversation. Automatic takes the first one installed: iTerm, WezTerm, then Terminal.",
   "set.favicons": "Project icons",
+  "act.reminders": "Reminders",
+  "act.title": "Agent access",
+  "act.help":
+    "What the agent in a conversation may do with {name} through the relay command. Kept in the vault's .relay/config.json, which the agent cannot edit.",
+  "act.access": "Let the agent use {name}",
+  "act.mailOnly": "Only Claude Code conversations get mail.",
+  "act.default": "Default ({p})",
+  "act.auto": "Runs",
+  "act.ask": "Asks first",
+  "act.deny": "Never",
   "set.faviconsOn": "Use the website favicon as icon",
   "set.faviconsHelp":
     "Once a day the app looks for a website in the notes of each project without an icon and uses its favicon. A project is tried once per website, a reset icon does not come back.",
@@ -406,7 +416,7 @@ const en = {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Show the inbox",
-  "mail.account": "Sidebar shows:",
+  "mail.account": "Default account, used by Claude when not told which:",
   "mail.testOk": "Works: {n} mails in the inbox",
   "mail.accounts": "{n} accounts",
   "mail.help":
@@ -434,7 +444,7 @@ const en = {
   "mail.showMail": "Mail",
   "mail.showText": "What Claude reads",
   "mail.accountsH": "Accounts",
-  "mail.setupTitle": "Connect your Gmail",
+  "mail.setupTitle": "Connect your mail",
   "mail.setupIntro": "There is no mail account yet. Connecting one takes a minute.",
   "mail.setupStep1": "Click Open the settings below, it takes you straight to Mail.",
   "mail.setupStep2": "Create an app password at Google, the button for it is in step 1 of that screen.",
@@ -456,7 +466,7 @@ const en = {
   "mail.pwL": "App password",
   "mail.pwPh": "the 16 letters, spaces are fine",
   "mail.connect": "Connect",
-  "mail.connecting": "Storing the code in the keychain and signing in to Gmail…",
+  "mail.connecting": "Storing the password in the keychain and signing in…",
   "mail.connected": "Connected to {email}: {n} mails in the inbox. Saved, you find them under Mail in the sidebar.",
   "mail.step2Hint":
     "The code goes straight into the macOS keychain, under the service relay-mail. The app stores it nowhere else and never shows it again. If it is wrong, it is removed right away.",
@@ -467,14 +477,25 @@ const en = {
   "mail.kaccL": "Keychain account",
   "mail.addTest": "Test and add",
   "mail.inKeychain": "password in keychain: {svc}",
+  "mail.kindGmail": "Gmail",
+  "mail.kindImap": "Other mail server (IMAP)",
+  "mail.guideImap": "Connect a mail server",
+  "mail.hostL": "Server",
+  "mail.portL": "Port",
+  "mail.imapPwL": "Password",
+  "mail.advHostL": "Server (empty for Gmail)",
+  "mail.imapHint":
+    "The password goes straight into the macOS keychain, under the service relay-mail. The server must accept IMAP over SSL/TLS (usually port 993) with your email address as the login. If the sign-in fails, the password is removed right away.",
   "mail.errLogin":
-    "Gmail refused the sign-in. Check that the app password belongs to this email address and that you copied the whole code. If it still fails, create a new code in step 1 and try again.",
+    "The mail server refused the sign-in. Check the email address and the password. For Gmail it must be the app password, the whole code: if it still fails, create a new code in step 1 and try again.",
   "mail.errNoPw":
     "There is no password in the keychain under that service and account. Check the names in Keychain Access, they must match exactly, or use steps 1 and 2 with a new app password.",
   "mail.errKeychain":
     "macOS asked for permission to read the keychain and got no answer. Try again and choose Always Allow.",
-  "mail.errGmail": "This address is not a Gmail or Google Workspace account. The app only supports Gmail for now.",
-  "mail.errNet": "Gmail cannot be reached. Check your internet connection and try again.",
+  "mail.errGmail":
+    "This address is not a Gmail or Google Workspace account. For any other provider, choose Other mail server (IMAP) and fill in the server.",
+  "mail.errNet":
+    "The mail server cannot be reached. Check your internet connection and the server name, then try again.",
   "mail.test": "Test",
   "mail.remove": "Remove",
   "mail.invalid": "Fill in a valid email address (and for Advanced also the service and the account).",
@@ -516,6 +537,7 @@ const en = {
   "kb.presetName": "Name",
   "kb.presetDelete": "Delete preset",
   "kb.noPresets": "No presets yet",
+  "kb.viewUnsupported": "Uses a filter Relay can't apply here (or a task list on another board)",
   "kb.save": "Save",
   "kb.filters": "Filters",
   "kb.clearAll": "Clear all filters",

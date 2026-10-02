@@ -2,8 +2,8 @@
 //! sent in the OAuth header (not in the URL). GET under the member, a board or a workspace; PUT only on a
 //! single card for list changes; comments and individual member changes. File uploads use a separate allowlist.
 
-use board_core::{only_keys, path_ok, t, Provider, Text};
-use serde_json::json;
+use board_core::{arg, arg_ok, only_keys, path_ok, read, t, write, Action, Provider, Req, Text};
+use serde_json::{json, Value};
 
 const TEXT: Text = &[
     ("auth", ["Trello refused the API key or token. Check both under Vault › Settings… › Integrations.", "Trello weigert de API-sleutel of het token. Controleer ze bij Vault › Instellingen… › Integraties.", "Trello refuse la clé API ou le jeton. Vérifiez-les dans Vault › Réglages… › Intégrations.", "Trello lehnt den API-Schlüssel oder das Token ab. Prüf beide unter Vault › Einstellungen… › Integrationen."]),
@@ -52,12 +52,40 @@ pub const PROVIDER: Provider = Provider {
         _ => format!("Trello {code}: {}", board_core::message(v.as_str().or(v["message"].as_str()))),
     },
     mcp: Some(board_core::Mcp { server: "trello", secrets: &[("key", &["TRELLO_API_KEY"]), ("token", &["TRELLO_TOKEN", "TRELLO_API_TOKEN"])], fields: &[] }),
+    actions: ACTIONS,
 };
+
+// ---------- agent actions (`relay trello.<id>`)
+
+fn api(method: &'static str, path: String, body: Option<Value>) -> Result<Req, String> { Ok(Req { method, url: format!("https://api.trello.com/1{path}"), body }) }
+fn id_ok(s: &str) -> bool { trello_id(s) }
+fn named(v: &Value) -> Value { v.as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "name": r["name"] })).collect()).unwrap_or_default() }
+
+const ACTIONS: &[Action] = &[
+    read("boards", "Your open boards.", &[], |_, _| api("GET", "/members/me/boards?filter=open&fields=name".into(), None), named),
+    read("lists", "The open lists of a board, where a new card goes.", &[("board", "board id")],
+        |_, a| api("GET", format!("/boards/{}/lists?filter=open&fields=name", arg_ok(a, "board", id_ok)?), None), named),
+    write("create_card", "Create a card at the bottom of a list.", &[("list", "list id"), ("name", "card title"), ("desc?", "description, Markdown")],
+        |_, a| api("POST", "/cards".into(), Some(json!({ "idList": arg_ok(a, "list", id_ok)?, "name": arg(a, "name"), "desc": arg(a, "desc").unwrap_or_default(), "pos": "bottom" }))),
+        |v| json!({ "id": v["id"], "url": v["shortUrl"] })),
+    write("comment", "Comment on a card.", &[("card", "card id"), ("text", "the comment, Markdown")],
+        |_, a| api("POST", format!("/cards/{}/actions/comments", arg_ok(a, "card", id_ok)?), Some(json!({ "text": arg(a, "text") }))),
+        |v| json!({ "id": v["id"] })),
+];
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value;
+    #[test]
+    fn actions_check_ids_before_they_reach_the_url() {
+        let act = |id: &str| PROVIDER.actions.iter().find(|a| a.id == id).unwrap();
+        let list = "60718293a4b55f1b2c3d4e5f";
+        let r = (act("create_card").build)(&json!({}), &json!({ "list": list, "name": "N" })).unwrap();
+        assert_eq!((r.method, r.url.as_str(), r.body.unwrap()["idList"].as_str()), ("POST", "https://api.trello.com/1/cards", Some(list)));
+        assert!((act("lists").build)(&json!({}), &json!({ "board": "x/../members" })).is_err());
+        assert_eq!((act("boards").out)(&json!([{ "id": "1", "name": "B", "x": 2 }])), json!([{ "id": "1", "name": "B" }]));
+    }
     #[test]
     fn allows_reads_and_moving_one_card() {
         let p = &PROVIDER;

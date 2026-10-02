@@ -7,5 +7,7 @@ fn main() {
     if a.len() == 4 && a[1] == "--broker" { return relay_lib::broker::main(&a[2], &a[3]); }
     // `relay --notify <title> <body>`: one banner, see src/notify.rs
     if a.get(1).map(String::as_str) == Some("--notify") { return relay_lib::notify::banner(&a[2], &a[3]); }
+    // `relay --cli …`: an agent's `relay` command (src/actions.rs), answered by the running app
+    if a.get(1).map(String::as_str) == Some("--cli") { std::process::exit(relay_lib::cli(&a[2..])); }
     relay_lib::run()
 }

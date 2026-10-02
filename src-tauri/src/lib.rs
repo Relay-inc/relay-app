@@ -16,6 +16,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
+mod actions;
 mod agents;
 pub mod broker;
 mod mail;
@@ -180,9 +181,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
     ("err.mail_pw", ["The app password is the 16-letter code Google showed (spaces are fine)", "Het app-wachtwoord is de code van 16 letters die Google toonde (spaties mogen)",
         "Le mot de passe d'application est le code de 16 lettres affiché par Google (les espaces sont acceptés)", "Das App-Passwort ist der 16-stellige Code, den Google angezeigt hat (Leerzeichen sind ok)"]),
+    ("err.mail_pw_any", ["The password must be 1 to 256 characters, without control characters", "Het wachtwoord moet 1 tot 256 tekens zijn, zonder stuurtekens", "Le mot de passe doit faire de 1 à 256 caractères, sans caractères de contrôle", "Das Passwort muss 1 bis 256 Zeichen lang sein, ohne Steuerzeichen"]),
     ("err.no_mail_account", ["Mail: no account set up. Add one under Relay › Settings… › Integrations › Mail.", "Mail: nog geen account. Voeg er een toe bij Relay › Instellingen… › Integraties › Mail.", "Mail : aucun compte. Ajoutez-en un dans Relay › Réglages… › Intégrations › Mail.", "Mail: noch kein Konto. Füge eins unter Relay › Einstellungen… › Integrationen › Mail hinzu."]),
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
-    ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
+    ("err.mail_account", ["Mail: invalid account (email, server, port, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, server, poort, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, serveur, port, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Server, Port, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
     ("err.no_import", ["Claude Code has no {v} MCP server with credentials", "Claude Code heeft geen {v}-MCP-server met inloggegevens", "Claude Code n'a pas de serveur MCP {v} avec des identifiants", "Claude Code hat keinen {v}-MCP-Server mit Zugangsdaten"]),
@@ -555,7 +557,9 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let mut cmd = p.command(&eb.env(), &l)?;
-    cmd.current_dir(&dir).env("PATH", &state.path);
+    // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
+    let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+    cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
     let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
@@ -1259,7 +1263,7 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
-// ---------- Mail: Gmail over IMAP in mail/, the app password stays in the macOS keychain.
+// ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
 // Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
 // click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
 
@@ -1270,10 +1274,10 @@ fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
     mail::pick_account(&mail::accounts(&s["mail"]), want).ok_or_else(|| trc("err.no_mail_account"))
 }
 
-/// One page of 50 mails from the inbox, page 1 is the newest.
+/// One page of 50 mails from one account's inbox, page 1 is the newest. The window merges the accounts.
 #[tauri::command]
-async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
-    let a = mail_acct(&state, "")?;
+async fn mail_list(state: State<'_, App>, account: String, page: u32) -> Result<Value, String> {
+    let a = mail_acct(&state, &account)?;
     state.mail.list(&a, page.clamp(1, 1000)).await
 }
 
@@ -1292,17 +1296,28 @@ async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: boo
 }
 
 /// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
-/// the email, over stdin so it never shows in the process list), then a login test. A code Gmail refuses is
-/// removed again. Returns the account for the settings, the window adds and saves it.
+/// the email, over stdin so it never shows in the process list), then a login test. A password the server refuses
+/// is removed again. No host is Gmail (app password), else any IMAP server. Returns the account for the settings,
+/// the window adds and saves it.
 #[tauri::command]
-async fn mail_connect(state: State<'_, App>, email: String, password: String) -> Result<Value, String> {
+async fn mail_connect(state: State<'_, App>, email: String, password: String, host: Option<String>, port: Option<u16>) -> Result<Value, String> {
     let email = email.trim().to_string();
-    let account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    let host = host.map(|h| h.trim().to_string()).unwrap_or_default();
+    let mut account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    if !host.is_empty() { account["host"] = json!(host); account["port"] = json!(port.unwrap_or(993)); }
     let a = mail::accounts(&json!({"accounts": [account.clone()]})).pop().ok_or_else(|| trc("err.mail_account"))?;
-    let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
-    if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+    let pw = if host.is_empty() {
+        let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
+        if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+        pw
+    } else {
+        if !(1..=256).contains(&password.chars().count()) || password.chars().any(char::is_control) { return Err(trc("err.mail_pw_any")); }
+        password
+    };
+    // hex (-X) so no password character can end the command line `security -i` reads
+    let hex: String = pw.bytes().map(|b| format!("{b:02x}")).collect();
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -X {hex}").map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),
@@ -1376,6 +1391,9 @@ fn nav_internal(url: &tauri::Url) -> bool {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// `relay --cli …`, see actions.rs.
+pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
+
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
@@ -1416,12 +1434,13 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
+            actions::start(app.handle());
             tray::init(app.handle())?;
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, scratch_list, scratch_save, scratch_delete, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

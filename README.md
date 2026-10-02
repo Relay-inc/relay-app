@@ -114,6 +114,7 @@ are a `Text` table in `lib.rs`.
 | `headers(cfg, secrets)` | The headers carrying the secrets, in the order of `secrets` (and content type). |
 | `ok(body)` | Whether a 2xx answer is a success. `true` for REST; Linear (GraphQL) answers errors with 200 and `errors`. |
 | `error(code, body)` | An error answer as one line. |
+| `actions` | What an agent may do with the tracker through `relay` (see [Agent actions](#agent-actions)): each builds its own request from checked arguments, so it is its own allowlist. |
 
 The app's commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
 `integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
@@ -267,6 +268,38 @@ or `t:<provider>:<sid>`.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
    `src-tauri/src/agents.rs` and `package.json` + `src/domain/agents.ts`, then `pnpm install`.
 6. `pnpm build`, `pnpm test` and `cargo test --workspace`.
+
+## Agent actions
+
+Everything an extension can do is also a shell command for the agent in a conversation, whatever provider runs
+it: `relay help` lists the actions available there, `relay <extension>.<action> key=value …` (or one JSON object,
+or `-` for JSON on stdin) runs one and prints JSON. `src-tauri/src/actions.rs` holds the registry, the policies,
+the socket the app listens on and the CLI side.
+
+- `relay` is a script the app writes to its data folder (`bin/relay`, `exec <this binary> --cli "$@"`) and puts first
+  on every agent's PATH, with `RELAY_CONVERSATION` set to the conversation's key. The CLI asks the app over
+  `$TMPDIR/relay-agents/relay.sock` (mode 0600); a call from anything that is not a running conversation is refused.
+- Extensions: the board providers' `actions` (Productive projects, task lists, tasks, comments, services, time
+  entries; Trello boards, lists, cards, comments; Linear teams and issues), mail (`search`, `read`, `thread`,
+  `attachment`, `save_draft`, the relay-mail tools) and the vault's reminders (`list`, `add`, `done`, `push`). Only
+  set-up extensions are listed.
+- Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
+  `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
+  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft to `auto`. Both are set in each
+  extension's Agent access section in Settings (Integrations › the extension; reminders under General) and kept in
+  the vault's `.relay/config.json`, read on every call, so a hand edit applies at once:
+
+  ```json
+  "actions": { "productive": { "*": "ask", "add_time": "auto" }, "trello": { "access": false }, "linear": "auto" }
+  ```
+
+  The agent works in the vault, so Claude Code is denied `Edit(./.relay/**)`: it cannot hand itself permissions.
+- A session that holds mail text asks before every write, and mail actions only run for Claude Code (the one
+  provider whose session can be restricted, see `taint` in lib.rs); a mail read through `relay` restricts the session
+  like relay-mail does.
+- Claude Code runs `relay` without a Bash card (`Bash(relay *)` in its allowed tools, so the action's own policy
+  decides) and learns about it from one `--append-system-prompt` line. The other providers have `relay` on their
+  PATH but are not told about it, and their own approval asks for each command.
 
 ## Other folders
 

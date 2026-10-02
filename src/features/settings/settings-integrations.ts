@@ -8,6 +8,7 @@ import { PROVIDERS, provider as providerById, type BoardProvider } from "../../d
 import { BoardsController } from "./board-controller";
 import { buttonClass, BUTTON_GLYPH, footer, appIcon, EMPTY_LIST, formText, section, statusLine, TILE } from "./blocks";
 import { MailController } from "./mail-controller";
+import "./settings-actions";
 import "./settings-board";
 import "./settings-fold";
 import "./settings-github";
@@ -219,10 +220,15 @@ export class SettingsIntegrations extends SettingsElement {
       }}
       @mail-test=${(e: CustomEvent) => mail.test(e.detail)}
       @mail-drop=${(e: CustomEvent) => mail.drop(e.detail)}
-      @mail-connect=${() => mail.connect()}
+      @mail-connect=${(e: CustomEvent<boolean>) => mail.connect(e.detail)}
       @mail-add=${() => mail.add()}
       @mail-save=${() => mail.save()}
     ></relay-settings-mail>`;
+  }
+
+  // what the agent may do with the extension through `relay`; GitHub has no actions, so nothing shows there
+  private actionsBody(ext: string, name: string) {
+    return html`<relay-settings-actions .ext=${ext} .name=${name}></relay-settings-actions>`;
   }
 
   private entries(): Entry[] {
@@ -232,7 +238,7 @@ export class SettingsIntegrations extends SettingsElement {
       name: provider.name,
       status: this.boardStatus(provider),
       on: this.isBoardOn(provider),
-      page: () => this.boardBody(provider),
+      page: () => html`${this.boardBody(provider)}${this.actionsBody(provider.id, provider.name)}`,
     }));
     return [
       ...boardEntries,
@@ -250,7 +256,7 @@ export class SettingsIntegrations extends SettingsElement {
         name: "Mail",
         status: this.mailStatus(),
         on: !!this.settings.mail?.on,
-        page: () => section(t("int.connection"), this.mailBody()),
+        page: () => html`${section(t("int.connection"), this.mailBody())}${this.actionsBody("mail", "Mail")}`,
       },
     ];
   }
