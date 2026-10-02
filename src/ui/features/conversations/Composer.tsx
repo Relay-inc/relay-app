@@ -1,12 +1,22 @@
-import { useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { isTerminal } from "../../../domain/navigation/keys";
 import type { PickKind } from "../../../domain/agents/types";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useDraftsStore } from "../../../application/conversations/drafts";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
-import { chatBar, commandsOf } from "../../../application/conversations/selectors";
-import { attach, sendMsg, sendOrStop, setAgent, setTyped, unattach } from "../../../application/conversations/actions";
+import { chatBar, commandsOf, machineChoice } from "../../../application/conversations/selectors";
+import {
+  attach,
+  sendMsg,
+  sendOrStop,
+  setAgent,
+  moveConversation,
+  setMachine,
+  setTyped,
+  unattach,
+} from "../../../application/conversations/actions";
+import { pollMachines } from "../../../application/conversations/polls";
 import { agentOf, chatAgent, inherited, onAgents, picks, setPick } from "../../../application/agents/agents";
 import { project } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
@@ -40,6 +50,8 @@ export function Composer({ className }: { className: string }) {
   const typed = useDraftsStore(s => s.typed[selected] ?? "");
   const attached = useDraftsStore(s => s.attached);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
+  // a conversation of a project bound to a machine runs there
+  const machine = useConversationsStore(s => s.machines[selected]?.machine);
   // the agent is fixed once a conversation has a message, and the sidebar shows it then
   const agentFixed = useConversationsStore(
     s => !s.chats[selected] || !!s.messages[selected]?.length || !!s.chats[selected]?.fork,
@@ -58,6 +70,17 @@ export function Composer({ className }: { className: string }) {
       inherited: { model: inherited("model"), effort: inherited("effort") },
     };
   });
+  // where the conversation runs or is to start: the machines are asked every few seconds while it shows
+  const hasChat = useConversationsStore(s => !!s.chats[selected]);
+  const chatProject = useConversationsStore(s => s.chats[selected]?.project ?? null);
+  const where = useDerived(() => machineChoice(selected));
+  const [moving, setMoving] = useState(false);
+  useEffect(() => {
+    if (!hasChat) return;
+    pollMachines(chatProject);
+    const timer = window.setInterval(() => pollMachines(chatProject), 3000);
+    return () => window.clearInterval(timer);
+  }, [hasChat, chatProject]);
   // the open conversation's agent's slash commands and skills
   const commands = useDerived(() => commandsOf(selected));
   const [dropping, setDropping] = useState(false);
@@ -262,6 +285,41 @@ export function Composer({ className }: { className: string }) {
                   ))}
                 </select>
                 {chevron}
+              </span>
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : null}
+          {hasChat && where.value !== null ? (
+            <>
+              {/* before the first message: where it starts. After it: where it runs, and another pick moves it */}
+              <span className="relative inline-flex items-center">
+                <select
+                  title={where.why ? t(where.why) : t(where.started ? "composer.moveHelp" : "composer.runOn")}
+                  aria-label={t("composer.runOn")}
+                  value={where.value}
+                  disabled={where.started && (busy || moving)}
+                  onChange={async e => {
+                    if (!where.started) return setMachine(e.target.value);
+                    setMoving(true);
+                    await moveConversation(e.target.value);
+                    setMoving(false);
+                  }}
+                >
+                  <option value="">{t("composer.thisMac")}</option>
+                  {where.list.map(option => (
+                    <option key={option.id} value={option.id} disabled={!!where.why || !option.online}>
+                      {`${option.name} · ${t(option.online ? "composer.available" : "composer.unavailable")}`}
+                    </option>
+                  ))}
+                </select>
+                {chevron}
+              </span>
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : machine ? (
+            <>
+              <span className="px-1.5 text-xs text-secondary whitespace-nowrap" title={t("composer.onMachineHelp")}>
+                {t("composer.onMachine", { name: machine })}
               </span>
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>

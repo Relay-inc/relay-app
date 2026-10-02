@@ -107,10 +107,11 @@ impl AgentProvider for Claude {
     }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
-        // the permission tool is this binary again, `relay --perm-server` (src-tauri/src/main.rs)
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        // the permission tool is this binary again, `relay --perm-server` (src-tauri/src/main.rs); on a work machine
+        // relay-server's own binary there (opts.perm_server, relay-server main.rs)
+        let perm = match env.opt("perm_server") { "" => std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy().into_owned(), p => p.to_string() };
         let mut mcp = json!({"mcpServers": {"vaultperm": {
-            "command": exe.to_string_lossy(), "args": ["--perm-server"],
+            "command": perm, "args": ["--perm-server"],
             "env": {"PENDING": env.pending.to_string_lossy(), "PROJECT": l.key}}}});
         // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
         if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }

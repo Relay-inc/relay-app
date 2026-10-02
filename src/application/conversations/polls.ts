@@ -44,7 +44,7 @@ export async function pollSubs() {
 }
 const unchanged = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 /** The providers' sessions as polled: only what changed is written, so the 2 and 10 s polls redraw nothing when idle. */
-export function setSessions(next: Partial<Pick<ConversationsState, "agentsList" | "appSids" | "sidOf">>) {
+export function setSessions(next: Partial<Pick<ConversationsState, "agentsList" | "appSids" | "sidOf" | "machines">>) {
   const now = cs();
   const changed = (Object.keys(next) as (keyof typeof next)[]).filter(field => !unchanged(next[field], now[field]));
   if (!changed.length) return;
@@ -56,12 +56,22 @@ let agentsAt = 0;
 /** The providers' sessions, which of them the app started, and each app conversation's session. */
 export async function pollAgents() {
   agentsAt = Date.now();
-  const [agentsList, appSids, sidOf] = await Promise.all([
+  const [agentsList, appSids, sidOf, machines] = await Promise.all([
     backend.agents(),
     backend.appSids(),
     backend.appSessions().catch(() => cs().sidOf),
+    backend.chatMachines().catch(() => cs().machines), // older backends have no machines
   ]);
-  setSessions({ agentsList, appSids, sidOf });
+  setSessions({ agentsList, appSids, sidOf, machines });
   await syncBusy();
 }
 export const agentsStale = () => Date.now() - agentsAt > 4000;
+/** The machines for the composer's pick in a conversation of `project`, while a new one's composer shows: the backend
+ *  answers from what its poller heard, so this is cheap to call every few seconds. */
+export async function pollMachines(project: string | null) {
+  const list = await backend.machinesList(project).catch(() => null); // older backends have no machines_list
+  if (!list || unchanged(list, cs().machineLists[project ?? ""])) return;
+  set(draft => {
+    draft.machineLists[project ?? ""] = list;
+  });
+}

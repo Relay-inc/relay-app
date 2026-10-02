@@ -4,7 +4,18 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { AgentSession, Pending, SessionOf, Sub, Transcript } from "../domain/conversations/types";
-import type { ActionConfig, ActionEntry, MailAcct, Settings } from "../domain/settings/types";
+import type {
+  ActionConfig,
+  ActionEntry,
+  Machine,
+  MachineChoice,
+  MachineStatus,
+  MirrorProgress,
+  MirrorStatus,
+  ServerSetup,
+  MailAcct,
+  Settings,
+} from "../domain/settings/types";
 import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus } from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
@@ -72,6 +83,8 @@ type SendArgs = {
   model: string;
   effort: string;
   provider: string;
+  projectName: string | null; // the conversation's project: a project bound to a machine runs there
+  machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the project's machine
   /** The project to tell the agent about; the backend puts the project line in front of `text`. */
   told: string | null;
   context: string | null;
@@ -99,6 +112,37 @@ export const subagents = (keys: string[]) => invoke<Record<string, Sub[]>>("suba
 export const agents = () => invoke<AgentSession[]>("agents");
 export const appSids = () => invoke<string[]>("app_sids");
 export const appSessions = () => invoke<SessionOf>("app_sessions");
+
+// ---------- work machines (relay-server in the LAN)
+/** The machine each conversation runs on, by conversation key. */
+export const chatMachines = () => invoke<Record<string, { machine: string; id: string; cwd: string }>>("chat_machines");
+/** Moves a conversation, between two turns, to another place: "" this Mac, or a machine id. */
+export const moveConversation = (key: string, to: string, projectName: string | null, mail: boolean) =>
+  invoke("move_conversation", { key, to, projectName, mail });
+/** Every paired machine as the backend last heard it, no network: for the composer's pick. */
+export const machinesList = (project: string | null) => invoke<MachineChoice[]>("machines_list", { project });
+/** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */
+export const machinePair = (line: string, name: string) => invoke<Machine>("machine_pair", { line, name });
+export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
+/** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
+export const serverSetup = () => invoke<ServerSetup>("server_setup");
+export const machineForget = (id: string) => invoke("machine_forget", { id });
+export const setMachineFolders = (id: string, folders: Record<string, string>) =>
+  invoke("set_machine_folders", { id, folders });
+/** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
+export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
+/** Turns "Mirror this Mac" on or off for a machine; exclude = vault folders that stay on this Mac. */
+export const setMachineMirror = (id: string, on: boolean, exclude: string[]) =>
+  invoke("set_machine_mirror", { id, on, exclude });
+/** The last sync round of a machine's mirror, null before the first. */
+export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
+/** Where the running round of a machine's mirror is, null between rounds. */
+export const mirrorProgress = (id: string) => invoke<MirrorProgress | null>("mirror_progress", { id });
+/** Removes the copy on the machine and turns its mirror off. */
+export const mirrorWipe = (id: string) => invoke("mirror_wipe", { id });
+/** The folder used on the machine when a project has none there; "" the machine's home. */
+export const setMachineDefaultFolder = (id: string, folder: string) =>
+  invoke("set_machine_default_folder", { id, folder });
 
 // ---------- usage
 export const usageLimits = () => invoke<ProvLimits[]>("usage_limits");

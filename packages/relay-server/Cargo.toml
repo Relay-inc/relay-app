@@ -1,0 +1,15 @@
+[package]
+name = "relay-server"
+version = "0.1.0"
+edition = "2021"
+description = "Runs Relay's agent conversations on a machine in the LAN; the app connects over mutual TLS with pinned certificates"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+relay-remote = { path = "../relay-remote" }
+agent-core.workspace = true
+agent-claude = { path = "../agent-claude" }
+ring = "0.17"
+
+[dev-dependencies]

@@ -7,6 +7,7 @@ import { makeStore } from "../make-store";
 export const useDraftsStore = makeStore<DraftsState>(() => ({
   typed: storage.get<Record<string, string>>("typed", {}),
   attached: [],
+  machine: {},
 }));
 /** What is typed in a conversation's composer, "" for nothing. */
 export const typedOf = (key: string) => useDraftsStore.getState().typed[key] ?? "";
