@@ -269,6 +269,16 @@ const en = {
   "set.terminalHelp":
     "Where “Open in Terminal” continues a conversation. Automatic takes the first one installed: iTerm, WezTerm, then Terminal.",
   "set.favicons": "Project icons",
+  "act.reminders": "Reminders",
+  "act.title": "Agent access",
+  "act.help":
+    "What the agent in a conversation may do with {name} through the relay command. Kept in the vault's .relay/config.json, which the agent cannot edit.",
+  "act.access": "Let the agent use {name}",
+  "act.mailOnly": "Only Claude Code conversations get mail.",
+  "act.default": "Default ({p})",
+  "act.auto": "Runs",
+  "act.ask": "Asks first",
+  "act.deny": "Never",
   "set.faviconsOn": "Use the website favicon as icon",
   "set.faviconsHelp":
     "Once a day the app looks for a website in the notes of each project without an icon and uses its favicon. A project is tried once per website, a reset icon does not come back.",

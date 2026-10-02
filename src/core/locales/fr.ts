@@ -272,6 +272,16 @@ export default {
   "set.terminalHelp":
     "Où « Ouvrir dans Terminal » poursuit une conversation. Automatique prend le premier installé : iTerm, WezTerm, puis Terminal.",
   "set.favicons": "Icônes de projet",
+  "act.reminders": "Rappels",
+  "act.title": "Accès de l'agent",
+  "act.help":
+    "Ce que l'agent d'une conversation peut faire avec {name} via la commande relay. Conservé dans le .relay/config.json du coffre, que l'agent ne peut pas modifier.",
+  "act.access": "Autoriser l'agent à utiliser {name}",
+  "act.mailOnly": "Seules les conversations Claude Code ont accès au courrier.",
+  "act.default": "Par défaut ({p})",
+  "act.auto": "S'exécute",
+  "act.ask": "Demande d'abord",
+  "act.deny": "Jamais",
   "set.faviconsOn": "Utiliser le favicon du site comme icône",
   "set.faviconsHelp":
     "Une fois par jour, l'app cherche un site web dans les notes de chaque projet sans icône et utilise son favicon. Chaque site n'est essayé qu'une fois par projet, une icône réinitialisée ne revient pas.",

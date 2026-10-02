@@ -2,8 +2,8 @@
 //! (vault-app.productive/token). GET on any path; PATCH on a single task, comment or attachment; POST a comment or
 //! an attachment record. The file itself goes to Productive's S3 bucket as a form, without the token.
 
-use board_core::{path_ok, t, t_v, Provider, Text};
-use serde_json::json;
+use board_core::{arg, arg_ok, digits, iso_date, path_ok, read, t, t_v, write, Action, Provider, Req, Text};
+use serde_json::{json, Value};
 
 const TEXT: Text = &[
     ("digits", ["Productive: {v} may only contain digits", "Productive: {v} bestaat enkel uit cijfers", "Productive : {v} ne peut contenir que des chiffres", "Productive: {v} darf nur Ziffern enthalten"]),
@@ -55,7 +55,58 @@ pub const PROVIDER: Provider = Provider {
     },
     mcp: Some(board_core::Mcp { server: "productive", secrets: &[("token", &["PRODUCTIVE_API_TOKEN"])],
         fields: &[("PRODUCTIVE_ORG_ID", "org"), ("PRODUCTIVE_USER_ID", "user")] }),
+    actions: ACTIONS,
 };
+
+// ---------- agent actions (`relay productive.<id>`)
+
+const API: &str = "https://api.productive.io/api/v2";
+fn get(path: String) -> Result<Req, String> { Ok(Req { method: "GET", url: format!("{API}{path}"), body: None }) }
+fn post(path: &str, body: Value) -> Result<Req, String> { Ok(Req { method: "POST", url: format!("{API}{path}"), body: Some(body) }) }
+fn rel(kind: &str, id: &str) -> Value { json!({ "data": { "type": kind, "id": id } }) }
+/// The configured user, the person time is booked on.
+fn me(cfg: &Value) -> Result<String, String> {
+    cfg["user"].as_str().filter(|u| digits(u)).map(String::from).ok_or_else(|| "Productive: no user ID, fill it in under Settings › Integrations".into())
+}
+/// A JSON:API list as `{id, <attrs>…}` rows.
+fn rows(v: &Value, attrs: &[&str]) -> Value {
+    v["data"].as_array().map(|d| d.iter().map(|r| {
+        let mut o = json!({ "id": r["id"] });
+        for a in attrs { o[*a] = r["attributes"][*a].clone(); }
+        o
+    }).collect()).unwrap_or_default()
+}
+fn created(v: &Value) -> Value { json!({ "id": v["data"]["id"], "type": v["data"]["type"] }) }
+
+const ACTIONS: &[Action] = &[
+    read("projects", "Active projects you can see.", &[],
+        |_, _| get("/projects?filter[status]=1&page[size]=200".into()), |v| rows(v, &["name", "project_number"])),
+    read("task_lists", "Open task lists of a project, where a new task goes.", &[("project", "project id")],
+        |_, a| get(format!("/task_lists?filter[project_id]={}&filter[status]=1&page[size]=200", arg_ok(a, "project", digits)?)), |v| rows(v, &["name"])),
+    write("create_task", "Create a task in a project's task list.",
+        &[("project", "project id"), ("task_list", "task list id"), ("title", "task title"), ("description?", "body, HTML"), ("assignee?", "person id, or 'me'")],
+        |cfg, a| {
+            let mut r = json!({ "project": rel("projects", &arg_ok(a, "project", digits)?), "task_list": rel("task_lists", &arg_ok(a, "task_list", digits)?) });
+            if let Some(who) = arg(a, "assignee") { r["assignee"] = rel("people", &if who == "me" { me(cfg)? } else { arg_ok(a, "assignee", digits)? }); }
+            post("/tasks", json!({ "data": { "type": "tasks", "attributes": { "title": arg(a, "title"), "description": arg(a, "description").unwrap_or_default() }, "relationships": r } }))
+        }, created),
+    write("comment", "Comment on a task.", &[("task", "task id"), ("body", "the comment, HTML")],
+        |_, a| post("/comments", json!({ "data": { "type": "comments", "attributes": { "body": arg(a, "body") }, "relationships": { "task": rel("tasks", &arg_ok(a, "task", digits)?) } } })),
+        created),
+    read("services", "The services (budget lines) of a project that time can be booked on.", &[("project", "project id")],
+        |_, a| get(format!("/services?filter[project_id]={}&page[size]=200", arg_ok(a, "project", digits)?)), |v| rows(v, &["name"])),
+    read("time_entries", "Your time entries between two dates (inclusive). time is in minutes.", &[("after", "YYYY-MM-DD"), ("before", "YYYY-MM-DD")],
+        |cfg, a| get(format!("/time_entries?filter[person_id]={}&filter[after]={}&filter[before]={}&page[size]=200", me(cfg)?, arg_ok(a, "after", iso_date)?, arg_ok(a, "before", iso_date)?)),
+        |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "date": r["attributes"]["date"], "time": r["attributes"]["time"],
+            "note": r["attributes"]["note"], "service": r["relationships"]["service"]["data"]["id"] })).collect()).unwrap_or_default()),
+    write("add_time", "Book time on a service for you.", &[("service", "service id"), ("date", "YYYY-MM-DD"), ("minutes", "duration in minutes"), ("note?", "what was done"), ("task?", "task id")],
+        |cfg, a| {
+            let minutes: u32 = arg_ok(a, "minutes", digits)?.parse().ok().filter(|m| (1..=1440).contains(m)).ok_or("'minutes' must be 1 to 1440")?;
+            let mut r = json!({ "person": rel("people", &me(cfg)?), "service": rel("services", &arg_ok(a, "service", digits)?) });
+            if arg(a, "task").is_some() { r["task"] = rel("tasks", &arg_ok(a, "task", digits)?); }
+            post("/time_entries", json!({ "data": { "type": "time_entries", "attributes": { "date": arg_ok(a, "date", iso_date)?, "time": minutes, "note": arg(a, "note").unwrap_or_default() }, "relationships": r } }))
+        }, created),
+];
 
 #[cfg(test)]
 mod tests {
@@ -95,6 +146,25 @@ mod tests {
         assert!((p.url)(&c, "GET", "/../x", &None).is_none());
         assert!((p.ready)(&c) && !(p.ready)(&json!({ "org": "" })));
         assert_eq!((p.headers)(&c, &["t-1".into()])[..2], ["X-Auth-Token: t-1".to_string(), "X-Organization-Id: 1".into()]);
+    }
+    #[test]
+    fn actions_build_their_own_requests_from_checked_ids() {
+        let act = |id: &str| PROVIDER.actions.iter().find(|a| a.id == id).unwrap();
+        let cfg = json!({ "org": "1", "user": "7" });
+        let r = (act("create_task").build)(&cfg, &json!({ "project": "3", "task_list": 4, "title": "T", "assignee": "me" })).unwrap();
+        assert_eq!((r.method, r.url.as_str()), ("POST", "https://api.productive.io/api/v2/tasks"));
+        let b = r.body.unwrap();
+        assert_eq!(b["data"]["relationships"]["task_list"]["data"]["id"], "4");
+        assert_eq!(b["data"]["relationships"]["assignee"]["data"]["id"], "7");
+        assert!((act("create_task").build)(&cfg, &json!({ "project": "3&x=1", "task_list": "4", "title": "T" })).is_err());
+        let t = (act("add_time").build)(&cfg, &json!({ "service": "9", "date": "2026-10-01", "minutes": "90" })).unwrap().body.unwrap();
+        assert_eq!((t["data"]["attributes"]["time"].clone(), t["data"]["relationships"]["person"]["data"]["id"].clone()), (json!(90), json!("7")));
+        assert!((act("add_time").build)(&cfg, &json!({ "service": "9", "date": "1 okt", "minutes": "90" })).is_err());
+        assert!((act("add_time").build)(&json!({ "org": "1", "user": "" }), &json!({ "service": "9", "date": "2026-10-01", "minutes": "90" })).unwrap_err().contains("user ID"));
+        assert!((act("task_lists").build)(&cfg, &json!({ "project": "3" })).unwrap().url.ends_with("filter[project_id]=3&filter[status]=1&page[size]=200"));
+        assert_eq!((act("projects").out)(&json!({ "data": [{ "id": "3", "attributes": { "name": "P", "project_number": "12", "x": 1 } }] })), json!([{ "id": "3", "name": "P", "project_number": "12" }]));
+        // writes ask unless the user says otherwise
+        for a in PROVIDER.actions { assert!(a.write == (a.default == board_core::Policy::Ask), "{}", a.id); }
     }
     #[test]
     fn config_ids_are_digits_and_errors_read_as_one_line() {

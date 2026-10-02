@@ -17,6 +17,7 @@ import {
   withoutColon,
   TILE,
 } from "./blocks";
+import "./settings-actions";
 import { glyphSvg } from "../../core/icons";
 import { PROVIDERS } from "../../domain/providers";
 import { viewItems, type ViewItem } from "../../domain/sidebar-views";
@@ -288,6 +289,7 @@ export class SettingsGeneral extends SettingsElement {
 
   override render() {
     return html`${this.renderVaultFolder()} ${this.renderFolders()}
+      <relay-settings-actions .ext=${"reminders"} .name=${t("act.reminders")}></relay-settings-actions>
     ${section(t("set.sec.interface"), html`${this.renderLanguage()} ${this.renderTheme()} ${this.renderAccent()} ${this.renderFavicons()} ${this.renderTerminal()}`)}
     ${this.renderSidebar()}`;
   }

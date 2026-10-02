@@ -272,6 +272,16 @@ export default {
   "set.terminalHelp":
     "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
+  "act.reminders": "Erinnerungen",
+  "act.title": "Zugriff für den Agenten",
+  "act.help":
+    "Was der Agent in einer Unterhaltung über den Befehl relay mit {name} tun darf. Gespeichert in der .relay/config.json des Vaults, die der Agent nicht bearbeiten kann.",
+  "act.access": "Der Agent darf {name} nutzen",
+  "act.mailOnly": "Nur Unterhaltungen mit Claude Code bekommen Mail.",
+  "act.default": "Standard ({p})",
+  "act.auto": "Läuft",
+  "act.ask": "Fragt zuerst",
+  "act.deny": "Nie",
   "set.faviconsOn": "Favicon der Website als Symbol",
   "set.faviconsHelp":
     "Einmal am Tag sucht die App in den Notizen jedes Projekts ohne Symbol eine Website und nutzt deren Favicon. Pro Website wird ein Projekt einmal versucht, ein zurückgesetztes Symbol kommt nicht wieder.",
