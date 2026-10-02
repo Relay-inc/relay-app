@@ -30,7 +30,7 @@ import {
   withoutColon,
 } from "./blocks";
 import { Field } from "./Field";
-import { RemoveFooter } from "./RemoveFooter";
+import { Footer } from "./Footer";
 import { Section } from "./Section";
 import { SettingsMenu } from "./SettingsMenu";
 import { Switch } from "./Switch";
@@ -57,7 +57,7 @@ const KNOWN_ERRORS: [RegExp, Key][] = [
  *  for its kind (Gmail with an app password, another IMAP server, a password already in the keychain). No password of
  *  our own either, the app reads it from the macOS keychain. The accounts as edited are saved with Save; what sits in
  *  the add fields stays in the store until it is used. */
-export function MailSettings({ onRemove }: { onRemove: () => void }) {
+export function MailSettings() {
   const { t, th, locale } = useT();
   const config = useSettingsStore(s => s.integrations.mail.edit);
   const draft = useSettingsStore(s => s.integrations.mail.draft);
@@ -296,11 +296,13 @@ export function MailSettings({ onRemove }: { onRemove: () => void }) {
           <Switch id="mailexp" on={!!config.experimental} onToggle={setMailExperimental} />
         </Field>
       )}
-      <RemoveFooter onRemove={onRemove} message={message} explain={explainError}>
-        <button className={buttonClass("primary")} onClick={saveMail}>
-          {t("set.save")}
-        </button>
-      </RemoveFooter>
+      <div className={FOOTER_IN_ROW}>
+        <Footer message={message} explain={explainError}>
+          <button className={buttonClass("primary")} onClick={saveMail}>
+            {t("set.save")}
+          </button>
+        </Footer>
+      </div>
     </Section>
   );
 }

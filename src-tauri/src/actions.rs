@@ -1,5 +1,5 @@
 // Agent actions: what the extensions can do, as `relay <extension>.<action>` for the agent in a conversation, so it
-// can create a ticket, book time, add a reminder or save a mail draft with the app's own credentials, whatever
+// can create a ticket, book time, add a reminder, read the calendar or save a mail draft with the app's own credentials, whatever
 // provider runs it. `relay` is a small script in the app's data folder (bin/relay, first on the agent's PATH) that
 // runs this binary as `relay --cli …`; the CLI asks the app over a Unix socket and prints the answer.
 //
@@ -29,7 +29,7 @@ pub fn sock() -> PathBuf { crate::broker::dir().join("relay.sock") }
 
 /// One command: where it runs and what the user decides about it.
 struct Item { ext: &'static str, id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)], write: bool, default: Policy, run: Run }
-enum Run { Board(&'static Provider, &'static Action), Mail, Reminders }
+enum Run { Board(&'static Provider, &'static Action), Mail, Reminders, Calendar }
 
 const MAIL: &[(&str, &str, &[(&str, &str)], bool)] = &[
     ("search", "Search Gmail (All Mail) with Gmail search syntax, newest first: ids, senders, subjects, dates.", &[("query", "Gmail search"), ("account?", "account email"), ("limit?", "1 to 50, default 20")], false),
@@ -52,6 +52,7 @@ fn items() -> Vec<Item> {
     out.extend(MAIL.iter().map(|(id, about, args, write)| Item { ext: "mail", id, about, args, write: *write, default: Policy::Auto, run: Run::Mail }));
     out.extend(REMINDERS.iter().map(|(id, about, args)| Item { ext: "reminders", id, about, args, write: *id != "list",
         default: if *id == "list" { Policy::Auto } else { Policy::Ask }, run: Run::Reminders }));
+    out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, with errors per calendar.", args: &[], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }
 
@@ -74,13 +75,14 @@ fn effective(acts: &Value, it: &Item, provider: &str, tainted: bool) -> Policy {
     }
 }
 
-/// Whether an extension is set up: a board provider with its config and secrets, mail with an account, a vault.
+/// Whether an extension is set up: a board provider with its config and secrets, mail with an account, a calendar, a vault.
 fn ready(app: &AppHandle, ext: &str) -> bool {
     let st = app.state::<crate::App>();
     let s = st.settings.lock().unwrap().clone();
     match ext {
         "mail" => crate::mail_on(&s),
         "reminders" => crate::vault_of(&s)["ok"] == true,
+        "calendar" => !crate::calendar::feeds(&s).is_empty(),
         id => providers::get(id).is_ok_and(|p| (p.ready)(&s["integrations"][p.id]) && providers::token(p).is_some()),
     }
 }
@@ -176,6 +178,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
         }
         Run::Mail => mail(app, key, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
+        Run::Calendar => Ok(crate::calendar::upcoming(&app.state::<crate::App>().settings.lock().unwrap().clone())),
     }
 }
 
@@ -319,7 +322,7 @@ mod tests {
         let names: Vec<String> = items().iter().map(|i| format!("{}.{}", i.ext, i.id)).collect();
         let mut d = names.clone(); d.sort(); d.dedup();
         assert_eq!(d.len(), names.len());
-        assert!(names.contains(&"productive.add_time".into()) && names.contains(&"reminders.add".into()) && names.contains(&"trello.create_card".into()));
+        assert!(names.contains(&"productive.add_time".into()) && names.contains(&"reminders.add".into()) && names.contains(&"calendar.meetings".into()) && names.contains(&"trello.create_card".into()));
     }
     #[test]
     fn cli_arguments() {

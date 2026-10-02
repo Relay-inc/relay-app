@@ -391,6 +391,7 @@ const calendarSaid = (message: Message | null) =>
   change(draft => {
     draft.calendar.message = message;
   });
+export const clearCalendarMessage = () => calendarSaid(null);
 const feeds = () => current().calendar?.feeds ?? [];
 const saveCalendarFeeds = async (list: { email: string }[]) =>
   commit(await backend.setSettings({ ...current(), calendar: { on: true, feeds: list } }));

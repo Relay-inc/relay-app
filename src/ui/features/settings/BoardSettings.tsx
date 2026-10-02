@@ -26,6 +26,7 @@ import {
   buttonClass,
   ERROR_MESSAGE,
   FIELD,
+  FOOTER_IN_ROW,
   HINT_IN_ROW,
   OPTIONAL_TEXT,
   SELECT,
@@ -33,7 +34,7 @@ import {
   withoutColon,
 } from "./blocks";
 import { Field } from "./Field";
-import { RemoveFooter } from "./RemoveFooter";
+import { Footer } from "./Footer";
 import { Section } from "./Section";
 import { SettingsMenu } from "./SettingsMenu";
 import { Switch } from "./Switch";
@@ -47,7 +48,7 @@ const boardOptions = (list: BoardOpt[]) =>
 
 /** A board provider's sections on its page in Integrations: the connection (token, the fields of its config), its
  *  boards per vault project. What is typed stays in the store until Save, so it survives going back to the list. */
-export function BoardSettings({ provider, onRemove }: { provider: BoardProvider; onRemove: () => void }) {
+export function BoardSettings({ provider }: { provider: BoardProvider }) {
   const { t, th, pt, pth } = useT();
   const config = useSettingsStore(s => s.settings.integrations[provider.id]) ?? NO_CONFIG;
   const hasToken = useSettingsStore(s => !!s.integrations.tokens[provider.id]);
@@ -315,17 +316,19 @@ export function BoardSettings({ provider, onRemove }: { provider: BoardProvider;
           )}
         </Field>
         {rest.map(providerField)}
-        <RemoveFooter onRemove={onRemove} message={message}>
-          <SettingsMenu
-            up
-            tip={t("int.more")}
-            items={more}
-            onPick={id => (id === "import" ? importBoard(provider) : clearBoard(provider))}
-          />
-          <button className={buttonClass("primary")} onClick={() => saveBoardForm(provider)}>
-            {t("int.save")}
-          </button>
-        </RemoveFooter>
+        <div className={FOOTER_IN_ROW}>
+          <Footer message={message}>
+            <SettingsMenu
+              up
+              tip={t("int.more")}
+              items={more}
+              onPick={id => (id === "import" ? importBoard(provider) : clearBoard(provider))}
+            />
+            <button className={buttonClass("primary")} onClick={() => saveBoardForm(provider)}>
+              {t("int.save")}
+            </button>
+          </Footer>
+        </div>
       </Section>
       {boardLinks()}
     </>
