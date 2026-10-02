@@ -19,6 +19,9 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 ### Added
 - Cmd-K can find projects by name, label, alias or context. Choose a result with the arrow keys and Enter, or click it, to open the project; Enter without a selection still asks a quick question (#58)
 
+### Fixed
+- Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open (#56)
+
 ## [0.0.2] - 2026-10-01
 
 ### Added
