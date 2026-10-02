@@ -59,7 +59,10 @@ export function edit(note: Scratch, text: string) {
   note.text = text;
   note.modified = Date.now() / 1000;
   clearTimeout(timers.get(note));
-  timers.set(note, window.setTimeout(() => flush(note), 400));
+  timers.set(
+    note,
+    window.setTimeout(() => flush(note), 400),
+  );
   changed();
 }
 
@@ -84,7 +87,8 @@ async function drop(note: Scratch) {
   scratch.notes = scratch.notes.filter(n => n !== note);
   if (scratch.open === note) scratch.open = null;
   changed();
-  if (note.id) await invoke("scratch_delete", { project: scratch.project, id: note.id }).catch(err => console.error(err));
+  if (note.id)
+    await invoke("scratch_delete", { project: scratch.project, id: note.id }).catch(err => console.error(err));
 }
 
 export async function deleteScratch(note: Scratch) {

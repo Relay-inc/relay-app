@@ -32,6 +32,8 @@ export async function addTerminal(project: string) {
     term.el.style.cssText = "width:100%;height:100%";
     const channel = new Channel<ArrayBuffer | number>();
     channel.onmessage = msg => {
+      // the exit of a closed tab arrives after its xterm is disposed
+      if (!byProject.get(project)?.list.includes(term) && term.id) return;
       if (msg instanceof ArrayBuffer) return xterm.write(new Uint8Array(msg));
       term.exited = true;
       xterm.write(`\r\n\x1b[2m${t("term.exited")}\x1b[0m\r\n`);

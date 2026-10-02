@@ -47,8 +47,10 @@ pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, pr
             if n == 0 || on_data.send(InvokeResponseBody::Raw(buf[..n].to_vec())).is_err() { break; }
         }
         // the shell ended (or was killed): report its code and drop the pty
-        let code = app.state::<Ptys>().map.lock().unwrap().remove(&id)
-            .and_then(|mut p| p.child.wait().ok()).map_or(-1, |s| s.exit_code() as i64);
+        // out of the map first: waiting while holding the lock would block every other pty (and kill_all on quit)
+        let pty = app.state::<Ptys>().map.lock().unwrap().remove(&id);
+        // the loop also ends when the webview dropped the channel while the shell still runs: end it rather than wait forever
+        let code = pty.and_then(|mut p| { p.child.kill().ok(); p.child.wait().ok() }).map_or(-1, |s| s.exit_code() as i64);
         on_data.send(InvokeResponseBody::Json(code.to_string())).ok();
     });
     Ok(id)

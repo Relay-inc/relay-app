@@ -130,6 +130,12 @@ export class RelayApp extends LitElement {
       closeTicket();
       return;
     }
+    // Esc in a terminal or a note is theirs (vim, a shell prompt): it neither closes the drawer nor stops the turn
+    if (
+      e.composedPath().some(target => target instanceof HTMLElement && target.localName === "relay-drawer") &&
+      inField(e)
+    )
+      return;
     if (ui.drawer && !ui.projectPanel && !inField(e)) {
       e.preventDefault();
       closeDrawer();
