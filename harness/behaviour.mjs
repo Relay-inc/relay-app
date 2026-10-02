@@ -557,9 +557,9 @@ const SCENARIOS = {
     const writes = async () => (await s.calls("integration_call")).filter(c => c.args.method !== "GET");
     s.check("comment posted once", (await writes()).filter(c => String(c.args.path).startsWith("/comments")).length === 1);
     s.check("comment box emptied", (await comment.inputValue().catch(() => null)) === "");
-    const status = visible(page.getByRole("combobox").filter({ has: page.getByRole("option", { name: "In review", exact: true }) })).first();
-    await status.selectOption({ label: "In progress" });
-    await settle(page, 500);
+    // the status pill opens a menu of the workflow's statuses
+    await click(button(page, "Status"), 200);
+    await click(page.getByRole("menuitemradio", { name: "In progress", exact: true }), 500);
     const status_ = (await writes()).filter(c => String(c.args.path).startsWith("/tasks"));
     s.check("status changed once", status_.length === 1 && JSON.stringify(status_[0].args.body).includes("ws2"));
     s.fact("writes", await writes());
@@ -578,6 +578,37 @@ const SCENARIOS = {
     const sends = await s.calls("send");
     s.check("the card goes in front of the first message", sends.length === 1 && String(sends[0].args.text).includes("Invoice export CSV") && String(sends[0].args.text).endsWith("What is left?"));
     s.fact("card send", sends[0]?.args ?? null);
+  },
+
+  async boardNewTask(s) {
+    await s.load();
+    const { page } = s;
+    await click(nav(page).getByText("Productive", { exact: true }), 300);
+    s.check("board shown", await waitText(page, "Invoice export CSV"));
+    const posts = async () => (await s.calls("integration_call")).filter(c => c.args.method === "POST" && c.args.path === "/tasks");
+    // New task in the title bar: the first column, Enter in the title creates it
+    await click(button(page, "New task"), 300);
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Parity task");
+    await page.keyboard.press("Enter");
+    await settle(page, 500);
+    const first = await posts();
+    s.check("one task created, in the first task list", first.length === 1 && JSON.stringify(first[0].args.body).includes('"title":"Parity task"') && JSON.stringify(first[0].args.body).includes('"tl1"'));
+    s.check("the card shows on the board", await waitText(page, "Parity task"));
+    s.check("the board says 21 tasks", await waitText(page, "21 tasks"));
+    // a lane's + puts it in that lane, with its description
+    await click(button(page, "New task in Review"), 300);
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Review the parity task");
+    await page.getByRole("textbox", { name: "Description (optional)", exact: true }).fill("Check it twice");
+    await click(button(page, "Create task"), 500);
+    const both = await posts();
+    s.check("the lane's task goes in its task list", both.length === 2 && JSON.stringify(both[1].args.body).includes('"tl4"') && JSON.stringify(both[1].args.body).includes("Check it twice"));
+    s.check("the second card shows", await waitText(page, "Review the parity task"));
+    // Escape closes the dialog without creating anything, and leaves the board open
+    await click(button(page, "New task"), 300);
+    await page.keyboard.press("Escape");
+    await settle(page, 300);
+    s.check("Escape creates nothing", (await posts()).length === 2 && !(await hasText(page, "Create task")) && (await hasText(page, "Review the parity task")));
+    s.fact("creates", (await posts()).map(c => c.args.body));
   },
 
   async boardTools(s) {

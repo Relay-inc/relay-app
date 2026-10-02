@@ -115,7 +115,8 @@ export function prDetail(repo: string, number: number) {
 const person = (id: string, first: string, last: string) => ({ id, type: "people", attributes: { first_name: first, last_name: last } });
 const PEOPLE = [person("70001", "Laurent", "M."), person("70002", "Sofie", "Claes"), person("70003", "Tom", "Willems"), person("70004", "Jonas", "Peeters")];
 const LISTS = ["Backlog", "To do", "In progress", "Review", "Done"].map((name, i) => ({ id: `tl${i + 1}`, type: "task_lists", attributes: { name, placement: i + 1 } }));
-const STATUSES = ["Not started", "In progress", "In review", "Closed"].map((name, i) => ({ id: `ws${i + 1}`, type: "workflow_statuses", attributes: { name, position: i + 1, category_id: i + 1 } }));
+// categories as Productive has them: 1 not started, 2 started, 3 closed
+const STATUSES = ["Not started", "In progress", "In review", "Closed"].map((name, i) => ({ id: `ws${i + 1}`, type: "workflow_statuses", attributes: { name, position: i + 1, category_id: [1, 2, 2, 3][i] } }));
 const TASK_TITLES = [
   "Invoice export CSV", "SSO redirect loop", "Viewer role sees invoices", "Avatar upload timeout", "French translation intake",
   "Rate limit docs", "Holiday banner copy", "Dashboard empty state", "Password reset mail", "Audit log export",
@@ -150,10 +151,26 @@ export function productive(method: string, path: string, body: unknown): unknown
   const url = new URL(path, "https://api.productive.io");
   const p = url.pathname;
   const f = (k: string) => url.searchParams.get(`filter[${k}]`);
+  const data = (body as { data?: { attributes?: Record<string, unknown>; relationships?: Record<string, unknown> } } | null)?.data;
+  // a new task from the board: at the end of its task list, in the first status unless it asks for one
+  if (method === "POST" && p === "/tasks") {
+    const n = TASKS.length;
+    const task = {
+      id: String(900100 + n), type: "tasks",
+      attributes: { ...TASKS[0].attributes, title: String(data?.attributes?.title ?? ""), description: String(data?.attributes?.description ?? ""), number: 300 + n, placement: n + 1,
+        due_date: null, tag_list: [], initial_estimate: null, worked_time: 0, remaining_time: null, created_at: iso(NOW) },
+      relationships: { ...TASKS[0].relationships, workflow_status: { data: { type: "workflow_statuses", id: STATUSES[0].id } }, assignee: { data: null }, ...(data?.relationships as object) },
+    } as (typeof TASKS)[number];
+    TASKS.push(task);
+    return one(task);
+  }
   if (method !== "GET") {
     const id = p.split("/")[2];
     const task = TASKS.find(x => x.id === id);
-    if (task && body && typeof body === "object") Object.assign(task.relationships, (body as { data: { relationships?: object } }).data.relationships || {});
+    if (task && data) {
+      Object.assign(task.relationships, data.relationships || {});
+      Object.assign(task.attributes, data.attributes || {});
+    }
     return p.startsWith("/comments") ? one({ id: "c-new", type: "comments", attributes: {} }) : one(task ?? TASKS[0]);
   }
   if (p === "/projects") return page([{ id: "p1", type: "projects", attributes: { name: "Northwind Portal" } }, { id: "p2", type: "projects", attributes: { name: "Beacon Billing" } }, { id: "p3", type: "projects", attributes: { name: "Internal" } }]);
