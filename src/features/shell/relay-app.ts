@@ -44,6 +44,13 @@ export class RelayApp extends LitElement {
         :host([drawer]) {
           grid-template-columns: 220px minmax(0, 1fr);
         }
+        /* too narrow for a third column: the drawer lies over the conversation */
+        relay-drawer {
+          position: fixed;
+          inset: 0 0 0 auto;
+          z-index: 20;
+          width: 460px;
+        }
       }
     `,
   ];
@@ -169,7 +176,7 @@ export class RelayApp extends LitElement {
     return html` ${this.renderSnapshotError()}
       <relay-sidebar class="min-h-0 min-w-0 border-r border-separator"></relay-sidebar>
       <relay-chat class="min-h-0 min-w-0"></relay-chat>
-      ${ui.drawer ? html`<relay-drawer class="min-h-0 min-w-0 overflow-hidden max-lg:hidden"></relay-drawer>` : nothing}
+      ${ui.drawer ? html`<relay-drawer class="min-h-0 min-w-0 overflow-hidden"></relay-drawer>` : nothing}
       ${ui.quickAsk ? html`<relay-quick></relay-quick>` : nothing} ${this.renderZoom()}`;
   }
 }

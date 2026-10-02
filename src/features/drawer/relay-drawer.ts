@@ -12,6 +12,7 @@ import { panelItem } from "../../domain/keys";
 import { selectedProject } from "../../domain/chats/state";
 import "../notes/relay-note-detail";
 import "../notes/relay-notes";
+import "../terminals/relay-terminals";
 
 const TITLES = { detail: "drawer.detail", terminal: "drawer.terminal", notes: "drawer.notes" } as const;
 
@@ -61,8 +62,7 @@ export class RelayDrawer extends LitElement {
   private renderBody() {
     switch (ui.drawer) {
       case "terminal":
-        // TODO(project-terminals): render html`<relay-terminals .project=${selectedProject()}></relay-terminals>` once that branch lands
-        return nothing;
+        return html`<relay-terminals class="flex-1 min-h-0" .project=${selectedProject() ?? ""}></relay-terminals>`;
       case "notes":
         return html`<relay-notes class="flex-1 min-h-0" .project=${selectedProject() ?? ""}></relay-notes>`;
       default:
