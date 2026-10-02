@@ -546,6 +546,12 @@ const en = {
   "kb.loading": "Loading…",
   "kb.noDesc": "No description",
   "kb.closed": "Closed",
+  "notes.new": "New note",
+  "notes.delete": "Delete",
+  "notes.untitled": "Untitled",
+  "notes.deleted": "Note deleted",
+  "notes.placeholder": "Paste or write anything for this project.",
+  "notes.empty": "No notes yet.",
 };
 export type Key = keyof typeof en;
 export default en;

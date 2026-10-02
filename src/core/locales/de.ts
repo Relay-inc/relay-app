@@ -551,4 +551,10 @@ export default {
   "kb.loading": "Lädt…",
   "kb.noDesc": "Keine Beschreibung",
   "kb.closed": "Geschlossen",
+  "notes.new": "Neue Notiz",
+  "notes.delete": "Löschen",
+  "notes.untitled": "Ohne Titel",
+  "notes.deleted": "Notiz gelöscht",
+  "notes.placeholder": "Beliebiges für dieses Projekt einfügen oder schreiben.",
+  "notes.empty": "Noch keine Notizen.",
 } satisfies Record<Key, string>;

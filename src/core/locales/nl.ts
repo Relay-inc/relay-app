@@ -548,4 +548,10 @@ export default {
   "kb.loading": "Laden…",
   "kb.noDesc": "Geen beschrijving",
   "kb.closed": "Gesloten",
+  "notes.new": "Nieuwe notitie",
+  "notes.delete": "Verwijderen",
+  "notes.untitled": "Zonder titel",
+  "notes.deleted": "Notitie verwijderd",
+  "notes.placeholder": "Plak of schrijf hier alles voor dit project.",
+  "notes.empty": "Nog geen notities.",
 } satisfies Record<Key, string>;

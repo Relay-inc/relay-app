@@ -553,4 +553,10 @@ export default {
   "kb.loading": "Chargement…",
   "kb.noDesc": "Pas de description",
   "kb.closed": "Fermé",
+  "notes.new": "Nouvelle note",
+  "notes.delete": "Supprimer",
+  "notes.untitled": "Sans titre",
+  "notes.deleted": "Note supprimée",
+  "notes.placeholder": "Collez ou écrivez ce que vous voulez pour ce projet.",
+  "notes.empty": "Pas encore de notes.",
 } satisfies Record<Key, string>;
