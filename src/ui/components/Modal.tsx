@@ -13,11 +13,16 @@ export function Modal({
   children: ReactNode;
 }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30" onClick={onClose}>
+    // only a click on the backdrop itself closes: clicks inside go on to the document, which opens links
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/30"
+      onClick={e => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         className={`w-240 max-w-[calc(100vw-48px)] h-175 max-h-[calc(100vh-48px)] flex flex-col bg-bg rounded-2xl shadow-md ring-1 ring-separator-strong overflow-hidden ${acting ? "opacity-70" : ""}`}
         inert={acting}
-        onClick={e => e.stopPropagation()}
       >
         {children}
       </div>

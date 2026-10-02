@@ -123,9 +123,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       on: mailOn,
       page: () => (
         <>
-          <Section title={t("int.connection")}>
-            <MailSettings onRemove={() => switchTo("mail", false)} />
-          </Section>
+          <MailSettings onRemove={() => switchTo("mail", false)} />
           <ActionsSection ext="mail" name="Mail" />
         </>
       ),

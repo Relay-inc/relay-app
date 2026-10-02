@@ -3,7 +3,7 @@ import { colOf, endOf, refOf, withCol, type Board } from "./rules.ts";
 
 /** What a move needs from the application: the provider's board as it is now, a way to change it, the call to the
  *  tracker, the message for a failure, and the moves in flight per card. */
-export type MoveHost = {
+type MoveHost = {
   board: () => Board;
   change: (recipe: (board: Board) => void) => void;
   move: (ref: BoardRef, card: Card, column: string, group?: string) => Promise<number | void>;

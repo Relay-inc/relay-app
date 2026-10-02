@@ -11,8 +11,13 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Changed
+
+- The interface is rebuilt on React with domain-driven layers: it looks and behaves as before, a streaming answer only redraws itself, text typed while a turn runs outside Relay is no longer lost, a language switch redraws everything, a note created during a turn turns the links in earlier answers into links, links in a mail reach the confirmation bar again, and a relay://ask link fills in Cmd-K instead of sending on its own
+
 ### Fixed
 
+- Settings › Integrations › Mail, Agents and Projects have even spacing again. Mail lists your accounts with a "+ Add account" button (Gmail, another mail server, or a password already in the keychain) that opens the steps in place of the list, instead of showing them under it all the time (#68)
 - Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
 
 ### Added
@@ -72,7 +77,6 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - The redesign's palette: Relay blue for selection, primary buttons and what waits for you, cooler greys, raised cards with a soft shadow and 8px corners on buttons and fields. Settings › General › Accent switches to Graphite (the text colour) instead. The settings window uses the same palette as the main window now (#39)
 - Each integration in Settings › Integrations opens a page of its own instead of folding open in the list, with its connection on top and, for board integrations, the boards per vault project below. That part now lists only the vault projects that have a board, suggests boards whose name matches a project (one click, or Link all), and adds one with a project and a board picker instead of a dropdown for every project. Boards are grouped by workspace (#33)
 - Setting up Linear walks you through creating the API key in three steps, with a link to Linear's Security & access page and a Create key button next to the field; a pasted value that isn't a personal API key (lin_api_…) is caught before saving (#35)
-- The interface is rebuilt on React: it looks and behaves as before, a streaming answer only redraws itself, text typed while a turn runs outside Relay is no longer lost, a language switch redraws everything, and a note created during a turn turns the links in earlier answers into links
 - A conversation in the sidebar shows its agent's own mark (Claude, Codex, OpenCode) in one colour instead of a speech bubble; the composer's agent picker only shows on a new conversation, where you can still switch (#31)
 - A calmer look: warm off-white panels, charcoal text and buttons instead of blue, hairline borders, barely-there shadows, smaller corner radius on buttons and fields, and status pills (CI, review, conflict) in pale green, red or grey. Dark mode follows the same palette (#27)
 - Quitting Relay no longer cuts a running turn loose: the agent keeps working under a small broker process (about 2 MB), and Relay picks the conversation back up when you reopen it within 15 minutes, so you can keep typing instead of seeing "handled outside the app". Idle agents stop when Relay quits; the next message resumes them (#17)

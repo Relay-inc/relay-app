@@ -11,7 +11,7 @@ export type Filters = Partial<Record<Facet, string[]>>;
 export type Preset = { name: string; filters: Filters };
 
 /** The values a card has in a facet: no value at all is a value for assignee and labels, so "unassigned" can be asked for. */
-export function valuesOf(card: Card, facet: Facet): string[] {
+function valuesOf(card: Card, facet: Facet): string[] {
   switch (facet) {
     case "state":
       return card.state ? [card.state] : [];

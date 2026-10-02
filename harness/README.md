@@ -107,8 +107,10 @@ window, comment, status, Start conversation), boardTools (list view, filters, Pr
 reminders, reminderUndo, settings (theme, accent, GitHub owners, language), agentAccess (policy and access per
 extension), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,
 typingOutside. Calls are normalised (conversation keys as `chat:<project>/<title>`, new ones `new#n`, dates masked) and
-split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose (Lit bugs): typingOutside
-and the mail link bar. `DEBUG=1` prints the full error of a scenario. Two runs of the same build give identical files.
+split into effects and counted reads. `KNOWN` lists checks a Lit baseline fails on purpose: two Lit bugs (typingOutside,
+the mail link bar) and one intended difference (deepLinks: a `relay://ask?q=` link opens Cmd-K with the text and waits
+for Enter, Lit sends it at once). The mock leaves sessionStorage alone, as a webview reload does: a launch link handled
+once (React keeps them under `handledLinks`) is not handled again by a reload in the same page, a new page handles it. `DEBUG=1` prints the full error of a scenario. Two runs of the same build give identical files.
 
 ## Numbers (`perf.mjs`)
 

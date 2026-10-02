@@ -302,35 +302,45 @@ async function keep(account: MailAcct, testResult: string) {
   });
   mailSaid({ text: t("mail.connected", { email: account.email, n: (testResult.match(/\d+/) || ["?"])[0] }), ok: true });
 }
-// "connect" and "advanced" both end here: busy while the step runs, the error shown when it fails
+// "connect" and "advanced" both end here: busy while the step runs, the error shown when it fails. Resolves to
+// whether the account was added.
 async function runStep(step: "connect" | "advanced", work: () => Promise<void>) {
   change(draft => {
     draft.mail.busy = step;
   });
   mailSaid(null);
+  let added = true;
   try {
     await work();
   } catch (error) {
     mailSaid(fail(error));
+    added = false;
   }
   change(draft => {
     draft.mail.busy = "";
   });
+  return added;
 }
+/** A new add step starts without the last try's message. */
+export const clearMailMessage = () => mailSaid(null);
 /** Connect with the typed address and app password (Gmail), or a password and server (`imap`): the backend stores the
  *  password in the keychain and tests the login. The password field empties after every attempt; an address refused
- *  before trying keeps both. */
+ *  before trying keeps both. Resolves to whether the account was added. */
 export async function connectMail(imap: boolean) {
   const typed = st().integrations.mail.draft;
-  if (!EMAIL.test(typed.email.trim())) return mailSaid({ text: t("mail.invalid"), ok: false });
-  await runStep("connect", async () => {
+  if (!EMAIL.test(typed.email.trim())) {
+    mailSaid({ text: t("mail.invalid"), ok: false });
+    return false;
+  }
+  const added = await runStep("connect", async () => {
     const server = imap ? { host: typed.host.trim(), port: Number(typed.port) || 993 } : undefined;
     const connected = await backend.mailConnect(typed.email, typed.password, server);
     await keep(connected.account, connected.result);
   });
   setMailDraft("password", "");
+  return added;
 }
-/** Add the typed account whose password already sits in the keychain. */
+/** Add the typed account whose password already sits in the keychain. Resolves to whether it was added. */
 export async function addMailAccount() {
   const typed = st().integrations.mail.draft;
   const host = typed.host.trim();
@@ -340,9 +350,11 @@ export async function addMailAccount() {
     keychain_account: typed.keychain_account.trim(),
     ...(host ? { host, port: Number(typed.port) || 993 } : {}),
   };
-  if (!EMAIL.test(account.email) || !account.keychain_service || !account.keychain_account)
-    return mailSaid({ text: t("mail.invalid"), ok: false });
-  await runStep("advanced", async () => keep(account, await backend.mailTest(account)));
+  if (!EMAIL.test(account.email) || !account.keychain_service || !account.keychain_account) {
+    mailSaid({ text: t("mail.invalid"), ok: false });
+    return false;
+  }
+  return runStep("advanced", async () => keep(account, await backend.mailTest(account)));
 }
 export async function testMail(account: MailAcct) {
   change(draft => {

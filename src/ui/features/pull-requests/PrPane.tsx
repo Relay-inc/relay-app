@@ -18,6 +18,7 @@ import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { Avatar } from "../../components/Avatar";
 import { ModalLink } from "../../components/ModalLink";
+import { tintText } from "../../../shared/tints";
 import { CI, age } from "./prState";
 
 type Tone = "ok" | "bad" | "run" | "";
@@ -41,7 +42,6 @@ const TONE: Record<Tone, string> = {
   run: "bg-fill-2 text-soon",
   "": "bg-fill-2 text-secondary",
 };
-const FOLDER: Record<string, string> = { "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m", "ctx-p": "text-ctx-p" };
 
 const chip = (tone: Tone, text: ReactNode) => (
   <span
@@ -157,7 +157,7 @@ export function PrPane({ prKey }: { prKey: string }) {
               <>
                 <span>·</span>
                 <span className="inline-flex items-center gap-1">
-                  <Icon name="folder" className={`glyph size-3 ${FOLDER[heading.project.tint]}`} />
+                  <Icon name="folder" className={`glyph size-3 ${tintText(heading.project.tint, "")}`} />
                   {heading.project.label}
                 </span>
               </>

@@ -23,7 +23,6 @@ export const ctxOf = (
       data,
     });
   },
-  thumb: url => backend.integrationThumb(boardProvider.id, url),
 });
 /** Switched on, config complete and a token in the keychain: the board shows in the sidebar. */
 export const providerReady = (boardProvider: BoardProvider) =>

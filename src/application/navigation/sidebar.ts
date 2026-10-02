@@ -15,7 +15,7 @@ import {
   type ViewRow,
   type Meta,
 } from "../../domain/navigation/sidebar";
-import { arranged, isHidden } from "../../domain/navigation/sidebar-order";
+import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
 import type { SidebarCfg } from "../../domain/settings/types";
 import { viewItems } from "../../domain/navigation/sidebar-views";
 import { WAIT, REM, PRS, MAIL } from "../../domain/navigation/views";
@@ -216,7 +216,7 @@ export function setSidebar(patch: SidebarCfg) {
   void saveMainSettings(next);
 }
 export const setViewHidden = (key: string, hidden: boolean) =>
-  setSidebar({ hidden: [...(sidebarCfg().hidden ?? []).filter(x => x !== key), ...(hidden ? [key] : [])] });
+  setSidebar({ hidden: withHidden(key, hidden, sidebarCfg()) });
 /** The page is dark, so the footer's toggle offers light; system counts as whatever macOS shows now. */
 export const isDark = () => {
   const theme = settings().theme ?? "system";

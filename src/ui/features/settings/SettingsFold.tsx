@@ -42,7 +42,7 @@ export function SettingsFold({
           <path d="m9 6 6 6-6 6" />
         </svg>
       </button>
-      {open && !nav && <div className="grid grid-cols-1 gap-3 px-3.5 pb-3.5 pl-13">{children}</div>}
+      {open && !nav && <div className="grid grid-cols-1 gap-3 px-3.5 pt-3 pb-3.5 pl-13">{children}</div>}
     </div>
   );
 }

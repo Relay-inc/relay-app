@@ -33,3 +33,8 @@ export const ordered = <T>(
 export const arranged = <T extends { key: string }>(items: T[], cfg: SidebarCfg = {}) =>
   ordered(items, item => item.key, cfg.order);
 export const isHidden = (key: string, cfg: SidebarCfg = {}) => !!cfg.hidden?.includes(key);
+/** The switched-off views with `key` switched off (`hidden`) or back on, each key once. */
+export const withHidden = (key: string, hidden: boolean, cfg: SidebarCfg = {}) => [
+  ...(cfg.hidden ?? []).filter(other => other !== key),
+  ...(hidden ? [key] : []),
+];

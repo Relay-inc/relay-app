@@ -1,13 +1,5 @@
 import type { KeyboardEvent } from "react";
-import type { Section } from "../../../domain/navigation/sidebar";
-
-// What the sidebar's rows and section heads share: the context text colours, the drop lines and the keyboard.
-export const TINT: Record<Section["tint"], string> = {
-  "": "text-secondary",
-  "ctx-a": "text-ctx-a",
-  "ctx-m": "text-ctx-m",
-  "ctx-p": "text-ctx-p",
-};
+// What the sidebar's rows and section heads share: the drop lines and the keyboard.
 export const DROP_LINE_BEFORE = "relative before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-accent";
 export const DROP_LINE_AFTER =
   "relative before:absolute before:inset-x-0 before:bottom-0 before:h-0.5 before:bg-accent";

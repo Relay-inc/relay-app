@@ -20,7 +20,9 @@ export function QuickAskView() {
   const [images, setImages] = useState<Img[]>([]);
   const waiting = useRef<Img[]>([]);
   const sent = useRef(false);
-  const [typed, setTyped] = useState("");
+  // a relay://ask link opens Cmd-K with its question typed (the shell keys this view by it)
+  const initial = useNavigationStore(s => s.quickText);
+  const [typed, setTyped] = useState(initial);
   const [picked, setPicked] = useState(-1); // no project selected: Enter keeps asking a quick question
   const found = useDerived(() => quickProjects(typed));
   const projects = images.length || typed.includes("\n") ? [] : found;
@@ -35,7 +37,12 @@ export function QuickAskView() {
   };
 
   useEffect(() => {
-    field.current?.focus();
+    const el = field.current!;
+    el.focus();
+    if (el.value) {
+      el.setSelectionRange(el.value.length, el.value.length);
+      el.style.height = el.scrollHeight + "px";
+    }
     return () => {
       if (!sent.current) releaseImages(waiting.current);
     };
@@ -126,6 +133,7 @@ export function QuickAskView() {
           ref={field}
           className="w-full border-0 outline-0 resize-none bg-transparent text-label text-lg leading-snug font-sans max-h-80 overflow-y-auto p-0.5 placeholder:text-secondary"
           rows={1}
+          defaultValue={initial}
           spellCheck={false}
           placeholder={t("qk.ph")}
           aria-label={t("qk.label")}

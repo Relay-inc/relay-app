@@ -39,9 +39,9 @@ export function ProjectSettings({ name, icon }: { name: string; icon: Icon | und
     setRepos(name, [...repos, repo]);
   };
 
-  // one element: the fold's gap is between bodies, the fields inside sit without one
+  // its parts are rows of the folded-open row's grid, so they get its gap
   return (
-    <div>
+    <>
       <Field label={t("pc.name")}>
         <ChangeInput
           className={FIELD}
@@ -114,6 +114,6 @@ export function ProjectSettings({ name, icon }: { name: string; icon: Icon | und
           />
         </span>
       </Field>
-    </div>
+    </>
   );
 }

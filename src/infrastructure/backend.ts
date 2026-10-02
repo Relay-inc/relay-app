@@ -121,9 +121,6 @@ export const integrationUpload = (args: {
   mime: string;
   data: string;
 }) => invoke<string>("integration_upload", args);
-/** A picture's preview as a data URL, from a URL the backend allows (no secrets go along). */
-export const integrationThumb = (provider: string, url: string) =>
-  invoke<string>("integration_thumb", { provider, url });
 /** Switched on, config complete and a token in the keychain. */
 export const integrationStatus = (provider: string) => invoke<boolean>("integration_status", { provider });
 export const integrationHasToken = (provider: string) => invoke<boolean>("integration_has_token", { provider });
@@ -158,8 +155,7 @@ export const onSettingsChanged = (handler: (settings: Settings) => void) =>
 export const onMenu = (handler: (item: string) => void) => listen<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());
 export const onRemindersChanged = (handler: () => void) => listen("reminders-changed", () => handler());
-/** relay:// links: the one that launched the app (it arrives before anything listens), then every one opened later. */
-export async function onDeepLinks(handler: (url: string) => void) {
-  (await getCurrent())?.forEach(handler);
-  return onOpenUrl(urls => urls.forEach(handler));
-}
+/** The relay:// links that launched the app: they arrive before anything listens. */
+export const launchLinks = async () => (await getCurrent()) ?? [];
+/** Every relay:// link opened while the app runs. */
+export const onDeepLink = (handler: (url: string) => void) => onOpenUrl(urls => urls.forEach(handler));

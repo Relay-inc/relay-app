@@ -94,8 +94,11 @@ export function BoardCard({
         <div
           className={`flex items-center gap-1.5 text-[11px] text-secondary tabular-nums ${card.state ? "pl-5.5" : ""}`}
         >
-          {(card.labels ?? []).map(name => (
-            <span key={name} className="h-4.5 px-1.5 rounded-sm bg-fill-2 text-label inline-flex items-center">
+          {(card.labels ?? []).map((name, i) => (
+            <span
+              key={`${i}:${name}`}
+              className="h-4.5 px-1.5 rounded-sm bg-fill-2 text-label inline-flex items-center"
+            >
               {name}
             </span>
           ))}

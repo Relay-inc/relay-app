@@ -12,6 +12,7 @@ type NavigationState = {
   toast: Toast | null;
   zoom: string; // the image shown large
   quickAsk: boolean; // Cmd-K
+  quickText: string; // what Cmd-K opens with typed (a relay://ask link), "" for an empty field
   lastProject: string | null; // the vault project last shown, so its linked board opens with the board view
   // The right panel's detail: a vault note ("note:…") or a board card ("card:<provider>:<id>"). While one is open the
   // panel widens; its tabs are behind it. A PR and a mail open next to their list, a card with a view in the ticket window.
@@ -45,6 +46,7 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
   toast: null,
   zoom: "",
   quickAsk: false,
+  quickText: "",
   lastProject: null,
   panel: {
     open: "",

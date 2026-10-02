@@ -31,7 +31,7 @@ import { checkBoards, resetBoard } from "./board/board";
 import { loadPrs, resetPrs } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
-import { handleLink } from "./deep-links";
+import { listenToLinks } from "./deep-links";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
 // versions, then the polls. Every poll of the app starts here, once.
@@ -81,7 +81,7 @@ export async function boot() {
   await loadSettingsAndVault();
   await adoptEarlierConversations();
   await pickStartView();
-  backend.onDeepLinks(handleLink);
+  listenToLinks();
   startPolls();
 }
 

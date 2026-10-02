@@ -1,4 +1,4 @@
-import type { BoardProvider, CardView } from "../../../domain/board/types";
+import type { BoardProvider, CardDetail } from "../../../domain/board/types";
 import { cardsIn, filtered, type Board } from "../../../domain/board/rules";
 import { openBoardCard, ticketChat } from "../../../application/board/board";
 import { cardAct, cardOf, closeTicket } from "../../../application/navigation/panel";
@@ -16,7 +16,7 @@ import { numbered } from "./format";
 import "../../styles/board.css";
 
 // the provider writes its strings in the language of the moment: `_lang` draws them again on a switch
-const viewOf = (view: (data: unknown) => CardView, data: unknown, _lang: string) => (data ? view(data) : null);
+const viewOf = (detail: CardDetail, data: unknown, _lang: string) => (data ? detail.view(data) : null);
 
 /** The card open in the ticket window over the board: the main column (title, description, files, activity with the
  *  comment box) and the sidebar with its fields. Previous and next step through the cards the board shows, in
@@ -30,7 +30,7 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
   const acting = useNavigationStore(s => s.panel.acting);
   const open = modal ? cardOf(modal) : undefined;
   if (!open || open.provider.id !== provider.id) return null;
-  const view = viewOf(open.detail.view, data, lang);
+  const view = viewOf(open.detail, data, lang);
 
   const cards = filtered(board);
   const order = board.columns.flatMap(column => cardsIn(provider, board, cards, column.id));
@@ -94,7 +94,12 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
               </label>
             </section>
           )}
-          <TicketActivity feed={view.feed} providerName={provider.name} onComment={text => act("comment", text)} />
+          <TicketActivity
+            key={modal}
+            feed={view.feed}
+            providerName={provider.name}
+            onComment={text => act("comment", text)}
+          />
         </div>
         <TicketSidebar view={view} projectName={projectName} onAct={act} onChat={startChat} />
       </div>

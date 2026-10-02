@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { arranged, isHidden, place } from "./sidebar-order.ts";
+import { arranged, isHidden, place, withHidden } from "./sidebar-order.ts";
 
 const items = ["a", "b", "c", "d"].map(key => ({ key, name: key }));
 const keys = (list: { key: string }[]) => list.map(item => item.key);
@@ -16,4 +16,9 @@ test("a drop moves the view before or after another, a hidden one keeps its plac
   assert.deepEqual(place(order, "a", "c", true), ["d", "b", "c", "a"]);
   assert.ok(isHidden("b", { hidden: ["b"] }));
   assert.ok(!isHidden("b", {}));
+});
+test("a view switched off or on is in the hidden list once, or not at all", () => {
+  assert.deepEqual(withHidden("b", true, { hidden: ["a", "b"] }), ["a", "b"]);
+  assert.deepEqual(withHidden("b", false, { hidden: ["a", "b"] }), ["a"]);
+  assert.deepEqual(withHidden("c", true), ["c"]);
 });

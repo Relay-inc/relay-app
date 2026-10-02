@@ -31,3 +31,20 @@ export const storage = {
     }
   },
 };
+/** sessionStorage, as quiet: it lives as long as the webview, so it survives a reload but not an app restart. */
+export const session = {
+  get: <T>(key: string, fallback: T): T => {
+    try {
+      return JSON.parse(sessionStorage.getItem(key) || "") ?? fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set: (key: string, value: unknown) => {
+    try {
+      sessionStorage.setItem(key, JSON.stringify(value));
+    } catch {
+      /* storage unavailable */
+    }
+  },
+};

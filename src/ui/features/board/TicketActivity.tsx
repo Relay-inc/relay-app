@@ -28,7 +28,8 @@ export function TicketActivity({
         <TicketHeading>{t("kb.activity")}</TicketHeading>
       </div>
       {feed.map((entry, i) => (
-        <div key={i} className="flex gap-3 py-2">
+        // newest first: counted from the oldest, an entry keeps its key when a new one comes in
+        <div key={feed.length - i} className="flex gap-3 py-2">
           <Avatar name={entry.who || providerName} size="size-6 text-[9px]" />
           <div className="flex-1 min-w-0 flex flex-col gap-0.5">
             <div className="flex gap-2 text-xs">

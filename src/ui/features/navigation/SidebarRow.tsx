@@ -6,7 +6,8 @@ import { Icon } from "../../components/Icon";
 import { Glyph } from "../../components/Glyph";
 import { ProjectImg } from "../../components/ProjectImg";
 import type { Drop } from "./useReorder";
-import { TINT, DROP_LINE_BEFORE, DROP_LINE_AFTER, clickOnKey } from "./rows";
+import { tintText } from "../../../shared/tints";
+import { DROP_LINE_BEFORE, DROP_LINE_AFTER, clickOnKey } from "./rows";
 
 type Tint = Section["tint"];
 
@@ -97,7 +98,7 @@ export function SidebarRow({
     : selected
       ? "text-accent-text"
       : kind === "proj"
-        ? TINT[tint]
+        ? tintText(tint, "text-secondary")
         : "text-secondary";
   const glyph = (className: string) =>
     svg ? <Glyph svg={svg} viewBox={box} className={className} /> : <Icon name={icon} className={className} />;

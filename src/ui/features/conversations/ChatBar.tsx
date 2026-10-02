@@ -3,9 +3,7 @@ import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
-
-// the colour of the project's folder icon
-const TINT = { "": "text-tertiary", "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m", "ctx-p": "text-ctx-p" };
+import { tintText, type Tint } from "../../../shared/tints";
 
 /** The title bar of the centre column: the project (or the view), the conversation's title and state, a view's own
  *  buttons (`actions`), the terminal and the right panel buttons. The shell keys it by the selection, so a title being
@@ -31,7 +29,7 @@ export function ChatBar({
 }: {
   heading: string;
   img: string; // the project's icon, an image data url
-  tint: keyof typeof TINT;
+  tint: Tint;
   state: "" | "busy" | "idle"; // the conversation's state pill; "" shows none
   editable: boolean; // a conversation, not a view: the heading opens the project panel, the title is shown
   sub: string;
@@ -99,7 +97,7 @@ export function ChatBar({
         {img ? (
           <ProjectImg url={img} className="size-3.5 flex-none object-contain rounded-xs" />
         ) : editable ? (
-          <Icon name="folder" className={`glyph size-3.5 flex-none ${TINT[tint]}`} />
+          <Icon name="folder" className={`glyph size-3.5 flex-none ${tintText(tint)}`} />
         ) : null}
         {heading}
       </h1>

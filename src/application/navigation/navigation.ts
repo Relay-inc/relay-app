@@ -89,9 +89,11 @@ export const zoom = (url: string) =>
   set(draft => {
     draft.zoom = url;
   });
-export const toggleQuickAsk = (on = !nav().quickAsk) =>
+/** Cmd-K open or closed; `text` opens it with that typed. */
+export const toggleQuickAsk = (on = !nav().quickAsk, text = "") =>
   set(draft => {
     draft.quickAsk = on;
+    draft.quickText = on ? text : "";
   });
 /** Cmd-K's projects for what is typed: name, label (as shown, with its emoji) and context. */
 export const quickProjects = (typed: string) =>

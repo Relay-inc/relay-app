@@ -17,9 +17,9 @@ export function BoardRow({ card, selected, onOpen }: { card: Card; selected: boo
       <Ring state={card.state} />
       <span className="w-14 flex-none font-mono text-[11px] text-secondary truncate">{numbered(card.number)}</span>
       <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{card.title}</span>
-      {(card.labels ?? []).map(name => (
+      {(card.labels ?? []).map((name, i) => (
         <span
-          key={name}
+          key={`${i}:${name}`}
           className="h-4.5 px-1.5 rounded-sm bg-fill-2 text-[11px] text-secondary inline-flex items-center"
         >
           {name}

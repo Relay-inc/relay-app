@@ -5,7 +5,7 @@ import type { Section } from "../../../domain/navigation/sidebar";
 import { addDraft, closeDraft, patchDraft } from "../../../application/reminders/draft";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
-import { TINT_TEXT } from "./tints";
+import { tintText } from "../../../shared/tints";
 
 const REPEATS = ["", "1w", "14d", "1m", "3m"];
 // a pill: the control inside is bare, the icons sit on top of it
@@ -80,7 +80,7 @@ export function ReminderForm({
           />
         </label>
         <label className={PILL}>
-          <Icon name="folder" className={`${PILL_ICON} ${TINT_TEXT[tint]}`} />
+          <Icon name="folder" className={`${PILL_ICON} ${tintText(tint)}`} />
           <select
             className={SELECT}
             value={draft.project}

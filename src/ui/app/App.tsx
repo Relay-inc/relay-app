@@ -111,6 +111,7 @@ export function App() {
   const panelHidden = useNavigationStore(s => s.panelHidden);
   const wide = useNavigationStore(s => !!s.panel.open);
   const quickAsk = useNavigationStore(s => s.quickAsk);
+  const quickText = useNavigationStore(s => s.quickText);
   const zoomed = useNavigationStore(s => s.zoom);
   const snapErr = useWorkspaceStore(s => s.snapErr);
 
@@ -142,7 +143,7 @@ export function App() {
       <PanelView
         className={`min-h-0 min-w-0 overflow-hidden transition duration-200 ease-out max-lg:hidden ${panelHiddenClasses}`}
       />
-      {quickAsk ? <QuickAskView /> : null}
+      {quickAsk ? <QuickAskView key={quickText} /> : null}
       {zoomed ? (
         <div
           className="fixed inset-0 z-30 grid place-items-center p-10 bg-black/55 cursor-zoom-out"

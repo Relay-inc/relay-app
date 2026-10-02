@@ -32,6 +32,7 @@ export function TicketSidebar({
         <TicketField label={t("kb.fStatus")}>
           <TicketPicker
             current={view.status.id}
+            currentName={view.status.name}
             choices={view.statuses}
             label={t("kb.fStatus")}
             onPick={id => onAct("status", id)}
@@ -53,6 +54,7 @@ export function TicketSidebar({
         <TicketField label={t("kb.fWho")}>
           <TicketPicker
             current={assignee?.id ?? ""}
+            currentName={assignee?.name ?? ""}
             choices={view.people}
             none={t("kb.unassigned")}
             label={t("kb.fWho")}
@@ -96,8 +98,8 @@ export function TicketSidebar({
       {!!view.labels.length && (
         <TicketField label={t("kb.fLabels")}>
           <div className="flex flex-wrap gap-1.5">
-            {view.labels.map(name => (
-              <span key={name} className="h-5.5 px-2 rounded-md bg-fill-2 text-xs inline-flex items-center">
+            {view.labels.map((name, i) => (
+              <span key={`${i}:${name}`} className="h-5.5 px-2 rounded-md bg-fill-2 text-xs inline-flex items-center">
                 {name}
               </span>
             ))}

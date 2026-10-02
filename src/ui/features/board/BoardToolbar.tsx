@@ -70,7 +70,7 @@ export function BoardToolbar({ provider, board }: { provider: BoardProvider; boa
             {group ? pt(provider, group.label) : t("kb.groupBy")}
           </button>
           {pop === "group" && (
-            <BoardPopover width="w-55 p-1" onClose={close}>
+            <BoardPopover width="w-55 p-1">
               <PopHeading>{t("kb.groupBy")}</PopHeading>
               {groups.map(g => (
                 <button
@@ -96,7 +96,7 @@ export function BoardToolbar({ provider, board }: { provider: BoardProvider; boa
           {preset?.name ?? t("kb.presets")}
         </button>
         {pop === "presets" && (
-          <BoardPopover width="w-60 p-1" onClose={close}>
+          <BoardPopover width="w-60 p-1">
             <BoardPresets provider={provider} board={board} onClose={close} />
           </BoardPopover>
         )}
@@ -112,7 +112,7 @@ export function BoardToolbar({ provider, board }: { provider: BoardProvider; boa
           )}
         </button>
         {pop === "filters" && (
-          <BoardPopover width="w-85" onClose={close}>
+          <BoardPopover width="w-85">
             <BoardFacets provider={provider} board={board} onClose={close} />
           </BoardPopover>
         )}

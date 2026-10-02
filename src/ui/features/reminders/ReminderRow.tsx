@@ -7,7 +7,7 @@ import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { useT } from "../../hooks/useT";
 import { ReminderCalendar } from "./ReminderCalendar";
-import { TINT_TEXT } from "./tints";
+import { tintText } from "../../../shared/tints";
 
 /** red when overdue, orange today and in the next 2 days, grey after that (decided 29/9) */
 const DUE = { late: "due-late", soon: "due-soon", "": "" };
@@ -103,7 +103,7 @@ export function ReminderRow({
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-secondary mt-0.5">
           {reminder.project && (
             <span className="inline-flex items-center gap-1">
-              <Icon name="folder" className={`glyph size-3 ${TINT_TEXT[tint]}`} />
+              <Icon name="folder" className={`glyph size-3 ${tintText(tint)}`} />
               {label}
             </span>
           )}

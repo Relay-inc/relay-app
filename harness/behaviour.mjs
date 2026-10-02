@@ -625,8 +625,17 @@ const SCENARIOS = {
     s.check("relay://open?q= opens the best match", await waitText(page, "Contact sync testen op staging"));
     s.fact("sel after open", (await s.local(["sel"])).sel);
     const text = "What is due today?";
+    // a link from outside never sends by itself: it opens Cmd-K with the text typed in, Enter sends it
     await page.evaluate(t => window.__harness.deepLink(`relay://ask?q=${encodeURIComponent(t)}`), text);
-    s.check("relay://ask?q= sends", await s.waitCall("send"));
+    s.check("relay://ask?q= sends nothing by itself", !(await s.waitCall("send", 1, 800)));
+    const field = await page.evaluate(() => {
+      let el = document.activeElement;
+      while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+      return { placeholder: el?.getAttribute("placeholder") ?? "", value: el?.value ?? null, caretAtEnd: el?.selectionStart === el?.value?.length && el?.selectionEnd === el?.value?.length };
+    });
+    s.check("it opens Cmd-K with the text, caret at the end", /ask a question/i.test(field.placeholder) && field.value === text && field.caretAtEnd);
+    await page.keyboard.press("Enter");
+    s.check("Enter there sends", await s.waitCall("send"));
     await settle(page, 300);
     const sends = await s.calls("send");
     s.check("as a quick question in a new conversation", sends.length === 1 && sends[0].args.project === "new#1" && String(sends[0].args.text).endsWith(text));
@@ -720,6 +729,8 @@ const OVERRIDES = { typingOutside: { outside: "switchTo" } };
 const KNOWN = {
   typingOutside: "Lit loses the text: takeText runs before the outside check (src/domain/chats/actions.ts)",
   mail: "Lit drops a link clicked in a mail: mailLinkClicked checks panel.open, the Mail view keeps the mail in panel.mailOpen (src/domain/mail.ts)",
+  // an intended difference, not a Lit bug to port: React fixed it on review (security)
+  deepLinks: "Lit sends relay://ask?q=<text> at once (quickSend in src/app/deep-links.ts); React opens Cmd-K with the text and waits for Enter",
 };
 
 // ---------- compare

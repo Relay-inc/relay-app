@@ -4,9 +4,10 @@ import { saveAgent, saveAgentBin } from "../../../application/settings/agents-pa
 import { Html } from "../../components/Html";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, FIELD, HINT_IN_ROW, PILL, SELECT, withoutColon } from "./blocks";
+import { FIELD, HINT_IN_ROW, PILL, SELECT, withoutColon } from "./blocks";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
+import { RemoveFooter } from "./RemoveFooter";
 
 const CAPS = ["images", "permissions", "questions", "subagents", "terminal", "limits", "effort"] as const;
 
@@ -26,11 +27,23 @@ export function AgentSettings({
   const { t, at, ath } = useT();
   const id = status.id;
   const note = status.detect.note;
-  // one element: the fold's gap is between bodies, the fields inside sit without one
+  // its parts are rows of the folded-open row's grid, so they get its gap
   return (
-    <div>
+    <>
       {agent && <Html as="p" className={HINT_IN_ROW} html={ath(agent, "set.help")} />}
-      <Field label={withoutColon(t("ag.bin"))} id={`agbin-${id}`} hint={note ? <code>{note}</code> : ""}>
+      <Field
+        label={withoutColon(t("ag.bin"))}
+        id={`agbin-${id}`}
+        hint={
+          note ? (
+            <span className="block truncate font-mono" title={note}>
+              {note}
+            </span>
+          ) : (
+            ""
+          )
+        }
+      >
         <ChangeInput
           className={FIELD}
           id={`agbin-${id}`}
@@ -54,21 +67,18 @@ export function AgentSettings({
           </Field>
         );
       })}
-      <Field label={withoutColon(t("ag.caps"))}>
-        <span className="flex max-w-2xs flex-wrap justify-end gap-1">
+      {/* the label above the pills: a row of them on the right would wrap into a ragged column */}
+      <div className="grid gap-1.5">
+        <span className="text-[13px] text-s-fg">{withoutColon(t("ag.caps"))}</span>
+        <div className="flex flex-wrap gap-1">
           {CAPS.filter(name => status.caps[name]).map(name => (
             <span key={name} className={PILL}>
               {t(`ag.cap.${name}`)}
             </span>
           ))}
-        </span>
-      </Field>
-      <div className="mt-0.5 flex flex-wrap items-center gap-2">
-        <span className="flex-1"></span>
-        <button className={buttonClass("ghost")} onClick={onRemove}>
-          {t("ag.remove")}
-        </button>
+        </div>
       </div>
-    </div>
+      <RemoveFooter onRemove={onRemove} />
+    </>
   );
 }

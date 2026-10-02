@@ -26,7 +26,6 @@ import {
   buttonClass,
   ERROR_MESSAGE,
   FIELD,
-  FOOTER_IN_ROW,
   HINT_IN_ROW,
   OPTIONAL_TEXT,
   SELECT,
@@ -34,7 +33,7 @@ import {
   withoutColon,
 } from "./blocks";
 import { Field } from "./Field";
-import { Footer } from "./Footer";
+import { RemoveFooter } from "./RemoveFooter";
 import { Section } from "./Section";
 import { SettingsMenu } from "./SettingsMenu";
 import { Switch } from "./Switch";
@@ -316,22 +315,17 @@ export function BoardSettings({ provider, onRemove }: { provider: BoardProvider;
           )}
         </Field>
         {rest.map(providerField)}
-        <div className={FOOTER_IN_ROW}>
-          <button className={buttonClass("ghost")} onClick={onRemove}>
-            {t("ag.remove")}
-          </button>
+        <RemoveFooter onRemove={onRemove} message={message}>
           <SettingsMenu
             up
             tip={t("int.more")}
             items={more}
             onPick={id => (id === "import" ? importBoard(provider) : clearBoard(provider))}
           />
-          <Footer message={message}>
-            <button className={buttonClass("primary")} onClick={() => saveBoardForm(provider)}>
-              {t("int.save")}
-            </button>
-          </Footer>
-        </div>
+          <button className={buttonClass("primary")} onClick={() => saveBoardForm(provider)}>
+            {t("int.save")}
+          </button>
+        </RemoveFooter>
       </Section>
       {boardLinks()}
     </>
