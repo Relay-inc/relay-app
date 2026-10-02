@@ -80,13 +80,26 @@ pub fn accounts(s: &Value, p: &dyn AgentProvider) -> Vec<String> {
     let extra = c["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).map(String::from);
     std::iter::once(String::new()).chain(extra.filter(|_| p.caps().accounts)).collect()
 }
-/// The account a conversation runs on: `cur` (its own, or the active one for a new conversation) while it still
-/// exists; with `auto` and `cur` used up, the next account after it that is not, round the list.
-pub fn pick_account(list: &[String], cur: &str, auto: bool, spent: impl Fn(&str) -> bool) -> String {
-    let i = list.iter().position(|a| a == cur).unwrap_or(0);
-    if !auto || !spent(&list[i]) { return list[i].clone(); }
-    (1..list.len()).map(|n| &list[(i + n) % list.len()]).find(|a| !spent(a)).unwrap_or(&list[i]).clone()
+/// The account a conversation runs on: `cur` (its own, or the active one for a new conversation), also when it left
+/// the list (its transcript is still there); with `auto` and `cur` used up, the next listed account after it that is
+/// not and is `ready` (signed in), round the list, else `cur`.
+pub fn pick_account(list: &[String], cur: &str, auto: bool, spent: impl Fn(&str) -> bool, ready: impl Fn(&str) -> bool) -> String {
+    if !auto || !spent(cur) { return cur.to_string(); }
+    let start = list.iter().position(|a| a == cur).map_or(0, |i| i + 1);
+    (0..list.len()).map(|n| &list[(start + n) % list.len()]).filter(|a| *a != cur)
+        .find(|a| !spent(a) && ready(a)).map_or_else(|| cur.to_string(), |a| a.clone())
 }
+
+/// Limits (`Limits::json`) that leave no room for a conversation on `model`: a window at 100% that applies to it. A
+/// model's own window (weekly Opus) only counts for that model, never for the CLI's default ("", which falls back).
+pub fn used_up(limits: &Value, model: &str) -> bool {
+    let model = model.to_lowercase();
+    limits["windows"].as_array().into_iter().flatten()
+        .filter(|w| w["name"].as_str().is_none_or(|n| !model.is_empty() && model.contains(&n.to_lowercase())))
+        .any(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
+}
+/// Limits read without a login: the account was never signed in (an expired token the CLI refreshes itself).
+pub fn no_login(limits: &Value) -> bool { limits["ok"] == false && limits["reason"] == "no-login" }
 
 /// A conversation's session: which provider, its session id there, and the account (config folder, "" the CLI's own).
 #[derive(Clone, Debug, PartialEq)]
@@ -160,13 +173,27 @@ mod tests {
         assert!(term_key("t:nope:abc").is_none() && term_key("c:1").is_none());
     }
     #[test]
+    fn only_the_windows_of_the_model_count() {
+        let w = |name: Value, pct: f64| json!({"name": name, "pct": pct});
+        let opus_week = json!({"ok": true, "windows": [w(Value::Null, 40.0), w(json!("Opus"), 100.0)]});
+        assert!(used_up(&opus_week, "opus") && used_up(&opus_week, "claude-opus-5-5"));
+        assert!(!used_up(&opus_week, "sonnet") && !used_up(&opus_week, ""));
+        assert!(used_up(&json!({"windows": [w(Value::Null, 100.0)]}), "sonnet"));
+        assert!(no_login(&json!({"ok": false, "reason": "no-login"})) && !no_login(&json!({"ok": false, "reason": "expired"})));
+    }
+    #[test]
     fn accounts_switch_only_when_used_up() {
         let l: Vec<String> = ["", "/a", "/b"].map(String::from).to_vec();
-        assert_eq!(pick_account(&l, "/a", true, |_| false), "/a");
-        assert_eq!(pick_account(&l, "/a", false, |_| true), "/a");
-        assert_eq!(pick_account(&l, "/a", true, |a| a == "/a"), "/b");
-        assert_eq!(pick_account(&l, "/b", true, |a| a != ""), "");
-        assert_eq!(pick_account(&l, "/b", true, |_| true), "/b"); // all used up: stay
-        assert_eq!(pick_account(&l, "/gone", true, |_| false), "");
+        let ok = |_: &str| true;
+        assert_eq!(pick_account(&l, "/a", true, |_| false, ok), "/a");
+        assert_eq!(pick_account(&l, "/a", false, |_| true, ok), "/a");
+        assert_eq!(pick_account(&l, "/a", true, |a| a == "/a", ok), "/b");
+        assert_eq!(pick_account(&l, "/b", true, |a| a != "", ok), "");
+        assert_eq!(pick_account(&l, "/b", true, |_| true, ok), "/b"); // all used up: stay
+        // never signed in: skipped
+        assert_eq!(pick_account(&l, "/a", true, |a| a == "/a", |a| a != "/b"), "");
+        // a removed account keeps its conversations, and moves on to a listed one when used up
+        assert_eq!(pick_account(&l, "/gone", true, |_| false, ok), "/gone");
+        assert_eq!(pick_account(&l, "/gone", true, |a| a == "/gone", ok), "");
     }
 }

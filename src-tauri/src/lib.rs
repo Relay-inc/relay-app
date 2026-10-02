@@ -351,6 +351,8 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
 async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
     let eb = env_of(&app, &state, p);
+    // on the account a new conversation gets now, never one inherited from the app's environment
+    let account = account_of(&state, p, "", "sonnet", true);
     // the repos linked to a project say a lot about what it is (lemahieu-shopware: a shop)
     let mut repos: HashMap<String, Vec<String>> = HashMap::new();
     for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
@@ -370,10 +372,13 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
         {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
     // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
-        let mut c = Command::new(&eb.bin).args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+        let mut c = Command::new(&eb.bin);
+        c.args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
                 "--tools", "WebSearch", "--allowedTools", "WebSearch"])
             .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
+        let mut c = c.spawn()?;
         c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
         c.wait_with_output()
     }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
@@ -449,34 +454,45 @@ impl EnvBuf {
     fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending, opts: &self.opts } }
 }
 fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
+    // the accounts conversations were recorded on, also one removed from the list since: its transcripts are still there
+    let recorded: Vec<String> = st.sids.lock().unwrap().values().filter(|x| x.provider == p.id() && !x.account.is_empty()).map(|x| x.account.clone()).collect();
     let s = st.settings.lock().unwrap();
     let mut opts = s["agents"]["providers"][p.id()].clone();
     // Claude Code gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
     if p.id() == "claude" && opts.is_object() { opts["mail"] = json!(mail_on(&s)); }
     // the account calls run on unless they say otherwise (spawn, limits): the active one
-    if p.caps().accounts && opts.is_object() { opts["account"] = opts["active"].clone(); }
+    if p.caps().accounts && opts.is_object() {
+        opts["account"] = opts["active"].clone();
+        let mut list = opts["accounts"].as_array().cloned().unwrap_or_default();
+        for d in recorded { if !list.iter().any(|a| a["dir"] == d.as_str()) { list.push(json!({"name": "", "dir": d})); } }
+        opts["accounts"] = json!(list);
+    }
     EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), opts }
 }
 /// The key of a provider's account in `limits` and `spent`.
 fn limit_key(p: &dyn AgentProvider, account: &str) -> String { format!("{}:{account}", p.id()) }
-/// An account whose limits are used up: a turn was refused on it, or a window it last read is at 100%.
-fn is_spent(st: &App, p: &dyn AgentProvider, account: &str) -> bool {
+/// An account with no room for `model`: a turn was refused on it, or a window it last read that applies is at 100%.
+fn is_spent(st: &App, p: &dyn AgentProvider, account: &str, model: &str) -> bool {
     let k = limit_key(p, account);
-    st.spent.lock().unwrap().contains(&k) || st.limits.lock().unwrap().get(&k)
-        .is_some_and(|(_, v)| v["windows"].as_array().into_iter().flatten().any(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0)))
+    st.spent.lock().unwrap().contains(&k) || st.limits.lock().unwrap().get(&k).is_some_and(|(_, v)| agents::used_up(v, model))
 }
-/// The account a conversation runs on: its session's, else the active one; with auto-switch on and that one used
-/// up, the next that is not. Reads what the limits last said, never asks (no network in a send).
+/// An account auto-switch may move to: its limits did not come back without a login (not read yet counts as fine).
+fn is_ready(st: &App, p: &dyn AgentProvider, account: &str) -> bool {
+    !st.limits.lock().unwrap().get(&limit_key(p, account)).is_some_and(|(_, v)| agents::no_login(v))
+}
+/// The account a conversation runs on: its session's, else the active one; with auto-switch on, `may_move` and that
+/// one used up for `model`, the next signed-in one that is not. Reads what the limits last said, never asks (no
+/// network in a send). A session holding mail text never moves (`may_move` false): it gets the limit error instead.
 /// ponytail: the limits are at most 5 minutes old (the webview's poll); a refused turn marks an account at once
-fn account_of(st: &App, p: &dyn AgentProvider, key: &str) -> String {
+fn account_of(st: &App, p: &dyn AgentProvider, key: &str, model: &str, may_move: bool) -> String {
     if !p.caps().accounts { return String::new(); }
     let own = st.sids.lock().unwrap().get(key).filter(|x| x.provider == p.id()).map(|x| x.account.clone());
     let (list, cur, auto) = {
         let s = st.settings.lock().unwrap();
         let c = &s["agents"]["providers"][p.id()];
-        (agents::accounts(&s, p), own.unwrap_or_else(|| c["active"].as_str().unwrap_or("").into()), c["auto"] == true)
+        (agents::accounts(&s, p), own.unwrap_or_else(|| c["active"].as_str().unwrap_or("").into()), c["auto"] == true && may_move)
     };
-    agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a))
+    agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a, model), |a| is_ready(st, p, a))
 }
 fn mail_on(s: &Value) -> bool { s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() }
 /// A conversation's provider: its session's, else the one asked for when switched on, else the default.
@@ -767,7 +783,9 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
     let opts = (model, effort);
     let name = name.unwrap_or_else(|| project.clone());
-    let mut account = account_of(&state, p, &project);
+    // a session that holds mail text stays on its account (another account may be another owner)
+    let tainted = mail.unwrap_or(false) || state.procs.lock().unwrap().get(&project).is_some_and(|x| x.tainted);
+    let mut account = account_of(&state, p, &project, &opts.0, !tainted);
     let mut procs = state.procs.lock().unwrap();
     // a turn still running stays where it is: the account moves once the conversation is idle
     if let Some(x) = procs.get(&project).filter(|x| x.turns > 0 && x.provider == p.id()) { account = x.account.clone(); }
@@ -819,7 +837,9 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
         provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().title)).or_else(|| on.iter().copied().find(|p| p.caps().title))
     };
     let p = p.ok_or_else(|| trc("err.no_agent"))?;
-    let eb = env_of(&app, &state, p);
+    // on the account a new conversation gets now (Haiku: no model window of its own)
+    let mut eb = env_of(&app, &state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "haiku", true)); }
     tauri::async_runtime::spawn_blocking(move || p.title(&eb.env(), &text)).await.map_err(|e| e.to_string())?
 }
 
@@ -1051,7 +1071,7 @@ async fn usage_limits(app: AppHandle, state: State<'_, App>) -> Result<Value, St
             };
             accounts.push(json!({"dir": acct, "name": names.get(acct), "limits": v}));
         }
-        let now = account_of(&state, p, "");
+        let now = account_of(&state, p, "", "", true);
         let shown = accounts.iter().find(|a| a["dir"] == now.as_str()).unwrap_or(&accounts[0])["limits"].clone();
         out.push(json!({"provider": p.id(), "limits": shown, "accounts": if list.len() > 1 { json!(accounts) } else { json!(null) }}));
     }
