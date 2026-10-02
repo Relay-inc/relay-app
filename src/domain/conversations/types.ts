@@ -40,6 +40,9 @@ export type Item = {
   path?: string;
   imgs?: string[];
   tool?: { name: string; input: ToolInput };
+  /** a tool call: when it started and when its result came (ms), for the duration of a group of steps */
+  at?: number;
+  end?: number;
 };
 export type Chat = {
   key: string;
