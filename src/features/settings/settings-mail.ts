@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import { customElement, property } from "lit/decorators.js";
+import { customElement, property, state } from "lit/decorators.js";
 import { live } from "lit/directives/live.js";
 import { emit } from "../../core/dom";
 import type { Key } from "../../core/locales/en";
@@ -23,7 +23,14 @@ import { SettingsElement } from "./settings-element";
 import { tws } from "./styles";
 import type { MailAcct, MailCfg, Message } from "./types";
 
-export type MailNew = { email: string; keychain_service: string; keychain_account: string; password: string };
+export type MailNew = {
+  email: string;
+  keychain_service: string;
+  keychain_account: string;
+  password: string;
+  host: string;
+  port: string;
+};
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -34,7 +41,7 @@ declare global {
     "mail-account": CustomEvent<string>;
     "mail-test": CustomEvent<MailAcct>;
     "mail-drop": CustomEvent<MailAcct>;
-    "mail-connect": CustomEvent<void>;
+    "mail-connect": CustomEvent<boolean>; // whether it is a server other than Gmail
     "mail-add": CustomEvent<void>;
     "mail-save": CustomEvent<void>;
   }
@@ -52,7 +59,7 @@ const KNOWN_ERRORS: [RegExp, Key][] = [
   [/No password in the keychain/, "mail.errNoPw"],
   [/not approved in time/, "mail.errKeychain"],
   [/Only Gmail/, "mail.errGmail"],
-  [/IMAP (connection|timeout|protocol)/, "mail.errNet"],
+  [/IMAP (connection|timeout|protocol)|did not answer in time/, "mail.errNet"],
 ];
 
 /** Mail's body in the integrations list: the accounts, and the steps to connect another. No password of our own either,
@@ -69,6 +76,8 @@ export class SettingsMail extends SettingsElement {
   @property() busy = "";
   @property() message = "";
   @property({ type: Boolean }) ok = false;
+  /** which connect steps show */
+  @state() private kind: "gmail" | "imap" = "gmail";
 
   // a backend error as what to do about it, with the raw message small below for when it is something else
   private explainError(error: string) {
@@ -98,7 +107,7 @@ export class SettingsMail extends SettingsElement {
       <span class="min-w-0 flex-1"
         ><b class="block truncate font-medium">${account.email}</b
         ><span class="block truncate text-xs text-s-muted"
-          >${t("mail.inKeychain", { svc: account.keychain_service })}</span
+          >${t("mail.inKeychain", { svc: account.keychain_service })}${account.host ? ` · ${account.host}` : ""}</span
         ></span
       >${this.renderTestResult(account)}
       <span
@@ -162,18 +171,18 @@ export class SettingsMail extends SettingsElement {
     return field(withoutColon(label), input, { id, classes: "w-full" });
   }
 
-  private renderPasswordField() {
+  private renderPasswordField(label: Key, placeholder?: Key) {
     const input = html`<input
       class=${FIELD}
       id="mailpw"
       type="password"
       .value=${live(this.newAccount.password)}
       @input=${this.onNewField("password")}
-      placeholder=${t("mail.pwPh")}
+      placeholder=${placeholder ? t(placeholder) : ""}
       autocomplete="off"
       spellcheck="false"
     />`;
-    return field(withoutColon(t("mail.pwL")), input, { id: "mailpw", classes: "w-full" });
+    return field(withoutColon(t(label)), input, { id: "mailpw", classes: "w-full" });
   }
 
   private renderSaveRow() {
@@ -187,10 +196,36 @@ export class SettingsMail extends SettingsElement {
     </div>`;
   }
 
-  private renderConnectSteps() {
-    const heading = this.config.accounts.length ? t("mail.guideMore") : t("mail.guideH");
-    return html`<div class=${SUB}><b class="text-xs font-semibold">${heading}</b></div>
-      <div class=${STEP}>
+  private renderKindChoice() {
+    const kinds = [
+      ["gmail", t("mail.kindGmail")],
+      ["imap", t("mail.kindImap")],
+    ] as const;
+    return html`<div class="seg w-fit" role="radiogroup">
+      ${kinds.map(
+        ([kind, name]) =>
+          html`<button
+            role="radio"
+            aria-checked=${this.kind === kind}
+            class=${this.kind === kind ? "on" : ""}
+            @click=${() => (this.kind = kind)}
+          >
+            ${name}
+          </button>`,
+      )}
+    </div>`;
+  }
+
+  private renderConnectButton(imap: boolean) {
+    return html`<div class="flex items-center gap-2">
+      <button class=${buttonClass("primary")} @click=${() => emit(this, "mail-connect", imap)} ?disabled=${!!this.busy}>
+        ${t("mail.connect")}</button
+      >${this.renderBusy("connect")}
+    </div>`;
+  }
+
+  private renderGmailSteps() {
+    return html`<div class=${STEP}>
         <b class="font-medium">${t("mail.step1H")}</b>
         <p class=${PARA}>${th("mail.step1")}</p>
         <a class=${buttonClass()} href="https://myaccount.google.com/apppasswords" target="_blank"
@@ -200,14 +235,27 @@ export class SettingsMail extends SettingsElement {
       </div>
       <div class=${STEP}>
         <b class="font-medium">${t("mail.step2H")}</b>
-        ${this.renderEmailField("mailnew")} ${this.renderPasswordField()}
-        <div class="flex items-center gap-2">
-          <button class=${buttonClass("primary")} @click=${() => emit(this, "mail-connect")} ?disabled=${!!this.busy}>
-            ${t("mail.connect")}</button
-          >${this.renderBusy("connect")}
-        </div>
+        ${this.renderEmailField("mailnew")} ${this.renderPasswordField("mail.pwL", "mail.pwPh")}
+        ${this.renderConnectButton(false)}
         <p class=${HINT_STEP}>${th("mail.step2Hint")}</p>
       </div>`;
+  }
+
+  private renderImapSteps() {
+    return html`<div class=${STEP}>
+      ${this.renderEmailField("mailnew")}
+      ${this.renderTextField("mailhost", t("mail.hostL"), "host", "mail.example.com")}
+      ${this.renderTextField("mailport", t("mail.portL"), "port", "993")} ${this.renderPasswordField("mail.imapPwL")}
+      ${this.renderConnectButton(true)}
+      <p class=${HINT_STEP}>${th("mail.imapHint")}</p>
+    </div>`;
+  }
+
+  private renderConnectSteps() {
+    const imap = this.kind === "imap";
+    const heading = this.config.accounts.length ? t("mail.guideMore") : imap ? t("mail.guideImap") : t("mail.guideH");
+    return html`<div class=${SUB}><b class="text-xs font-semibold">${heading}</b></div>
+      ${this.renderKindChoice()} ${imap ? this.renderImapSteps() : this.renderGmailSteps()}`;
   }
 
   // the same without the app password: an account whose password already sits in the keychain
@@ -216,6 +264,8 @@ export class SettingsMail extends SettingsElement {
       <summary class="font-medium">${t("mail.advH")}</summary>
       <p class=${HINT_STEP}>${th("mail.adv")}</p>
       ${this.renderEmailField("mailemail2")}
+      ${this.renderTextField("mailhost2", t("mail.advHostL"), "host", "mail.example.com")}
+      ${this.renderTextField("mailport2", t("mail.portL"), "port", "993")}
       ${this.renderTextField("mailsvc", t("mail.svcL"), "keychain_service", "himalaya-weareantenna-imap")}
       ${this.renderTextField("mailkacc", t("mail.kaccL"), "keychain_account", "weareantenna")}
       <div class="flex items-center gap-2">

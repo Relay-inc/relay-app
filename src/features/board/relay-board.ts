@@ -6,7 +6,7 @@ import type { Key } from "../../core/locales/en";
 import { icon } from "../../core/icons";
 import { StoreController } from "../../core/store";
 import { tw } from "../../core/styles";
-import type { BoardProvider, Card, Column, Opt } from "../../domain/providers";
+import type { BoardProvider, Card, Column, Opt, View } from "../../domain/providers";
 import {
   boards,
   boardState,
@@ -28,6 +28,7 @@ import {
   savePresetAs,
   deletePreset,
   applyPreset,
+  applyView,
   isFolded,
   toggleFold,
   pickGroup,
@@ -42,6 +43,7 @@ import {
   options,
   sameFilters,
   type Facet,
+  type Filters,
 } from "../../domain/board-filter";
 import { panel, cardAct, closeTicket, cardOf, type CardAct } from "../../domain/panel";
 import { chat, newChat } from "../../domain/chats/state";
@@ -239,8 +241,10 @@ export class RelayBoard extends LitElement {
     const total = data.cards.length;
     const groups = provider.groupings ?? [];
     const group = groups.find(g => g.id === data.group);
-    const preset = presetsOf(provider).find(p => sameFilters(p.filters, data.filters));
     const n = activeCount(data.filters);
+    const preset =
+      presetsOf(provider).find(p => sameFilters(p.filters, data.filters)) ??
+      (n ? data.views.find(v => this.viewOn(provider, v)) : undefined);
     return html`<div class="relative flex items-center gap-2 mb-3">
       <label class="flex-1 min-w-0 flex items-center gap-2 h-7.5 px-2.5 rounded-lg bg-fill-2 text-tertiary">
         ${icon("search", "glyph size-3.5")}
@@ -303,6 +307,53 @@ export class RelayBoard extends LitElement {
     </div>`;
   }
 
+  private viewOn = (provider: BoardProvider, v: View) => {
+    const data = boardState(provider);
+    return (
+      !!v.filters &&
+      sameFilters(v.filters, data.filters) &&
+      (!v.group || v.group === data.group) &&
+      (!v.layout || v.layout === data.view)
+    );
+  };
+  // a preset or saved view: how many cards it shows, a check when it is what the board shows
+  private presetRow(name: string, filters: Filters | null, on: boolean, apply: () => void, remove?: () => void) {
+    const data = boardState(this.provider);
+    return html`<div
+      class="group ${this.popRow} ${filters ? "" : "opacity-50"}"
+      title=${filters ? "" : t("kb.viewUnsupported")}
+      @click=${() => {
+        if (!filters) return;
+        apply();
+        this.closePop();
+      }}
+    >
+      <span class="flex-1 truncate">${name}</span>${
+        filters
+          ? html`<span class="text-xs text-tertiary tabular-nums"
+              >${data.cards.filter(c => matches(c, "", filters)).length}</span
+            >`
+          : nothing
+      }
+      ${on ? icon("check", "glyph size-3.5") : nothing}
+      ${
+        remove
+          ? html`<button
+              class="hidden group-hover:inline-grid btn-icon size-5 rounded-sm"
+              title=${t("kb.presetDelete")}
+              @click=${(e: Event) => {
+                e.stopPropagation();
+                remove();
+              }}
+            >
+              ${icon("close", "glyph size-3")}
+            </button>`
+          : nothing
+      }
+    </div>`;
+  }
+
+  // the tracker's saved views (read only) above the presets kept in Relay, each under where it comes from
   private renderPresets(provider: BoardProvider) {
     const data = boardState(provider);
     const presets = presetsOf(provider);
@@ -313,34 +364,26 @@ export class RelayBoard extends LitElement {
       savePresetAs(provider, input.value);
       this.closePop();
     };
-    return html`${this.popHeading(t("kb.presets"))}
+    return html`${
+        data.views.length
+          ? html`${this.popHeading(provider.name)}
+              ${data.views.map(v =>
+                this.presetRow(v.name, v.filters, this.viewOn(provider, v), () => applyView(provider, v)),
+              )}
+              <div class="h-px bg-separator my-1"></div>`
+          : nothing
+      }
+      ${this.popHeading(data.views.length ? "Relay" : t("kb.presets"))}
       ${
         presets.length
-          ? presets.map(
-              p =>
-                html`<div
-                  class="group ${this.popRow}"
-                  @click=${() => {
-                    applyPreset(provider, p);
-                    this.closePop();
-                  }}
-                >
-                  <span class="flex-1 truncate">${p.name}</span
-                  ><span class="text-xs text-tertiary tabular-nums"
-                    >${data.cards.filter(c => matches(c, "", p.filters)).length}</span
-                  >
-                  ${sameFilters(p.filters, data.filters) ? icon("check", "glyph size-3.5") : nothing}
-                  <button
-                    class="hidden group-hover:inline-grid btn-icon size-5 rounded-sm"
-                    title=${t("kb.presetDelete")}
-                    @click=${(e: Event) => {
-                      e.stopPropagation();
-                      deletePreset(provider, p.name);
-                    }}
-                  >
-                    ${icon("close", "glyph size-3")}
-                  </button>
-                </div>`,
+          ? presets.map(p =>
+              this.presetRow(
+                p.name,
+                p.filters,
+                sameFilters(p.filters, data.filters),
+                () => applyPreset(provider, p),
+                () => deletePreset(provider, p.name),
+              ),
             )
           : html`<div class="px-2 py-1.5 text-xs text-secondary">${t("kb.noPresets")}</div>`
       }

@@ -12,7 +12,14 @@ export type IntegrationsHost = ReactiveControllerHost & { settings: Settings; co
 /** Mail's state and calls, kept by the integrations page so they survive the row folding shut. */
 export class MailController {
   edit!: MailCfg;
-  newAccount: MailNew = { email: "", keychain_service: "", keychain_account: "", password: "" }; // what sits in the add fields
+  newAccount: MailNew = {
+    email: "",
+    keychain_service: "",
+    keychain_account: "",
+    password: "",
+    host: "",
+    port: "993",
+  }; // what sits in the add fields
   busy = ""; // "connect" or "advanced" while that step runs
   message = "";
   ok = false;
@@ -50,7 +57,14 @@ export class MailController {
     this.tests[account.email] = { text: testResult, ok: true };
     this.message = t("mail.connected", { email: account.email, n: (testResult.match(/\d+/) || ["?"])[0] });
     this.ok = true;
-    Object.assign(this.newAccount, { email: "", password: "", keychain_service: "", keychain_account: "" });
+    Object.assign(this.newAccount, {
+      email: "",
+      password: "",
+      keychain_service: "",
+      keychain_account: "",
+      host: "",
+      port: "993",
+    });
   }
 
   // "connect" and "advanced" both end here: busy while the step runs, the error shown when it fails
@@ -67,8 +81,8 @@ export class MailController {
     this.redraw();
   }
 
-  // connect with an app password: the backend stores it in the keychain and tests the login
-  async connect() {
+  // connect with an app password (Gmail) or a password and server (imap): the backend stores it in the keychain and tests the login
+  async connect(imap: boolean) {
     const draft = this.newAccount;
     if (!EMAIL.test(draft.email.trim())) {
       this.fail(t("mail.invalid"));
@@ -79,6 +93,7 @@ export class MailController {
       const connected = await invoke<{ account: MailAcct; result: string }>("mail_connect", {
         email: draft.email,
         password: draft.password,
+        ...(imap ? { host: draft.host.trim(), port: Number(draft.port) || 993 } : {}),
       });
       await this.keep(connected.account, connected.result);
     });
@@ -89,10 +104,12 @@ export class MailController {
   // add an account whose password already sits in the keychain
   async add() {
     const draft = this.newAccount;
-    const account = {
+    const host = draft.host.trim();
+    const account: MailAcct = {
       email: draft.email.trim(),
       keychain_service: draft.keychain_service.trim(),
       keychain_account: draft.keychain_account.trim(),
+      ...(host ? { host, port: Number(draft.port) || 993 } : {}),
     };
     if (!EMAIL.test(account.email) || !account.keychain_service || !account.keychain_account) {
       this.fail(t("mail.invalid"));
