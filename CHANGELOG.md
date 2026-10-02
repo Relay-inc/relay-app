@@ -21,6 +21,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Fixed
 - Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open (#56)
+- Repeated drags of a board card are saved in order. A failed move restores its last saved position, and late replies cannot change a different board after you switch views (#57)
 
 ## [0.0.2] - 2026-10-01
 
