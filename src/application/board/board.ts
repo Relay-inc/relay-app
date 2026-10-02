@@ -184,9 +184,17 @@ export function showBoard(provider: BoardProvider, reload = false) {
   run(provider, async live => {
     const projects = boardState(provider).projects ?? (await provider.projects(ctxOf(provider)));
     if (!live()) return;
+    // the board linked to a vault project counts even when the tracker's list leaves its project out (Productive lists
+    // only the projects you are a member of): it is listed under the vault project's name
+    const lastProject = useNavigationStore.getState().lastProject;
+    const linked = lastProject ? settings().boards?.[lastProject] : undefined;
     change(provider, state => {
-      state.projects = projects;
-      if (!projects.some(project => project.id === state.project)) {
+      const linkedHere = linked?.provider === provider.id && linked.project === state.project;
+      state.projects =
+        linkedHere && !projects.some(project => project.id === state.project)
+          ? [...projects, { id: state.project, name: projectLabel(lastProject!) }]
+          : projects;
+      if (!state.projects.some(project => project.id === state.project)) {
         state.project = "";
         state.board = "";
       }

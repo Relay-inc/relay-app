@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import type { PR } from "../../../domain/pull-requests/types";
 import { usePullRequestsStore } from "../../../application/pull-requests/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -13,17 +13,31 @@ import { PrPane } from "./PrPane";
  *  bar's button. */
 export function PullRequestsView({ className = "" }: { className?: string }) {
   const { t } = useT();
-  const list = usePullRequestsStore(s => s.list);
+  const all = usePullRequestsStore(s => s.list);
   const err = usePullRequestsStore(s => s.err);
   const busy = usePullRequestsStore(s => s.busy);
   const open = useNavigationStore(s => s.panel.prOpen);
+  // opened from a project's title bar: only that project's PRs
+  const project = useNavigationStore(s => s.tool?.project);
+  const list = useMemo(
+    () =>
+      all && project
+        ? {
+            ...all,
+            review: all.review.filter(pr => pr.project === project),
+            mine: all.mine.filter(pr => pr.project === project),
+          }
+        : all,
+    [all, project],
+  );
 
-  // with nothing picked yet, the first PR of the list
+  // with nothing picked yet (or a PR of another project), the first PR of the list
   const first = list?.review[0] || list?.mine[0];
   const firstKey = first ? prKey(first.repo, first.number) : "";
+  const shown = !!list && [...list.review, ...list.mine].some(pr => prKey(pr.repo, pr.number) === open);
   useEffect(() => {
-    if (!open && firstKey) openPr(firstKey);
-  }, [open, firstKey]);
+    if (!shown && firstKey) openPr(firstKey);
+  }, [shown, firstKey]);
 
   const group = (name: string, prs: PR[], mine: boolean) => (
     <section>
@@ -57,7 +71,7 @@ export function PullRequestsView({ className = "" }: { className?: string }) {
         {err ? <div className="err-box m-4">{err}</div> : null}
         {lists}
       </div>
-      <div className="min-h-0 overflow-y-auto">{open ? <PrPane prKey={open} /> : null}</div>
+      <div className="min-h-0 overflow-y-auto">{open && (shown || !project) ? <PrPane prKey={open} /> : null}</div>
     </div>
   );
 }

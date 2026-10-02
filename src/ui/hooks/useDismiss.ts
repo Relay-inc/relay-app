@@ -10,7 +10,11 @@ export function useDismiss(
 ) {
   const dismiss = useEffectEvent((e: Event) => {
     if (e instanceof KeyboardEvent) {
-      if (e.key === "Escape") close();
+      // the key is taken: the app's own Esc (back from a project's board, stop the turn) leaves it alone
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+      }
       return;
     }
     const target = e.target instanceof Element ? e.target : null;

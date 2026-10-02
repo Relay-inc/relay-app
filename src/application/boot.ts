@@ -25,10 +25,10 @@ import { closeChat } from "./conversations/actions";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere } from "./navigation/navigation";
-import { closeDetail } from "./navigation/panel";
+import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
-import { loadPrs, resetPrs } from "./pull-requests/prs";
+import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
 import { listenToLinks } from "./deep-links";
@@ -61,10 +61,11 @@ async function settingsChanged(next: Settings) {
     resetPrs();
     if (!ghOn() && selected() === PRS) select(WAIT);
     loadPrs();
+    loadProjectRepos();
   }
   if (mailChanged) {
     resetMail();
-    if (isMailKey(useNavigationStore.getState().panel.open)) closeDetail();
+    if (isMailKey(useNavigationStore.getState().panel.open)) closeDrawer();
     if (!mailOn() && selected() === MAIL) select(WAIT);
     loadMails();
   }
@@ -119,6 +120,8 @@ async function loadSettingsAndVault() {
   await loadSnapshot();
   await refreshIcons();
   backend.onIconsChanged(reloadIcons);
+  backend.onReposChanged(loadProjectRepos);
+  backend.onRepoUnlinked(askRepo);
 }
 
 // conversations from earlier versions: general:<id>, plain project names
