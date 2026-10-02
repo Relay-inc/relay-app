@@ -67,7 +67,10 @@ struct Open {
     walkers: HashMap<String, Walker>,
 }
 
-pub struct Mirror { data: PathBuf, work: PathBuf, pub in_ram: bool, open: Mutex<HashMap<String, Open>> }
+// `unlocking`: one unlock at a time. A first unlock of a big store (converting it, unpacking thousands of files) takes
+// longer than the app waits, and its next round asks again: two at once would convert the same blobs.
+// ponytail: one lock for every device, per-device locks if several laptops unlock big stores at the same moment
+pub struct Mirror { data: PathBuf, work: PathBuf, pub in_ram: bool, open: Mutex<HashMap<String, Open>>, unlocking: Mutex<()> }
 
 /// Whether `dir` is on a tmpfs or ramfs (Linux, from /proc/mounts); false elsewhere.
 fn on_ram(dir: &Path) -> bool {
@@ -84,7 +87,7 @@ impl Mirror {
         fs::create_dir_all(&work).ok();
         let in_ram = on_ram(&work);
         if !in_ram { eprintln!("relay-server: the mirror's working copy {} is not on a RAM disk, plaintext lands on disk (set RELAY_SERVER_WORKDIR to a tmpfs)", work.display()); }
-        let m = Arc::new(Mirror { data: data.into(), work, in_ram, open: Mutex::new(HashMap::new()) });
+        let m = Arc::new(Mirror { data: data.into(), work, in_ram, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) });
         let m2 = m.clone();
         thread::spawn(move || loop { thread::sleep(FLUSH); m2.flush_all(); });
         m
@@ -97,6 +100,8 @@ impl Mirror {
     /// Take the device's key (64 hex), check it against the store, unpack every root into the working copy.
     pub fn unlock(&self, ns: &str, key_hex: &str) -> Result<(), String> {
         if self.is_open(ns) { return Ok(()); }
+        let _one = self.unlocking.lock().unwrap_or_else(|e| e.into_inner());
+        if self.is_open(ns) { return Ok(()); } // the unlock this one waited for opened it
         let raw: Vec<u8> = (0..key_hex.len()).step_by(2).filter_map(|i| key_hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect();
         if raw.len() != 32 { return Err("bad mirror key".into()); }
         let (key, names) = derive(&raw);
@@ -262,12 +267,31 @@ mod tests {
     fn mirror(name: &str) -> Mirror {
         let base = std::env::temp_dir().join(format!("relay-mirror-{name}-{}", std::process::id()));
         fs::remove_dir_all(&base).ok();
-        Mirror { data: base.join("data"), work: base.join("work"), in_ram: false, open: Mutex::new(HashMap::new()) }
+        Mirror { data: base.join("data"), work: base.join("work"), in_ram: false, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) }
     }
     fn names_in(dir: &Path) -> Vec<String> {
         let mut v: Vec<String> = fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into()).collect();
         v.sort();
         v
+    }
+
+    #[test]
+    fn unlocks_at_the_same_time_convert_once() {
+        let m = Arc::new(mirror("concurrent"));
+        let store = m.store("dev");
+        let v1 = LessSafeKey::new(UnboundKey::new(&CHACHA20_POLY1305, &RAW).unwrap());
+        let v1_names = hmac::Key::new(hmac::HMAC_SHA256, &RAW);
+        fs::create_dir_all(&store).unwrap();
+        fs::write(store.join("check"), seal(&v1, b"check", CHECK_V1).unwrap()).unwrap();
+        for i in 0..300 {
+            let rel = format!("n/{i}.md");
+            let p = store.join("vault").join(blob_name(&v1_names, "vault", &rel));
+            sync::write_atomic(&p, &seal(&v1, b"vault", &pack(&rel, rel.as_bytes())).unwrap(), None).unwrap();
+        }
+        let threads: Vec<_> = (0..4).map(|_| { let m = m.clone(); std::thread::spawn(move || m.unlock("dev", &hex(&RAW))) }).collect();
+        for t in threads { t.join().unwrap().unwrap(); }
+        assert_eq!(names_in(&store.join("vault")).len(), 300);
+        assert_eq!(fs::read(m.work_of("dev").join("vault/n/299.md")).unwrap(), b"n/299.md");
     }
 
     #[test]
