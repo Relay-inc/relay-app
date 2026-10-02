@@ -12,7 +12,7 @@ const options: AgentOption<Key>[] = [
   { id: "auth", label: "opt.auth", choices: [{ id: "chatgpt", label: "opt.auth.chatgpt" }, { id: "api-key", label: "opt.auth.api-key" }] },
 ];
 
-// Codex in the webview: its name, glyph, strings and options. Everything that runs is in src/lib.rs and bridge.py.
+// Codex in the webview: its name, glyph, strings and options. Everything that runs is in src/lib.rs and src/bridge.rs.
 const codex: AgentProvider<Key> = {
   id: "codex",
   name: "Codex",

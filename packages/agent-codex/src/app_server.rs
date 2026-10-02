@@ -1,5 +1,5 @@
 //! `codex app-server` (JSON-RPC 2.0 over stdio, v2 protocol of codex-cli 0.159) as the contract's events, the turns
-//! the app sends, and the answers to its approval requests. bridge.py does the handshake and fills in the thread id.
+//! the app sends, and the answers to its approval requests. bridge.rs does the handshake and fills in the thread id.
 
 use agent_core::{pending::Request, Event, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
@@ -9,7 +9,7 @@ use std::sync::Mutex;
 /// The newest rate limits an app-server pushed (`account/rateLimits/updated`): epoch ms and the snapshot.
 pub static LIVE_LIMITS: Mutex<Option<(i64, Value)>> = Mutex::new(None);
 
-/// A turn as `turn/start`; bridge.py fills in `threadId` (and the model and effort it was started with).
+/// A turn as `turn/start`; bridge.rs fills in `threadId` (and the model and effort it was started with).
 /// Images go inline as data URLs.
 pub fn turn_start(turn: &Turn) -> Value {
     let mut input: Vec<Value> = vec![];
@@ -101,7 +101,7 @@ impl State {
         let mut out = vec![];
         let p = &m["params"];
         let Some(method) = m["method"].as_str() else {
-            // a response: the thread bridge.py started or resumed, or an error (a turn that could not start)
+            // a response: the thread bridge.rs started or resumed, or an error (a turn that could not start)
             if let Some(e) = m.get("error") {
                 let text = e["message"].as_str().unwrap_or("codex error").to_string();
                 out.push(Event::Error { text: text.clone() });

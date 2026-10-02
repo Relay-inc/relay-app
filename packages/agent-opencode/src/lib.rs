@@ -1,5 +1,5 @@
 //! OpenCode (sst/opencode) as an agent provider. Every conversation is one private `opencode serve` in the vault
-//! behind bridge.py: the session's server-sent events become the contract's events, permission requests and
+//! behind its bridge (bridge.rs, run as `relay --opencode-bridge`): the session's server-sent events become the contract's events, permission requests and
 //! questions go to the cards ([`Event::Permission`]) and back through [`AgentProvider::respond`]. Models come from
 //! `opencode models` (the configured providers); history, the session list and token usage with cost from its
 //! SQLite storage (see [`store`]). OpenCode reports no plan or rate limits.
@@ -11,11 +11,10 @@ use std::process::Command;
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 
+pub mod bridge;
 pub mod events;
 pub mod store;
 
-// ponytail: bridge.py is read from this checkout, like agent-codex's
-const BRIDGE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/bridge.py");
 
 pub struct OpenCode;
 pub static PROVIDER: OpenCode = OpenCode;
@@ -91,8 +90,8 @@ impl AgentProvider for OpenCode {
         let model = if l.model.contains('/') && agent_core::safe_model(l.model) { l.model } else { "" };
         let cfg = json!({"cwd": env.vault, "model": model, "variant": l.effort, "resume": ok(l.resume), "fork": ok(l.fork),
             "ask": pick(env, "permissions", &PERMS) == "ask", "system": agent_core::envelope::HINT});
-        let mut cmd = Command::new("/usr/bin/python3");
-        cmd.arg(BRIDGE).arg(env.bin).arg(cfg.to_string());
+        let mut cmd = Command::new(std::env::current_exe().map_err(|e| e.to_string())?);
+        cmd.arg("--opencode-bridge").arg(env.bin).arg(cfg.to_string());
         Ok(cmd)
     }
     fn input(&self, turn: &Turn) -> Option<String> { Some(events::prompt(turn).to_string()) }
@@ -148,7 +147,6 @@ mod tests {
     use super::*;
     use std::io::{BufRead, BufReader, Write};
     use std::path::PathBuf;
-    use std::process::Stdio;
     fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/opencode", pending: p, opts } }
 
     #[test]
@@ -158,7 +156,7 @@ mod tests {
         let l = Launch { key: "c:1", name: "x", model: "anthropic/claude-sonnet-5-5", effort: "high", resume: Some(sid), fork: None, turn: None };
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &l).unwrap();
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args[0].ends_with("agent-opencode/bridge.py") && args[1] == "/opt/opencode");
+        assert!(args[0] == "--opencode-bridge" && args[1] == "/opt/opencode");
         let cfg: Value = serde_json::from_str(&args[2]).unwrap();
         assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "anthropic/claude-sonnet-5-5", "variant": "high", "resume": sid, "fork": null, "ask": true, "system": agent_core::envelope::HINT}));
         // a model without a provider, a bad session id, permissions left to the config
@@ -183,17 +181,18 @@ mod tests {
         assert!(PROVIDER.history(&e, "ses_nothere", 0).0.is_empty());
     }
 
-    /// bridge.py against a stand-in for `opencode serve` (tests/fixtures/fake-serve.py): the password, the session
+    /// The bridge against a stand-in for `opencode serve` (tests/fixtures/fake-serve.py): the password, the session
     /// made after a failed resume, the prompt with model and variant, the events of other sessions left out, a
     /// permission answered, a failed request reported.
     #[test]
     fn bridge_speaks_to_a_server() {
         let fake = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/fake-serve.py");
         let cfg = json!({"cwd": "/tmp", "model": "anthropic/m1", "variant": "high", "resume": "ses_gone", "ask": true});
-        let Ok(mut ch) = Command::new("/usr/bin/python3").arg(BRIDGE).arg(fake).arg(cfg.to_string())
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn() else { return }; // no python3: nothing to test
-        let mut stdin = ch.stdin.take().unwrap();
-        let mut lines = BufReader::new(ch.stdout.take().unwrap()).lines().map_while(Result::ok);
+        if !Path::new("/usr/bin/python3").exists() { return; } // the stand-in is python: nothing to test
+        let (stdin_r, mut stdin) = std::io::pipe().unwrap();
+        let (out_r, out_w) = std::io::pipe().unwrap();
+        let bridge = std::thread::spawn(move || bridge::run(fake, &cfg, BufReader::new(stdin_r), out_w, |_| {}));
+        let mut lines = BufReader::new(out_r).lines().map_while(Result::ok);
         let mut st = events::State::default();
         let mut next = || { let l = lines.next().expect("bridge ended"); (serde_json::from_str::<Value>(&l).unwrap(), st.parse(&l)) };
         let (_, ev) = next();
@@ -223,7 +222,7 @@ mod tests {
         writeln!(stdin, "{}", PROVIDER.respond(request, &json!({"behavior": "allow"})).unwrap()).unwrap();
         assert_eq!(next().0["type"], "command.allowed");
         drop(stdin); // the app closed it: the server is stopped, the bridge ends
-        assert!(lines.next().is_none());
-        assert!(ch.wait().unwrap().success());
+        let extra = lines.next(); assert!(extra.is_none(), "{extra:?}");
+        assert_eq!(bridge.join().unwrap(), 0);
     }
 }

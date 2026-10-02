@@ -13,12 +13,11 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Fixed
 
-- The released app could not read the vault: it looked for a script in the build machine's checkout. Reading the vault is built into the app now, and no longer needs Python
-- Permission prompts work in the released app: they ran a script from the machine that built it, and needed Python
+- The released app works again: it looked for its scripts in the checkout of the machine that built it, so reading the vault, permission prompts, Codex and OpenCode all failed
+
 ### Changed
 
-- Loading the slash commands of Claude Code, Codex, OpenCode and Pi no longer needs Python, so Macs without the Xcode Command Line Tools no longer get an install prompt.
-- Project icons from websites work in the released app and on Macs without Python (the favicon lookup is built in now)
+- Relay no longer needs Python: reading the vault, project icons, permission prompts, slash commands and the Codex and OpenCode bridges are built into the app, so Macs without the Xcode Command Line Tools no longer get an install prompt
 
 ## [0.0.3] - 2026-10-02
 
