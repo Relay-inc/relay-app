@@ -104,14 +104,45 @@ there knows what Claude Code knows on the laptop:
 A file changed on both sides keeps both versions: the machine's becomes `Name (conflict <machine> <date>).md`. Hooks,
 transcripts, MCP servers and repos never go along: what a repo needs for Claude belongs in the repo.
 
-**On the machine's disk the mirror is sealed.** Every file is a blob in `data/mirror/<device>/`, named by an HMAC of its
-path, encrypted with ChaCha20-Poly1305. The key stays on the laptop and comes with every connection; the server keeps
-it in memory only. Unlocked, the server unpacks the mirror into `RELAY_SERVER_WORKDIR`, which should be a RAM disk
-(compose.yml mounts a tmpfs at `/home/relay/work`). After a restart the mirror is locked until the laptop connects:
-conversations in the vault wait for it, conversations in a repo run. `relay-server revoke` removes a device's mirror.
+### How the copy is encrypted
 
-The `docker run` above mounts that RAM disk (`--tmpfs`). Without one the server logs a warning and Settings › Machines
-says the working copy is on disk.
+The machine only ever stores ciphertext. The key stays with the laptop.
+
+- **The key.** Relay makes a random 256-bit key per machine the first time the mirror is switched on, and keeps it in
+  its app data as `mirror-<machine>.key` (0600). It sends the key with an `unlock` request over the mutual-TLS
+  connection at the start of every sync round. The server keeps it in memory only, never on disk.
+- **One blob per file**, in `data/mirror/<device>/<root>/`:
+  - the name is HMAC-SHA256 of `<root>\0<path>`, so the disk shows neither file names nor folders,
+  - the content is ChaCha20-Poly1305 (`ring`) over the path plus the file, with a fresh random 96-bit nonce per write
+    and the root as associated data, so a blob moved to another root does not open,
+  - on disk: `nonce (12 bytes) || ciphertext || tag (16 bytes)`.
+- **A check blob** (`data/mirror/<device>/check`) holds a known text sealed with the key. A wrong key is refused at
+  `unlock` ("this mirror was made with another key") instead of being used on the store.
+- **Unlocked**, the server opens every blob into the working copy in `RELAY_SERVER_WORKDIR`, which should be a RAM disk
+  (compose.yml and the `docker run` above mount a tmpfs at `/home/relay/work`). The agents work there. Every 5 seconds
+  the server seals what changed back into blobs and removes the blobs of deleted files.
+- **Locked** after a restart: only the blobs are left, the working copy is gone with the RAM disk. Conversations in the
+  vault wait until the laptop connects and unlocks again. Conversations in a repo run. `relay-server revoke` and Remove
+  the copy in Relay delete a device's store.
+
+What this protects, and what it does not:
+
+| Who | Sees |
+|---|---|
+| Someone with the disk, a backup of `appdata` or the server while it is locked | How many files, their sizes and when they changed. No names, no content. |
+| Root on the running server while the mirror is unlocked | Everything: the working copy is plain text in RAM, as it must be for the agent to read it. |
+| Another device paired with the same server | Nothing: each device has its own store, working copy and key. |
+
+Known limits:
+- The one key is used both for ChaCha20-Poly1305 and as the HMAC key for the names. Not a known weakness for these two
+  primitives, but separate keys derived with HKDF would be cleaner.
+- The blobs are sealed one by one, nothing binds the set together. Someone who can write to the disk can delete a blob
+  or put back an older one of the same file, and the server would unpack that older version.
+- A tmpfs can be swapped to disk when the machine has swap. Unraid has none by default.
+- Losing the key file on the laptop makes the copy unreadable. Nothing is lost: Remove the copy, switch the mirror on
+  again, and the next round sends everything again.
+
+Without a RAM disk the server logs a warning and Settings › Machines says the working copy is on disk.
 
 ## Commands
 
