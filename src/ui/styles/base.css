@@ -40,6 +40,12 @@
   --syn-prop: oklch(0.52 0.12 210);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.05);
+  --mark: oklch(0.93 0.09 95);
+  --lane: #efeff0;
+  --card-edge: rgba(0, 0, 0, 0.09);
+  --card-edge-hover: rgba(0, 0, 0, 0.16);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
+  --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.06), 0 8px 20px rgba(0, 0, 0, 0.07);
   --r: 8px;
   --ease: ease-out;
   --d: 150ms;
@@ -57,7 +63,7 @@
   :root:not([data-theme="light"]) {
     --bg: #161618;
     --sidebar: #1c1c1f;
-    --raised: #222226;
+    --raised: #242428;
     --well: #1c1c1f;
     --label: #ededef;
     --secondary: #a1a1a8;
@@ -90,6 +96,12 @@
     --syn-prop: oklch(0.8 0.09 210);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
+    --mark: oklch(0.45 0.08 95);
+    --lane: #111113;
+    --card-edge: rgba(255, 255, 255, 0.08);
+    --card-edge-hover: rgba(255, 255, 255, 0.16);
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.35);
   }
   :root:not([data-theme="light"])[data-accent="graphite"] {
     --accent: #ededef;
@@ -103,7 +115,7 @@
 :root[data-theme="dark"] {
   --bg: #161618;
   --sidebar: #1c1c1f;
-  --raised: #222226;
+  --raised: #242428;
   --well: #1c1c1f;
   --label: #ededef;
   --secondary: #a1a1a8;
@@ -136,6 +148,12 @@
   --syn-prop: oklch(0.8 0.09 210);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
+  --mark: oklch(0.45 0.08 95);
+  --lane: #111113;
+  --card-edge: rgba(255, 255, 255, 0.08);
+  --card-edge-hover: rgba(255, 255, 255, 0.16);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.4), 0 8px 20px rgba(0, 0, 0, 0.35);
 }
 :root[data-theme="dark"][data-accent="graphite"] {
   --accent: #ededef;

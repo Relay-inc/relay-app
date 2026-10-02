@@ -36,6 +36,10 @@
   --color-ctx-m: var(--ctx-m);
   --color-ctx-p: var(--ctx-p);
   --color-ok: var(--ok);
+  --color-mark: var(--mark);
+  --color-lane: var(--lane);
+  --color-card-edge: var(--card-edge);
+  --color-card-edge-hover: var(--card-edge-hover);
   --color-bad: var(--bad);
   --color-white: #fff;
   --color-black: #000;
@@ -52,6 +56,8 @@
   --shadow-lg: var(--shadow);
   --shadow-xl: var(--shadow);
   --shadow-2xl: var(--shadow);
+  --shadow-card: var(--card-shadow);
+  --shadow-card-hover: var(--card-shadow-hover);
   --animate-skel: skel 1.4s ease-in-out infinite;
   @keyframes skel {
     50% {
@@ -80,7 +86,7 @@
 
 /* buttons */
 @utility btn {
-  @apply h-7.5 px-3.5 rounded-lg border border-separator-strong bg-transparent text-label font-medium cursor-default transition hover:bg-fill active:scale-98 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-focus;
+  @apply h-7.5 px-3 rounded-lg border border-separator-strong bg-transparent text-label font-medium cursor-default transition hover:bg-fill active:scale-98 focus-visible:outline-3 focus-visible:outline-offset-1 focus-visible:outline-focus;
   & svg {
     @apply size-4 fill-none stroke-current;
     stroke-width: 1.5;
