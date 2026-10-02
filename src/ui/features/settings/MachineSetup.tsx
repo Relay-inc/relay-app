@@ -14,9 +14,10 @@ export function CommandBlock({ hint, command }: { hint: string; command: string 
   const { t } = useT();
   const [copied, setCopied] = useState(false);
   return (
-    <div className="grid gap-1">
+    // the block scrolls sideways itself: a long command never widens the page
+    <div className="grid min-w-0 grid-cols-1 gap-1">
       <span className={HINT_IN_ROW}>{hint}</span>
-      <div className="relative">
+      <div className="relative min-w-0">
         <pre className="overflow-x-auto rounded-lg bg-fill px-3 py-2 pr-10 font-mono text-xs leading-relaxed text-s-fg">
           {command}
         </pre>
@@ -47,9 +48,9 @@ export function MachineSetup({ open }: { open: boolean }) {
   const commands = setupCommands(setup.image, setup.version, folder);
   return (
     <Section title={t("mc.setupTitle")} desc={t("mc.setupHelp", { version: setup.version })}>
-      <details open={open} className="group grid gap-3">
+      <details open={open} className="min-w-0">
         <summary className="cursor-pointer text-xs font-medium text-s-fg">{t("mc.setupShow")}</summary>
-        <div className="mt-3 grid gap-3">
+        <div className="mt-3 grid min-w-0 grid-cols-1 gap-3">
           <Field label={t("mc.setupFolder")} hint={t("mc.setupFolderHelp")} id="mcsetupfolder">
             <input
               className={`${FIELD} font-mono`}

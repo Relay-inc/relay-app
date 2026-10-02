@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -73,9 +73,18 @@ const NOW_S = Math.floor(NOW / 1000);
 const thumb = `data:image/png;base64,${pngBase64(100, 100, "#dfe7f7", "#2f6fdb")}`;
 const calls: Call[] = [];
 const unmocked = new Set<string>();
-const sidKeys = () => Object.fromEntries(conv.conversations.map(c => [c.key, { provider: c.provider, sid: conv.sidOf(c.key) }]));
+const sidKeys = () =>
+  Object.fromEntries(conv.conversations.map(c => [c.key, { provider: c.provider, sid: conv.sidOf(c.key) }]));
 const terminalAgents = () => [
-  ...vault.terminalSessions.map((s, i) => ({ id: `term-${i + 1}`, sessionId: s.sessionId, provider: "claude", kind: "interactive", status: i === 0 ? "busy" : "idle", name: s.name, startedAt: s.last_at })),
+  ...vault.terminalSessions.map((s, i) => ({
+    id: `term-${i + 1}`,
+    sessionId: s.sessionId,
+    provider: "claude",
+    kind: "interactive",
+    status: i === 0 ? "busy" : "idle",
+    name: s.name,
+    startedAt: s.last_at,
+  })),
   vault.backgroundBlocked,
 ];
 
@@ -105,6 +114,24 @@ function handle(cmd: string, a: Args): unknown {
     // the deep-link plugin: the link the app was started with (later ones come as the deep-link://new-url event)
     case "plugin:deep-link|get_current":
       return query.get("link") ? [query.get("link")] : null;
+
+    // work machines (fixture "machines": one that speaks an older protocol)
+    case "machine_status":
+      return {
+        ok: false,
+        outdated: "server",
+        version: "0.1.0",
+        error: "relay-server 0.1.0 speaks protocol 1, this Relay 2",
+      };
+    case "server_setup":
+      return { version: "0.0.4", image: "ghcr.io/laurentme/relay-server" };
+    case "mirror_status":
+    case "mirror_progress":
+      return null;
+    case "machines_list":
+      return [];
+    case "chat_machines":
+      return {};
 
     // settings, language, vault
     case "get_settings":
@@ -184,7 +211,11 @@ function handle(cmd: string, a: Args): unknown {
       return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
     }
     case "subagents":
-      return Object.fromEntries((a.keys as string[]).filter(k => k in conv.subagents).map(k => [k, conv.subagents[k as keyof typeof conv.subagents]]));
+      return Object.fromEntries(
+        (a.keys as string[])
+          .filter(k => k in conv.subagents)
+          .map(k => [k, conv.subagents[k as keyof typeof conv.subagents]]),
+      );
     case "agent_log":
       return conv.agentLog(a.id);
     case "pending":
@@ -193,7 +224,8 @@ function handle(cmd: string, a: Args): unknown {
       pending = pending.filter(x => x.id !== a.id);
       return null;
     case "send":
-      if (harness.autoReply) setTimeout(() => harness.stream({ key: a.project, deltas: 40, tokensPerDelta: 3, ratePerSecond: 60 }), 30);
+      if (harness.autoReply)
+        setTimeout(() => harness.stream({ key: a.project, deltas: 40, tokensPerDelta: 3, ratePerSecond: 60 }), 30);
       return null;
     case "ai_title":
       return String(a.text).split(/\s+/).slice(0, 5).join(" ");
@@ -226,7 +258,10 @@ function handle(cmd: string, a: Args): unknown {
       return id;
     }
     case "scratch_delete":
-      scratch.set(a.project, (scratch.get(a.project) ?? []).filter(n => n.id !== a.id));
+      scratch.set(
+        a.project,
+        (scratch.get(a.project) ?? []).filter(n => n.id !== a.id),
+      );
       return null;
     case "stop":
     case "bg":
@@ -256,22 +291,30 @@ function handle(cmd: string, a: Args): unknown {
       return null;
     case "mail_move":
       // the backend refuses with the experimental flag off, and takes 1 to 500 mails at a time
-      if (!settings.mail?.experimental) throw new Error("Archive and delete are experimental, switch them on in Settings › Mail");
+      if (!settings.mail?.experimental)
+        throw new Error("Archive and delete are experimental, switch them on in Settings › Mail");
       if (!a.ids?.length || a.ids.length > 500) throw new Error("1 to 500 mails at a time");
       for (const id of a.ids) movedMails.add(`${a.account}:${id}`);
       return null;
     case "mail_test":
       return "Connected: 1,204 mails in INBOX";
     case "mail_connect":
-      return { account: { email: a.email, keychain_service: "relay-mail", keychain_account: a.email }, result: "Connected" };
+      return {
+        account: { email: a.email, keychain_service: "relay-mail", keychain_account: a.email },
+        result: "Connected",
+      };
     // calendar: the secret address is checked like calendar.rs's url_ok, then "fetched" (3 meetings in the next 7 days)
     case "calendar_connect":
       if (!a.url) return 0;
       if (!a.url.startsWith("https://calendar.google.com/calendar/ical/") || !a.url.endsWith(".ics"))
-        return Promise.reject("That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.");
+        return Promise.reject(
+          "That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.",
+        );
       return 3;
     case "calendar_meetings": {
-      const feeds: string[] = settings.calendar?.on ? settings.calendar.feeds.map((f: { email: string }) => f.email) : [];
+      const feeds: string[] = settings.calendar?.on
+        ? settings.calendar.feeds.map((f: { email: string }) => f.email)
+        : [];
       return { meetings: feeds.length ? structuredClone(integ.meetings) : [], errors: integ.calendarErrors(feeds) };
     }
     case "integration_status":
@@ -295,7 +338,16 @@ function handle(cmd: string, a: Args): unknown {
 }
 
 // ---------- ready: the first quiet 250 ms after the window's start-up calls (the polls do not count)
-const POLLS = new Set(["pending", "subagents", "history_sid", "agents", "app_sids", "app_sessions", "running", "plugin:window|is_focused"]);
+const POLLS = new Set([
+  "pending",
+  "subagents",
+  "history_sid",
+  "agents",
+  "app_sids",
+  "app_sessions",
+  "running",
+  "plugin:window|is_focused",
+]);
 let markReady: () => void;
 const ready = new Promise<void>(resolve => (markReady = resolve));
 let quietTimer = 0;
@@ -317,20 +369,33 @@ setTimeout(settle, 0);
 // ---------- streaming a turn: the agent events of the real sequence, one task per event like Tauri's
 type StreamOpts = { key: string; deltas: number; tokensPerDelta?: number; ratePerSecond?: number; tools?: boolean };
 type StreamStats = { perDelta: number[]; total: number; renderedAt: number };
-const nextTask = () => new Promise<void>(resolve => {
-  const channel = new MessageChannel();
-  channel.port1.onmessage = () => resolve();
-  channel.port2.postMessage(0);
-});
+const nextTask = () =>
+  new Promise<void>(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(0);
+  });
 /** The next frame has been painted: a task right after the next animation frame. */
-const nextPaint = () => new Promise<number>(resolve => requestAnimationFrame(() => nextTask().then(() => resolve(performance.now()))));
+const nextPaint = () =>
+  new Promise<number>(resolve => requestAnimationFrame(() => nextTask().then(() => resolve(performance.now()))));
 
-async function stream({ key, deltas, tokensPerDelta = 3, ratePerSecond = 0, tools = true }: StreamOpts): Promise<StreamStats> {
+async function stream({
+  key,
+  deltas,
+  tokensPerDelta = 3,
+  ratePerSecond = 0,
+  tools = true,
+}: StreamOpts): Promise<StreamStats> {
   const words = conv.replyText(deltas * tokensPerDelta);
   const perDelta: number[] = [];
   const start = performance.now();
   if (tools) {
-    emitAgent(key, { type: "tool_call", id: `toolu_stream_${start | 0}`, name: "Read", input: { file_path: `${vault.VAULT}/Calendar/2026-10-01.md` } });
+    emitAgent(key, {
+      type: "tool_call",
+      id: `toolu_stream_${start | 0}`,
+      name: "Read",
+      input: { file_path: `${vault.VAULT}/Calendar/2026-10-01.md` },
+    });
     await nextTask();
     emitAgent(key, { type: "tool_result", id: `toolu_stream_${start | 0}`, error: false });
     await nextTask();
@@ -347,7 +412,13 @@ async function stream({ key, deltas, tokensPerDelta = 3, ratePerSecond = 0, tool
     await nextTask(); // the handler and the microtasks it queued (a store notify, a render) have run
     perDelta.push(performance.now() - before);
   }
-  emitAgent(key, { type: "turn_end", ok: true, error: null, usage: { input: 1200, output: deltas * tokensPerDelta, cacheRead: 0, cacheWrite: 0 }, duration_ms: Math.round(performance.now() - start) });
+  emitAgent(key, {
+    type: "turn_end",
+    ok: true,
+    error: null,
+    usage: { input: 1200, output: deltas * tokensPerDelta, cacheRead: 0, cacheWrite: 0 },
+    duration_ms: Math.round(performance.now() - start),
+  });
   await nextTask();
   const renderedAt = await nextPaint();
   return { perDelta, total: renderedAt - start, renderedAt };
@@ -362,9 +433,30 @@ const harness = {
   pickFolder: null as string | null,
   fixture,
   now: NOW,
-  keys: { long: conv.LONG_KEY, switchTo: conv.SWITCH_KEY, permission: conv.PERMISSION_KEY, question: conv.QUESTION_KEY, action: conv.ACTION_KEY, terminal: `t:${vault.terminalSessions[0].sessionId}` },
-  titles: { long: conv.LONG_TITLE, switchTo: conv.SWITCH_TITLE, permission: conv.PERMISSION_TITLE, question: conv.QUESTION_TITLE, action: conv.ACTION_TITLE },
-  markers: { longEnd: conv.LONG_END, switchEnd: conv.endMarker(conv.SWITCH_KEY), card: integ.CARD_TITLE, plainMail: integ.PLAIN_MAIL.subject, htmlMail: integ.HTML_MAIL.subject, studioMail: integ.STUDIO_MAIL.subject, otherMail: integ.OTHER_MAIL.subject },
+  keys: {
+    long: conv.LONG_KEY,
+    switchTo: conv.SWITCH_KEY,
+    permission: conv.PERMISSION_KEY,
+    question: conv.QUESTION_KEY,
+    action: conv.ACTION_KEY,
+    terminal: `t:${vault.terminalSessions[0].sessionId}`,
+  },
+  titles: {
+    long: conv.LONG_TITLE,
+    switchTo: conv.SWITCH_TITLE,
+    permission: conv.PERMISSION_TITLE,
+    question: conv.QUESTION_TITLE,
+    action: conv.ACTION_TITLE,
+  },
+  markers: {
+    longEnd: conv.LONG_END,
+    switchEnd: conv.endMarker(conv.SWITCH_KEY),
+    card: integ.CARD_TITLE,
+    plainMail: integ.PLAIN_MAIL.subject,
+    htmlMail: integ.HTML_MAIL.subject,
+    studioMail: integ.STUDIO_MAIL.subject,
+    otherMail: integ.OTHER_MAIL.subject,
+  },
   emit,
   emitAgent,
   stream,
@@ -373,7 +465,8 @@ const harness = {
   /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
   deepLink: (url: string) => emit("deep-link://new-url", [url]),
   /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
-  resolved: (key: string, model = "opus", effort = "high") => emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
+  resolved: (key: string, model = "opus", effort = "high") =>
+    emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
 };

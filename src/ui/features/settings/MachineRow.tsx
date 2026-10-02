@@ -37,7 +37,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
       <StatusLine level="ok">{[t("mc.online"), status.version, status.os].filter(Boolean).join(" · ")}</StatusLine>
     );
   return (
-    <div className="grid gap-2.5 border-b border-s-border px-3.5 py-3 last:border-b-0">
+    <div className="grid min-w-0 grid-cols-1 gap-2.5 border-b border-s-border px-3.5 py-3 last:border-b-0">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-[13px] font-semibold text-s-fg">{machine.name}</span>
         <span className="font-mono text-xs text-s-muted">
