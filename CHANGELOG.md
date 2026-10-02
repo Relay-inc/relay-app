@@ -11,6 +11,10 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ## [Unreleased]
 
+### Fixed
+
+- Codex and OpenCode work in the released app: they ran scripts from the machine that built it, and needed Python.
+
 ## [0.0.3] - 2026-10-02
 
 ### Added

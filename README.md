@@ -178,7 +178,7 @@ own transcripts and logs, and reports its limits and tokens.
 | | Claude Code | Codex | OpenCode | Pi |
 |---|---|---|---|---|
 | Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) | [`agent-pi`](packages/agent-pi/README.md) |
-| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` | `pi --mode rpc` (JSON lines over stdio), no bridge |
+| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind its bridge (`relay --codex-bridge`) | a private `opencode serve` (HTTP + SSE) behind its bridge (`relay --opencode-bridge`) | `pi --mode rpc` (JSON lines over stdio), no bridge |
 | Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
 | Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no |
 | Thinking, images | –, yes | yes, yes | yes, yes | yes, yes |

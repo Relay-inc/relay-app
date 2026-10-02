@@ -13,8 +13,8 @@ Then Settings › Agents › Codex › Use. The program defaults to the first of
 
 ## How it runs
 
-- **Runs** `/usr/bin/python3 bridge.py <codex> '<config>'` in the vault, one process per conversation (`caps.persistent`).
-  `bridge.py` starts `codex app-server` (JSON-RPC 2.0 over stdio), does the handshake (`initialize`, `initialized`,
+- **Runs** `relay --codex-bridge <codex> '<config>'` (the app's own binary, src/bridge.rs) in the vault, one process per conversation (`caps.persistent`).
+  The bridge starts `codex app-server` (JSON-RPC 2.0 over stdio), does the handshake (`initialize`, `initialized`,
   `thread/resume` for a known session, else `thread/start`, with cwd, model, `model_reasoning_effort`, sandbox and approval
   policy) and then passes lines through. It fills in the thread id (and model and effort) of each `turn/start` the Rust
   side writes, and declines server requests the app has no card for (`item/tool/requestUserInput`, MCP elicitations, …),
@@ -53,13 +53,13 @@ Then Settings › Agents › Codex › Use. The program defaults to the first of
 
 Tests: `cargo test -p agent-codex` (fixtures in `tests/fixtures/`: an app-server stream and a rollout written from the
 generated protocol schema and the field names in the codex binary, the two live runs below trimmed and anonymised, a
-`threads` query result, a stand-in app-server for `bridge.py`), `pnpm test`.
+`threads` query result, a stand-in app-server for the bridge, still python), `pnpm test`.
 
 ## What ran live, what did not
 
 Ran against the installed codex-cli 0.159.2 on its ChatGPT login, each bounded to 90 s, from a fresh temp folder:
 
-1. `bridge.py` → new thread → one turn ("reply ok"): handshake, session id, streamed text, token usage, rate limits
+1. the bridge (then python) → new thread → one turn ("reply ok"): handshake, session id, streamed text, token usage, rate limits
    (`account/rateLimits/updated`: only a weekly primary window on this plan), `turn/completed`. The rollout and the
    `threads` row it left were read back and match the parsers (`tests/fixtures/*-live.jsonl`).
 2. The same thread resumed, read-only sandbox, a turn that needs a write: `item/commandExecution/requestApproval` came
@@ -79,4 +79,4 @@ commands. The two live runs left one thread (cwd a temp folder) in `~/.codex`.
 - Tokens are unpriced (no public per-token prices for the ChatGPT plan's models); the Usage view counts them as such.
 - Models and efforts are global lists; a model that does not take the chosen effort is left to Codex to refuse.
 - Archived rollouts (`archived_sessions/`) are not counted.
-- `bridge.py` needs `/usr/bin/python3` (as agent-claude's `perm_server.py` does) and is read from this checkout.
+- The bridge is Rust, run as a subcommand of the app. Only the test's stand-in app-server needs python3.
