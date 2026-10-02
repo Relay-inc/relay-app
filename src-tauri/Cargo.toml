@@ -39,6 +39,8 @@ mail-parser = "0.11"
 ammonia = "4"
 futures = "0.3"
 base64 = "0.23"
+# the shells of the embedded terminals (src/pty.rs)
+portable-pty = "0.9"
 
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true

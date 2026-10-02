@@ -11,27 +11,22 @@ not ship.
 
 ## Layout
 
-Default window 1280 x 820, minimum 900 x 600. Three panes, the way Mail does it.
+Default window 1280 x 820, minimum 900 x 600. Two panes, plus a drawer on the right that exists only while it is open.
 
 ```
-┌────────────┬──────────────────────────────────┬──────────────┐
-│ ⌕ Zoek     │ Weemaes              Actief · 71 │ Stand   Open │  toolbar, 52px
-│            ├──────────────────────────────────┤              │
-│ Wacht op   │                                  │ Fase ...     │
-│ jou      1 │   waar staan we?          (jij)  │              │
-│ Algemeen   │                                  │ ☐ Mail aan   │
-│            │   Contract op story points ...   │   De Groote  │
-│ ANTENNA    │   ▸ Weemaes.md gelezen           │ ☐ Stukken    │
-│ Weemaes  ● │                                  │              │
-│ C-All   25 │   ┌ Toestemming ──────────────┐  │              │
-│ Cloet   18 │   │ gh pr merge 741           │  │              │
-│ ZAAK       │   │        Weigeren  Toestaan │  │              │
-│ ...        │   └───────────────────────────┘  │              │
-│            │ ┌──────────────────────────────┐ │              │
-│            │ │ Vraag iets over Weemaes…     │ │              │
-│            │ └                          ↑ ──┘ │              │
-└────────────┴──────────────────────────────────┴──────────────┘
-   240px              flexible                     300px, hideable
+┌────────────┬─────────────────────────────────────────────────┬────────────┐
+│ ⌕ Zoek     │ Weemaes              Actief · 71   ▦ ⌥ ⌨ ▤ ▭   │ Notities ×│  toolbar, 48px
+│            ├─────────────────────────────────────────────────┤           │
+│ Wacht op   │                                                 │           │
+│ jou      1 │   waar staan we?                         (jij)  │  drawer,  │
+│ Algemeen   │                                                 │  460px,   │
+│            │   Contract op story points ...                  │  on       │
+│ ANTENNA    │   ▸ Weemaes.md gelezen                          │  demand   │
+│ Weemaes  ● │                                                 │           │
+│ ...        │ ┌─────────────────────────────────────────────┐ │           │
+│            │ │ Vraag iets over Weemaes…                  ↑ │ │           │
+└────────────┴─┴─────────────────────────────────────────────┴─┴────────────┘
+   240px                       flexible                          0 or 460px
 ```
 
 - **Sidebar** (240px): search field, then "Wacht op jou" and "Algemeen" as the two fixed rows, then
@@ -43,8 +38,13 @@ Default window 1280 x 820, minimum 900 x 600. Three panes, the way Mail does it.
   card with the exact command and two buttons. The composer sits at the bottom, one field and a
   send button. There is no "background" switch: every conversation keeps running when the user
   clicks to another project, and the sidebar reports back (decided 2026-09-29).
-- **Inspector** (300px, ⌘⌥I hides it): the project's Stand van zaken and its `## Open` as
-  checkboxes, straight from the note. This is where "op de hoogte blijven" happens without asking.
+- **Project tools** (top right of the toolbar, only with a project open): the project's linked
+  board and, when it has GitHub repos, the pull requests view, then the embedded terminal and the
+  notes, which toggle the drawer (the open one in the accent colour). The plain terminal button
+  resumes the conversation in the external terminal app.
+- **Drawer** (460px, Esc or × closes it): opens for a card or note detail (from a link in a
+  conversation or a board) and for the terminal and notes tools. No drawer, no column: the
+  conversation takes the width.
 
 ## Color
 
@@ -56,7 +56,7 @@ fallbacks for the mockup in a browser.
 |---|---|---|---|
 | `--bg` | `#FFFFFF` | `#1E1E1E` | conversation pane |
 | `--sidebar` | `#EFEEED` | `#2A2A2A` | sidebar (vibrancy in the app) |
-| `--inspector` | `#F7F6F5` | `#242424` | inspector |
+| `--inspector` | `#F7F6F5` | `#242424` | onboarding card |
 | `--label` | `rgba(0,0,0,.85)` | `rgba(255,255,255,.85)` | text |
 | `--secondary` | `rgba(0,0,0,.50)` | `rgba(255,255,255,.55)` | meta, tool lines |
 | `--separator` | `rgba(0,0,0,.10)` | `rgba(255,255,255,.10)` | every divider |
@@ -72,9 +72,9 @@ System font (`-apple-system`, SF Pro), SF Mono for commands and paths.
 | Size | Weight | Where |
 |---|---|---|
 | 11px | 600 | sidebar group headers (ANTENNA), the one place with caps, as macOS does |
-| 13px | 400 / 500 | sidebar rows, toolbar subtitle, tool lines, inspector meta |
+| 13px | 400 / 500 | sidebar rows, toolbar subtitle, tool lines, drawer meta |
 | 13px mono | 400 | commands in permission cards, paths |
-| 15px | 600 | toolbar title, inspector headings |
+| 15px | 600 | toolbar title, drawer headings |
 | 16px | 400 | conversation text and the composer. Reading text never goes below 16px |
 
 ## Shape and depth

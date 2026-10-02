@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import { WAIT, PRS, MAIL, isView, boardIdOf } from "../../domain/navigation/views";
+import { WAIT, PRS, MAIL, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
 import { isTerminal } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
@@ -9,7 +9,7 @@ import { chatsOf, selectedProject } from "../conversations/selectors";
 import { newChat, dropEmptyDraft, markSeen } from "../conversations/chats";
 import { typedOf } from "../conversations/drafts";
 import { ensureHistory } from "../conversations/history";
-import { loadPrs } from "../pull-requests/prs";
+import { loadPrs, loadProjectRepos } from "../pull-requests/prs";
 import { loadMails } from "../mail/mail";
 import { searchProjects } from "../../domain/navigation/project-search";
 import { useWorkspaceStore } from "../workspace/store";
@@ -18,26 +18,37 @@ import { settings } from "../settings/settings";
 import { useNavigationStore } from "./store";
 import { request } from "./requests";
 
-// Moving around the main window: which conversation or view is open, the toast, the right panel and the overlays.
+// Moving around the main window: which conversation or view is open, the toast, the right drawer and the overlays.
 const nav = () => useNavigationStore.getState();
 const set = useNavigationStore.setState;
 
-/** Open a conversation, terminal session, board or view in the middle column. */
-export async function select(key: string) {
+/** Open a conversation, terminal session, board or view in the middle column. `tool`: it is a project's board or PRs
+ *  opened from its title bar (`openTool`). */
+export async function select(key: string, tool: Tool | null = null) {
   if (nav().selected !== key) dropEmptyDraft(nav().selected);
   const { chats } = useConversationsStore.getState();
   set(draft => {
     draft.projectPanel = false;
-    if (draft.selected !== key && draft.panel.open) draft.panel.open = "";
+    draft.tool = tool;
+    if (draft.selected !== key && draft.drawer === "detail") {
+      draft.drawer = "";
+      draft.panel.open = "";
+    }
     draft.selected = key;
   });
-  if (!isView(key))
-    set(draft => {
-      draft.lastProject = selectedProject();
-    });
+  const project = isView(key) ? null : selectedProject();
+  set(draft => {
+    if (!isView(key)) draft.lastProject = project;
+    // a project's terminals and notes only stay open while that project's tools are in the bar
+    if ((draft.drawer === "terminal" || draft.drawer === "notes") && !(isView(key) ? tool?.project : project))
+      draft.drawer = "";
+  });
   markSeen(key);
   storage.set("sel", chats[key]?.draft && !typedOf(key) ? WAIT : key);
-  if (!isView(key) && !useConversationsStore.getState().chats[key]?.draft) await ensureHistory(key, isTerminal(key));
+  if (!isView(key)) {
+    loadProjectRepos();
+    if (!useConversationsStore.getState().chats[key]?.draft) await ensureHistory(key, isTerminal(key));
+  }
   if (key === PRS) loadPrs();
   if (key === MAIL) loadMails();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
@@ -68,12 +79,31 @@ export const hideToast = () => {
   });
 };
 
-export const setPanelHidden = (hide: boolean) => {
+/** The board or PRs button of a project: shows that view as the project's, the same button (or Esc) goes back. */
+export async function openTool(project: string, key: string) {
+  const current = nav().tool;
+  if (current?.project === project && nav().selected === key) return closeTool();
+  const back = current?.back ?? nav().selected;
+  // the board view follows the project last shown (application/board followLinkedBoard)
   set(draft => {
-    draft.panelHidden = hide;
+    draft.lastProject = project;
   });
-  storage.set("noinsp", hide);
-};
+  await select(key, { project, back });
+}
+export function closeTool() {
+  const tool = nav().tool;
+  if (!tool) return;
+  const chat = useConversationsStore.getState().chats[tool.back];
+  // the conversation it came from may have been closed meanwhile: then the project's latest one
+  if (isTerminal(tool.back) || (chat && !chat.closed)) select(tool.back);
+  else openProject(tool.project);
+}
+/** A drawer tool's button: opens it, or closes it when it is the one shown. */
+export const toggleDrawer = (tool: "terminal" | "notes") =>
+  set(draft => {
+    draft.drawer = draft.drawer === tool ? "" : tool;
+    draft.panel.open = "";
+  });
 export const openProjectPanel = () => {
   if (isView(nav().selected)) return;
   set(draft => {
