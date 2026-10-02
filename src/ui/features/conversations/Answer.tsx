@@ -17,7 +17,7 @@ export function Answer({ text }: { text: string }) {
     <div className="group">
       <Markdown className="md-chat [&_a:not(.vlink)]:underline [&_strong]:font-bold!" text={text} />
       <button
-        className="grid place-items-center size-6 -ml-1 mt-1 rounded-sm border-0 bg-transparent text-secondary hover:bg-fill opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+        className="grid place-items-center size-6 -ml-1 cursor-pointer mt-1 rounded-sm border-0 bg-transparent text-secondary hover:bg-fill opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
         title={t("copy")}
         aria-label={t("copy")}
         onClick={copy}

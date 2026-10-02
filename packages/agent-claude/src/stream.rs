@@ -25,7 +25,11 @@ pub fn parse(line: &str) -> Vec<Event> {
     let Ok(ev) = serde_json::from_str::<Value>(line) else { return vec![] };
     let mut out = vec![];
     match ev["type"].as_str().unwrap_or("") {
-        "system" if ev["subtype"] == "init" => if let Some(id) = ev["session_id"].as_str() { out.push(Event::Session { id: id.into() }); },
+        "system" if ev["subtype"] == "init" => {
+            if let Some(id) = ev["session_id"].as_str() { out.push(Event::Session { id: id.into() }); }
+            if let Some(m) = ev["model"].as_str() { out.push(Event::Resolved { model: m.into(), effort: None }); }
+        }
+        "conversation_reset" => out.push(Event::Reset),
         "assistant" => assistant(&ev["message"]["content"], &mut out),
         "user" => for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
             out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
@@ -44,15 +48,18 @@ pub fn parse(line: &str) -> Vec<Event> {
     out
 }
 
-/// One transcript line as history: the user's messages (not the harness's `<…>` ones) and Claude's blocks.
+/// Text the harness put in the user's turn: `<…>` lines, and a subagent's or teammate's message.
+fn harness(t: &str) -> bool { t.starts_with('<') || t.starts_with("Another Claude session sent a message") }
+
+/// One transcript line as history: the user's messages (not the harness's ones) and Claude's blocks.
 pub fn history_line(e: &Value, out: &mut Vec<Event>) {
-    if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true { return; }
+    if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true || e["isMeta"] == true { return; }
     if let Some(at) = e["timestamp"].as_str() { out.push(Event::Time { at: at.into() }); }
     let c = &e["message"]["content"];
     if e["type"] == "assistant" { return assistant(c, out); }
-    if let Some(s) = c.as_str() { if !s.starts_with('<') { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
+    if let Some(s) = c.as_str() { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
-    let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).filter(|t| !t.starts_with('<')).collect();
+    let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).filter(|t| !harness(t)).collect();
     // an image not inline as base64 is None: a placeholder
     let images: Vec<Option<Image>> = blocks.iter().filter(|x| x["type"] == "image").map(|x| {
         let s = &x["source"];
@@ -83,15 +90,17 @@ mod tests {
 
     #[test]
     fn stream_json_to_events() {
-        let ev: Vec<Event> = STREAM.lines().flat_map(parse).collect();
+        let mut ev: Vec<Event> = STREAM.lines().flat_map(parse).collect();
         assert_eq!(ev[0], Event::Session { id: "36099ce4-d17c-482a-8907-23790cc0e8db".into() });
+        assert_eq!(ev.remove(1), Event::Resolved { model: "claude-opus-5-5".into(), effort: None });
         assert_eq!(ev[1], Event::Text { text: "Ik kijk even.".into(), delta: false });
         assert!(matches!(&ev[2], Event::ToolCall { id, name, input } if id == "toolu_1" && name == "Read" && input["file_path"] == "/v/a.md"));
         assert_eq!(ev[3], Event::ToolResult { id: "toolu_1".into(), error: false });
         assert_eq!(ev[4], Event::ToolResult { id: "toolu_2".into(), error: true });
-        assert!(matches!(&ev[5], Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(4200) } if u.input == 12 && u.cache_read == 300 && u.cost == Some(0.25)));
-        assert_eq!(ev[6], Event::TurnEnd { ok: false, error: Some("error_max_turns".into()), usage: None, duration_ms: None });
-        assert_eq!(ev.len(), 7); // blank text, rate-limit and unknown lines give nothing
+        assert_eq!(ev[5], Event::Reset);
+        assert!(matches!(&ev[6], Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(4200) } if u.input == 12 && u.cache_read == 300 && u.cost == Some(0.25)));
+        assert_eq!(ev[7], Event::TurnEnd { ok: false, error: Some("error_max_turns".into()), usage: None, duration_ms: None });
+        assert_eq!(ev.len(), 8); // blank text, rate-limit and unknown lines give nothing
     }
 
     #[test]
@@ -116,7 +125,7 @@ mod tests {
         assert_eq!(ev[1], Event::User { text: "en dit".into(), images: vec![Some(Image { media_type: "image/png".into(), data: "AA==".into() }), None] });
         assert_eq!(ev[2], Event::Text { text: "Drie dingen.".into(), delta: false });
         assert!(matches!(&ev[3], Event::ToolCall { name, .. } if name == "Bash"));
-        assert_eq!(ev.len(), 4); // no <command> lines, tool results, sidechains or other types
+        assert_eq!(ev.len(), 4); // no <command>, meta or teammate lines, tool results, sidechains or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_file(p).ok();
     }

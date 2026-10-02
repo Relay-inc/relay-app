@@ -20,23 +20,30 @@ export function SettingsApp() {
   // --tw-leading, which every text-* below would then inherit
   return (
     <div className="flex h-full min-h-0 [line-height:1.4]">
-      <nav className="w-50 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 py-3 select-none">
-        <div className="mt-1 grid gap-0.5 first:mt-0">
-          {TABS.map(([id, name, glyph]) => (
+      <nav className="w-52 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 pt-12 select-none">
+        <div className="grid gap-px py-1">
+          {TABS.map(([id, name, glyph], index) => (
             <button
               key={id}
-              className={`flex h-7 items-center gap-2 overflow-hidden rounded-md px-2 text-sm text-s-fg hover:bg-s-sel focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel" : ""}`}
+              className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg hover:bg-s-hover focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : ""}`}
               onClick={() => go(id)}
               aria-current={tab === id ? "page" : undefined}
             >
-              <Icon name={glyph} className="size-4 flex-none fill-none stroke-current stroke-2 glyph" />
+              <Icon
+                name={glyph}
+                className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : ""}`}
+              />
               <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
+              <span className="text-[11px] font-normal text-tertiary">⌘{index + 1}</span>
             </button>
           ))}
         </div>
       </nav>
-      <section className="min-w-0 flex-1 min-h-0 overflow-y-auto px-6 pt-5 pb-6">
-        <div className="mx-auto grid max-w-2xl grid-cols-1 content-start gap-8 [&>*]:min-w-0">
+      <section className="min-w-0 flex-1 min-h-0 overflow-y-auto">
+        <div className="flex h-12 items-center border-b border-s-seam px-8 text-[13px] font-semibold">
+          {t(TABS.find(x => x[0] === tab)![1])}
+        </div>
+        <div className="mx-auto grid max-w-150 grid-cols-1 content-start gap-7 px-8 pt-6 pb-10 [&>*]:min-w-0">
           <div className={page("general")}>
             <GeneralPage vaultStatus={vaultStatus} />
           </div>

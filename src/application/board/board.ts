@@ -1,17 +1,22 @@
 import { t, currentLocale } from "../../shared/i18n";
 import { PROVIDERS } from "../../shared/plugins";
-import type { BoardProvider, Card } from "../../domain/board/types";
-import { refOf, colOf, withCol, endOf, sameRef, storageKey, whoOf, link, type Board } from "../../domain/board/rules";
+import type { BoardProvider, Card, Column, View } from "../../domain/board/types";
+import { refOf, colOf, sameRef, storageKey, isFolded, tidied, link, type Board } from "../../domain/board/rules";
+import { parsePresets, savePreset, type Facet, type Filters, type Preset } from "../../domain/board/filter";
+import { moveCard } from "../../domain/board/moves";
 import { storage } from "../../infrastructure/storage";
 import { saveMainSettings, settings } from "../settings/settings";
 import { useNavigationStore } from "../navigation/store";
-import { openCard } from "../navigation/panel";
+import { closeTicket, openCard } from "../navigation/panel";
+import { select } from "../navigation/navigation";
+import { newChat } from "../conversations/chats";
+import { typeInto } from "../conversations/actions";
 import { useWorkspaceStore } from "../workspace/store";
 import { projectLabel } from "../workspace/vault";
-import { storedBoards, useBoardStore } from "./store";
+import { storedBoard, useBoardStore } from "./store";
 import { ctxOf, providerReady } from "./ctx";
 
-// A provider's board as a kanban (domain/board/rules.ts). The backend holds the token.
+// A provider's board as a kanban or a list (domain/board/rules.ts). The backend holds the token.
 const bs = () => useBoardStore.getState();
 
 export const checkBoards = async () => {
@@ -28,30 +33,82 @@ const change = (provider: BoardProvider, recipe: (state: Board) => void) =>
   useBoardStore.setState(draft => {
     recipe(draft.states[provider.id]);
   });
-export const setFilter = (provider: BoardProvider, filter: { q?: string; who?: string }) =>
+
+// ---------- search, filters, layout and presets
+/** The search and the filters; a filter value no card has is dropped, it would hide every card. */
+export const setFilter = (provider: BoardProvider, filter: { q?: string; filters?: Filters }) =>
   change(provider, state => {
-    Object.assign(state, filter);
+    if (filter.q !== undefined) state.q = filter.q;
+    if (filter.filters) state.filters = tidied(state, filter.filters);
   });
-/** The folded column ids. */
-const folded = (provider: BoardProvider) => bs().folded[provider.id] || [];
-export function toggleFold(provider: BoardProvider, column: string) {
-  const set = new Set(folded(provider));
-  if (!set.delete(column)) set.add(column);
-  useBoardStore.setState(draft => {
-    draft.folded[provider.id] = [...set];
+/** Switch one value of a facet on or off. */
+export function toggleFilter(provider: BoardProvider, facet: Facet, value: string) {
+  const now = boardState(provider).filters[facet] ?? [];
+  setFilter(provider, {
+    filters: {
+      ...boardState(provider).filters,
+      [facet]: now.includes(value) ? now.filter(v => v !== value) : [...now, value],
+    },
   });
-  storage.setRaw(`${storageKey(provider)}Folded`, JSON.stringify([...set]));
+}
+/** Clear one facet, or every filter. */
+export const clearFilters = (provider: BoardProvider, facet?: Facet) =>
+  setFilter(provider, { filters: facet ? { ...boardState(provider).filters, [facet]: [] } : {} });
+export function setView(provider: BoardProvider, view: Board["view"]) {
+  change(provider, state => {
+    state.view = view;
+  });
+  storage.setRaw(`${storageKey(provider)}View`, view);
 }
 
-/** New credentials or a new language: start over. */
+// presets: filter sets saved under a name, per board, in this app's storage
+const presetsKey = (provider: BoardProvider, board = boardState(provider).board) =>
+  `${storageKey(provider)}Presets:${board}`;
+function savePresets(provider: BoardProvider, presets: Preset[]) {
+  storage.setRaw(presetsKey(provider), JSON.stringify(presets));
+  change(provider, state => {
+    state.presets = presets;
+  });
+}
+export const savePresetAs = (provider: BoardProvider, name: string) =>
+  savePresets(provider, savePreset(boardState(provider).presets, name.trim(), boardState(provider).filters));
+export const deletePreset = (provider: BoardProvider, name: string) =>
+  savePresets(
+    provider,
+    boardState(provider).presets.filter(p => p.name !== name),
+  );
+export const applyPreset = (provider: BoardProvider, preset: Preset) =>
+  setFilter(provider, { filters: preset.filters });
+/** A saved view of the tracker: its filters, and its layout and grouping when the board has them. */
+export function applyView(provider: BoardProvider, view: View) {
+  if (!view.filters) return;
+  if (view.layout) setView(provider, view.layout);
+  setFilter(provider, { filters: view.filters });
+  if (view.group && view.group !== boardState(provider).group && provider.groupings?.some(g => g.id === view.group))
+    pickGroup(provider, view.group);
+}
+
+/** Fold a column or open it again; the choice is kept per column id across sessions. */
+export function toggleFold(provider: BoardProvider, column: Column) {
+  const folded = !isFolded(bs().folded[provider.id], column);
+  useBoardStore.setState(draft => {
+    (draft.folded[provider.id] ??= {})[column.id] = folded;
+  });
+  storage.setRaw(`${storageKey(provider)}Fold`, JSON.stringify(bs().folded[provider.id]));
+}
+
+/** New credentials or a new language: start over. The fresh boards go on counting from the old ones, so a load the
+ *  old board started cannot become live again when the reload brings `gen` to the same number. */
 export function resetBoard() {
   useBoardStore.setState(draft => {
-    draft.states = storedBoards();
+    for (const provider of PROVIDERS)
+      draft.states[provider.id] = storedBoard(provider, draft.states[provider.id].gen + 1);
     draft.resets++;
   });
   PROVIDERS.forEach(provider => provider.reset?.());
 }
 
+// ---------- loading
 // one load at a time: a newer choice makes the answer of an older one irrelevant
 async function run(provider: BoardProvider, load: (live: () => boolean) => Promise<void>) {
   let generation = 0;
@@ -77,18 +134,23 @@ async function run(provider: BoardProvider, load: (live: () => boolean) => Promi
 async function loadCards(provider: BoardProvider, live: () => boolean, boardId: string) {
   const state = boardState(provider);
   const ref = { ...refOf(provider, state), board: boardId };
-  const [columns, cards] = boardId
+  const ctx = ctxOf(provider);
+  // the views are extra: a board still shows when they don't load
+  const [columns, cards, views] = boardId
     ? await Promise.all([
-        provider.columns(ctxOf(provider), ref, state.group || undefined),
-        provider.cards(ctxOf(provider), ref),
+        provider.columns(ctx, ref, state.group || undefined),
+        provider.cards(ctx, ref),
+        provider.views?.(ctx, ref).catch(() => []) ?? [],
       ])
-    : [[], []];
+    : [[], [], []];
   if (!live()) return;
   change(provider, draft => {
     draft.board = boardId;
     draft.columns = columns;
     draft.cards = cards;
-    draft.who = whoOf(draft);
+    draft.views = views;
+    draft.presets = parsePresets(storage.getRaw(presetsKey(provider, boardId)) || null);
+    draft.filters = tidied(draft);
   });
   const key = storageKey(provider);
   storage.setRaw(`${key}Project`, boardState(provider).project);
@@ -108,6 +170,7 @@ function followLinkedBoard(provider: BoardProvider) {
     draft.boards = [];
     draft.columns = [];
     draft.cards = [];
+    draft.views = [];
   });
 }
 
@@ -147,6 +210,7 @@ export function pickProject(provider: BoardProvider, projectId: string) {
       state.boards = boardList;
       state.columns = [];
       state.cards = [];
+      state.views = [];
     });
     await loadCards(provider, live, boardList[0]?.id || "");
   });
@@ -166,43 +230,38 @@ export function pickGroup(provider: BoardProvider, group: string) {
     storage.setRaw(`${storageKey(provider)}Group`, group);
   });
 }
-/** A card to another column: shown there at once (at its end), back where it was when the tracker refuses. */
-async function moveCard(provider: BoardProvider, card: Card, column: string) {
-  const state = boardState(provider);
-  if (column === colOf(provider, state, card)) return;
-  const replace = (next: Card) =>
-    change(provider, draft => {
-      draft.cards = draft.cards.map(x => (x.id === card.id ? next : x));
-    });
-  const moved = { ...withCol(provider, state, card, column), placement: endOf(provider, state, column, card.id) };
-  replace(moved);
-  change(provider, draft => {
-    draft.err = "";
-  });
-  try {
-    const placement = await provider.move(
-      ctxOf(provider),
-      refOf(provider, boardState(provider)),
-      moved,
-      column,
-      state.group || undefined,
-    );
-    if (placement != null) replace({ ...moved, placement });
-  } catch (e) {
-    replace(card);
-    change(provider, draft => {
-      draft.err = t("kb.moveFailed", { e: String(e) });
-    });
-  }
-}
-/** A card dropped on a column: moved when that is another column than its own. */
+
+// ---------- cards
+const moves = new Map<string, Promise<Card>>();
+/** A card dropped on a column: moved when that is another column than its own (domain/board/moves.ts). */
 export function dropCard(provider: BoardProvider, id: string, column: string) {
   const state = boardState(provider);
   const card = state.cards.find(x => x.id === id);
-  if (card && column !== colOf(provider, state, card)) moveCard(provider, card, column);
+  if (!card || column === colOf(provider, state, card)) return;
+  const context = ctxOf(provider);
+  moveCard(
+    {
+      board: () => boardState(provider),
+      change: recipe => change(provider, recipe),
+      move: (ref, moved, to, group) => provider.move(context, ref, moved, to, group),
+      failed: e => t("kb.moveFailed", { e: String(e) }),
+      queue: moves,
+    },
+    provider,
+    card,
+    column,
+  );
 }
 export const openBoardCard = (provider: BoardProvider, id: string) =>
   openCard(provider, refOf(provider, boardState(provider)), id);
+/** "Start conversation" in the ticket window: a new conversation under the board's vault project, with the card's
+ *  number, title and link typed in its composer; the draft keeps its title. */
+export async function ticketChat(provider: BoardProvider, text: string) {
+  const key = newChat(linkedProject(provider) || null);
+  closeTicket();
+  await select(key);
+  typeInto(key, text);
+}
 
 // ---------- which vault project a board belongs to: a vault project has at most one board
 /** Every vault project as [name, label], by label, for the link picker. */

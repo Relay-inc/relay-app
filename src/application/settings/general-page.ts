@@ -1,13 +1,17 @@
 import { t } from "../../shared/i18n";
-import type { Theme } from "../../domain/settings/types";
+import { PROVIDERS } from "../../shared/plugins";
+import type { Accent, SidebarCfg, TerminalApp, Theme } from "../../domain/settings/types";
 import type { MapKey, VaultMap, VaultStatus } from "../../domain/workspace/types";
+import { arranged, isHidden } from "../../domain/navigation/sidebar-order";
+import { viewItems } from "../../domain/navigation/sidebar-views";
 import { applyTheme } from "../../infrastructure/window";
 import { pickVault, pickMapped, checkMapping } from "../workspace/vault-setup";
 import { initLanguage } from "./settings";
 import { save, showTitle } from "./window";
 import { useSettingsStore } from "./store";
 
-// Settings › General: the vault folder with its mapping, and the interface (language, colour scheme, favicons).
+// Settings › General: the vault folder with its mapping, and the interface (language, colour scheme, accent, favicons,
+// terminal), and the views on top of the sidebar.
 const st = () => useSettingsStore.getState();
 const set = useSettingsStore.setState;
 const current = () => st().settings;
@@ -44,6 +48,29 @@ export async function changeLanguage(language: string) {
   showTitle();
 }
 export async function changeTheme(theme: Theme) {
-  applyTheme(theme);
+  applyTheme(theme, current().accent);
   await save({ ...current(), theme });
+}
+export async function changeAccent(accent: Accent) {
+  applyTheme(current().theme, accent);
+  await save({ ...current(), accent });
+}
+export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), terminal });
+/** The sidebar's views: the layout, the order, the ones switched off (each patch keeps the rest). */
+export const saveSidebar = (patch: SidebarCfg) => save({ ...current(), sidebar: { ...current().sidebar, ...patch } });
+/** One view on top of the sidebar switched on or off. */
+export function showView(key: string, on: boolean) {
+  const hidden = (current().sidebar?.hidden ?? []).filter(other => other !== key);
+  return saveSidebar({ hidden: on ? hidden : [...hidden, key] });
+}
+/** The sidebar's views in the order of the sidebar, each with whether it shows: the boards switched on, pull
+ *  requests and mail when they are on. */
+export function sidebarViews() {
+  const settings = current();
+  const cfg = settings.sidebar ?? {};
+  const boards = PROVIDERS.filter(board => settings.integrations[board.id]?.on);
+  return arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on, t), cfg).map(item => ({
+    ...item,
+    shown: !isHidden(item.key, cfg),
+  }));
 }

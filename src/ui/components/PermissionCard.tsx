@@ -2,6 +2,7 @@ import { Fragment, useState } from "react";
 import type { CardChoice, Pending, Question } from "../../domain/conversations/types";
 import { useT } from "../hooks/useT";
 import { Html } from "./Html";
+import { Icon } from "./Icon";
 import { isQuestion } from "../../domain/conversations/rules";
 
 // what a permission card shows: the command, the file (and what is written to it), or the input as it is
@@ -14,7 +15,13 @@ function describe(request: Pending): string {
 }
 
 // a long path never widens the card past its border
-const box = "grid grid-cols-1 gap-2.5 rounded-lg border border-accent bg-fill px-3.5 py-3";
+const box = "grid grid-cols-1 gap-2.5 rounded-xl border border-accent bg-raised ring-3 ring-accent-soft px-3.5 py-3";
+// the icon in front of what the card asks
+const badge = (name: string) => (
+  <span className="grid place-items-center size-5.5 flex-none rounded-md bg-accent-soft text-accent-text">
+    <Icon name={name} className="glyph size-3.5" />
+  </span>
+);
 
 /** A pending permission or question of an agent, waiting for the user. `where`: the conversation it belongs to when
  *  shown outside it. The container answers (`onAnswer`, e.g. the `answer` use case) and sets `busy` while it does;
@@ -58,7 +65,7 @@ export function PermissionCard({
         {(question.options || []).map(option => (
           <button
             key={option.label}
-            className={picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"}
+            className={picked[qi]?.has(option.label) ? "btn btn-primary cursor-pointer" : "btn cursor-pointer"}
             title={option.description || ""}
             disabled={busy}
             onClick={() => pick(qi, option.label, !!question.multiSelect)}
@@ -79,13 +86,16 @@ export function PermissionCard({
   if (isQuestion(request))
     return (
       <div className={box}>
-        <div className="text-sm text-secondary">{t("card.asks")}</div>
+        <div className="flex items-center gap-2 text-[13px] text-secondary">
+          {badge("chat")}
+          {t("card.asks")}
+        </div>
         {questions.map(renderQuestion)}
         <div className="flex justify-end gap-2">
-          <button className="btn" disabled={busy} onClick={() => onAnswer("deny")}>
+          <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
             {t("card.skip")}
           </button>
-          <button className="btn btn-primary" disabled={busy} onClick={answerQuestions}>
+          <button className="btn btn-primary cursor-pointer" disabled={busy} onClick={answerQuestions}>
             {t("card.answer")}
           </button>
         </div>
@@ -93,17 +103,18 @@ export function PermissionCard({
     );
   return (
     <div className={box}>
-      <Html
-        as="div"
-        className="text-sm text-secondary [&_code]:font-mono [&_code]:text-xs"
-        html={th("card.wants", { tool: request.tool_name, where: where ? t("card.in", { name: where }) : "" })}
-      />
-      <pre className="font-mono text-sm whitespace-pre-wrap wrap-anywhere text-label">{describe(request)}</pre>
+      <div className="flex items-center gap-2 text-[13px] text-secondary [&_b]:text-label [&_b]:font-semibold">
+        {badge("term")}
+        <Html html={th("card.wants", { tool: request.tool_name, where: where ? t("card.in", { name: where }) : "" })} />
+      </div>
+      <pre className="px-3 py-2.5 rounded-lg bg-well border border-separator font-mono text-[13px] whitespace-pre-wrap wrap-anywhere text-label">
+        {describe(request)}
+      </pre>
       <div className="flex justify-end gap-2">
-        <button className="btn" disabled={busy} onClick={() => onAnswer("deny")}>
+        <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
           {t("card.deny")}
         </button>
-        <button className="btn btn-primary" disabled={busy} onClick={() => onAnswer("allow")}>
+        <button className="btn btn-primary cursor-pointer" disabled={busy} onClick={() => onAnswer("allow")}>
           {t("card.allow")}
         </button>
       </div>

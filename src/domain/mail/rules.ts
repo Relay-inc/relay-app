@@ -1,4 +1,5 @@
 import type { Mail, MailFilter } from "./types";
+import { newestFirst } from "./merge.ts";
 
 export const PAGE_SIZE = 50;
 export const unread = (message: Mail) => message.unread;
@@ -20,15 +21,17 @@ export function filtered(list: Mail[], filter: MailFilter, projectOf: (message: 
     !query || `${message.subject} ${sender(message)} ${message.from[0]?.email ?? ""}`.toLowerCase().includes(query);
   return list.filter(message => matchesState(message) && matchesProject(message) && matchesText(message));
 }
-/** The newest page replaces what it covers, older pages loaded with "more" stay below it. */
-export function withFirstPage(list: Mail[] | null, fresh: Mail[]): Mail[] {
-  // an empty page means an empty inbox: edge would be Infinity and keep every stale row
-  if (!fresh.length) return [];
-  const edge = Math.min(...fresh.map(message => Date.parse(message.date)));
-  const older = (list || []).filter(
-    message => Date.parse(message.date) < edge && !fresh.some(x => x.id === message.id),
+/** One account's newest page replaces what it covers, its older pages loaded with "more" stay below it, other
+ *  accounts' rows stay. Newest first. */
+export function withFirstPage(list: Mail[] | null, account: string, fresh: Mail[]): Mail[] {
+  const all = list || [];
+  // an empty page means an empty inbox: with no edge nothing old is kept
+  const edge = fresh.length ? Math.min(...fresh.map(message => Date.parse(message.date) || 0)) : -Infinity;
+  const older = all.filter(
+    message =>
+      message.account === account && (Date.parse(message.date) || 0) < edge && !fresh.some(x => x.id === message.id),
   );
-  return [...fresh, ...older];
+  return newestFirst([...all.filter(message => message.account !== account), ...fresh, ...older]);
 }
 // what the agent is told about the mail: where to read it, and not to trust it. The prompt holds no subject or sender:
 // that is third-party text.

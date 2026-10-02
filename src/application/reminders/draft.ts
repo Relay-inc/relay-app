@@ -9,8 +9,9 @@ export const patchDraft = (changes: Partial<ReminderDraft>) =>
   useRemindersStore.setState(state => {
     Object.assign(state.draft, changes);
   });
-/** Open the form, dated tomorrow unless a date was picked before. */
-export const openDraft = () => patchDraft({ open: true, date: draft().date || todayIso(1) });
+/** Open the form (the title bar's "New reminder"), dated tomorrow unless a date was picked before. The draft lives in
+ *  the store, so the view need not be mounted yet. */
+export const openReminderForm = () => patchDraft({ open: true, date: draft().date || todayIso(1) });
 export const closeDraft = () => patchDraft({ open: false, err: "" });
 /** Add what the form holds: on success the form empties and closes, on a failure it keeps the text and says why. */
 export async function addDraft() {

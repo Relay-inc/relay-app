@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { AgentSession, Pending, SessionOf, Sub, Transcript } from "../domain/conversations/types";
-import type { MailAcct, Settings } from "../domain/settings/types";
+import type { ActionConfig, ActionEntry, MailAcct, Settings } from "../domain/settings/types";
 import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus } from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
@@ -51,7 +52,8 @@ export const reminderAdd = (text: string, date: string, project: string | null, 
 
 // ---------- agents and conversations
 export const agentsStatus = () => invoke<AgentsStatus>("agents_status");
-export const claudeCommands = () => invoke<SlashCommand[]>("claude_commands");
+/** A provider's slash commands and skills for the current vault. */
+export const agentCommands = (provider: string) => invoke<SlashCommand[]>("agent_commands", { provider });
 /** Every conversation key the backend has a session for (older versions' keys too). */
 export const chats = () => invoke<string[]>("chats");
 export const chatProviders = () => invoke<Record<string, string>>("chat_providers");
@@ -68,6 +70,9 @@ type SendArgs = {
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });
+/** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
+export const dropWorktrees = (project: string) =>
+  invoke<{ removed: number; kept: number }>("drop_worktrees", { project });
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });
@@ -79,8 +84,8 @@ export const history = (project: string) => invoke<AgentEvent[]>("history", { pr
 /** A transcript by session id from an offset; `provider` for an app conversation's session, none for a terminal one. */
 export const historySid = (sid: string, from: number, provider?: string) =>
   invoke<Transcript<AgentEvent>>("history_sid", provider === undefined ? { sid, from } : { sid, from, provider });
-/** The conversation keys whose process the app runs. */
-export const running = () => invoke<string[]>("running");
+/** The conversations whose process the app runs, with the turns each has in flight (0: idle but alive). */
+export const running = () => invoke<Record<string, number>>("running");
 export const pending = () => invoke<Pending[]>("pending");
 export const subagents = (keys: string[]) => invoke<Record<string, Sub[]>>("subagents", { keys });
 export const agents = () => invoke<AgentSession[]>("agents");
@@ -97,11 +102,12 @@ export const githubPr = (repo: string, number: number) => invoke<PrDetail>("gith
 export const githubStatus = () => invoke<string>("github_status");
 
 // ---------- mail
-export const mailList = (page: number) => invoke<Mail[]>("mail_list", { page });
+export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_list", { account, page });
 export const mailRead = (account: string, id: string) => invoke<MailBody>("mail_read", { account, id });
 export const mailSeen = (account: string, id: string, seen: boolean) => invoke("mail_seen", { account, id, seen });
-export const mailConnect = (email: string, password: string) =>
-  invoke<{ account: MailAcct; result: string }>("mail_connect", { email, password });
+/** Gmail without a server; a generic IMAP account with its host and port. */
+export const mailConnect = (email: string, password: string, imap?: { host: string; port: number }) =>
+  invoke<{ account: MailAcct; result: string }>("mail_connect", { email, password, ...imap });
 export const mailTest = (account: MailAcct) => invoke<string>("mail_test", { account });
 
 // ---------- board integrations (the token never reaches the webview)
@@ -115,6 +121,9 @@ export const integrationUpload = (args: {
   mime: string;
   data: string;
 }) => invoke<string>("integration_upload", args);
+/** A picture's preview as a data URL, from a URL the backend allows (no secrets go along). */
+export const integrationThumb = (provider: string, url: string) =>
+  invoke<string>("integration_thumb", { provider, url });
 /** Switched on, config complete and a token in the keychain. */
 export const integrationStatus = (provider: string) => invoke<boolean>("integration_status", { provider });
 export const integrationHasToken = (provider: string) => invoke<boolean>("integration_has_token", { provider });
@@ -127,11 +136,16 @@ export const integrationToken = (provider: string, token: string, account?: stri
 export const integrationImport = (provider: string) =>
   invoke<Record<string, string>>("integration_import", { provider });
 
+// ---------- agent access to extensions (the vault's .relay/config.json)
+export const actionConfig = () => invoke<ActionConfig>("action_config");
+export const setActionConfig = (ext: string, entry: ActionEntry) =>
+  invoke<ActionConfig["config"]>("set_action_config", { ext, entry });
+
 // ---------- events from the backend
 /** One normalised event of an agent process. */
-export const onAgent = (handler: (key: string, event: AgentEvent) => void) =>
+export const onAgent = (handler: (key: string, event: AgentEvent, provider: string) => void) =>
   listen<{ project: string; provider: string; event: AgentEvent }>("agent", e =>
-    handler(e.payload.project, e.payload.event),
+    handler(e.payload.project, e.payload.event, e.payload.provider),
   );
 /** A notification banner was clicked: open that conversation. */
 export const onOpenChat = (handler: (key: string) => void) => listen<string>("open-chat", e => handler(e.payload));
@@ -144,3 +158,8 @@ export const onSettingsChanged = (handler: (settings: Settings) => void) =>
 export const onMenu = (handler: (item: string) => void) => listen<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());
 export const onRemindersChanged = (handler: () => void) => listen("reminders-changed", () => handler());
+/** relay:// links: the one that launched the app (it arrives before anything listens), then every one opened later. */
+export async function onDeepLinks(handler: (url: string) => void) {
+  (await getCurrent())?.forEach(handler);
+  return onOpenUrl(urls => urls.forEach(handler));
+}

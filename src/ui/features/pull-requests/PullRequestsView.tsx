@@ -1,52 +1,45 @@
+import { useEffect } from "react";
 import type { PR } from "../../../domain/pull-requests/types";
 import { usePullRequestsStore } from "../../../application/pull-requests/store";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { openDetail } from "../../../application/navigation/panel";
+import { openPr } from "../../../application/navigation/panel";
 import { prKey } from "../../../domain/navigation/keys";
-import { loadPrs } from "../../../application/pull-requests/prs";
-import { projectLabel } from "../../../application/workspace/vault";
-import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { PrRow } from "./PrRow";
+import { PrPane } from "./PrPane";
 
-/** The Pull requests view: both lists, with a reload button. */
-export function PullRequestsView() {
+/** The Pull requests view, as Mail does it: the list on the left (what waits for your review, what you opened), the
+ *  PR you picked on the right, so you can go from one to the next without closing anything. Reloading is the title
+ *  bar's button. */
+export function PullRequestsView({ className = "" }: { className?: string }) {
   const { t } = useT();
   const list = usePullRequestsStore(s => s.list);
   const err = usePullRequestsStore(s => s.err);
   const busy = usePullRequestsStore(s => s.busy);
-  const open = useNavigationStore(s => s.panel.open);
-  // the display label per project the PRs name
-  const labels = useDerived(() =>
-    Object.fromEntries(
-      [...(list?.review || []), ...(list?.mine || [])].flatMap(pr =>
-        pr.project ? [[pr.project, projectLabel(pr.project)]] : [],
-      ),
-    ),
-  );
+  const open = useNavigationStore(s => s.panel.prOpen);
+
+  // with nothing picked yet, the first PR of the list
+  const first = list?.review[0] || list?.mine[0];
+  const firstKey = first ? prKey(first.repo, first.number) : "";
+  useEffect(() => {
+    if (!open && firstKey) openPr(firstKey);
+  }, [open, firstKey]);
 
   const group = (name: string, prs: PR[], mine: boolean) => (
-    <section className="mb-6">
-      <h2 className="list-head">
-        {name} <span className="font-mono tabular-nums">{prs.length}</span>
+    <section>
+      <h2 className="flex items-baseline gap-1.5 px-4 pt-4.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary">
+        {name} <span className="tabular-nums">{prs.length}</span>
       </h2>
-      {prs.length ? (
-        prs.map(pr => {
-          const key = prKey(pr.repo, pr.number);
-          return (
-            <PrRow
-              key={key}
-              pr={pr}
-              mine={mine}
-              project={pr.project ? labels[pr.project] : ""}
-              selected={open === key}
-              onOpen={() => openDetail(key)}
-            />
-          );
-        })
-      ) : (
-        <div className="text-secondary text-sm py-2">{t("pr.none")}</div>
-      )}
+      <div className="flex flex-col gap-0.5 px-2">
+        {prs.length ? (
+          prs.map(pr => {
+            const key = prKey(pr.repo, pr.number);
+            return <PrRow key={key} pr={pr} mine={mine} selected={open === key} onOpen={() => openPr(key)} />;
+          })
+        ) : (
+          <div className="text-secondary text-sm px-2.5 py-2">{t("pr.none")}</div>
+        )}
+      </div>
     </section>
   );
   let lists = null;
@@ -57,18 +50,14 @@ export function PullRequestsView() {
         {group(t("pr.mine"), list.mine, true)}
       </>
     );
-  else if (!busy) lists = <div className="text-secondary text-sm text-center">{t("pr.notLoaded")}</div>;
+  else if (!busy) lists = <div className="text-secondary text-sm text-center p-4">{t("pr.notLoaded")}</div>;
   return (
-    <div className="flex flex-col gap-[18px]">
-      <div className="flex items-center gap-2 mb-3.5">
-        <span className="flex-1"></span>
-        {busy ? <span className="spinner"></span> : null}
-        <button className="btn" onClick={loadPrs}>
-          {t("pr.reload")}
-        </button>
+    <div className={`${className} grid grid-cols-[380px_minmax(0,1fr)] min-h-0`}>
+      <div className="min-h-0 overflow-y-auto border-r border-separator pb-4">
+        {err ? <div className="err-box m-4">{err}</div> : null}
+        {lists}
       </div>
-      {err ? <div className="err-box">{err}</div> : null}
-      {lists}
+      <div className="min-h-0 overflow-y-auto">{open ? <PrPane prKey={open} /> : null}</div>
     </div>
   );
 }

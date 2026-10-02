@@ -21,6 +21,7 @@ export type Decision = { behavior: "allow"; updatedInput: any } | { behavior: "d
 
 /** The normalised events, the Tauri event `agent` as `{project, provider, event}`, and history items. */
 export type AgentEvent =
+  | { type: "working" }
   | { type: "session"; id: string }
   | { type: "user"; text: string; images: (Image | null)[] }
   | { type: "text"; text: string; delta: boolean }
@@ -31,6 +32,8 @@ export type AgentEvent =
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }
   | { type: "time"; at: string }       // history only: when the transcript line after it was written
   | { type: "error"; text: string }
+  | { type: "reset" }                 // the conversation started over (/clear); a new session follows
+  | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills

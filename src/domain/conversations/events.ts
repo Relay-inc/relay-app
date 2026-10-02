@@ -2,6 +2,7 @@ import type { AgentEvent } from "../agents/types";
 import type { ConversationsState, Translate } from "./state";
 import type { Item, ToolInput } from "./types";
 import { formatDuration, lastAi } from "./rules.ts";
+import { cleanCommands } from "./commands.ts";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) as a reducer over the conversations
 // state, and the transcripts behind a conversation as items. Pure: what needs the outside (a banner, saving, a vault
@@ -10,15 +11,15 @@ import { formatDuration, lastAi } from "./rules.ts";
 type EventOf<Type extends AgentEvent["type"]> = Extract<AgentEvent, { type: Type }>;
 
 export const IMG_OK = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+/** Around the project line the app puts in front of a message; the transcript keeps it, the conversation hides it. */
+export const CTX_OPEN = "<relay-project>";
+export const CTX_CLOSE = "</relay-project>";
+const CTX_RE = new RegExp(`^${CTX_OPEN}[\\s\\S]*?${CTX_CLOSE}\\s*`);
 
 /** What the reducer reads from outside the state. */
 export type EventEnv = { t: Translate; selected: string; now: number };
 /** What the reducer asks for after an event. */
-export type Effect =
-  | { kind: "save-chats" }
-  | { kind: "save-commands" }
-  | { kind: "notify"; key: string; body: string }
-  | { kind: "snapshot" };
+export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; body: string } | { kind: "snapshot" };
 
 export function push(state: Pick<ConversationsState, "messages">, key: string, item: Item) {
   (state.messages[key] ||= []).push(item);
@@ -41,19 +42,31 @@ const toolItem = (id: string, name: string, input: ToolInput, state: Item["state
 export const doneText = (seconds: number, t: Translate) =>
   seconds ? t("work.doneIn", { d: formatDuration(seconds) }) : t("work.done");
 
-/** One event of an agent process applied to `state` (an Immer draft, changed in place). Returns the effects to run;
- *  an event the app does not show changes nothing and returns []. */
-export function applyAgentEvent(state: ConversationsState, key: string, event: AgentEvent, env: EventEnv): Effect[] {
+const ACTIVITY: AgentEvent["type"][] = ["working", "text", "thinking", "tool_call"];
+
+/** One event of `provider`'s agent process applied to `state` (an Immer draft, changed in place). Returns the effects
+ *  to run; an event the app does not show changes nothing and returns []. */
+export function applyAgentEvent(
+  state: ConversationsState,
+  key: string,
+  event: AgentEvent,
+  env: EventEnv,
+  provider = "claude",
+): Effect[] {
+  // activity can arrive after a reload before the first status poll: it shows the turn, without counting another one
+  if (ACTIVITY.includes(event.type)) {
+    state.status[key] = "busy";
+    state.queued[key] = Math.max(1, state.queued[key] || 0);
+  }
   switch (event.type) {
     case "commands":
-      state.commands = event.commands.map(({ name, description, argumentHint }) => ({
-        name,
-        description,
-        argumentHint,
-      }));
-      return [{ kind: "save-commands" }];
+      state.commands[provider] = cleanCommands(event.commands);
+      return [];
     case "draft_saved":
       push(state, key, { kind: "note", text: draftNote(event, env.t) });
+      return [];
+    case "reset":
+      state.messages[key] = [];
       return [];
     case "text":
       pushText((state.messages[key] ||= []), event.text, event.delta);
@@ -148,7 +161,7 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
       const imgs = entry.images.map(image =>
         image && IMG_OK.includes(image.media_type) ? imageUrl(image.media_type, image.data) : "",
       );
-      items.push({ kind: "me", text: entry.text, ...(imgs.length ? { imgs } : {}) });
+      items.push({ kind: "me", text: entry.text.replace(CTX_RE, ""), ...(imgs.length ? { imgs } : {}) });
     } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok"));
   }
@@ -165,4 +178,22 @@ export function trackTimes(state: Pick<ConversationsState, "outsideAt">, key: st
       if (at && state.outsideAt[key]) state.outsideAt[key].to = at;
     } else if (row.type === "user" && at) state.outsideAt[key] = { from: at, to: at };
   }
+}
+
+/** The turns the app's own processes have in flight after a reload (`running`: per key, 0 when idle but alive), for the
+ *  conversations the page knows nothing about yet: a late poll never revives a turn that already ended. `owned`: the
+ *  keys the backend runs, which the providers' session lists must not override; `adopted`: the ones now busy. */
+export function adoptOwnedTurns(state: ConversationsState, running: Record<string, number>) {
+  const owned = new Set<string>();
+  const adopted: string[] = [];
+  for (const [key, conversation] of Object.entries(state.chats)) {
+    if (conversation.closed || !(key in running)) continue;
+    owned.add(key);
+    if (running[key] > 0 && state.status[key] === undefined) {
+      state.status[key] = "busy";
+      state.queued[key] = running[key];
+      adopted.push(key);
+    }
+  }
+  return { owned, adopted };
 }

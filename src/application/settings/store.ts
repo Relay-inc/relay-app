@@ -1,6 +1,8 @@
 import type { Lang } from "../../shared/i18n";
 import {
   EMPTY_SETTINGS,
+  type ActionEntry,
+  type ActionMeta,
   NO_MAIL_DRAFT,
   type BoardForm,
   type MailCfg,
@@ -36,6 +38,9 @@ export type SettingsState = {
     message: Message | null;
     finding: boolean;
   };
+  // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
+  // last load (`""`) or save (by extension) failed
+  actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
   integrations: {
     loaded: boolean; // the tokens are known
     listMessage: Message | null;
@@ -71,6 +76,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   message: null,
   agentsPage: { detected: null, message: null },
   projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
+  actions: { list: [], entries: {}, errors: {} },
   integrations: {
     loaded: false,
     listMessage: null,

@@ -1,7 +1,8 @@
-import type { CardFile } from "../../../domain/board/types";
+import type { CardView } from "../../../domain/board/types";
+import { size } from "./format";
 
 /** A card's or a comment's files. Opening one needs the tracker's session, so a link to the browser. */
-export function CardFiles({ files }: { files: CardFile[] }) {
+export function TicketFiles({ files }: { files: NonNullable<CardView["files"]> }) {
   return (
     <ul className="flex flex-col gap-1 my-1.5 text-sm">
       {files.map(file => (
@@ -13,7 +14,7 @@ export function CardFiles({ files }: { files: CardFile[] }) {
           ) : (
             <span className="truncate">{file.name}</span>
           )}
-          <span className="text-xs text-secondary tabular-nums">{file.size}</span>
+          {file.size > 0 && <span className="text-xs text-secondary tabular-nums">{size(file.size)}</span>}
         </li>
       ))}
     </ul>

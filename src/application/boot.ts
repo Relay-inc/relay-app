@@ -22,8 +22,7 @@ import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
 import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./conversations/polls";
 import { closeChat } from "./conversations/actions";
-import { loadCommands } from "./conversations/commands";
-import { loadAgents } from "./agents/agents";
+import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere } from "./navigation/navigation";
 import { closeDetail } from "./navigation/panel";
@@ -32,6 +31,7 @@ import { checkBoards, resetBoard } from "./board/board";
 import { loadPrs, resetPrs } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
+import { handleLink } from "./deep-links";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
 // versions, then the polls. Every poll of the app starts here, once.
@@ -52,10 +52,8 @@ async function settingsChanged(next: Settings) {
   const integrationsChanged = !sameJson(next.integrations, was.integrations);
   const githubChanged = !sameJson(next.github, was.github);
   const mailChanged = !sameJson(next.mail, was.mail);
-  // another vault has other commands and skills
-  const vaultChanged = next.vault !== was.vault;
   setSettingsState(next);
-  applyTheme(next.theme);
+  applyTheme(next.theme, next.accent);
   // a new language applies without a restart. The board drops its cache: task labels are built in the language
   if (integrationsChanged || languageChanged) resetBoard();
   if (languageChanged) await initLanguage();
@@ -74,8 +72,8 @@ async function settingsChanged(next: Settings) {
     if (boardDown(selected())) select(WAIT);
     loadSnapshot();
   });
+  // the agents bring the commands and skills of the vault with them
   loadAgents().then(reloadUsage);
-  if (vaultChanged) loadCommands();
 }
 
 export async function boot() {
@@ -83,11 +81,14 @@ export async function boot() {
   await loadSettingsAndVault();
   await adoptEarlierConversations();
   await pickStartView();
+  backend.onDeepLinks(handleLink);
   startPolls();
 }
 
 function listenToBackend() {
-  backend.onAgent(onAgentEvent);
+  backend.onAgent((key, event, provider) =>
+    event.type === "resolved" ? sawDefaults(provider, event) : onAgentEvent(key, event, provider),
+  );
   backend.onOpenChat(select);
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
@@ -108,7 +109,7 @@ async function loadSettingsAndVault() {
     /* older backend */
   }
   await initLanguage();
-  applyTheme(settings().theme);
+  applyTheme(settings().theme, settings().accent);
   // no vault yet, or the configured one is gone: choose one before anything reads it
   const vaultStatus = await backend.vaultStatus();
   if (!vaultStatus.ok) {
@@ -155,7 +156,6 @@ async function adoptEarlierConversations() {
   await adoptProviders();
   saveChats();
   loadAgents();
-  loadCommands();
   const untitled = Object.values(cs().chats).filter(conversation =>
     ["Gesprek", "Algemeen gesprek"].includes(conversation.title),
   );

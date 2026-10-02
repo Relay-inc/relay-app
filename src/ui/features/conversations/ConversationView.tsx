@@ -1,7 +1,10 @@
+import type { Item } from "../../../domain/conversations/types";
+import { agent } from "../../../shared/plugins";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
 import { routeTo } from "../../../application/conversations/actions";
+import { chatAgent } from "../../../application/agents/agents";
 import { project } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -9,7 +12,20 @@ import { ConversationItem } from "./ConversationItem";
 import { NoteLine } from "./NoteLine";
 import { PendingRequest } from "./PendingRequest";
 import { RouteChoice } from "./RouteChoice";
+import { ToolGroup } from "./ToolGroup";
 import { Working } from "./Working";
+
+// the tool calls between two messages fold into one group, keyed by the index of its first step
+function groupSteps(items: Item[]) {
+  const out: { at: number; item: Item; steps?: Item[] }[] = [];
+  items.forEach((item, at) => {
+    const last = out[out.length - 1];
+    if (item.kind !== "tool") out.push({ at, item });
+    else if (last?.steps) last.steps.push(item);
+    else out.push({ at, item, steps: [item] });
+  });
+  return out;
+}
 
 /** The open conversation: what was said and done, a question about the project, the cards waiting, and the working
  *  indicator. A stream delta changes one item; the others keep their identity and do not redraw. */
@@ -21,17 +37,25 @@ export function ConversationView() {
   const outside = useConversationsStore(s => selected in s.outside);
   const pendingList = useConversationsStore(s => s.pendingList);
   const routeHits = useConversationsStore(s => (s.routeChoice?.key === selected ? s.routeChoice.hits : null));
-  // the project it is under (for the empty line) and whether a terminal session is writing
+  // the project it is under (for the empty line), whether a terminal session is writing, and the agent's name
   const where = useDerived(() => {
     const { session, projectName } = chatBar(selected);
-    return { name: project(projectName) ? projectName : null, writing: !!session?.busy };
+    const id = chatAgent(selected);
+    return { name: project(projectName) ? projectName : null, writing: !!session?.busy, agent: agent(id)?.name ?? id };
   });
   const waiting = pendingList.filter(request => request.project === selected);
+  const working = t("work.working", { agent: where.agent });
   return (
-    <div className="flex flex-col gap-[18px]">
-      {/* a tool line by its call id; the rest is append-only, so its index is stable */}
+    <div className="flex flex-col gap-5">
+      {/* the rest is append-only, so an index is stable; a tool line keeps its call id */}
       {items?.length ? (
-        items.map((item, i) => <ConversationItem key={item.id ?? i} item={item} />)
+        groupSteps(items).map(entry =>
+          entry.steps ? (
+            <ToolGroup key={entry.at} steps={entry.steps} />
+          ) : (
+            <ConversationItem key={entry.item.id ?? entry.at} item={entry.item} />
+          ),
+        )
       ) : (
         <NoteLine text={where.name ? t("chat.emptyProject", { name: where.name }) : t("chat.emptyGeneral")} />
       )}
@@ -39,8 +63,8 @@ export function ConversationView() {
       {waiting.map(request => (
         <PendingRequest key={request.id} request={request} />
       ))}
-      {/* while the agent works: only the pulsing dots, the running step has its own line */}
-      {busy && !waiting.length ? <Working label={t("work.working")} text={outside ? t("work.outside") : ""} /> : null}
+      {/* every provider shares the same indicator; permission cards take its place while waiting */}
+      {busy && !waiting.length ? <Working label={working} text={outside ? t("work.outside") : working} /> : null}
       {where.writing ? <Working text={t("term.writing")} /> : null}
     </div>
   );

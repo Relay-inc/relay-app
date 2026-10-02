@@ -12,27 +12,31 @@ type Press = {
   after?: boolean;
 };
 
-// what a dragged kind can be dropped on: the header's section, the other conversations of its project, the other projects of its section
+// what a dragged kind can be dropped on: the header's section, the other views, the other conversations of its project,
+// the other projects of its section
 const dropSelector = (kind: ReorderKind, group: string) => {
   if (kind === "sec") return "[data-drop]";
+  if (kind === "view") return "[data-view]";
   if (kind === "conv") return `[data-kind="conv"][data-parent="${CSS.escape(group)}"]`;
   return `[data-kind="proj"][data-context="${CSS.escape(group)}"]`;
 };
 // the id a drop target stands for
 const dropId = (kind: ReorderKind, target: HTMLElement) => {
   if (kind === "sec") return target.dataset.drop;
+  if (kind === "view") return target.dataset.view;
   if (kind === "conv") return target.dataset.key;
   return target.dataset.project;
 };
 
-/** Reorder the sidebar by pressing and moving: a section header among headers, a project among the projects of its
- *  section, a conversation among those of its project. `press` goes on the row's pointerdown, `dropzone` says how a
+/** Reorder the sidebar by pressing and moving: a view among the views, a section header among headers, a project among
+ *  the projects of its section, a conversation among those of its project. With `sideways` the views stand in a row of
+ *  icons, so before or after is left or right of the middle. `press` goes on the row's pointerdown, `dropzone` says how a
  *  row is drawn meanwhile, and `unlessDragged` keeps the click that ends a drag from also selecting the row. */
-export function useReorder(root: RefObject<HTMLElement | null>) {
+export function useReorder(root: RefObject<HTMLElement | null>, sideways: boolean) {
   const justDragged = useRef(false);
   // the ids of the rows that can be reordered among each other, in screen order (sections reorder without them)
   const visibleIds = (press: Press) => {
-    if (press.kind === "sec" || !root.current) return [];
+    if (press.kind === "sec" || press.kind === "view" || !root.current) return [];
     const rows = root.current.querySelectorAll<HTMLElement>(dropSelector(press.kind, press.group));
     return [...rows].map(row => dropId(press.kind, row)!);
   };
@@ -43,7 +47,9 @@ export function useReorder(root: RefObject<HTMLElement | null>) {
         ?.closest<HTMLElement>(dropSelector(press.kind, press.group));
       if (!dropTarget) return { target: undefined };
       const box = dropTarget.getBoundingClientRect();
-      return { target: dropId(press.kind, dropTarget), after: e.clientY > box.top + box.height / 2 };
+      const after =
+        press.kind === "view" && sideways ? e.clientX > box.left + box.width / 2 : e.clientY > box.top + box.height / 2;
+      return { target: dropId(press.kind, dropTarget), after };
     },
     onEnd: (press, released) => {
       if (!press.moving) return;

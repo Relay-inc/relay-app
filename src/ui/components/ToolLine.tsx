@@ -15,20 +15,31 @@ const hostOf = (url: string | undefined) => {
 };
 
 /** One tool call as a short line ("read x.md", a command, "searched for ..."). Its `<code>` is styled by the line that
- *  holds it (`[&_code]:…`). */
-export function ToolLine({ name, input }: { name: string; input: ToolInput | undefined }) {
+ *  holds it (`[&_code]:…`). `linked`: the file is a note that opens, so its name is drawn as a link. */
+export function ToolLine({
+  name,
+  input,
+  linked = false,
+}: {
+  name: string;
+  input: ToolInput | undefined;
+  linked?: boolean;
+}) {
   const { th } = useT();
   const args = input || {};
+  const file = linked
+    ? raw(`<span class="text-accent-text">${esc(fileName(args.file_path))}</span>`)
+    : fileName(args.file_path);
   // a line without markup stays text, one with markup renders it
-  const line = (html: string) => (/[<&]/.test(html) ? <Html className="contents" html={html} /> : <>{html}</>);
+  const line = (html: string) => (/[<&]/.test(html) ? <Html html={html} /> : <>{html}</>);
   switch (name) {
     case "Read":
-      return line(th("tool.read", { file: fileName(args.file_path) }));
+      return line(th("tool.read", { file }));
     case "Write":
-      return line(th("tool.write", { file: fileName(args.file_path) }));
+      return line(th("tool.write", { file }));
     case "Edit":
     case "MultiEdit":
-      return line(th("tool.edit", { file: fileName(args.file_path) }));
+      return line(th("tool.edit", { file }));
     case "Bash":
       return <code>{String(args.command || "").slice(0, 90)}</code>;
     case "Grep":

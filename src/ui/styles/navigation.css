@@ -9,6 +9,10 @@
   -webkit-user-select: none;
   user-select: none;
 }
+/* the rows were custom elements in Lit, whose hosts never shrank in the nav's flex column */
+.relay-sidebar nav > * {
+  flex-shrink: 0;
+}
 .relay-sidebar[data-reordering],
 .relay-sidebar[data-reordering] * {
   cursor: grabbing !important;
@@ -19,7 +23,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--inspector);
+  background: var(--bg);
 }
 /* a vault note in the Status tab looks like one in a conversation: md-defaults' link colour would win otherwise */
 .relay-panel .md-panel a.vlink {
@@ -28,13 +32,4 @@
 }
 .relay-panel .md-panel a.vlink:hover {
   text-decoration-color: currentColor;
-}
-/* the read-only checkboxes follow the theme: without it the dark theme draws them as light grey squares */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .relay-panel input[type="checkbox"] {
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] .relay-panel input[type="checkbox"] {
-  color-scheme: dark;
 }

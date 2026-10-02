@@ -8,6 +8,7 @@ import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { settings } from "../settings/settings";
 import { boardOf } from "../navigation/navigation";
+import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent } from "../agents/agents";
 import { projectLabel } from "../workspace/vault";
 import { useConversationsStore } from "./store";
@@ -25,6 +26,8 @@ export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 export const terminalSessions = (hidden = false) =>
   rules.terminalSessions(cs(), useWorkspaceStore.getState().snap.sessions.items, settings().overrides, t, hidden);
 export const terminalOf = (key: string) => terminalSessions().find(session => session.key === key);
+/** The slash commands and skills of a conversation's agent, for the composer's completion. */
+export const commandsOf = (key: string) => cs().commands[chatAgent(key)] ?? [];
 /** The project of the open conversation, terminal or app. */
 export const selectedProject = () => {
   const selected = useNavigationStore.getState().selected;
@@ -51,6 +54,9 @@ export function chatBar(key: string) {
   const projectName = session ? session.project : onView ? null : projectOf(key);
   const conversation = cs().chats[key];
   const board = boardOf(key);
+  const context = projectName
+    ? useWorkspaceStore.getState().snap.projects.find(p => p.name === projectName)?.context
+    : "";
   const VIEW_NAMES: Record<string, Key> = {
     [PRS]: "nav.prs",
     [USAGE]: "nav.usage",
@@ -64,6 +70,9 @@ export function chatBar(key: string) {
     session: session ? { busy: session.status === "busy" } : null,
     projectName,
     img: !onView && projectName ? (useWorkspaceStore.getState().icons[projectName]?.img ?? "") : "",
+    tint: context ? contextTint(context) : ("" as const),
+    // an app conversation's turn: idle or busy; "" for a terminal session or a view
+    state: conversation ? (cs().status[key] ?? ("idle" as const)) : ("" as const),
     title: session ? session.title : label(key),
     renamable: !!conversation,
     // the terminal would resume a conversation that touched mail without the app's restrictions

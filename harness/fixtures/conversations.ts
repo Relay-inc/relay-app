@@ -41,10 +41,12 @@ export const PERMISSION_KEY = special("Northwind Portal", "Push the portal fix",
 export const SWITCH_KEY = chats.filter(c => c.project === "Northwind Portal")[1].key;
 chats.filter(c => c.project === "Northwind Portal")[1].title = "Invoice export columns";
 export const QUESTION_KEY = special("Harbor CRM", "Contact sync strategy", 8);
+export const ACTION_KEY = special("Atlas Logistics", "Plan the depot import", 11);
 export const LONG_TITLE = "Billing sync double balances";
 export const SWITCH_TITLE = "Invoice export columns";
 export const PERMISSION_TITLE = "Push the portal fix";
 export const QUESTION_TITLE = "Contact sync strategy";
+export const ACTION_TITLE = "Plan the depot import";
 
 export const conversations = chats;
 export const sidOf = (key: string) => uuid(chats.findIndex(c => c.key === key) + 101);
@@ -129,6 +131,8 @@ export function history(key: string): Ev[] {
   const base = shortHistory(chats[index], index);
   if (key === PERMISSION_KEY) base.push(user("Push it so the client can test."), tool("Bash", { command: "git status" }), ai("The branch is clean. I need your go to push."));
   if (key === QUESTION_KEY) base.push(user("Which sync should we use?"), ai("Two options, I asked you below."));
+  // the app puts the project in front of a message (<relay-project>), the transcript keeps it, the conversation hides it
+  if (key === ACTION_KEY) base.push(user("<relay-project>This conversation is about the vault project Atlas Logistics.</relay-project>\nMake a ticket for the depot import."), tool("Bash", { command: "relay productive.create_task title='Depot import script' list='To do'" }), ai("I asked to create the ticket, it waits for your go."));
   return base;
 }
 
@@ -143,8 +147,9 @@ export const liveTail = (): Ev[] => [
   { type: "tool_call", id: "toolu_live_run", name: "Grep", input: { pattern: "replace\\(" } },
 ];
 
-// ---------- the pending card and question (pending/<id>.json)
+// ---------- the pending card and question (pending/<id>.json), and an agent action (`relay`, actions.rs) that asks
 export const pending = [
+  { id: "act-0001", project: ACTION_KEY, provider: "claude", kind: "tool", tool_name: "relay productive.create_task", input: { title: "Depot import script", list: "To do" }, tool_use_id: null, relay: true, at: NOW - 2 * 60000 },
   { id: "perm-0001", project: PERMISSION_KEY, provider: "claude", kind: "tool", tool_name: "Bash", input: { command: "git push origin fix/portal-redirect", description: "Push the fix branch to GitHub" }, tool_use_id: "toolu_perm", relay: false, at: NOW - 4 * 60000 },
   {
     id: "ask-0001", project: QUESTION_KEY, provider: "claude", kind: "question", tool_name: "AskUserQuestion", tool_use_id: "toolu_ask", at: NOW - 7 * 60000,

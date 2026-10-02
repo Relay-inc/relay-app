@@ -1,19 +1,31 @@
-import type { SlashCommand } from "../../domain/conversations/commands";
 import * as backend from "../../infrastructure/backend";
-import { storage } from "../../infrastructure/storage";
+import { cleanCommands } from "../../domain/conversations/commands";
+import { useAgentsStore } from "../agents/store";
 import { useConversationsStore } from "./store";
 
-// Claude Code's slash commands and skills, from its last start: kept (`commands`), so the composer completes before one runs.
-export const saveCommands = () => storage.set("commands", useConversationsStore.getState().commands);
-function setCommands(list: SlashCommand[]) {
+// The slash commands and skills per provider for the current vault, never a cache across vaults: asked whenever the
+// agents are (loadAgents), and an agent's start updates its own list (the `commands` event).
+let generation = 0;
+export function loadCommands() {
+  const mine = ++generation;
   useConversationsStore.setState(draft => {
-    draft.commands = list.map(({ name, description, argumentHint }) => ({ name, description, argumentHint }));
+    draft.commands = {};
   });
-  saveCommands();
+  return Promise.all(
+    useAgentsStore
+      .getState()
+      .status.providers.filter(p => p.on && p.detect.installed)
+      .map(async provider => {
+        try {
+          const list = cleanCommands(await backend.agentCommands(provider.id));
+          // a late answer for another vault never lands
+          if (mine === generation)
+            useConversationsStore.setState(draft => {
+              draft.commands[provider.id] = list;
+            });
+        } catch (e) {
+          console.error(e);
+        }
+      }),
+  );
 }
-/** Asked once at the start, without waiting for a conversation; a Claude start updates it too (events.ts). */
-export const loadCommands = () =>
-  backend
-    .claudeCommands()
-    .then(setCommands)
-    .catch(e => console.error(e));

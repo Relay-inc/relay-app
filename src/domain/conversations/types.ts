@@ -33,7 +33,7 @@ export type AgentSession = {
 };
 /** One line of a conversation. A tool line keeps the call, so it is drawn (and translated) when shown. */
 export type Item = {
-  kind: "me" | "ai" | "tool" | "err" | "note" | "done";
+  kind: "me" | "ai" | "tool" | "err" | "note" | "done" | "allowed" | "denied";
   text: string;
   id?: string;
   state?: "run" | "ok" | "err";
@@ -49,9 +49,10 @@ export type Chat = {
   draft?: boolean;
   fork?: string;
   closed?: number;
-  mail?: string;
+  mail?: string; // what goes in front of the first message: a mail or a card to read
   provider?: string; // its agent, set at the first message
   fromMail?: boolean; /* about a mail or has read mail */
+  told?: string; // the project the agent was last told this conversation is about
 };
 /** An image waiting to be sent: its media type, base64 data, and a blob url to show it. */
 export type Img = { mt: string; data: string; url: string };

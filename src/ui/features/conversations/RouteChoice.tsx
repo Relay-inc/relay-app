@@ -8,11 +8,11 @@ export function RouteChoice({ hits, onRoute }: { hits: string[]; onRoute: (proje
       <div className="text-sm text-secondary">{t("route.question")}</div>
       <div className="flex flex-wrap gap-2">
         {hits.map(hit => (
-          <button key={hit} className="btn" onClick={() => onRoute(hit)}>
+          <button key={hit} className="btn cursor-pointer" onClick={() => onRoute(hit)}>
             {hit}
           </button>
         ))}
-        <button className="btn" onClick={() => onRoute("")}>
+        <button className="btn cursor-pointer" onClick={() => onRoute("")}>
           {t("route.keep")}
         </button>
       </div>

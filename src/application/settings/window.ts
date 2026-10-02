@@ -20,12 +20,12 @@ export const TABS = [
 const st = () => useSettingsStore.getState();
 const set = useSettingsStore.setState;
 
-/** The window's start: the settings, the vault status, the language and theme, the page it was on. */
+/** The window's start: the settings, the vault status, the language, theme and accent, the page it was on. */
 export async function initSettingsWindow() {
   const saved = await backend.getSettings();
   const vaultStatus = await backend.vaultStatus();
   await initLanguage();
-  applyTheme(saved.theme);
+  applyTheme(saved.theme, saved.accent);
   const stored = storage.getRaw("prefsTab");
   set(draft => {
     draft.settings = saved;

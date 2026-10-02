@@ -13,6 +13,7 @@ export type ConversationsState = {
   queued: Record<string, number>; // messages sent but not answered yet: one turn end each
   unseen: Set<string>;
   dismissed: Set<string>; // "is this about project X?" answered no
+  closing: Set<string>; // conversations being closed: the process stops and its worktrees go, which can take a while
   routeChoice: RouteChoice | null;
   pendingList: Pending[];
   pendingPolled: boolean; // the cards already waiting at start get no banner
@@ -30,8 +31,8 @@ export type ConversationsState = {
   subs: Record<string, Sub[]>; // per conversation key, polled every 2 s
   subsOpen: Set<string>; // conversations whose finished agents are unfolded
   subLog: Record<string, string[]>; // agent id: its last messages, while unfolded
-  // Claude Code's slash commands and skills, from its last start: kept, so the composer completes before one runs
-  commands: SlashCommand[];
+  // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
+  commands: Record<string, SlashCommand[]>;
 };
 
 /** The state on a fresh start, with what was stored. */
@@ -39,7 +40,6 @@ export const initialConversations = (stored: {
   chats: Record<string, Chat>;
   hidden: string[];
   forked: string[];
-  commands: SlashCommand[];
 }): ConversationsState => ({
   ...stored,
   messages: {},
@@ -47,6 +47,8 @@ export const initialConversations = (stored: {
   queued: {},
   unseen: new Set(),
   dismissed: new Set(),
+  closing: new Set(),
+  commands: {},
   routeChoice: null,
   pendingList: [],
   pendingPolled: false,

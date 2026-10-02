@@ -29,6 +29,18 @@ import {
   ImageNotFound01Icon,
   RefreshIcon,
   MoreHorizontalIcon,
+  PencilEdit02Icon,
+  ArrowDown01Icon,
+  Sun03Icon,
+  Moon02Icon,
+  File01Icon,
+  Add01Icon,
+  Bookmark01Icon,
+  FilterHorizontalIcon,
+  ArrowUpRight01Icon,
+  KanbanIcon,
+  ListViewIcon,
+  DashboardSquare01Icon,
 } from "@hugeicons/core-free-icons";
 
 /** One SVG element: its tag and its attributes, camelCase as React takes them. */
@@ -64,6 +76,21 @@ const ICONS: Record<string, Icon> = {
   none: ImageNotFound01Icon,
   refresh: RefreshIcon,
   more: MoreHorizontalIcon,
+  compose: PencilEdit02Icon,
+  chevron: ArrowDown01Icon,
+  sun: Sun03Icon,
+  moon: Moon02Icon,
+  file: File01Icon,
+  edit: PencilEdit02Icon,
+  add: Add01Icon,
+  down: ArrowDown01Icon,
+  bookmark: Bookmark01Icon,
+  filter: FilterHorizontalIcon,
+  out: ArrowUpRight01Icon,
+  plus: Add01Icon,
+  kanban: KanbanIcon,
+  rows: ListViewIcon,
+  board: DashboardSquare01Icon,
 };
 // the attributes without React's key and the stroke settings the CSS owns
 const own = ([tag, attrs]: Shape): Shape => [

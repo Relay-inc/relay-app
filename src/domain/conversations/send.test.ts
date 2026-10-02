@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planSend } from "./send.ts";
+import { outgoing, planSend, refusesImages } from "./send.ts";
 
 const state = (typed: Record<string, string>, outside: Record<string, number> = {}) => ({
   typed,
@@ -36,3 +36,34 @@ test("nothing to send, or the waiting view: nothing happens", () => {
 
 test("typing in a terminal session forks it", () =>
   assert.deepEqual(planSend(state({ "t:s1": "go on" }), "t:s1"), { kind: "fork", text: "go on", take: true }));
+
+// what the agent gets (Lit's quick-send.test.ts): the project line and a mail wait for the first ordinary message
+const contextOf = (project: string) => (project === "Relay" ? "Personal" : undefined);
+test("the project goes in front of the first message, once", () => {
+  const first = outgoing({ project: "Relay" }, "hi", contextOf);
+  assert.equal(first.told, "Relay");
+  assert.match(first.sent, /^<relay-project>.*"Relay" \(context Personal\).*<\/relay-project>\n\nhi$/);
+  assert.deepEqual(outgoing({ project: "Relay", told: "Relay" }, "hi", contextOf), {
+    sent: "hi",
+    told: "",
+    tookMail: false,
+  });
+});
+test("a mail to read goes in front of the message", () =>
+  assert.deepEqual(outgoing({ project: null, mail: "Mail" }, "hi", contextOf), {
+    sent: "Mail\n\nhi",
+    told: "",
+    tookMail: true,
+  }));
+test("slash commands keep their prefix and defer project and mail context", () =>
+  assert.deepEqual(outgoing({ project: "Relay", mail: "Saved mail context" }, "/compact", contextOf), {
+    sent: "/compact",
+    told: "",
+    tookMail: false,
+  }));
+test("commands without attachments", () => {
+  assert.ok(refusesImages("codex", "/review now"));
+  assert.ok(refusesImages("pi", "/compact"));
+  assert.ok(!refusesImages("claude", "/compact"));
+  assert.ok(!refusesImages("codex", "/compacted"));
+});

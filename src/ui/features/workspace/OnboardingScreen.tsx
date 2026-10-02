@@ -2,7 +2,7 @@ import { useState } from "react";
 import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../../domain/workspace/types";
 import { checkMapping, pickMapped, pickVault, saveOnboardingVault } from "../../../application/workspace/vault-setup";
 import { useT } from "../../hooks/useT";
-import mark from "../../relay-mark.svg";
+import mark from "../../assets/relay-mark.svg";
 
 const HEADING = "text-base font-semibold mt-2.5";
 const trimmed = (map: VaultMap) =>

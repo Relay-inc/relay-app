@@ -1,17 +1,20 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
 
-const barButton =
-  "h-6 rounded-lg border-0 bg-transparent cursor-default whitespace-nowrap transition-colors duration-(--d) ease-(--ease) hover:bg-fill focus-visible:outline-3 focus-visible:outline-accent/45 focus-visible:outline-offset-1";
+// the colour of the project's folder icon
+const TINT = { "": "text-tertiary", "ctx-a": "text-ctx-a", "ctx-m": "text-ctx-m", "ctx-p": "text-ctx-p" };
 
-/** The title bar of the centre column: the project (or the view) and the conversation's title, the terminal and the
- *  right panel buttons. The shell keys it by the selection, so a title being edited never carries over. */
+/** The title bar of the centre column: the project (or the view), the conversation's title and state, a view's own
+ *  buttons (`actions`), the terminal and the right panel buttons. The shell keys it by the selection, so a title being
+ *  edited never carries over. */
 export function ChatBar({
   heading,
   img,
+  tint,
+  state,
   editable,
   sub,
   value,
@@ -20,6 +23,7 @@ export function ChatBar({
   noTerm,
   locked,
   panelOff,
+  actions,
   onEditProject,
   onRename,
   onOpenTerminal,
@@ -27,6 +31,8 @@ export function ChatBar({
 }: {
   heading: string;
   img: string; // the project's icon, an image data url
+  tint: keyof typeof TINT;
+  state: "" | "busy" | "idle"; // the conversation's state pill; "" shows none
   editable: boolean; // a conversation, not a view: the heading opens the project panel, the title is shown
   sub: string;
   value: string; // the conversation's title
@@ -35,6 +41,7 @@ export function ChatBar({
   noTerm: boolean;
   locked: boolean; // the terminal would resume a conversation that touched mail without the app's restrictions
   panelOff: boolean;
+  actions?: ReactNode;
   onEditProject: () => void;
   onRename: (title: string) => void;
   onOpenTerminal: () => void;
@@ -68,14 +75,14 @@ export function ChatBar({
 
   return (
     <div
-      className="flex-none h-13 flex items-center gap-2.5 px-5 border-b border-separator select-none"
+      className="flex-none h-12 flex items-center gap-2 pl-5 pr-3 border-b border-separator select-none"
       data-tauri-drag-region
     >
       <h1
         className={
-          "text-base font-semibold flex-none max-w-2/5 whitespace-nowrap overflow-hidden text-ellipsis cursor-default rounded-md px-1.5 py-0.5 -ml-1.5" +
+          "flex items-center gap-1.5 text-sm font-normal flex-none max-w-2/5 whitespace-nowrap overflow-hidden text-ellipsis cursor-default rounded-md px-1.5 py-0.75 -ml-1.5 text-secondary" +
           (editable
-            ? " hover:bg-fill focus-visible:outline-3 focus-visible:outline-accent/45 focus-visible:outline-offset-1 after:inline-block after:ml-1.5 after:w-0 after:h-0 after:border-t-4 after:border-t-secondary after:border-x-4 after:border-x-transparent after:align-middle"
+            ? " hover:bg-fill hover:text-label focus-visible:outline-3 focus-visible:outline-accent/45 focus-visible:outline-offset-1"
             : "")
         }
         title={editable ? t("chat.editTitle") : undefined}
@@ -89,16 +96,19 @@ export function ChatBar({
           onEditProject();
         }}
       >
-        <ProjectImg url={img} className="inline w-4 h-4 flex-none object-contain rounded-xs mr-1.5" />
+        {img ? (
+          <ProjectImg url={img} className="size-3.5 flex-none object-contain rounded-xs" />
+        ) : editable ? (
+          <Icon name="folder" className={`glyph size-3.5 flex-none ${TINT[tint]}`} />
+        ) : null}
         {heading}
-        {/* a space between the name and the caret */}{" "}
       </h1>
       {editable ? (
         <>
-          <span className="text-secondary -mx-1">›</span>
+          <span className="text-tertiary">/</span>
           <input
             className={
-              "text-base text-label bg-transparent border-0 rounded-md px-1.5 py-0.5 min-w-0 max-w-2/5 outline-0 text-ellipsis focus:bg-fill" +
+              "text-sm font-semibold text-label bg-transparent border-0 rounded-md px-1.5 py-0.75 min-w-0 max-w-2/5 outline-0 text-ellipsis focus:bg-fill" +
               (readonly ? "" : " hover:bg-fill")
             }
             spellCheck={false}
@@ -114,9 +124,16 @@ export function ChatBar({
         </>
       ) : null}
       <span className="text-secondary whitespace-nowrap overflow-hidden text-ellipsis">{sub}</span>
+      {state ? (
+        <span className="h-5 px-2 rounded-full bg-fill-2 text-secondary text-[11px] font-medium inline-flex items-center gap-1.25 whitespace-nowrap">
+          <span className={`size-1.5 rounded-full ${state === "busy" ? "bg-soon" : "bg-ok"}`}></span>
+          {t(state === "busy" ? "bar.working" : "bar.ready")}
+        </span>
+      ) : null}
       <span className="flex-1" data-tauri-drag-region></span>
+      {actions}
       <button
-        className={`${barButton} w-7 p-0 grid place-items-center text-secondary hover:text-label`}
+        className="btn-icon disabled:opacity-40"
         hidden={noTerm}
         disabled={locked}
         title={t(locked ? "bar.termMail" : "bar.openTerminal")}
@@ -126,7 +143,7 @@ export function ChatBar({
         <Icon name="term" className="glyph size-4" />
       </button>
       <button
-        className={`${barButton} w-7 p-0 grid place-items-center ${panelOff ? "text-accent" : "text-secondary hover:text-label"}`}
+        className={`btn-icon ${panelOff ? "text-accent!" : ""}`}
         title={t("bar.togglePanelTitle")}
         aria-label={t("bar.togglePanel")}
         onClick={onTogglePanel}

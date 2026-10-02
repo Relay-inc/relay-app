@@ -57,9 +57,9 @@ marked.use({
   ],
   renderer: {
     html: ({ text }) => esc(text),
-    // a code block with a copy button in its corner on hover (the app copies it, src/ui/app/App.tsx)
-    code: ({ text }) =>
-      `<div class="relative group/code"><pre><code>${esc(text)}</code></pre><button data-copy class="absolute top-1.5 right-1.5 grid place-items-center size-6 rounded-sm border-0 bg-bg text-secondary opacity-0 group-hover/code:opacity-100 focus-visible:opacity-100" title="${esc(t("copy"))}" aria-label="${esc(t("copy"))}"><svg class="glyph size-3.5" viewBox="0 0 24 24" aria-hidden="true">${iconPaths("copy")}</svg></button></div>`,
+    // a code block under a header with its language and a copy button (the app copies it, src/ui/app/App.tsx)
+    code: ({ text, lang }) =>
+      `<div class="codeblock my-2 rounded-[10px] bg-well border border-separator overflow-hidden"><div class="flex items-center h-7.5 pl-3 pr-1.5 border-b border-separator font-mono text-[11px] text-tertiary"><span class="flex-1">${esc((lang ?? "").split(/\s/)[0])}</span><button data-copy class="cursor-pointer inline-flex items-center gap-1 h-5.5 px-1.5 border-0 rounded-[5px] bg-transparent text-secondary font-sans text-[11px] hover:bg-fill-2 hover:text-label" title="${esc(t("copy"))}"><svg class="glyph size-3" viewBox="0 0 24 24" aria-hidden="true">${iconPaths("copy")}</svg>${esc(t("copy"))}</button></div><pre><code>${esc(text)}</code></pre></div>`,
     image: ({ text }) => esc(text),
     codespan: ({ text }) =>
       isNotePath(text) ? noteA(noteOf(text), `<code>${esc(text)}</code>`) : `<code>${esc(text)}</code>`,

@@ -50,12 +50,17 @@ def main():
     # the rest of the server's log goes to stderr
     threading.Thread(target=lambda: [sys.stderr.write(l) for l in srv.stdout], daemon=True).start()
 
-    def call(method, path, body=None):
+    def call(method, path, body=None, timeout=60):
         req = urllib.request.Request(url + path, method=method, data=None if body is None else json.dumps(body).encode(),
                                      headers={"Authorization": auth, "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=60) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             s = r.read()
             return json.loads(s) if s.strip() else None
+
+    try:
+        commands = {c["name"] for c in call("GET", "/command")}
+    except Exception:
+        commands = set()
 
     stopping = threading.Event()
 
@@ -125,7 +130,27 @@ def main():
                     body["model"] = {"providerID": p, "modelID": mid}
                 if cfg.get("variant"):
                     body["variant"] = cfg["variant"]
-                call("POST", f"/session/{sid}/prompt_async", body)
+                parts = body["parts"]
+                text = next((p.get("text", "") for p in parts if p.get("type") == "text"), "")
+                words = text.split(maxsplit=1)
+                if words and words[0].startswith("/") and words[0][1:] in commands:
+                    command_body = {"command": words[0][1:], "arguments": words[1] if len(words) > 1 else ""}
+                    if body.get("model"):
+                        command_body["model"] = cfg["model"]
+                    if body.get("variant"):
+                        command_body["variant"] = body["variant"]
+                    files = [part for part in parts if part.get("type") == "file"]
+                    if files:
+                        command_body["parts"] = files
+                    # /command waits for the turn: keep stdin free for permission/question replies.
+                    def execute(payload):
+                        try:
+                            call("POST", f"/session/{sid}/command", payload, timeout=86400)
+                        except Exception as error:
+                            out({"type": "bridge.error", "message": str(error)})
+                    threading.Thread(target=execute, args=(command_body,), daemon=True).start()
+                else:
+                    call("POST", f"/session/{sid}/prompt_async", body)
             elif t == "permission":
                 body = {"reply": m.get("reply") or "reject"}
                 if m.get("message"):

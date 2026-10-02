@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PROVIDERS } from "../../../shared/plugins";
 import type { BoardProvider } from "../../../domain/board/types";
 import { useSettingsStore } from "../../../application/settings/store";
@@ -14,7 +14,8 @@ import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
-import { EMPTY_LIST, TILE } from "./blocks";
+import { ActionsSection } from "./ActionsSection";
+import { BUTTON_GLYPH, buttonClass, EMPTY_LIST, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
 import { Footer } from "./Footer";
 import { GithubSettings } from "./GithubSettings";
@@ -23,7 +24,6 @@ import { Section } from "./Section";
 import { SettingsFold } from "./SettingsFold";
 import { SettingsMenu } from "./SettingsMenu";
 import { StatusLine } from "./StatusLine";
-import { useToggleSet } from "./useToggleSet";
 
 // a provider's 16×16 glyph on the 24×24 tile
 const providerIcon = (provider: BoardProvider) => (
@@ -40,11 +40,13 @@ const GITHUB_MARK = (
     />
   </svg>
 );
-type Entry = { id: string; icon: ReactNode; name: string; status: ReactNode; on: boolean; body: () => ReactNode };
+/** An integration: its row, and its page (sections of its own). */
+type Entry = { id: string; icon: ReactNode; name: string; status: ReactNode; on: boolean; page: () => ReactNode };
 
 /** Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on), the
- *  others are in the Add menu. In the list means in the sidebar; Remove switches it off and keeps the token. A row's
- *  body reads its own state; this page only knows which rows are listed and open. */
+ *  others are in the Add menu. In the list means in the sidebar; a row opens the integration's own page, Remove
+ *  switches it off and keeps the token. A page reads its own state; this one only knows which rows are listed and
+ *  which page is open. */
 export function IntegrationsPage({ active }: { active: boolean }) {
   const { t, th, tn } = useT();
   const loaded = useSettingsStore(s => s.integrations.loaded);
@@ -60,7 +62,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       PROVIDERS.map(provider => [provider.id, { setUp: !!boardSetUp(provider), on: isBoardOn(provider) }]),
     ),
   );
-  const folds = useToggleSet();
+  // the integration whose page is open, or null for the list
+  const [detail, setDetail] = useState<string | null>(null);
   useEffect(() => {
     loadIntegrations();
   }, []);
@@ -72,7 +75,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
 
   // an integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain
   const switchTo = (id: string, on: boolean) => {
-    folds.setOpen(id, on);
+    setDetail(on ? id : null);
     switchIntegration(id, on);
   };
   const boardStatus = (provider: BoardProvider) => {
@@ -88,7 +91,12 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       name: provider.name,
       status: boardStatus(provider),
       on: boardsState[provider.id].on,
-      body: () => <BoardSettings provider={provider} onRemove={() => switchTo(provider.id, false)} />,
+      page: () => (
+        <>
+          <BoardSettings provider={provider} onRemove={() => switchTo(provider.id, false)} />
+          <ActionsSection ext={provider.id} name={provider.name} />
+        </>
+      ),
     })),
     {
       id: "github",
@@ -100,7 +108,12 @@ export function IntegrationsPage({ active }: { active: boolean }) {
         <StatusLine level={github.error ? "warn" : "off"}>{github.error || t("gh.checking")}</StatusLine>
       ),
       on: githubOn,
-      body: () => <GithubSettings onRemove={() => switchTo("github", false)} />,
+      // GitHub has no actions for the agent, so no access section
+      page: () => (
+        <Section title={t("int.connection")}>
+          <GithubSettings onRemove={() => switchTo("github", false)} />
+        </Section>
+      ),
     },
     {
       id: "mail",
@@ -108,9 +121,39 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       name: "Mail",
       status: <StatusLine level={mailCount ? "ok" : "off"}>{tn("mail.accounts", mailCount)}</StatusLine>,
       on: mailOn,
-      body: () => <MailSettings onRemove={() => switchTo("mail", false)} />,
+      page: () => (
+        <>
+          <Section title={t("int.connection")}>
+            <MailSettings onRemove={() => switchTo("mail", false)} />
+          </Section>
+          <ActionsSection ext="mail" name="Mail" />
+        </>
+      ),
     },
   ];
+  // an integration's own page: back to the list, its name and status, then its sections
+  const open = entries.find(entry => entry.id === detail && entry.on);
+  if (open)
+    return (
+      <>
+        <header className="grid gap-3">
+          <button className={`${buttonClass("ghost")} -ml-2 justify-self-start`} onClick={() => setDetail(null)}>
+            <Icon name="left" className={BUTTON_GLYPH} />
+            {t("set.tab.integrations")}
+          </button>
+          <div className="flex items-center gap-3">
+            <span className="grid size-9 flex-none place-items-center rounded-lg border border-s-border bg-s-bg">
+              {open.icon}
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-s-fg">{open.name}</h1>
+              <div className="mt-px flex">{open.status}</div>
+            </div>
+          </div>
+        </header>
+        {open.page()}
+      </>
+    );
   const listed = entries.filter(entry => entry.on);
   return (
     <Section
@@ -127,21 +170,16 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       }
     >
       {listed.length ? (
-        listed.map(entry => {
-          const open = folds.isOpen(entry.id);
-          return (
-            <SettingsFold
-              key={entry.id}
-              open={open}
-              icon={entry.icon}
-              name={entry.name}
-              status={entry.status}
-              onToggle={() => folds.toggle(entry.id)}
-            >
-              {open && entry.body()}
-            </SettingsFold>
-          );
-        })
+        listed.map(entry => (
+          <SettingsFold
+            key={entry.id}
+            nav
+            icon={entry.icon}
+            name={entry.name}
+            status={entry.status}
+            onToggle={() => setDetail(entry.id)}
+          />
+        ))
       ) : (
         <div className={EMPTY_LIST}>{t("int.empty")}</div>
       )}

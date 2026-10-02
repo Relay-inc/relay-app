@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { CODE } from "./blocks";
 
-const LABEL = "block text-sm leading-7 text-s-fg";
-const FIELD_HINT = `-mt-1 text-xs leading-snug text-s-faint ${CODE}`;
+const LABEL = "block text-[13px] leading-7 text-s-fg";
+const FIELD_HINT = `-mt-1 text-xs leading-snug text-s-muted ${CODE}`;
 
 /** A field: its label and hint on the left, the control on the right. With `id` the label points at the control. */
 export function Field({

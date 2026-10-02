@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import type { Mail, MailBody } from "../../../domain/mail/types";
 import { useMailStore } from "../../../application/mail/store";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { closeDetail } from "../../../application/navigation/panel";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
 import { mailChat, mailLinkGo, mailSeen, toggleMailText } from "../../../application/mail/mail";
@@ -41,26 +40,25 @@ const formatAddresses = (addresses: Mail["from"]) =>
     </span>
   ));
 
-/** One mail in the right panel: who, when, the mail, and the ways into a conversation. Headers show at once, the body
+/** One mail next to the Mail list: who, when, the mail, and the ways into a conversation. Headers show at once, the body
  *  loads. Opening never marks it read, only the read button does. HTML goes in a frame sandboxed without any allowance
  *  (no scripts, no same origin; the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
-export function MailDetail({ panelKey }: { panelKey: string }) {
+export function MailDetail({ mailKey: key, className }: { mailKey: string; className?: string }) {
   const { t, locale } = useT();
-  const item = useMailStore(s => s.list?.find(candidate => mailKey(candidate) === panelKey));
-  const textView = useMailStore(s => s.textView.has(panelKey));
+  const item = useMailStore(s => s.list?.find(candidate => mailKey(candidate) === key));
+  const textView = useMailStore(s => s.textView.has(key));
   const link = useMailStore(s => s.link);
-  const body = useNavigationStore(s => s.panel.detail[panelKey]) as MailBody | undefined;
+  const body = useNavigationStore(s => s.panel.detail[key]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
 
-  // two groups: reading this mail on the left, the ways into a conversation on the right. A narrow panel wraps a whole group
+  // two groups: reading this mail on the left, the ways into a conversation on the right
   const isUnread = item ? unread(item) : false;
   const bar = (
     <div className="flex items-center flex-wrap gap-2 mb-3">
       <span className="flex items-center gap-2">
-        {iconButton("close", t("pr.close"), closeDetail)}
         {item
           ? iconButton(isUnread ? "read" : "unread", isUnread ? t("mail.markRead") : t("mail.markUnread"), () =>
-              mailSeen(panelKey, isUnread),
+              mailSeen(key, isUnread),
             )
           : null}
         {body?.html
@@ -74,14 +72,14 @@ export function MailDetail({ panelKey }: { panelKey: string }) {
           {iconButton(
             "reply",
             t("mail.draft"),
-            () => mailChat(panelKey, "draft"),
+            () => mailChat(key, "draft"),
             "btn btn-icon",
             `${t("mail.draft")}: ${t("mail.draftTitle")}`,
           )}
           {iconButton(
             "talk",
             t("mail.talk"),
-            () => mailChat(panelKey, "talk"),
+            () => mailChat(key, "talk"),
             "btn btn-icon btn-primary",
             `${t("mail.talk")}: ${t("mail.talkTitle")}`,
           )}
@@ -91,7 +89,7 @@ export function MailDetail({ panelKey }: { panelKey: string }) {
   );
   if (!item)
     return (
-      <div>
+      <div className={className}>
         {bar}
         <Note>{t("mail.gone")}</Note>
       </div>
@@ -139,7 +137,7 @@ export function MailDetail({ panelKey }: { panelKey: string }) {
             referrerPolicy="no-referrer"
             title={item.subject || t("mail.noSubject")}
             srcDoc={body.html}
-            className="block w-full h-140 mt-3 border border-separator rounded-lg bg-white"
+            className="block w-full h-[calc(100vh-15rem)] min-h-100 mt-3 border border-separator rounded-lg bg-white"
           ></iframe>
         ) : (
           <MailText text={body.text} />
@@ -147,7 +145,7 @@ export function MailDetail({ panelKey }: { panelKey: string }) {
       </>
     );
   return (
-    <div>
+    <div className={className}>
       {bar}
       {link ? (
         // confirm before a link in a mail opens
@@ -163,8 +161,10 @@ export function MailDetail({ panelKey }: { panelKey: string }) {
           </div>
         </div>
       ) : null}
-      <h2 className="text-sm font-semibold mb-2 leading-snug">{item.subject || t("mail.noSubject")}</h2>
-      <div className="text-sm leading-normal pb-2.5 border-b border-separator">
+      <h2 className="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
+        {item.subject || t("mail.noSubject")}
+      </h2>
+      <div className="text-[13px] leading-normal pb-3 border-b border-separator">
         <div>{formatAddresses(item.from)}</div>
         <div className="text-secondary tabular-nums">
           {t("mail.to")} {formatAddresses(item.to)}

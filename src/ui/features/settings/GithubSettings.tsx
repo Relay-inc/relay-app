@@ -6,7 +6,7 @@ import { buttonClass, FIELD, FOOTER_IN_ROW, HINT_IN_ROW, withoutColon } from "./
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 
-/** GitHub's body in the integrations list: the owners to show PRs of. No token of our own, the app uses gh's login.
+/** GitHub's body on its page in Integrations: the owners to show PRs of. No token of our own, the app uses gh's login.
  *  The owners as typed stay in the store until Save. */
 export function GithubSettings({ onRemove }: { onRemove: () => void }) {
   const { t, th } = useT();

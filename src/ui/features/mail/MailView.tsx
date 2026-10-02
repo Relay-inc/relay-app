@@ -1,76 +1,85 @@
 import { useMailStore } from "../../../application/mail/store";
 import { useSettingsStore } from "../../../application/settings/store";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { openDetail } from "../../../application/navigation/panel";
+import { openMail } from "../../../application/navigation/panel";
 import { mailKey } from "../../../domain/navigation/keys";
 import { sender, unread } from "../../../domain/mail/rules";
 import { inbox, loadMails, mailSeen, moreMails, openMailSetup, setMailFilter } from "../../../application/mail/mail";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { MailBar } from "./MailBar";
+import { MailDetail } from "./MailDetail";
 import { MailRow } from "./MailRow";
 import { MailSetup } from "./MailSetup";
 
-/** The inbox: search, read state and project on top, the mails that pass the filters under one heading with the unread count. */
-export function MailView() {
+/** The inbox, as Mail does it: on the left search, read state and project on top and the mails that pass the filters
+ *  under one heading with the unread count; on the right the mail you picked. */
+export function MailView({ className = "" }: { className?: string }) {
   const { t } = useT();
   const hasAccount = useSettingsStore(s => !!s.settings.mail.accounts?.length);
   const loaded = useMailStore(s => !!s.list);
-  const total = useMailStore(s => s.list?.length ?? 0);
   const err = useMailStore(s => s.err);
   const busy = useMailStore(s => s.busy);
   const more = useMailStore(s => s.more);
-  const end = useMailStore(s => s.end);
   const filter = useMailStore(s => s.filter);
-  const open = useNavigationStore(s => s.panel.open);
-  const { shown, unread: unreadCount, projects } = useDerived(inbox);
+  const open = useNavigationStore(s => s.panel.mailOpen);
+  const { shown, total, unread: unreadCount, ended, projects } = useDerived(inbox);
+  const root = `${className} grid grid-cols-[380px_minmax(0,1fr)] min-h-0`;
 
-  if (!hasAccount) return <MailSetup onSetup={openMailSetup} />;
+  if (!hasAccount)
+    return (
+      <div className={root}>
+        <div className="col-span-2 max-w-170 w-full mx-auto px-8 pt-7">
+          <MailSetup onSetup={openMailSetup} />
+        </div>
+      </div>
+    );
 
-  // the count keeps the heading's number style, the word around it stays in the heading's font
-  const [beforeCount, afterCount] = t("mail.unread", { n: "\u0000" }).split("\u0000");
   const notLoaded = busy ? null : <div className="text-secondary text-sm text-center">{t("pr.notLoaded")}</div>;
   return (
-    <div className="flex flex-col gap-[18px]">
-      <MailBar filter={filter} projects={projects} busy={busy} onFilter={setMailFilter} onReload={loadMails} />
-      <div>
+    <div className={root}>
+      <div className="min-h-0 overflow-y-auto border-r border-separator px-2 pt-3 pb-4">
+        <MailBar
+          className="block px-2"
+          filter={filter}
+          projects={projects}
+          busy={busy}
+          onFilter={setMailFilter}
+          onReload={loadMails}
+        />
         {err ? <div className="err-box">{err}</div> : null}
         {loaded ? (
-          <section className="mb-6">
-            <h2 className="list-head">
+          <section>
+            <h2 className="flex items-baseline gap-1.5 px-2 pt-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary">
               {t("mail.inbox")}
-              {unreadCount ? (
-                <>
-                  {" "}
-                  {beforeCount}
-                  <span className="font-mono tabular-nums">{unreadCount}</span>
-                  {afterCount}
-                </>
-              ) : null}
+              {unreadCount ? <span className="tabular-nums">{t("mail.unread", { n: unreadCount })}</span> : null}
             </h2>
-            {shown.length ? (
-              shown.map(({ mail, project }) => {
-                const key = mailKey(mail);
-                return (
-                  <MailRow
-                    key={key}
-                    mail={mail}
-                    sender={sender(mail)}
-                    project={project}
-                    selected={open === key}
-                    onOpen={() => openDetail(key)}
-                    onFlip={() => mailSeen(key, unread(mail))}
-                  />
-                );
-              })
-            ) : (
-              <div className="text-secondary text-sm py-2">{total ? t("mail.noMatch") : t("mail.none")}</div>
-            )}
+            <div className="flex flex-col gap-0.5">
+              {shown.length ? (
+                shown.map(({ mail, project, account }) => {
+                  const key = mailKey(mail);
+                  return (
+                    <MailRow
+                      key={key}
+                      mail={mail}
+                      sender={sender(mail)}
+                      project={project}
+                      account={account}
+                      selected={open === key}
+                      onOpen={() => openMail(key)}
+                      onFlip={() => mailSeen(key, unread(mail))}
+                    />
+                  );
+                })
+              ) : (
+                <div className="text-secondary text-sm px-2.5 py-2">{total ? t("mail.noMatch") : t("mail.none")}</div>
+              )}
+            </div>
           </section>
         ) : (
           notLoaded
         )}
-        {loaded && !end ? (
+        {loaded && !ended ? (
           <div className="flex justify-center py-3.5">
             <button className="btn inline-flex items-center gap-2" disabled={more} onClick={moreMails}>
               {more ? <span className="spinner"></span> : null}
@@ -78,6 +87,13 @@ export function MailView() {
             </button>
           </div>
         ) : null}
+      </div>
+      <div className="min-h-0 overflow-y-auto">
+        {open ? (
+          <MailDetail className="max-w-200 px-8 pt-5.5 pb-10 select-text cursor-auto" mailKey={open} />
+        ) : (
+          <div className="h-full grid place-items-center text-[13px] text-tertiary">{t("mail.pick")}</div>
+        )}
       </div>
     </div>
   );

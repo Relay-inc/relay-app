@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { Key } from "../../../shared/i18n";
 import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../../domain/workspace/types";
-import type { Theme } from "../../../domain/settings/types";
+import type { TerminalApp } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
+  changeAccent,
   changeLanguage,
   changeTheme,
   checkMap,
@@ -11,24 +12,42 @@ import {
   pickVaultFolder,
   saveFavicons,
   saveFolders,
+  saveSidebar,
+  saveTerminal,
+  showView,
+  sidebarViews,
 } from "../../../application/settings/general-page";
+import { Glyph } from "../../components/Glyph";
 import { Html } from "../../components/Html";
+import { Icon } from "../../components/Icon";
 import { Select } from "../../components/Select";
+import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
-import { buttonClass, OPTIONAL_TEXT, SELECT, withoutColon } from "./blocks";
+import { ActionsSection } from "./ActionsSection";
+import { buttonClass, OPTIONAL_TEXT, SELECT, TILE, withoutColon } from "./blocks";
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { PathField } from "./PathField";
 import { Section } from "./Section";
+import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
 
 const trimmed = (map: VaultMap) => Object.fromEntries(KEYS.map(([key]) => [key, map[key].trim()])) as VaultMap;
 
-/** General: the vault folder with its mapping, and the interface (language, colour scheme, favicons). */
+// Relay blue is the fixed brand colour (it must not follow the current accent); graphite is the text colour
+const SWATCH = { relay: "bg-[#3a5ffb]", graphite: "bg-label" };
+
+/** General: the vault folder with its mapping, what agents may do with reminders, the interface (language, colour
+ *  scheme, accent, favicons, terminal) and the views on top of the sidebar. */
 export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
   const { t, th } = useT();
   const language = useSettingsStore(s => s.settings.language);
-  const theme = useSettingsStore(s => s.settings.theme);
+  const theme = useSettingsStore(s => s.settings.theme || "system");
+  const accent = useSettingsStore(s => s.settings.accent || "relay");
+  const terminal = useSettingsStore(s => s.settings.terminal || "auto");
+  const sidebarLayout = useSettingsStore(s => s.settings.sidebar?.layout ?? "list");
+  const reordered = useSettingsStore(s => !!s.settings.sidebar?.order?.length);
+  const views = useDerived(sidebarViews);
   const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
   const message = useSettingsStore(s => s.message);
   // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
@@ -48,10 +67,20 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
     { id: "de", name: "Deutsch" },
   ];
   const themes = [
-    { id: "system", name: t("set.system") },
-    { id: "light", name: t("set.themeLight") },
-    { id: "dark", name: t("set.themeDark") },
+    ["system", t("set.system")],
+    ["light", t("set.themeLight")],
+    ["dark", t("set.themeDark")],
+  ] as const;
+  const terminals = [
+    { id: "auto", name: t("set.terminalAuto") },
+    { id: "iterm", name: "iTerm" },
+    { id: "wezterm", name: "WezTerm" },
+    { id: "terminal", name: "Terminal" },
   ];
+  const layouts = [
+    ["list", t("set.sidebarList")],
+    ["icons", t("set.sidebarIcons")],
+  ] as const;
   const mapping = ([key, , required]: [MapKey, boolean, boolean]) => {
     const configured = vaultStatus.map[key];
     const found = required || configured ? vaultStatus.found[key] : null;
@@ -111,6 +140,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
       >
         {KEYS.map(mapping)}
       </Section>
+      <ActionsSection ext="reminders" name={t("act.reminders")} />
       <Section title={t("set.sec.interface")}>
         <Field label={t("set.language")} id="language" hint={<Html html={th("set.languageHelp")} />}>
           <Select
@@ -121,18 +151,73 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
             onChange={changeLanguage}
           />
         </Field>
-        <Field label={t("set.theme")} id="theme" hint={<Html html={th("set.themeHelp")} />}>
-          <Select
-            className={SELECT}
-            id="theme"
-            options={themes}
-            value={theme || "system"}
-            onChange={value => changeTheme(value as Theme)}
-          />
+        <Field label={t("set.theme")} hint={<Html html={th("set.themeHelp")} />}>
+          <Segmented label={t("set.theme")} options={themes} value={theme} onPick={changeTheme} />
+        </Field>
+        <Field label={t("set.accent")} hint={<Html html={th("set.accentHelp")} />}>
+          <div className="flex gap-2.5" role="radiogroup" aria-label={t("set.accent")}>
+            {(["relay", "graphite"] as const).map(value => (
+              <button
+                key={value}
+                role="radio"
+                aria-checked={accent === value}
+                className={`flex h-7 items-center gap-1.5 rounded-lg border bg-transparent pr-2.5 pl-1.5 text-xs font-medium text-s-fg focus-visible:ring-1 ring-s-primary focus-visible:outline-none ${accent === value ? "border-accent" : "border-s-input"}`}
+                onClick={() => changeAccent(value)}
+              >
+                <span className={`size-4 rounded-full inset-ring inset-ring-black/10 ${SWATCH[value]}`}></span>
+                {t(`set.accent.${value}`)}
+              </button>
+            ))}
+          </div>
         </Field>
         <Field label={t("set.faviconsOn")} id="favon" hint={<Html html={th("set.faviconsHelp")} />}>
           <Switch id="favon" on={faviconsOn} onToggle={saveFavicons} />
         </Field>
+        <Field label={t("set.terminal")} id="terminal" hint={<Html html={th("set.terminalHelp")} />}>
+          <Select
+            className={SELECT}
+            id="terminal"
+            options={terminals}
+            value={terminal}
+            onChange={value => saveTerminal(value as TerminalApp)}
+          />
+        </Field>
+      </Section>
+      <Section title={t("set.sec.sidebar")}>
+        <Field label={t("set.sidebarLayout")} hint={<Html html={th("set.sidebarLayoutHelp")} />}>
+          <Segmented
+            label={t("set.sidebarLayout")}
+            options={layouts}
+            value={sidebarLayout}
+            onPick={layout => saveSidebar({ layout })}
+          />
+        </Field>
+        <Field label={t("set.sidebarItems")} hint={<Html html={th("set.sidebarItemsHelp")} />}>
+          {reordered && (
+            <button className={buttonClass()} onClick={() => saveSidebar({ order: [] })}>
+              {t("nav.resetOrder")}
+            </button>
+          )}
+        </Field>
+        {/* one switch per view, in the order of the sidebar */}
+        {views.map(view => (
+          <Field
+            key={view.key}
+            id={`sb-${view.key}`}
+            label={
+              <span className="inline-flex items-center gap-2">
+                {view.mark ? (
+                  <Glyph svg={view.mark} className={TILE} viewBox="0 0 24 24" />
+                ) : (
+                  <Icon name={view.icon ?? ""} className={TILE} />
+                )}
+                {view.name}
+              </span>
+            }
+          >
+            <Switch id={`sb-${view.key}`} on={view.shown} onToggle={on => showView(view.key, on)} />
+          </Field>
+        ))}
       </Section>
     </>
   );

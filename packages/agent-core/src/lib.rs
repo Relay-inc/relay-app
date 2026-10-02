@@ -114,6 +114,8 @@ pub struct Launch<'a> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Event {
+    /// Live work began or resumed; idempotent, not another queued user message.
+    Working,
     /// The provider's session id: stored in sessions.json, used for resume.
     Session { id: String },
     /// A user message (history only). An image that is not inline is None, shown as a placeholder.
@@ -132,6 +134,11 @@ pub enum Event {
     /// other event, so the app can tell how long a turn it did not start has been running.
     Time { at: String },
     Error { text: String },
+    /// The conversation started over (`/clear`): what came before is gone; a new Session follows.
+    Reset,
+    /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
+    /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
+    Resolved { model: String, effort: Option<String> },
 }
 
 /// Tokens of one turn, as the provider reports them.
@@ -153,6 +160,8 @@ pub trait AgentProvider: Sync {
     fn default_bin(&self, home: &str) -> String;
     fn detect(&self, env: &Env) -> Detect;
     fn models(&self) -> Vec<Choice>;
+    /// Executable slash commands/skills in this vault, without starting a conversation.
+    fn commands(&self, _env: &Env) -> Value { serde_json::json!([]) }
     fn efforts(&self) -> Vec<Choice> { vec![] }
     /// Whether a session id may go on a command line.
     fn valid_session(&self, id: &str) -> bool { safe_id(id) }
@@ -224,4 +233,13 @@ mod tests {
         assert!(safe_id("36099ce4-d17c-482a") && !safe_id("") && !safe_id("a b"));
         assert!(safe_model("opus") && safe_model("claude-opus-5-5[1m]") && safe_model("openai/gpt-5") && !safe_model("--x") && !safe_model("a b"));
     }
+}
+
+/// Discover commands with a shared deadline and child-process cleanup, without an inference turn.
+pub fn discover_commands(env: &Env, script: &str) -> Value {
+    if env.vault.is_empty() || !Path::new(env.bin).is_file() { return Value::Null; }
+    let script = format!("{}\n{}\nmain()", include_str!("../discover.py"), script);
+    Command::new("/usr/bin/python3").args(["-c", &script, env.bin, env.vault, ""])
+        .env("PATH", env.path).stdin(Stdio::null()).stderr(Stdio::null()).output().ok()
+        .filter(|o| o.status.success()).and_then(|o| serde_json::from_slice(&o.stdout).ok()).unwrap_or(Value::Null)
 }

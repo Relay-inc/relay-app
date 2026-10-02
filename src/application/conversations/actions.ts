@@ -1,8 +1,8 @@
-import { t } from "../../shared/i18n";
+import { t, tn } from "../../shared/i18n";
 import type { Img, Pending, CardChoice } from "../../domain/conversations/types";
 import { NEW, decisionOf } from "../../domain/conversations/rules";
 import { push } from "../../domain/conversations/events";
-import { planSend } from "../../domain/conversations/send";
+import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
 import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import type { Settings } from "../../domain/settings/types";
@@ -14,11 +14,11 @@ import { request } from "../navigation/requests";
 import { chatAgent, picks } from "../agents/agents";
 import { saveMainSettings, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
-import { findProjects } from "../workspace/vault";
+import { findProjects, project as vaultProject } from "../workspace/vault";
 import { setIcon } from "../workspace/icons";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
-import { chatsOf, displayTitle, label, projectOf, selectedProject, terminalOf } from "./selectors";
+import { chatsOf, displayTitle, label, projectOf, selectedProject, terminalOf, terminalSessions } from "./selectors";
 import { newChat, saveChats } from "./chats";
 import { prepImages, releaseImages } from "./images";
 import { flush } from "./events";
@@ -55,6 +55,17 @@ export function setTyped(value: string) {
     });
   storage.set("sel", value ? key : WAIT);
   saveChats();
+}
+/** Text into a conversation's composer from elsewhere (a card's "Start conversation"): the draft keeps its title. */
+export function typeInto(key: string, value: string) {
+  setDrafts(draft => {
+    draft.typed[key] = value;
+  });
+  storage.set("typed", drafts().typed);
+  if (cs().chats[key]?.draft) {
+    storage.set("sel", key);
+    saveChats();
+  }
 }
 /** Images pasted or dropped into the composer. Cmd-K keeps its own list: it uses `prepImages` itself. */
 export async function attach(files: File[]) {
@@ -149,14 +160,17 @@ function queueMessage(key: string, text: string, images: Img[]) {
 async function deliver(key: string, text: string, images: Img[]) {
   const conversation = cs().chats[key];
   const name = `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`;
-  const sent = conversation?.mail ? `${conversation.mail}\n\n${text}` : text;
-  if (conversation?.mail) {
+  // the agent only hears the project through the message: in front of the first one, and again after a move
+  const { sent, told, tookMail } = outgoing(conversation, text, project => vaultProject(project)?.context);
+  if (tookMail) {
     set(draft => {
       delete draft.chats[key].mail;
     });
     saveChats();
   }
   try {
+    if (images.length && refusesImages(chatAgent(key), text))
+      throw new Error("This command does not accept attachments.");
     await backend.send({
       project: key,
       text: sent,
@@ -164,10 +178,16 @@ async function deliver(key: string, text: string, images: Img[]) {
       name,
       fork: conversation?.fork ?? null,
       mail: !!conversation?.fromMail,
-      model: picks("model").value,
-      effort: picks("effort").value,
+      model: picks("model", key).value,
+      effort: picks("effort", key).value,
       provider: chatAgent(key),
     });
+    if (told && cs().chats[key]) {
+      set(draft => {
+        draft.chats[key].told = told;
+      });
+      saveChats();
+    }
   } catch (error) {
     set(draft => {
       push(draft, key, { kind: "err", text: String(error) });
@@ -269,6 +289,13 @@ export async function answer(request: Pending, choice: CardChoice) {
   if (!decision) return false;
   await backend.answer(request.id, decision);
   set(draft => {
+    if (choice === "allow" || choice === "deny") {
+      const { command, file_path } = request.input;
+      push(draft, request.project, {
+        kind: choice === "allow" ? "allowed" : "denied",
+        text: String(command ?? file_path ?? request.tool_name),
+      });
+    }
     draft.pendingList = draft.pendingList.filter(x => x.id !== request.id);
   });
   return true;
@@ -305,28 +332,83 @@ export function openTerminal() {
 }
 
 // ---------- closing hides a conversation from the sidebar. An app conversation stops but keeps its session, a
-// terminal session keeps running in iTerm. Both come back via the undo bar or right-click > Heropen.
-export async function closeChat(key: string) {
-  const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
+// terminal session keeps running in the terminal. Both come back via the undo bar or right-click > Heropen.
+async function hide(key: string) {
   if (isTerminal(key)) {
     set(draft => {
       draft.forked.push(termSid(key));
     });
     storage.set("forkedTerms", cs().forked);
-  } else if (cs().chats[key]) {
-    await backend.stop(key);
-    set(draft => {
-      draft.chats[key].closed = Date.now();
-      delete draft.status[key];
-      delete draft.queued[key];
-    });
-    saveChats();
+    return null;
   }
-  toast(t("toast.closed", { title: title ?? "" }), () => reopen(key));
+  if (!cs().chats[key]) return null;
+  // the sidebar greys the row out while this runs
+  set(draft => {
+    draft.closing.add(key);
+  });
+  let worktrees;
+  try {
+    await backend.stop(key);
+    // the git worktrees this conversation made go with it, the ones with work git would lose stay
+    worktrees = await backend.dropWorktrees(key).catch(() => null);
+  } finally {
+    set(draft => {
+      draft.closing.delete(key);
+    });
+  }
+  set(draft => {
+    draft.chats[key].closed = Date.now();
+    delete draft.status[key];
+    delete draft.queued[key];
+  });
+  saveChats();
+  return worktrees;
+}
+const worktreeNote = (removed: number, kept: number) =>
+  (removed ? ` · ${tn("toast.worktreesRemoved", removed)}` : "") +
+  (kept ? ` · ${tn("toast.worktreesKept", kept)}` : "");
+export async function closeChat(key: string) {
+  if (cs().closing.has(key)) return;
+  const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
+  const worktrees = await hide(key);
+  toast(t("toast.closed", { title: title ?? "" }) + worktreeNote(worktrees?.removed ?? 0, worktrees?.kept ?? 0), () =>
+    reopen(key),
+  );
   if (selected() !== key) return;
   const project = isTerminal(key) ? null : projectOf(key);
   const neighbour = project ? chatsOf(project)[0] : undefined;
   await select(neighbour ? neighbour.key : WAIT);
+}
+/** Right-click on Algemeen or a project > close all: every open conversation and terminal session under it, one undo. */
+export async function closeAll(project: string | null) {
+  const keys = [
+    ...chatsOf(project).map(conversation => conversation.key),
+    ...terminalSessions()
+      .filter(session => session.project === project)
+      .map(session => session.key),
+  ];
+  let removed = 0;
+  let kept = 0;
+  // all of them grey out at once, each goes when its turn is done
+  set(draft => {
+    for (const key of keys) if (draft.chats[key]) draft.closing.add(key);
+  });
+  for (const key of keys) {
+    const worktrees = await hide(key);
+    removed += worktrees?.removed ?? 0;
+    kept += worktrees?.kept ?? 0;
+  }
+  toast(tn("toast.closedAll", keys.length) + worktreeNote(removed, kept), () => {
+    const sids = keys.filter(isTerminal).map(termSid);
+    set(draft => {
+      draft.forked = draft.forked.filter(sid => !sids.includes(sid));
+      for (const key of keys) if (draft.chats[key]) delete draft.chats[key].closed;
+    });
+    storage.set("forkedTerms", cs().forked);
+    saveChats();
+    hideToast();
+  });
+  if (keys.includes(selected())) await select(WAIT);
 }
 export async function reopen(key: string) {
   if (isTerminal(key)) {

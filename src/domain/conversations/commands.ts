@@ -1,5 +1,10 @@
-/** A slash command or skill as Claude Code's initialize answer lists it. */
+/** A slash command or skill executable through the provider's Relay transport. */
 export type SlashCommand = { name: string; description: string; argumentHint?: string };
+/** A provider's list as the composer keeps it: only named commands, with their own fields. */
+export const cleanCommands = (list: SlashCommand[]): SlashCommand[] =>
+  list
+    .filter(command => typeof command.name === "string" && command.name.length > 0)
+    .map(({ name, description, argumentHint }) => ({ name, description: description ?? "", argumentHint }));
 
 /** The commands for what is typed: only while the field is a `/` and a name with no space yet. Names that start with
  * it first, then names that contain it, then descriptions that mention it. */

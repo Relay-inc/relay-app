@@ -11,10 +11,11 @@ import { TINT, DROP_LINE_BEFORE, DROP_LINE_AFTER, clickOnKey } from "./rows";
 type Tint = Section["tint"];
 
 type Props = Omit<ComponentProps<"div">, "className"> & {
-  kind?: "view" | "proj" | "conv" | "fold";
+  kind?: "view" | "tile" | "proj" | "conv" | "fold";
   name: string;
   icon?: string; // a named icon, or `svg`: a provider's own glyph
   svg?: string;
+  box?: string; // the grid `svg` is drawn on
   img?: string | null; // a project's icon: an image, else an emoji, else the folder
   emoji?: string;
   tint?: Tint;
@@ -22,6 +23,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   unseen?: boolean;
   indent?: boolean; // under its project
   closable?: boolean;
+  closing?: boolean; // being closed: greyed out and pulsing until it is gone
   trail?: Trail;
   subs?: number; // subagents working
   subsTitle?: string;
@@ -33,29 +35,38 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   onAdd?: () => void;
 };
 
-function metaClass(meta: Meta, selected: boolean) {
+function metaClass(meta: Meta) {
   if (meta.kind === "badge")
-    return "min-w-4 h-4 px-1 rounded-lg bg-accent text-on-accent text-xs font-semibold grid place-items-center";
-  const due = meta.kind === "late" || meta.kind === "soon";
-  if (!due) return "tabular-nums text-secondary";
-  if (selected) return "tabular-nums text-on-accent font-semibold";
-  return `tabular-nums ${meta.kind === "late" ? "due-late" : "due-soon"}`;
+    return "min-w-4.5 h-4.5 px-1.25 rounded-full bg-accent text-on-accent text-[11px] font-semibold grid place-items-center tabular-nums";
+  if (meta.kind === "late") return "tabular-nums text-xs font-medium text-late";
+  if (meta.kind === "soon") return "tabular-nums text-xs font-medium text-soon";
+  return "tabular-nums text-xs font-medium text-secondary";
 }
-// the drop line wins over the subrow's guide line, which a selected row drops
-function dropLineClass(drop: Drop, indent: boolean, selected: boolean) {
+function dropLineClass(drop: Drop, tile: boolean) {
+  // tiles stand side by side: the line goes left or right of them
+  if (tile && drop)
+    return `relative before:absolute before:inset-y-1 before:w-0.5 before:bg-accent ${drop === "before" ? "before:-left-0.5" : "before:-right-0.5"}`;
   if (drop === "before") return DROP_LINE_BEFORE;
   if (drop === "after") return DROP_LINE_AFTER;
-  if (indent && !selected) return "border-l border-separator";
   return "";
 }
+// the count on a tile: the badge in its corner, small enough not to cover the icon
+const TILE_META: Record<Meta["kind"], string> = {
+  badge: "bg-accent text-on-accent",
+  late: "bg-late text-white",
+  soon: "bg-soon text-white",
+  count: "bg-fill-2 text-secondary",
+};
 
-/** One row of the sidebar: a view, a project, a conversation or terminal session, or the "n more" fold. The click, press
- *  and context menu are the container's (passed through to the row); the close and "+" buttons are their own. */
+/** One row of the sidebar: a view, a project, a conversation or terminal session, or the "n more" fold; or a view as a
+ *  square icon (`tile`) when the views are shown as a row of icons. The click, press and context menu are the
+ *  container's (passed through to the row); the close and "+" buttons are their own. */
 export function SidebarRow({
   kind = "view",
   name,
   icon = "",
   svg = "",
+  box = "0 0 16 16",
   img = null,
   emoji = "",
   tint = "",
@@ -63,6 +74,7 @@ export function SidebarRow({
   unseen = false,
   indent = false,
   closable = false,
+  closing = false,
   trail = "",
   subs = 0,
   subsTitle = "",
@@ -80,9 +92,43 @@ export function SidebarRow({
     action?.();
   };
 
-  const glyphColor = selected ? "text-on-accent" : kind === "proj" ? TINT[tint] || "text-secondary" : "text-secondary";
-  const glyphClass = `glyph ${indent ? "size-3" : "size-4"} flex-none ${glyphColor}`;
-  let lead: ReactNode = svg ? <Glyph svg={svg} className={glyphClass} /> : <Icon name={icon} className={glyphClass} />;
+  const glyphColor = closing
+    ? "text-tertiary"
+    : selected
+      ? "text-accent-text"
+      : kind === "proj"
+        ? TINT[tint]
+        : "text-secondary";
+  const glyph = (className: string) =>
+    svg ? <Glyph svg={svg} viewBox={box} className={className} /> : <Icon name={icon} className={className} />;
+
+  if (kind === "tile") {
+    const tip = meta?.title ? `${name}: ${meta.title}` : name;
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onKeyDown={clickOnKey}
+        title={tip}
+        aria-label={tip}
+        aria-pressed={selected}
+        {...rest}
+        className={`relative size-8 grid place-items-center rounded-md cursor-default transition-colors duration-150 ease-out ${selected ? "bg-accent-soft" : "hover:bg-fill"} ${dropLineClass(drop, true)} ${dragging ? "opacity-40" : ""}`}
+      >
+        {glyph(`glyph size-4.5 ${glyphColor}`)}
+        {meta ? (
+          <span
+            className={`absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-1 rounded-full text-[10px] leading-none font-semibold grid place-items-center tabular-nums ${TILE_META[meta.kind]}`}
+          >
+            {meta.n}
+          </span>
+        ) : null}
+      </div>
+    );
+  }
+
+  const glyphClass = `glyph ${indent ? "size-3.5" : "size-4"} flex-none ${glyphColor}`;
+  let lead: ReactNode = glyph(glyphClass);
   if (kind === "fold") lead = null;
   else if (kind === "proj") {
     if (isImg(img)) lead = <ProjectImg url={img} className="size-4 flex-none object-contain rounded-xs" />;
@@ -90,44 +136,42 @@ export function SidebarRow({
     else lead = <Icon name="folder" className={glyphClass} />;
   }
 
-  const rowClass = selected
-    ? "bg-accent text-on-accent"
-    : `hover:bg-fill ${indent ? (unseen ? "text-label" : "text-secondary") : ""}`;
-  const projectClass = kind === "proj" ? "mt-0.5 font-medium" : "";
-  const subClass = indent ? `ml-4 pl-2.5 ${selected ? "" : "rounded-l-none"}` : "";
-  const buttonColor = selected ? "text-on-accent" : "text-secondary hover:text-label";
+  const rowClass = closing
+    ? "text-tertiary"
+    : selected
+      ? "bg-accent-soft"
+      : `hover:bg-fill ${indent ? (unseen ? "text-label" : "text-secondary hover:text-label") : ""}`;
   return (
     <div
       role="button"
       tabIndex={0}
       onKeyDown={clickOnKey}
+      aria-busy={closing}
       {...rest}
-      className={`group flex ${indent ? "h-6" : "h-7"} items-center gap-2 px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${projectClass} ${subClass} ${dropLineClass(drop, indent, selected)} ${dragging ? "opacity-40" : ""}`}
+      className={`group flex ${indent ? "h-6.5 gap-2" : "h-7 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
     >
       {lead}
       <span className={`flex-1 overflow-hidden whitespace-nowrap text-ellipsis ${unseen ? "font-semibold" : ""}`}>
         {name}
       </span>
       {meta ? (
-        <span title={meta.title ?? ""} className={metaClass(meta, selected)}>
+        <span title={meta.title ?? ""} className={metaClass(meta)}>
           {meta.n}
         </span>
       ) : null}
       {subs ? (
         <span
-          className={`min-w-4 h-4 px-1 flex-none rounded-lg text-xs font-semibold grid place-items-center tabular-nums ${selected ? "bg-on-accent/25 text-on-accent" : "bg-fill text-secondary"}`}
+          className="min-w-4 h-4 px-1 flex-none rounded-lg text-xs font-semibold grid place-items-center tabular-nums bg-fill-2 text-secondary"
           title={subsTitle}
         >
           {subs}
         </span>
       ) : null}
-      {trail === "dot" ? (
-        <span className={`size-2 rounded-full group-hover:hidden ${selected ? "bg-on-accent" : "bg-accent"}`} />
-      ) : null}
+      {trail === "dot" ? <span className="size-2 flex-none rounded-full bg-accent group-hover:hidden" /> : null}
       {trail === "spin" ? <span className="spinner group-hover:hidden" /> : null}
-      {closable ? (
+      {closable && !closing ? (
         <button
-          className={`hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default hover:bg-fill ${buttonColor}`}
+          className="hidden group-hover:grid place-items-center size-4 ml-1 flex-none rounded-sm text-sm leading-none cursor-default text-secondary hover:bg-fill-2 hover:text-label"
           title={t("nav.close")}
           aria-label={t("nav.close")}
           onClick={fromButton(onClose)}
@@ -137,7 +181,7 @@ export function SidebarRow({
       ) : null}
       {addTitle ? (
         <button
-          className={`hidden group-hover:block ml-1 w-5 h-4 rounded-md text-base leading-none cursor-default hover:bg-fill ${buttonColor}`}
+          className="hidden group-hover:block ml-1 w-5 h-4 rounded-md text-base leading-none cursor-default text-secondary hover:bg-fill-2 hover:text-label"
           title={addTitle}
           aria-label={addTitle}
           onClick={fromButton(onAdd)}

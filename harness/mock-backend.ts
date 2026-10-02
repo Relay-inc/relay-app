@@ -1,9 +1,10 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|onboarding, ?sel=<selection key> (what the window opens on).
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding, ?sel=<selection key> (what the window
+// opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import { NOW } from "./fixtures/util";
+import { NOW, pngBase64 } from "./fixtures/util";
 import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
@@ -38,9 +39,12 @@ material.textContent = "html { background: var(--sidebar); }";
 document.head.append(material);
 
 // ---------- mutable backend state
-let settings = vault.settings(fixture === "dark" ? "dark" : "light", onboarding);
+let settings = vault.settings(fixture);
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
+let reminders = [...vault.reminders];
+let added = 0;
+let actionConfig = integ.actionConfig();
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -51,6 +55,7 @@ function emit(event: string, payload: unknown) {
 const emitAgent = (project: string, event: unknown, provider = "claude") => emit("agent", { project, provider, event });
 
 // ---------- commands
+const thumb = `data:image/png;base64,${pngBase64(100, 100, "#dfe7f7", "#2f6fdb")}`;
 const calls: Call[] = [];
 const unmocked = new Set<string>();
 const sidKeys = () => Object.fromEntries(conv.conversations.map(c => [c.key, { provider: c.provider, sid: conv.sidOf(c.key) }]));
@@ -82,6 +87,9 @@ function handle(cmd: string, a: Args): unknown {
     case "plugin:window|set_title":
     case "plugin:opener|open_url":
       return null;
+    // the deep-link plugin: the link the app was started with (later ones come as the deep-link://new-url event)
+    case "plugin:deep-link|get_current":
+      return query.get("link") ? [query.get("link")] : null;
 
     // settings, language, vault
     case "get_settings":
@@ -103,7 +111,7 @@ function handle(cmd: string, a: Args): unknown {
     case "pick_path":
       return null;
     case "snapshot":
-      return vault.snapshot();
+      return vault.snapshot(reminders);
     case "vault_notes":
       return { root: vault.VAULT, notes: vault.notes };
     case "read_note":
@@ -120,14 +128,23 @@ function handle(cmd: string, a: Args): unknown {
     case "set_project_repos":
       return null;
     case "reminder":
+      reminders = vault.remindersAfter(reminders, a.action, a, 0);
+      return reminders.find(r => r.id === a.id)?.date ?? "";
     case "reminder_add":
-      return "ok";
+      reminders = vault.remindersAfter(reminders, "add", a, ++added);
+      return reminders.at(-1)!.id;
 
     // agents and conversations
     case "agents_status":
       return integ.agentsStatus;
-    case "claude_commands":
-      return integ.slashCommands;
+    case "agent_commands":
+      return integ.agentCommands(a.provider);
+    case "action_config":
+      return { actions: integ.actions, config: structuredClone(actionConfig) };
+    case "set_action_config":
+      if (Object.keys(a.entry).length) actionConfig[a.ext] = a.entry;
+      else delete actionConfig[a.ext];
+      return structuredClone(actionConfig);
     case "chats":
       return conv.conversations.map(c => c.key);
     case "chat_providers":
@@ -139,7 +156,10 @@ function handle(cmd: string, a: Args): unknown {
     case "agents":
       return terminalAgents();
     case "running":
-      return [];
+      return {}; // conversation key -> turns running, for the processes the app started
+    case "drop_worktrees":
+      // the switch-to conversation made one git worktree, removed when it closes
+      return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
       return conv.history(a.project);
     case "history_sid": {
@@ -181,7 +201,7 @@ function handle(cmd: string, a: Args): unknown {
     case "github_pr":
       return integ.prDetail(a.repo, a.number);
     case "mail_list":
-      return integ.mailPage(a.page ?? 1);
+      return integ.mailPage(a.account, a.page ?? 1);
     case "mail_read":
       return integ.mailBody(a.id);
     case "mail_seen":
@@ -202,6 +222,8 @@ function handle(cmd: string, a: Args): unknown {
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":
       return "https://files.example/upload/1";
+    case "integration_thumb":
+      return a.url === integ.THUMB_URL ? thumb : Promise.reject("not a picture");
   }
   unmocked.add(cmd);
   console.warn(`[harness] unmocked command ${cmd}`, a);
@@ -274,14 +296,18 @@ const harness = {
   autoReply: true,
   fixture,
   now: NOW,
-  keys: { long: conv.LONG_KEY, switchTo: conv.SWITCH_KEY, permission: conv.PERMISSION_KEY, question: conv.QUESTION_KEY, terminal: `t:${vault.terminalSessions[0].sessionId}` },
-  titles: { long: conv.LONG_TITLE, switchTo: conv.SWITCH_TITLE, permission: conv.PERMISSION_TITLE, question: conv.QUESTION_TITLE },
-  markers: { longEnd: conv.LONG_END, switchEnd: conv.endMarker(conv.SWITCH_KEY), card: integ.CARD_TITLE, plainMail: integ.PLAIN_MAIL.subject, htmlMail: integ.HTML_MAIL.subject },
+  keys: { long: conv.LONG_KEY, switchTo: conv.SWITCH_KEY, permission: conv.PERMISSION_KEY, question: conv.QUESTION_KEY, action: conv.ACTION_KEY, terminal: `t:${vault.terminalSessions[0].sessionId}` },
+  titles: { long: conv.LONG_TITLE, switchTo: conv.SWITCH_TITLE, permission: conv.PERMISSION_TITLE, question: conv.QUESTION_TITLE, action: conv.ACTION_TITLE },
+  markers: { longEnd: conv.LONG_END, switchEnd: conv.endMarker(conv.SWITCH_KEY), card: integ.CARD_TITLE, plainMail: integ.PLAIN_MAIL.subject, htmlMail: integ.HTML_MAIL.subject, studioMail: integ.STUDIO_MAIL.subject },
   emit,
   emitAgent,
   stream,
   nextTask,
   nextPaint,
+  /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
+  deepLink: (url: string) => emit("deep-link://new-url", [url]),
+  /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
+  resolved: (key: string, model = "opus", effort = "high") => emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
 };

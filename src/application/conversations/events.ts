@@ -9,7 +9,6 @@ import { loadSnapshot } from "../workspace/vault";
 import { useConversationsStore } from "./store";
 import { label } from "./selectors";
 import { saveChats } from "./chats";
-import { saveCommands } from "./commands";
 
 // The agent processes' events, through the pure reducer (domain/conversations/events.ts). Stream deltas are the hot
 // path: the text deltas of one animation frame go into the store as one update, so a delta redraws the streaming
@@ -37,23 +36,24 @@ function run(effects: Effect[]) {
     else if (!once.has(effect.kind)) {
       once.add(effect.kind);
       if (effect.kind === "save-chats") saveChats();
-      else if (effect.kind === "save-commands") saveCommands();
       else if (effect.kind === "snapshot") loadSnapshot();
     }
   }
 }
 
-function apply(events: [string, AgentEvent][]) {
+// a conversation key, its event and the provider whose process sent it
+type Received = [string, AgentEvent, string];
+function apply(events: Received[]) {
   if (!events.length) return;
   const effects: Effect[] = [];
   const env = { t, selected: useNavigationStore.getState().selected, now: Date.now() };
   useConversationsStore.setState(draft => {
-    for (const [key, event] of events) effects.push(...applyAgentEvent(draft, key, event, env));
+    for (const [key, event, provider] of events) effects.push(...applyAgentEvent(draft, key, event, env, provider));
   });
   run(effects);
 }
 
-let buffered: [string, AgentEvent][] = [];
+let buffered: Received[] = [];
 let frame = 0;
 /** Apply the text deltas still waiting for a frame: a use case that writes a conversation first calls this, so the
  *  answer so far lands before what it writes. */
@@ -65,12 +65,12 @@ export function flush() {
   apply(events);
 }
 /** The backend's `agent` event for one conversation. */
-export function onAgentEvent(key: string, event: AgentEvent) {
+export function onAgentEvent(key: string, event: AgentEvent, provider = "claude") {
   if (event.type === "text" && event.delta) {
-    buffered.push([key, event]);
+    buffered.push([key, event, provider]);
     frame ||= requestAnimationFrame(flush);
     return;
   }
   flush();
-  apply([[key, event]]);
+  apply([[key, event, provider]]);
 }

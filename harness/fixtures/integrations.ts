@@ -1,6 +1,6 @@
 // Mail (60 mails over two pages), GitHub PRs, a Productive board (JSON:API as integration_call returns it), usage and agents.
 import { NOW, HOUR, DAY, iso, rng } from "./util";
-import { MAIL_ACCOUNT } from "./vault";
+import { MAIL_ACCOUNT, MAIL_ACCOUNT_2 } from "./vault";
 import { LONG_KEY, sidOf, conversations } from "./conversations";
 
 // ---------- mail
@@ -27,12 +27,25 @@ export const mails = Array.from({ length: 60 }, (_, i) => {
     attachments: i % 5 === 1,
   };
 });
-export const mailPage = (page: number) => mails.slice((page - 1) * 50, page * 50);
+// the second account (a generic IMAP server): 8 mails over the last week, merged into the one inbox by date
+const STUDIO = [
+  ["Lead form: custom planning tool", "Pieter Janssens", "pieter@janssens-bouw.example"], ["Quote request intranet", "Eva Maes", "eva@maes-advocaten.example"],
+  ["Your domain renews in 30 days", null, "noreply@registrar.example"], ["Re: Wedding photos selection", "Lotte & Bram", "lotte@example.net"],
+  ["Invoice 2026-031 paid", "Bookkeeping", "noreply@books.example"], ["Coffee next week?", "Kim De Smet", "kim@example.net"],
+  ["New login on your account", null, "security@registrar.example"], ["Portfolio site feedback", "Eva Maes", "eva@maes-advocaten.example"],
+] as const;
+export const studioMails = STUDIO.map(([subject, name, email], i) => ({
+  id: String(700 - i), account: MAIL_ACCOUNT_2, subject, date: iso(NOW - (i * 21 + 2) * HOUR - 7 * 60000), unread: i < 2,
+  from: [{ name, email }], to: [{ name: "Laurent", email: MAIL_ACCOUNT_2 }], attachments: false,
+}));
+export const STUDIO_MAIL = studioMails[0];
+/** mail_list: one account's page of 50, newest first. */
+export const mailPage = (account: string, page: number) => (account === MAIL_ACCOUNT_2 ? studioMails : mails).slice((page - 1) * 50, page * 50);
 export const PLAIN_MAIL = mails[0]; // plain text with a quoted reply
 export const HTML_MAIL = mails[1]; // html
 export function mailBody(id: string) {
   const index = mails.findIndex(m => m.id === id);
-  const message = mails[index] ?? mails[0];
+  const message = mails[index] ?? studioMails.find(m => m.id === id) ?? mails[0];
   const isHtml = index % 3 === 1;
   const text = `Hi Laurent,\n\nThanks for the update on "${message.subject}". Two things before we sign off:\n\n1. The export should include the VAT column.\n2. Can the viewer role see the invoices?\n\nSee https://northwind.example/acceptance for the list.\n\nKind regards,\n${message.from[0].name ?? message.from[0].email}\n\nOn Wed 30 Sep 2026 at 16:02, Laurent <${MAIL_ACCOUNT}> wrote:\n> Hi,\n> The portal is on staging, the checklist is attached.\n> > Earlier: can we have it before October?\n> Laurent`;
   const html = isHtml
@@ -119,6 +132,8 @@ const TASKS = TASK_TITLES.map((title, i) => ({
   },
 }));
 export const CARD_TITLE = TASK_TITLES[0];
+/** The public 100x100 thumb of the picture attachment; integration_thumb turns it into a data URL. */
+export const THUMB_URL = "https://files.example/thumb/invoice-list.png";
 const page = (data: unknown[], included: unknown[] = []) => ({ data, included, meta: { total_pages: 1 } });
 const one = (data: unknown, included: unknown[] = []) => ({ data, included });
 
@@ -150,10 +165,20 @@ export function productive(method: string, path: string, body: unknown): unknown
     const ids = (f("task_id") || "").split(",");
     return page(ids.slice(0, 40).map(id => ({ id: `ac${id}`, type: "activities", attributes: { item_type: "task", task_id: Number(id), event: "update", created_at: iso(NOW - 30 * HOUR), changeset: [{ task_list: [{ value: "To do" }, { value: "In progress" }] }] }, relationships: { creator: { data: { type: "people", id: "70003" } } } })), PEOPLE);
   }
-  if (p === "/attachments") return page([{ id: "at1", type: "attachments", attributes: { name: "export-sample.csv", size: 12_800, url: "https://files.example/export-sample.csv", attachable_type: "task", deleted_at: null }, relationships: {} }]);
+  if (p === "/attachments") return page([
+    { id: "at1", type: "attachments", attributes: { name: "export-sample.csv", size: 12_800, url: "https://files.example/export-sample.csv", content_type: "text/csv", resized: false, attachable_type: "task", deleted_at: null }, relationships: {} },
+    { id: "at2", type: "attachments", attributes: { name: "invoice-list.png", size: 48_200, url: "https://files.example/invoice-list.png", content_type: "image/png", resized: true, thumb: THUMB_URL, attachable_type: "task", deleted_at: null }, relationships: {} },
+  ]);
+  // the project's saved task views, as the Presets menu lists them: two it can apply, one with a date filter it cannot
+  if (p === "/filters") return page([
+    { id: "v1", type: "filters", attributes: { name: "My open tasks", filterable_collection: "tasks", hidden: false, params: { $op: "and", assignee_id: { eq: ["{me}"] }, status: { eq: ["1"] } }, group_by: "task-list,task", layout_id: 101 } },
+    { id: "v2", type: "filters", attributes: { name: "In review", filterable_collection: "tasks", hidden: false, params: { $op: "and", workflow_status_id: { eq: ["ws3"] } }, group_by: null, layout_id: 100 } },
+    { id: "v3", type: "filters", attributes: { name: "Due this week", filterable_collection: "tasks", hidden: false, params: { $op: "and", due_date: { lt_eq: "2026-10-04" } }, group_by: null, layout_id: 101 } },
+    { id: "v4", type: "filters", attributes: { name: "Old hidden view", filterable_collection: "tasks", hidden: true, params: {}, group_by: null, layout_id: 101 } },
+  ]);
   if (p === "/custom_fields") return page([]);
   if (p.startsWith("/organizations/")) return one({ id: "40001", type: "organizations", attributes: { name: "Acme Agency" } });
-  if (p.startsWith("/projects/")) return one({ id: p.split("/")[2], type: "projects", attributes: { name: "Northwind Portal" }, relationships: { workflow: { data: { type: "workflows", id: "wf1" } } } });
+  if (p.startsWith("/projects/")) return one({ id: p.split("/")[2], type: "projects", attributes: { name: "Northwind Portal", preferences: { navigation_order: ["v2", "v1", "v3"] } }, relationships: { workflow: { data: { type: "workflows", id: "wf1" } } } });
   if (p === "/workflow_statuses") return page(STATUSES);
   if (p === "/people" || p.startsWith("/people/")) return p === "/people" ? page(PEOPLE) : one(PEOPLE[0]);
   return page([]);
@@ -199,11 +224,34 @@ export const agentsStatus = {
       models: choices([["gpt-5.3-codex", "GPT-5.3 Codex"]]), efforts: choices([["low", "Low"], ["medium", "Medium"], ["high", "High"]]), bin: "/opt/homebrew/bin/codex", defaultBin: "/opt/homebrew/bin/codex" },
     { id: "opencode", name: "OpenCode", on: false, caps: caps(false), detect: { installed: false, bin: "/opt/homebrew/bin/opencode", version: null, loggedIn: null, note: null },
       models: [], efforts: [], bin: "", defaultBin: "/opt/homebrew/bin/opencode" },
+    { id: "pi", name: "Pi", on: false, caps: caps(false), detect: { installed: false, bin: "/opt/homebrew/bin/pi", version: null, loggedIn: null, note: null },
+      models: [], efforts: [], bin: "", defaultBin: "/opt/homebrew/bin/pi" },
   ],
 };
-export const slashCommands = [
+/** agent_commands: per provider, what the composer completes after a slash. */
+export const agentCommands = (provider: string) => (provider === "claude" ? slashCommands : provider === "codex" ? [{ name: "review", description: "Review the working tree" }, { name: "init", description: "Write an AGENTS.md" }] : []);
+const slashCommands = [
   { name: "review", description: "Review a pull request", argumentHint: "<pr>" },
   { name: "today", description: "Morning briefing" },
   { name: "mail-draft", description: "Draft a mail in my voice" },
   { name: "compact", description: "Compact the conversation" },
 ];
+
+// ---------- agent actions (the `relay` command): every action, and the vault's .relay/config.json `actions`
+const act = (ext: string, id: string, about: string, write: boolean, def: string) => ({ ext, id, about, write, default: def });
+export const actions = [
+  act("productive", "list_tasks", "List the open tasks of a board.", false, "auto"),
+  act("productive", "create_task", "Create a task on a board.", true, "ask"),
+  act("productive", "comment", "Comment on a task.", true, "ask"),
+  act("productive", "add_time", "Book time on a service.", true, "ask"),
+  act("mail", "search", "Search Gmail (All Mail) with Gmail search syntax, newest first: ids, senders, subjects, dates.", false, "auto"),
+  act("mail", "read", "Read one mail: headers, attachment list, text body. Does not mark it read.", false, "auto"),
+  act("mail", "thread", "The whole conversation of a mail, oldest first.", false, "auto"),
+  act("mail", "attachment", "Save one attachment into ~/Downloads/Relay-mail, returns its path.", false, "auto"),
+  act("mail", "save_draft", "Save a full RFC 5322 message as a Gmail draft. Never sent.", true, "auto"),
+  act("reminders", "list", "The vault's open reminders, with their ids.", false, "auto"),
+  act("reminders", "add", "Add a reminder to the vault.", true, "ask"),
+  act("reminders", "done", "Mark a reminder done (a repeating one moves on).", true, "ask"),
+  act("reminders", "push", "Move a reminder to another date.", true, "ask"),
+];
+export const actionConfig = (): Record<string, unknown> => ({ productive: { "*": "ask", add_time: "auto" } });

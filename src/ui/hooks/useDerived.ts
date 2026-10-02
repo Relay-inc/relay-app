@@ -1,5 +1,6 @@
 import { useRef, useSyncExternalStore } from "react";
 import { stores, tracked, unchanged } from "../../application/make-store";
+import { currentLang, currentLocale } from "../../shared/i18n";
 
 const subscribe = (changed: () => void) => {
   const offs = stores.map(store => store.subscribe(changed));
@@ -28,15 +29,19 @@ function same(a: unknown, b: unknown): boolean {
  *  Maps) and reads only store state: something else it depends on (the clock) is only read again on the next change
  *  of a store it read. For one store's own slice, select from that store instead. */
 export function useDerived<T>(compute: () => T): T {
-  const last = useRef<{ value: T; deps: ReturnType<typeof tracked>["deps"]; compute: () => T } | null>(null);
+  const last = useRef<{ value: T; deps: ReturnType<typeof tracked>["deps"]; compute: () => T; lang: string } | null>(
+    null,
+  );
   return useSyncExternalStore(subscribe, () => {
     // React reads the snapshot on every change of any store, and several times per render: skip unless what this
-    // read looked at changed, or the read itself did
+    // read looked at changed, or the read itself did. The module-level t() reads the language outside the stores, so
+    // the language is part of the key: a read that translates follows a switch even when nothing it read changed
+    const lang = `${currentLang()} ${currentLocale()}`;
     const prev = last.current;
-    if (prev && prev.compute === compute && unchanged(prev.deps)) return prev.value;
+    if (prev && prev.compute === compute && prev.lang === lang && unchanged(prev.deps)) return prev.value;
     const { value: next, deps } = tracked(compute);
     const value = prev && same(prev.value, next) ? prev.value : next;
-    last.current = { value, deps, compute };
+    last.current = { value, deps, compute, lang };
     return value;
   });
 }

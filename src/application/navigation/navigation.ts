@@ -11,6 +11,10 @@ import { typedOf } from "../conversations/drafts";
 import { ensureHistory } from "../conversations/history";
 import { loadPrs } from "../pull-requests/prs";
 import { loadMails } from "../mail/mail";
+import { searchProjects } from "../../domain/navigation/project-search";
+import { useWorkspaceStore } from "../workspace/store";
+import { projectLabel } from "../workspace/vault";
+import { settings } from "../settings/settings";
 import { useNavigationStore } from "./store";
 import { request } from "./requests";
 
@@ -89,6 +93,14 @@ export const toggleQuickAsk = (on = !nav().quickAsk) =>
   set(draft => {
     draft.quickAsk = on;
   });
+/** Cmd-K's projects for what is typed: name, label (as shown, with its emoji) and context. */
+export const quickProjects = (typed: string) =>
+  searchProjects(
+    useWorkspaceStore
+      .getState()
+      .snap.projects.map(project => ({ ...project, label: settings().projects[project.name]?.label })),
+    typed,
+  ).map(project => ({ name: project.name, label: projectLabel(project.name), context: project.context }));
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openExternal = (url: string) => backend.openUrl(url);
 export const openSettings = () => backend.openSettingsWindow();

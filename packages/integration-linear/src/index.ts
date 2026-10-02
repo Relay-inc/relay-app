@@ -1,5 +1,6 @@
 import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
 import { ISSUES, ISSUE_URL, MOVE, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapStates, mapTeams } from "./map";
+import { linearTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
 const t = translator<Key>("linear");
@@ -21,6 +22,8 @@ const linear: BoardProvider<Key> = {
   strings,
   // Linear's mark: a disc with diagonal cuts, in white on its indigo tile
   glyph: '<rect width="16" height="16" rx="3" fill="#5E6AD2" stroke="none"/><path d="M3.3 9.4l3.3 3.3a5 5 0 0 1-3.3-3.3zm-.2-1.7l5.2 5.2a5 5 0 0 0 1.4-.3L3.4 6.3a5 5 0 0 0-.3 1.4zm.8-2.4l6.8 6.8c.3-.2.6-.4.9-.7L4.6 4.4c-.3.3-.5.6-.7.9zm1.6-1.6l6.8 6.8A5 5 0 0 0 5.5 3.7z" fill="#fff" stroke="none"/>',
+  // the sidebar's mark: the same disc and cuts as an outline
+  mark: '<path d="M4.97 6.38A9 9 0 1 1 17.62 19.03Z"/><path d="M3.62 8.71L15.29 20.38"/><path d="M3.01 11.63L12.37 20.99"/><path d="M3.67 15.41L8.59 20.33"/>',
 
   projects: async c => (await all(c)).projects,
   boards: async (c, p) => (await all(c)).boards.filter(b => b.project === p),
@@ -37,11 +40,15 @@ const linear: BoardProvider<Key> = {
     return typeof r.issue?.sortOrder === "number" ? r.issue.sortOrder : undefined;
   },
   url: async (c, _ref, id) => links.get(id) || (await gql(c, ISSUE_URL, { id }))?.issue?.url || "https://linear.app",
-  reset: () => { teams = null; links.clear(); },
+  detail: linearTicket.detail,
+  reset: () => { teams = null; links.clear(); linearTicket.reset(); },
 
   settings: {
     tokenLabel: "token",
     help: "help",
+    // Linear's own page for personal API keys, shown as a button next to the field
+    tokenUrl: () => "https://linear.app/settings/account/security",
+    check: s => (s.token && !/^lin_api_\S+$/.test(s.token) ? "badToken" : undefined),
     fields: [{ key: "done", label: "states", placeholder: "showDone", check: true, optional: true }],
     async test(c) { teams = null; const v = (await gql(c, VIEWER))?.viewer; return t("connectedAs", { name: v?.displayName || v?.name || v?.id || "?" }); },
     allBoards: async c => (await all(c)).boards,

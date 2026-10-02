@@ -17,8 +17,8 @@ import { commit } from "./window";
 import { useSettingsStore, type SettingsState } from "./store";
 
 // Settings › Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on),
-// the others are in the Add menu. In the list means in the sidebar; Remove switches it off and keeps the token. The
-// state lives here, not in a row, so it survives the row folding shut. That includes what is typed (the board form,
+// the others are in the Add menu. In the list means in the sidebar; a row opens the integration's own page, Remove
+// switches it off and keeps the token. The state lives here, so it survives going back to the list. That includes what is typed (the board form,
 // the GitHub owners, the mail add fields): kept as typed, read and emptied by the save use cases.
 const st = () => useSettingsStore.getState();
 const current = () => st().settings;
@@ -115,30 +115,35 @@ export async function loadAllBoards(provider: BoardProvider) {
     });
   }
 }
-/** A vault project's row in the board mapping: what its "none" option says, and the board of this provider it is on. */
-type BoardLink = { vaultProject: string; noneLabel: string; board?: string };
+/** A vault project in the board mapping: the board of this provider it is on, or the other provider it is on. */
+export type BoardRow = { vaultProject: string; board?: string; other?: string };
 /** Each vault project with the board of this provider it is on; a vault project has at most one board. */
-export const boardLinks = (provider: BoardProvider): BoardLink[] =>
+export const boardRows = (provider: BoardProvider): BoardRow[] =>
   (st().integrations.vaultProjects || []).map(vaultProject => {
     const linked = current().boards?.[vaultProject];
     const isOurs = linked?.provider === provider.id;
     return {
       vaultProject,
-      noneLabel: isOurs || !linked ? t("kb.linkNone") : (providerById(linked.provider)?.name ?? linked.provider),
       board: isOurs ? linked.board : undefined,
+      other: linked && !isOurs ? (providerById(linked.provider)?.name ?? linked.provider) : undefined,
     };
   });
 const said = (provider: BoardProvider, message: Message) =>
   change(draft => {
     draft.messages[provider.id] = message;
   });
-/** A vault project to one of the provider's boards (`value` "project/board"), or None (""). Picking one replaces what
- *  the vault project had and takes the board from any other project (domain/board link). */
-export async function mapBoard(provider: BoardProvider, vaultProject: string, value: string) {
-  const [project, board] = value.split("/");
-  // None only drops this provider's board, another provider's link stays
-  if (!board && current().boards?.[vaultProject]?.provider !== provider.id) return;
-  const boards = link(current().boards ?? {}, vaultProject, board ? { provider: provider.id, project, board } : null);
+/** A vault project linked to a board (`value` "project/board"), or unlinked (""). */
+export type BoardLink = { vaultProject: string; value: string };
+/** Link vault projects to the provider's boards or unlink them, in one save. Linking replaces what the vault project
+ *  had and takes the board from any other project (domain/board link); unlinking only drops this provider's board,
+ *  another provider's link stays. */
+export async function mapBoard(provider: BoardProvider, links: BoardLink[]) {
+  let boards = current().boards ?? {};
+  for (const { vaultProject, value } of links) {
+    const [project, board] = value.split("/");
+    if (board) boards = link(boards, vaultProject, { provider: provider.id, project, board });
+    else if (boards[vaultProject]?.provider === provider.id) boards = link(boards, vaultProject, null);
+  }
   try {
     commit(await backend.setSettings({ ...current(), boards }));
     said(provider, { text: t("set.saved"), ok: true });
@@ -312,13 +317,15 @@ async function runStep(step: "connect" | "advanced", work: () => Promise<void>) 
     draft.mail.busy = "";
   });
 }
-/** Connect with the typed address and app password: the backend stores the password in the keychain and tests the
- *  login. The password field empties after every attempt; an address refused before trying keeps both. */
-export async function connectMail() {
+/** Connect with the typed address and app password (Gmail), or a password and server (`imap`): the backend stores the
+ *  password in the keychain and tests the login. The password field empties after every attempt; an address refused
+ *  before trying keeps both. */
+export async function connectMail(imap: boolean) {
   const typed = st().integrations.mail.draft;
   if (!EMAIL.test(typed.email.trim())) return mailSaid({ text: t("mail.invalid"), ok: false });
   await runStep("connect", async () => {
-    const connected = await backend.mailConnect(typed.email, typed.password);
+    const server = imap ? { host: typed.host.trim(), port: Number(typed.port) || 993 } : undefined;
+    const connected = await backend.mailConnect(typed.email, typed.password, server);
     await keep(connected.account, connected.result);
   });
   setMailDraft("password", "");
@@ -326,10 +333,12 @@ export async function connectMail() {
 /** Add the typed account whose password already sits in the keychain. */
 export async function addMailAccount() {
   const typed = st().integrations.mail.draft;
-  const account = {
+  const host = typed.host.trim();
+  const account: MailAcct = {
     email: typed.email.trim(),
     keychain_service: typed.keychain_service.trim(),
     keychain_account: typed.keychain_account.trim(),
+    ...(host ? { host, port: Number(typed.port) || 993 } : {}),
   };
   if (!EMAIL.test(account.email) || !account.keychain_service || !account.keychain_account)
     return mailSaid({ text: t("mail.invalid"), ok: false });

@@ -1,6 +1,6 @@
 import { t } from "../../shared/i18n";
 import type { AgentEvent } from "../../domain/agents/types";
-import { toItems, trackTimes, doneText, push } from "../../domain/conversations/events";
+import { adoptOwnedTurns, toItems, trackTimes, doneText, push } from "../../domain/conversations/events";
 import { UNTITLED } from "../../domain/conversations/rules";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
@@ -54,24 +54,28 @@ export async function ensureHistory(key: string, fresh = false) {
 // Only for a conversation the page knows nothing about yet, so a late "busy" never brings back the dots of a finished turn.
 export async function syncBusy() {
   const liveAgents = new Map(cs().agentsList.map(agent => [`${agent.provider}:${agent.sessionId}`, agent]));
-  const ownedKeys = new Set(await backend.running().catch(() => [] as string[]));
-  for (const [key, { provider, sid }] of Object.entries(cs().sidOf)) {
-    const conversation = cs().chats[key];
-    if (!conversation || conversation.closed) continue;
-    const busy = liveAgents.get(`${provider}:${sid}`)?.status === "busy";
-    if (busy && cs().status[key] === undefined) await adoptRunningTurn(key, provider, sid, ownedKeys.has(key));
+  const running = await backend.running().catch(() => ({}) as Record<string, number>);
+  // the app's own process table knows the active turns, also of a fresh process that has not named its session yet;
+  // the CLIs' session lists only describe what is persisted
+  let owned = new Set<string>();
+  let adopted: string[] = [];
+  set(draft => {
+    ({ owned, adopted } = adoptOwnedTurns(draft, running));
+  });
+  // the events that follow land on top of the transcript
+  for (const key of adopted) if (!cs().messages[key]) await ensureHistory(key);
+  for (const [key, conversation] of Object.entries(cs().chats)) {
+    const session = cs().sidOf[key];
+    if (conversation.closed || owned.has(key) || !session) continue;
+    const busy = liveAgents.get(`${session.provider}:${session.sid}`)?.status === "busy";
+    if (busy && cs().status[key] === undefined) await adoptRunningTurn(key, session.provider, session.sid);
     else if (!busy && key in cs().outside) await finishOutsideTurn(key);
   }
 }
-async function adoptRunningTurn(key: string, provider: string, sid: string, ownedByApp: boolean) {
+async function adoptRunningTurn(key: string, provider: string, sid: string) {
   set(draft => {
     draft.status[key] = "busy";
   });
-  if (ownedByApp) {
-    // the events that follow land on top of the transcript
-    if (!cs().messages[key]) await ensureHistory(key);
-    return;
-  }
   const transcript = await backend.historySid(sid, 0, provider);
   set(draft => {
     draft.messages[key] = toItems(transcript.items, imageUrl);

@@ -13,12 +13,17 @@ import {
   type SidebarModel,
   type Trail,
   type ViewRow,
+  type Meta,
 } from "../../domain/navigation/sidebar";
+import { arranged, isHidden } from "../../domain/navigation/sidebar-order";
+import type { SidebarCfg } from "../../domain/settings/types";
+import { viewItems } from "../../domain/navigation/sidebar-views";
 import { WAIT, REM, PRS, MAIL } from "../../domain/navigation/views";
 import type { Chat, TerminalSession } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { unread } from "../../domain/mail/rules";
 import { storage } from "../../infrastructure/storage";
+import { applyTheme, prefersDark } from "../../infrastructure/window";
 import { useConversationsStore } from "../conversations/store";
 import { typedOf } from "../conversations/drafts";
 import {
@@ -33,12 +38,11 @@ import {
 import { chatAgent } from "../agents/agents";
 import { useWorkspaceStore } from "../workspace/store";
 import { contexts, projectLabel } from "../workspace/vault";
-import { ghOn, mailOn, settings } from "../settings/settings";
+import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { useNavigationStore } from "./store";
-import { boardKey } from "../../domain/navigation/keys";
 
 // The sidebar: its own state (search, folds, dragged order) and the rows it shows, built from every context's state.
 const nav = () => useNavigationStore.getState();
@@ -63,6 +67,18 @@ export const toggleUnfold = (project: string) =>
   });
 /** A drop after dragging: `visible` is the order as shown, the dragged `id` goes before or after `ref`. */
 export function reorder(kind: ReorderKind, scope: string, visible: string[], id: string, ref: string, after: boolean) {
+  if (kind === "view") {
+    // among all views, the switched-off ones too, so they come back where they were
+    setSidebar({
+      order: place(
+        allViews().map(view => view.key),
+        id,
+        ref,
+        after,
+      ),
+    });
+    return;
+  }
   set(draft => {
     if (kind === "sec") draft.sidebar.secOrder = place(draft.sidebar.secOrder, id, ref, after);
     else if (kind === "conv") draft.sidebar.convOrder[scope] = place(visible, id, ref, after);
@@ -109,6 +125,7 @@ const convRow = (conversation: Chat): ConvRow => ({
   ...subsOf(conversation.key),
   // only a draft reads what is typed: a keystroke in a started conversation leaves the sidebar alone
   closable: !(conversation.draft && !typedOf(conversation.key)),
+  closing: cs().closing.has(conversation.key),
 });
 const termRow = (session: TerminalSession): ConvRow => ({
   key: session.key,
@@ -121,6 +138,7 @@ const termRow = (session: TerminalSession): ConvRow => ({
   trail: terminalTrail(session),
   ...subsOf(session.key),
   closable: true,
+  closing: false,
 });
 
 // the label without the emoji projectLabel puts in front: the row draws the project's icon next to it already
@@ -155,49 +173,65 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
   };
 }
 
-// ---------- the view rows: waiting, reminders, the boards, pull requests and mail
-const waitingRow = (): ViewRow => {
+// ---------- the view rows: waiting, reminders, the boards, pull requests and mail, in the user's order
+const waitingMeta = (): Meta | undefined => {
   const waiting = waitCount();
-  return { key: WAIT, icon: "bell", name: t("nav.waiting"), meta: waiting ? { kind: "badge", n: waiting } : undefined };
+  return waiting ? { kind: "badge", n: waiting } : undefined;
 };
-const remindersRow = (): ViewRow => {
+const remindersMeta = (): Meta | undefined => {
   const reminders = useWorkspaceStore.getState().snap.reminders;
   const due = reminders.filter(reminder => reminder.days <= 0).length;
   const overdue = reminders.some(reminder => reminder.days < 0);
-  return {
-    key: REM,
-    icon: "list",
-    name: t("nav.reminders"),
-    meta: due ? { kind: overdue ? "late" : "soon", n: due } : undefined,
-  };
+  return due ? { kind: overdue ? "late" : "soon", n: due } : undefined;
 };
-const boardRows = (): ViewRow[] =>
-  readyBoards().map(board => ({ key: boardKey(board.id), svg: board.glyph, name: board.name }));
-const prsRow = (): ViewRow => {
+const prsMeta = (): Meta | undefined => {
   const review = usePullRequestsStore.getState().list?.review.length ?? 0;
-  return {
-    key: PRS,
-    icon: "pr",
-    name: t("nav.prs"),
-    meta: review ? { kind: "count", n: review, title: t("nav.prsReview") } : undefined,
-  };
+  return review ? { kind: "count", n: review, title: t("nav.prsReview") } : undefined;
 };
-const mailRow = (): ViewRow => {
+const mailMeta = (): Meta | undefined => {
   const unreadCount = useMailStore.getState().list?.filter(unread).length ?? 0;
-  return {
-    key: MAIL,
-    icon: "mail",
-    name: t("nav.mail"),
-    meta: unreadCount ? { kind: "count", n: unreadCount } : undefined,
-  };
+  return unreadCount ? { kind: "count", n: unreadCount } : undefined;
 };
-const viewRows = (): ViewRow[] => [
-  waitingRow(),
-  remindersRow(),
-  ...boardRows(),
-  ...(ghOn() ? [prsRow()] : []),
-  ...(mailOn() ? [mailRow()] : []),
-];
+const META: Record<string, () => Meta | undefined> = {
+  [WAIT]: waitingMeta,
+  [REM]: remindersMeta,
+  [PRS]: prsMeta,
+  [MAIL]: mailMeta,
+};
+
+export const sidebarCfg = (): SidebarCfg => settings().sidebar ?? {};
+export const viewsLayout = () => sidebarCfg().layout ?? "list";
+/** Every view there is now, in the user's order, the switched-off ones included. */
+const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), t), sidebarCfg());
+export const hiddenViews = () => allViews().filter(view => isHidden(view.key, sidebarCfg()));
+const viewRows = (): ViewRow[] =>
+  allViews()
+    .filter(view => !isHidden(view.key, sidebarCfg()))
+    .map(view => ({ ...view, meta: META[view.key]?.() }));
+
+/** Changes the sidebar's settings: shown at once, then saved (the settings window follows). */
+export function setSidebar(patch: SidebarCfg) {
+  const next = { ...settings(), sidebar: { ...sidebarCfg(), ...patch } };
+  setSettingsState(next);
+  void saveMainSettings(next);
+}
+export const setViewHidden = (key: string, hidden: boolean) =>
+  setSidebar({ hidden: [...(sidebarCfg().hidden ?? []).filter(x => x !== key), ...(hidden ? [key] : [])] });
+/** The page is dark, so the footer's toggle offers light; system counts as whatever macOS shows now. */
+export const isDark = () => {
+  const theme = settings().theme ?? "system";
+  return theme === "dark" || (theme === "system" && prefersDark());
+};
+/** The footer's toggle: flips light and dark, shown at once, then saved. */
+export function toggleTheme() {
+  const next = { ...settings(), theme: isDark() ? ("light" as const) : ("dark" as const) };
+  applyTheme(next.theme, next.accent);
+  setSettingsState(next);
+  void saveMainSettings(next);
+}
+/** The colour of a vault context, the same in the sidebar, the title bar and the reminders. */
+export const contextTint = (context: string) =>
+  CONTEXT_TINTS[Math.max(0, contexts().indexOf(context)) % CONTEXT_TINTS.length];
 
 // ---------- the sections
 const section = (id: string, query: string, rest: Omit<Section, "id" | "collapsed" | "open">): Section => ({

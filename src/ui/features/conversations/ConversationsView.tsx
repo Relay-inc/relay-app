@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isView } from "../../../domain/navigation/views";
+import { isView, MAIL, PRS, REM } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -9,11 +9,15 @@ import { openProjectPanel, setPanelHidden } from "../../../application/navigatio
 import { useDerived } from "../../hooks/useDerived";
 import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
+import { PullRequestsView } from "../pull-requests/PullRequestsView";
+import { MailView } from "../mail/MailView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
 import { MoveBar } from "./MoveBar";
 import { Composer } from "./Composer";
+import { NewReminder } from "./NewReminder";
+import { PrsReload } from "./PrsReload";
 import { column, strip } from "./layout";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
@@ -34,7 +38,10 @@ export function ConversationsView({ className }: { className: string }) {
   const log = useRef<HTMLDivElement>(null);
   const msgs = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  // the Pull requests and Mail views scroll their list and the open item apart, so they fill the pane instead of the log
+  const ownScroll = selected === PRS || selected === MAIL;
   useEffect(() => {
+    if (ownScroll) return;
     const logEl = log.current!;
     const observer = new ResizeObserver(() => {
       if (stick.current && !isView(useNavigationStore.getState().selected)) logEl.scrollTop = logEl.scrollHeight;
@@ -42,7 +49,7 @@ export function ConversationsView({ className }: { className: string }) {
     observer.observe(msgs.current!);
     observer.observe(logEl);
     return () => observer.disconnect();
-  }, []);
+  }, [ownScroll]);
   // a scroll event is dispatched a frame late, after more text may have come in: only a move up unsticks, so a
   // stream into a log at the bottom keeps following
   const lastTop = useRef(0);
@@ -62,28 +69,45 @@ export function ConversationsView({ className }: { className: string }) {
   });
 
   const asked = onView || !!bar.session || !!bar.projectName || dismissed || busy;
+  const chatBarEl = (
+    <ChatBar
+      key={selected}
+      heading={bar.heading}
+      img={bar.img}
+      tint={bar.tint}
+      state={bar.state}
+      editable={!onView}
+      sub={bar.waiting}
+      value={bar.title}
+      readonly={!!bar.session}
+      renamable={bar.renamable}
+      noTerm={bar.noTerm}
+      locked={bar.locked}
+      panelOff={panelHidden}
+      actions={selected === REM ? <NewReminder /> : selected === PRS ? <PrsReload /> : null}
+      onEditProject={openProjectPanel}
+      onRename={rename}
+      onOpenTerminal={openTerminal}
+      onTogglePanel={() => setPanelHidden(!panelHidden)}
+    />
+  );
+  if (ownScroll)
+    return (
+      <div className={`${className} flex flex-col relative bg-bg`}>
+        {chatBarEl}
+        {selected === PRS ? <PullRequestsView className="flex-1" /> : <MailView className="flex-1" />}
+      </div>
+    );
   return (
     <div className={`${className} flex flex-col relative bg-bg`}>
-      <ChatBar
-        key={selected}
-        heading={bar.heading}
-        img={bar.img}
-        editable={!onView}
-        sub={bar.waiting}
-        value={bar.title}
-        readonly={!!bar.session}
-        renamable={bar.renamable}
-        noTerm={bar.noTerm}
-        locked={bar.locked}
-        panelOff={panelHidden}
-        onEditProject={openProjectPanel}
-        onRename={rename}
-        onOpenTerminal={openTerminal}
-        onTogglePanel={() => setPanelHidden(!panelHidden)}
-      />
+      {chatBarEl}
       {projectPanel ? <ProjectPanel /> : null}
-      <div id="log" ref={log} className="flex-1 overflow-y-auto pt-6 pb-2" onScroll={onScroll}>
-        <div ref={msgs} id="msgs" className={`mx-auto flex flex-col gap-4 ${board ? "px-5" : "max-w-2xl px-7"}`}>
+      <div id="log" ref={log} className="flex-1 overflow-y-auto pt-7 pb-3" onScroll={onScroll}>
+        <div
+          ref={msgs}
+          id="msgs"
+          className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : "max-w-170 px-8"}`}
+        >
           <SelectedView />
         </div>
       </div>
@@ -102,7 +126,7 @@ export function ConversationsView({ className }: { className: string }) {
         </div>
       ) : null}
       <MoveBar className={column} session={bar.session} asked={asked} />
-      {onView ? null : <Composer className={`${column} mt-2 mb-5`} />}
+      {onView ? null : <Composer className={`${column} mt-2 mb-4.5`} />}
     </div>
   );
 }

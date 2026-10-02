@@ -22,11 +22,8 @@ export function SubagentRow({ agent, duration }: { agent: Sub; duration: string 
         onClick={() => toggleSubLog(agent.id)}
       >
         <span
-          className={
-            running
-              ? "size-2 flex-none rounded-full bg-accent animate-pulse-dot"
-              : "size-2 flex-none rounded-full bg-separator"
-          }
+          // Lit 338405d dropped the pulse-dot animation and still names it here: the dot stays still, as there
+          className={running ? "size-2 flex-none rounded-full bg-accent" : "size-2 flex-none rounded-full bg-separator"}
         ></span>
         <span
           className={

@@ -8,7 +8,8 @@ import { ctxOf } from "../board/ctx";
 import { clearMailLink } from "../mail/mail";
 import { useNavigationStore } from "./store";
 
-// The right panel's detail: a PR, a mail, a vault note or a tracker card, shown from what is known at once, then fresh.
+// The details: a note or card in the right panel, a PR or mail next to its list, a card in the ticket window over the
+// board. Each is shown from what is known at once, then fresh.
 const nav = () => useNavigationStore.getState();
 const set = useNavigationStore.setState;
 
@@ -20,14 +21,14 @@ export const cardOf = (key: string) => {
     ? { provider: cardProvider, detail: cardProvider.detail, id: item.id }
     : undefined;
 };
-/** A card opens in the right panel when its provider has one, else in the browser. */
+/** A card opens in the ticket window when its provider describes it, else in the browser. */
 export async function openCard(boardProvider: BoardProvider, ref: BoardRef, id: string) {
   const key = cardKey(boardProvider.id, id);
   if (boardProvider.detail) {
     set(draft => {
       draft.panel.cardRefs[key] = ref;
     });
-    return openDetail(key);
+    return openTicket(key);
   }
   try {
     backend.openUrl(await boardProvider.url(ctxOf(boardProvider), ref, id));
@@ -50,17 +51,15 @@ function fetchDetail(key: string, item: PanelItem): Promise<unknown> {
       return backend.githubPr(item.repo, item.number);
   }
 }
-/** Show a PR, mail, note or card in the right panel: what is known at once, then fresh from the backend. */
+/** Show a vault note in the right panel: what is known at once, then fresh from the backend. */
 export async function openDetail(key: string) {
   const item = panelItem(key);
   if (!item) return;
-  const card = cardOf(key);
   clearMailLink();
   set(draft => {
     draft.panel.open = key;
     draft.panel.err = "";
     draft.panel.actErr = "";
-    if (card) draft.panel.detail[key] ??= card.detail.cached(card.id);
     draft.panelHidden = false;
   });
   storage.set("noinsp", false);
@@ -71,12 +70,74 @@ export async function openDetail(key: string) {
     });
   } catch (e) {
     set(draft => {
-      // a mail that cannot be read is not shown from an older answer
-      if (item.kind === "mail") delete draft.panel.detail[key];
       // the error of a load the user already left does not show on the detail open now
       if (!draft.panel.detail[key] && draft.panel.open === key) draft.panel.err = String(e);
     });
   }
+}
+/** Show a mail in the Mail view next to the list: its headers at once, the body from the server. */
+export async function openMail(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "mail") return;
+  clearMailLink();
+  set(draft => {
+    draft.panel.mailOpen = key;
+    draft.panel.err = "";
+  });
+  try {
+    const detail = await fetchDetail(key, item);
+    set(draft => {
+      draft.panel.detail[key] = detail;
+    });
+  } catch (e) {
+    set(draft => {
+      // a mail that cannot be read is not shown from an older answer
+      delete draft.panel.detail[key];
+      if (draft.panel.mailOpen === key) draft.panel.err = String(e);
+    });
+  }
+}
+/** Show a card in the ticket window over the board: what is known at once, then fresh from the tracker. */
+export async function openTicket(key: string) {
+  const item = panelItem(key);
+  const card = cardOf(key);
+  if (item?.kind !== "card" || !card) return;
+  set(draft => {
+    draft.panel.modal = key;
+    draft.panel.err = "";
+    draft.panel.actErr = "";
+    draft.panel.detail[key] ??= card.detail.cached(card.id);
+  });
+  await refresh(key, item, "modal");
+}
+/** Show a PR in the Pull requests view: what is known at once, then fresh from GitHub. */
+export async function openPr(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "pr") return;
+  set(draft => {
+    draft.panel.prOpen = key;
+    draft.panel.err = "";
+  });
+  await refresh(key, item, "prOpen");
+}
+// the fresh answer replaces the known one; an error shows only without one, and only while that detail is still open
+async function refresh(key: string, item: PanelItem, slot: "modal" | "prOpen") {
+  try {
+    const detail = await fetchDetail(key, item);
+    set(draft => {
+      draft.panel.detail[key] = detail;
+    });
+  } catch (e) {
+    set(draft => {
+      if (!draft.panel.detail[key] && draft.panel[slot] === key) draft.panel.err = String(e);
+    });
+  }
+}
+export function closeTicket() {
+  if (!nav().panel.modal) return;
+  set(draft => {
+    draft.panel.modal = "";
+  });
 }
 /** An action from a card's panel (comment, status, assignee, attach): the provider does it in the tracker and answers
  *  with the card as it is now. Resolves true when it worked (the UI then empties the comment box); on a failure what

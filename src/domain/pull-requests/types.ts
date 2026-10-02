@@ -1,5 +1,5 @@
 // Pull requests from GitHub, fetched by the backend through gh: what is waiting on the user's review and what
-// he opened. Read-only: a row opens the PR in the right panel (description, checks, conversation), a link
+// they opened. Read-only: a row opens the PR next to the list (description, checks, conversation), a link
 // there opens it on GitHub. Anything others see (a review, a merge) does not happen from the app without approval (decided 29/9).
 export type PR = {
   number: number;
@@ -30,7 +30,7 @@ export type GhCheck = {
   detailsUrl?: string;
   targetUrl?: string;
 };
-type GhThread = {
+export type GhThread = {
   path: string;
   line?: number | null;
   isResolved: boolean;

@@ -4,7 +4,8 @@ import type { PrDetail } from "../../domain/pull-requests/types";
 import { reviewPrompt, rowProject } from "../../domain/pull-requests/rules";
 import * as backend from "../../infrastructure/backend";
 import { ghOn } from "../settings/settings";
-import { project } from "../workspace/vault";
+import { project, projectLabel } from "../workspace/vault";
+import { contextTint } from "../navigation/sidebar";
 import { useNavigationStore } from "../navigation/store";
 import { select } from "../navigation/navigation";
 import { startChat } from "../conversations/chats";
@@ -23,6 +24,7 @@ export async function loadPrs() {
     const list = await backend.githubPrs();
     set(draft => {
       draft.list = list;
+      draft.at = Date.now();
       draft.err = "";
     });
   } catch (e) {
@@ -37,6 +39,7 @@ export async function loadPrs() {
 export const resetPrs = () =>
   set(draft => {
     draft.list = null;
+    draft.at = 0;
     draft.err = "";
   });
 /** "Laat Claude reviewen": a new app conversation under the PR's project, Claude reports here and posts nothing. */
@@ -53,4 +56,15 @@ export async function reviewPr(key: string) {
   });
   await select(chatKey);
   sendMsg(reviewPrompt(pr, repo));
+}
+/** The PR detail's header: its repo and, when the vault knows the project of its row in the lists, that project's
+ *  label and context tint. Read it with `useDerived`. */
+export function prHeading(key: string) {
+  const item = panelItem(key);
+  if (item?.kind !== "pr") return { repo: "", project: null };
+  const known = project(rowProject(usePullRequestsStore.getState().list, item.repo, item.number));
+  return {
+    repo: item.repo,
+    project: known ? { label: projectLabel(known.name), tint: contextTint(known.context) } : null,
+  };
 }

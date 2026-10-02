@@ -1,5 +1,6 @@
 import { currentLocale, translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
 import { mapBoards, mapCards, mapColumns } from "./map";
+import { trelloTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
 const t = translator<Key>("trello");
@@ -27,12 +28,14 @@ const trello: BoardProvider<Key> = {
   strings,
   // Trello's mark: two bars in a blue tile
   glyph: '<rect width="16" height="16" rx="3" fill="#0C66E4" stroke="none"/><rect x="3.2" y="3.2" width="4" height="9.2" rx="1" fill="#fff" stroke="none"/><rect x="8.8" y="3.2" width="4" height="5.6" rx="1" fill="#fff" stroke="none"/>',
+  // the sidebar's mark: Hugeicons' Trello, the set the app draws in
+  mark: '<path d="M2.5 12C2.5 7.52166 2.5 5.28249 3.89124 3.89124C5.28249 2.5 7.52166 2.5 12 2.5C16.4783 2.5 18.7175 2.5 20.1088 3.89124C21.5 5.28249 21.5 7.52166 21.5 12C21.5 16.4783 21.5 18.7175 20.1088 20.1088C18.7175 21.5 16.4783 21.5 12 21.5C7.52166 21.5 5.28249 21.5 3.89124 20.1088C2.5 18.7175 2.5 16.4783 2.5 12Z"/><path d="M6 8C6 7.05719 6 6.58579 6.29289 6.29289C6.58579 6 7.05719 6 8 6H8.5C9.44281 6 9.91421 6 10.2071 6.29289C10.5 6.58579 10.5 7.05719 10.5 8V15C10.5 15.9428 10.5 16.4142 10.2071 16.7071C9.91421 17 9.44281 17 8.5 17H8C7.05719 17 6.58579 17 6.29289 16.7071C6 16.4142 6 15.9428 6 15V8Z"/><path d="M13.5 8C13.5 7.05719 13.5 6.58579 13.7929 6.29289C14.0858 6 14.5572 6 15.5 6H16C16.9428 6 17.4142 6 17.7071 6.29289C18 6.58579 18 7.05719 18 8V10C18 10.9428 18 11.4142 17.7071 11.7071C17.4142 12 16.9428 12 16 12H15.5C14.5572 12 14.0858 12 13.7929 11.7071C13.5 11.4142 13.5 10.9428 13.5 10V8Z"/>',
 
   projects: async c => (await all(c)).projects,
   boards: async (c, p) => (await all(c)).boards.filter(b => b.project === p),
   columns: async (c, ref) => mapColumns(await c.call("GET", `/boards/${ref.board}/lists?filter=open&fields=name,pos,closed`)),
   cards: async (c, ref) => {
-    const [raw, m] = await Promise.all([c.call("GET", `/boards/${ref.board}/cards/open?fields=name,idShort,idList,pos,due,idMembers,shortUrl,closed&members=true&member_fields=fullName`),
+    const [raw, m] = await Promise.all([c.call("GET", `/boards/${ref.board}/cards/open?fields=name,idShort,idList,pos,due,idMembers,shortUrl,closed,labels,dateLastActivity&members=true&member_fields=fullName`),
       c.config.mine ? who(c) : null]);
     for (const x of raw || []) links.set(x.id, x.shortUrl);
     return mapCards(raw || [], m?.id);
@@ -43,7 +46,8 @@ const trello: BoardProvider<Key> = {
     return typeof r?.pos === "number" ? r.pos : undefined;
   },
   url: async (_c, _ref, id) => links.get(id) || `https://trello.com/c/${id}`,
-  reset: () => { me = null; mine = null; links.clear(); },
+  detail: trelloTicket.detail,
+  reset: () => { me = null; mine = null; links.clear(); trelloTicket.reset(); },
 
   settings: {
     tokenLabel: "token",

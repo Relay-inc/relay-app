@@ -10,12 +10,15 @@ export function TodoList({ items }: { items: Todo[] }) {
   return (
     <ul className="list-none">
       {items.map((todo, i) => (
-        <li key={i} className="flex items-start gap-2 py-2 border-b border-separator text-sm leading-snug">
-          <input className="mt-0.5 size-4 flex-none accent-accent" type="checkbox" disabled />
-          <span>
+        <li key={i} className="flex items-start gap-2.5 py-2.25 border-b border-separator text-[13px] leading-snug">
+          {/* reminders carry a date line and no box; an open item is a (read-only, so always empty) checkbox */}
+          {todo.when === undefined ? (
+            <span className="mt-px size-4 flex-none rounded-[5px] border-[1.5px] border-separator-strong" />
+          ) : null}
+          <span className="min-w-0 flex flex-col gap-0.5">
             <Markdown className="line-clamp-3" text={todo.text} />
             {todo.when === undefined ? null : (
-              <span className="text-secondary tabular-nums">
+              <span className="block text-xs text-secondary tabular-nums">
                 {todo.project ? `${todo.project} · ` : null}
                 <span className={DUE[todo.due ?? ""]}>{todo.when}</span>
               </span>

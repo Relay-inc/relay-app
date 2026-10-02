@@ -1,13 +1,19 @@
 import { useEffect } from "react";
 import type { BoardProvider } from "../../../domain/board/types";
-import { colOf, filtered } from "../../../domain/board/rules";
+import { cardsIn, filtered, isFolded } from "../../../domain/board/rules";
 import { dropCard, openBoardCard, showBoard, toggleFold } from "../../../application/board/board";
 import { useBoardStore } from "../../../application/board/store";
+import { cardOf } from "../../../application/navigation/panel";
+import { useNavigationStore } from "../../../application/navigation/store";
 import { usePointerDrag } from "../../hooks/usePointerDrag";
 import { useT } from "../../hooks/useT";
+import { BoardHead } from "./BoardHead";
 import { BoardToolbar } from "./BoardToolbar";
+import { BoardChips } from "./BoardChips";
 import { BoardColumn } from "./BoardColumn";
+import { BoardList } from "./BoardList";
 import { BoardCard, type CardGrab } from "./BoardCard";
+import { BoardTicket } from "./BoardTicket";
 
 /** What the board keeps of a pressed card: which one, where it was grabbed, and the column it hovers. */
 type Grab = { id: string; offsetX: number; offsetY: number; width: number; overColumn?: string };
@@ -16,13 +22,17 @@ type Grab = { id: string; offsetX: number; offsetY: number; width: number; overC
 const columnAt = (e: PointerEvent) =>
   document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-list]")?.dataset.list;
 
-/** A provider's board as a kanban: the head row and the columns. Dragging a card to another column moves it in the
- *  tracker, a click opens it. */
+/** A provider's board: the head row, the toolbar with its filter chips, the columns as a kanban or a list, and the
+ *  ticket window over it. Dragging a card to another column moves it in the tracker, a click opens it. */
 export function BoardView({ provider }: { provider: BoardProvider }) {
   const { t } = useT();
   const board = useBoardStore(s => s.states[provider.id]);
-  const foldedColumns = useBoardStore(s => s.folded[provider.id]);
+  const folds = useBoardStore(s => s.folded[provider.id]);
   const resets = useBoardStore(s => s.resets);
+  // the card open in the ticket window, marked on the board
+  const modal = useNavigationStore(s => s.panel.modal);
+  const open = modal ? cardOf(modal) : undefined;
+  const selected = open?.provider.id === provider.id ? open.id : "";
   const { drag, start } = usePointerDrag<Grab>({
     onMove: (_, e) => ({ overColumn: columnAt(e) }),
     // a release opens the card or drops it, a cancel does neither
@@ -51,30 +61,37 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
       if (board.busy || board.err) return null;
       return <div className="text-secondary text-sm text-center">{t("kb.noCols")}</div>;
     }
-    const { cards } = filtered(board);
+    const cards = filtered(board);
     return (
-      <div className="flex gap-3 items-start overflow-x-auto pb-2">
-        {board.columns.map(column => (
-          <BoardColumn
-            key={column.id}
-            column={column}
-            cards={cards
-              .filter(card => colOf(provider, board, card) === column.id)
-              .sort((a, b) => a.placement - b.placement)}
-            over={!!drag?.moving && drag.overColumn === column.id}
-            folded={!!foldedColumns?.includes(column.id)}
-            onFold={() => toggleFold(provider, column.id)}
-            onGrab={onGrab}
-            onOpen={id => openBoardCard(provider, id)}
-          />
-        ))}
-      </div>
+      <>
+        <BoardToolbar provider={provider} board={board} />
+        <BoardChips provider={provider} filters={board.filters} />
+        {board.view === "list" ? (
+          <BoardList provider={provider} board={board} cards={cards} folds={folds} selected={selected} />
+        ) : (
+          <div className="flex gap-2.5 items-start overflow-x-auto pb-2">
+            {board.columns.map(column => (
+              <BoardColumn
+                key={column.id}
+                column={column}
+                cards={cardsIn(provider, board, cards, column.id)}
+                selected={selected}
+                over={!!drag?.moving && drag.overColumn === column.id}
+                folded={isFolded(folds, column)}
+                onFold={() => toggleFold(provider, column)}
+                onGrab={onGrab}
+                onOpen={id => openBoardCard(provider, id)}
+              />
+            ))}
+          </div>
+        )}
+      </>
     );
   };
 
   return (
     <div>
-      <BoardToolbar provider={provider} board={board} />
+      <BoardHead provider={provider} board={board} />
       {board.err && <div className="err-box mb-3">{board.err}</div>}
       {columns()}
       {drag && ghost && (
@@ -83,6 +100,7 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
           ghost={{ left: drag.x - drag.offsetX, top: drag.y - drag.offsetY, width: drag.width }}
         />
       )}
+      <BoardTicket provider={provider} board={board} />
     </div>
   );
 }

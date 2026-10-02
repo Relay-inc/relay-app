@@ -114,6 +114,7 @@ are a `Text` table in `lib.rs`.
 | `headers(cfg, secrets)` | The headers carrying the secrets, in the order of `secrets` (and content type). |
 | `ok(body)` | Whether a 2xx answer is a success. `true` for REST; Linear (GraphQL) answers errors with 200 and `errors`. |
 | `error(code, body)` | An error answer as one line. |
+| `actions` | What an agent may do with the tracker through `relay` (see [Agent actions](#agent-actions)): each builds its own request from checked arguments, so it is its own allowlist. |
 
 The app's commands (all take `provider`): `integration_status` (on, ready and a token), `integration_has_token`,
 `integration_token(token, account?)` (save one secret, `token` by default; `""` without an account removes them all), `integration_call(method, path, body)`. The call runs curl
@@ -168,25 +169,25 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 
 ## Agent providers
 
-The conversations run on a coding-agent CLI: Claude Code, Codex or OpenCode. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
+The conversations run on a coding-agent CLI: Claude Code, Codex, OpenCode or Pi. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in
 [`packages/agent-core`](packages/agent-core/README.md). The app owns the processes, `sessions.json`, the pending folder,
 the settings and the commands; a provider builds its command line, turns its output into normalised events, reads its
 own transcripts and logs, and reports its limits and tokens.
 
-| | Claude Code | Codex | OpenCode |
-|---|---|---|---|
-| Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) |
-| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` |
-| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) |
-| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) |
-| Thinking, images | –, yes | yes, yes | yes, yes |
-| Resume, fork | yes, yes | yes, – | yes, yes |
-| Subagents, titles | yes, yes | –, – | –, – |
-| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants |
-| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` |
-| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded |
-| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) |
-| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price |
+| | Claude Code | Codex | OpenCode | Pi |
+|---|---|---|---|---|
+| Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) | [`agent-pi`](packages/agent-pi/README.md) |
+| Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind `bridge.py` | a private `opencode serve` (HTTP + SSE) behind `bridge.py` | `pi --mode rpc` (JSON lines over stdio), no bridge |
+| Permissions | cards, through `perm_server.py` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
+| Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no |
+| Thinking, images | –, yes | yes, yes | yes, yes | yes, yes |
+| Resume, fork | yes, yes | yes, – | yes, yes | yes (`--session-id`), yes (`--fork`) |
+| Subagents, titles | yes, yes | –, – | –, – | –, – |
+| Models, efforts | built-in list, efforts | `~/.codex/models_cache.json` | `opencode models --verbose` (configured providers), model variants | `pi --list-models`, thinking levels |
+| Session list, terminal | `claude agents`, attach / stop | `state_5.sqlite` threads, `codex resume` | `opencode.db` sessions, `opencode --session` | session files, `pi --session` |
+| Tokens | `~/.claude/projects/**/*.jsonl`, priced at API list prices | rollout `token_count` events, unpriced | `opencode.db` assistant messages, with the cost OpenCode recorded | session files, with the cost pi computed from its prices |
+| Limits | plan limits (`api.anthropic.com/api/oauth/usage`) | rate-limit windows from the rollouts and the app-server | none (OpenCode has none) | none (pi has none) |
+| Known gaps | see its README | no questions, fork, subagents or titles; no accept-for-session; tokens unpriced | no limits, subagents or titles; no "always"; cost 0 where OpenCode has no price | no permissions or questions; extension dialogs unanswered; no limits, subagents or titles |
 
 **Backend**, `agent_core::AgentProvider` (`packages/agent-core/src/lib.rs`), a `pub static PROVIDER` in the package,
 registered in `PROVIDERS` in `src-tauri/src/agents.rs`:
@@ -267,6 +268,38 @@ or `t:<provider>:<sid>`.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
    `src-tauri/src/agents.rs` and `package.json` + `src/shared/plugins.ts`, then `pnpm install`.
 6. `pnpm build`, `pnpm test` and `cargo test --workspace`.
+
+## Agent actions
+
+Everything an extension can do is also a shell command for the agent in a conversation, whatever provider runs
+it: `relay help` lists the actions available there, `relay <extension>.<action> key=value …` (or one JSON object,
+or `-` for JSON on stdin) runs one and prints JSON. `src-tauri/src/actions.rs` holds the registry, the policies,
+the socket the app listens on and the CLI side.
+
+- `relay` is a script the app writes to its data folder (`bin/relay`, `exec <this binary> --cli "$@"`) and puts first
+  on every agent's PATH, with `RELAY_CONVERSATION` set to the conversation's key. The CLI asks the app over
+  `$TMPDIR/relay-agents/relay.sock` (mode 0600); a call from anything that is not a running conversation is refused.
+- Extensions: the board providers' `actions` (Productive projects, task lists, tasks, comments, services, time
+  entries; Trello boards, lists, cards, comments; Linear teams and issues), mail (`search`, `read`, `thread`,
+  `attachment`, `save_draft`, the relay-mail tools) and the vault's reminders (`list`, `add`, `done`, `push`). Only
+  set-up extensions are listed.
+- Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
+  `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
+  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft to `auto`. Both are set in each
+  extension's Agent access section in Settings (Integrations › the extension; reminders under General) and kept in
+  the vault's `.relay/config.json`, read on every call, so a hand edit applies at once:
+
+  ```json
+  "actions": { "productive": { "*": "ask", "add_time": "auto" }, "trello": { "access": false }, "linear": "auto" }
+  ```
+
+  The agent works in the vault, so Claude Code is denied `Edit(./.relay/**)`: it cannot hand itself permissions.
+- A session that holds mail text asks before every write, and mail actions only run for Claude Code (the one
+  provider whose session can be restricted, see `taint` in lib.rs); a mail read through `relay` restricts the session
+  like relay-mail does.
+- Claude Code runs `relay` without a Bash card (`Bash(relay *)` in its allowed tools, so the action's own policy
+  decides) and learns about it from one `--append-system-prompt` line. The other providers have `relay` on their
+  PATH but are not told about it, and their own approval asks for each command.
 
 ## Other folders
 

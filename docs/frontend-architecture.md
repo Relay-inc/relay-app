@@ -32,18 +32,18 @@ ESLint enforces this with `no-restricted-imports` per folder (`eslint.config.js`
 
 The folder names are the same in `domain/`, `application/` and `ui/features/`:
 
-| Context | What it holds |
-|---|---|
+| Context         | What it holds                                                                                                                                              |
+| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `conversations` | Chats, their items, sessions (app, terminal, outside, background), permission cards and questions, drafts, routing to a project, subagents, slash commands |
-| `agents` | Agent providers, model and effort picks |
-| `workspace` | Vault snapshot, projects, notes, project icons, vault setup |
-| `navigation` | The selection (`sel`), the right panel, the project panel, toasts, zoom, Cmd-K |
-| `mail` | Accounts, list, filters, detail, link confirmation |
-| `board` | Board providers, cards, card detail, card actions |
-| `reminders` | Reminders, the draft form |
-| `pull-requests` | PR list and detail |
-| `usage` | Plan limits and token usage |
-| `settings` | Settings, both windows |
+| `agents`        | Agent providers, model and effort picks                                                                                                                    |
+| `workspace`     | Vault snapshot, projects, notes, project icons, vault setup                                                                                                |
+| `navigation`    | The selection (`sel`), the right panel, the project panel, toasts, zoom, Cmd-K                                                                             |
+| `mail`          | Accounts, list, filters, detail, link confirmation                                                                                                         |
+| `board`         | Board providers, cards, card detail, card actions                                                                                                          |
+| `reminders`     | Reminders, the draft form                                                                                                                                  |
+| `pull-requests` | PR list and detail                                                                                                                                         |
+| `usage`         | Plan limits and token usage                                                                                                                                |
+| `settings`      | Settings, both windows                                                                                                                                     |
 
 Ubiquitous language: the names in code follow the names in the app (conversation, card, reminder, project, vault).
 
@@ -67,7 +67,7 @@ Ubiquitous language: the names in code follow the names in the app (conversation
   mail against the projects).
 - The reminders are part of the vault snapshot (`useWorkspaceStore(s => s.snap.reminders)`); the reminders store holds
   the new-reminder form's draft, which must survive the view unmounting.
-- Persisted state uses exactly the same localStorage keys and encodings as before (`chats`, `typed`, `sel`, `hiddenAgents`, `forkedTerms`, `collapsed`, `secOrder`, `projOrder`, `convOrder`, `mailFilter`, `noinsp`, `gens`, the model/effort pick keys, `prefsTab`, `pvProject`, `pvBoard`, …). Existing users keep their conversations.
+- Persisted state uses exactly the same localStorage keys and encodings as before (`chats`, `typed`, `sel`, `hiddenAgents`, `forkedTerms`, `collapsed`, `secOrder`, `projOrder`, `convOrder`, `mailFilter`, `noinsp`, `gens`, the model/effort pick keys, the CLI defaults seen per provider (`defaults.<id>`), `prefsTab`, `pvProject`, `pvBoard`, per board `<pv|id>Fold` (folded per column id, replaces `<pv|id>Folded`), `<pv|id>View` and `<pv|id>Presets:<board>`, …). Existing users keep their conversations.
 - The Tauri commands, their arguments and the backend events are unchanged.
 
 ## Performance rules
@@ -102,7 +102,7 @@ Ubiquitous language: the names in code follow the names in the app (conversation
 
 ## Integrations
 
-`packages/board-core` defines `CardDetail` as data (fields, description HTML, feed, files, available actions). The integrations return that model, and `ui/features/board` renders it. Packages do not depend on React.
+`packages/board-core` defines `CardDetail` as data: `view(d)` gives a `CardView` (title, status and assignee with their choices, due, labels, description HTML, files, feed). The integrations return that model (Markdown through `@relay/board-core/detail`, Productive's HTML after its `clean()`), and `ui/features/board` draws it as the ticket window over the board. Packages depend on no UI framework.
 
 ## Checks before a merge
 

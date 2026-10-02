@@ -53,8 +53,8 @@ export async function newPage(browser, { scale = 2, fixedTime = true } = {}) {
 }
 
 /** Open a page of the app (index.html or settings.html) with a fixture and a selection, and wait until it settled. */
-export async function open(page, base, { path = "/", fixture = "default", sel = "" } = {}) {
-  const q = new URLSearchParams({ fixture, ...(sel ? { sel } : {}) });
+export async function open(page, base, { path = "/", fixture = "default", sel = "", link = "" } = {}) {
+  const q = new URLSearchParams({ fixture, ...(sel ? { sel } : {}), ...(link ? { link } : {}) });
   await page.goto(`${base}${path}?${q}`);
   await page.waitForFunction(() => window.__harness, null, { timeout: 15000 });
   await page.evaluate(() => window.__harness.ready);

@@ -12,14 +12,16 @@ function formatWhen(iso: string, locale: string) {
 }
 
 const UNREAD =
-  "font-semibold before:inline-block before:w-2 before:h-2 before:rounded-full before:bg-accent before:mr-2";
+  "font-semibold before:inline-block before:size-1.75 before:rounded-full before:bg-accent before:mr-1.5 before:align-middle";
 
 /** One mail in the inbox: unread in bold with a dot like Mail.app; the date, and on hover the read/unread button in its
- *  place. `project` is the display label of the mail's project, "" when it has none. */
+ *  place. `project` is the display label of the mail's project, `account` the account's address when there is more than
+ *  one; "" when there is none. */
 export function MailRow({
   mail,
   sender,
   project,
+  account,
   selected,
   onOpen,
   onFlip,
@@ -27,6 +29,7 @@ export function MailRow({
   mail: Mail;
   sender: string;
   project: string;
+  account: string;
   selected: boolean;
   onOpen: () => void;
   onFlip: () => void;
@@ -43,25 +46,26 @@ export function MailRow({
         e.preventDefault();
         onOpen();
       }}
-      className={`group flex gap-4 items-center py-2.5 -mx-2.5 px-2.5 rounded-lg border-b border-separator text-inherit cursor-default transition-colors duration-150 ease-out ${selected ? "bg-accent/15" : "hover:bg-fill"}`}
+      className={`group flex gap-3 items-start p-2.5 rounded-[9px] text-inherit cursor-pointer transition-colors duration-150 ease-out ${selected ? "bg-accent-soft" : "hover:bg-fill"}`}
       onClick={onOpen}
     >
       <div className="min-w-0 flex-1">
-        <div className={`text-base leading-snug line-clamp-1 group-hover:text-accent ${mail.unread ? UNREAD : ""}`}>
+        <div className={`text-[13px] leading-snug line-clamp-1 ${mail.unread ? UNREAD : "font-medium"}`}>
           {/* a space between the unread dot and the subject; at the start of a line without the dot it collapses */}{" "}
           {mail.subject || t("mail.noSubject")}
         </div>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm text-secondary mt-0.5 tabular-nums">
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-secondary mt-1 tabular-nums">
           <span>{sender}</span>
+          {account ? <span>{account}</span> : null}
           {project ? <span>{project}</span> : null}
         </div>
       </div>
       <div className="grid justify-items-end">
-        <span className="col-start-1 row-start-1 flex text-sm text-secondary mt-0.5 tabular-nums group-hover:invisible">
+        <span className="col-start-1 row-start-1 flex text-xs text-secondary tabular-nums group-hover:invisible">
           {formatWhen(mail.date, locale)}
         </span>
         <button
-          className="col-start-1 row-start-1 btn inline-grid place-items-center w-6! h-6! p-0! invisible group-hover:visible"
+          className="col-start-1 row-start-1 btn btn-icon cursor-pointer w-6! h-6! invisible group-hover:visible"
           title={flipLabel}
           aria-label={flipLabel}
           onClick={e => {

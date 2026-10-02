@@ -5,24 +5,72 @@
   display: block;
   width: 100%;
   min-height: 24px;
-  font-size: 16px;
-  line-height: 1.45;
+  font-size: 15px;
+  line-height: 1.5;
   color: var(--label);
 }
 .relay-composer textarea::placeholder {
-  color: var(--secondary);
+  color: var(--tertiary);
 }
 .relay-composer select {
   all: unset;
   font-size: 12px;
   color: var(--secondary);
-  padding: 2px 4px;
-  border-radius: calc(var(--r) - 2px);
+  height: 26px;
+  line-height: 26px;
+  padding: 0 20px 0 8px;
+  border-radius: 7px;
   cursor: default;
 }
 .relay-composer select:hover:not(:disabled) {
-  background: var(--fill);
+  background: var(--fill-2);
+  color: var(--label);
 }
 .relay-composer select:disabled {
   opacity: 0.5;
+}
+
+/* Working: an accent band runs along each line towards the label, the left one rightwards, the right one leftwards */
+.relay-working .flow {
+  background: linear-gradient(90deg, var(--separator) 0 35%, var(--accent) 50%, var(--separator) 65% 100%)
+    var(--separator);
+  background-size: 300% 100%;
+  animation: flow 1.6s ease-in-out infinite;
+}
+.relay-working .flow.rev {
+  animation-direction: reverse;
+}
+@keyframes flow {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+/* the label's trailing dots fill in one by one; the box keeps three dots of room so the line doesn't shift */
+.relay-working .dots::after {
+  content: "...";
+  position: absolute;
+  left: calc(100% - 1.4ch);
+  width: 0;
+  overflow: hidden;
+  animation: dots 1.2s steps(4, jump-none) infinite;
+}
+.relay-working .dots {
+  position: relative;
+  padding-right: 1.4ch;
+}
+@keyframes dots {
+  to {
+    width: 1.2ch;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .relay-working .dots::after {
+    width: 1.2ch;
+  }
+  .relay-working .flow {
+    background: var(--separator);
+  }
 }

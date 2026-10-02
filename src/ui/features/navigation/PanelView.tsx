@@ -4,13 +4,15 @@ import type { Project } from "../../../domain/workspace/types";
 import type { PR } from "../../../domain/pull-requests/types";
 import type { Reminder } from "../../../domain/reminders/types";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { setTab, openDetail } from "../../../application/navigation/panel";
+import { setTab, openPr } from "../../../application/navigation/panel";
+import { select } from "../../../application/navigation/navigation";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { usePullRequestsStore } from "../../../application/pull-requests/store";
-import { project, projectLabel } from "../../../application/workspace/vault";
+import { project } from "../../../application/workspace/vault";
 import { selectedProject } from "../../../application/conversations/selectors";
 import { ghOn } from "../../../application/settings/settings";
 import { prKey } from "../../../domain/navigation/keys";
+import { PRS } from "../../../domain/navigation/views";
 import { urgency } from "../../../domain/reminders/rules";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -28,37 +30,32 @@ const TABS = [
   ["prs", "tab.prs"],
 ] as const;
 
-/** The right panel: the tabs, the "today" list, a project's tabs, and the open PR, mail, note or card. */
+/** The right panel: the tabs, the "today" list, a project's tabs, and the open note or card. */
 export function PanelView({ className }: { className: string }) {
   const { t } = useT();
   const open = useNavigationStore(s => s.panel.open);
+  const prOpen = useNavigationStore(s => s.panel.prOpen);
   const chosenTab = useNavigationStore(s => s.tab);
   const github = useDerived(() => ghOn());
-  const info = useDerived(() => {
-    const shown = project(selectedProject());
-    return shown ? { project: shown, label: projectLabel(shown.name) } : undefined;
-  });
+  const info = useDerived(() => project(selectedProject()));
   const allReminders = useWorkspaceStore(s => s.snap.reminders);
   const prs = usePullRequestsStore(s => s.list);
   const tab: PanelTab = chosenTab === "prs" && !github ? "open" : chosenTab;
 
-  const heading = (title: string, count?: number) => (
-    <h2 className="text-sm font-semibold mb-2">
-      {title}
-      {count === undefined ? null : (
-        <>
-          {" "}
-          <span className="text-secondary tabular-nums">{count}</span>
-        </>
-      )}
-    </h2>
+  const heading = (title: string, meta?: ReactNode) => (
+    <div className="flex items-baseline gap-1.5 mb-2.5">
+      <h2 className="text-[13px] font-semibold">{title}</h2>
+      {meta === undefined ? null : <span className="text-xs text-tertiary tabular-nums">{meta}</span>}
+    </div>
   );
+  const note = (text: string) => <Note className="text-[13px]">{text}</Note>;
   const dueLabel = (reminder: Reminder) => {
     if (reminder.days < 0) return t("due.overdue", { n: -reminder.days });
     if (reminder.days === 0) return t("due.today");
     return t("due.in", { n: reminder.days });
   };
-  const prRow = (pr: PR, mine: boolean, label: string) => {
+  // a PR opens next to the list in the Pull requests view
+  const prRow = (pr: PR, mine: boolean) => {
     const key = prKey(pr.repo, pr.number);
     return (
       <PrRow
@@ -66,9 +63,11 @@ export function PanelView({ className }: { className: string }) {
         compact
         pr={pr}
         mine={mine}
-        project={label}
-        selected={open === key}
-        onOpen={() => openDetail(key)}
+        selected={prOpen === key}
+        onOpen={() => {
+          openPr(key);
+          select(PRS);
+        }}
       />
     );
   };
@@ -85,12 +84,12 @@ export function PanelView({ className }: { className: string }) {
     return (
       <>
         {heading(t("insp.today"), due.length)}
-        {due.length ? <TodoList items={items} /> : <Note>{t("insp.nothingDue")}</Note>}
+        {due.length ? <TodoList items={items} /> : note(t("insp.nothingDue"))}
       </>
     );
   };
-  const projectPrs = (name: string, label: string) => {
-    if (!prs) return <Note>{t("pr.loading")}</Note>;
+  const projectPrs = (name: string) => {
+    if (!prs) return note(t("pr.loading"));
     const review = prs.review.filter(pr => pr.project === name);
     const mine = prs.mine.filter(pr => pr.project === name);
     const count = review.length + mine.length;
@@ -99,25 +98,27 @@ export function PanelView({ className }: { className: string }) {
         {heading(t("nav.prs"), count)}
         {count ? (
           <div>
-            {review.map(pr => prRow(pr, false, label))}
-            {mine.map(pr => prRow(pr, true, label))}
+            {review.map(pr => prRow(pr, false))}
+            {mine.map(pr => prRow(pr, true))}
           </div>
         ) : (
-          <Note>{t("pr.noneProject")}</Note>
+          note(t("pr.noneProject"))
         )}
       </>
     );
   };
   const stand = (shown: Project) => (
     <>
-      {heading(t("insp.stand"))}
-      <Note>{t("insp.updated", { date: shown.last })}</Note>
-      <Markdown className="md-panel [&_p+p]:mt-2" text={shown.stand || t("insp.noStand")} />
+      {heading(t("insp.stand"), t("insp.updated", { date: shown.last }))}
+      <Markdown
+        className="md-panel text-[13px] leading-[1.55] select-text [&_p+p]:mt-2.5"
+        text={shown.stand || t("insp.noStand")}
+      />
     </>
   );
   const projectReminders = (name: string) => {
     const own = allReminders.filter(reminder => reminder.project === name);
-    if (!own.length) return <Note>{t("insp.noRem")}</Note>;
+    if (!own.length) return note(t("insp.noRem"));
     const items = own.map(reminder => ({
       text: reminder.title,
       when: dueLabel(reminder),
@@ -135,17 +136,17 @@ export function PanelView({ className }: { className: string }) {
     return (
       <>
         {heading(t("tab.open"), items.length)}
-        {items.length ? <TodoList items={items.map(text => ({ text }))} /> : <Note>{t("insp.noOpen")}</Note>}
+        {items.length ? <TodoList items={items.map(text => ({ text }))} /> : note(t("insp.noOpen"))}
       </>
     );
   };
   const body = (): ReactNode => {
     if (open) return <PanelDetail />;
     if (!info) return today();
-    if (tab === "prs") return projectPrs(info.project.name, info.label);
-    if (tab === "stand") return stand(info.project);
-    if (tab === "rem") return projectReminders(info.project.name);
-    return openItems(info.project);
+    if (tab === "prs") return projectPrs(info.name);
+    if (tab === "stand") return stand(info);
+    if (tab === "rem") return projectReminders(info.name);
+    return openItems(info);
   };
 
   // app chrome is not text: no selection in the bar and the tabs, like a native Mac app
@@ -153,10 +154,10 @@ export function PanelView({ className }: { className: string }) {
     <aside className={`relay-panel ${className}`}>
       <div className="flex flex-col flex-1 min-h-0 border-l border-separator">
         <div
-          className="h-13 flex-none flex items-center gap-2.5 px-5 border-b border-separator min-w-75 select-none"
+          className="h-12 flex-none flex items-center px-3.5 border-b border-separator min-w-75 select-none"
           data-tauri-drag-region
         >
-          <div className="seg select-none">
+          <div className="seg flex-1 select-none [&>button]:flex-1">
             {TABS.map(([id, key]) => (
               <button
                 key={id}
@@ -169,7 +170,7 @@ export function PanelView({ className }: { className: string }) {
             ))}
           </div>
         </div>
-        <div className={`overflow-y-auto pt-4 px-4 pb-6 ${open ? "min-w-115" : "min-w-75"}`}>{body()}</div>
+        <div className={`overflow-y-auto pt-4.5 px-4.5 pb-6 ${open ? "min-w-115" : "min-w-75"}`}>{body()}</div>
       </div>
     </aside>
   );

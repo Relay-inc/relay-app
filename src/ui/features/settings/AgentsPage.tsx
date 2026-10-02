@@ -8,7 +8,7 @@ import { Glyph } from "../../components/Glyph";
 import { Html } from "../../components/Html";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
-import { buttonClass, EMPTY_LIST, PILL, SELECT, TILE } from "./blocks";
+import { buttonClass, DEFAULT_PILL, EMPTY_LIST, SELECT, TILE } from "./blocks";
 import { AgentSettings } from "./AgentSettings";
 import { Footer } from "./Footer";
 import { LoadingSection } from "./LoadingSection";
@@ -75,7 +75,7 @@ export function AgentsPage() {
               {agents?.default === id && (
                 <>
                   {" "}
-                  <span className={PILL}>{t("ag.isDefault")}</span>
+                  <span className={DEFAULT_PILL}>{t("ag.isDefault")}</span>
                 </>
               )}
             </>

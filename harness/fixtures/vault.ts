@@ -60,17 +60,18 @@ const rem = (id: string, days: number, project: string | null, title: string, re
   text: `${title}. Source: [[${project ?? "Calendar/2026-10-01"}]]`,
   repeat,
 });
+// ids as the backend makes them (8 hex characters, reminders.rs): `reminder` refuses anything else
 export const reminders = [
-  rem("r1", -3, "Kestrel API", "Chase the client for the partner API keys"),
-  rem("r2", -1, "Beacon Billing", "Check balances after the billing fix"),
-  rem("r3", 0, "Northwind Portal", "Send the acceptance checklist"),
-  rem("r4", 0, null, "Pay the accountant invoice"),
-  rem("r5", 1, "Atlas Logistics", "Ask for depot coordinates"),
-  rem("r6", 1, "Portfolio", "Earnings print, check the thesis", "3m"),
-  rem("r7", 4, "Wedding Photos", "Shotlist call with the couple"),
-  rem("r8", 6, "Harbor CRM", "Staging test of the contact sync"),
-  rem("r9", 12, "Homelab", "Order the backup disk"),
-  rem("r10", 30, null, "Renew the domain names", "1m"),
+  rem("a1b2c301", -3, "Kestrel API", "Chase the client for the partner API keys"),
+  rem("a1b2c302", -1, "Beacon Billing", "Check balances after the billing fix"),
+  rem("a1b2c303", 0, "Northwind Portal", "Send the acceptance checklist"),
+  rem("a1b2c304", 0, null, "Pay the accountant invoice"),
+  rem("a1b2c305", 1, "Atlas Logistics", "Ask for depot coordinates"),
+  rem("a1b2c306", 1, "Portfolio", "Earnings print, check the thesis", "3m"),
+  rem("a1b2c307", 4, "Wedding Photos", "Shotlist call with the couple"),
+  rem("a1b2c308", 6, "Harbor CRM", "Staging test of the contact sync"),
+  rem("a1b2c309", 12, "Homelab", "Order the backup disk"),
+  rem("a1b2c30a", 30, null, "Renew the domain names", "1m"),
 ];
 
 /** Terminal sessions: open in the terminal, not started by the app (snapshot.sessions plus the `agents` list). */
@@ -80,12 +81,12 @@ export const terminalSessions = [
 ];
 export const backgroundBlocked = { id: "bg-blocked-1", sessionId: "7e1f0c2a-3333-4c33-8333-0000000000a3", provider: "claude", kind: "background", status: "idle", state: "blocked", name: "nightly-report", startedAt: iso(NOW - 6 * HOUR) };
 
-export function snapshot() {
+export function snapshot(list = reminders) {
   return {
     today: ymd(NOW),
     projects,
     sessions: { error: null, items: terminalSessions.map(({ name: _name, ...s }) => s) },
-    reminders,
+    reminders: list,
     vault: vaultStatus(true),
   };
 }
@@ -97,8 +98,30 @@ export function vaultStatus(ok: boolean) {
     : { vault: "", map, found: { workState: false, reminders: false, notes: false }, ok: false };
 }
 
+/** What `reminder` and `reminder_add` do to the list (reminders.rs act and add): done drops a row or moves a repeating
+ * one on, push moves it, add appends one. `when`: YYYY-MM-DD, morgen, +1w. */
+export function remindersAfter(list: typeof reminders, action: string, a: { id?: string; date?: string | null; text?: string; project?: string | null; repeat?: string | null }, n: number) {
+  const day = (when: string, from = NOW) => (when === "morgen" ? from + DAY : when === "+1w" ? from + 7 * DAY : Date.parse(`${when}T07:30:00Z`));
+  const repeatDays = (r: string) => Number(r.slice(0, -1)) * ({ d: 1, w: 7, m: 30 }[r.slice(-1)] ?? 1);
+  const at = (date: number, r: (typeof reminders)[number]) => ({ ...r, date: ymd(date), days: Math.round((date - NOW) / DAY) });
+  if (action === "add") {
+    const date = day(a.date || "");
+    const id = (0xd0000000 + n).toString(16);
+    return [...list, at(date, { id, date: "", days: 0, project: a.project ?? null, title: a.text ?? "", text: a.text ?? "", repeat: a.repeat || null })];
+  }
+  const r = list.find(x => x.id === a.id);
+  if (!r) throw new Error("This reminder is gone, reload");
+  if (action === "done" && !r.repeat) return list.filter(x => x !== r);
+  const date = action === "done" ? Date.parse(`${r.date}T07:30:00Z`) + repeatDays(r.repeat!) * DAY : day(a.date || "");
+  return list.map(x => (x === r ? at(date, r) : x));
+}
+
 export const MAIL_ACCOUNT = "laurent@example.com";
-export function settings(theme: "light" | "dark", onboarding: boolean) {
+/** A second account on a non-Gmail IMAP server: the inbox merges both (mail_list per account). */
+export const MAIL_ACCOUNT_2 = "studio@example.org";
+/** default, dark, graphite (the accent), icons (the sidebar's views as a row of icons), onboarding */
+export function settings(fixture: string) {
+  const onboarding = fixture === "onboarding";
   return {
     vault: onboarding ? "" : VAULT,
     vaults: {},
@@ -107,11 +130,17 @@ export function settings(theme: "light" | "dark", onboarding: boolean) {
     integrations: { productive: { on: true, org: "40001", user: "70001" } },
     boards: { "Northwind Portal": { provider: "productive", project: "p1", board: "f1" } },
     github: { on: true, owners: "acme" },
-    mail: { on: true, account: MAIL_ACCOUNT, accounts: [{ email: MAIL_ACCOUNT, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT }] },
+    mail: { on: true, account: MAIL_ACCOUNT, accounts: [
+      { email: MAIL_ACCOUNT, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT },
+      { email: MAIL_ACCOUNT_2, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT_2, host: "imap.example.org", port: 993 },
+    ] },
     language: "en",
-    theme,
+    theme: fixture === "dark" ? "dark" : "light",
+    accent: fixture === "graphite" ? "graphite" : "relay",
+    terminal: "auto",
+    ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
     favicons: { on: false, last: "", tried: {} },
-    agents: { default: "claude", providers: { claude: { on: true, bin: "" }, codex: { on: true, bin: "", sandbox: "workspace-write" }, opencode: { on: false, bin: "" } } },
+    agents: { default: "claude", providers: { claude: { on: true, bin: "" }, codex: { on: true, bin: "", sandbox: "workspace-write" }, opencode: { on: false, bin: "" }, pi: { on: false, bin: "" } } },
   };
 }
 

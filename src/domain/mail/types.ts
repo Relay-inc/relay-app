@@ -1,6 +1,6 @@
-// The inbox, fetched by the backend over IMAP (Gmail): the newest mails. A row opens the mail in the right panel,
-// and from there a button starts a conversation about it. Opening leaves a mail unread, read/unread only changes
-// on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
+// The inbox, fetched by the backend over IMAP (Gmail or any server), every account merged: the newest mails. A row opens
+// the mail next to the list, and from there a button starts a conversation about it. Opening leaves a mail unread,
+// read/unread only changes on the user's click. Nothing here sends or moves a mail: a reply only becomes a draft, from a conversation (decided 29/9).
 export type Mail = {
   id: string;
   account: string;

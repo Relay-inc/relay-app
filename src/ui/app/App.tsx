@@ -7,7 +7,7 @@ import { useConversationsStore } from "../../application/conversations/store";
 import { useWorkspaceStore } from "../../application/workspace/store";
 import { escStop, ctrlC } from "../../application/conversations/actions";
 import { setPanelHidden, toggleQuickAsk, zoom, openExternal } from "../../application/navigation/navigation";
-import { closeDetail, openDetail } from "../../application/navigation/panel";
+import { closeDetail, closeTicket, openDetail } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
 import { useT } from "../hooks/useT";
 import { Html } from "../components/Html";
@@ -29,12 +29,17 @@ const closest = <T extends HTMLElement>(e: Event, match: (node: HTMLElement) => 
   e.composedPath().find((node): node is T => node instanceof HTMLElement && match(node));
 
 // ---------- the shortcuts that work anywhere in the main window, registered once
-// Esc closes the image, then the right panel, then stops the running turn
+// Esc closes the image, then the ticket window, then the right panel, then stops the running turn
 function onEscape(e: KeyboardEvent) {
   const { zoom: zoomed, panel, projectPanel, quickAsk, selected } = useNavigationStore.getState();
   if (zoomed) {
     e.preventDefault();
     zoom("");
+    return;
+  }
+  if (panel.modal) {
+    e.preventDefault();
+    closeTicket();
     return;
   }
   if (panel.open && !projectPanel && !inField(e)) {
@@ -86,7 +91,7 @@ function onLink(e: MouseEvent) {
   // a code block's copy button (shared/markdown.ts)
   const copyButton = closest(e, node => node.hasAttribute("data-copy"));
   if (copyButton) {
-    copyText(copyButton.parentElement?.querySelector("pre")?.innerText ?? "", copyButton);
+    copyText(copyButton.closest(".codeblock")?.querySelector("pre")?.innerText ?? "", copyButton);
     return;
   }
   // the window itself never navigates: a web or mail link opens outside, any other href (relative, data:) does nothing

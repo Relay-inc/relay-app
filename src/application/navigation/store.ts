@@ -13,10 +13,13 @@ type NavigationState = {
   zoom: string; // the image shown large
   quickAsk: boolean; // Cmd-K
   lastProject: string | null; // the vault project last shown, so its linked board opens with the board view
-  // The right panel's detail: a PR ("owner/repo#12"), a mail ("mail:…"), a vault note ("note:…") or a board card
-  // ("card:<provider>:<id>"). While one is open the panel widens; its tabs are behind it.
+  // The right panel's detail: a vault note ("note:…") or a board card ("card:<provider>:<id>"). While one is open the
+  // panel widens; its tabs are behind it. A PR and a mail open next to their list, a card with a view in the ticket window.
   panel: {
     open: string; // the key of what is shown, "" for the tabs
+    modal: string; // the card key shown in the ticket window over the board, "" for none
+    prOpen: string; // the PR key shown in the Pull requests view, "" for none
+    mailOpen: string; // the mail key shown in the Mail view, "" for none
     detail: Record<string, unknown>; // the last answer per key: shown at once, a fresh one follows
     err: string;
     cardRefs: Record<string, BoardRef>;
@@ -43,7 +46,17 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
   zoom: "",
   quickAsk: false,
   lastProject: null,
-  panel: { open: "", detail: {}, err: "", cardRefs: {}, acting: false, actErr: "" },
+  panel: {
+    open: "",
+    modal: "",
+    prOpen: "",
+    mailOpen: "",
+    detail: {},
+    err: "",
+    cardRefs: {},
+    acting: false,
+    actErr: "",
+  },
   sidebar: {
     find: "",
     collapsed: storage.get<Record<string, boolean>>("collapsed", {}),

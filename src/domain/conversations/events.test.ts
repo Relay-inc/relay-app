@@ -9,7 +9,7 @@ const t = ((key: string, params?: Record<string, string | number>) =>
   params ? `${key} ${JSON.stringify(params)}` : key) as EventEnv["t"];
 const env: EventEnv = { t, selected: "c:open", now: 1000 };
 const fresh = (): ConversationsState => ({
-  ...initialConversations({ chats: {}, hidden: [], forked: [], commands: [] }),
+  ...initialConversations({ chats: {}, hidden: [], forked: [] }),
   chats: { "c:1": { key: "c:1", project: null, title: "x", at: 0 } },
 });
 const run = (state: ConversationsState, ...events: Parameters<typeof applyAgentEvent>[2][]) => {
@@ -136,7 +136,7 @@ test("the process exiting during a turn is an interruption; after it, nothing is
 
 test("an event the app does not show changes nothing", () => {
   const state = fresh();
-  const { next, effects } = run(state, { type: "thinking", text: "hm", delta: true }, { type: "session", id: "s" });
+  const { next, effects } = run(state, { type: "session", id: "s" });
   assert.equal(next, state);
   assert.deepEqual(effects, []);
 });
