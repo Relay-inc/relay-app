@@ -645,7 +645,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                     Event::Session { id: sid } => {
                         let st = a.state::<App>();
                         let mut sids = st.sids.lock().unwrap();
-                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone() });
+                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone(), host: String::new() });
                         save_sids(&a, &sids);
                     }
                     // raised in the provider's own protocol: a card like any other, answered through respond()

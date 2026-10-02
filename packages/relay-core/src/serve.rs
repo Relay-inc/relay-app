@@ -9,11 +9,13 @@
 //
 // Protocol: TCP, one JSON object per line. Requests carry an `id` and get `{id, ok: true, result}` or
 // `{id, ok: false, error}`. The first request must be `hello` with the token. Frames of an attached conversation
-// come unasked as `{ev: "frame", key, seq, f}` where `f` is the broker's frame (`o <line>`, `e <line>`, `x <code>`).
+// come unasked as `{ev: "frame", key, seq, f}`, where `f` is the broker's frame (`o <line>`, `e <line>`, `x <code>`),
+// and `{ev: "ping"}` every 20 s. `seq` counts per run of the daemon: hello's `epoch` changes when it restarts.
 //
-//   hello {token}                                  -> {version, vault, providers: [{id, name, caps, detect}]}
+//   hello {token}                                  -> {version, epoch, vault, providers: [{id, name, caps, detect}]}
 //   spawn {key, provider, name, model?, effort?, resume?, fork?, mail?}  -> {pid}
-//   attach {key, from}                             -> {next}; then every frame with seq >= from, then live
+//   attach {key, from}                             -> {next, replay}; then the `replay` buffered frames with
+//                                                     seq >= from, then live
 //   input {key, line} | kill {key} | running       -> running: [{key, provider, model, effort, pid, next, done}]
 //   pending | answer {request, decision}      (request: the pending id)
 //   history {provider, sid, from} | subagents {provider, sid} | agent_log {provider, sid, agent} | commands {provider}
@@ -33,7 +35,7 @@ use std::{fs, thread};
 const MAX_BUFFER: usize = 4 << 20;
 
 /// `~/.config/relay/serve.json`: `{listen, token, vault, agents?}`; `agents` as in the app's settings.
-pub struct Config { pub listen: String, pub token: String, pub vault: String, pub settings: Value, pub pending: PathBuf, pub path: String, pub home: String }
+pub struct Config { pub epoch: u64, pub listen: String, pub token: String, pub vault: String, pub settings: Value, pub pending: PathBuf, pub path: String, pub home: String }
 impl Config {
     pub fn load(file: &str) -> Result<Config, String> {
         let mut v: Value = serde_json::from_str(&fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?).map_err(|e| format!("{file}: {e}"))?;
@@ -43,7 +45,8 @@ impl Config {
         agents::migrate(&mut v);
         let pending = PathBuf::from(file).parent().unwrap_or(std::path::Path::new(".")).join("pending");
         fs::create_dir_all(&pending).map_err(|e| e.to_string())?;
-        Ok(Config { listen, token, vault, settings: v, pending, path: crate::login_path(), home: crate::home() })
+        let epoch = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+        Ok(Config { epoch, listen, token, vault, settings: v, pending, path: crate::login_path(), home: crate::home() })
     }
     fn opts(&self, p: &dyn AgentProvider, mail: bool) -> Value {
         let mut o = self.settings["agents"]["providers"][p.id()].clone();
@@ -135,7 +138,8 @@ fn handle(cfg: &Config, hub: &Arc<Mutex<Hub>>, me: (u64, &Client), r: &Value) ->
             let from = r["from"].as_u64().unwrap_or(0);
             c.subs.retain(|(id, _)| *id != me.0);
             // the reply and the buffered frames go out under the lock, so a live frame cannot overtake them
-            send(me.1, &json!({"id": r["id"], "ok": true, "result": {"next": c.next}}));
+            let replay = c.buf.iter().filter(|(seq, _)| *seq >= from).count();
+            send(me.1, &json!({"id": r["id"], "ok": true, "result": {"next": c.next, "replay": replay}}));
             for (seq, f) in c.buf.iter().filter(|(seq, _)| *seq >= from) { send(me.1, &json!({"ev": "frame", "key": s("key"), "seq": seq, "f": f})); }
             c.subs.push((me.0, me.1.clone()));
             Err(String::new()) // already answered
@@ -171,12 +175,15 @@ fn hello(cfg: &Config, r: &Value) -> Result<Value, String> {
     if t.len() != cfg.token.len() || t.iter().zip(cfg.token.as_bytes()).fold(0, |a, (x, y)| a | (x ^ y)) != 0 { return Err("bad token".into()); }
     let providers: Vec<Value> = agents::enabled(&cfg.settings).into_iter()
         .map(|p| json!({"id": p.id(), "name": p.name(), "caps": p.caps(), "detect": cfg.with_env(p, false, |env| p.detect(env))})).collect();
-    Ok(json!({"version": env!("CARGO_PKG_VERSION"), "vault": cfg.vault, "providers": providers}))
+    Ok(json!({"version": env!("CARGO_PKG_VERSION"), "epoch": cfg.epoch, "vault": cfg.vault, "providers": providers}))
 }
 
 fn client(cfg: Arc<Config>, hub: Arc<Mutex<Hub>>, id: u64, s: TcpStream) {
     let Ok(w) = s.try_clone() else { return };
     let me: Client = Arc::new(Mutex::new(w));
+    // a ping every 20 s, so the app notices a dead connection (remote.rs reads with a timeout)
+    let ping = me.clone();
+    thread::spawn(move || while send(&ping, &json!({"ev": "ping"})) { thread::sleep(std::time::Duration::from_secs(20)); });
     let mut authed = false;
     for line in BufReader::new(s).lines().map_while(Result::ok) {
         let r: Value = match serde_json::from_str(&line) { Ok(r) => r, Err(_) => break };

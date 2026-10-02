@@ -63,12 +63,19 @@ pub fn load_meta(path: &Path) -> Option<Meta> { serde_json::from_str(&fs::read_t
 pub fn forget(key: &str, pid: u32) { if load_meta(&meta_path(key)).is_some_and(|m| m.pid == pid) { fs::remove_file(meta_path(key)).ok(); } }
 
 /// The agent a broker runs: its pid, for the app's "is this still the same process" checks, and to stop it.
-pub struct Agent { pid: u32 }
-impl From<u32> for Agent { fn from(pid: u32) -> Self { Agent { pid } } }
+/// `remote`: an agent on a server (remote.rs), stopped through relay-serve; its pid is the server's.
+#[derive(Clone)]
+pub struct Agent { pid: u32, remote: Option<std::sync::Arc<crate::remote::Link>> }
+impl From<u32> for Agent { fn from(pid: u32) -> Self { Agent { pid, remote: None } } }
 impl Agent {
+    pub fn remote(pid: u32, link: std::sync::Arc<crate::remote::Link>) -> Agent { Agent { pid, remote: Some(link) } }
     pub fn id(&self) -> u32 { self.pid }
+    pub fn is_remote(&self) -> bool { self.remote.is_some() }
     /// Stops the agent; its broker then reports the exit and quits too.
-    pub fn kill(&mut self) -> std::io::Result<()> { Command::new("/bin/kill").args(["-9", &self.pid.to_string()]).status().map(|_| ()) }
+    pub fn kill(&mut self) -> std::io::Result<()> {
+        if let Some(l) = &self.remote { return l.kill(); }
+        Command::new("/bin/kill").args(["-9", &self.pid.to_string()]).status().map(|_| ())
+    }
 }
 /// A connection to a broker: the agent, where its stdin goes, and the frames to read (the first `backlog` were
 /// buffered while the app was away).
@@ -104,7 +111,7 @@ fn connect(sock: &Path) -> std::io::Result<Result<Conn, String>> {
     frames.read_line(&mut hello)?;
     let mut w = hello.trim_end().splitn(3, ' ');
     Ok(match (w.next(), w.next(), w.next()) {
-        (Some("p"), Some(pid), Some(n)) => Ok(Conn { agent: Agent { pid: pid.parse().unwrap_or(0) }, stdin: s, frames, backlog: n.parse().unwrap_or(0) }),
+        (Some("p"), Some(pid), Some(n)) => Ok(Conn { agent: Agent::from(pid.parse::<u32>().unwrap_or(0)), stdin: s, frames, backlog: n.parse().unwrap_or(0) }),
         (Some("!"), ..) => Err(hello[2..].trim().to_string()),
         _ => Err(format!("broker: {}", hello.trim())),
     })

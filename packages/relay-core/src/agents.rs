@@ -50,22 +50,28 @@ pub fn bin(s: &Value, p: &dyn AgentProvider, home: &str, path: &str) -> String {
     })
 }
 
-/// A conversation's session: which provider, and its session id there.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Sess { pub provider: String, pub sid: String }
+/// A conversation's session: which provider, its session id there, and where it runs ("" here, "server" on the
+/// server of the settings, see remote.rs).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Sess { pub provider: String, pub sid: String, pub host: String }
 
 /// sessions.json: `{key: "<sid>"}` is Claude's (every file from before the providers), `{key: {provider, sid}}`
 /// another provider's. Claude's stay strings, so an older build still reads the file.
 pub fn load_sessions(raw: &str) -> HashMap<String, Sess> {
     let m: Map<String, Value> = serde_json::from_str(raw).unwrap_or_default();
     m.into_iter().filter_map(|(k, v)| match v {
-        Value::String(sid) => Some((k, Sess { provider: FIRST.into(), sid })),
-        Value::Object(o) => Some((k, Sess { provider: o.get("provider")?.as_str()?.into(), sid: o.get("sid")?.as_str()?.into() })),
+        Value::String(sid) => Some((k, Sess { provider: FIRST.into(), sid, host: String::new() })),
+        Value::Object(o) => Some((k, Sess { provider: o.get("provider")?.as_str()?.into(), sid: o.get("sid")?.as_str()?.into(),
+            host: o.get("host").and_then(|h| h.as_str()).unwrap_or("").into() })),
         _ => None,
     }).collect()
 }
 pub fn save_sessions(m: &HashMap<String, Sess>) -> String {
-    let o: Map<String, Value> = m.iter().map(|(k, s)| (k.clone(), if s.provider == FIRST { json!(s.sid) } else { json!({"provider": s.provider, "sid": s.sid}) })).collect();
+    let o: Map<String, Value> = m.iter().map(|(k, s)| (k.clone(), match (s.provider == FIRST, s.host.is_empty()) {
+        (true, true) => json!(s.sid),
+        (_, true) => json!({"provider": s.provider, "sid": s.sid}),
+        _ => json!({"provider": s.provider, "sid": s.sid, "host": s.host}),
+    })).collect();
     serde_json::to_string_pretty(&Value::Object(o)).unwrap()
 }
 
@@ -83,13 +89,15 @@ mod tests {
     use super::*;
     #[test]
     fn sessions_json_stays_readable_both_ways() {
-        let m = load_sessions(r#"{"c:1": "36099ce4-d17c", "p": {"provider": "codex", "sid": "abc"}, "bad": 3}"#);
-        assert_eq!(m["c:1"], Sess { provider: "claude".into(), sid: "36099ce4-d17c".into() });
+        let m = load_sessions(r#"{"c:1": "36099ce4-d17c", "p": {"provider": "codex", "sid": "abc"}, "r": {"provider": "claude", "sid": "s", "host": "server"}, "bad": 3}"#);
+        assert_eq!(m["c:1"], Sess { provider: "claude".into(), sid: "36099ce4-d17c".into(), host: "".into() });
+        assert_eq!(m["r"].host, "server");
         assert_eq!(m["p"].provider, "codex");
-        assert_eq!(m.len(), 2);
+        assert_eq!(m.len(), 3);
         let back: Value = serde_json::from_str(&save_sessions(&m)).unwrap();
         assert_eq!(back["c:1"], "36099ce4-d17c");
         assert_eq!(back["p"], json!({"provider": "codex", "sid": "abc"}));
+        assert_eq!(back["r"], json!({"provider": "claude", "sid": "s", "host": "server"}));
         assert!(load_sessions("").is_empty());
     }
     #[test]
