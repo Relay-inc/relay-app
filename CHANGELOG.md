@@ -26,6 +26,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Added
 
+- A project conversation that commits to a repo no project has asks whether to link it to the project (the PRs and the GitHub button pick it up); "Not now" is remembered in the vault's `.relay/config.json` so it is not asked again.
 - Scratch notes per project: paste or write plain text, saved as you type in the vault's `.relay/notes` folder, with undo when you delete one.
 - Terminals per project: one or more shells in tabs, in the project's checkout, that keep running while you look at another project.
 - Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs. (#64)

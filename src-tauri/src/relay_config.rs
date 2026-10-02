@@ -90,6 +90,16 @@ pub fn set_repos(vault: &str, project: &str, repos: &[String]) -> Result<(), Str
     save(vault, &c)
 }
 
+/// A repo unlinked on purpose: `""` in `repos`, so nothing links it and nothing asks again.
+pub fn ignore_repo(vault: &str, repo: &str) -> Result<(), String> {
+    let repo = repo.trim().to_lowercase();
+    if repo.split('/').count() != 2 || repo.split('/').any(str::is_empty) { return Err(format!("not owner/repo: {repo}")); }
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["repos"].is_object() { c["repos"] = json!({}); }
+    c["repos"].as_object_mut().unwrap().entry(repo).or_insert(json!(""));
+    save(vault, &c)
+}
+
 // ---------- actions
 
 /// The agent access and policies per extension, `{}` when there are none.

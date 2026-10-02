@@ -16,6 +16,7 @@ import { closeChat } from "../domain/chats/actions";
 import { select, newHere } from "../domain/navigation";
 import { boards, checkBoards, resetBoard } from "../domain/board";
 import { loadPrs, resetPrs, loadProjectRepos } from "../domain/prs";
+import { askRepo } from "../domain/repo-asks";
 import { loadMails, resetMail, mailLinkClicked } from "../domain/mail";
 import { panel, closeDrawer } from "../domain/panel";
 import { startUsage, reloadUsage } from "../domain/usage";
@@ -111,6 +112,7 @@ async function loadSettingsAndVault() {
   await refreshIcons();
   listen("icons-changed", reloadIcons);
   listen("repos-changed", loadProjectRepos);
+  listen<{ key: string; repo: string }>("repo-unlinked", e => askRepo(e.payload.key, e.payload.repo));
 }
 
 // conversations from earlier versions: general:<id>, plain project names

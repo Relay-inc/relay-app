@@ -11,6 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openProjectPanel, openTool, closeTool, toggleDrawer } from "../../domain/navigation";
 import { agentOf, chatAgent } from "../../domain/agents";
 import { prs, loadPrs, projectRepos } from "../../domain/prs";
+import { repoAskFor, answerRepo } from "../../domain/repo-asks";
 import { config, ghOn } from "../../domain/config";
 import { provider } from "../../domain/providers";
 import { vault, projectLabel } from "../../domain/vault";
@@ -233,6 +234,16 @@ export class RelayChat extends LitElement {
       return html`<div class=${column}>
         <div class="${strip} border border-separator bg-fill">
           <span>${t("move.term", { busy: session.status === "busy" ? t("move.termBusy") : "" })}</span>
+        </div>
+      </div>`;
+    }
+    const ask = repoAskFor(this.selected);
+    if (ask) {
+      return html`<div class=${column}>
+        <div class="${strip} border border-separator bg-fill">
+          <span>${th("repo.ask", ask)}</span><span class="flex-1"></span>
+          <button class="btn" @click=${() => answerRepo(this.selected, false)}>${t("repo.no")}</button
+          ><button class="btn btn-primary" @click=${() => answerRepo(this.selected, true)}>${t("repo.yes")}</button>
         </div>
       </div>`;
     }
