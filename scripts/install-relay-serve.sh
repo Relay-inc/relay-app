@@ -42,4 +42,4 @@ cat > "$plist" <<PL
 PL
 launchctl bootout "gui/$(id -u)/be.relay.serve" 2>/dev/null || true
 launchctl bootstrap "gui/$(id -u)" "$plist"
-echo "relay-serve on $listen. Token for the app (Settings › Servers): $token"
+echo "relay-serve on $listen. Token for the app (Settings › Agents › Server): $token"
