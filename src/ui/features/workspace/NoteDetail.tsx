@@ -1,7 +1,7 @@
 import { noteOf } from "../../../shared/markdown";
 import { panelItem } from "../../../domain/navigation/keys";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { closeDetail } from "../../../application/navigation/panel";
+import { closeDrawer } from "../../../application/navigation/panel";
 import { noteKnown } from "../../../application/workspace/vault";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { useT } from "../../hooks/useT";
@@ -12,7 +12,7 @@ type Note = { path: string; text: string };
 
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n?/;
 
-/** A vault note in the right panel: the frontmatter as small print, the body as markdown. Links in it open the next
+/** A vault note in the right drawer: the frontmatter as small print, the body as markdown. Links in it open the next
  *  note (ui/app handles `data-note`, the frontmatter's [[links]] use it too). */
 export function NoteDetail({ panelKey }: { panelKey: string }) {
   const { t } = useT();
@@ -27,7 +27,7 @@ export function NoteDetail({ panelKey }: { panelKey: string }) {
   return (
     <DetailFrame
       closeLabel={t("pr.close")}
-      onClose={closeDetail}
+      onClose={closeDrawer}
       bar={
         <span className="text-secondary overflow-hidden text-ellipsis whitespace-nowrap flex-1 min-w-0">
           {note?.path ?? (item?.kind === "note" ? item.target : "")}
