@@ -13,11 +13,11 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Changed
 
-- The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The board and pull requests open as the project's, with the same icon, the project name or Esc to go back to the conversation. The button that resumes the conversation in iTerm or WezTerm moved next to its title.
+- The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The board and pull requests open as the project's, with the same icon, the project name or Esc to go back to the conversation. The button that resumes the conversation in iTerm or WezTerm moved next to its title. (#70)
 
 ### Removed
 
-- The right panel's tabs (open items, status, reminders, pull requests), its "today" list and the ⌥⌘I shortcut.
+- The right panel's tabs (open items, status, reminders, pull requests), its "today" list and the ⌥⌘I shortcut. (#70)
 
 ### Fixed
 
@@ -26,9 +26,9 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Added
 
-- A project conversation that commits to a repo no project has asks whether to link it to the project (the PRs and the GitHub button pick it up); "Not now" is remembered in the vault's `.relay/config.json` so it is not asked again.
-- Scratch notes per project: paste or write plain text, saved as you type in the vault's `.relay/notes` folder, with undo when you delete one.
-- Terminals per project: one or more shells in tabs, in the project's checkout, that keep running while you look at another project.
+- A project conversation that commits to a repo no project has asks whether to link it to the project (the PRs and the GitHub button pick it up); "Not now" is remembered in the vault's `.relay/config.json` so it is not asked again. (#70)
+- Scratch notes per project: paste or write plain text, saved as you type in the vault's `.relay/notes` folder, with undo when you delete one. (#70)
+- Terminals per project: one or more shells in tabs, in the project's checkout, that keep running while you look at another project. (#70)
 - Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs. (#64)
 - The agent can now do what the extensions do: create tasks, comments and time entries in Productive, cards in Trello, issues in Linear, add or move vault reminders and save mail drafts, through a `relay` command in its conversation (`relay help` lists what is set up). Reads run on their own, anything that changes something asks first on a card. Each extension's settings page has an Agent access section: switch the extension off for agents, or pick per action whether it runs, asks first or never runs. It is saved in the vault's `.relay/config.json`, so it travels with the vault and can be edited by hand (#52)
 
