@@ -13,11 +13,11 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Fixed
 
-- Working animations recover active conversations after a reload for every provider and identify the agent that is running.
+- Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
 
 ### Added
 
-- Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs.
+- Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs. (#64)
 
 - Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
 - The views on top of the sidebar can be set up: right-click one to hide it, show it as a row of icons instead of a list, bring hidden ones back or reset the order, and drag them to reorder. Settings › General › Sidebar has the same switches. Trello, Linear and Productive now draw a monochrome icon there, like the rest of the sidebar (#53)
