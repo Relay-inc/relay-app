@@ -135,9 +135,11 @@ impl Mirrors {
             let mergeable = |p: &str| p.rsplit('/').next() == Some("MEMORY.md");
             for (step, (root, mode)) in ROOTS.into_iter().enumerate() {
                 let Some(src) = source(data, &id, root, vault) else { continue };
-                let progress = |done, total| { self.progress.lock().unwrap().insert(id.clone(), Progress { root, step: step + 1, done, total }); };
                 if mode == Mode::TwoWay { std::fs::create_dir_all(&src).ok(); }
                 let base = Self::load_base(data, &id, root);
+                // a round with nothing to send stays quiet; only a first round shows its (long) comparing
+                let first = base.is_empty();
+                let progress = |done, total| { if total > 0 || first { self.progress.lock().unwrap().insert(id.clone(), Progress { root, step: step + 1, done, total }); } };
                 let mut walkers = self.walkers.lock().unwrap();
                 let w = walkers.entry(format!("{id}/{root}")).or_default();
                 let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable, &progress);
