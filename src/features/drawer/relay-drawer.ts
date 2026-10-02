@@ -9,7 +9,9 @@ import { ui } from "../../domain/ui";
 import { panel, cardOf, closeDrawer, cardAct, type CardAct } from "../../domain/panel";
 import { cardChat } from "../../domain/card-chat";
 import { panelItem } from "../../domain/keys";
+import { selectedProject } from "../../domain/chats/state";
 import "../notes/relay-note-detail";
+import "../notes/relay-notes";
 
 const TITLES = { detail: "drawer.detail", terminal: "drawer.terminal", notes: "drawer.notes" } as const;
 
@@ -62,8 +64,7 @@ export class RelayDrawer extends LitElement {
         // TODO(project-terminals): render html`<relay-terminals .project=${selectedProject()}></relay-terminals>` once that branch lands
         return nothing;
       case "notes":
-        // TODO(project-notes): render html`<relay-notes .project=${selectedProject()}></relay-notes>` once that branch lands
-        return nothing;
+        return html`<relay-notes class="flex-1 min-h-0" .project=${selectedProject() ?? ""}></relay-notes>`;
       default:
         return this.renderDetail();
     }
@@ -81,7 +82,11 @@ export class RelayDrawer extends LitElement {
           ${icon("close", "glyph size-4")}
         </button>
       </div>
-      <div class="overflow-y-auto pt-4.5 px-4.5 pb-6 min-w-115">${this.renderBody()}</div>
+      <div
+        class="min-w-115 ${ui.drawer === "detail" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}"
+      >
+        ${this.renderBody()}
+      </div>
     </div>`;
   }
 }
