@@ -428,7 +428,7 @@ export default {
   "note.draftCc": ", cc {cc}",
   "note.draftBcc": ", bcc {bcc}",
   "int.mailSidebar": "Posteingang anzeigen",
-  "mail.account": "Seitenleiste zeigt:",
+  "mail.account": "Standardkonto, das Claude nutzt, wenn nichts anderes gesagt wird:",
   "mail.testOk": "Funktioniert: {n} Mails im Posteingang",
   "mail.accounts": "{n} Konten",
   "mail.help":
@@ -456,7 +456,7 @@ export default {
   "mail.showMail": "Mail",
   "mail.showText": "Was Claude liest",
   "mail.accountsH": "Konten",
-  "mail.setupTitle": "Gmail verbinden",
+  "mail.setupTitle": "Mail verbinden",
   "mail.setupIntro": "Noch kein Mailkonto. Das Verbinden dauert eine Minute.",
   "mail.setupStep1": "Klick unten auf Einstellungen öffnen, du landest direkt bei Mail.",
   "mail.setupStep2": "Leg bei Google ein App-Passwort an, der Knopf dafür ist in Schritt 1 dieser Seite.",
@@ -478,7 +478,7 @@ export default {
   "mail.pwL": "App-Passwort",
   "mail.pwPh": "die 16 Zeichen, Leerzeichen sind ok",
   "mail.connect": "Verbinden",
-  "mail.connecting": "Code im Schlüsselbund speichern und bei Gmail anmelden…",
+  "mail.connecting": "Passwort im Schlüsselbund speichern und anmelden…",
   "mail.connected":
     "Verbunden mit {email}: {n} Mails im Posteingang. Gespeichert, du findest sie unter Mail in der Seitenleiste.",
   "mail.step2Hint":
@@ -490,14 +490,25 @@ export default {
   "mail.kaccL": "Schlüsselbund-Konto",
   "mail.addTest": "Testen und hinzufügen",
   "mail.inKeychain": "Passwort im Schlüsselbund: {svc}",
+  "mail.kindGmail": "Gmail",
+  "mail.kindImap": "Anderer Mailserver (IMAP)",
+  "mail.guideImap": "Einen Mailserver verbinden",
+  "mail.hostL": "Server",
+  "mail.portL": "Port",
+  "mail.imapPwL": "Passwort",
+  "mail.advHostL": "Server (leer für Gmail)",
+  "mail.imapHint":
+    "Das Passwort geht direkt in den macOS-Schlüsselbund, unter dem Dienst relay-mail. Der Server muss IMAP über SSL/TLS erlauben (meist Port 993), mit deiner E-Mail-Adresse als Login. Scheitert die Anmeldung, wird das Passwort sofort wieder entfernt.",
   "mail.errLogin":
-    "Gmail hat die Anmeldung abgelehnt. Prüf, ob das App-Passwort zu dieser Adresse gehört und ob du den ganzen Code kopiert hast. Klappt es nicht, leg in Schritt 1 einen neuen Code an und versuch es noch einmal.",
+    "Der Mailserver hat die Anmeldung abgelehnt. Prüf die E-Mail-Adresse und das Passwort. Bei Gmail muss es das App-Passwort sein, der ganze Code: wenn es weiter scheitert, leg in Schritt 1 einen neuen Code an und versuch es noch einmal.",
   "mail.errNoPw":
     "Unter diesem Dienst und Konto liegt kein Passwort im Schlüsselbund. Prüf die Namen in der Schlüsselbundverwaltung, sie müssen genau stimmen, oder nimm Schritt 1 und 2 mit einem neuen App-Passwort.",
   "mail.errKeychain":
     "macOS hat um Erlaubnis zum Lesen des Schlüsselbunds gefragt und keine Antwort bekommen. Versuch es noch einmal und wähl Immer erlauben.",
-  "mail.errGmail": "Diese Adresse ist kein Gmail- oder Google-Workspace-Konto. Die App unterstützt vorerst nur Gmail.",
-  "mail.errNet": "Gmail ist nicht erreichbar. Prüf deine Internetverbindung und versuch es noch einmal.",
+  "mail.errGmail":
+    "Diese Adresse ist kein Gmail- oder Google-Workspace-Konto. Wähl für andere Anbieter Anderer Mailserver (IMAP) und trag den Server ein.",
+  "mail.errNet":
+    "Der Mailserver ist nicht erreichbar. Prüf deine Internetverbindung und den Servernamen und versuch es noch einmal.",
   "mail.test": "Testen",
   "mail.remove": "Entfernen",
   "mail.invalid": "Gib eine gültige E-Mail-Adresse ein (und bei Erweitert auch Dienst und Konto).",
@@ -539,6 +550,7 @@ export default {
   "kb.presetName": "Name",
   "kb.presetDelete": "Voreinstellung löschen",
   "kb.noPresets": "Noch keine Voreinstellungen",
+  "kb.viewUnsupported": "Nutzt einen Filter, den Relay hier nicht anwenden kann (oder eine Aufgabenliste auf einem anderen Board)",
   "kb.save": "Speichern",
   "kb.filters": "Filter",
   "kb.clearAll": "Alle Filter löschen",

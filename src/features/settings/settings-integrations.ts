@@ -220,7 +220,7 @@ export class SettingsIntegrations extends SettingsElement {
       }}
       @mail-test=${(e: CustomEvent) => mail.test(e.detail)}
       @mail-drop=${(e: CustomEvent) => mail.drop(e.detail)}
-      @mail-connect=${() => mail.connect()}
+      @mail-connect=${(e: CustomEvent<boolean>) => mail.connect(e.detail)}
       @mail-add=${() => mail.add()}
       @mail-save=${() => mail.save()}
     ></relay-settings-mail>`;
