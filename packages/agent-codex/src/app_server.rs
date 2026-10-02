@@ -108,6 +108,9 @@ impl State {
                 out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None });
             }
             self.session(m["result"]["thread"]["id"].as_str(), &mut out);
+            if let Some(model) = m["result"]["model"].as_str() {
+                out.push(Event::Resolved { model: model.into(), effort: m["result"]["reasoningEffort"].as_str().map(Into::into) });
+            }
             return out;
         };
         let ask = m.get("id").filter(|_| m.get("params").is_some()).cloned();
@@ -194,6 +197,7 @@ mod tests {
         let ev: Vec<Event> = LIVE.lines().flat_map(|l| st.parse(l)).collect();
         let mut it = ev.iter();
         assert_eq!(it.next(), Some(&Event::Session { id: "019a0000-aaaa-7000-8000-000000000001".into() })); // once, not again for thread/started
+        assert_eq!(it.next(), Some(&Event::Resolved { model: "gpt-6.1-sol".into(), effort: Some("medium".into()) }));
         assert_eq!(it.next(), Some(&Event::Thinking { text: "Looking at".into(), delta: false }));
         assert_eq!(it.next(), Some(&Event::Thinking { text: " the notes".into(), delta: true }));
         assert!(matches!(it.next(), Some(Event::ToolCall { id, name, input }) if id == "call_1" && name == "Bash" && input["command"] == "ls -la"));

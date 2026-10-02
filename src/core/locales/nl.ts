@@ -310,6 +310,7 @@ export default {
   "vault.snapErr": "Kon de vault niet lezen: {e}",
   "bar.chatTitle": "Titel van het gesprek",
   "composer.model": "Model",
+  "composer.resolvedDefault": "{value} (standaard)",
   "composer.defaultModel": "Standaard model",
   "composer.effort": "Effort",
   "composer.defaultEffort": "Standaard effort",

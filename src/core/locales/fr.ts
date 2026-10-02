@@ -312,6 +312,7 @@ export default {
   "vault.snapErr": "Impossible de lire le coffre : {e}",
   "bar.chatTitle": "Titre de la conversation",
   "composer.model": "Modèle",
+  "composer.resolvedDefault": "{value} (par défaut)",
   "composer.defaultModel": "Modèle par défaut",
   "composer.effort": "Effort",
   "composer.defaultEffort": "Effort par défaut",

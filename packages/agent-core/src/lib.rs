@@ -134,6 +134,9 @@ pub enum Event {
     Error { text: String },
     /// The conversation started over (`/clear`): what came before is gone; a new Session follows.
     Reset,
+    /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
+    /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
+    Resolved { model: String, effort: Option<String> },
 }
 
 /// Tokens of one turn, as the provider reports them.

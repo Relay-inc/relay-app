@@ -8,6 +8,7 @@ import { changed, ls } from "../core/store";
 import { ui, isTerminal } from "./ui";
 import { chat } from "./chats/state";
 import type { SlashCommand } from "./commands";
+import type { AgentEvent } from "@relay/agent-core";
 
 export type * from "@relay/agent-core";
 
@@ -65,6 +66,23 @@ export function picks(kind: "model" | "effort", chatKey = ui.selected) {
   const list = status ? own! : FALLBACK[kind];
   const wanted = ls.get(pickKey(kind, id), "");
   return { list, value: list.some(choice => choice.id === wanted) ? wanted : "", key: pickKey(kind, id) };
+}
+// what a fresh conversation without picks ran on, per provider (src-tauri read_agent); effort per model
+type Seen = { model?: string; effort?: Record<string, string> };
+const seenKey = (id: string) => `defaults.${id}`;
+export function sawDefaults(id: string, e: Extract<AgentEvent, { type: "resolved" }>) {
+  const seen = ls.get<Seen>(seenKey(id), {});
+  if (e.default_model) seen.model = e.model;
+  if (e.default_effort && e.effort) seen.effort = { ...seen.effort, [e.model]: e.effort };
+  ls.set(seenKey(id), seen);
+  changed();
+}
+/** The label of the inherited choice, once a conversation has shown it. */
+export function inherited(kind: "model" | "effort", chatKey = ui.selected) {
+  const id = chatAgent(chatKey),
+    seen = ls.get<Seen>(seenKey(id), {});
+  const value = kind === "model" ? seen.model : seen.effort?.[picks("model", chatKey).value || seen.model || ""];
+  return value && (picks(kind, chatKey).list.find(choice => choice.id === value)?.label ?? value);
 }
 export function setPick(kind: "model" | "effort", value: string) {
   ls.set(picks(kind).key, value);
