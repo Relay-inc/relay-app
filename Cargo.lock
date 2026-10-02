@@ -3342,6 +3342,7 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "portable-pty",
+ "relay-core",
  "serde",
  "serde_json",
  "sha1_smol",
@@ -3353,6 +3354,15 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-window-state",
  "tokio",
+]
+
+[[package]]
+name = "relay-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha1_smol",
 ]
 
 [[package]]

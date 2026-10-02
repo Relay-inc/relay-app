@@ -44,6 +44,7 @@ portable-pty = "0.9"
 
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true
+relay-core = { path = "../packages/relay-core" }
 agent-claude = { path = "../packages/agent-claude" }
 agent-codex = { path = "../packages/agent-codex" }
 agent-opencode = { path = "../packages/agent-opencode" }

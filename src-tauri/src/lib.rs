@@ -19,7 +19,7 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 mod actions;
 mod agents;
 mod commits;
-pub mod broker;
+pub use relay_core::broker;
 mod mail;
 pub mod notify;
 mod providers;
@@ -33,7 +33,7 @@ mod worktrees;
 
 // ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
 const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
-fn home() -> String { std::env::var("HOME").unwrap_or_default() }
+use relay_core::{home, login_path};
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
     st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string()
@@ -273,13 +273,6 @@ fn save_sids(app: &AppHandle, sids: &HashMap<String, agents::Sess>) {
 
 fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
     fs::write(data_dir(app).join("worktrees.json"), json!(w).to_string()).ok();
-}
-
-fn login_path() -> String {
-    Command::new("/bin/zsh").args(["-lic", "printf %s \"$PATH\""]).stdin(Stdio::null()).output()
-        .ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|p| !p.is_empty())
-        .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
 /// Everything the sidebar shows, read by snapshot.py from the mapped paths. Also returns the vault
