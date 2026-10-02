@@ -113,7 +113,7 @@ send, stop, cards (permission, question, agent action), cmdk, newGeneral, rename
 mail (two accounts merged, read per account, load more, the link bar), mailTriage (experimental: Inbox/Other, E and #,
 a held key acting once, Cmd- and Shift-click, Cmd-A, Esc, bulk read and delete, a reload keeps moved mails gone),
 mailTriageFilter (mails a read filter hides after a bulk read leave the selection), mailTriageOff (without the flag: no
-tabs, no checkboxes, E does nothing), prs (side by side, AI review), board (ticket
+tabs, no checkboxes, E does nothing), prs (side by side, Review with Claude), board (ticket
 window, comment, status, Start conversation), boardTools (list view, filters, Productive's saved views, grouping),
 reminders, reminderUndo, settings (theme, accent, GitHub owners, language), calendar (the meetings under Waiting, the banner, Join, Prepare and Meeting note as restricted conversations on Claude), calendarNoClaude (refused with Claude off), calendarSettings (add, a refused address, remove), agentAccess (policy and access per
 extension), agentAccounts (add a folder, pick it for new conversations, auto-switch, rename, remove), cmdkProject, deepLinks (at launch and while running), resolvedDefaults, slashCommands, closeAll, typedDraft,

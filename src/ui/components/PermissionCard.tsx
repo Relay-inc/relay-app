@@ -50,6 +50,8 @@ export function PermissionCard({
     setPicked({ ...picked, [questionIndex]: next });
   };
   const questions = request.input.questions || [];
+  // Answer waits for something picked or typed
+  const hasAnswer = questions.some((_, qi) => picked[qi]?.size || other[qi]?.trim());
   const answerQuestions = () =>
     onAnswer({
       picked: questions.map((question, qi) =>
@@ -60,7 +62,7 @@ export function PermissionCard({
 
   const renderQuestion = (question: Question, qi: number) => (
     <Fragment key={qi}>
-      <div className="text-base font-semibold text-label">{question.question}</div>
+      <div className="text-[15px] leading-[1.4] font-semibold text-label">{question.question}</div>
       <div className="flex flex-wrap gap-2">
         {(question.options || []).map(option => (
           <button
@@ -75,7 +77,7 @@ export function PermissionCard({
         ))}
       </div>
       <input
-        className="rounded-md border border-separator bg-bg px-2.5 py-1.5 text-sm text-label placeholder:text-secondary"
+        className="h-8 rounded-lg border border-separator-strong bg-transparent px-2.5 text-[13px] text-label placeholder:text-secondary outline-none"
         placeholder={t("card.other")}
         value={other[qi] ?? ""}
         onChange={e => setOther({ ...other, [qi]: e.target.value })}
@@ -95,7 +97,11 @@ export function PermissionCard({
           <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
             {t("card.skip")}
           </button>
-          <button className="btn btn-primary cursor-pointer" disabled={busy} onClick={answerQuestions}>
+          <button
+            className="btn btn-primary cursor-pointer disabled:opacity-50"
+            disabled={busy || !hasAnswer}
+            onClick={answerQuestions}
+          >
             {t("card.answer")}
           </button>
         </div>

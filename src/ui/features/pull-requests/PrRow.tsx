@@ -1,6 +1,7 @@
 import type { PR } from "../../../domain/pull-requests/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
+import { prProjectLabel } from "../../../application/pull-requests/prs";
 import { CI, CI_TEXT, age, prColor } from "./prState";
 
 const REVIEW: Record<string, [string, "rv.changes" | "rv.approved"]> = {
@@ -64,7 +65,8 @@ export function PrRow({
     );
 
   const review = pr.review ? REVIEW[pr.review] : undefined;
-  const byline = [mine ? "" : pr.author, age(pr.created, t)].filter(Boolean).join(" · ");
+  const projectName = pr.project ? prProjectLabel(pr.project) : "";
+  const byline = [mine ? "" : pr.author, projectName, age(pr.created, t)].filter(Boolean).join(" · ");
   return (
     <button
       type="button"
@@ -83,7 +85,7 @@ export function PrRow({
         </span>
         <span className="flex flex-wrap items-center gap-2 text-xs text-secondary tabular-nums">
           <span className="font-mono text-[11px]">
-            {repo}#{pr.number}
+            {repo} #{pr.number}
           </span>
           {byline}
         </span>
