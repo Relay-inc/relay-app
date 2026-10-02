@@ -1,9 +1,40 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
 import type { CardChoice, Pending, Question } from "../../domain/conversations/types";
+import { useNavigationStore } from "../../application/navigation/store";
 import { useT } from "../hooks/useT";
 import { Html } from "./Html";
 import { Icon } from "./Icon";
+import { Highlighted } from "./Highlighted";
 import { isQuestion } from "../../domain/conversations/rules";
+
+// ---------- Enter allows a permission card, but only when it is the one card on screen that can be allowed: with two
+// (the Waiting view) it would be a guess. The composer takes Enter when it is empty (allowOnlyCard), any other field,
+// button or link keeps its own Enter
+const allowable = new Set<() => void>();
+const listeners = new Set<() => void>();
+const changed = () => listeners.forEach(listener => listener());
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+};
+const isOnlyCard = () => allowable.size === 1;
+/** Allows the one permission card on screen. Whether there was exactly one. */
+export function allowOnlyCard() {
+  const { panel, zoom, quickAsk } = useNavigationStore.getState();
+  if (allowable.size !== 1 || panel.modal || zoom || quickAsk) return false;
+  [...allowable][0]();
+  return true;
+}
+window.addEventListener("keydown", e => {
+  if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.repeat) return;
+  if (e.defaultPrevented) return;
+  const inControl = e
+    .composedPath()
+    .some(node => node instanceof HTMLElement && node.matches("input, textarea, select, button, a, [contenteditable]"));
+  if (!inControl && allowOnlyCard()) e.preventDefault();
+});
 
 // what a permission card shows: the command, the file (and what is written to it), or the input as it is
 function describe(request: Pending): string {
@@ -38,6 +69,20 @@ export function PermissionCard({
   onAnswer: (choice: CardChoice) => void;
 }) {
   const { t, th } = useT();
+  const question = isQuestion(request);
+  // this card is the one Enter allows while it waits alone (allowOnlyCard)
+  const only = useSyncExternalStore(subscribe, isOnlyCard);
+  const allowByKey = useEffectEvent(() => onAnswer("allow"));
+  useEffect(() => {
+    if (busy || question) return;
+    const allow = () => allowByKey();
+    allowable.add(allow);
+    changed();
+    return () => {
+      allowable.delete(allow);
+      changed();
+    };
+  }, [busy, question]);
   // the options picked per question, and what is typed in its "other" field
   const [picked, setPicked] = useState<Record<number, Set<string>>>({});
   const [other, setOther] = useState<Record<number, string>>({});
@@ -85,7 +130,7 @@ export function PermissionCard({
     </Fragment>
   );
 
-  if (isQuestion(request))
+  if (question)
     return (
       <div className={box}>
         <div className="flex items-center gap-2 text-[13px] text-secondary">
@@ -114,14 +159,23 @@ export function PermissionCard({
         <Html html={th("card.wants", { tool: request.tool_name, where: where ? t("card.in", { name: where }) : "" })} />
       </div>
       <pre className="px-3 py-2.5 rounded-lg bg-well border border-separator font-mono text-[13px] whitespace-pre-wrap wrap-anywhere text-label">
-        {describe(request)}
+        {request.tool_name === "Bash" ? <Highlighted code={describe(request)} lang="bash" /> : describe(request)}
       </pre>
       <div className="flex justify-end gap-2">
         <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
           {t("card.deny")}
         </button>
-        <button className="btn btn-primary cursor-pointer" disabled={busy} onClick={() => onAnswer("allow")}>
+        <button
+          className="btn btn-primary cursor-pointer inline-flex items-center gap-2"
+          disabled={busy}
+          onClick={() => onAnswer("allow")}
+        >
           {t("card.allow")}
+          {only && !busy ? (
+            <span className="text-[11px] opacity-70" aria-hidden="true">
+              ↵
+            </span>
+          ) : null}
         </button>
       </div>
     </div>

@@ -241,7 +241,7 @@ const SCENARIOS = {
     await s.load();
     await s.load({ sel: s.keys.permission });
     const { page } = s;
-    s.check("permission card shown", await waitText(page, "git push origin fix/portal-redirect"));
+    s.check("permission card shown", await waitText(page, "push origin fix/portal-redirect"));
     await click(button(page, "Allow"), 300);
     s.check("answer called", await s.waitCall("answer"));
     const perm = await s.calls("answer");
