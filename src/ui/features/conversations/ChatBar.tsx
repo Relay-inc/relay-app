@@ -5,6 +5,10 @@ import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { ProjectImg } from "../../components/ProjectImg";
 import { tintText, type Tint } from "../../../shared/tints";
+import { boardOf } from "../../../application/navigation/navigation";
+import { useNavigationStore } from "../../../application/navigation/store";
+import { BoardCrumb } from "../board/BoardCrumb";
+import { BoardActions } from "../board/BoardActions";
 
 /** What the bar offers for a project: its tools, the one that is open lit. */
 export type BarTools = {
@@ -63,6 +67,8 @@ export function ChatBar({
   onToggleDrawer: (tool: "terminal" | "notes") => void;
 }) {
   const { t } = useT();
+  // a board: its crumb (switch board or project) and its buttons (BoardCrumb, BoardActions)
+  const board = boardOf(useNavigationStore(s => s.selected));
   // the title while it is edited: a redraw must not take the text away from under the caret
   const [draft, setDraft] = useState<string | null>(null);
   // Escape blurs without saving
@@ -158,6 +164,7 @@ export function ChatBar({
         </>
       ) : null}
       <span className="text-secondary whitespace-nowrap overflow-hidden text-ellipsis">{sub}</span>
+      {board ? <BoardCrumb provider={board} /> : null}
       {state ? (
         <span className="h-5 px-2 rounded-full bg-fill-2 text-secondary text-[11px] font-medium inline-flex items-center gap-1.25 whitespace-nowrap">
           <span className={`size-1.5 rounded-full ${state === "busy" ? "bg-soon" : "bg-ok"}`}></span>
@@ -166,6 +173,7 @@ export function ChatBar({
       ) : null}
       <span className="flex-1" data-tauri-drag-region></span>
       {actions}
+      {board ? <BoardActions provider={board} /> : null}
       {tools ? (
         <>
           {tools.board ? (

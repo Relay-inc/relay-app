@@ -17,6 +17,7 @@ export type Board = {
   err: string;
   busy: boolean;
   gen: number;
+  loadedAt: number; // when the cards last came from the tracker, ms; 0 before that
   group: string; // the provider's grouping shown (Productive: task lists or statuses), "" when it has one
   q: string; // the search over title and number
   filters: Filters; // the facet filters (state, status, assignee, folder, task list, labels), see filter.ts
@@ -43,6 +44,7 @@ export const newBoard = (
   err: "",
   busy: false,
   gen,
+  loadedAt: 0,
   group: provider.groupings?.some(x => x.id === last.group) ? last.group : (provider.groupings?.[0].id ?? ""),
   q: "",
   filters: {},
@@ -70,6 +72,27 @@ export const endOf = (provider: BoardProvider, state: Board, column: string, exc
 /** A column's cards in the board's order. */
 export const cardsIn = (provider: BoardProvider, state: Board, cards: Card[], column: string) =>
   cards.filter(card => colOf(provider, state, card) === column).sort((a, b) => a.placement - b.placement);
+
+/** A card made on the board before the tracker answered: at the end of `column` in the grouping shown, coloured like it. */
+export const draftCard = (provider: BoardProvider, state: Board, id: string, title: string, column: string): Card => {
+  const lane = state.columns.find(c => c.id === column);
+  return withCol(
+    provider,
+    state,
+    {
+      id,
+      title,
+      number: "",
+      column: "",
+      placement: endOf(provider, state, column, id),
+      due: null,
+      who: "",
+      state: lane?.state,
+      tone: lane?.tone,
+    },
+    column,
+  );
+};
 
 /** The filters as they can apply: a value no card has any more (someone no longer on the board) is dropped, it would
  *  hide every card. Before the cards are known nothing is dropped. */

@@ -20,8 +20,10 @@ export const facetName = (t: (key: Key) => string, facet: Facet, value: string) 
       : value === NO_LABEL
         ? t("kb.noLabels")
         : value;
-/** A toolbar button, accented while what it opens is in effect. */
-export const toolButton = (on: boolean) =>
-  `inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap border cursor-default hover:bg-fill ${on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong bg-transparent text-label"}`;
+/** A toolbar button, accented while what it opens is in effect, filled while its popover is open. */
+export const toolButton = (on: boolean, open = false) =>
+  `inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-xs font-medium whitespace-nowrap border cursor-default hover:bg-fill ${on ? "border-accent bg-accent-soft text-accent-text" : `border-separator-strong text-label ${open ? "bg-fill-2" : "bg-transparent"}`}`;
+/** A popover's surface: raised, the app's shadow and a hairline edge. The radius is the caller's: 10, the filters' 12. */
+export const POPOVER = "bg-raised shadow-[var(--shadow),0_0_0_.5px_var(--separator-strong)]";
 /** A row in a popover. */
 export const POP_ROW = "flex items-center gap-2 h-7.5 px-2 rounded-md hover:bg-fill-2 cursor-default";
