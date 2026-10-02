@@ -55,7 +55,7 @@ impl AgentProvider for OpenCode {
     fn name(&self) -> &'static str { "OpenCode" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: false, fork: true,
-            terminal: true, background: true, effort: true, limits: false, title: false }
+            terminal: true, background: true, effort: true, limits: false, title: false, accounts: false }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = [format!("{home}/.opencode/bin/opencode"), "/opt/homebrew/bin/opencode".into(), "/usr/local/bin/opencode".into(),
@@ -73,6 +73,9 @@ impl AgentProvider for OpenCode {
         Detect { installed, bin: env.bin.into(), version, logged_in: None, note }
     }
     fn models(&self) -> Vec<Choice> { models_of(&self.bin()).0 }
+    fn commands(&self, env: &Env) -> Value {
+        agent_core::discover_commands(env, include_str!("../commands.py"))
+    }
     fn efforts(&self) -> Vec<Choice> { models_of(&self.bin()).1 }
     fn valid_session(&self, id: &str) -> bool { store::valid(id) }
 
@@ -194,7 +197,7 @@ mod tests {
         let (echo, _) = next();
         assert_eq!(echo["type"], "echo");
         let got = &echo["properties"];
-        assert_eq!(got["seen"], json!(["GET /session/ses_gone", "POST /session", "GET /event", "POST /session/ses_new1/prompt_async"]));
+        assert_eq!(got["seen"], json!(["GET /command", "GET /session/ses_gone", "POST /session", "GET /event", "POST /session/ses_new1/prompt_async"]));
         assert_eq!(got["body"], json!({"parts": [{"type": "text", "text": "hoi"}], "model": {"providerID": "anthropic", "modelID": "m1"}, "variant": "high"}));
         assert_eq!((got["auth"].as_bool(), got["ask"].as_str()), (Some(true), Some("ask")));
         let (_, ev) = next();
@@ -206,6 +209,13 @@ mod tests {
         writeln!(stdin, "{}", json!({"type": "permission", "id": "per_bad", "reply": "once"})).unwrap();
         let (_, ev) = next();
         assert!(matches!(&ev[0], Event::Error { text } if text.contains("404")));
+        writeln!(stdin, "{}", PROVIDER.input(&Turn { text: "/check src/main.rs".into(), images: vec![] }).unwrap()).unwrap();
+        let (command, _) = next();
+        assert_eq!(command["properties"]["body"], json!({"command": "check", "arguments": "src/main.rs", "model": "anthropic/m1", "variant": "high"}));
+        let (_, ev) = next();
+        let Some(Event::Permission { request }) = ev.first() else { panic!("{ev:?}") };
+        writeln!(stdin, "{}", PROVIDER.respond(request, &json!({"behavior": "allow"})).unwrap()).unwrap();
+        assert_eq!(next().0["type"], "command.allowed");
         drop(stdin); // the app closed it: the server is stopped, the bridge ends
         assert!(lines.next().is_none());
         assert!(ch.wait().unwrap().success());

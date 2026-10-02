@@ -56,7 +56,7 @@ impl Spec {
 /// What the app keeps next to the socket, to take a conversation back after a restart.
 #[derive(Serialize, Deserialize, Clone)]
 /// `pid`: the agent's, so the end of one process never removes the file of the one that replaced it.
-pub struct Meta { pub key: String, pub provider: String, pub model: String, pub effort: String, pub tainted: bool, #[serde(default)] pub pid: u32 }
+pub struct Meta { pub key: String, pub provider: String, pub model: String, pub effort: String, pub tainted: bool, #[serde(default)] pub pid: u32, #[serde(default)] pub account: String }
 
 /// The folder with the sockets: short, because a socket path has a 104-byte limit on macOS. A relay-server keeps its
 /// own (RELAY_AGENTS_DIR), so an app on the same Mac never takes over the server's conversations.

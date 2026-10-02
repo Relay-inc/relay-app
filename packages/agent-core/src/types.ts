@@ -5,7 +5,7 @@ import type { Locales } from "./i18n";
 /** What a provider can do; the app hides what is false. See `Caps` in src/lib.rs. */
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
-  fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean;
+  fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; accounts: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
@@ -21,6 +21,7 @@ export type Decision = { behavior: "allow"; updatedInput: any } | { behavior: "d
 
 /** The normalised events, the Tauri event `agent` as `{project, provider, event}`, and history items. */
 export type AgentEvent =
+  | { type: "working" }
   | { type: "session"; id: string }
   | { type: "user"; text: string; images: (Image | null)[] }
   | { type: "text"; text: string; delta: boolean }
@@ -32,6 +33,7 @@ export type AgentEvent =
   | { type: "time"; at: string }       // history only: when the transcript line after it was written
   | { type: "error"; text: string }
   | { type: "reset" }                 // the conversation started over (/clear); a new session follows
+  | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills

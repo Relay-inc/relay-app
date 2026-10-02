@@ -43,6 +43,11 @@ mail-parser = "0.11"
 ammonia = "4"
 futures = "0.3"
 base64 = "0.23"
+# the calendar feeds (src/calendar.rs): recurring meetings and their time zones
+rrule = "0.14"
+chrono-tz = "0.10"
+# the shells of the embedded terminals (src/pty.rs)
+portable-pty = "0.9"
 
 # the broker and the link to a work machine (src/machines.rs, packages/relay-server)
 relay-remote = { path = "../packages/relay-remote" }
@@ -52,6 +57,7 @@ agent-core.workspace = true
 agent-claude = { path = "../packages/agent-claude" }
 agent-codex = { path = "../packages/agent-codex" }
 agent-opencode = { path = "../packages/agent-opencode" }
+tauri-plugin-deep-link = "2"
 
 # the red menu bar title when a reminder is overdue (src/tray.rs), same versions as tauri's tray-icon
 [target.'cfg(target_os = "macos")'.dependencies]

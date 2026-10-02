@@ -9,6 +9,9 @@
 //   icons     project -> its icon: "icons/<file>.png" (a file next to the config), an emoji, a website whose
 //             favicon the app fetches and stores as a file, or "" (none, do not guess). No entry: the app guesses
 //             the project's website from its notes and stores the favicon.
+//   actions   extension -> agent access and the policy per action for the `relay` command (actions.rs):
+//             {"access": false} switches an extension off for agents, {"*": "ask", "add_time": "auto"} sets
+//             policies (auto, ask, deny), a plain "auto" sets them all. No entry: on, reads run, writes ask.
 //
 // Written once from what the app detects, the first time a vault is used; after that the file is the truth,
 // edited by hand or in Settings. snapshot.py and favicon.py read the same file.
@@ -84,6 +87,36 @@ pub fn set_repos(vault: &str, project: &str, repos: &[String]) -> Result<(), Str
         if !ok { return Err(format!("not owner/repo: {r}")); }
         m.insert(r, json!(project));
     }
+    save(vault, &c)
+}
+
+/// A repo unlinked on purpose: `""` in `repos`, so nothing links it and nothing asks again.
+pub fn ignore_repo(vault: &str, repo: &str) -> Result<(), String> {
+    let repo = repo.trim().to_lowercase();
+    if repo.split('/').count() != 2 || repo.split('/').any(str::is_empty) { return Err(format!("not owner/repo: {repo}")); }
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["repos"].is_object() { c["repos"] = json!({}); }
+    c["repos"].as_object_mut().unwrap().entry(repo).or_insert(json!(""));
+    save(vault, &c)
+}
+
+// ---------- actions
+
+/// The agent access and policies per extension, `{}` when there are none.
+pub fn actions(vault: &str) -> Value { load(vault).map(|c| c["actions"].clone()).filter(Value::is_object).unwrap_or_else(|| json!({})) }
+/// One extension's entry replaces the one it had: `access` a boolean, every other key an action (or `*`) with a policy.
+pub fn set_actions(vault: &str, ext: &str, entry: &Value) -> Result<(), String> {
+    let name_ok = |k: &str| !k.is_empty() && k.len() <= 64 && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '*');
+    let o = entry.as_object().ok_or("not an object")?;
+    if !name_ok(ext) { return Err(format!("bad extension: {ext}")); }
+    for (k, v) in o {
+        let ok = if k == "access" { v.is_boolean() } else { name_ok(k) && v.as_str().is_some_and(|p| ["auto", "ask", "deny"].contains(&p)) };
+        if !ok { return Err(format!("bad {ext}.{k}: {v}")); }
+    }
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["actions"].is_object() { c["actions"] = json!({}); }
+    let m = c["actions"].as_object_mut().unwrap();
+    if o.is_empty() { m.remove(ext); } else { m.insert(ext.into(), entry.clone()); }
     save(vault, &c)
 }
 
@@ -316,6 +349,23 @@ mod tests {
         assert_eq!(project_of(&["o2o-platform"], &by), Some(&ps[1]));
         assert_eq!(project_of(&["spardex"], &by), Some(&ps[2]));
         assert_eq!(project_of(&["spardexer", "blog"], &by), None, "never part of a word");
+        fs::remove_dir_all(&d).ok();
+    }
+    #[test]
+    fn actions_keep_only_access_and_policies() {
+        let d = std::env::temp_dir().join(format!("relay-acts-{}", std::process::id()));
+        let v = d.to_string_lossy().to_string();
+        save(&v, &json!({ "icons": {} })).unwrap();
+        assert_eq!(actions(&v), json!({}));
+        set_actions(&v, "trello", &json!({ "access": false })).unwrap();
+        set_actions(&v, "productive", &json!({ "*": "ask", "add_time": "auto" })).unwrap();
+        assert_eq!(actions(&v), json!({ "trello": { "access": false }, "productive": { "*": "ask", "add_time": "auto" } }));
+        assert!(set_actions(&v, "productive", &json!({ "add_time": "yes" })).is_err());
+        assert!(set_actions(&v, "productive", &json!({ "access": "no" })).is_err());
+        assert!(set_actions(&v, "../x", &json!({})).is_err());
+        set_actions(&v, "trello", &json!({})).unwrap();
+        assert_eq!(actions(&v), json!({ "productive": { "*": "ask", "add_time": "auto" } }));
+        assert_eq!(load(&v).unwrap()["icons"], json!({}), "the rest of the file stays");
         fs::remove_dir_all(&d).ok();
     }
 }

@@ -55,7 +55,7 @@ fn spec(cwd: &str) -> Spec {
     Spec { program: "/bin/sh".into(), args: vec!["-c".into(), "while IFS= read -r l; do if [ \"$l\" = later ]; then sleep 1; echo late; else echo \"got $l\"; fi; done".into()],
         env: vec![], cwd: Some(cwd.into()) }
 }
-fn meta(key: &str) -> Meta { Meta { key: key.into(), provider: "claude".into(), model: String::new(), effort: String::new(), tainted: false, pid: 0 } }
+fn meta(key: &str) -> Meta { Meta { key: key.into(), provider: "claude".into(), model: String::new(), effort: String::new(), tainted: false, pid: 0, account: String::new() } }
 fn next(frames: &mut dyn BufRead) -> String {
     let mut l = String::new();
     frames.read_line(&mut l).unwrap();

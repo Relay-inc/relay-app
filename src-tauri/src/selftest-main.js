@@ -3,9 +3,7 @@
 (async () => {
   const steps = [];
   const sleep = ms => new Promise(r => setTimeout(r, ms));
-  // through every shadow root: the app is web components all the way down
-  const all = (root = document) => [...root.querySelectorAll("*")].flatMap(el => [el, ...(el.shadowRoot ? all(el.shadowRoot) : [])]);
-  const text = () => all().filter(el => el.shadowRoot).map(el => el.shadowRoot.textContent).join(" ");
+  const text = () => document.body.textContent;
   const until = async (what, f, ms = 10000) => {
     for (let t = 0; t < ms; t += 200) {
       const v = f();
@@ -14,32 +12,34 @@
     }
     throw new Error("timed out: " + what);
   };
+  // React tracks a field's value itself: set it through the element's own setter, then tell React it changed
+  const type = (el, value) => {
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value").set.call(el, value);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  };
   let label = "";
   const report = ok => window.__TAURI_INTERNALS__.invoke("plugin:event|emit", { event: "selftest-ui", payload: { ok, steps, label } });
   try {
     // a project without open work only shows up when searched for, as a user would
-    const sidebar = await until("the sidebar", () => all().find(el => el.tagName === "RELAY-SIDEBAR"));
-    const search = await until("the sidebar search", () => all(sidebar.shadowRoot).find(el => el.tagName === "INPUT"));
-    search.value = "__PROJECT__";
-    search.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-    const row = await until("__PROJECT__ in the sidebar", () => all().find(el => el.getAttribute?.("data-project") === "__PROJECT__"));
+    const search = await until("the sidebar search", () => document.querySelector(".relay-sidebar input"));
+    type(search, "__PROJECT__");
+    const row = await until("__PROJECT__ in the sidebar", () => document.querySelector('[data-project="__PROJECT__"]'));
     row.click();
     steps.push("project opened");
-    const field = await until("the composer", () => all().find(el => el.tagName === "TEXTAREA"));
-    field.value = "hi from the UI";
-    field.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    const field = await until("the composer", () => document.querySelector(".relay-composer textarea"));
+    type(field, "hi from the UI");
     await sleep(100);
-    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, composed: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
     steps.push("sent");
-    await until("the machine's answer", () => text().includes("echo from relay-docker: hi from the UI"), 20000);
+    // the stand-in claude echoes the whole prompt, the project line in front included
+    await until("the machine's answer", () => /echo from relay-docker:[\s\S]*hi from the UI/.test(text()), 20000);
     steps.push("answered by the machine");
-    const composer = all().find(el => el.tagName === "RELAY-COMPOSER");
-    label = await until("the composer label", () => (composer.shadowRoot.textContent.match(/on docker/) || [])[0], 15000);
+    label = await until("the composer label", () => (document.querySelector(".relay-composer")?.textContent.match(/on docker/) || [])[0], 15000);
     steps.push("label shown");
     report(true);
   } catch (e) {
     steps.push("error: " + e.message);
-    label = document.body.innerHTML.slice(0, 300) + " | " + text().replace(/\s+/g, " ").slice(0, 700);
+    label = text().replace(/\s+/g, " ").slice(0, 1000);
     report(false);
   }
 })();
