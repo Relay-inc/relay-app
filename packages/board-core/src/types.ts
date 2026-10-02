@@ -1,4 +1,3 @@
-import type { TemplateResult } from "lit";
 import type { Locales } from "./i18n";
 
 // The contract a task tracker implements to show as a board in the sidebar (see README, "Integrations").
@@ -39,6 +38,12 @@ export type CardView = {
 };
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */
 export type Grouping<K extends string = string> = { id: string; label: K };
+/** A card's values a board filters on, per facet (names, as the cards carry them; `who` is the first name). */
+export type ViewFilters = Partial<Record<"state" | "status" | "who" | "folder" | "list" | "label", string[]>>;
+/** A view saved in the tracker (Productive's saved views), offered next to the app's own presets. `filters` is null
+ * when it asks for something the board can't filter on; `group` is the grouping it lays the columns out by, `layout`
+ * how it shows (absent: one the board doesn't have, the board stays as it is). */
+export type View = { id: string; name: string; filters: ViewFilters | null; group?: string; layout?: "kanban" | "list" };
 /** Which board a vault project maps to, settings.boards[vault project]. */
 export type BoardRef = { provider: string; project: string; board: string };
 
@@ -46,25 +51,19 @@ export type BoardRef = { provider: string; project: string; board: string };
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
   /** Upload to a backend-allowed URL. `fields` are Productive form fields, Linear signed headers, or empty for Trello.
    * Authentication and transport are selected by the backend; secrets never come from the webview. */
-  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string>;
-  /** a picture's preview from a URL the backend's `thumb` allows (no secrets go along), resolves with a data URL */
-  thumb: (url: string) => Promise<string> };
+  upload: (url: string, fields: Record<string, string>, file: File) => Promise<string> };
 
-/** The right panel for one card, optional: without it a click opens the card in the browser. */
+/** A card's detail, optional: without it a click opens the card in the browser. Data only: the app draws the ticket
+ * window from `view` (ui/features/board), the package knows no UI framework. */
 export interface CardDetail<D = any> {
-  /** what a background load already has, so the panel opens at once */
+  /** what a background load already has, so the window opens at once */
   cached(id: string): D | undefined;
   fetch(ctx: Ctx, ref: BoardRef, id: string): Promise<D>;
-  /** The same card as data, for the ticket window; a provider without it has no window (its detail shows in the right panel). */
-  view?(d: D): CardView;
-  /** A template in the PR detail's classes. Its close button fires a bubbling, composed "detail-close" event (the panel closes on it). */
-  render(d: D | null, err: string): TemplateResult;
-  /** An action from the panel, resolves with the card as it is now. The template asks for one with a bubbling, composed
-   * "detail-act" event, detail `{ action, value, files }`: a picker's value or the composer's text, and picked or dropped files. */
+  /** The card as the ticket window shows it, made when it is drawn (strings in the language of that moment). */
+  view(d: D): CardView;
+  /** An action from the window, resolves with the card as it is now: "status" or "assignee" with the picked id,
+   * "member-add"/"member-remove" with a person id, "comment" with the composer's text, "attach" with picked files. */
   act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[] }): Promise<D>;
-  /** A conversation about the card: its title in the list, and what goes in front of the user's first message. The
-   * template asks for one with a bubbling, composed "detail-chat" event. */
-  chat?(d: D, id: string): { title: string; prompt: string };
 }
 
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).
@@ -94,6 +93,8 @@ export interface BoardProvider<K extends string = string> {
   cards(ctx: Ctx, ref: BoardRef): Promise<Card[]>;
   /** Move the card to another column, in the tracker right away. Resolves with the new placement when the API gives one. */
   move(ctx: Ctx, ref: BoardRef, card: Card, to: string, group?: string): Promise<number | void>;
+  /** The board's saved views in the tracker, read only. */
+  views?(ctx: Ctx, ref: BoardRef): Promise<View[]>;
   /** The card's page in the tracker's web app. */
   url(ctx: Ctx, ref: BoardRef, card: string): Promise<string>;
   detail?: CardDetail;

@@ -10,6 +10,21 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+
+### Changed
+
+- The interface is rebuilt on React with domain-driven layers: it looks and behaves as before, a streaming answer only redraws itself, text typed while a turn runs outside Relay is no longer lost, a language switch redraws everything, a note created during a turn turns the links in earlier answers into links, links in a mail reach the confirmation bar again, and a relay://ask link fills in Cmd-K instead of sending on its own
+
+### Fixed
+
+- Settings › Integrations › Mail, Agents and Projects have even spacing again. Mail lists your accounts with a "+ Add account" button (Gmail, another mail server, or a password already in the keychain) that opens the steps in place of the list, instead of showing them under it all the time (#68)
+- Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
+
+### Added
+
+- Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs. (#64)
+- The agent can now do what the extensions do: create tasks, comments and time entries in Productive, cards in Trello, issues in Linear, add or move vault reminders and save mail drafts, through a `relay` command in its conversation (`relay help` lists what is set up). Reads run on their own, anything that changes something asks first on a card. Each extension's settings page has an Agent access section: switch the extension off for agents, or pick per action whether it runs, asks first or never runs. It is saved in the vault's `.relay/config.json`, so it travels with the vault and can be edited by hand (#52)
+
 - Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
 - The views on top of the sidebar can be set up: right-click one to hide it, show it as a row of icons instead of a list, bring hidden ones back or reset the order, and drag them to reorder. Settings › General › Sidebar has the same switches. Trello, Linear and Productive now draw a monochrome icon there, like the rest of the sidebar (#53)
 - A conversation under a project now tells the agent which project it is about, in front of its first message and again after you move it to another project, so it no longer has to guess from what you typed. The line stays out of the conversation view (#50)
@@ -25,12 +40,15 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - Cmd-K can find projects by name, label, alias or context. Choose a result with the arrow keys and Enter, or click it, to open the project; Enter without a selection still asks a quick question (#58)
 
 ### Fixed
+- Open in Terminal works without iTerm: Settings › General › Terminal picks iTerm, WezTerm or Terminal, and Automatic (the default) takes the first one installed. A terminal that fails to open now shows an error instead of doing nothing (#67)
 - Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open (#56)
 - Repeated drags of a board card are saved in order. A failed move restores its last saved position, and late replies cannot change a different board after you switch views (#57)
 
 ## [0.0.2] - 2026-10-01
 
 ### Added
+- Mail works with any IMAP mail server, not only Gmail: Settings › Integrations › Mail › Other mail server (IMAP) takes the address, server, port and password (stored in the macOS keychain). All accounts show in one inbox, newest first, with the account on each row. Claude searches the inbox of such an account and saves replies as drafts in its Drafts folder; nothing is ever sent (#41)
+- A Productive board's Presets menu also lists the project's saved views from Productive (read only), above the presets you keep in Relay; picking one applies its filters, grouping and layout (kanban or list). A view that uses a filter Relay can't apply shows greyed out (#42)
 - Boards get a toolbar: search with a task count, a Kanban/List toggle, Group lanes by, Filters (state, status, assignee, folder, task list, labels, each with its count) shown as removable chips, and Presets, filter sets you save under a name per board. The list view has foldable lanes, and done lanes start folded (#39)
 - Opening a Productive task shows it in a window over the board, with previous/next, status and assignee pickers, comments, files and "Start conversation" (#39)
 - Every version is a GitHub release with the macOS app to download and that version's changes as its notes (#36)

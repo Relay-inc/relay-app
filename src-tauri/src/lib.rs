@@ -16,6 +16,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
+mod actions;
 mod agents;
 pub mod broker;
 mod mail;
@@ -91,6 +92,7 @@ fn norm(mut v: Value) -> Value {
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     if !v["accent"].as_str().is_some_and(|a| ["relay", "graphite"].contains(&a)) { v["accent"] = json!("relay"); }
+    if !v["terminal"].as_str().is_some_and(|t| t == "auto" || TERMINALS.iter().any(|(id, _)| *id == t)) { v["terminal"] = json!("auto"); }
     v
 }
 
@@ -177,9 +179,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
     ("err.mail_pw", ["The app password is the 16-letter code Google showed (spaces are fine)", "Het app-wachtwoord is de code van 16 letters die Google toonde (spaties mogen)",
         "Le mot de passe d'application est le code de 16 lettres affiché par Google (les espaces sont acceptés)", "Das App-Passwort ist der 16-stellige Code, den Google angezeigt hat (Leerzeichen sind ok)"]),
+    ("err.mail_pw_any", ["The password must be 1 to 256 characters, without control characters", "Het wachtwoord moet 1 tot 256 tekens zijn, zonder stuurtekens", "Le mot de passe doit faire de 1 à 256 caractères, sans caractères de contrôle", "Das Passwort muss 1 bis 256 Zeichen lang sein, ohne Steuerzeichen"]),
     ("err.no_mail_account", ["Mail: no account set up. Add one under Relay › Settings… › Integrations › Mail.", "Mail: nog geen account. Voeg er een toe bij Relay › Instellingen… › Integraties › Mail.", "Mail : aucun compte. Ajoutez-en un dans Relay › Réglages… › Intégrations › Mail.", "Mail: noch kein Konto. Füge eins unter Relay › Einstellungen… › Integrationen › Mail hinzu."]),
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
-    ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
+    ("err.mail_account", ["Mail: invalid account (email, server, port, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, server, poort, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, serveur, port, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Server, Port, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
     ("err.no_import", ["Claude Code has no {v} MCP server with credentials", "Claude Code heeft geen {v}-MCP-server met inloggegevens", "Claude Code n'a pas de serveur MCP {v} avec des identifiants", "Claude Code hat keinen {v}-MCP-Server mit Zugangsdaten"]),
@@ -187,6 +190,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
+    ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
@@ -455,12 +459,33 @@ fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentPr
     let s = st.settings.lock().unwrap();
     asked.and_then(|a| agents::enabled(&s).into_iter().find(|p| p.id() == a)).unwrap_or_else(|| agents::get_or_first(Some(&agents::default_id(&s))))
 }
-/// Run a shell command in a new iTerm window.
-fn iterm(cmd: &str) -> Result<(), String> {
-    let script = format!(
-        "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
-        serde_json::to_string(cmd).unwrap());
-    Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
+/// The terminals a session opens in, by settings.terminal; "auto" takes the first one installed (Terminal always is).
+const TERMINALS: [(&str, &str); 3] = [("iterm", "iTerm"), ("wezterm", "WezTerm"), ("terminal", "Terminal")];
+fn app_path(app: &str) -> Option<PathBuf> {
+    [format!("/Applications/{app}.app"), format!("{}/Applications/{app}.app", home()), format!("/System/Applications/Utilities/{app}.app")]
+        .into_iter().map(PathBuf::from).find(|p| p.exists())
+}
+fn terminal_of(choice: &str, installed: impl Fn(&str) -> bool) -> &'static str {
+    TERMINALS.iter().find(|(id, app)| if choice == "auto" { installed(app) } else { *id == choice }).map_or("terminal", |(id, _)| id)
+}
+/// Run a shell command in a new window of the terminal from the settings.
+fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
+    let choice = st.settings.lock().unwrap()["terminal"].as_str().unwrap_or("auto").to_string();
+    let osa = |script: String| {
+        let o = Command::new("/usr/bin/osascript").args(["-e", &script]).output().map_err(|e| e.to_string())?;
+        if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().to_string()) }
+    };
+    let q = serde_json::to_string(cmd).unwrap();
+    match terminal_of(&choice, |app| app_path(app).is_some()) {
+        "iterm" => osa(format!("tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {q}\nend tell")),
+        "wezterm" => {
+            let bin = app_path("WezTerm").ok_or_else(|| trc_v("err.no_terminal", "WezTerm"))?.join("Contents/MacOS/wezterm");
+            // a login shell: a GUI app's PATH has no `claude`. The shell stays after the command, as in iTerm
+            let sh = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+            Command::new(bin).args(["start", "--", &sh, "-lc", &format!("{cmd}; exec {sh} -l")]).spawn().map(|_| ()).map_err(|e| e.to_string())
+        }
+        _ => osa(format!("tell application \"Terminal\"\n activate\n do script {q}\nend tell")),
+    }
 }
 
 /// DENIED and MAIL_TOOLS are agent_claude's: the flags it starts every Claude session with.
@@ -519,7 +544,9 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let mut cmd = p.command(&eb.env(), &l)?;
-    cmd.current_dir(&dir).env("PATH", &state.path);
+    // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
+    let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+    cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
     let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
@@ -572,6 +599,11 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                 }
             }
             for ev in parse(&line) {
+                // Replayed activity restores turns surviving an app restart. Repeated model steps never
+                // count as extra user messages; Claude's assistant blocks also provide this signal.
+                if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
+                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.max(1); }
+                }
                 match &ev {
                     Event::Session { id: sid } => {
                         let st = a.state::<App>();
@@ -836,7 +868,9 @@ fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<
 }
 
 #[tauri::command]
-fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys().cloned().collect() }
+fn running(state: State<App>) -> HashMap<String, u32> {
+    state.procs.lock().unwrap().iter().map(|(key, proc)| (key.clone(), proc.turns)).collect()
+}
 
 /// The open permission requests and questions of every provider.
 #[tauri::command]
@@ -883,7 +917,7 @@ fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Op
     let cmd = sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
         .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(&project))))
         .ok_or_else(|| trc_v("err.agent_terminal", p.name()))?;
-    iterm(&cmd)
+    in_terminal(&state, &cmd)
 }
 
 /// Background sessions of a provider (not started by the app): step into one in iTerm, or stop it.
@@ -894,7 +928,7 @@ fn bg(app: AppHandle, state: State<App>, action: String, id: String, provider: O
     let eb = env_of(&app, &state, p);
     match action.as_str() {
         "stop" => p.stop_background(&eb.env(), &id),
-        "attach" => iterm(&p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
+        "attach" => in_terminal(&state, &p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
         _ => Err("unknown action".into()),
     }
 }
@@ -911,26 +945,16 @@ async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, S
     }).await.map_err(|e| e.to_string())
 }
 
-/// Claude Code's slash commands and skills for the vault, from a Claude that only answers `initialize` (hooks off, no
-/// message, so no session): the composer completes before any conversation has started a process of its own.
+/// Provider-specific discovery in the active vault; only commands executable by Relay are returned.
 #[tauri::command]
-async fn claude_commands(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
-    let dir = need_vault(&state)?;
-    let eb = env_of(&app, &state, agents::get_or_first(Some("claude")));
+async fn agent_commands(app: AppHandle, state: State<'_, App>, provider: String) -> Result<Value, String> {
+    need_vault(&state)?;
+    let p = agents::PROVIDERS.iter().copied().find(|p| p.id() == provider).ok_or("unknown provider")?;
+    let eb = env_of(&app, &state, p);
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new(&eb.bin)
-            .args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--settings", r#"{"disableAllHooks":true}"#])
-            .current_dir(&dir).env("PATH", &eb.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
-            .spawn().map_err(|e| format!("claude start: {e}"))?;
-        // stdin closes after the request: Claude answers it and exits
-        writeln!(child.stdin.take().unwrap(), "{}", pipe_init(false)).map_err(|e| e.to_string())?;
-        let out = std::io::BufReader::new(child.stdout.take().unwrap());
-        let commands = out.lines().map_while(Result::ok).filter_map(|l| serde_json::from_str::<Value>(&l).ok())
-            .find(|ev| ev["type"] == "control_response").map(|ev| ev["response"]["response"]["commands"].clone());
-        child.kill().ok();
-        child.wait().ok();
-        commands.filter(Value::is_array).ok_or_else(|| "claude: no commands".to_string())
-    }).await.map_err(|e| e.to_string())?
+        let commands = p.commands(&eb.env());
+        if commands.is_array() { commands } else { json!([]) }
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Token usage per switched-on provider and over all of them. `today` and `week` are the local starts of the
@@ -1093,7 +1117,7 @@ async fn integration_upload(provider: String, url: String, fields: serde_json::M
 fn save_attachment(name: String, data: String) -> Result<String, String> {
     use base64::Engine;
     let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| e.to_string())?;
-    if bytes.len() > 50_000_000 { return Err(format!("{name}: > 50 MB")); }
+    if bytes.len() > 50_000_000 { return Err("> 50 MB".into()); } // the webview puts the name in front
     // only the name's last part: the webview names the file, not where it goes
     let file = std::path::Path::new(&name).file_name().ok_or("no file name")?;
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
@@ -1242,7 +1266,7 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
-// ---------- Mail: Gmail over IMAP in mail/, the app password stays in the macOS keychain.
+// ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
 // Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
 // click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
 
@@ -1253,10 +1277,10 @@ fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
     mail::pick_account(&mail::accounts(&s["mail"]), want).ok_or_else(|| trc("err.no_mail_account"))
 }
 
-/// One page of 50 mails from the inbox, page 1 is the newest.
+/// One page of 50 mails from one account's inbox, page 1 is the newest. The window merges the accounts.
 #[tauri::command]
-async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
-    let a = mail_acct(&state, "")?;
+async fn mail_list(state: State<'_, App>, account: String, page: u32) -> Result<Value, String> {
+    let a = mail_acct(&state, &account)?;
     state.mail.list(&a, page.clamp(1, 1000)).await
 }
 
@@ -1275,17 +1299,28 @@ async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: boo
 }
 
 /// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
-/// the email, over stdin so it never shows in the process list), then a login test. A code Gmail refuses is
-/// removed again. Returns the account for the settings, the window adds and saves it.
+/// the email, over stdin so it never shows in the process list), then a login test. A password the server refuses
+/// is removed again. No host is Gmail (app password), else any IMAP server. Returns the account for the settings,
+/// the window adds and saves it.
 #[tauri::command]
-async fn mail_connect(state: State<'_, App>, email: String, password: String) -> Result<Value, String> {
+async fn mail_connect(state: State<'_, App>, email: String, password: String, host: Option<String>, port: Option<u16>) -> Result<Value, String> {
     let email = email.trim().to_string();
-    let account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    let host = host.map(|h| h.trim().to_string()).unwrap_or_default();
+    let mut account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    if !host.is_empty() { account["host"] = json!(host); account["port"] = json!(port.unwrap_or(993)); }
     let a = mail::accounts(&json!({"accounts": [account.clone()]})).pop().ok_or_else(|| trc("err.mail_account"))?;
-    let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
-    if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+    let pw = if host.is_empty() {
+        let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
+        if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+        pw
+    } else {
+        if !(1..=256).contains(&password.chars().count()) || password.chars().any(char::is_control) { return Err(trc("err.mail_pw_any")); }
+        password
+    };
+    // hex (-X) so no password character can end the command line `security -i` reads
+    let hex: String = pw.bytes().map(|b| format!("{b:02x}")).collect();
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -X {hex}").map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),
@@ -1359,6 +1394,9 @@ fn nav_internal(url: &tauri::Url) -> bool {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// `relay --cli …`, see actions.rs.
+pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
+
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
@@ -1398,12 +1436,13 @@ pub fn run() {
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
             reattach(app.handle());
+            actions::start(app.handle());
             tray::init(app.handle())?;
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, save_attachment, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, save_attachment, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -1522,5 +1561,19 @@ mod mail_tests {
         assert!(!ok((0..6).map(|i| a(&format!("u{i}@y.be"))).collect(), ""));
         assert!(!ok(vec![a("x@y.be"), a("X@Y.be")], ""), "the same email twice");
         assert!(!ok(vec![a("x@y.be")], "other@y.be"), "a sidebar account that is not configured");
+    }
+}
+
+#[cfg(test)]
+mod terminal_tests {
+    // "auto" takes the first installed terminal in TERMINALS order, an explicit choice stays even when not installed
+    #[test]
+    fn terminal_choice() {
+        use super::terminal_of;
+        assert_eq!(terminal_of("auto", |a| a == "WezTerm" || a == "Terminal"), "wezterm");
+        assert_eq!(terminal_of("auto", |a| a == "iTerm" || a == "WezTerm"), "iterm");
+        assert_eq!(terminal_of("auto", |_| false), "terminal");
+        assert_eq!(terminal_of("iterm", |_| false), "iterm");
+        assert_eq!(terminal_of("bogus", |_| true), "terminal");
     }
 }

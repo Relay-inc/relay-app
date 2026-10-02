@@ -34,7 +34,7 @@ export function mapDetail(card: any, lists: any[], people: any[], feed: any[], p
       const d = a.data || {};
       // Trello's display entities include a readable value for the changed field, without translating API keys.
       const changes = d.listBefore && d.listAfter ? `${d.listBefore.name} → ${d.listAfter.name}`
-        : Object.entries(d.old || {}).map(([k, old]) => `${k}: ${String(old ?? "—")} → ${String(d.card?.[k] ?? "—")}`).join(", ");
+        : Object.entries(d.old || {}).map(([k, old]) => `${k}: ${String(old ?? "–")} → ${String(d.card?.[k] ?? "–")}`).join(", ");
       return { at: a.date, who: a.memberCreator?.fullName || a.memberCreator?.username || "",
         html: a.type === "commentCard" ? markdown(d.text || "") : "",
         change: a.type === "commentCard" ? "" : changes || a.type.replace(/([a-z])([A-Z])/g, "$1 $2"),
@@ -43,7 +43,7 @@ export function mapDetail(card: any, lists: any[], people: any[], feed: any[], p
   };
 }
 
-export const trelloTicket = ticketDetail("Trello", async (c, ref, id) => {
+export const trelloTicket = ticketDetail(async (c, ref, id) => {
   const card = await c.call("GET", `/cards/${id}?fields=name,desc,idShort,idList,idBoard,closed,due,labels,shortUrl&members=true&member_fields=fullName,username&board=true&board_fields=name&list=true&list_fields=name&attachments=true`);
   const [lists, people, feed] = await Promise.all([
     c.call("GET", `/boards/${card.idBoard}/lists?filter=all&fields=name,closed,pos`),

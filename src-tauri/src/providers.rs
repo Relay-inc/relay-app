@@ -89,10 +89,14 @@ pub fn curl_quote(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\")
 /// One API call for the provider, blocking: the caller runs it off the main thread.
 pub fn call(p: &Provider, cfg: &Value, method: &str, path: &str, body: Option<Value>) -> Result<Value, String> {
     let url = (p.url)(cfg, method, path, &body).ok_or_else(|| trc_v("err.call", p.name))?;
+    send(p, cfg, method, &url, body)
+}
+/// A request to a URL the provider built or allowed (an agent action builds its own), with the secrets.
+pub fn send(p: &Provider, cfg: &Value, method: &str, url: &str, body: Option<Value>) -> Result<Value, String> {
     if !(p.ready)(cfg) { return Err(board_core::t(p.text, p.not_ready)); }
     let token = token(p).ok_or_else(|| trc_v("err.no_token", p.name))?;
     // globoff: the [ ] in filter[...] are not curl ranges
-    let mut conf = format!("globoff\nurl = {}\nrequest = {method}\n", curl_quote(&url));
+    let mut conf = format!("globoff\nurl = {}\nrequest = {method}\n", curl_quote(url));
     for h in (p.headers)(cfg, &token) { conf += &format!("header = {}\n", curl_quote(&h)); }
     if let Some(b) = body { conf += &format!("data-binary = {}\n", curl_quote(&b.to_string())); }
     let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--max-time", "20", "-K", "-", "-w", "\n%{http_code}"])
