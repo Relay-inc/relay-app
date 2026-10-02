@@ -6,9 +6,8 @@ import { backgroundAction } from "../../../application/conversations/actions";
 import { chatAgent } from "../../../application/agents/agents";
 import { select } from "../../../application/navigation/navigation";
 import { useCalendarStore } from "../../../application/calendar/store";
-import { joinMeeting, meetingChat, soonMeetings } from "../../../application/calendar/calendar";
+import { joinMeeting, meetingChat, soonMeetings, timeOf } from "../../../application/calendar/calendar";
 import { joinable, minutesLeft } from "../../../domain/calendar/rules";
-import { clockTime } from "../../../shared/format";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
@@ -78,7 +77,6 @@ export function WaitingView() {
     </div>
   );
 
-  const timeOf = (iso: string) => clockTime(iso, locale);
   // a calendar that did not load, so a missing meeting is not a surprise
   const calendarDown = calendarErrors.length ? (
     <div className="text-xs text-secondary">{t("wait.calendarDown", { error: calendarErrors.join("; ") })}</div>

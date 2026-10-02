@@ -49,6 +49,7 @@ export async function loadMeetings() {
 // every 30 seconds: the countdown, and the banner. Also when the window has focus (unlike a finished turn's banner,
 // application/conversations/events.ts): a meeting in 5 minutes matters whatever is on screen. A click opens Waiting.
 export function tick() {
+  if (!cal().list.length) return; // nothing counts down: no wake-up for the reads over this store
   const now = Date.now();
   set(draft => {
     draft.now = now;

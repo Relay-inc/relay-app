@@ -48,7 +48,8 @@ fn forget(email: &str) { Command::new("/usr/bin/security").args(["delete-generic
 /// Settings › Calendar: save a calendar's secret address and try it, the number of meetings in the next 7 days back.
 /// An address that does not load is not saved. An empty address removes the calendar's entry.
 pub fn connect(email: &str, url: &str) -> Result<usize, String> {
-    let (email, url) = (email.trim(), url.trim());
+    // one keychain entry per calendar whatever the capitals: the account is the email in lower case
+    let (email, url) = (&email.trim().to_ascii_lowercase(), url.trim());
     if !email_ok(email) { return Err(super::trc("err.cal_email")); }
     if url.is_empty() { forget(email); return Ok(0); }
     if !url_ok(url) { return Err(super::trc("err.cal_url")); }
@@ -125,10 +126,12 @@ fn when(p: &Prop) -> Option<DateTime<Utc>> {
     let v = p.value.trim_end_matches('Z');
     let n = NaiveDateTime::parse_from_str(v, "%Y%m%dT%H%M%S").ok()?;
     if p.value.ends_with('Z') { return Some(Utc.from_utc_datetime(&n)); }
-    match p.param("TZID").and_then(|z| z.parse::<chrono_tz::Tz>().ok()) {
+    // a time in the spring-forward gap does not exist: it is read an hour later, as calendar apps show it
+    let at = |n: NaiveDateTime| match p.param("TZID").and_then(|z| z.parse::<chrono_tz::Tz>().ok()) {
         Some(tz) => tz.from_local_datetime(&n).earliest().map(|d| d.with_timezone(&Utc)),
         None => Local.from_local_datetime(&n).earliest().map(|d| d.with_timezone(&Utc)),
-    }
+    };
+    at(n).or_else(|| at(n + Duration::hours(1)))
 }
 
 struct Ev { props: Vec<Prop> }
@@ -260,7 +263,7 @@ pub fn meetings(ics: &str, me: &str, from: DateTime<Utc>, to: DateTime<Utc>) -> 
         for s in set.after(tz(from - Duration::seconds(1))).before(tz(to)).all(100).dates {
             if days.contains(&s.date_naive()) { continue; } // in DTSTART's own time zone, like the rule
             let s = s.with_timezone(&Utc);
-            if s >= to || moved.contains(&(uid.clone(), s.timestamp())) { continue; }
+            if s < from || s >= to || moved.contains(&(uid.clone(), s.timestamp())) { continue; }
             out.extend(meeting(e, me, s, len));
         }
     }
@@ -330,6 +333,11 @@ mod tests {
             "https://meet.google.com:8443/x", "https://teams.microsoft.com.evil.example/l"] {
             assert_eq!(join(bad), "", "{bad}");
         }
+    }
+    #[test]
+    fn a_time_in_the_spring_forward_gap_is_read_an_hour_later() {
+        let p = parse_line("DTSTART;TZID=Europe/Brussels:20270328T023000").unwrap(); // 02:30 does not exist that night
+        assert_eq!(when(&p), Some(bxl("2027-03-28", "03:30")));
     }
     #[test]
     fn text_unescapes_in_one_pass() {

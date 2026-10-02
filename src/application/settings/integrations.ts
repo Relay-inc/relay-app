@@ -391,7 +391,8 @@ const saveCalendarFeeds = async (list: { email: string }[]) =>
   commit(await backend.setSettings({ ...current(), calendar: { on: true, feeds: list } }));
 /** Add a calendar: the backend tries the address, keeps it in the keychain and counts the meetings; only then the email
  *  goes in the settings. Resolves to whether it was added. */
-export async function connectCalendar(email: string, url: string) {
+export async function connectCalendar(typed: string, url: string) {
+  const email = typed.toLowerCase(); // the backend keeps the keychain entry under the email in lower case
   change(draft => {
     draft.calendar.busy = true;
   });
@@ -399,7 +400,7 @@ export async function connectCalendar(email: string, url: string) {
   let added = true;
   try {
     const count = await backend.calendarConnect(email, url);
-    const others = feeds().filter(feed => feed.email.toLowerCase() !== email.toLowerCase());
+    const others = feeds().filter(feed => feed.email.toLowerCase() !== email);
     await saveCalendarFeeds([...others, { email }]);
     calendarSaid({ text: tn("cal.connected", count, { email }), ok: true });
   } catch (error) {
