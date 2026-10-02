@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -122,6 +122,7 @@ function handle(cmd: string, a: Args): unknown {
     case "check_vault":
       return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
     case "pick_folder":
+      return harness.pickFolder;
     case "pick_path":
       return null;
     case "snapshot":
@@ -350,6 +351,8 @@ const harness = {
   calls,
   unmocked,
   autoReply: true,
+  /** What `pick_folder` answers: null is cancelled. */
+  pickFolder: null as string | null,
   fixture,
   now: NOW,
   keys: { long: conv.LONG_KEY, switchTo: conv.SWITCH_KEY, permission: conv.PERMISSION_KEY, question: conv.QUESTION_KEY, action: conv.ACTION_KEY, terminal: `t:${vault.terminalSessions[0].sessionId}` },

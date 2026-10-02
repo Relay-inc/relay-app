@@ -193,6 +193,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_import", ["Claude Code has no {v} MCP server with credentials", "Claude Code heeft geen {v}-MCP-server met inloggegevens", "Claude Code n'a pas de serveur MCP {v} avec des identifiants", "Claude Code hat keinen {v}-MCP-Server mit Zugangsdaten"]),
     ("err.icons_no_claude", ["Finding websites needs Claude Code switched on under Agents", "Websites zoeken heeft Claude Code nodig, aangezet onder Agents", "La recherche de sites nécessite Claude Code activé dans Agents", "Websites suchen braucht Claude Code, eingeschaltet unter Agents"]),
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
+    ("err.agent_account", ["{v}: an account needs a name of 1 to 40 characters and an absolute folder", "{v}: een account heeft een naam van 1 tot 40 tekens en een absolute map nodig", "{v} : un compte a besoin d'un nom de 1 à 40 caractères et d'un dossier absolu", "{v}: ein Konto braucht einen Namen mit 1 bis 40 Zeichen und einen absoluten Ordner"]),
+    ("err.agent_account_dir", ["{v}: each account needs its own folder, other than ~/.claude", "{v}: elk account heeft een eigen map nodig, niet ~/.claude", "{v} : chaque compte a besoin de son propre dossier, autre que ~/.claude", "{v}: jedes Konto braucht einen eigenen Ordner, nicht ~/.claude"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
     ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
@@ -254,14 +256,16 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
 // with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
-struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32 }
+// account: the config folder it runs on ("" the CLI's own), see agents::accounts
+struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, account: String }
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
     sids: Mutex<HashMap<String, agents::Sess>>, // conversation key -> provider and session id, persisted
     path: String,                          // login-shell PATH, so the agent's tools find gh, himalaya, node
     settings: Mutex<Value>,                // settings.json: vault, projects, overrides, agents, mail
-    limits: Mutex<HashMap<String, (i64, Value)>>, // per provider: its last limits answer and when
+    limits: Mutex<HashMap<String, (i64, Value)>>, // per provider and account (limit_key): its last limits answer and when
+    spent: Mutex<std::collections::HashSet<String>>, // limit_keys a turn was refused on, until their limits read below 100% again
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
     asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
@@ -359,6 +363,8 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
 async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
     let eb = env_of(&app, &state, p);
+    // on the account a new conversation gets now, never one inherited from the app's environment
+    let account = account_of(&state, p, "", "sonnet");
     // the repos linked to a project say a lot about what it is (lemahieu-shopware: a shop)
     let mut repos: HashMap<String, Vec<String>> = HashMap::new();
     for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
@@ -378,10 +384,13 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
         {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
     // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
-        let mut c = Command::new(&eb.bin).args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+        let mut c = Command::new(&eb.bin);
+        c.args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
                 "--tools", "WebSearch", "--allowedTools", "WebSearch"])
             .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
+        let mut c = c.spawn()?;
         c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
         c.wait_with_output()
     }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
@@ -487,11 +496,44 @@ impl EnvBuf {
     fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending, opts: &self.opts } }
 }
 fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
+    // the accounts conversations were recorded on, also one removed from the list since: its transcripts are still there
+    let recorded: Vec<String> = st.sids.lock().unwrap().values().filter(|x| x.provider == p.id() && !x.account.is_empty()).map(|x| x.account.clone()).collect();
     let s = st.settings.lock().unwrap();
     let mut opts = s["agents"]["providers"][p.id()].clone();
     // Claude Code gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
     if p.id() == "claude" && opts.is_object() { opts["mail"] = json!(mail_on(&s)); }
+    // the account calls run on unless they say otherwise (spawn, limits): the active one
+    if p.caps().accounts && opts.is_object() {
+        opts["account"] = opts["active"].clone();
+        let mut list = opts["accounts"].as_array().cloned().unwrap_or_default();
+        for d in recorded { if !list.iter().any(|a| a["dir"] == d.as_str()) { list.push(json!({"name": "", "dir": d})); } }
+        opts["accounts"] = json!(list);
+    }
     EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), opts }
+}
+/// The key of a provider's account in `limits` and `spent`.
+fn limit_key(p: &dyn AgentProvider, account: &str) -> String { format!("{}:{account}", p.id()) }
+/// An account with no room for `model`: a turn was refused on it, or a window it last read that applies is at 100%.
+fn is_spent(st: &App, p: &dyn AgentProvider, account: &str, model: &str) -> bool {
+    let k = limit_key(p, account);
+    st.spent.lock().unwrap().contains(&k) || st.limits.lock().unwrap().get(&k).is_some_and(|(_, v)| agents::used_up(v, model))
+}
+/// An account auto-switch may move to: its limits did not come back without a login (not read yet counts as fine).
+fn is_ready(st: &App, p: &dyn AgentProvider, account: &str) -> bool {
+    !st.limits.lock().unwrap().get(&limit_key(p, account)).is_some_and(|(_, v)| agents::no_login(v))
+}
+/// The account a conversation runs on: its session's, else the active one; with auto-switch on and that one used up
+/// for `model`, the next signed-in one that is not. Reads what the limits last said, never asks (no network in a send).
+/// ponytail: the limits are at most 5 minutes old (the webview's poll); a refused turn marks an account at once
+fn account_of(st: &App, p: &dyn AgentProvider, key: &str, model: &str) -> String {
+    if !p.caps().accounts { return String::new(); }
+    let own = st.sids.lock().unwrap().get(key).filter(|x| x.provider == p.id()).map(|x| x.account.clone());
+    let (list, cur, auto) = {
+        let s = st.settings.lock().unwrap();
+        let c = &s["agents"]["providers"][p.id()];
+        (agents::accounts(&s, p), own.unwrap_or_else(|| c["active"].as_str().unwrap_or("").into()), c["auto"] == true)
+    };
+    agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a, model), |a| is_ready(st, p, a))
 }
 fn mail_on(s: &Value) -> bool { s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() }
 /// A conversation's provider: its session's, else the one asked for when switched on, else the default.
@@ -578,9 +620,10 @@ fn pipe_init(mail_on: bool) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str) -> Result<Proc, String> {
     let dir = need_vault(state)?;
-    let eb = env_of(app, state, p);
+    let mut eb = env_of(app, state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account); }
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
@@ -588,7 +631,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
     let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
     cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
+    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into() };
     let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
@@ -596,8 +639,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
-    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()) };
-    read_agent(app, project, p, c, inherit);
+    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), account: account.into() };
+    read_agent(app, project, p, c, inherit, account);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if claude && from_mail { write_taint(&mut proc, &dir); }
     Ok(proc)
@@ -607,8 +650,11 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
 /// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
 /// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
 /// end, it reads the rest from the transcript. `inherit`: whether the model and the effort were left to the CLI.
-fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn, inherit: (bool, bool)) {
+fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn, inherit: (bool, bool), account: &str) {
     let (a, k, pid, id, claude, pend, mut parse) = (app.clone(), key.to_string(), c.agent.id(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
+    let (account, lk) = (account.to_string(), limit_key(p, account));
+    // the account's limits are used up: the next message moves to another one (with auto-switch on)
+    let spend = move |a: &AppHandle| { a.state::<App>().spent.lock().unwrap().insert(lk.clone()); };
     let (frames, backlog) = (c.frames, c.backlog);
     std::thread::spawn(move || {
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
@@ -623,6 +669,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
             // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
             if claude {
                 if let Ok(ev) = serde_json::from_str::<Value>(&line) {
+                    if ev["type"] == "rate_limit_event" && ev["rate_limit_info"]["status"] == "rejected" { spend(&a); }
                     if ev["type"] == "control_request" { control(&a, &k, pid, &ev); continue; }
                     if ev["type"] == "control_response" {
                         if ev["response"]["subtype"] == "error" {
@@ -659,7 +706,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                     Event::Session { id: sid } => {
                         let st = a.state::<App>();
                         let mut sids = st.sids.lock().unwrap();
-                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone() });
+                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone(), account: account.clone() });
                         save_sids(&a, &sids);
                     }
                     // raised in the provider's own protocol: a card like any other, answered through respond()
@@ -683,7 +730,9 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                         if !replay { emit(json!({"type": "resolved", "model": model, "effort": effort, "default_model": inherit.0, "default_effort": inherit.1})); }
                         continue;
                     }
-                    Event::TurnEnd { .. } => {
+                    Event::TurnEnd { error, .. } => {
+                        let e = error.as_deref().unwrap_or("").to_lowercase();
+                        if e.contains("usage limit") || e.contains("hit your limit") { spend(&a); }
                         if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
                     }
                     _ => {}
@@ -717,9 +766,9 @@ fn reattach(app: &AppHandle) {
         let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let Ok(stdin) = c.stdin.try_clone() else { continue };
-        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1 };
+        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1, account: m.account.clone() };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        read_agent(app, &m.key, p, c, (false, false));
+        read_agent(app, &m.key, p, c, (false, false), &m.account);
     }
 }
 
@@ -785,19 +834,22 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
     let opts = (model, effort);
     let name = name.unwrap_or_else(|| project.clone());
+    let mut account = account_of(&state, p, &project, &opts.0);
     let mut procs = state.procs.lock().unwrap();
+    // a turn still running stays where it is: the account moves once the conversation is idle
+    if let Some(x) = procs.get(&project).filter(|x| x.turns > 0 && x.provider == p.id()) { account = x.account.clone(); }
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account)?;
         procs.insert(project, x);
         return Ok(());
     }
-    // model and effort are start flags: a switch restarts the process on the same session
+    // model, effort and account are start flags: a switch restarts the process on the same session
     let mut was_tainted = false;
-    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id()) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
+    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || x.account != account) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &account)?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -834,7 +886,9 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
         provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().title)).or_else(|| on.iter().copied().find(|p| p.caps().title))
     };
     let p = p.ok_or_else(|| trc("err.no_agent"))?;
-    let eb = env_of(&app, &state, p);
+    // on the account a new conversation gets now (Haiku: no model window of its own)
+    let mut eb = env_of(&app, &state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "haiku")); }
     tauri::async_runtime::spawn_blocking(move || p.title(&eb.env(), &text)).await.map_err(|e| e.to_string())?
 }
 
@@ -1040,17 +1094,35 @@ async fn usage_limits(app: AppHandle, state: State<'_, App>) -> Result<Value, St
     let on: Vec<_> = agents::enabled(&state.settings.lock().unwrap()).into_iter().filter(|p| p.caps().limits).collect();
     let mut out = vec![];
     for p in on {
-        let cached = state.limits.lock().unwrap().get(p.id()).filter(|(at, _)| usage::now_ms() - at < 60_000).map(|(_, v)| v.clone());
-        let v = match cached {
-            Some(v) => v,
-            None => {
-                let eb = env_of(&app, &state, p);
-                let v = tauri::async_runtime::spawn_blocking(move || p.limits(&eb.env()).json()).await.unwrap_or_else(|_| json!({"ok": false, "reason": "unavailable"}));
-                state.limits.lock().unwrap().insert(p.id().to_string(), (usage::now_ms(), v.clone()));
-                v
-            }
+        // every account's, so auto-switch knows which are used up; the view shows the one a new conversation gets
+        let (list, names) = {
+            let s = state.settings.lock().unwrap();
+            let c = &s["agents"]["providers"][p.id()];
+            let names: HashMap<String, String> = c["accounts"].as_array().into_iter().flatten()
+                .filter_map(|a| Some((a["dir"].as_str()?.to_string(), a["name"].as_str()?.to_string()))).collect();
+            (agents::accounts(&s, p), names)
         };
-        out.push(json!({"provider": p.id(), "limits": v}));
+        let mut accounts = vec![];
+        for acct in &list {
+            let k = limit_key(p, acct);
+            let cached = state.limits.lock().unwrap().get(&k).filter(|(at, _)| usage::now_ms() - at < 60_000).map(|(_, v)| v.clone());
+            let v = match cached {
+                Some(v) => v,
+                None => {
+                    let mut eb = env_of(&app, &state, p);
+                    if p.caps().accounts { eb.opts["account"] = json!(acct); }
+                    let v = tauri::async_runtime::spawn_blocking(move || p.limits(&eb.env()).json()).await.unwrap_or_else(|_| json!({"ok": false, "reason": "unavailable"}));
+                    state.limits.lock().unwrap().insert(k.clone(), (usage::now_ms(), v.clone()));
+                    // limits that read again: a refused turn no longer counts, unless a window is still full
+                    if v["ok"] == true { state.spent.lock().unwrap().remove(&k); }
+                    v
+                }
+            };
+            accounts.push(json!({"dir": acct, "name": names.get(acct), "limits": v}));
+        }
+        let now = account_of(&state, p, "", "");
+        let shown = accounts.iter().find(|a| a["dir"] == now.as_str()).unwrap_or(&accounts[0])["limits"].clone();
+        out.push(json!({"provider": p.id(), "limits": shown, "accounts": if list.len() > 1 { json!(accounts) } else { json!(null) }}));
     }
     Ok(json!(out))
 }
@@ -1482,7 +1554,7 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), mail: mail::Mail::new() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new() });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
             actions::start(app.handle());

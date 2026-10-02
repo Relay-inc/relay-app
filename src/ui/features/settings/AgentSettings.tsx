@@ -5,6 +5,7 @@ import { Html } from "../../components/Html";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
 import { FIELD, HINT_IN_ROW, PILL, SELECT, withoutColon } from "./blocks";
+import { AgentAccounts } from "./AgentAccounts";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
 import { RemoveFooter } from "./RemoveFooter";
@@ -67,6 +68,7 @@ export function AgentSettings({
           </Field>
         );
       })}
+      {status.caps.accounts && <AgentAccounts id={id} config={config} />}
       {/* the label above the pills: a row of them on the right would wrap into a ragged column */}
       <div className="grid gap-1.5">
         <span className="text-[13px] text-s-fg">{withoutColon(t("ag.caps"))}</span>

@@ -47,6 +47,16 @@ export default {
   "ag.cap.effort": "inspanning",
   "ag.add": "+ Agent toevoegen",
   "ag.remove": "Verwijderen",
+  "ag.accounts": "Accounts",
+  "ag.accountsHelp": "Meer dan één login: elk is een eigen configuratiemap. Meld je één keer aan in de terminal:",
+  "ag.accountAdd": "Account toevoegen…",
+  "ag.accountRemove": "{name} verwijderen",
+  "ag.accountName": "Naam van het account",
+  "ag.accountOwn": "Dat van Claude Code zelf (~/.claude)",
+  "ag.accountActive": "Nieuwe gesprekken gebruiken",
+  "ag.accountAuto": "Automatisch van account wisselen",
+  "ag.accountAutoHelp":
+    "Is de planlimiet van een account op, dan verhuist het volgende bericht het gesprek naar het volgende account met ruimte.",
   "ag.empty": "Nog geen agents. Voeg er een toe om er gesprekken mee te starten.",
   "ag.listHelp":
     "Enkel de agents in deze lijst verschijnen in de composer. Klik er een aan om de instellingen te wijzigen.",

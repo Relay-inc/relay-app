@@ -48,7 +48,7 @@ impl AgentProvider for Pi {
     fn name(&self) -> &'static str { "Pi" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: false, questions: false, subagents: false, fork: true,
-            terminal: true, background: true, effort: true, limits: false, title: false }
+            terminal: true, background: true, effort: true, limits: false, title: false, accounts: false }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = [format!("{home}/.npm-global/bin/pi"), "/opt/homebrew/bin/pi".into(), "/usr/local/bin/pi".into(), format!("{home}/.local/bin/pi"), format!("{home}/.bun/bin/pi")];

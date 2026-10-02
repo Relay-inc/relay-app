@@ -70,12 +70,13 @@ pub fn parse_lines(text: &str, dir: &str, file_sid: &str, since: i64, seen: &mut
 
 static TAIL: Mutex<Option<Tail<Rec>>> = Mutex::new(None);
 
-/// What the transcripts under `root` gained since the last call, and every record since `since`; the
-/// vault's own are the ones in its folder `vault_dir` (its slug).
-pub fn records(root: &Path, vault_dir: &str, since: i64) -> Vec<Record> {
+/// What the transcripts under each root (one per account) gained since the last call, and every record since
+/// `since`; the vault's own are the ones in its folder `vault_dir` (its slug). A conversation moved to another
+/// account has its transcript in both: `seen` counts each message once.
+pub fn records(roots: &[std::path::PathBuf], vault_dir: &str, since: i64) -> Vec<Record> {
     let mut t = TAIL.lock().unwrap();
     let t = t.get_or_insert_with(Tail::default);
-    refresh(t, root, since);
+    for root in roots { refresh(t, root, since); }
     t.records().into_iter().map(|r| to_record(r, vault_dir)).collect()
 }
 fn refresh(t: &mut Tail<Rec>, root: &Path, since: i64) {
@@ -92,18 +93,27 @@ fn to_record(r: Rec, vault_dir: &str) -> Record {
         input: r.input, output: r.output, cache_read: r.cache_read, cache_write: r.write_5m + r.write_1h }
 }
 
-/// The login the claude CLI stored: the keychain on macOS, a file elsewhere.
-pub fn credentials(home: &str) -> Option<Value> {
-    Command::new("/usr/bin/security").args(["find-generic-password", "-s", "Claude Code-credentials", "-w"]).stderr(Stdio::null()).output().ok()
+/// The keychain item the claude CLI keeps its login in: one per config folder, the folder's sha256 in the name
+/// when CLAUDE_CONFIG_DIR is set (`account`), none for its own.
+pub fn keychain_service(account: &str) -> String {
+    use sha2::{Digest, Sha256};
+    if account.is_empty() { return "Claude Code-credentials".into(); }
+    let hex: String = Sha256::digest(account.as_bytes()).iter().map(|b| format!("{b:02x}")).collect();
+    format!("Claude Code-credentials-{}", &hex[..8])
+}
+/// The login the claude CLI stored for an account ("" its own folder): the keychain on macOS, a file elsewhere.
+pub fn credentials(home: &str, account: &str) -> Option<Value> {
+    let dir = if account.is_empty() { format!("{home}/.claude") } else { account.to_string() };
+    Command::new("/usr/bin/security").args(["find-generic-password", "-s", &keychain_service(account), "-w"]).stderr(Stdio::null()).output().ok()
         .filter(|o| o.status.success()).map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .or_else(|| fs::read_to_string(format!("{home}/.claude/.credentials.json")).ok())
+        .or_else(|| fs::read_to_string(format!("{dir}/.credentials.json")).ok())
         .and_then(|s| serde_json::from_str::<Value>(&s).ok())
 }
 
 /// The 5-hour and weekly limits of the claude.ai plan, or why they are unavailable.
-pub fn fetch_limits(home: &str) -> Limits {
+pub fn fetch_limits(home: &str, account: &str) -> Limits {
     let fail = |r: &str| Limits::Off(r.into());
-    let Some(cred) = credentials(home) else { return fail("no-login") };
+    let Some(cred) = credentials(home, account) else { return fail("no-login") };
     let o = &cred["claudeAiOauth"];
     let Some(tok) = o["accessToken"].as_str() else { return fail("no-login") };
     if o["expiresAt"].as_i64().is_some_and(|e| e < now_ms()) { return fail("expired"); }
@@ -159,6 +169,12 @@ not json
     const WEEK: i64 = 1790640000000;  // 2026-09-29T00:00:00Z
     const NOW: i64 = TODAY + 12 * 3600 * 1000;
 
+    #[test]
+    fn one_keychain_item_per_account() {
+        assert_eq!(keychain_service(""), "Claude Code-credentials");
+        let s = keychain_service("/Users/me/.claude-work");
+        assert!(s.starts_with("Claude Code-credentials-") && s.len() == 32 && s != keychain_service("/Users/me/.claude-home"));
+    }
     #[test]
     fn prices_by_prefix() {
         assert_eq!(price("claude-opus-5-5"), Some((4.0, 20.0, 0.2)));

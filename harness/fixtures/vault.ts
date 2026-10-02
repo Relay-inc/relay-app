@@ -117,10 +117,17 @@ export function remindersAfter(list: typeof reminders, action: string, a: { id?:
 }
 
 export const MAIL_ACCOUNT = "laurent@example.com";
+/** Claude Code's extra logins (settings.agents.providers.claude), each its own CLAUDE_CONFIG_DIR. */
+const CLAUDE_ACCOUNTS = {
+  accounts: [{ name: "Work", dir: "/Users/demo/.claude-work" }, { name: "Side projects", dir: "/Users/demo/.claude-side" }],
+  active: "/Users/demo/.claude-work",
+  auto: true,
+};
 /** A second account on a non-Gmail IMAP server: the inbox merges both (mail_list per account). */
 export const MAIL_ACCOUNT_2 = "studio@example.org";
 /** default, dark, graphite (the accent), icons (the sidebar's views as a row of icons), onboarding, calendar (two
- * calendars switched on, the second one failing) */
+ * calendars switched on, the second one failing), accounts
+ * (Claude Code on two extra logins, the work one active, auto-switch on) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   return {
@@ -142,7 +149,7 @@ export function settings(fixture: string) {
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
     favicons: { on: false, last: "", tried: {} },
-    agents: { default: "claude", providers: { claude: { on: true, bin: "" }, codex: { on: true, bin: "", sandbox: "workspace-write" }, opencode: { on: false, bin: "" }, pi: { on: false, bin: "" } } },
+    agents: { default: "claude", providers: { claude: { on: true, bin: "", ...(fixture === "accounts" ? CLAUDE_ACCOUNTS : {}) }, codex: { on: true, bin: "", sandbox: "workspace-write" }, opencode: { on: false, bin: "" }, pi: { on: false, bin: "" } } },
   };
 }
 
