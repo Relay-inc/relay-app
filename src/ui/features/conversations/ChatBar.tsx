@@ -21,7 +21,7 @@ export function ChatBar({
   heading,
   img,
   tint,
-  state,
+  icon,
   editable,
   sub,
   value,
@@ -43,9 +43,9 @@ export function ChatBar({
   heading: string;
   img: string; // the project's icon, an image data url
   tint: Tint;
-  state: "" | "busy" | "idle"; // the conversation's state pill; "" shows none
+  icon: string; // a view's icon, shown before its name; "" for none
   editable: boolean; // a conversation, not a view: the heading opens the project panel, the title is shown
-  sub: string;
+  sub: string; // a view's second crumb ("3 waiting"), shown bold after "/"; "" for none. Not shown on a conversation
   value: string; // the conversation's title
   readonly: boolean; // a terminal session takes its title from the transcript
   renamable: boolean;
@@ -54,7 +54,7 @@ export function ChatBar({
   tools: BarTools | null; // a vault project is open (or its board or PRs): its tool icons show on the right
   drawer: Drawer; // what the right drawer shows, the open tool lights up
   back: boolean; // the project's board or PRs is shown: the heading goes back to the conversation
-  actions?: ReactNode;
+  actions?: ReactNode; // a view's own buttons and quiet text, on the right before the project's tools
   onEditProject: () => void;
   onRename: (title: string) => void;
   onOpenTerminal: () => void;
@@ -95,7 +95,7 @@ export function ChatBar({
     >
       <h1
         className={
-          "flex items-center gap-1.5 text-sm font-normal flex-none max-w-2/5 whitespace-nowrap overflow-hidden text-ellipsis cursor-default rounded-md px-1.5 py-0.75 -ml-1.5 text-secondary" +
+          "flex items-center gap-1.5 text-[13px] font-normal flex-none max-w-2/5 whitespace-nowrap overflow-hidden text-ellipsis cursor-default rounded-md px-1.5 py-0.75 -ml-1.5 text-secondary" +
           (editable || back
             ? " hover:bg-fill hover:text-label focus-visible:outline-3 focus-visible:outline-accent/45 focus-visible:outline-offset-1"
             : "")
@@ -115,6 +115,8 @@ export function ChatBar({
           <ProjectImg url={img} className="size-3.5 flex-none object-contain rounded-xs" />
         ) : editable ? (
           <Icon name="folder" className={`glyph size-3.5 flex-none ${tintText(tint)}`} />
+        ) : icon ? (
+          <Icon name={icon} className="glyph size-3.5 flex-none" />
         ) : null}
         {heading}
       </h1>
@@ -124,14 +126,14 @@ export function ChatBar({
           {/* the invisible mirror sizes the field to its text, the input fills it */}
           <span className="inline-grid min-w-0 max-w-2/5">
             <span
-              className="col-start-1 row-start-1 invisible whitespace-pre overflow-hidden text-sm font-semibold px-1.5"
+              className="col-start-1 row-start-1 invisible whitespace-pre overflow-hidden text-[13px] font-semibold px-1.5"
               aria-hidden="true"
             >
               {shown || " "}
             </span>
             <input
               className={
-                "col-start-1 row-start-1 w-full text-sm font-semibold text-label bg-transparent border-0 rounded-md px-1.5 py-0.75 min-w-0 outline-0 text-ellipsis focus:bg-fill" +
+                "col-start-1 row-start-1 w-full text-[13px] font-semibold text-label bg-transparent border-0 rounded-md px-1.5 py-0.75 min-w-0 outline-0 text-ellipsis focus:bg-fill" +
                 (readonly ? "" : " hover:bg-fill")
               }
               spellCheck={false}
@@ -157,12 +159,13 @@ export function ChatBar({
           </button>
         </>
       ) : null}
-      <span className="text-secondary whitespace-nowrap overflow-hidden text-ellipsis">{sub}</span>
-      {state ? (
-        <span className="h-5 px-2 rounded-full bg-fill-2 text-secondary text-[11px] font-medium inline-flex items-center gap-1.25 whitespace-nowrap">
-          <span className={`size-1.5 rounded-full ${state === "busy" ? "bg-soon" : "bg-ok"}`}></span>
-          {t(state === "busy" ? "bar.working" : "bar.ready")}
-        </span>
+      {!editable && sub ? (
+        <>
+          <span className="text-tertiary text-[13px]">/</span>
+          <span className="text-[13px] font-semibold text-label whitespace-nowrap overflow-hidden text-ellipsis">
+            {sub}
+          </span>
+        </>
       ) : null}
       <span className="flex-1" data-tauri-drag-region></span>
       {actions}
@@ -216,7 +219,7 @@ function ToolButton({
 }) {
   return (
     <button
-      className={`btn-icon ${on ? "text-accent!" : dim ? "opacity-40 hover:opacity-100" : ""}`}
+      className={`btn-icon ${on ? "bg-accent-soft text-accent-text!" : dim ? "opacity-40 hover:opacity-100" : ""}`}
       title={label}
       aria-label={label}
       aria-pressed={on}

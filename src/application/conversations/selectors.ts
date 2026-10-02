@@ -8,6 +8,8 @@ import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { ghOn, settings } from "../settings/settings";
 import { usePullRequestsStore } from "../pull-requests/store";
+import { useMailStore } from "../mail/store";
+import { unread } from "../../domain/mail/rules";
 import { boardOf } from "../navigation/navigation";
 import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
@@ -51,6 +53,31 @@ export const aboutItems = (items: Item[] | undefined, projects: Project[]) =>
   rules.aboutProject({ messages: { about: items ?? [] } }, "about", projects);
 export const lastAi = (key: string) => rules.lastAi(cs().messages[key], t);
 
+const VIEW_ICONS: Record<string, string> = { [WAIT]: "bell", [REM]: "list", [PRS]: "pr", [MAIL]: "mail" };
+
+// the phrase after the view's name in the title bar: what needs you now
+function viewSummary(key: string) {
+  if (key === WAIT) {
+    const n = waitCount();
+    return n ? t("bar.waitingN", { n }) : t("bar.allClear");
+  }
+  if (key === REM) {
+    const reminders = useWorkspaceStore.getState().snap.reminders;
+    return t("bar.remCount", { due: reminders.filter(r => r.days <= 0).length, total: reminders.length });
+  }
+  if (key === PRS) {
+    const n = usePullRequestsStore.getState().list?.review.length ?? 0;
+    return n ? t("bar.prsReview", { n }) : t("bar.prsNone");
+  }
+  if (key === MAIL) {
+    const list = useMailStore.getState().list;
+    if (!list) return "";
+    const n = list.filter(unread).length;
+    return n ? t("mail.unread", { n }) : t("bar.mailRead");
+  }
+  return "";
+}
+
 /** The middle column's title bar for a selection: the heading (a board's or view's name, else the project's label),
  *  the project and its image, the editable title, what the terminal button may do, and the project's tools. */
 export function chatBar(key: string) {
@@ -83,14 +110,14 @@ export function chatBar(key: string) {
     projectName,
     img: toolProject ? (useWorkspaceStore.getState().icons[toolProject]?.img ?? "") : "",
     tint: context ? contextTint(context) : ("" as const),
-    // an app conversation's turn: idle or busy; "" for a terminal session or a view
-    state: conversation ? (cs().status[key] ?? ("idle" as const)) : ("" as const),
+    icon: tool ? "" : (VIEW_ICONS[key] ?? ""),
     title: session ? session.title : label(key),
     renamable: !!conversation,
     // the terminal would resume a conversation that touched mail without the app's restrictions
     locked: !!conversation?.fromMail,
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
-    waiting: tool ? viewName : key === WAIT ? `${waitCount()}` : "",
+    // the view's second crumb: the project's view name when opened from a project, else a one-phrase summary
+    sub: tool ? viewName : viewSummary(key),
     // the project's tools: its linked board, GitHub (dimmed while it has no repos) and, in the drawer, terminal and notes
     tools: toolProject
       ? {

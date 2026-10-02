@@ -257,7 +257,7 @@ export function NavigationView({ className }: { className: string }) {
       <label className="flex items-center gap-2 mx-3 mb-1.5 h-7.5 px-2.5 rounded-lg bg-fill-2 text-tertiary">
         <Icon name="search" className="glyph size-3.5 flex-none stroke-2" />
         <input
-          className="min-w-0 flex-1 text-sm text-label outline-none select-text placeholder:text-tertiary"
+          className="min-w-0 flex-1 text-[13px] text-label outline-none select-text placeholder:text-tertiary"
           value={find}
           placeholder={t("nav.search")}
           onChange={e => setFind(e.target.value)}
