@@ -47,6 +47,7 @@ export default {
   "ag.accounts": "Konten",
   "ag.accountsHelp": "Mehr als ein Login: jedes hat einen eigenen Konfigurationsordner. Einmal im Terminal anmelden:",
   "ag.accountAdd": "Konto hinzufügen…",
+  "ag.accountRemove": "{name} entfernen",
   "ag.accountName": "Name des Kontos",
   "ag.accountOwn": "Das von Claude Code selbst (~/.claude)",
   "ag.accountActive": "Neue Unterhaltungen nutzen",

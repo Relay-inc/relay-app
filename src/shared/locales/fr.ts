@@ -48,6 +48,7 @@ export default {
   "ag.accountsHelp":
     "Plus d’une connexion : chacune a son propre dossier de configuration. Connectez-vous une fois dans le terminal :",
   "ag.accountAdd": "Ajouter un compte…",
+  "ag.accountRemove": "Retirer {name}",
   "ag.accountName": "Nom du compte",
   "ag.accountOwn": "Celui de Claude Code (~/.claude)",
   "ag.accountActive": "Les nouvelles conversations utilisent",

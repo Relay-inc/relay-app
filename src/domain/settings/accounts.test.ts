@@ -16,7 +16,8 @@ test("a picked folder is named after itself without its dot, once", () => {
 });
 test("renaming trims, removing the active one falls back to the CLI's own", () => {
   const now = { accounts: [work, { name: "home", dir: "/h" }], active: work.dir, auto: true };
-  assert.equal(renameAccount(now, 0, "  Work ").accounts[0].name, "Work");
+  assert.equal(renameAccount(now, 0, "  Work ")?.accounts[0].name, "Work");
+  assert.equal(renameAccount(now, 0, "   "), null);
   assert.deepEqual(removeAccount(now, 0), { accounts: [{ name: "home", dir: "/h" }], active: "", auto: true });
   assert.equal(removeAccount(now, 1).active, work.dir);
 });

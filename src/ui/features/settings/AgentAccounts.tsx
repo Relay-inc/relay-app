@@ -32,12 +32,21 @@ export function AgentAccounts({ id, config }: { id: string; config: AgentCfg }) 
                 aria-label={t("ag.accountName")}
                 value={account.name}
                 maxLength={40}
-                onCommit={name => saveAgentAccounts(id, renameAccount(now, i, name))}
+                onCommit={(name, input) => {
+                  const next = renameAccount(now, i, name);
+                  // a blank name is not saved: the field shows the old one again
+                  if (next) saveAgentAccounts(id, next);
+                  else input.value = account.name;
+                }}
               />
               <code className="max-w-48 truncate text-xs text-s-muted" title={account.dir}>
                 {account.dir}
               </code>
-              <button className={buttonClass("ghost")} onClick={() => saveAgentAccounts(id, removeAccount(now, i))}>
+              <button
+                className={buttonClass("ghost")}
+                aria-label={t("ag.accountRemove", { name: account.name })}
+                onClick={() => saveAgentAccounts(id, removeAccount(now, i))}
+              >
                 {t("ag.remove")}
               </button>
             </div>

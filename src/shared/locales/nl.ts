@@ -47,6 +47,7 @@ export default {
   "ag.accounts": "Accounts",
   "ag.accountsHelp": "Meer dan één login: elk is een eigen configuratiemap. Meld je één keer aan in de terminal:",
   "ag.accountAdd": "Account toevoegen…",
+  "ag.accountRemove": "{name} verwijderen",
   "ag.accountName": "Naam van het account",
   "ag.accountOwn": "Dat van Claude Code zelf (~/.claude)",
   "ag.accountActive": "Nieuwe gesprekken gebruiken",

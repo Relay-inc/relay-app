@@ -46,6 +46,7 @@ const en = {
   "ag.accounts": "Accounts",
   "ag.accountsHelp": "More than one login: each is its own config folder. Sign in once in the terminal:",
   "ag.accountAdd": "Add account…",
+  "ag.accountRemove": "Remove {name}",
   "ag.accountName": "Account name",
   "ag.accountOwn": "Claude Code’s own (~/.claude)",
   "ag.accountActive": "New conversations use",

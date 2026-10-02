@@ -18,10 +18,15 @@ export function addAccount(now: Accounts, dir: string): Accounts | null {
   return { ...now, accounts: [...now.accounts, { name: dir.split("/").pop()!.replace(/^\./, ""), dir }] };
 }
 
-export const renameAccount = (now: Accounts, index: number, name: string): Accounts => ({
-  ...now,
-  accounts: now.accounts.map((account, i) => (i === index ? { ...account, name: name.trim() } : account)),
-});
+/** The account under a new name, trimmed; a blank name changes nothing (null). */
+export function renameAccount(now: Accounts, index: number, name: string): Accounts | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  return {
+    ...now,
+    accounts: now.accounts.map((account, i) => (i === index ? { ...account, name: trimmed } : account)),
+  };
+}
 
 /** Without the account; new conversations go back to the CLI's own folder when it was the active one. */
 export const removeAccount = (now: Accounts, index: number): Accounts => ({

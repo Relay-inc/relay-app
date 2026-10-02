@@ -32,8 +32,12 @@ pub fn migrate(v: &mut Value) {
         if p.caps().accounts {
             // accounts: the extra logins as {name, dir}; active: the one new conversations start on ("" the CLI's own);
             // auto: move to the next account when one's limits are used up
+            // a blank name (older builds saved one) becomes the folder's, so check() still passes
             let list: Vec<Value> = c["accounts"].as_array().into_iter().flatten()
-                .filter(|a| a["dir"].as_str().is_some_and(|d| !d.is_empty()) && a["name"].is_string()).cloned().collect();
+                .filter(|a| a["dir"].as_str().is_some_and(|d| !d.is_empty()) && a["name"].is_string()).cloned()
+                .map(|mut a| { if a["name"].as_str().unwrap_or("").trim().is_empty() {
+                    a["name"] = json!(a["dir"].as_str().unwrap_or("").trim_end_matches('/').rsplit('/').next().unwrap_or("").trim_start_matches('.'));
+                } a }).collect();
             let active = c["active"].as_str().filter(|d| list.iter().any(|a| a["dir"] == *d)).unwrap_or("").to_string();
             (c["accounts"], c["active"]) = (json!(list), json!(active));
             if !c["auto"].is_boolean() { c["auto"] = json!(false); }
@@ -52,9 +56,14 @@ pub fn check(v: &Value) -> Result<(), String> {
     for p in PROVIDERS {
         let b = v["agents"]["providers"][p.id()]["bin"].as_str().unwrap_or("");
         if !b.is_empty() && (!b.starts_with('/') || b.len() > 500 || b.contains(['\n', '\0'])) { return Err(super::trc_v("err.agent_bin", p.name())); }
+        // each account its own folder, never ~/.claude (the CLI's own, always there as "")
+        let mut dirs = vec![format!("{}/.claude", super::home())];
         for a in v["agents"]["providers"][p.id()]["accounts"].as_array().into_iter().flatten() {
-            let (d, n) = (a["dir"].as_str().unwrap_or(""), a["name"].as_str().unwrap_or(""));
-            if !d.starts_with('/') || d.len() > 500 || d.contains(['\n', '\0']) || n.chars().count() > 40 { return Err(super::trc_v("err.agent_account", p.name())); }
+            let (d, n) = (a["dir"].as_str().unwrap_or(""), a["name"].as_str().unwrap_or("").trim());
+            if !d.starts_with('/') || d.len() > 500 || d.contains(['\n', '\0']) || n.is_empty() || n.chars().count() > 40 { return Err(super::trc_v("err.agent_account", p.name())); }
+            let d = d.trim_end_matches('/').to_string();
+            if dirs.contains(&d) { return Err(super::trc_v("err.agent_account_dir", p.name())); }
+            dirs.push(d);
         }
     }
     Ok(())
@@ -156,13 +165,17 @@ mod tests {
         migrate(&mut v);
         assert_eq!(v["agents"], json!({"default": "claude", "providers": {"claude": {"on": true, "bin": "", "accounts": [], "active": "", "auto": false}, "codex": {"on": false, "bin": ""}, "opencode": {"on": false, "bin": ""}, "pi": {"on": false, "bin": ""}}}));
         assert!(check(&v).is_ok());
-        v["agents"]["providers"]["claude"]["accounts"] = json!([{"name": "Work", "dir": "relative"}]);
-        assert!(check(&v).is_err());
-        v["agents"]["providers"]["claude"]["accounts"] = json!([{"name": "Work", "dir": "/h/.claude-work"}, {"dir": ""}]);
+        for bad in [json!([{"name": "Work", "dir": "relative"}]), json!([{"name": "  ", "dir": "/h/.claude-work"}]),
+                    json!([{"name": "A", "dir": "/h/w"}, {"name": "B", "dir": "/h/w/"}]), json!([{"name": "Own", "dir": format!("{}/.claude/", crate::home())}])] {
+            v["agents"]["providers"]["claude"]["accounts"] = bad;
+            assert!(check(&v).is_err());
+        }
+        v["agents"]["providers"]["claude"]["accounts"] = json!([{"name": " ", "dir": "/h/.claude-work"}, {"dir": ""}]);
         v["agents"]["providers"]["claude"]["active"] = json!("/gone");
         migrate(&mut v);
         assert!(check(&v).is_ok());
         assert_eq!(v["agents"]["providers"]["claude"]["active"], "");
+        assert_eq!(v["agents"]["providers"]["claude"]["accounts"][0]["name"], "claude-work");
         assert_eq!(accounts(&v, PROVIDERS[0]), ["", "/h/.claude-work"]);
         v["agents"]["providers"]["claude"]["bin"] = json!("relative/claude");
         assert!(check(&v).is_err());

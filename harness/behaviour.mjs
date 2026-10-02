@@ -617,11 +617,16 @@ const SCENARIOS = {
     await click(visible(page.getByRole("switch", { name: "Switch accounts automatically" })), 300);
     s.check("auto-switch saved", (await claude())?.auto === true);
     const name = visible(page.getByRole("textbox", { name: "Account name" })).first();
+    const saves = (await s.calls("set_settings")).length;
+    await name.fill("   ");
+    await name.press("Enter");
+    await settle(page, 300);
+    s.check("a blank name is not saved", (await s.calls("set_settings")).length === saves && (await name.inputValue()) === "claude-work");
     await name.fill("  Work ");
     await name.press("Enter");
     await settle(page, 300);
     s.check("renamed, trimmed", (await claude())?.accounts?.[0]?.name === "Work");
-    await click(visible(page.getByRole("button", { name: "Remove", exact: true })).first(), 300);
+    await click(visible(page.getByRole("button", { name: "Remove Work", exact: true })), 300);
     const last = await claude();
     s.check("removed, back on the CLI's own", last?.accounts?.length === 0 && last?.active === "" && last?.auto === true);
     s.fact("saved", (await s.calls("set_settings")).map(c => { const x = c.args.settings?.agents?.providers?.claude; return { accounts: x?.accounts, active: x?.active, auto: x?.auto }; }));
@@ -765,6 +770,7 @@ const KNOWN = {
   mail: "Lit drops a link clicked in a mail: mailLinkClicked checks panel.open, the Mail view keeps the mail in panel.mailOpen (src/domain/mail.ts)",
   // an intended difference, not a Lit bug to port: React fixed it on review (security)
   deepLinks: "Lit sends relay://ask?q=<text> at once (quickSend in src/app/deep-links.ts); React opens Cmd-K with the text and waits for Enter",
+  agentAccounts: "Lit saves a blank account name and names every account's button just Remove; React keeps the old name and labels it Remove <name> (review of #45)",
 };
 
 // ---------- compare
