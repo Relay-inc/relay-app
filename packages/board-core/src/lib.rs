@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub type Text = &'static [(&'static str, [&'static str; 4])];
 
 #[derive(Clone, Copy, PartialEq)]
-pub enum UploadKind { Form, Trello }
+pub enum UploadKind { Form, Trello, Put }
 
 pub struct Provider {
     /// "productive": the key in settings.integrations, in the keychain service and in the webview's registry

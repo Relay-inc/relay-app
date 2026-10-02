@@ -1,6 +1,6 @@
 //! Linear on the backend: a personal API key in the keychain (vault-app.linear/token), sent as the
 //! Authorization header as it is. One endpoint, POST /graphql. Any query goes (a query cannot change anything);
-//! the only mutation allowed is MOVE, the one in src/map.ts, with nothing but an issue id and a state id.
+//! ticket mutations are matched exactly, with validated variables. Signed file uploads carry no API key.
 
 use board_core::{t, Provider, Text};
 use serde_json::{json, Value};
@@ -12,6 +12,10 @@ const TEXT: Text = &[
 
 /// The mutation that moves an issue to another workflow state, compared with its whitespace collapsed.
 const MOVE: &str = "mutation Move($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { id sortOrder } } }";
+const ASSIGN: &str = "mutation Assign($id: String!, $assigneeId: String) { issueUpdate(id: $id, input: { assigneeId: $assigneeId }) { success } }";
+const COMMENT: &str = "mutation Comment($id: String!, $body: String!) { commentCreate(input: { issueId: $id, body: $body }) { success } }";
+const UPLOAD: &str = "mutation Upload($contentType: String!, $filename: String!, $size: Int!) { fileUpload(contentType: $contentType, filename: $filename, size: $size) { success uploadFile { uploadUrl assetUrl headers { key value } } } }";
+const ATTACH: &str = "mutation Attach($id: String!, $title: String!, $url: String!) { attachmentCreate(input: { issueId: $id, title: $title, url: $url }) { success } }";
 fn squash(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ") }
 /// A Linear id: a UUID.
 fn linear_id(v: &Value) -> bool { v.as_str().is_some_and(|s| (1..=64).contains(&s.len()) && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')) }
@@ -37,12 +41,22 @@ pub const PROVIDER: Provider = Provider {
         let shape = o.keys().all(|k| k == "query" || k == "variables") && vars.is_object();
         let words = |w: &str| q.split(|c: char| !c.is_ascii_alphanumeric() && c != '_').any(|x| x == w);
         let read = !words("mutation") && !words("subscription");
-        let moves = squash(q) == MOVE && vars.as_object().unwrap().len() == 2 && linear_id(&vars["id"]) && linear_id(&vars["stateId"]);
-        (method == "POST" && path == "/graphql" && shape && q.len() < 4000 && (read || moves)).then(|| "https://api.linear.app/graphql".into())
+        let count = vars.as_object().map_or(0, |o| o.len());
+        let moves = squash(q) == MOVE && count == 2 && linear_id(&vars["id"]) && linear_id(&vars["stateId"]);
+        let text = |key: &str| vars[key].as_str().is_some_and(|s| !s.trim().is_empty());
+        let writes = match squash(q).as_str() {
+            ASSIGN => count == 2 && linear_id(&vars["id"]) && vars.get("assigneeId").is_some_and(|v| v.is_null() || linear_id(v)),
+            COMMENT => count == 2 && linear_id(&vars["id"]) && text("body"),
+            UPLOAD => count == 3 && text("contentType") && text("filename") && vars["size"].as_u64().is_some_and(|s| s <= 50_000_000),
+            ATTACH => count == 3 && linear_id(&vars["id"]) && text("title") && vars["url"].as_str().is_some_and(|s| s.starts_with("https://uploads.linear.app/") && !s.chars().any(char::is_control)),
+            _ => false,
+        };
+        (method == "POST" && path == "/graphql" && shape && q.len() < 4000 && (read || moves || writes)).then(|| "https://api.linear.app/graphql".into())
     },
     headers: |_, s| vec![format!("Authorization: {}", s[0]), "Content-Type: application/json".into()],
-    upload: |_| false,
-    upload_kind: board_core::UploadKind::Form,
+    upload: |url| url.len() < 16000 && !url.chars().any(char::is_control) &&
+        ["https://uploads.linear.app/", "https://storage.googleapis.com/"].iter().any(|prefix| url.starts_with(prefix)),
+    upload_kind: board_core::UploadKind::Put,
     thumb: |_| false,
     ok: |v| v["errors"].as_array().is_none_or(|e| e.is_empty()),
     error: |code, v| {
@@ -77,6 +91,30 @@ mod tests {
         assert!((p.url)(&c, "GET", "/graphql", &None).is_none());
         assert!((p.url)(&c, "POST", "/other", &Some(json!({ "query": "query { viewer { id } }" }))).is_none());
         assert_eq!((p.headers)(&c, &["lin_api_x".into()])[0], "Authorization: lin_api_x");
+    }
+    #[test]
+    fn allows_only_ticket_mutations_and_valid_variables() {
+        let id = "2b1c3d4e-0000-4000-8000-00000000000a";
+        let allowed = |query, variables| (PROVIDER.url)(&json!({}), "POST", "/graphql", &Some(json!({ "query": query, "variables": variables }))).is_some();
+        assert!(allowed(ASSIGN, json!({ "id": id, "assigneeId": null })));
+        assert!(allowed(ASSIGN, json!({ "id": id, "assigneeId": id })));
+        assert!(!allowed(ASSIGN, json!({ "id": id })));
+        assert!(!allowed(ASSIGN, json!({ "id": id, "assigneeId": "bad id" })));
+        assert!(allowed(COMMENT, json!({ "id": id, "body": "hello" })));
+        assert!(!allowed(COMMENT, json!({ "id": id, "body": " " })));
+        assert!(allowed(UPLOAD, json!({ "contentType": "text/plain", "filename": "a.txt", "size": 12 })));
+        assert!(!allowed(UPLOAD, json!({ "contentType": "text/plain", "filename": "a.txt", "size": 50_000_001 })));
+        assert!(!allowed(UPLOAD, json!({ "contentType": "text/plain", "filename": "a.txt", "size": -1 })));
+        assert!(allowed(ATTACH, json!({ "id": id, "title": "a.txt", "url": "https://uploads.linear.app/a" })));
+        assert!(!allowed(ATTACH, json!({ "id": id, "title": "a.txt", "url": "https://uploads.linear.app.evil/a" })));
+        assert!(!allowed(COMMENT, json!({ "id": id, "body": "hello", "extra": true })));
+        assert!(!allowed(COMMENT, json!([])));
+        assert!(!allowed(&format!("{COMMENT} mutation Delete {{ issueDelete(id: \"x\") {{ success }} }}"), json!({ "id": id, "body": "hi" })));
+        assert!((PROVIDER.upload)("https://storage.googleapis.com/linear/file?signature=abc"));
+        assert!((PROVIDER.upload)("https://uploads.linear.app/file?signature=abc"));
+        for url in ["http://storage.googleapis.com/a", "https://storage.googleapis.com.evil/a", "https://uploads.linear.app@evil/a", "https://evil.com/a", "https://uploads.linear.app/a\noutput=x"] {
+            assert!(!(PROVIDER.upload)(url));
+        }
     }
     #[test]
     fn errors_read_as_one_line() {

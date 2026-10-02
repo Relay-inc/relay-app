@@ -72,7 +72,7 @@ export class RelayTicket extends LitElement {
 
   private files(list: NonNullable<CardView["files"]>) {
     return html`<ul class="flex flex-col gap-1 my-1.5 text-sm">
-      ${list.map(f => html`<li class="flex items-baseline gap-2 min-w-0">${f.url ? html`<a class="truncate" href=${f.url}>${f.name}</a>` : html`<span class="truncate">${f.name}</span>`}<span class="text-xs text-secondary tabular-nums">${size(f.size)}</span></li>`)}
+      ${list.map(f => html`<li class="flex items-baseline gap-2 min-w-0">${f.url ? html`<a class="truncate" href=${f.url}>${f.name}</a>` : html`<span class="truncate">${f.name}</span>`}${f.size > 0 ? html`<span class="text-xs text-secondary tabular-nums">${size(f.size)}</span>` : nothing}</li>`)}
     </ul>`;
   }
 
