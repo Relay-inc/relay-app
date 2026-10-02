@@ -14,7 +14,7 @@
 //             policies (auto, ask, deny), a plain "auto" sets them all. No entry: on, reads run, writes ask.
 //
 // Written once from what the app detects, the first time a vault is used; after that the file is the truth,
-// edited by hand or in Settings. snapshot.rs and favicon.py read the same file.
+// edited by hand or in Settings. snapshot.rs and favicon.rs read the same file.
 
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
