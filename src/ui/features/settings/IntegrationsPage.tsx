@@ -96,7 +96,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       on: boardsState[provider.id].on,
       page: () => (
         <>
-          <BoardSettings provider={provider} onRemove={() => switchTo(provider.id, false)} />
+          <BoardSettings provider={provider} />
           <ActionsSection ext={provider.id} name={provider.name} />
         </>
       ),
@@ -114,7 +114,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       // GitHub has no actions for the agent, so no access section
       page: () => (
         <Section title={t("int.connection")}>
-          <GithubSettings onRemove={() => switchTo("github", false)} />
+          <GithubSettings />
         </Section>
       ),
     },
@@ -126,7 +126,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       on: mailOn,
       page: () => (
         <>
-          <MailSettings onRemove={() => switchTo("mail", false)} />
+          <MailSettings />
           <ActionsSection ext="mail" name="Mail" />
         </>
       ),
@@ -138,9 +138,10 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       status: <StatusLine level={calendarCount ? "ok" : "off"}>{tn("cal.feeds", calendarCount)}</StatusLine>,
       on: calendarOn,
       page: () => (
-        <Section title={t("int.connection")}>
-          <CalendarSettings onRemove={() => switchTo("calendar", false)} />
-        </Section>
+        <>
+          <CalendarSettings />
+          <ActionsSection ext="calendar" name={t("cal.name")} />
+        </>
       ),
     },
   ];
@@ -165,6 +166,16 @@ export function IntegrationsPage({ active }: { active: boolean }) {
           </div>
         </header>
         {open.page()}
+        {/* the same last section on every integration's page */}
+        <Section
+          title={t("int.removeH", { name: open.name })}
+          desc={t("int.removeHelp", { name: open.name })}
+          action={
+            <button className={buttonClass()} onClick={() => switchTo(open.id, false)}>
+              {t("ag.remove")}
+            </button>
+          }
+        />
       </>
     );
   const listed = entries.filter(entry => entry.on);

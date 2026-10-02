@@ -2,13 +2,13 @@ import { useSettingsStore } from "../../../application/settings/store";
 import { checkGithub, saveGithub, setGithubOwners } from "../../../application/settings/integrations";
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
-import { buttonClass, FIELD, HINT_IN_ROW, withoutColon } from "./blocks";
+import { buttonClass, FIELD, FOOTER_IN_ROW, HINT_IN_ROW, withoutColon } from "./blocks";
 import { Field } from "./Field";
-import { RemoveFooter } from "./RemoveFooter";
+import { Footer } from "./Footer";
 
 /** GitHub's body on its page in Integrations: the owners to show PRs of. No token of our own, the app uses gh's login.
  *  The owners as typed stay in the store until Save. */
-export function GithubSettings({ onRemove }: { onRemove: () => void }) {
+export function GithubSettings() {
   const { t, th } = useT();
   const owners = useSettingsStore(s => s.integrations.github.owners ?? s.settings.github.owners);
   const message = useSettingsStore(s => s.integrations.github.message);
@@ -25,14 +25,16 @@ export function GithubSettings({ onRemove }: { onRemove: () => void }) {
           placeholder={t("gh.ownersPh")}
         />
       </Field>
-      <RemoveFooter onRemove={onRemove} message={message}>
-        <button className={buttonClass()} onClick={checkGithub}>
-          {t("gh.recheck")}
-        </button>
-        <button className={buttonClass("primary")} onClick={saveGithub}>
-          {t("set.save")}
-        </button>
-      </RemoveFooter>
+      <div className={FOOTER_IN_ROW}>
+        <Footer message={message}>
+          <button className={buttonClass()} onClick={checkGithub}>
+            {t("gh.recheck")}
+          </button>
+          <button className={buttonClass("primary")} onClick={saveGithub}>
+            {t("set.save")}
+          </button>
+        </Footer>
+      </div>
     </div>
   );
 }
