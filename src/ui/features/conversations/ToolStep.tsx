@@ -6,6 +6,7 @@ import { openDetail } from "../../../application/navigation/panel";
 import { useDerived } from "../../hooks/useDerived";
 import { Icon } from "../../components/Icon";
 import { ToolLine } from "../../components/ToolLine";
+import { Highlighted } from "../../components/Highlighted";
 import { changeOf } from "../../components/tool-change";
 
 // the icon before the line: what kind of call it is, a spinner while it runs
@@ -42,6 +43,7 @@ export function ToolStep({ item }: { item: Item }) {
       {change?.del.length ? <span className="font-mono text-[11px] text-del-fg">−{change.del.length}</span> : null}
     </>
   );
+  // the tool call carries the old and new text, not where they sit in the file: rows without line numbers
   const row = (sign: string, text: string, colour: string, i: number) => (
     <div key={i} className={`px-3 whitespace-pre-wrap wrap-anywhere ${colour}`}>
       {sign} {text}
@@ -69,11 +71,11 @@ export function ToolStep({ item }: { item: Item }) {
       )}
       {open && command ? (
         <pre className="my-1 px-3 py-2 bg-well border border-separator rounded-lg font-mono text-xs leading-[1.6] text-label whitespace-pre-wrap wrap-anywhere select-text max-h-60 overflow-y-auto">
-          {command}
+          <Highlighted code={command} lang="bash" />
         </pre>
       ) : null}
       {change && (change.del.length || change.add.length) ? (
-        <div className="my-1 border border-separator rounded-lg overflow-hidden font-mono text-xs leading-[1.7] max-h-60 overflow-y-auto">
+        <div className="mt-1 mb-1.5 border border-separator rounded-lg overflow-hidden font-mono text-xs leading-[1.7] max-h-120 overflow-y-auto">
           {change.del.map((text, i) => row("−", text, "bg-del-bg text-del-fg", i))}
           {change.add.map((text, i) => row("+", text, "bg-add-bg text-add-fg", change.del.length + i))}
         </div>
