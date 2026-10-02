@@ -257,7 +257,7 @@ struct App {
     limits: Mutex<HashMap<String, (i64, Value)>>, // per provider: its last limits answer and when
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
-    asked: Mutex<std::collections::HashSet<String>>, // repos already offered for linking this run (commits.rs)
+    asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -406,15 +406,16 @@ fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: 
 #[tauri::command]
 fn ignore_repo(state: State<App>, repo: String) -> Result<(), String> { relay_config::ignore_repo(&need_vault(&state)?, &repo) }
 /// The repos a conversation committed to that no project has, and that the vault did not unlink on purpose, each
-/// only once per run. `dirs`: checkouts or their main repos, found by commits.rs.
-fn unlinked_repos(app: &AppHandle, dirs: Vec<PathBuf>) -> Vec<String> {
+/// only once per conversation and run (a general conversation, which never asks, must not use up a project's ask).
+/// `dirs`: checkouts or their main repos, found by commits.rs.
+fn unlinked_repos(app: &AppHandle, key: &str, dirs: Vec<PathBuf>) -> Vec<String> {
     let st = app.state::<App>();
     let vault = st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
     let Some(cfg) = relay_config::load(&vault) else { return vec![] };
     let known = repo_projects(&vault);
     let mut asked = st.asked.lock().unwrap();
     dirs.iter().filter_map(|d| gh_repo(&d.to_string_lossy())).filter(|r| {
-        !known.contains_key(r) && !cfg["repos"].as_object().is_some_and(|m| m.keys().any(|k| k.to_lowercase() == *r)) && asked.insert(r.clone())
+        !known.contains_key(r) && !cfg["repos"].as_object().is_some_and(|m| m.keys().any(|k| k.to_lowercase() == *r)) && asked.insert(format!("{key}\n{r}"))
     }).collect()
 }
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
@@ -643,7 +644,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                     Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
                     Event::ToolResult { id: call, .. } if commit_before.contains_key(call) => {
                         let before = commit_before.remove(call).unwrap_or_default();
-                        for repo in unlinked_repos(&a, commits::changed(&before, &commits::snapshot(&wt_root))) { a.emit("repo-unlinked", json!({"key": k, "repo": repo})).ok(); }
+                        for repo in unlinked_repos(&a, &k, commits::changed(&before, &commits::snapshot(&wt_root))) { a.emit("repo-unlinked", json!({"key": k, "repo": repo})).ok(); }
                     }
                     _ => {}
                 }
