@@ -142,7 +142,7 @@ export class RelayApp extends LitElement {
       return;
     }
     // a project's board or PRs opened from the title bar: back to the conversation
-    if (ui.tool && isView(ui.selected) && !inField(e)) {
+    if (ui.tool && isView(ui.selected) && !inField(e) && !e.defaultPrevented) {
       e.preventDefault();
       closeTool();
       return;

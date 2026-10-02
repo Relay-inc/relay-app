@@ -67,8 +67,12 @@ export async function openTool(project: string, key: string) {
   await select(key, { project, back });
 }
 export function closeTool() {
-  const back = ui.tool?.back;
-  if (back) select(back);
+  const tool = ui.tool;
+  if (!tool) return;
+  // the conversation it came from may have been closed meanwhile: then the project's latest one
+  const open = isTerminal(tool.back) || (chat.chats[tool.back] && !chat.chats[tool.back].closed);
+  if (open) select(tool.back);
+  else openProject(tool.project);
 }
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
 export const toggleDrawer = (tool: "terminal" | "notes") => {

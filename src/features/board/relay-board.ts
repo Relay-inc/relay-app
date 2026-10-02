@@ -97,13 +97,13 @@ export class RelayBoard extends LitElement {
     super.connectedCallback();
     window.addEventListener("pointermove", this.onPointerMove);
     window.addEventListener("pointerup", this.onPointerUp);
-    window.addEventListener("keydown", this.onKey);
+    window.addEventListener("keydown", this.onKey, true);
   }
   override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener("pointermove", this.onPointerMove);
     window.removeEventListener("pointerup", this.onPointerUp);
-    window.removeEventListener("keydown", this.onKey);
+    window.removeEventListener("keydown", this.onKey, true);
     this.drag = null;
     document.body.classList.remove("reordering");
   }
@@ -113,9 +113,11 @@ export class RelayBoard extends LitElement {
     if (this.provider && (changed.has("provider") || !boards.states.has(this.provider.id))) showBoard(this.provider);
   }
 
-  // Escape closes the open popover
+  // Escape closes the open popover, and only that: caught before the app's own Esc (which would leave the board)
   private onKey = (e: KeyboardEvent) => {
-    if (e.key === "Escape" && this.pop) this.closePop();
+    if (e.key !== "Escape" || !this.pop) return;
+    e.preventDefault();
+    this.closePop();
   };
   private closePop = () => {
     this.pop = "";
