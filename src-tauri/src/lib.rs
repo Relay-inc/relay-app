@@ -27,6 +27,7 @@ mod pty;
 mod relay_config;
 mod reminders;
 mod scratch;
+mod server;
 mod tray;
 mod vault;
 mod worktrees;
@@ -95,6 +96,8 @@ fn norm(mut v: Value) -> Value {
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     if !v["accent"].as_str().is_some_and(|a| ["relay", "graphite"].contains(&a)) { v["accent"] = json!("relay"); }
+    if !v["server"].is_object() { v["server"] = json!({}); }
+    if !v["server"]["addr"].as_str().is_some_and(|a| a.len() <= 200 && !a.contains(char::is_whitespace)) { v["server"]["addr"] = json!(""); }
     if !v["terminal"].as_str().is_some_and(|t| t == "auto" || TERMINALS.iter().any(|(id, _)| *id == t)) { v["terminal"] = json!("auto"); }
     v
 }
@@ -192,6 +195,9 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.icons_no_claude", ["Finding websites needs Claude Code switched on under Agents", "Websites zoeken heeft Claude Code nodig, aangezet onder Agents", "La recherche de sites nécessite Claude Code activé dans Agents", "Websites suchen braucht Claude Code, eingeschaltet unter Agents"]),
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
+    ("err.server_offline", ["The server is offline: this conversation continues when it is back", "De server is offline: dit gesprek gaat verder zodra hij terug is", "Le serveur est hors ligne : cette conversation reprend à son retour", "Der Server ist offline: dieses Gespräch geht weiter, sobald er zurück ist"]),
+    ("err.server_addr", ["The server address is host:port, without spaces", "Het serveradres is host:poort, zonder spaties", "L'adresse du serveur est hôte:port, sans espaces", "Die Serveradresse ist Host:Port, ohne Leerzeichen"]),
+    ("err.token_save", ["The token could not be saved in the keychain", "Het token kon niet in de sleutelhanger bewaard worden", "Le jeton n'a pas pu être enregistré dans le trousseau", "Das Token konnte nicht im Schlüsselbund gespeichert werden"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
     ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
@@ -208,7 +214,7 @@ fn set_cur_lang(lang: &str) {
     CUR_LANG.store(i, std::sync::atomic::Ordering::Relaxed);
     board_core::set_lang(i); // the integrations' own strings
 }
-fn trc(key: &str) -> String { tr(LANGS[CUR_LANG.load(std::sync::atomic::Ordering::Relaxed)], key) }
+pub(crate) fn trc(key: &str) -> String { tr(LANGS[CUR_LANG.load(std::sync::atomic::Ordering::Relaxed)], key) }
 fn trc_v(key: &str, v: &str) -> String { trc(key).replace("{v}", v) }
 /// The locale for dates in the webview: the first macOS preferred locale in the UI language (nl-BE for nl),
 /// else the language itself.
@@ -247,7 +253,8 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
 // with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
-struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32 }
+// host: where it runs, "" here or server::HOST (server.rs)
+struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, host: String }
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
@@ -258,9 +265,11 @@ struct App {
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
     asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
+    server: Mutex<Value>,                  // the server's last status (server.rs)
+    remote_pending: Mutex<std::collections::HashSet<String>>, // ids of the server's waiting cards, so answers go back there
 }
 
-fn data_dir(app: &AppHandle) -> PathBuf {
+pub(crate) fn data_dir(app: &AppHandle) -> PathBuf {
     let d = app.path().app_data_dir().expect("app data dir");
     fs::create_dir_all(d.join("pending")).ok();
     d
@@ -564,26 +573,31 @@ fn pipe_init(mail_on: bool) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, host: &str) -> Result<Proc, String> {
     let dir = need_vault(state)?;
     let eb = env_of(app, state, p);
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
-    let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
-    let mut cmd = p.command(&eb.env(), &l)?;
-    // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
-    let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
-    cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
-    let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
+    let c = if host == server::HOST {
+        // the server builds the command from its own settings and vault (relay-serve)
+        server::open(state, project, json!({"provider": p.id(), "name": name, "model": opts.0, "effort": opts.1, "resume": resume, "fork": fork, "mail": eb.opts["mail"] == true}))?
+    } else {
+        let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
+        let mut cmd = p.command(&eb.env(), &l)?;
+        // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
+        let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+        cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
+        let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
+        broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?
+    };
     let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
     if claude { writeln!(stdin, "{}", pipe_init(eb.opts["mail"] == true)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
     // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
-    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()) };
-    read_agent(app, project, p, c, inherit);
+    let mut proc = Proc { child: c.agent.clone(), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), host: host.into() };
+    read_agent(app, project, p, c, inherit, host);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if claude && from_mail { write_taint(&mut proc, &dir); }
     Ok(proc)
@@ -593,8 +607,10 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
 /// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
 /// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
 /// end, it reads the rest from the transcript. `inherit`: whether the model and the effort were left to the CLI.
-fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn, inherit: (bool, bool)) {
+/// `host`: where it runs; a server conversation's repos are not on this disk, so no worktree or commit tracking.
+pub(crate) fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn, inherit: (bool, bool), host: &str) {
     let (a, k, pid, id, claude, pend, mut parse) = (app.clone(), key.to_string(), c.agent.id(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
+    let (host, local) = (host.to_string(), !c.agent.is_remote());
     let (frames, backlog) = (c.frames, c.backlog);
     std::thread::spawn(move || {
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
@@ -634,7 +650,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                     if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.max(1); }
                 }
                 match &ev {
-                    Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
+                    Event::ToolCall { id: call, input, .. } if local && !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
                     Event::ToolResult { id: call, .. } if commit_before.contains_key(call) => {
                         let before = commit_before.remove(call).unwrap_or_default();
                         for repo in unlinked_repos(&a, &k, commits::changed(&before, &commits::snapshot(&wt_root))) { a.emit("repo-unlinked", json!({"key": k, "repo": repo})).ok(); }
@@ -645,7 +661,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                     Event::Session { id: sid } => {
                         let st = a.state::<App>();
                         let mut sids = st.sids.lock().unwrap();
-                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone(), host: String::new() });
+                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone(), host: host.clone() });
                         save_sids(&a, &sids);
                     }
                     // raised in the provider's own protocol: a card like any other, answered through respond()
@@ -654,7 +670,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                         (r.project, r.provider, r.relay) = (k.clone(), id.into(), true);
                         pending::write(&pend, &r).ok();
                     }
-                    Event::ToolCall { id: call, input, .. } if worktrees::may_add(input) => { wt_before.insert(call.clone(), worktrees::snapshot(&wt_root)); }
+                    Event::ToolCall { id: call, input, .. } if local && worktrees::may_add(input) => { wt_before.insert(call.clone(), worktrees::snapshot(&wt_root)); }
                     Event::ToolResult { id: call, .. } if wt_before.contains_key(call) => {
                         let before = wt_before.remove(call).unwrap_or_default();
                         let new: Vec<String> = worktrees::snapshot(&wt_root).difference(&before).map(|p| p.to_string_lossy().into()).collect();
@@ -703,9 +719,9 @@ fn reattach(app: &AppHandle) {
         let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let Ok(stdin) = c.stdin.try_clone() else { continue };
-        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1 };
+        let x = Proc { child: c.agent.clone(), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1, host: String::new() };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        read_agent(app, &m.key, p, c, (false, false));
+        read_agent(app, &m.key, p, c, (false, false), "");
     }
 }
 
@@ -757,8 +773,10 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, host: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
+    // where it runs: its session's host, else the one asked for at the first message
+    let host = state.sids.lock().unwrap().get(&project).map(|s| s.host.clone()).or(host).filter(|h| h == server::HOST).unwrap_or_default();
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
         images.unwrap_or_default().into_iter().filter_map(|i| Some(Image { media_type: i["media_type"].as_str()?.into(), data: i["data"].as_str()?.into() }))
@@ -775,15 +793,15 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &host)?;
         procs.insert(project, x);
         return Ok(());
     }
     // model and effort are start flags: a switch restarts the process on the same session
     let mut was_tainted = false;
-    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id()) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
+    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || x.host != host) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &host)?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -828,6 +846,7 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
 #[tauri::command]
 fn history(app: AppHandle, state: State<App>, project: String) -> Value {
     let Some(s) = state.sids.lock().unwrap().get(&project).cloned() else { return json!([]) };
+    if s.host == server::HOST { return server::history(&app, &state, &s.provider, &s.sid); }
     let p = agents::get_or_first(Some(&s.provider));
     json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0)
 }
@@ -891,7 +910,8 @@ fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
     let mut out = serde_json::Map::new();
     for k in keys {
         let Some((p, sid)) = sid_of(&state, &k).filter(|(p, _)| p.caps().subagents) else { continue };
-        let list = p.subagents(&env_of(&app, &state, p).env(), &sid);
+        let list = if on_server(&state, &k) { server::ask(&state, json!({"cmd": "subagents", "provider": p.id(), "sid": sid})).as_array().cloned().unwrap_or_default() }
+            else { p.subagents(&env_of(&app, &state, p).env(), &sid) };
         if !list.is_empty() { out.insert(k, json!(list)); }
     }
     Value::Object(out)
@@ -901,8 +921,10 @@ fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
 #[tauri::command]
 fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<String> {
     let Some((p, sid)) = sid_of(&state, &key) else { return vec![] };
+    if on_server(&state, &key) { return serde_json::from_value(server::ask(&state, json!({"cmd": "agent_log", "provider": p.id(), "sid": sid, "agent": id}))).unwrap_or_default(); }
     p.agent_log(&env_of(&app, &state, p).env(), &sid, &id)
 }
+fn on_server(st: &App, key: &str) -> bool { st.sids.lock().unwrap().get(key).is_some_and(|s| s.host == server::HOST) }
 
 #[tauri::command]
 fn running(state: State<App>) -> HashMap<String, u32> {
@@ -911,12 +933,17 @@ fn running(state: State<App>) -> HashMap<String, u32> {
 
 /// The open permission requests and questions of every provider.
 #[tauri::command]
-fn pending(app: AppHandle) -> Vec<Value> { pending::list(&pending_dir(&app)) }
+fn pending(app: AppHandle, state: State<App>) -> Vec<Value> {
+    let mut list = pending::list(&pending_dir(&app));
+    list.extend(server::pending(&state));
+    list
+}
 
 /// The user's decision. A provider that raised the request in its own protocol gets it over stdin.
 #[tauri::command]
 fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Result<(), String> {
     if !pending::valid_id(&id) { return Err("bad id".into()); }
+    if let Some(r) = server::answer(&state, &id, &decision) { return r; }
     let dir = pending_dir(&app);
     let req = pending::read(&dir, &id);
     pending::answer(&dir, &id, &decision)?;
@@ -1049,6 +1076,7 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 /// Validate, save and activate new settings. Returns what was saved.
 #[tauri::command]
 fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
+    if settings["server"]["addr"].as_str().is_some_and(|a| a.len() > 200 || a.contains(char::is_whitespace)) { return Err(trc("err.server_addr")); }
     let mut s = norm(settings);
     let lang = ui_lang_of(&s);
     // the vault by its real path, with its full mapping stored, so the file shows what the app uses
@@ -1455,16 +1483,17 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), mail: mail::Mail::new() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), mail: mail::Mail::new(), server: Mutex::new(json!({"configured": false, "online": false})), remote_pending: Default::default() });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
+            server::start(app.handle());
             actions::start(app.handle());
             tray::init(app.handle())?;
             let handle = app.handle().clone();
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, server::server_status, server::server_token, server::chat_hosts, scratch_list, scratch_save, scratch_delete])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
