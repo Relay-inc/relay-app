@@ -99,6 +99,14 @@ const TOOLS: [string, (i: number) => Record<string, unknown>][] = [
   ["mcp__claude_ai_Notion__notion-search", () => ({ query: "billing incident" })],
   ["MultiEdit", () => ({ file_path: "/Users/demo/code/beacon/tests/Billing/BalanceSyncTest.php" })],
 ];
+// what Claude Code reports with an edit's result (toolUseResult.structuredPatch): line numbers and context
+const PATCHES: Record<string, { oldStart: number; newStart: number; lines: string[] }[]> = {
+  Edit: [{ oldStart: 39, newStart: 39, lines: ["         $credits = $this->credits->forDossier($dossier->id());", "         $balance = $dossier->total()->minus($credits->sum());", "-        $this->balances->add($dossier->id(), $balance);", "+        $this->balances->replace($dossier->id(), $balance);", "+        $this->log->info('balance replaced', ['dossier' => $dossier->id()]);", "     }", " ", "     public function syncAll(): void"] }],
+  MultiEdit: [
+    { oldStart: 12, newStart: 12, lines: ["     public function testCreditBeforeInvoice(): void", "     {", "-        $this->markTestIncomplete();", "+        $this->arrive('credit', 'invoice');", "+        $this->assertBalance(1000);", "     }"] },
+    { oldStart: 58, newStart: 59, lines: ["     {", "-        $this->assertSame(2, $this->balances->count());", "+        $this->assertSame(1, $this->balances->count());", "     }"] },
+  ],
+};
 let longCache: Ev[] | null = null;
 export function longHistory(): Ev[] {
   if (longCache) return longCache;
@@ -107,7 +115,7 @@ export function longHistory(): Ev[] {
   let items = 0;
   const add = (event: Ev) => {
     out.push(event);
-    if (event.type !== "time") items++;
+    if (event.type !== "time" && event.type !== "patch") items++;
   };
   let t = NOW - 6 * HOUR;
   for (let round = 0; items < 299; round++) {
@@ -115,7 +123,9 @@ export function longHistory(): Ev[] {
     add(user(round === 0 ? "The billing sync shows double balances for some dossiers. Find out why." : `Round ${round}: ${["check the next batch", "what about archived dossiers?", "run the tests again", "show me the diff", "is the client affected?"][round % 5]}`, round % 4 === 1 ? [img] : []));
     for (let k = 0; k < 1 + (round % 3) && items < 299; k++) {
       const [name, input] = TOOLS[(round * 3 + k) % TOOLS.length];
-      add(tool(name, input(round)));
+      const call = tool(name, input(round));
+      add(call);
+      if (PATCHES[name]) add({ type: "patch", id: call.id, hunks: PATCHES[name] });
     }
     if (items < 299) add(ai(MD[round % MD.length](round)));
   }
