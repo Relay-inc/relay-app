@@ -57,7 +57,16 @@ export type MirrorProgress = {
   total: number;
 };
 /** What `machine_status` says about a machine. */
-export type MachineStatus = { ok: boolean; host?: string; version?: string; os?: string; error?: string };
+export type MachineStatus = {
+  ok: boolean;
+  host?: string;
+  version?: string;
+  os?: string;
+  error?: string;
+  outdated?: "server" | "app"; // it answers but speaks another protocol: the side to update
+};
+/** What `server_setup` gives for setting up a machine: this Relay's version and the relay-server image. */
+export type ServerSetup = { version: string; image: string };
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder

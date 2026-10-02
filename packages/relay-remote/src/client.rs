@@ -80,9 +80,13 @@ impl Client {
     pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
 
     pub fn info(&self) -> Result<Info, String> {
-        let info: Info = serde_json::from_value(self.call(json!({"op": "info"}))?["info"].clone()).map_err(|e| e.to_string())?;
+        let info = self.info_any()?;
         if info.proto != PROTO { return Err(format!("relay-server {} speaks protocol {}, this Relay {PROTO}: update one of them", info.version, info.proto)); }
         Ok(info)
+    }
+    /// What the server says about itself, also when it speaks another protocol (to say which side to update).
+    pub fn info_any(&self) -> Result<Info, String> {
+        serde_json::from_value(self.call(json!({"op": "info"}))?["info"].clone()).map_err(|e| e.to_string())
     }
     /// The brokers that run there, to take their conversations back after the app restarts.
     pub fn list(&self) -> Result<Vec<Meta>, String> {

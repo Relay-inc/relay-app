@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { agoParts, conflictPath, excludePath, foldersOf, machinePick, projectChoices } from "./machines.ts";
+import {
+  agoParts,
+  conflictPath,
+  excludePath,
+  foldersOf,
+  machinePick,
+  projectChoices,
+  setupCommands,
+  SETUP_FOLDER,
+} from "./machines.ts";
 
 test("folders: empty rows drop out, paths are trimmed", () => {
   assert.deepEqual(
@@ -57,4 +66,18 @@ test("ago: picks the unit, never in the future", () => {
 });
 test("conflict path loses its vault/ prefix", () => {
   assert.equal(conflictPath("vault/Notes/a (conflict).md"), "Notes/a (conflict).md");
+});
+
+test("setup: the image of this version, the folders under the one given", () => {
+  const c = setupCommands("ghcr.io/x/relay-server", "0.3.0", "/srv/relay/");
+  assert.match(
+    c.install,
+    /^mkdir -p \/srv\/relay\/data \/srv\/relay\/claude \/srv\/relay\/repos \/srv\/relay\/local\nchown -R 1000:1000 \/srv\/relay\n/,
+  );
+  assert.match(c.install, /-v \/srv\/relay\/local:\/home\/relay\/.local \\\n {2}ghcr.io\/x\/relay-server:0.3.0$/);
+  assert.match(c.update, /^docker pull ghcr.io\/x\/relay-server:0.3.0\ndocker rm -f relay-server\ndocker run /);
+});
+test("setup: an empty folder is the default, one with a space is quoted", () => {
+  assert.ok(setupCommands("i", "1", " ").install.includes(`${SETUP_FOLDER}/data`));
+  assert.ok(setupCommands("i", "1", "/mnt/my disk").install.includes('-v "/mnt/my disk/data:/home/relay/data"'));
 });

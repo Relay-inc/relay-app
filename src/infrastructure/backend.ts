@@ -12,6 +12,7 @@ import type {
   MachineStatus,
   MirrorProgress,
   MirrorStatus,
+  ServerSetup,
   MailAcct,
   Settings,
 } from "../domain/settings/types";
@@ -120,6 +121,8 @@ export const machinesList = (project: string | null) => invoke<MachineChoice[]>(
 /** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */
 export const machinePair = (line: string, name: string) => invoke<Machine>("machine_pair", { line, name });
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
+/** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
+export const serverSetup = () => invoke<ServerSetup>("server_setup");
 export const machineForget = (id: string) => invoke("machine_forget", { id });
 export const setMachineFolders = (id: string, folders: Record<string, string>) =>
   invoke("set_machine_folders", { id, folders });

@@ -27,6 +27,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Added
 
+- Settings › Machines › Set up a machine: the commands to run relay-server in Docker on a home server, for the image of this Relay's version and the folder you type, each with a copy button. A machine that speaks an older protocol says so in its row, with the commands to update it.
 - A conversation can move between this Mac and a work machine between two turns: pick another place in the composer. Its history goes along and the next message goes on there.
 - The mirror's first round is much faster: files go to the machine 500 at a time, not one connection each. Settings › Machines shows a progress bar while a round runs. The machine's copy uses separate keys for encrypting and naming, derived with HKDF, and converts an existing copy on its first unlock.
 - relay-server is released as an image, `ghcr.io/laurentme/relay-server` for amd64 and arm64 with the same version as Relay. Claude Code is no longer in the image: the first start installs it into a volume, where its updates stay.

@@ -57,3 +57,33 @@ export function agoParts(
 
 /** A conflict as the backend names it, "vault/<path>", without its "vault/" prefix. */
 export const conflictPath = (conflict: string) => conflict.replace(/^vault\//, "");
+
+/** Where a machine keeps relay-server's folders unless the page says otherwise: an Unraid appdata folder. */
+export const SETUP_FOLDER = "/mnt/user/appdata/relay-server";
+/** The commands that set up relay-server in Docker on a machine (a home server, a NAS), to run there in this order.
+ *  `folder` keeps the pairing, Claude's login, Claude Code itself and the repos. The image of this Relay's `version`
+ *  speaks its protocol. `update` replaces a running one with that version, the folders stay. */
+export function setupCommands(image: string, version: string, folder: string) {
+  const dir = folder.trim().replace(/\/+$/, "") || SETUP_FOLDER;
+  const q = (path: string) => (/^[\w./:-]+$/.test(path) ? path : `"${path.replace(/(["$`\\])/g, "\\$1")}"`);
+  const volumes = [
+    "data:/home/relay/data",
+    "claude:/home/relay/.claude",
+    "repos:/home/relay/repos",
+    "local:/home/relay/.local",
+  ];
+  const run = [
+    'docker run -d --name relay-server --hostname "$(hostname)" --restart unless-stopped -p 47800:47800 \\',
+    "  --tmpfs /home/relay/work:uid=1000,gid=1000,mode=0700,size=2g \\",
+    ...volumes.map(volume => `  -v ${q(`${dir}/${volume}`)} \\`),
+    `  ${image}:${version}`,
+  ].join("\n");
+  const folders = ["data", "claude", "repos", "local"].map(name => q(`${dir}/${name}`)).join(" ");
+  return {
+    login: "docker login ghcr.io -u <your GitHub user>",
+    install: `mkdir -p ${folders}\nchown -R 1000:1000 ${q(dir)}\n${run}`,
+    claude: "docker exec -it relay-server claude",
+    pair: "docker exec relay-server relay-server pair --host <this machine's LAN address>",
+    update: `docker pull ${image}:${version}\ndocker rm -f relay-server\n${run}`,
+  };
+}

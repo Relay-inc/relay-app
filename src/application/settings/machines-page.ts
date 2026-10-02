@@ -23,6 +23,14 @@ export async function showMachinesPage() {
     draft.checked = true;
   });
   checkAll();
+  backend
+    .serverSetup()
+    .then(setup =>
+      change(draft => {
+        draft.setup = setup;
+      }),
+    )
+    .catch(() => {}); // an older backend: no setup section
   const snapshot = await backend.snapshot().catch(() => ({ projects: [] }));
   const projects = (snapshot.projects || []).map(project => String(project.name)).sort((a, b) => a.localeCompare(b));
   change(draft => {
@@ -187,3 +195,8 @@ export async function wipeMirror(machine: Machine) {
     mirrorMessage(machine.id, String(error));
   }
 }
+/** The folder on the machine the setup commands use. */
+export const setSetupFolder = (folder: string) =>
+  change(draft => {
+    draft.setupFolder = folder;
+  });

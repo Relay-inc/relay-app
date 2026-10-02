@@ -10,10 +10,11 @@ import {
   type MachineStatus,
   type MirrorProgress,
   type MirrorStatus,
+  type ServerSetup,
   type Message,
   type Settings,
 } from "../../domain/settings/types";
-import type { FolderRow } from "../../domain/settings/machines";
+import { SETUP_FOLDER, type FolderRow } from "../../domain/settings/machines";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
@@ -53,6 +54,8 @@ export type SettingsState = {
     mirror: Record<string, MirrorStatus | null>; // the last mirror round per machine, polled while the page shows
     mirrorMessages: Record<string, Message | null>; // per machine: why the last mirror change failed
     mirrorProgress: Record<string, MirrorProgress | null>; // per machine: the running round, null between rounds
+    setup: ServerSetup | null; // this Relay's version and the image, for the setup commands
+    setupFolder: string; // where the machine keeps relay-server's folders, as typed in the setup section
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
@@ -105,6 +108,8 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     mirror: {},
     mirrorMessages: {},
     mirrorProgress: {},
+    setup: null,
+    setupFolder: SETUP_FOLDER,
   },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {

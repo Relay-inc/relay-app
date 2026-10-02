@@ -664,6 +664,24 @@ export default {
   "mc.namePh": "Leer nimmt den Hostnamen der Maschine",
   "mc.pair": "Koppeln",
   "mc.pairing": "Koppeln…",
+  "mc.setupTitle": "Maschine einrichten",
+  "mc.setupHelp":
+    "relay-server läuft in Docker auf einem Heimserver oder einem NAS. Diese Befehle sind für relay-server {version}, die Version dieses Relay. Führe sie auf der Maschine in dieser Reihenfolge aus.",
+  "mc.setupShow": "Befehle zeigen",
+  "mc.setupFolder": "Ordner auf der Maschine",
+  "mc.setupFolderHelp":
+    "Bewahrt die Kopplung, den Claude-Login, Claude Code und die Repos. Auf Unraid ein Ordner in appdata.",
+  "mc.setupLogin": "Nur solange das Image privat ist: einmal mit einem GitHub-Token mit read:packages anmelden.",
+  "mc.setupInstall": "Ordner anlegen und relay-server starten. Der erste Start installiert Claude Code.",
+  "mc.setupClaude": "Einmal bei Claude anmelden. Es erscheint ein Link zum Öffnen auf diesem Mac.",
+  "mc.setupPair":
+    "Erstelle eine Kopplungszeile mit der LAN-Adresse der Maschine und füge sie unter Maschine koppeln ein.",
+  "mc.copy": "Kopieren",
+  "mc.copied": "Kopiert",
+  "mc.outdatedServer":
+    "relay-server dort spricht ein älteres Protokoll als dieses Relay: aktualisiere es auf der Maschine",
+  "mc.outdatedApp": "relay-server dort spricht ein neueres Protokoll als dieses Relay: aktualisiere Relay",
+  "mc.updateHelp": "Auf der Maschine ausführen. Die Ordner bewahren die Kopplung, den Login und die Gespräche.",
   "mc.empty": "Noch keine Maschinen. Koppel eine, um Gespräche darauf laufen zu lassen.",
   "mc.refresh": "Aktualisieren",
   "mc.checking": "Prüfen…",

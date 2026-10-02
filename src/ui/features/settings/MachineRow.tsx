@@ -1,12 +1,13 @@
 import { useState } from "react";
 import type { Machine } from "../../../domain/settings/types";
-import { folderRows, projectChoices } from "../../../domain/settings/machines";
+import { folderRows, projectChoices, setupCommands } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import { editRows, forgetMachine, saveDefaultFolder, saveFolders } from "../../../application/settings/machines-page";
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, OK_MESSAGE, PILL, SELECT } from "./blocks";
 import { MachineMirror } from "./MachineMirror";
+import { CommandBlock } from "./MachineSetup";
 import { StatusLine } from "./StatusLine";
 
 /** A paired machine on Settings › Machines: its name, address, whether it is online and its fingerprint, Forget (with
@@ -18,6 +19,8 @@ export function MachineRow({ machine }: { machine: Machine }) {
   const draft = useSettingsStore(s => s.machinesPage.drafts[machine.id]);
   const message = useSettingsStore(s => s.machinesPage.messages[machine.id]);
   const projects = useSettingsStore(s => s.machinesPage.projects);
+  const setup = useSettingsStore(s => s.machinesPage.setup);
+  const setupFolder = useSettingsStore(s => s.machinesPage.setupFolder);
   const [confirming, setConfirming] = useState(false);
   const [folder, setFolder] = useState(machine.default_folder ?? "");
   const [folderMessage, setFolderMessage] = useState<{ text: string; ok: boolean } | null>(null);
@@ -26,6 +29,8 @@ export function MachineRow({ machine }: { machine: Machine }) {
   const statusLine =
     !status || status === "checking" ? (
       <StatusLine level="off">{t("mc.checking")}</StatusLine>
+    ) : status.outdated ? (
+      <StatusLine level="warn">{t(status.outdated === "server" ? "mc.outdatedServer" : "mc.outdatedApp")}</StatusLine>
     ) : !status.ok ? (
       <StatusLine level="warn">{t("mc.offline")}</StatusLine>
     ) : (
@@ -66,6 +71,12 @@ export function MachineRow({ machine }: { machine: Machine }) {
         )}
       </div>
       {confirming ? <Html as="p" className={HINT_IN_ROW} html={th("mc.forgetHelp", { name: machine.name })} /> : null}
+      {status && status !== "checking" && status.outdated === "server" && setup ? (
+        <CommandBlock
+          hint={t("mc.updateHelp")}
+          command={setupCommands(setup.image, setup.version, setupFolder).update}
+        />
+      ) : null}
       <div className="grid gap-1.5">
         <span className="text-xs font-medium text-s-fg">{t("mc.folders")}</span>
         {rows.length ? (

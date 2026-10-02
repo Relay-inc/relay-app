@@ -665,6 +665,24 @@ export default {
   "mc.namePh": "Vide : le nom d'hôte de la machine",
   "mc.pair": "Associer",
   "mc.pairing": "Association…",
+  "mc.setupTitle": "Configurer une machine",
+  "mc.setupHelp":
+    "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
+  "mc.setupShow": "Afficher les commandes",
+  "mc.setupFolder": "Dossier sur la machine",
+  "mc.setupFolderHelp":
+    "Garde l'appairage, la connexion de Claude, Claude Code et les dépôts. Sur Unraid un dossier dans appdata.",
+  "mc.setupLogin":
+    "Seulement tant que l'image est privée : connectez-vous une fois avec un jeton GitHub qui a read:packages.",
+  "mc.setupInstall": "Créez les dossiers et démarrez relay-server. Le premier démarrage installe Claude Code.",
+  "mc.setupClaude": "Connectez-vous une fois à Claude. Un lien s'affiche à ouvrir sur ce Mac.",
+  "mc.setupPair":
+    "Créez une ligne d'appairage avec l'adresse LAN de la machine et collez-la sous Appairer une machine.",
+  "mc.copy": "Copier",
+  "mc.copied": "Copié",
+  "mc.outdatedServer": "relay-server y parle un protocole plus ancien que ce Relay : mettez-le à jour sur la machine",
+  "mc.outdatedApp": "relay-server y parle un protocole plus récent que ce Relay : mettez Relay à jour",
+  "mc.updateHelp": "À lancer sur la machine. Les dossiers gardent l'appairage, la connexion et les conversations.",
   "mc.empty": "Aucune machine pour l'instant. Associez-en une pour y exécuter des conversations.",
   "mc.refresh": "Actualiser",
   "mc.checking": "Vérification…",

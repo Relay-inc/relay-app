@@ -1678,9 +1678,19 @@ fn sys_name() -> String {
 async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, String> {
     let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
     let c = state.machines.client(&m);
-    let r = tauri::async_runtime::spawn_blocking(move || c.info()).await.map_err(|e| e.to_string())?;
-    Ok(match r { Ok(i) => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os}), Err(e) => json!({"ok": false, "error": e}) })
+    let r = tauri::async_runtime::spawn_blocking(move || c.info_any()).await.map_err(|e| e.to_string())?;
+    let proto = relay_remote::proto::PROTO;
+    Ok(match r {
+        Ok(i) if i.proto == proto => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os}),
+        // it answers but speaks another protocol: the page says which side to update, with the commands
+        Ok(i) => json!({"ok": false, "outdated": if i.proto < proto { "server" } else { "app" }, "version": i.version,
+            "error": format!("relay-server {} speaks protocol {}, this Relay {proto}", i.version, i.proto)}),
+        Err(e) => json!({"ok": false, "error": e}),
+    })
 }
+/// For setting up a machine: this Relay's version, the relay-server image of the same version speaks its protocol.
+#[tauri::command]
+fn server_setup() -> Value { json!({"version": env!("CARGO_PKG_VERSION"), "image": "ghcr.io/laurentme/relay-server"}) }
 /// Forget a machine here. Its conversations there stop (nothing would ever reach them again) and lose their bind; on
 /// the machine `relay-server revoke` unpairs this Mac.
 #[tauri::command]
@@ -1891,7 +1901,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, mirror_wipe, move_conversation, machines_list, set_machine_default_folder, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, mirror_wipe, move_conversation, server_setup, machines_list, set_machine_default_folder, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
