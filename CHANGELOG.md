@@ -17,7 +17,7 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - A conversation you close greys out and pulses in the sidebar until it is gone, so a slow close (stopping the agent, removing its worktrees) shows that it is working. Close all greys out every conversation it closes at once (#48)
 
 ### Fixed
-- Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open.
+- Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open (#56)
 
 ## [0.0.2] - 2026-10-01
 
