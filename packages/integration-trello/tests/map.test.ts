@@ -20,7 +20,7 @@ test("columns are the open lists in board order", () => {
 test("cards carry number, list, due day and the first name of the first member", () => {
   const [a, b] = mapCards(fx("cards"));
   assert.deepEqual(a, { id: "600000000000000000000d01", title: "Fix the header", number: "12", column: "600000000000000000000c01",
-    placement: 65535, due: "2026-10-03", who: "Kristof" });
+    placement: 65535, due: "2026-10-03", who: "Kristof", whoName: "Kristof Example" });
   assert.equal(b.due, null);
   assert.equal(b.who, "");
 });

@@ -10,29 +10,38 @@ export type Opt = { id: string; name: string };
 /** A column: a Productive task list, a Trello list, a Linear workflow state. */
 export type Column = { id: string; name: string; placement: number;
   /** what the column means when it is a workflow status (Productive statuses, Linear states): draws its ring */
-  state?: State };
+  state?: State; tone?: Tone };
 /** The broad kind of a workflow status: not started, in progress, finished. */
 export type State = "todo" | "doing" | "done";
+/** The colour of a workflow status' ring (toneOf in tone.ts): waiting in a backlog, planned, being worked on, blocked,
+ *  in review, finished. Without one the ring takes its colour from the State. */
+export type Tone = "idle" | "planned" | "active" | "blocked" | "review" | "done";
 /** A card in a column. `number` is shown as #number (as it is when not only digits, Linear's ENG-12), `who` is the
- * assignee's first name, `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
+ * assignee's first name (what the filters and saved views match on), `whoName` their full name (the avatar's
+ * initials), `me` whether that is the user, `due` is yyyy-mm-dd, `priority` Linear's scale: 1 urgent to 4 low, 0 or absent none. */
 export type Card = { id: string; title: string; number: string; column: string; placement: number; due: string | null; who: string; priority?: number;
+  whoName?: string; me?: boolean;
   /** its column in each grouping but the first (`column`): Productive's { status: workflow status id } */
   in?: Record<string, string>;
   /** What the tracker knows beyond the column, all optional (a provider fills what it has; the board hides what no card has):
    *  its workflow status (name and kind), the folder (Productive board) and task list it sits in, labels, and the last update as an ISO time. */
-  status?: string; state?: State; folder?: string; list?: string; labels?: string[]; updated?: string };
+  status?: string; state?: State; tone?: Tone; folder?: string; list?: string; labels?: string[]; updated?: string };
 /** A card for the ticket window, in a shape every provider's detail can fill: the app draws it, the provider only maps. `description` and the feed's `html` are sanitised HTML. */
 export type CardView = {
   title: string; number: string; closed: boolean; url: string;
   board: string; list: string; project: string; created: string; creator: string;
   description: string;
-  status?: { id: string; name: string; state?: State };
+  status?: { id: string; name: string; state?: State; tone?: Tone };
   assignee?: { id: string; name: string };
   /** Trello supports multiple members. Changes add/remove one member, preserving everyone else. */
   assignees?: Opt[];
   due: string; labels: string[];
+  /** the provider writes labels as free text ("label-add" and "label-remove" with the label): the window offers + Label */
+  editLabels?: boolean;
+  /** the folder the task list is in (Productive's board), shown as folder › list */
+  folder?: string;
   /** the choices for the status and assignee pickers, once known; without them those two show as text */
-  statuses?: Opt[]; people?: Opt[];
+  statuses?: (Opt & { state?: State; tone?: Tone })[]; people?: Opt[];
   files: { id: string; name: string; size: number; url: string }[] | null;
   feed: { at: string; who: string; html: string; change: string; files: { id: string; name: string; size: number; url: string }[] }[];
 };
@@ -62,7 +71,8 @@ export interface CardDetail<D = any> {
   /** The card as the ticket window shows it, made when it is drawn (strings in the language of that moment). */
   view(d: D): CardView;
   /** An action from the window, resolves with the card as it is now: "status" or "assignee" with the picked id,
-   * "member-add"/"member-remove" with a person id, "comment" with the composer's text, "attach" with picked files. */
+   * "member-add"/"member-remove" with a person id, "label-add"/"label-remove" with a label, "comment" with the
+   * composer's text, "attach" with picked files. */
   act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[] }): Promise<D>;
 }
 
@@ -93,6 +103,11 @@ export interface BoardProvider<K extends string = string> {
   cards(ctx: Ctx, ref: BoardRef): Promise<Card[]>;
   /** Move the card to another column, in the tracker right away. Resolves with the new placement when the API gives one. */
   move(ctx: Ctx, ref: BoardRef, card: Card, to: string, group?: string): Promise<number | void>;
+  /** A new card in a column of the grouping shown (`group`), at its end. Resolves with the card as the tracker made it.
+   *  Without it the board offers no New task. */
+  create?(ctx: Ctx, ref: BoardRef, input: { title: string; description: string; column: string; group?: string }): Promise<Card>;
+  /** A line under the grouping menu, about how the groupings relate to the tracker's own board. */
+  groupHint?: K;
   /** The board's saved views in the tracker, read only. */
   views?(ctx: Ctx, ref: BoardRef): Promise<View[]>;
   /** The card's page in the tracker's web app. */

@@ -1,6 +1,6 @@
 //! Productive on the backend: org and user id in the config, the API token in the keychain
-//! (vault-app.productive/token). GET on any path; PATCH on a single task, comment or attachment; POST a comment or
-//! an attachment record. The file itself goes to Productive's S3 bucket as a form, without the token.
+//! (vault-app.productive/token). GET on any path, PATCH on a single task, comment or attachment, POST a task, a
+//! comment or an attachment record. The file itself goes to Productive's S3 bucket as a form, without the token.
 
 use board_core::{arg, arg_ok, digits, iso_date, path_ok, read, t, t_v, write, Action, Provider, Req, Text};
 use serde_json::{json, Value};
@@ -36,7 +36,7 @@ pub const PROVIDER: Provider = Provider {
         let one = |kind: &str| path.strip_prefix(kind).is_some_and(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_digit()));
         let write = body.is_some() && match method {
             "PATCH" => one("/tasks/") || one("/comments/") || one("/attachments/"),
-            "POST" => path == "/comments" || path == "/attachments",
+            "POST" => path == "/comments" || path == "/attachments" || path == "/tasks",
             _ => false,
         };
         (path_ok(path) && (method == "GET" || write)).then(|| format!("https://api.productive.io/api/v2{path}"))
@@ -127,7 +127,7 @@ mod tests {
         assert_eq!(import(json!({"mcpServers": {"productive-dev": dev, "productive": env}}), "/v", Value::Null).unwrap().0[0].1, "t");
     }
     #[test]
-    fn allows_reads_moving_a_task_comments_and_attachments() {
+    fn allows_reads_new_and_moved_tasks_comments_and_attachments() {
         let p = &PROVIDER;
         let c = json!({ "org": "1" });
         assert!((p.url)(&c, "GET", "/tasks?filter[folder_id]=3&page[size]=200", &None).is_some());
@@ -135,7 +135,9 @@ mod tests {
         assert!((p.url)(&c, "PATCH", "/tasks", &Some(json!({}))).is_none());
         assert!((p.url)(&c, "PATCH", "/comments/7", &Some(json!({}))).is_some() && (p.url)(&c, "PATCH", "/attachments/7", &Some(json!({}))).is_some());
         assert!((p.url)(&c, "POST", "/comments", &Some(json!({}))).is_some() && (p.url)(&c, "POST", "/attachments", &Some(json!({}))).is_some());
-        assert!((p.url)(&c, "POST", "/comments", &None).is_none() && (p.url)(&c, "POST", "/tasks", &Some(json!({}))).is_none());
+        assert!((p.url)(&c, "POST", "/comments", &None).is_none() && (p.url)(&c, "POST", "/tasks", &None).is_none());
+        // a new task from the board
+        assert!((p.url)(&c, "POST", "/tasks", &Some(json!({}))).is_some() && (p.url)(&c, "POST", "/tasks/42", &Some(json!({}))).is_none());
         assert!((p.url)(&c, "PATCH", "/people/7", &Some(json!({}))).is_none() && (p.url)(&c, "DELETE", "/comments/7", &None).is_none());
         assert!((p.upload)("https://productive-files-production.s3.eu-west-1.amazonaws.com") && (p.upload)("https://productive-files.s3.amazonaws.com/k"));
         for bad in ["https://attacker.s3.amazonaws.com", "http://productive-files.s3.amazonaws.com", "https://evil.com/.amazonaws.com", "https://a@b.amazonaws.com", "https://amazonaws.com.evil.com"] { assert!(!(p.upload)(bad), "{bad}"); }
