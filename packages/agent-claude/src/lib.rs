@@ -33,7 +33,6 @@ fn on_account(cmd: &mut Command, account: &str) {
 /// The app's `relay` command (src-tauri/src/actions.rs) runs without a Bash card: each action has its own policy,
 /// and the app asks on a card for the ones that need it.
 pub const RELAY_TOOL: &str = "Bash(relay *)";
-const RELAY_HINT: &str = "The Relay app gives you its extensions as a shell command: `relay help` lists the actions available in this conversation (creating tickets in Productive, Trello or Linear, booking time in Productive, vault reminders, mail drafts), `relay <action> key=value ...` runs one. Use it instead of other tools for these when an action fits. Some actions ask the user first; a denied one stays denied, do not work around it.";
 
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
@@ -109,7 +108,7 @@ impl AgentProvider for Claude {
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
             .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg(RELAY_TOOL).arg("--disallowedTools").args(DENIED)
-            .args(["--append-system-prompt", RELAY_HINT, "-n", l.name]);
+            .args(["--append-system-prompt", agent_core::envelope::HINT, "-n", l.name]);
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }

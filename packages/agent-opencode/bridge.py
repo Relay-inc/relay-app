@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """The app's stdin/stdout to `opencode serve` (HTTP + server-sent events), for one conversation.
 
-    bridge.py <opencode-bin> '<config json>'   config: {cwd, model, variant, resume, fork, ask}
+    bridge.py <opencode-bin> '<config json>'   config: {cwd, model, variant, resume, fork, ask, system}
 
 It starts a private server in the vault (127.0.0.1, a free port, a random password), opens or makes the session
 (resume: GET /session/<id>, fork: POST /session/<id>/fork, else POST /session) and, once subscribed to
 its events, writes `{"type":"bridge.session","id":…}`. Then it passes the server's events of that session to stdout, one JSON object per
 line, as they come from GET /event, and turns the app's stdin lines into requests:
 
-    {"type":"prompt","parts":[…]}                      POST /session/<id>/prompt_async (model and variant filled in)
+    {"type":"prompt","parts":[…]}                      POST /session/<id>/prompt_async (model, variant and system filled in)
     {"type":"permission","id":"per…","reply":"once"|"reject","message"?}   POST /permission/<id>/reply
     {"type":"question","id":"que…","answers":[[label…]…]} | {…,"reject":true}  POST /question/<id>/reply | reject
     {"type":"abort"}                                   POST /session/<id>/abort
@@ -130,6 +130,8 @@ def main():
                     body["model"] = {"providerID": p, "modelID": mid}
                 if cfg.get("variant"):
                     body["variant"] = cfg["variant"]
+                if cfg.get("system"):
+                    body["system"] = cfg["system"]
                 parts = body["parts"]
                 text = next((p.get("text", "") for p in parts if p.get("type") == "text"), "")
                 words = text.split(maxsplit=1)

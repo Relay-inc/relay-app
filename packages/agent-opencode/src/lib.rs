@@ -84,7 +84,7 @@ impl AgentProvider for OpenCode {
         // opencode models are provider/model: anything else is its default
         let model = if l.model.contains('/') && agent_core::safe_model(l.model) { l.model } else { "" };
         let cfg = json!({"cwd": env.vault, "model": model, "variant": l.effort, "resume": ok(l.resume), "fork": ok(l.fork),
-            "ask": pick(env, "permissions", &PERMS) == "ask"});
+            "ask": pick(env, "permissions", &PERMS) == "ask", "system": agent_core::envelope::HINT});
         let mut cmd = Command::new("/usr/bin/python3");
         cmd.arg(BRIDGE).arg(env.bin).arg(cfg.to_string());
         Ok(cmd)
@@ -154,7 +154,7 @@ mod tests {
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[0].ends_with("agent-opencode/bridge.py") && args[1] == "/opt/opencode");
         let cfg: Value = serde_json::from_str(&args[2]).unwrap();
-        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "anthropic/claude-sonnet-5-5", "variant": "high", "resume": sid, "fork": null, "ask": true}));
+        assert_eq!(cfg, json!({"cwd": "/Users/me/my vault", "model": "anthropic/claude-sonnet-5-5", "variant": "high", "resume": sid, "fork": null, "ask": true, "system": agent_core::envelope::HINT}));
         // a model without a provider, a bad session id, permissions left to the config
         let o = json!({"permissions": "config"});
         let cmd = PROVIDER.command(&env(&p, &o), &Launch { model: "sonnet", resume: Some("x; rm"), fork: Some(sid), ..l }).unwrap();

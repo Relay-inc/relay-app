@@ -95,7 +95,7 @@ pub fn history(rows: &[Value], from: u64) -> (Vec<Event>, u64) {
         if !user && m["time"]["completed"].is_null() && m["error"].is_null() { break; }
         if let Some(at) = m["time"]["created"].as_i64() { out.push(Event::Time { at: rfc3339(at) }); }
         if user {
-            let text: Vec<&str> = parts.iter().filter(|p| p["type"] == "text" && p["synthetic"] != true).filter_map(|p| p["text"].as_str()).collect();
+            let text: Vec<&str> = parts.iter().filter(|p| p["type"] == "text" && p["synthetic"] != true).filter_map(|p| p["text"].as_str()).map(agent_core::envelope::strip).collect();
             let images = parts.iter().filter(|p| p["type"] == "file" && p["mime"].as_str().is_some_and(|m| m.starts_with("image/"))).map(|p| {
                 let url = p["url"].as_str().unwrap_or("");
                 url.strip_prefix("data:").and_then(|r| r.split_once(";base64,")).map(|(t, d)| agent_core::Image { media_type: t.into(), data: d.into() })
@@ -171,6 +171,13 @@ pub fn parse_models(s: &str) -> (Vec<Choice>, Vec<Choice>) {
 mod tests {
     use super::*;
     fn rows(s: &str) -> Vec<Value> { serde_json::from_str(s).unwrap() }
+
+    #[test]
+    fn the_project_line_is_not_the_message() {
+        let part = serde_json::json!({"type": "text", "text": agent_core::envelope::wrap("Relay", "", "waarom?")}).to_string();
+        let r = vec![serde_json::json!({"mid": "msg_1", "mdata": r#"{"role":"user","time":{"created":1}}"#, "pid": "prt_1", "pdata": part})];
+        assert!(history(&r, 0).0.contains(&Event::User { text: "waarom?".into(), images: vec![] }));
+    }
 
     #[test]
     fn history_of_a_live_session() {

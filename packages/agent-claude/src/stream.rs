@@ -1,5 +1,6 @@
 //! Claude Code's stream-json, in and out, and its transcripts, as the contract's events.
 
+use agent_core::envelope::strip;
 use agent_core::{Event, Image, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::path::Path;
@@ -57,9 +58,9 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     if let Some(at) = e["timestamp"].as_str() { out.push(Event::Time { at: at.into() }); }
     let c = &e["message"]["content"];
     if e["type"] == "assistant" { return assistant(c, out); }
-    if let Some(s) = c.as_str() { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
+    if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
-    let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).filter(|t| !harness(t)).collect();
+    let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).map(strip).filter(|t| !harness(t)).collect();
     // an image not inline as base64 is None: a placeholder
     let images: Vec<Option<Image>> = blocks.iter().filter(|x| x["type"] == "image").map(|x| {
         let s = &x["source"];
@@ -110,6 +111,14 @@ mod tests {
         assert_eq!(m["message"]["content"][0]["source"]["media_type"], "image/png");
         assert_eq!(m["message"]["content"][1], json!({"type": "text", "text": "kijk"}));
         assert_eq!(m["message"]["content"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn the_project_line_is_not_the_message() {
+        let line = json!({"type": "user", "message": {"content": [{"type": "text", "text": agent_core::envelope::wrap("Relay", "", "waarom?")}]}});
+        let mut out = vec![];
+        history_line(&line, &mut out);
+        assert_eq!(out, vec![Event::User { text: "waarom?".into(), images: vec![] }]);
     }
 
     #[test]

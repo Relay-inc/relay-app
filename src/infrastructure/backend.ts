@@ -72,6 +72,9 @@ type SendArgs = {
   model: string;
   effort: string;
   provider: string;
+  /** The project to tell the agent about; the backend puts the project line in front of `text`. */
+  told: string | null;
+  context: string | null;
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });

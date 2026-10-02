@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The app's stdin/stdout to `codex app-server` (JSON-RPC 2.0, one JSON object per line), for one conversation.
 
-    bridge.py <codex-bin> '<config json>'   config: {cwd, model, effort, sandbox, approval, resume}
+    bridge.py <codex-bin> '<config json>'   config: {cwd, model, effort, sandbox, approval, resume, instructions}
 
 It does the handshake the app cannot (initialize, initialized, thread/start or thread/resume, which gives the thread id)
 and then passes lines both ways: every line codex writes goes to stdout unchanged, every line the app writes goes to
@@ -79,6 +79,8 @@ def main():
         opts["model"] = cfg["model"]
     if cfg.get("effort"):
         opts["config"] = {"model_reasoning_effort": cfg["effort"]}
+    if cfg.get("instructions"):
+        opts["developerInstructions"] = cfg["instructions"]
     r = None
     if cfg.get("resume"):
         send({"id": 1, "method": "thread/resume", "params": {"threadId": cfg["resume"], **opts}})

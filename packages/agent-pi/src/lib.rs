@@ -71,7 +71,7 @@ impl AgentProvider for Pi {
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         let mut cmd = Command::new(env.bin);
-        cmd.args(["--mode", "rpc"]);
+        cmd.args(["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT]);
         // pi models are provider/model; a resume pi no longer has starts a session with that id
         if let Some(s) = l.resume.filter(|s| self.valid_session(s)) { cmd.args(["--session-id", s]); }
         else if let Some(s) = l.fork.filter(|s| self.valid_session(s)) { cmd.args(["--fork", s]); }
@@ -133,12 +133,12 @@ mod tests {
         let l = Launch { key: "c:1", name: "x", model: "openai-codex/gpt-5.5", effort: "high", resume: Some(sid), fork: None, turn: None };
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &l).unwrap();
         assert_eq!(cmd.get_program(), "/opt/pi");
-        assert_eq!(args(&cmd), ["--mode", "rpc", "--session-id", sid, "--model", "openai-codex/gpt-5.5", "--thinking", "high"]);
+        assert_eq!(args(&cmd), ["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT, "--session-id", sid, "--model", "openai-codex/gpt-5.5", "--thinking", "high"]);
         // a fork, a model without a provider, an effort pi does not know, a bad session id
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &Launch { model: "sonnet", effort: "ultra", resume: None, fork: Some(sid), ..l }).unwrap();
-        assert_eq!(args(&cmd), ["--mode", "rpc", "--fork", sid]);
+        assert_eq!(args(&cmd), ["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT, "--fork", sid]);
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &Launch { model: "--x/y", effort: "", resume: Some("x; rm"), ..l }).unwrap();
-        assert_eq!(args(&cmd), ["--mode", "rpc"]);
+        assert_eq!(args(&cmd), ["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT]);
         let e = env(&p, &Value::Null);
         assert_eq!(PROVIDER.terminal(&e, Terminal::Resume(sid)).unwrap(), format!("cd '/Users/me/my vault' && '/opt/pi' --session {sid}"));
         assert_eq!(PROVIDER.terminal(&e, Terminal::New("x")).unwrap(), "cd '/Users/me/my vault' && '/opt/pi'");
