@@ -76,7 +76,7 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
             <section className="flex flex-col gap-2">
               <TicketHeading>{t("kb.files")}</TicketHeading>
               {view.files.length ? (
-                <TicketFiles files={view.files} />
+                <TicketFiles provider={provider.id} files={view.files} />
               ) : (
                 <div className="text-secondary text-sm">{t("kb.noFiles")}</div>
               )}
@@ -99,6 +99,7 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
           <TicketActivity
             key={modal}
             feed={view.feed}
+            providerId={provider.id}
             providerName={provider.name}
             onComment={text => act("comment", text)}
           />

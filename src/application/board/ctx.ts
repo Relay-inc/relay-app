@@ -27,3 +27,16 @@ export const ctxOf = (
 /** Switched on, config complete and a token in the keychain: the board shows in the sidebar. */
 export const providerReady = (boardProvider: BoardProvider) =>
   backend.integrationStatus(boardProvider.id).catch(() => false);
+
+// thumb URL → data URL; a failed one is dropped, so the next open tries again
+const thumbs = new Map<string, Promise<string>>();
+/** A file's preview as a data URL, fetched once per URL by the backend. */
+export const thumbOf = (provider: string, url: string) => {
+  let got = thumbs.get(url);
+  if (!got) {
+    got = backend.integrationThumb(provider, url);
+    got.catch(() => thumbs.delete(url));
+    thumbs.set(url, got);
+  }
+  return got;
+};

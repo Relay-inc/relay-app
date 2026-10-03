@@ -202,6 +202,9 @@ export const integrationUpload = (args: {
   mime: string;
   data: string;
 }) => invoke<string>("integration_upload", args);
+/** A picture's preview from a URL the provider's `thumb` allows, fetched without secrets, as a data URL. */
+export const integrationThumb = (provider: string, url: string) =>
+  invoke<string>("integration_thumb", { provider, url });
 /** Switched on, config complete and a token in the keychain. */
 export const integrationStatus = (provider: string) => invoke<boolean>("integration_status", { provider });
 export const integrationHasToken = (provider: string) => invoke<boolean>("integration_has_token", { provider });

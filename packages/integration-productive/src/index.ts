@@ -73,9 +73,11 @@ function optsOf(c: Ctx, project: string) {
   })().catch(e => { opts.delete(project); throw e; }));
   return opts.get(project)!;
 }
-// an attachment as the ticket window shows it; Productive keeps deleted ones with deleted_at
-type File_ = { id: string; name: string; size: number; url: string };
-const fileOf = (x: any): File_ => ({ id: x.id, name: x.attributes.name || "", size: x.attributes.size || 0, url: safeUrl(x.attributes.url) });
+// an attachment as the ticket window shows it; Productive keeps deleted ones with deleted_at. A picture also has its
+// 100x100 thumb: the original wants a browser login, the thumb is public, so the backend fetches it for the preview
+type File_ = { id: string; name: string; size: number; url: string; thumb: string };
+const fileOf = (x: any): File_ => ({ id: x.id, name: x.attributes.name || "", size: x.attributes.size || 0, url: safeUrl(x.attributes.url),
+  thumb: x.attributes.resized && /^image\//.test(x.attributes.content_type || "") ? x.attributes.thumb || "" : "" });
 const live = (x: any) => x.type === "attachments" && !x.attributes?.deleted_at;
 const onComment = (x: any) => x.attributes?.attachable_type === "comment" || !!x.relationships?.comment?.data;
 const pick = (included: any[], type: string, rel: any) => included.find((i: any) => i.type === type && i.id === rel?.data?.id);

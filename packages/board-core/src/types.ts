@@ -42,8 +42,8 @@ export type CardView = {
   folder?: string;
   /** the choices for the status and assignee pickers, once known; without them those two show as text */
   statuses?: (Opt & { state?: State; tone?: Tone })[]; people?: Opt[];
-  files: { id: string; name: string; size: number; url: string }[] | null;
-  feed: { at: string; who: string; html: string; change: string; files: { id: string; name: string; size: number; url: string }[] }[];
+  files: { id: string; name: string; size: number; url: string; thumb?: string }[] | null;
+  feed: { at: string; who: string; html: string; change: string; files: { id: string; name: string; size: number; url: string; thumb?: string }[] }[];
 };
 /** A way to lay out the columns, when a provider has more than one: Productive's task lists or workflow statuses. */
 export type Grouping<K extends string = string> = { id: string; label: K };

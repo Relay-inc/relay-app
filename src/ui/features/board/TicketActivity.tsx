@@ -10,10 +10,12 @@ import { when } from "./format";
  *  Cmd-Enter or Comment sends, and what was typed goes once the tracker took it. */
 export function TicketActivity({
   feed,
+  providerId,
   providerName,
   onComment,
 }: {
   feed: CardView["feed"];
+  providerId: string;
   providerName: string;
   onComment: (text: string) => Promise<boolean>;
 }) {
@@ -42,7 +44,7 @@ export function TicketActivity({
             ) : (
               entry.change && <div className="text-sm text-secondary">{entry.change}</div>
             )}
-            {!!entry.files.length && <TicketFiles files={entry.files} />}
+            {!!entry.files.length && <TicketFiles provider={providerId} files={entry.files} />}
           </div>
         </div>
       ))}
