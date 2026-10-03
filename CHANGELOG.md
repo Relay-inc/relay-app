@@ -5,8 +5,9 @@ that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, ref
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
 `src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
-builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes; run
-the workflow by hand (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes. Then
+push relay-server's image from a checkout of the tag with `scripts/push-server-image.sh`. Run the workflow by hand
+(Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
@@ -22,11 +23,10 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 ### Fixed
 
-- The released app works again: it looked for its scripts in the checkout of the machine that built it, so reading the vault, permission prompts, Codex and OpenCode all failed (#79)
+- Settings › Machines › Set up a machine in a development build of Relay uses relay-server:latest: it gave the build's own version, which has no image
 
 ### Changed
 
-- Relay no longer needs Python: reading the vault, project icons, permission prompts, slash commands and the Codex and OpenCode bridges are built into the app, so Macs without the Xcode Command Line Tools no longer get an install prompt (#79)
 - The Relay redesign: view title bars show an icon and a summary ("3 waiting", "2 due · 7 total", "2 to review", "21 unread"), the board's project and board pickers, its last sync, New task and refresh moved into the title bar, lanes and cards have the new look with a status ring per workflow status and both initials on avatars
 - The agent picker in the composer is a menu with each agent's icon, the ticket window's status and assignee open a menu, due dates read Yesterday, Today or Tomorrow, Reminders show "Fri 2/10" and undo as a compact chip, pull requests show their project and "Review with Claude"
 - Settings opens at 900 x 660 with hairline rows, and Agents and Integrations list every item with an on/off switch, switched-off ones stay visible, dimmed
@@ -36,16 +36,29 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 
 - The Working/Ready pill in the conversation title bar: the sidebar already shows whether a turn runs
 
+## [0.0.4] - 2026-10-03
+
+### Added
+- Drop files from Finder anywhere on the window, pick them with +, or paste them after Cmd-C in Finder: the agent gets their path and reads them where they are, nothing is copied. They wait as chips next to the pictures, and in the conversation a click opens the file in its own app (Option-click shows it in Finder). Reading a file you attached needs no permission card in that conversation, anything else still asks. Pictures still go inline (#86)
+
+- Work machines: run a project's conversations on another computer in your network (a home server, a spare Mac), so they keep going while this Mac is closed. Run `relay-server` there (Settings › Machines › Set up a machine has the commands), pair it with the line `relay-server pair` prints, then pick per conversation where it runs, or link a project to its folder on that machine. The connection is mutual TLS with pinned certificates: a device that is not paired never gets past the handshake. Permission cards from there show up here as usual, the composer says where a conversation runs, and a conversation that lost its connection is taken back when the machine answers again. Mail stays on this Mac (#82)
+- Work machines can mirror this Mac: Settings › Machines › Mirror this Mac keeps your Claude context (CLAUDE.md, skills, agents, commands), your plugins, the vault and its memory in sync on the machine, so a conversation there knows what Claude knows here, also while this Mac is closed. What it writes in the vault comes back here, a file changed on both sides keeps both versions. On the machine the copy is encrypted with a key only this Mac holds, and lives in RAM while unlocked. Files go to the machine 500 at a time, and Settings › Machines shows a progress bar while a round runs. (#82)
+- A conversation can move between this Mac and a work machine between two turns: pick another place in the composer. Its history goes along and the next message goes on there. (#82)
+- relay-server is released as an image, `ghcr.io/laurentme/relay-server` for amd64 and arm64 with the same version as Relay. Claude Code is not in the image: the first start installs it into a volume, where its updates stay. (#82)
+- Settings › Machines › Set up a machine: the commands to run relay-server in Docker on a home server, for the image of this Relay's version and the folder you type, each with a copy button. A machine that speaks an older protocol says so in its row, with the commands to update it. (#82)
+
+### Changed
+
+- Relay no longer needs Python: reading the vault, project icons, permission prompts, slash commands and the Codex and OpenCode bridges are built into the app, so Macs without the Xcode Command Line Tools no longer get an install prompt (#79)
+
+### Fixed
+
+- The released app works again: it looked for its scripts in the checkout of the machine that built it, so reading the vault, permission prompts, Codex and OpenCode all failed (#79)
+
 ## [0.0.3] - 2026-10-02
 
 ### Added
 
-- Settings › Machines › Set up a machine: the commands to run relay-server in Docker on a home server, for the image of this Relay's version and the folder you type, each with a copy button. A machine that speaks an older protocol says so in its row, with the commands to update it.
-- A conversation can move between this Mac and a work machine between two turns: pick another place in the composer. Its history goes along and the next message goes on there.
-- The mirror's first round is much faster: files go to the machine 500 at a time, not one connection each. Settings › Machines shows a progress bar while a round runs. The machine's copy uses separate keys for encrypting and naming, derived with HKDF, and converts an existing copy on its first unlock.
-- relay-server is released as an image, `ghcr.io/laurentme/relay-server` for amd64 and arm64 with the same version as Relay. Claude Code is no longer in the image: the first start installs it into a volume, where its updates stay.
-- Work machines can mirror this Mac: Settings › Machines › Mirror this Mac keeps your Claude context (CLAUDE.md, skills, agents, commands), your plugins, the vault and its memory in sync on the machine, so a conversation there knows what Claude knows here, also while this Mac is closed. What it writes in the vault comes back here, a file changed on both sides keeps both versions. On the machine the copy is encrypted with a key only this Mac holds, and lives in RAM while unlocked
-- Work machines: run a project's conversations on another computer in your network (a home server, a spare Mac), so they keep going while this Mac is closed. Install `relay-server` there (packages/relay-server), run `relay-server pair` and paste the line in Settings › Machines, then link a project to its folder on that machine. The connection is mutual TLS with pinned certificates: a device that is not paired never gets past the handshake. Permission cards from there show up here as usual, the composer says where a conversation runs, and a conversation that lost its connection is taken back when the machine answers again. Mail, the vault and general conversations stay on this Mac
 - Right-click a conversation and pick "Copy session ID" to copy the agent's session ID, so you can point another conversation at it (#72)
 - Agents can read your calendar with `relay calendar.meetings` (an hour ago to 12 hours ahead), with an Agent access section on Settings › Integrations › Calendar
 - Claude Code can run on more than one account: Settings › Agents › Claude Code › Accounts adds a login as its own config folder (sign in once with `CLAUDE_CONFIG_DIR=<folder> claude /login`) and picks the one new conversations use. Each conversation stays on its account. Switch on **Switch accounts automatically** and a conversation whose account hit its plan limit moves to the next account with room on your next message, history included (#45)
@@ -163,7 +176,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/LaurentMe/vault-app/releases/tag/v0.0.1

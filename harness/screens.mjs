@@ -100,6 +100,36 @@ const VIEWS = {
     await page.keyboard.type("/");
     await settle(page);
   },
+  // a picture and two files waiting by their path, the drop highlight off (drag-leave)
+  "composer-files": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/demo/Pictures/site photo.png", "/Users/demo/Downloads/Q3 report.pdf", "/Users/demo/Downloads/Budget 2027.xlsx"]));
+    await page.evaluate(() => window.__harness.emit("tauri://drag-leave", null));
+    await settle(page, 300);
+  },
+  "cmd-k-file": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.evaluate(() => window.__harness.dropPaths(["/Users/demo/Downloads/Q3 report.pdf"]));
+    await page.keyboard.type("Summarise this");
+    await settle(page, 300);
+  },
+  // a sent message with its files as chips
+  "conversation-files": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(() => {
+      window.__harness.autoReply = false;
+      return window.__harness.dropPaths(["/Users/demo/Downloads/Q3 report.pdf", "/Users/demo/Downloads/Budget 2027.xlsx"]);
+    });
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Compare these with the plan");
+    await page.keyboard.press("Enter");
+    await waitText("Compare these with the plan");
+    await settle(page, 300);
+  },
   "composer-resolved": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);

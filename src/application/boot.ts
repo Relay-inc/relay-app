@@ -33,6 +33,7 @@ import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
 import { loadMeetings, tick } from "./calendar/calendar";
 import { listenToLinks } from "./deep-links";
+import { listenToFileDrops } from "./conversations/attachments";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
 // versions, then the polls. Every poll of the app starts here, once.
@@ -97,6 +98,7 @@ function listenToBackend() {
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
   backend.onMenu(onMenu);
+  listenToFileDrops();
 }
 
 // the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation

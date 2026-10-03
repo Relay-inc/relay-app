@@ -143,6 +143,11 @@ export default {
   "composer.commands": "Befehle und Skills",
   copy: "Kopieren",
   "img.remove": "Entfernen",
+  "file.openHint": "Klicken zum Öffnen, Wahltaste-Klick zeigt sie im Finder",
+  "file.remove": "Datei entfernen",
+  "file.missing": "{name} ist nicht mehr am alten Ort",
+  "file.remote":
+    "Angehängte Dateien gehen nur in einem Gespräch auf diesem Mac: der Agent auf der Maschine kann ihre Pfade nicht lesen.",
   "img.removeLabel": "Bild entfernen",
   "img.placeholder": "[Bild]",
   "img.open": "Größer anzeigen",
@@ -176,7 +181,7 @@ export default {
   "card.denied": "Abgelehnt {c}",
   steps_one: "{n} Schritt",
   steps_other: "{n} Schritte",
-  "composer.attach": "Bild anhängen",
+  "composer.attach": "Dateien anhängen",
   "wait.bg": "Hintergrundsitzung im Terminal, blockiert, gestartet am {date}.",
   "wait.hide": "Ausblenden",
   "wait.stop": "Stoppen",
@@ -383,7 +388,7 @@ export default {
   "composer.defaultEffort": "Standard-Effort",
   "qk.ph": "Projekte suchen oder eine Frage stellen…",
   "qk.label": "Projekte und schnelle Fragen",
-  "qk.hint": "↵ fragen · ↑↓ Projekt wählen · Bild einfügen oder ablegen · Esc schließt",
+  "qk.hint": "↵ fragen · ↑↓ Projekt wählen · Bild einfügen oder Datei ablegen · Esc schließt",
   "qk.projects": "Projekte",
   "qk.openHint": "↵ Projekt öffnen · ↑↓ wählen · Esc schließt",
   "note.reviewStarted": "Review von {repo} #{n} aus Pull Requests gestartet",
@@ -705,6 +710,8 @@ export default {
   "mc.setupTitle": "Maschine einrichten",
   "mc.setupHelp":
     "relay-server läuft in Docker auf einem Heimserver oder einem NAS. Diese Befehle sind für relay-server {version}, die Version dieses Relay. Führe sie auf der Maschine in dieser Reihenfolge aus.",
+  "mc.setupHelpDev":
+    "relay-server läuft in Docker auf einem Heimserver oder einem NAS. Dies ist eine Entwicklungsversion von Relay, für ihre Version gibt es kein Image: Diese Befehle nutzen das neueste, relay-server:latest. Führe sie auf der Maschine in dieser Reihenfolge aus.",
   "mc.setupShow": "Befehle zeigen",
   "mc.setupFolder": "Ordner auf der Maschine",
   "mc.setupFolderHelp":

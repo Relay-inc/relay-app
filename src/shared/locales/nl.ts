@@ -143,6 +143,11 @@ export default {
   "composer.commands": "Commando's en skills",
   copy: "Kopiëren",
   "img.remove": "Verwijderen",
+  "file.openHint": "Klik om te openen, Option-klik toont het in de Finder",
+  "file.remove": "Bestand verwijderen",
+  "file.missing": "{name} staat niet meer waar het stond",
+  "file.remote":
+    "Bijgevoegde bestanden werken enkel voor een gesprek op deze Mac: de agent op de machine kan hun paden niet lezen.",
   "img.removeLabel": "Afbeelding verwijderen",
   "img.placeholder": "[afbeelding]",
   "img.open": "Groter tonen",
@@ -176,7 +181,7 @@ export default {
   "card.denied": "Geweigerd {c}",
   steps_one: "{n} stap",
   steps_other: "{n} stappen",
-  "composer.attach": "Afbeelding toevoegen",
+  "composer.attach": "Bestanden toevoegen",
   "wait.bg": "Achtergrondsessie in de terminal, geblokkeerd, gestart {date}.",
   "wait.hide": "Verbergen",
   "wait.stop": "Stoppen",
@@ -382,7 +387,7 @@ export default {
   "composer.defaultEffort": "Standaard effort",
   "qk.ph": "Zoek projecten of stel een vraag…",
   "qk.label": "Projecten en snelle vragen",
-  "qk.hint": "↵ vraag stellen · ↑↓ project kiezen · plak of sleep een afbeelding · esc sluit",
+  "qk.hint": "↵ vraag stellen · ↑↓ project kiezen · plak een afbeelding of sleep een bestand · esc sluit",
   "qk.projects": "Projecten",
   "qk.openHint": "↵ project openen · ↑↓ kiezen · esc sluit",
   "note.reviewStarted": "Review van {repo} #{n} gestart vanuit Pull requests",
@@ -699,6 +704,8 @@ export default {
   "mc.setupTitle": "Machine opzetten",
   "mc.setupHelp":
     "relay-server draait in Docker op een thuisserver of een NAS. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
+  "mc.setupHelpDev":
+    "relay-server draait in Docker op een thuisserver of een NAS. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupShow": "Toon de commando's",
   "mc.setupFolder": "Map op de machine",
   "mc.setupFolderHelp":

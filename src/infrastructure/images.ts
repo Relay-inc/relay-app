@@ -76,3 +76,6 @@ export async function iconFrom(file: Blob): Promise<string | null> {
 }
 /** A data url (a fetched favicon) as a 64 px icon. */
 export const iconFromDataUrl = async (dataUrl: string) => iconFrom(await (await fetch(dataUrl)).blob());
+/** base64 data as a File, so a picture read from its path goes through `prepareImage` like a pasted one. */
+export const fileOf = (mediaType: string, data: string, name: string) =>
+  new File([Uint8Array.from(atob(data), char => char.charCodeAt(0))], name, { type: mediaType });

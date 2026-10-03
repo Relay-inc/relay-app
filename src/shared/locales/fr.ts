@@ -145,6 +145,11 @@ export default {
   "composer.commands": "Commandes et skills",
   copy: "Copier",
   "img.remove": "Supprimer",
+  "file.openHint": "Cliquer pour ouvrir, Option-clic pour l'afficher dans le Finder",
+  "file.remove": "Retirer le fichier",
+  "file.missing": "{name} n'est plus à son emplacement",
+  "file.remote":
+    "Les fichiers joints ne fonctionnent que pour une conversation sur ce Mac : l'agent sur la machine ne peut pas lire leurs chemins.",
   "img.removeLabel": "Supprimer l'image",
   "img.placeholder": "[image]",
   "img.open": "Afficher en grand",
@@ -178,7 +183,7 @@ export default {
   "card.denied": "Refusé {c}",
   steps_one: "{n} étape",
   steps_other: "{n} étapes",
-  "composer.attach": "Joindre une image",
+  "composer.attach": "Joindre des fichiers",
   "wait.bg": "Session en arrière-plan dans le terminal, bloquée, lancée le {date}.",
   "wait.hide": "Masquer",
   "wait.stop": "Arrêter",
@@ -385,7 +390,7 @@ export default {
   "composer.defaultEffort": "Effort par défaut",
   "qk.ph": "Recherchez un projet ou posez une question…",
   "qk.label": "Projets et questions rapides",
-  "qk.hint": "↵ poser une question · ↑↓ choisir un projet · coller ou déposer une image · échap ferme",
+  "qk.hint": "↵ poser une question · ↑↓ choisir un projet · coller une image ou déposer un fichier · échap ferme",
   "qk.projects": "Projets",
   "qk.openHint": "↵ ouvrir le projet · ↑↓ choisir · échap ferme",
   "note.reviewStarted": "Revue de {repo} #{n} lancée depuis Pull requests",
@@ -706,6 +711,8 @@ export default {
   "mc.setupTitle": "Configurer une machine",
   "mc.setupHelp":
     "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
+  "mc.setupHelpDev":
+    "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ceci est une version de développement de Relay, aucune image n'existe pour sa version : ces commandes utilisent la plus récente, relay-server:latest. Lancez-les sur la machine, dans cet ordre.",
   "mc.setupShow": "Afficher les commandes",
   "mc.setupFolder": "Dossier sur la machine",
   "mc.setupFolderHelp":

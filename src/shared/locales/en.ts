@@ -140,6 +140,11 @@ const en = {
   "composer.commands": "Commands and skills",
   copy: "Copy",
   "img.remove": "Remove",
+  "file.openHint": "Click to open, Option-click to show in Finder",
+  "file.remove": "Remove file",
+  "file.missing": "{name} is no longer where it was",
+  "file.remote":
+    "Attached files only work for a conversation on this Mac: the agent on the machine cannot read their paths.",
   "img.removeLabel": "Remove image",
   "img.placeholder": "[image]",
   "img.open": "Show larger",
@@ -173,7 +178,7 @@ const en = {
   "card.denied": "Denied {c}",
   steps_one: "{n} step",
   steps_other: "{n} steps",
-  "composer.attach": "Attach image",
+  "composer.attach": "Attach files",
   "wait.bg": "Background session in the terminal, blocked, started {date}.",
   "wait.hide": "Hide",
   "wait.stop": "Stop",
@@ -379,7 +384,7 @@ const en = {
   "composer.defaultEffort": "Default effort",
   "qk.ph": "Search projects or ask a question…",
   "qk.label": "Projects and quick questions",
-  "qk.hint": "↵ ask · ↑↓ select a project · paste or drop an image · esc closes",
+  "qk.hint": "↵ ask · ↑↓ select a project · paste an image or drop a file · esc closes",
   "qk.projects": "Projects",
   "qk.openHint": "↵ open project · ↑↓ select · esc closes",
   "note.reviewStarted": "Review of {repo} #{n} started from Pull requests",
@@ -698,6 +703,8 @@ const en = {
   "mc.setupTitle": "Set up a machine",
   "mc.setupHelp":
     "relay-server runs in Docker on a home server or a NAS. These commands are for relay-server {version}, the version of this Relay. Run them on the machine, in this order.",
+  "mc.setupHelpDev":
+    "relay-server runs in Docker on a home server or a NAS. This is a development build of Relay, there is no image of its own version: these commands use the newest one, relay-server:latest. Run them on the machine, in this order.",
   "mc.setupShow": "Show the commands",
   "mc.setupFolder": "Folder on the machine",
   "mc.setupFolderHelp": "Keeps the pairing, Claude's login, Claude Code and the repos. On Unraid a folder in appdata.",

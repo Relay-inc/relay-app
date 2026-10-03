@@ -66,7 +66,7 @@ export type MachineStatus = {
   outdated?: "server" | "app"; // it answers but speaks another protocol: the side to update
 };
 /** What `server_setup` gives for setting up a machine: this Relay's version and the relay-server image. */
-export type ServerSetup = { version: string; image: string };
+export type ServerSetup = { version: string; image: string; dev?: boolean }; // dev: a development build, version "latest"
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder

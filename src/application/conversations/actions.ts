@@ -3,6 +3,7 @@ import type { Img, Pending, CardChoice } from "../../domain/conversations/types"
 import { NEW, decisionOf } from "../../domain/conversations/rules";
 import { push } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
+import { fileName, withFiles } from "../../domain/conversations/files";
 import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import type { Settings } from "../../domain/settings/types";
@@ -30,6 +31,7 @@ import {
 } from "./selectors";
 import { newChat, saveChats } from "./chats";
 import { prepImages, releaseImages } from "./images";
+import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
 import { pollAgents } from "./polls";
 
@@ -85,6 +87,21 @@ export async function attach(files: File[]) {
     draft.attached.push(...images);
   });
 }
+/** Files by their path (dropped, picked, pasted after a Finder copy): pictures join the images, the rest wait as paths. */
+export async function attachPaths(paths: string[]) {
+  const { images, files } = await fromPaths(paths);
+  setDrafts(draft => {
+    draft.attached.push(...images);
+    draft.files.push(...files.filter(path => !draft.files.includes(path)));
+  });
+}
+/** The + in the composer: the open dialog, its files attached by path. */
+export const pickAndAttach = async () => attachPaths(await pickedPaths());
+export function unattachFile(i: number) {
+  setDrafts(draft => {
+    draft.files.splice(i, 1);
+  });
+}
 export function unattach(i: number) {
   const gone = drafts().attached[i];
   if (!gone) return;
@@ -133,11 +150,12 @@ function routeFirstMessage(key: string, text: string, forced?: string, to?: stri
   return false;
 }
 // the conversation's own state at its first send: no longer a draft, a title, an agent
-function startConversation(key: string, text: string) {
+function startConversation(key: string, text: string, files: string[]) {
   const provider = chatAgent(key);
   set(draft => {
     const conversation = draft.chats[key];
-    if (conversation.title === NEW) conversation.title = (text || t("chat.image")).slice(0, 48);
+    if (conversation.title === NEW)
+      conversation.title = (text || (files[0] ? fileName(files[0]) : t("chat.image"))).slice(0, 48);
     conversation.draft = false;
     conversation.at = Date.now();
     conversation.provider ||= provider;
@@ -158,16 +176,21 @@ function generateTitle(key: string, typedTitle: string, text: string) {
     .catch(() => {});
 }
 // the message shows up and the conversation is busy until its turn ends
-function queueMessage(key: string, text: string, images: Img[]) {
+function queueMessage(key: string, text: string, images: Img[], files: string[]) {
   flush();
   set(draft => {
-    push(draft, key, { kind: "me", text, ...(images.length ? { imgs: images.map(image => image.url) } : {}) });
+    push(draft, key, {
+      kind: "me",
+      text,
+      ...(images.length ? { imgs: images.map(image => image.url) } : {}),
+      ...(files.length ? { files } : {}),
+    });
     draft.status[key] = "busy";
     draft.queued[key] = (draft.queued[key] || 0) + 1;
   });
   if (key === selected()) request("scroll-bottom");
 }
-async function deliver(key: string, text: string, images: Img[]) {
+async function deliver(key: string, text: string, images: Img[], files: string[]) {
   const conversation = cs().chats[key];
   const name = `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`;
   // the agent only hears the project through the message: with the first one, and again after a move
@@ -179,11 +202,14 @@ async function deliver(key: string, text: string, images: Img[]) {
     saveChats();
   }
   try {
-    if (images.length && refusesImages(chatAgent(key), text))
+    if ((images.length || files.length) && refusesImages(chatAgent(key), text))
       throw new Error("This command does not accept attachments.");
+    // ponytail: a machine cannot read this Mac's paths; upload the files over the connection when that is needed
+    if (files.length && machineChoice(key).value) throw new Error(t("file.remote"));
     await backend.send({
       project: key,
-      text: sent,
+      // attached files go as their paths after the message: the agent reads them where they are
+      text: withFiles(sent, files),
       images: images.map(image => ({ media_type: image.mt, data: image.data })),
       name,
       fork: conversation?.fork ?? null,
@@ -219,10 +245,10 @@ function takeTyped() {
   });
   storage.set("typed", drafts().typed);
 }
-/** Send `forced`, or what is typed in the open conversation with its images. `to` sends to a conversation that is not
- *  open (Cmd-K) with its own images: the composer, its images and the view stay as they are. */
-export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []): Promise<void> {
-  const plan = planSend({ ...drafts(), outside: cs().outside }, selected(), forced, to, toImgs.length);
+/** Send `forced`, or what is typed in the open conversation with its images and files. `to` sends to a conversation
+ *  that is not open (Cmd-K) with its own: the composer, its attachments and the view stay as they are. */
+export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], toFiles: string[] = []): Promise<void> {
+  const plan = planSend({ ...drafts(), outside: cs().outside }, selected(), forced, to, toImgs.length + toFiles.length);
   if (plan.kind === "nothing") return;
   if (plan.kind === "wait-outside") return note(plan.key, t("work.waitOutside"));
   if (plan.take) takeTyped();
@@ -230,15 +256,17 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = []):
   const { key, text } = plan;
   if (cs().chats[key] && routeFirstMessage(key, text, forced, to)) return;
   const isFirst = !(cs().messages[key] || []).length;
-  if (cs().chats[key]) startConversation(key, text);
-  if (cs().chats[key] && text && isFirst) generateTitle(key, cs().chats[key].title, text);
   const images = to ? toImgs : drafts().attached;
+  const files = to ? toFiles : drafts().files;
+  if (cs().chats[key]) startConversation(key, text, files);
+  if (cs().chats[key] && text && isFirst) generateTitle(key, cs().chats[key].title, text);
   if (!to)
     setDrafts(draft => {
       draft.attached = [];
+      draft.files = [];
     });
-  queueMessage(key, text, images);
-  await deliver(key, text, images);
+  queueMessage(key, text, images, files);
+  await deliver(key, text, images, files);
 }
 /** Stop the open conversation's running turn. */
 const stopChat = () => {
@@ -482,11 +510,11 @@ export function escStop() {
 export const ctrlC = () => (cs().status[selected()] === "busy" ? stopChat() : setTyped(""));
 
 // ---------- Cmd-K: a question that becomes a new general conversation in the background, the open screen stays
-export function quickSend(text: string, imgs: Img[]) {
+export function quickSend(text: string, imgs: Img[], files: string[] = []) {
   const key = newChat(null);
-  sendMsg(text, key, imgs);
+  sendMsg(text, key, imgs, files);
   toast(
-    t("toast.started", { text: (text || t("chat.image")).slice(0, 60) }),
+    t("toast.started", { text: (text || (files[0] ? fileName(files[0]) : t("chat.image"))).slice(0, 60) }),
     () => {
       hideToast();
       select(key);

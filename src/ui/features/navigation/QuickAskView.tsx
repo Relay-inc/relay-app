@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
 import type { Img } from "../../../domain/conversations/types";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { openProject, quickProjects, toggleQuickAsk } from "../../../application/navigation/navigation";
 import { quickSend } from "../../../application/conversations/actions";
 import { prepImages, releaseImages } from "../../../application/conversations/images";
-import { pastedImages, hasFiles } from "../../components/image-files";
+import { dropTarget, fromPaths } from "../../../application/conversations/attachments";
+import { onPasteFiles } from "../../components/image-files";
 import { ImageThumbs } from "../../components/ImageThumbs";
+import { FileChips } from "../../components/FileChips";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 
@@ -19,13 +21,16 @@ export function QuickAskView() {
   // images waiting in the field, freed when it closes without sending
   const [images, setImages] = useState<Img[]>([]);
   const waiting = useRef<Img[]>([]);
+  // files by their path, dropped or pasted after a Finder copy
+  const [files, setFiles] = useState<string[]>([]);
+  const [dropping, setDropping] = useState(false);
   const sent = useRef(false);
   // a relay://ask link opens Cmd-K with its question typed (the shell keys this view by it)
   const initial = useNavigationStore(s => s.quickText);
   const [typed, setTyped] = useState(initial);
   const [picked, setPicked] = useState(-1); // no project selected: Enter keeps asking a quick question
   const found = useDerived(() => quickProjects(typed));
-  const projects = images.length || typed.includes("\n") ? [] : found;
+  const projects = images.length || files.length || typed.includes("\n") ? [] : found;
   const update = (next: Img[]) => {
     waiting.current = next;
     setImages(next);
@@ -35,6 +40,16 @@ export function QuickAskView() {
     const prepared = await prepImages(files);
     if (prepared.length) update([...waiting.current, ...prepared]);
   };
+  const addPaths = async (paths: string[]) => {
+    setPicked(-1);
+    const read = await fromPaths(paths);
+    if (read.images.length) update([...waiting.current, ...read.images]);
+    setFiles(now => [...now, ...read.files.filter(path => !now.includes(path))]);
+    field.current?.focus();
+  };
+  // while Cmd-K is open, a drop anywhere on the window lands here and not in the composer behind it
+  const dropped = useEffectEvent((paths: string[]) => addPaths(paths));
+  useEffect(() => dropTarget({ over: setDropping, drop: dropped }), []);
 
   useEffect(() => {
     const el = field.current!;
@@ -82,20 +97,12 @@ export function QuickAskView() {
       return;
     }
     const text = e.currentTarget.value.trim();
-    if (!text && !images.length) return;
+    if (!text && !images.length && !files.length) return;
     sent.current = true;
     close();
-    quickSend(text, images);
+    quickSend(text, images, files);
   };
-  const onPaste = (e: ClipboardEvent) => {
-    const files = pastedImages(e);
-    if (files.length) add(files);
-  };
-  const onDrop = (e: DragEvent) => {
-    if (!hasFiles(e)) return;
-    e.preventDefault();
-    add([...e.dataTransfer.files]);
-  };
+  const onPaste = (e: ClipboardEvent<HTMLTextAreaElement>) => onPasteFiles(e, add, addPaths);
   const remove = (i: number) => {
     releaseImages([images[i]]);
     update(images.filter((_, at) => at !== i));
@@ -111,7 +118,7 @@ export function QuickAskView() {
       }}
     >
       <div
-        className="w-full max-w-xl bg-bg border border-separator rounded-xl shadow-2xl px-4 pt-3.5 pb-2.5"
+        className={`w-full max-w-xl bg-bg border rounded-xl shadow-2xl px-4 pt-3.5 pb-2.5 ${dropping ? "border-accent" : "border-separator"}`}
         role="dialog"
         aria-label={t("qk.label")}
         aria-modal="true"
@@ -121,13 +128,19 @@ export function QuickAskView() {
             close();
           }
         }}
-        onDragOver={e => {
-          if (hasFiles(e)) e.preventDefault();
-        }}
-        onDrop={onDrop}
       >
         {images.length ? (
           <ImageThumbs className="mb-2" urls={images.map(image => image.url)} onRemove={remove} />
+        ) : null}
+        {files.length ? (
+          <FileChips
+            className="mb-2"
+            paths={files}
+            onRemove={i => {
+              setFiles(files.filter((_, at) => at !== i));
+              field.current?.focus();
+            }}
+          />
         ) : null}
         <textarea
           ref={field}

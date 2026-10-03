@@ -47,7 +47,10 @@ export function MachineSetup({ open }: { open: boolean }) {
   if (!setup) return null;
   const commands = setupCommands(setup.image, setup.version, folder);
   return (
-    <Section title={t("mc.setupTitle")} desc={t("mc.setupHelp", { version: setup.version })}>
+    <Section
+      title={t("mc.setupTitle")}
+      desc={setup.dev ? t("mc.setupHelpDev") : t("mc.setupHelp", { version: setup.version })}
+    >
       <details open={open} className="min-w-0">
         <summary className="cursor-pointer text-xs font-medium text-s-fg">{t("mc.setupShow")}</summary>
         <div className="mt-3 grid min-w-0 grid-cols-1 gap-3">

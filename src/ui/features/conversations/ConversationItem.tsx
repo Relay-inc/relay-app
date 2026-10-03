@@ -16,7 +16,7 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
   const { th } = useT();
   switch (item.kind) {
     case "me":
-      return <UserMessage text={item.text} imgs={item.imgs} />;
+      return <UserMessage text={item.text} imgs={item.imgs} files={item.files} />;
     case "ai":
       return <Answer text={item.text} />;
     case "tool":
