@@ -5,6 +5,7 @@ import { useT } from "../../hooks/useT";
 import { AgentsPage } from "./AgentsPage";
 import { GeneralPage } from "./GeneralPage";
 import { IntegrationsPage } from "./IntegrationsPage";
+import { MachinesPage } from "./MachinesPage";
 import { ProjectsPage } from "./ProjectsPage";
 
 /** The settings window, laid out like bb's: the pages in a sidebar on the left, the shown page on the right. Every
@@ -55,6 +56,9 @@ export function SettingsApp() {
           </div>
           <div className={page("integrations")}>
             <IntegrationsPage active={tab === "integrations"} />
+          </div>
+          <div className={page("machines")}>
+            <MachinesPage active={tab === "machines"} />
           </div>
         </div>
       </section>

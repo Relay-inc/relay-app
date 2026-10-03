@@ -7,15 +7,20 @@ import {
   type BoardForm,
   type MailCfg,
   type MailNew,
+  type MachineStatus,
+  type MirrorProgress,
+  type MirrorStatus,
+  type ServerSetup,
   type Message,
   type Settings,
 } from "../../domain/settings/types";
+import { SETUP_FOLDER, type FolderRow } from "../../domain/settings/machines";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
-export type SettingsTab = "general" | "projects" | "agents" | "integrations";
+export type SettingsTab = "general" | "projects" | "agents" | "integrations" | "machines";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
@@ -37,6 +42,20 @@ export type SettingsState = {
     repos: Record<string, string[]>;
     message: Message | null;
     finding: boolean;
+  };
+  machinesPage: {
+    checked: boolean; // the projects read and every machine checked, once when the page first shows
+    projects: string[]; // the vault's project names, sorted
+    status: Record<string, MachineStatus | "checking">;
+    pairing: boolean;
+    pairError: string;
+    drafts: Record<string, FolderRow[]>; // folder rows being edited per machine, until Save
+    messages: Record<string, Message | null>; // per machine: why the last save or forget failed, or that it saved
+    mirror: Record<string, MirrorStatus | null>; // the last mirror round per machine, polled while the page shows
+    mirrorMessages: Record<string, Message | null>; // per machine: why the last mirror change failed
+    mirrorProgress: Record<string, MirrorProgress | null>; // per machine: the running round, null between rounds
+    setup: ServerSetup | null; // this Relay's version and the image, for the setup commands
+    setupFolder: string; // where the machine keeps relay-server's folders, as typed in the setup section
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
@@ -78,6 +97,20 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   message: null,
   agentsPage: { detected: null, message: null },
   projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
+  machinesPage: {
+    checked: false,
+    projects: [],
+    status: {},
+    pairing: false,
+    pairError: "",
+    drafts: {},
+    messages: {},
+    mirror: {},
+    mirrorMessages: {},
+    mirrorProgress: {},
+    setup: null,
+    setupFolder: SETUP_FOLDER,
+  },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {
     loaded: false,

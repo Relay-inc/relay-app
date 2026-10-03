@@ -1,6 +1,6 @@
 //! The pending folder, for every provider: a permission request or question is `<id>.json`, the app's answer
 //! `<id>.answer.json`. Files, not a socket: nothing listens on a port and a waiting question survives an app
-//! restart. A provider either writes and polls the files itself (Claude's perm_server.py, relay false), or
+//! restart. A provider either writes and polls the files itself (Claude's permission server, relay false), or
 //! raises [`crate::Event::Permission`]; the app then writes the request (relay true) and hands the answer to
 //! [`crate::AgentProvider::respond`].
 //!
@@ -111,7 +111,7 @@ mod tests {
         let mut r = Request::new("tool", "Bash", serde_json::json!({"command": "ls"}));
         r.project = "c:1".into(); r.provider = "codex".into();
         write(&d, &r).unwrap();
-        // a file perm_server.py wrote before the providers: no provider, kind or relay
+        // a file the Claude permission server wrote before the providers: no provider, kind or relay
         fs::write(d.join("abc123.json"), r#"{"id":"abc123","project":"p","at":1.0,"tool_name":"AskUserQuestion","input":{}}"#).unwrap();
         let open = list(&d);
         assert_eq!(open.len(), 2);

@@ -23,12 +23,13 @@ import {
   toggleTheme,
 } from "../../../application/navigation/sidebar";
 import { newChat } from "../../../application/conversations/chats";
-import { chatsOf, closedOf, terminalSessions } from "../../../application/conversations/selectors";
+import { chatsOf, closedOf, sessionIdOf, terminalSessions } from "../../../application/conversations/selectors";
 import { closeAll, closeChat, reopen } from "../../../application/conversations/actions";
 import { usageSummary } from "../../../application/usage/usage";
 import { useDerived } from "../../hooks/useDerived";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useT } from "../../hooks/useT";
+import { copyText } from "../../components/copy";
 import { Icon } from "../../components/Icon";
 import { SidebarRow } from "./SidebarRow";
 import { SidebarHead } from "./SidebarHead";
@@ -95,6 +96,7 @@ export function NavigationView({ className }: { className: string }) {
     if (target.kind === "conv")
       return [
         { id: "assign", label: t("ctx.assign") },
+        ...(sessionIdOf(target.chatKey) ? [{ id: "copyid", label: t("ctx.copyId") }] : []),
         { id: "close", label: t("nav.close") },
       ];
     const closed = closedOf(target.project);
@@ -118,7 +120,8 @@ export function NavigationView({ className }: { className: string }) {
     else if (itemId === "assign") {
       await select(target.chatKey);
       openProjectPanel();
-    } else if (itemId === "close") closeChat(target.chatKey);
+    } else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
+    else if (itemId === "close") closeChat(target.chatKey);
     else if (itemId === "new") select(newChat(target.project));
     else if (itemId === "closeall") closeAll(target.project);
     else reopen(itemId.slice("reopen:".length));

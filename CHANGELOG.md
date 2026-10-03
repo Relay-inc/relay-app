@@ -5,45 +5,49 @@ that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, ref
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
 `src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
-builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes; run
-the workflow by hand (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes. Then
+push relay-server's image from a checkout of the tag with `scripts/push-server-image.sh`. Run the workflow by hand
+(Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
-### Changed
-
-- The interface is rebuilt on React with domain-driven layers: it looks and behaves as before, a streaming answer only redraws itself, text typed while a turn runs outside Relay is no longer lost, a language switch redraws everything, a note created during a turn turns the links in earlier answers into links, links in a mail reach the confirmation bar again, and a relay://ask link fills in Cmd-K instead of sending on its own
-- The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The board and pull requests open as the project's, with the same icon, the project name or Esc to go back to the conversation. The button that resumes the conversation in iTerm or WezTerm moved next to its title. (#70)
-
-### Removed
-
-- The right panel's tabs (open items, status, reminders, pull requests), its "today" list and the ⌥⌘I shortcut. (#70)
-
-### Fixed
-
-- Settings › Integrations › Mail, Agents and Projects have even spacing again. Mail lists your accounts with a "+ Add account" button (Gmail, another mail server, or a password already in the keychain) that opens the steps in place of the list, instead of showing them under it all the time (#68)
-- Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
+## [0.0.4] - 2026-10-03
 
 ### Added
 - Drop files from Finder anywhere on the window, pick them with +, or paste them after Cmd-C in Finder: the agent gets their path and reads them where they are, nothing is copied. They wait as chips next to the pictures, and in the conversation a click opens the file in its own app (Option-click shows it in Finder). Reading a file you attached needs no permission card in that conversation, anything else still asks. Pictures still go inline
 
+- Work machines: run a project's conversations on another computer in your network (a home server, a spare Mac), so they keep going while this Mac is closed. Run `relay-server` there (Settings › Machines › Set up a machine has the commands), pair it with the line `relay-server pair` prints, then pick per conversation where it runs, or link a project to its folder on that machine. The connection is mutual TLS with pinned certificates: a device that is not paired never gets past the handshake. Permission cards from there show up here as usual, the composer says where a conversation runs, and a conversation that lost its connection is taken back when the machine answers again. Mail stays on this Mac (#82)
+- Work machines can mirror this Mac: Settings › Machines › Mirror this Mac keeps your Claude context (CLAUDE.md, skills, agents, commands), your plugins, the vault and its memory in sync on the machine, so a conversation there knows what Claude knows here, also while this Mac is closed. What it writes in the vault comes back here, a file changed on both sides keeps both versions. On the machine the copy is encrypted with a key only this Mac holds, and lives in RAM while unlocked. Files go to the machine 500 at a time, and Settings › Machines shows a progress bar while a round runs. (#82)
+- A conversation can move between this Mac and a work machine between two turns: pick another place in the composer. Its history goes along and the next message goes on there. (#82)
+- relay-server is released as an image, `ghcr.io/laurentme/relay-server` for amd64 and arm64 with the same version as Relay. Claude Code is not in the image: the first start installs it into a volume, where its updates stay. (#82)
+- Settings › Machines › Set up a machine: the commands to run relay-server in Docker on a home server, for the image of this Relay's version and the folder you type, each with a copy button. A machine that speaks an older protocol says so in its row, with the commands to update it. (#82)
+
+### Changed
+
+- Relay no longer needs Python: reading the vault, project icons, permission prompts, slash commands and the Codex and OpenCode bridges are built into the app, so Macs without the Xcode Command Line Tools no longer get an install prompt (#79)
+
+### Fixed
+
+- The released app works again: it looked for its scripts in the checkout of the machine that built it, so reading the vault, permission prompts, Codex and OpenCode all failed (#79)
+
+## [0.0.3] - 2026-10-02
+
+### Added
+
+- Right-click a conversation and pick "Copy session ID" to copy the agent's session ID, so you can point another conversation at it (#72)
+- Agents can read your calendar with `relay calendar.meetings` (an hour ago to 12 hours ahead), with an Agent access section on Settings › Integrations › Calendar
 - Claude Code can run on more than one account: Settings › Agents › Claude Code › Accounts adds a login as its own config folder (sign in once with `CLAUDE_CONFIG_DIR=<folder> claude /login`) and picks the one new conversations use. Each conversation stays on its account. Switch on **Switch accounts automatically** and a conversation whose account hit its plan limit moves to the next account with room on your next message, history included (#45)
 - A project conversation that commits to a repo no project has asks whether to link it to the project (the PRs and the GitHub button pick it up); "Not now" is remembered in the vault's `.relay/config.json` so it is not asked again. (#70)
 - Scratch notes per project: paste or write plain text, saved as you type in the vault's `.relay/notes` folder, with undo when you delete one. (#70)
 - Terminals per project: one or more shells in tabs, in the project's checkout, that keep running while you look at another project. (#70)
 - Slash-command completion for Codex, OpenCode and Pi, with provider-specific commands and skills that execute through their native APIs. (#64)
 - The agent can now do what the extensions do: create tasks, comments and time entries in Productive, cards in Trello, issues in Linear, add or move vault reminders and save mail drafts, through a `relay` command in its conversation (`relay help` lists what is set up). Reads run on their own, anything that changes something asks first on a card. Each extension's settings page has an Agent access section: switch the extension off for agents, or pick per action whether it runs, asks first or never runs. It is saved in the vault's `.relay/config.json`, so it travels with the vault and can be edited by hand (#52)
-
-- Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
 - The views on top of the sidebar can be set up: right-click one to hide it, show it as a row of icons instead of a list, bring hidden ones back or reset the order, and drag them to reorder. Settings › General › Sidebar has the same switches. Trello, Linear and Productive now draw a monochrome icon there, like the rest of the sidebar (#53)
 - A conversation under a project now tells the agent which project it is about, in front of its first message and again after you move it to another project, so it no longer has to guess from what you typed. The line stays out of the conversation view (#50)
 - Pi joins Claude Code, Codex and OpenCode as an agent: Settings › Agents › Pi turns it on once `pi` is installed and has a login or key. Pick its models and thinking levels, paste images, resume, fork or continue a session in the terminal, and see its tokens and cost in Usage. Pi never asks before it edits files or runs commands, so there are no permission cards (#46)
 - A conversation you close greys out and pulses in the sidebar until it is gone, so a slow close (stopping the agent, removing its worktrees) shows that it is working. Close all greys out every conversation it closes at once (#48)
 - Meetings from Google Calendar show at the top of Waiting from half an hour before they start, with a banner 5 minutes before. Each has **Join**, **Meeting note** (a conversation that makes the meeting's note in the vault) and **Prepare** (a briefing from what the vault knows about the people and the topic). Add a calendar under Settings › Integrations › Calendar with its secret iCal address, which stays in the keychain. Meetings you declined, marked free or are alone in are left out (#54)
-- The Remove button on an integration's page works again (#54)
-
-### Added
 - Relay opens `relay://` links, so Raycast, Alfred or a browser can reach Cmd-K from outside the app: `relay://ask` opens Cmd-K, `relay://ask?q=…` asks a quick question, `relay://open?q=…` opens the best matching project. The window comes forward either way (#65)
 - The model and effort pickers name the CLI's own defaults, for example "claude-opus-5-5 (default)", once a new conversation ran without a pick. Relay shows what the CLI reports it runs on instead of guessing from its settings. Claude Code doesn't report its effort, so that picker keeps "Default effort" (#63)
 - Linear issues open in Relay with descriptions, activity, comments, status and assignee changes, file attachments, and ticket conversations (#62).
@@ -51,10 +55,27 @@ the workflow by hand (Actions › release › Run workflow) to publish a version
 - Mail can archive and delete, as an experimental switch in Settings › Mail: archive (E) or delete (#) the open mail or a selection (Cmd- or Shift-click, Cmd-A for all), mark a selection read or unread, and the list splits into Inbox and Other, where newsletters and notifications from people you never wrote to go. Archived mails go to the Archive folder (Gmail: All Mail), deleted ones to the Trash, for Gmail and other IMAP servers alike; Claude still cannot move or delete mail (#61)
 - Cmd-K can find projects by name, label, alias or context. Choose a result with the arrow keys and Enter, or click it, to open the project; Enter without a selection still asks a quick question (#58)
 
+### Removed
+
+- The right panel's tabs (open items, status, reminders, pull requests), its "today" list and the ⌥⌘I shortcut. (#70)
+
+### Changed
+
+- Usage shows the totals only: the breakdowns by model and by conversation sit under "Details" and open when you click it
+- Settings › Integrations › Calendar works like Mail: your calendars in a list with a "+ Add calendar" button that opens the steps in place of the list. Every integration page now ends with its own "Remove" section, so Remove no longer sits under the last calendar or account as if it removed that one
+- The interface is rebuilt on React with domain-driven layers: it looks and behaves as before, a streaming answer only redraws itself, text typed while a turn runs outside Relay is no longer lost, a language switch redraws everything, a note created during a turn turns the links in earlier answers into links, links in a mail reach the confirmation bar again, and a relay://ask link fills in Cmd-K instead of sending on its own
+- The fixed right panel is gone. A project's board, pull requests, terminal and notes are now icons at the top right of the title bar, and a drawer opens on the right only when you ask for it or open a card or note. The board and pull requests open as the project's, with the same icon, the project name or Esc to go back to the conversation. The button that resumes the conversation in iTerm or WezTerm moved next to its title. (#70)
+
 ### Fixed
+- Banners no longer leave a Relay process running for every one you didn't click: each conversation keeps only its latest banner's process, a new banner ends the previous one (#51)
+- The Remove button on an integration's page works again (#54)
 - Open in Terminal works without iTerm: Settings › General › Terminal picks iTerm, WezTerm or Terminal, and Automatic (the default) takes the first one installed. A terminal that fails to open now shows an error instead of doing nothing (#67)
 - Cmd-K questions use the model and effort saved for their own agent, even when a conversation with a different agent is open (#56)
 - Repeated drags of a board card are saved in order. A failed move restores its last saved position, and late replies cannot change a different board after you switch views (#57)
+- The first message of a project conversation (and the first one after a move) no longer disappears when Relay reopens the conversation after a restart or reload
+- Codex, Pi and OpenCode now hear about the `relay` actions too, as Claude already did (the hint goes into each CLI's system prompt)
+- Settings › Integrations › Mail, Agents and Projects have even spacing again. Mail lists your accounts with a "+ Add account" button (Gmail, another mail server, or a password already in the keychain) that opens the steps in place of the list, instead of showing them under it all the time (#68)
+- Working animations recover active conversations after a reload for every provider and identify the agent that is running. (#64)
 
 ## [0.0.2] - 2026-10-01
 
@@ -131,6 +152,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.4...HEAD
+[0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
+[0.0.3]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/LaurentMe/vault-app/releases/tag/v0.0.1

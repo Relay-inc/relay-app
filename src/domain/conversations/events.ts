@@ -12,10 +12,6 @@ import { splitFiles } from "./files.ts";
 type EventOf<Type extends AgentEvent["type"]> = Extract<AgentEvent, { type: Type }>;
 
 export const IMG_OK = ["image/png", "image/jpeg", "image/gif", "image/webp"];
-/** Around the project line the app puts in front of a message; the transcript keeps it, the conversation hides it. */
-export const CTX_OPEN = "<relay-project>";
-export const CTX_CLOSE = "</relay-project>";
-const CTX_RE = new RegExp(`^${CTX_OPEN}[\\s\\S]*?${CTX_CLOSE}\\s*`);
 
 /** What the reducer reads from outside the state. */
 export type EventEnv = { t: Translate; selected: string; now: number };
@@ -162,7 +158,7 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
       const imgs = entry.images.map(image =>
         image && IMG_OK.includes(image.media_type) ? imageUrl(image.media_type, image.data) : "",
       );
-      const { text, files } = splitFiles(entry.text.replace(CTX_RE, ""));
+      const { text, files } = splitFiles(entry.text);
       items.push({ kind: "me", text, ...(imgs.length ? { imgs } : {}), ...(files.length ? { files } : {}) });
     } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok"));

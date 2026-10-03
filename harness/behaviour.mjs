@@ -197,9 +197,9 @@ const SCENARIOS = {
     await page.keyboard.press("Enter");
     s.check("send called", await s.waitCall("send"));
     const sends = await s.calls("send");
-    // the first message of a project conversation carries the project line in front (<relay-project>…</relay-project>)
-    s.check("send once, to this conversation, with the text", sends.length === 1 && sends[0].args.project === "chat:Northwind Portal/Invoice export columns" && String(sends[0].args.text).endsWith(text));
-    s.check("the project line goes in front", /^<relay-project>[\s\S]*Northwind Portal[\s\S]*<\/relay-project>/.test(sends[0]?.args.text ?? ""));
+    // the first message of a project conversation tells the agent the project (the backend puts the line in front)
+    s.check("send once, to this conversation, with the text", sends.length === 1 && sends[0].args.project === "chat:Northwind Portal/Invoice export columns" && sends[0].args.text === text);
+    s.check("the agent is told the project", sends[0]?.args.told === "Northwind Portal");
     s.check("composer cleared", (await composerValue(page)) === "");
     s.check("message shown", await waitText(page, text));
     s.check("no Done before the turn ends", !(await hasText(page, "Done")));

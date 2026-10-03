@@ -5,7 +5,7 @@
 //! reports no plan or rate limits.
 
 use agent_core::{usage, AgentProvider, Caps, Choice, Detect, Env, Event, Launch, Parser, Terminal, Turn};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
 use std::sync::Mutex;
@@ -19,6 +19,14 @@ pub static PROVIDER: Pi = Pi;
 
 /// The thinking levels of `--thinking`; "" is pi's own default (its settings, else the model's).
 const EFFORTS: [(&str, &str); 7] = [("off", "Off"), ("minimal", "Minimal"), ("low", "Low"), ("medium", "Medium"), ("high", "High"), ("xhigh", "Extra high"), ("max", "Max")];
+/// /compact (pi lists it too, so it comes once) plus what `get_commands` answered; none when it failed.
+fn pi_commands(result: &Value) -> Value {
+    if result["success"] != true { return Value::Array(vec![]); }
+    let mut commands = vec![json!({"name": "compact", "description": "Compact the conversation context", "argumentHint": "[instructions]"})];
+    commands.extend(result["data"]["commands"].as_array().into_iter().flatten().filter(|c| c["name"] != "compact")
+        .map(|c| json!({"name": c["name"], "description": c["description"].as_str().unwrap_or("")})));
+    Value::Array(commands)
+}
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 
 /// The program the last `detect` saw (the settings' override), for the model list, which has no env.
@@ -65,13 +73,20 @@ impl AgentProvider for Pi {
     }
     fn models(&self) -> Vec<Choice> { models_of(&self.bin()) }
     fn commands(&self, env: &Env) -> Value {
-        agent_core::discover_commands(env, include_str!("../commands.py"))
+        agent_core::discover_commands(env, |p| {
+            let mut cmd = Command::new(env.bin);
+            cmd.args(["--mode", "rpc", "--no-session"]).current_dir(env.vault);
+            let c = p.start(cmd)?;
+            p.send(c, json!({"type": "get_commands", "id": "commands"}))?;
+            let r = p.receive(c, |v| v["id"] == "commands")?;
+            Ok(pi_commands(&r))
+        })
     }
     fn efforts(&self) -> Vec<Choice> { EFFORTS.iter().map(|(i, l)| Choice::new(i, l)).collect() }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         let mut cmd = Command::new(env.bin);
-        cmd.args(["--mode", "rpc"]);
+        cmd.args(["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT]);
         // pi models are provider/model; a resume pi no longer has starts a session with that id
         if let Some(s) = l.resume.filter(|s| self.valid_session(s)) { cmd.args(["--session-id", s]); }
         else if let Some(s) = l.fork.filter(|s| self.valid_session(s)) { cmd.args(["--fork", s]); }
@@ -121,6 +136,14 @@ impl Pi {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn commands_lead_with_compact_once() {
+        let r = json!({"success": true, "data": {"commands": [{"name": "compact"}, {"name": "x", "description": "d"}]}});
+        assert_eq!(super::pi_commands(&r), json!([
+            {"name": "compact", "description": "Compact the conversation context", "argumentHint": "[instructions]"},
+            {"name": "x", "description": "d"}]));
+        assert_eq!(super::pi_commands(&json!({"success": false})), json!([]));
+    }
     use super::*;
     use std::path::PathBuf;
     fn env<'a>(p: &'a Path, opts: &'a Value) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/opt/pi", pending: p, opts } }
@@ -133,12 +156,12 @@ mod tests {
         let l = Launch { key: "c:1", name: "x", model: "openai-codex/gpt-5.5", effort: "high", resume: Some(sid), fork: None, turn: None };
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &l).unwrap();
         assert_eq!(cmd.get_program(), "/opt/pi");
-        assert_eq!(args(&cmd), ["--mode", "rpc", "--session-id", sid, "--model", "openai-codex/gpt-5.5", "--thinking", "high"]);
+        assert_eq!(args(&cmd), ["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT, "--session-id", sid, "--model", "openai-codex/gpt-5.5", "--thinking", "high"]);
         // a fork, a model without a provider, an effort pi does not know, a bad session id
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &Launch { model: "sonnet", effort: "ultra", resume: None, fork: Some(sid), ..l }).unwrap();
-        assert_eq!(args(&cmd), ["--mode", "rpc", "--fork", sid]);
+        assert_eq!(args(&cmd), ["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT, "--fork", sid]);
         let cmd = PROVIDER.command(&env(&p, &Value::Null), &Launch { model: "--x/y", effort: "", resume: Some("x; rm"), ..l }).unwrap();
-        assert_eq!(args(&cmd), ["--mode", "rpc"]);
+        assert_eq!(args(&cmd), ["--mode", "rpc", "--append-system-prompt", agent_core::envelope::HINT]);
         let e = env(&p, &Value::Null);
         assert_eq!(PROVIDER.terminal(&e, Terminal::Resume(sid)).unwrap(), format!("cd '/Users/me/my vault' && '/opt/pi' --session {sid}"));
         assert_eq!(PROVIDER.terminal(&e, Terminal::New("x")).unwrap(), "cd '/Users/me/my vault' && '/opt/pi'");

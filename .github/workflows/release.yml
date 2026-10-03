@@ -1,5 +1,7 @@
 # A new version on main is a release: when package.json's version has no tag yet, build Relay for macOS and publish it
 # as GitHub release v<version>, its notes the version's section of CHANGELOG.md. Run it by hand to retry a failed one.
+# relay-server's image is pushed from a Mac afterwards (scripts/push-server-image.sh): arm64 under QEMU here took
+# most of a release's minutes.
 name: release
 on:
   push:
@@ -17,7 +19,7 @@ jobs:
       new: ${{ steps.check.outputs.new }}
       notes: ${{ steps.check.outputs.notes }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - id: check
         env:
           GH_TOKEN: ${{ github.token }}
@@ -49,11 +51,11 @@ jobs:
     # Apple silicon; an Intel or universal build is another target in `args`
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
@@ -69,3 +71,4 @@ jobs:
           releaseBody: ${{ needs.version.outputs.notes }}
           releaseDraft: false
           prerelease: false
+

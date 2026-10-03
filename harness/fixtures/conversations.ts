@@ -131,8 +131,7 @@ export function history(key: string): Ev[] {
   const base = shortHistory(chats[index], index);
   if (key === PERMISSION_KEY) base.push(user("Push it so the client can test."), tool("Bash", { command: "git status" }), ai("The branch is clean. I need your go to push."));
   if (key === QUESTION_KEY) base.push(user("Which sync should we use?"), ai("Two options, I asked you below."));
-  // the app puts the project in front of a message (<relay-project>), the transcript keeps it, the conversation hides it
-  if (key === ACTION_KEY) base.push(user("<relay-project>This conversation is about the vault project Atlas Logistics.</relay-project>\nMake a ticket for the depot import."), tool("Bash", { command: "relay productive.create_task title='Depot import script' list='To do'" }), ai("I asked to create the ticket, it waits for your go."));
+  if (key === ACTION_KEY) base.push(user("Make a ticket for the depot import."), tool("Bash", { command: "relay productive.create_task title='Depot import script' list='To do'" }), ai("I asked to create the ticket, it waits for your go."));
   return base;
 }
 

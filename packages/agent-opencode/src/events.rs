@@ -1,4 +1,4 @@
-//! The events of `opencode serve` (GET /event, as bridge.py passes them on: `{type, properties}` per line) as the
+//! The events of `opencode serve` (GET /event, as bridge.rs passes them on: `{type, properties}` per line) as the
 //! contract's events, the turns the app sends, and the answers to its permission requests and questions.
 //! Written against opencode 1.18.33; tests/fixtures/serve-live*.jsonl are three live runs.
 
@@ -6,7 +6,7 @@ use agent_core::{pending::Request, Event, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
-/// A turn as bridge.py's `prompt` line; it fills in the model and variant. Images go as data-URL file parts.
+/// A turn as bridge.rs's `prompt` line; it fills in the model and variant. Images go as data-URL file parts.
 pub fn prompt(turn: &Turn) -> Value {
     let mut parts: Vec<Value> = vec![];
     if !turn.text.is_empty() { parts.push(json!({"type": "text", "text": turn.text})); }

@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.0.2"
+version = "0.0.4"
 description = "Relay control room"
 authors = []
 edition = "2021"
@@ -14,6 +14,10 @@ edition = "2021"
 name = "relay_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+# a self-test of the work machines inside the app (src/selftest.rs), run by packages/relay-server/docker/selftest.sh
+selftest = []
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -24,7 +28,11 @@ serde_json.workspace = true
 tauri-plugin-dialog = "2"
 sys-locale = "0.3.2"
 chrono = "0.4"
+regex = "1"
 sha1_smol = "1"
+# the favicon run (src/favicon.rs): domains in notes, accents folded, icon links resolved
+unicode-normalization = "0.1"
+url = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
 # the board integrations, registered in src/providers.rs (PROVIDERS)
@@ -44,6 +52,9 @@ rrule = "0.14"
 chrono-tz = "0.10"
 # the shells of the embedded terminals (src/pty.rs)
 portable-pty = "0.9"
+
+# the broker and the link to a work machine (src/machines.rs, packages/relay-server)
+relay-remote = { path = "../packages/relay-remote" }
 
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true

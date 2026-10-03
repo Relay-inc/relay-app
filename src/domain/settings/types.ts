@@ -25,6 +25,48 @@ export type Accent = "relay" | "graphite";
 export type TerminalApp = "auto" | "iterm" | "wezterm" | "terminal";
 /** The views on top of the sidebar: rows with names or a row of icons, the order they were dragged in, the ones switched off. */
 export type SidebarCfg = { layout?: "list" | "icons"; order?: string[]; hidden?: string[] };
+/** Another computer in the LAN running relay-server; folders: vault project name to an absolute path on it. */
+export type Machine = {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  fp: string;
+  folders: Record<string, string>;
+  mirror?: { on: boolean; exclude: string[] }; // "Mirror this Mac": exclude = vault folders that stay on this Mac
+  default_folder?: string; // where a conversation runs when its project has no folder there; "" or none: the home
+};
+/** A machine in the composer's pick (`machines_list`): `default` when the project runs there without a pick. */
+export type MachineChoice = { id: string; name: string; online: boolean; default: boolean };
+/** What `mirror_status` says about the last sync round of a machine; `at` is unix seconds. */
+export type MirrorStatus = {
+  at: number;
+  pushed: number;
+  pulled: number;
+  conflicts: string[];
+  skipped: string[];
+  errors: string[];
+  locked: boolean;
+  in_ram: boolean;
+};
+/** Where a running mirror round is (`mirror_progress`): root `step` of 4, `done` of `total` files, total 0 while comparing. */
+export type MirrorProgress = {
+  root: "context" | "plugins" | "vault" | "memory";
+  step: number;
+  done: number;
+  total: number;
+};
+/** What `machine_status` says about a machine. */
+export type MachineStatus = {
+  ok: boolean;
+  host?: string;
+  version?: string;
+  os?: string;
+  error?: string;
+  outdated?: "server" | "app"; // it answers but speaks another protocol: the side to update
+};
+/** What `server_setup` gives for setting up a machine: this Relay's version and the relay-server image. */
+export type ServerSetup = { version: string; image: string };
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
@@ -42,6 +84,8 @@ export type Settings = {
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;
+  machines?: Machine[];
+  machines_default?: string; // where new conversations run without a pick: "" this Mac, or a machine id
 };
 
 /** The settings before the backend answered. */

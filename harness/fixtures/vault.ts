@@ -3,20 +3,113 @@ import { NOW, DAY, HOUR, iso, ymd, pngBase64 } from "./util";
 
 export const VAULT = "/Users/demo/Vault";
 
-type P = { name: string; context: string; state: string; daysAgo: number; summary: string; open: string[]; aliases?: string[] };
+type P = {
+  name: string;
+  context: string;
+  state: string;
+  daysAgo: number;
+  summary: string;
+  open: string[];
+  aliases?: string[];
+};
 const P: P[] = [
-  { name: "Northwind Portal", context: "Agency", state: "Active", daysAgo: 0, summary: "Customer portal v2 in acceptance, invoices export open.", open: ["#412 mergen, dan acceptatie (sinds 28/9)", "Invoice export CSV naar klant", "Security review login flow"], aliases: ["NWP"] },
-  { name: "Atlas Logistics", context: "Agency", state: "Active", daysAgo: 1, summary: "Route planner proof of concept, waiting on depot data.", open: ["Depot coordinates opvragen", "Planner demo plannen"] },
-  { name: "Harbor CRM", context: "Agency", state: "Active", daysAgo: 1, summary: "Migration to the new CRM API, contact sync rewritten.", open: ["Contact sync testen op staging"] },
-  { name: "Delmas Bakery", context: "Agency", state: "Active", daysAgo: 2, summary: "Webshop opening hours and holiday banner live.", open: [] },
-  { name: "Kestrel API", context: "Agency", state: "Blocked", daysAgo: 5, summary: "Waiting on client keys for the partner API.", open: ["Keys van klant (sinds 22/9)", "Rate limits documenteren"] },
-  { name: "Orchard Health", context: "Agency", state: "Active", daysAgo: 3, summary: "Patient intake form, accessibility pass done.", open: ["Formulier vertalen naar FR"] },
-  { name: "Lumen Site", context: "Agency", state: "Quiet", daysAgo: 34, summary: "Marketing site, no activity since August.", open: [] },
-  { name: "Beacon Billing", context: "Agency", state: "Active", daysAgo: 0, summary: "Billing sync double balances investigated, fix on branch.", open: ["Fix #88 reviewen", "Saldo's controleren na deploy", "Klant informeren"] },
-  { name: "Side Studio", context: "Studio", state: "Active", daysAgo: 2, summary: "Two leads for custom tools, first call next week.", open: ["Lead 1 opvolgen"] },
-  { name: "Wedding Photos", context: "Studio", state: "Active", daysAgo: 4, summary: "October wedding confirmed, contract signed.", open: ["Shotlist afstemmen"] },
-  { name: "Portfolio", context: "Personal", state: "Active", daysAgo: 1, summary: "Quarterly check done, no trim levels hit.", open: [] },
-  { name: "Homelab", context: "Personal", state: "Paused", daysAgo: 12, summary: "Server stable, backup still missing.", open: ["Backup naar NAS"] },
+  {
+    name: "Northwind Portal",
+    context: "Agency",
+    state: "Active",
+    daysAgo: 0,
+    summary: "Customer portal v2 in acceptance, invoices export open.",
+    open: ["#412 mergen, dan acceptatie (sinds 28/9)", "Invoice export CSV naar klant", "Security review login flow"],
+    aliases: ["NWP"],
+  },
+  {
+    name: "Atlas Logistics",
+    context: "Agency",
+    state: "Active",
+    daysAgo: 1,
+    summary: "Route planner proof of concept, waiting on depot data.",
+    open: ["Depot coordinates opvragen", "Planner demo plannen"],
+  },
+  {
+    name: "Harbor CRM",
+    context: "Agency",
+    state: "Active",
+    daysAgo: 1,
+    summary: "Migration to the new CRM API, contact sync rewritten.",
+    open: ["Contact sync testen op staging"],
+  },
+  {
+    name: "Delmas Bakery",
+    context: "Agency",
+    state: "Active",
+    daysAgo: 2,
+    summary: "Webshop opening hours and holiday banner live.",
+    open: [],
+  },
+  {
+    name: "Kestrel API",
+    context: "Agency",
+    state: "Blocked",
+    daysAgo: 5,
+    summary: "Waiting on client keys for the partner API.",
+    open: ["Keys van klant (sinds 22/9)", "Rate limits documenteren"],
+  },
+  {
+    name: "Orchard Health",
+    context: "Agency",
+    state: "Active",
+    daysAgo: 3,
+    summary: "Patient intake form, accessibility pass done.",
+    open: ["Formulier vertalen naar FR"],
+  },
+  {
+    name: "Lumen Site",
+    context: "Agency",
+    state: "Quiet",
+    daysAgo: 34,
+    summary: "Marketing site, no activity since August.",
+    open: [],
+  },
+  {
+    name: "Beacon Billing",
+    context: "Agency",
+    state: "Active",
+    daysAgo: 0,
+    summary: "Billing sync double balances investigated, fix on branch.",
+    open: ["Fix #88 reviewen", "Saldo's controleren na deploy", "Klant informeren"],
+  },
+  {
+    name: "Side Studio",
+    context: "Studio",
+    state: "Active",
+    daysAgo: 2,
+    summary: "Two leads for custom tools, first call next week.",
+    open: ["Lead 1 opvolgen"],
+  },
+  {
+    name: "Wedding Photos",
+    context: "Studio",
+    state: "Active",
+    daysAgo: 4,
+    summary: "October wedding confirmed, contract signed.",
+    open: ["Shotlist afstemmen"],
+  },
+  {
+    name: "Portfolio",
+    context: "Personal",
+    state: "Active",
+    daysAgo: 1,
+    summary: "Quarterly check done, no trim levels hit.",
+    open: [],
+  },
+  {
+    name: "Homelab",
+    context: "Personal",
+    state: "Paused",
+    daysAgo: 12,
+    summary: "Server stable, backup still missing.",
+    open: ["Backup naar NAS"],
+  },
 ];
 const stand = (p: P) =>
   `*Stand van zaken, laatst bijgewerkt ${ymd(NOW - p.daysAgo * DAY)}.*\n\n${p.summary} The **next step** is agreed with the client.\n\n- Phase: build\n- Risk: timeline on evening work\n- Next: demo on Thursday, see [[${p.name}]]`;
@@ -76,10 +169,31 @@ export const reminders = [
 
 /** Terminal sessions: open in the terminal, not started by the app (snapshot.sessions plus the `agents` list). */
 export const terminalSessions = [
-  { sessionId: "7e1f0c2a-1111-4c11-8111-0000000000a1", project: "Northwind Portal", last_user: "Run the e2e suite against staging and summarise failures", last_at: iso(NOW - 25 * 60000), name: "e2e staging run" },
-  { sessionId: "7e1f0c2a-2222-4c22-8222-0000000000a2", project: null, last_user: "Clean up the downloads folder", last_at: iso(NOW - 3 * HOUR), name: "" },
+  {
+    sessionId: "7e1f0c2a-1111-4c11-8111-0000000000a1",
+    project: "Northwind Portal",
+    last_user: "Run the e2e suite against staging and summarise failures",
+    last_at: iso(NOW - 25 * 60000),
+    name: "e2e staging run",
+  },
+  {
+    sessionId: "7e1f0c2a-2222-4c22-8222-0000000000a2",
+    project: null,
+    last_user: "Clean up the downloads folder",
+    last_at: iso(NOW - 3 * HOUR),
+    name: "",
+  },
 ];
-export const backgroundBlocked = { id: "bg-blocked-1", sessionId: "7e1f0c2a-3333-4c33-8333-0000000000a3", provider: "claude", kind: "background", status: "idle", state: "blocked", name: "nightly-report", startedAt: iso(NOW - 6 * HOUR) };
+export const backgroundBlocked = {
+  id: "bg-blocked-1",
+  sessionId: "7e1f0c2a-3333-4c33-8333-0000000000a3",
+  provider: "claude",
+  kind: "background",
+  status: "idle",
+  state: "blocked",
+  name: "nightly-report",
+  startedAt: iso(NOW - 6 * HOUR),
+};
 
 export function snapshot(list = reminders) {
   return {
@@ -100,14 +214,35 @@ export function vaultStatus(ok: boolean) {
 
 /** What `reminder` and `reminder_add` do to the list (reminders.rs act and add): done drops a row or moves a repeating
  * one on, push moves it, add appends one. `when`: YYYY-MM-DD, morgen, +1w. */
-export function remindersAfter(list: typeof reminders, action: string, a: { id?: string; date?: string | null; text?: string; project?: string | null; repeat?: string | null }, n: number) {
-  const day = (when: string, from = NOW) => (when === "morgen" ? from + DAY : when === "+1w" ? from + 7 * DAY : Date.parse(`${when}T07:30:00Z`));
+export function remindersAfter(
+  list: typeof reminders,
+  action: string,
+  a: { id?: string; date?: string | null; text?: string; project?: string | null; repeat?: string | null },
+  n: number,
+) {
+  const day = (when: string, from = NOW) =>
+    when === "morgen" ? from + DAY : when === "+1w" ? from + 7 * DAY : Date.parse(`${when}T07:30:00Z`);
   const repeatDays = (r: string) => Number(r.slice(0, -1)) * ({ d: 1, w: 7, m: 30 }[r.slice(-1)] ?? 1);
-  const at = (date: number, r: (typeof reminders)[number]) => ({ ...r, date: ymd(date), days: Math.round((date - NOW) / DAY) });
+  const at = (date: number, r: (typeof reminders)[number]) => ({
+    ...r,
+    date: ymd(date),
+    days: Math.round((date - NOW) / DAY),
+  });
   if (action === "add") {
     const date = day(a.date || "");
     const id = (0xd0000000 + n).toString(16);
-    return [...list, at(date, { id, date: "", days: 0, project: a.project ?? null, title: a.text ?? "", text: a.text ?? "", repeat: a.repeat || null })];
+    return [
+      ...list,
+      at(date, {
+        id,
+        date: "",
+        days: 0,
+        project: a.project ?? null,
+        title: a.text ?? "",
+        text: a.text ?? "",
+        repeat: a.repeat || null,
+      }),
+    ];
   }
   const r = list.find(x => x.id === a.id);
   if (!r) throw new Error("This reminder is gone, reload");
@@ -119,7 +254,10 @@ export function remindersAfter(list: typeof reminders, action: string, a: { id?:
 export const MAIL_ACCOUNT = "laurent@example.com";
 /** Claude Code's extra logins (settings.agents.providers.claude), each its own CLAUDE_CONFIG_DIR. */
 const CLAUDE_ACCOUNTS = {
-  accounts: [{ name: "Work", dir: "/Users/demo/.claude-work" }, { name: "Side projects", dir: "/Users/demo/.claude-side" }],
+  accounts: [
+    { name: "Work", dir: "/Users/demo/.claude-work" },
+    { name: "Side projects", dir: "/Users/demo/.claude-side" },
+  ],
   active: "/Users/demo/.claude-work",
   auto: true,
 };
@@ -131,7 +269,25 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
  * archive, delete, Inbox/Other) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
+  // a paired work machine that speaks an older protocol, its mirror on (Settings › Machines)
+  const machines =
+    fixture === "machines"
+      ? {
+          machines: [
+            {
+              id: "a1b2c3d4e5f6",
+              name: "Server",
+              host: "192.168.1.2",
+              port: 47800,
+              fp: "0f9534960dd3570a".padEnd(64, "0"),
+              folders: {},
+              mirror: { on: true, exclude: [] },
+            },
+          ],
+        }
+      : {};
   return {
+    ...machines,
     vault: onboarding ? "" : VAULT,
     vaults: {},
     projects: { "Beacon Billing": { label: "Beacon" } },
@@ -139,18 +295,40 @@ export function settings(fixture: string) {
     integrations: { productive: { on: true, org: "40001", user: "70001" } },
     boards: { "Northwind Portal": { provider: "productive", project: "p1", board: "f1" } },
     github: { on: true, owners: "acme" },
-    mail: { on: true, account: MAIL_ACCOUNT, accounts: [
-      { email: MAIL_ACCOUNT, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT },
-      { email: MAIL_ACCOUNT_2, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT_2, host: "imap.example.org", port: 993 },
-    ], experimental: fixture === "mailexp" },
-    calendar: fixture === "calendar" ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] } : { on: false, feeds: [] },
+    mail: {
+      on: true,
+      account: MAIL_ACCOUNT,
+      accounts: [
+        { email: MAIL_ACCOUNT, keychain_service: "relay-mail", keychain_account: MAIL_ACCOUNT },
+        {
+          email: MAIL_ACCOUNT_2,
+          keychain_service: "relay-mail",
+          keychain_account: MAIL_ACCOUNT_2,
+          host: "imap.example.org",
+          port: 993,
+        },
+      ],
+      experimental: fixture === "mailexp",
+    },
+    calendar:
+      fixture === "calendar"
+        ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
+        : { on: false, feeds: [] },
     language: "en",
     theme: fixture === "dark" ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
     favicons: { on: false, last: "", tried: {} },
-    agents: { default: "claude", providers: { claude: { on: true, bin: "", ...(fixture === "accounts" ? CLAUDE_ACCOUNTS : {}) }, codex: { on: true, bin: "", sandbox: "workspace-write" }, opencode: { on: false, bin: "" }, pi: { on: false, bin: "" } } },
+    agents: {
+      default: "claude",
+      providers: {
+        claude: { on: true, bin: "", ...(fixture === "accounts" ? CLAUDE_ACCOUNTS : {}) },
+        codex: { on: true, bin: "", sandbox: "workspace-write" },
+        opencode: { on: false, bin: "" },
+        pi: { on: false, bin: "" },
+      },
+    },
   };
 }
 

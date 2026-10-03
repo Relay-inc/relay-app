@@ -1,0 +1,15 @@
+[package]
+name = "relay-remote"
+version = "0.1.0"
+edition = "2021"
+description = "The broker that holds an agent's pipes, and Relay's link to a work machine: mutual TLS with pinned certificates"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true
+sha1_smol = "1"
+libc = "0.2"
+# TLS 1.3 with ring as the crypto provider (aws-lc-rs needs cmake), certificates made by rcgen
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "logging"] }
+rcgen = { version = "0.14", default-features = false, features = ["ring", "crypto"] }
+ring = "0.17"

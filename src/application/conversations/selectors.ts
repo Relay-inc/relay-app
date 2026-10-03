@@ -2,7 +2,7 @@ import { t, type Key } from "../../shared/i18n";
 import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
-import { isTerminal } from "../../domain/navigation/keys";
+import { isTerminal, termSid } from "../../domain/navigation/keys";
 import { WAIT, REM, PRS, MAIL, USAGE, isView } from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
@@ -14,7 +14,9 @@ import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent } from "../agents/agents";
 import { projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
+import { machinePick } from "../../domain/settings/machines";
 import { useConversationsStore } from "./store";
+import { useDraftsStore } from "./drafts";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
 // `useDerived` (ui/hooks), which redraws when what they return changes.
@@ -23,6 +25,8 @@ const cs = () => useConversationsStore.getState();
 export const displayTitle = (title: string) => rules.displayTitle(title, t);
 export const projectOf = (key: string) => rules.projectOf(cs(), key);
 export const label = (key: string) => rules.label(cs(), key, t);
+/** The agent's session id behind a conversation (`claude --resume <id>`); empty while a new chat has none yet. */
+export const sessionIdOf = (key: string) => cs().sidOf[key]?.sid ?? termSid(key);
 /** A project's open conversations (null: the general ones), newest first. */
 export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 /** The sessions open in the terminal that the app did not start; `hidden` the ones closed here. */
@@ -101,4 +105,20 @@ export function chatBar(key: string) {
         }
       : null,
   };
+}
+/** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
+ *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
+ *  it where it runs: picking another place then moves it (`moveConversation`). */
+export function machineChoice(key: string) {
+  const conversation = cs().chats[key];
+  const list = cs().machineLists[conversation?.project ?? ""] ?? [];
+  const started = !!cs().sidOf[key];
+  const why: Key | null =
+    chatAgent(key) !== "claude"
+      ? "composer.machineOnlyClaude"
+      : conversation?.fromMail
+        ? "composer.machineNoMail"
+        : null;
+  if (started) return { list, value: list.length ? (cs().machines[key]?.id ?? "") : null, why, started };
+  return { list, value: machinePick(list, useDraftsStore.getState().machine[key], !why), why, started };
 }

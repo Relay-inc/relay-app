@@ -1,4 +1,5 @@
 import type { Key } from "../../shared/i18n";
+import type { MachineChoice } from "../settings/types";
 import type { SlashCommand } from "./commands";
 import type { AgentSession, Chat, Img, Item, Pending, RouteChoice, SessionOf, Sub } from "./types";
 
@@ -22,6 +23,8 @@ export type ConversationsState = {
   forked: string[]; // terminal sessions continued in the app, no longer listed
   appSids: string[];
   sidOf: SessionOf; // app conversation key: its provider and session id
+  machines: Record<string, { machine: string; id: string; cwd: string }>; // conversation key: the machine it runs on (`chat_machines`)
+  machineLists: Record<string, MachineChoice[]>; // the composer's machine pick per project ("" general), `machines_list`
   // app conversations whose turn runs in a process this page gets no events from (it outlived an app restart):
   // the transcript offset read so far. The page follows the transcript until the provider's sessions say the turn ended
   outside: Record<string, number>;
@@ -55,6 +58,8 @@ export const initialConversations = (stored: {
   agentsList: [],
   appSids: [],
   sidOf: {},
+  machines: {},
+  machineLists: {},
   outside: {},
   outsideAt: {},
   termOffset: {},
@@ -65,6 +70,11 @@ export const initialConversations = (stored: {
 
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is
  *  typed but not sent per conversation (survives switching and closing the app), and the images waiting for the
- *  next send. */
-/** `files`: the paths attached by drop, + or paste, waiting with the images for the next send. */
-export type DraftsState = { typed: Record<string, string>; attached: Img[]; files: string[] };
+ *  next send with the files attached by their path (`files`), and where a conversation without a session yet is to
+ *  run (`machinePick`). */
+export type DraftsState = {
+  typed: Record<string, string>;
+  attached: Img[];
+  files: string[];
+  machine: Record<string, string>;
+};
