@@ -217,7 +217,6 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       model: picks("model", key).value,
       effort: picks("effort", key).value,
       provider: chatAgent(key),
-      projectName: conversation?.project ?? null,
       // where it runs, as the composer shows it; the backend only reads it at the first spawn
       machine: machineChoice(key).value,
       told: told || null,
@@ -296,11 +295,9 @@ export async function moveConversation(to: string) {
   const key = selected();
   const conversation = cs().chats[key];
   if (!conversation) return;
-  const place = to
-    ? (cs().machineLists[conversation.project ?? ""]?.find(machine => machine.id === to)?.name ?? to)
-    : t("composer.thisMac");
+  const place = to ? (cs().machineList.find(machine => machine.id === to)?.name ?? to) : t("composer.thisMac");
   try {
-    await backend.moveConversation(key, to, conversation.project ?? null, !!conversation.fromMail);
+    await backend.moveConversation(key, to, !!conversation.fromMail);
     note(key, t("note.movedTo", { name: place }));
   } catch (error) {
     set(draft => {

@@ -695,11 +695,10 @@ export default {
   "composer.machineOnlyClaude": "Seul Claude Code s'exécute sur une machine de travail.",
   "composer.machineNoMail": "Une conversation sur un e-mail reste sur ce Mac : les outils de courrier tournent ici.",
   "mc.intro":
-    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Une autre conversation peut aussi s'y exécuter : choisissez la machine à côté du modèle avant son premier message. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici.",
+    "Une conversation peut s'exécuter sur une machine et continue quand ce Mac est fermé : choisissez la machine à côté du modèle avant son premier message, ou faites-en la valeur par défaut ci-dessous. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici.",
   "mc.runDefaultTitle": "Où s'exécutent les conversations",
   "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
-  "mc.runDefaultHelp":
-    "Un projet avec un dossier sur une machine s'y exécute. Chaque nouvelle conversation peut encore choisir un autre endroit à côté du modèle.",
+  "mc.runDefaultHelp": "Chaque nouvelle conversation peut encore choisir un autre endroit à côté du modèle.",
   "mc.pairTitle": "Associer une machine",
   "mc.line": "Ligne d'association",
   "mc.lineHelp":
@@ -739,16 +738,7 @@ export default {
   "mc.cancel": "Annuler",
   "mc.forgetHelp":
     "Cela retire {name} ici seulement. Pour révoquer l'accès complètement, lancez <code>relay-server revoke {name}</code> sur la machine.",
-  "mc.folders": "Dossiers des projets",
-  "mc.noFolders":
-    "Aucun dossier pour l'instant. Liez un projet à un dépôt de cette machine pour y démarrer ses conversations. Sans dossier, elles démarrent dans le vault en miroir.",
-  "mc.addFolder": "Ajouter un dossier",
   "mc.removeFolder": "Retirer",
-  "mc.project": "Projet",
-  "mc.pickProject": "Choisir un projet",
-  "mc.path": "Dossier sur la machine",
-  "mc.save": "Enregistrer",
-  "mc.errPath": "Chaque ligne demande un projet et un chemin absolu commençant par /.",
   "mc.mirror": "Mettre ce Mac en miroir",
   "mc.mirrorHelp":
     "Votre contexte Claude, vos plugins, votre vault et sa mémoire, toujours synchronisés et chiffrés sur la machine. Oublier supprime la copie là-bas.",

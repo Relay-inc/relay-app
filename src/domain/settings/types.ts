@@ -25,14 +25,13 @@ export type Accent = "relay" | "graphite";
 export type TerminalApp = "auto" | "iterm" | "wezterm" | "terminal";
 /** The views on top of the sidebar: rows with names or a row of icons, the order they were dragged in, the ones switched off. */
 export type SidebarCfg = { layout?: "list" | "icons"; order?: string[]; hidden?: string[] };
-/** Another computer in the LAN running relay-server; folders: vault project name to an absolute path on it. */
+/** Another computer in the LAN running relay-server. */
 export type Machine = {
   id: string;
   name: string;
   host: string;
   port: number;
   fp: string;
-  folders: Record<string, string>;
   mirror?: { exclude: string[] }; // vault folders that stay on this Mac, out of the machine's mirror
 };
 /** A machine in the composer's pick (`machines_list`): `default` when the project runs there without a pick. */

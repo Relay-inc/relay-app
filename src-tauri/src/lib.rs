@@ -641,15 +641,15 @@ fn pipe_init(mail_on: bool) -> Value {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str, project_name: Option<&str>, machine: Option<&str>) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str, machine: Option<&str>) -> Result<Proc, String> {
     let dir = need_vault(state)?;
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let claude = p.id() == "claude";
     let settings = state.settings.lock().unwrap().clone();
-    // a project with a folder on a work machine runs there (machines.rs); a fork copies a session of this Mac, so stays
-    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, project_name, resume.is_some(), machine) } else { None };
+    // where the composer or Settings › Machines says (machines.rs); a fork copies a session of this Mac, so stays
+    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
     // a work machine has its own login: no account of this Mac goes along
     let account = if remote.is_some() { "" } else { account };
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: u32::from(turn.is_some()) };
@@ -917,7 +917,7 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, project_name: Option<String>, machine: Option<String>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
     // the project the agent is told about: the line in front of the message (agent_core::envelope)
     let text = match told.filter(|t| !t.is_empty()) { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
@@ -940,7 +940,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account, project_name.as_deref(), machine.as_deref())?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account, machine.as_deref())?;
         procs.insert(project, x);
         return Ok(());
     }
@@ -949,7 +949,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
     if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || (x.account != account && !x.remote)) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &account, project_name.as_deref(), machine.as_deref())?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &account, machine.as_deref())?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -1009,7 +1009,7 @@ async fn history(app: AppHandle, state: State<'_, App>, project: String) -> Resu
 #[tauri::command]
 fn reset(app: AppHandle, state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
-    state.machines.unbind(&project); // a fresh start goes where the project's folders say now
+    state.machines.unbind(&project); // a fresh start goes where the composer or the default says now
     let mut sids = state.sids.lock().unwrap();
     sids.remove(&project);
     save_sids(&app, &sids);
@@ -1034,10 +1034,10 @@ fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Res
 /// message resumes the session there. A conversation that read mail stays on this Mac. What is only on one side (work
 /// not committed in a repo there) does not move.
 #[tauri::command]
-async fn move_conversation(app: AppHandle, key: String, to: String, project_name: Option<String>, mail: bool) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || move_to(&app, &key, &to, project_name.as_deref(), mail)).await.map_err(|e| e.to_string())?
+async fn move_conversation(app: AppHandle, key: String, to: String, mail: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || move_to(&app, &key, &to, mail)).await.map_err(|e| e.to_string())?
 }
-fn move_to(app: &AppHandle, key: &str, to: &str, project_name: Option<&str>, mail: bool) -> Result<(), String> {
+fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), String> {
     let state = app.state::<App>();
     let sess = state.sids.lock().unwrap().get(key).cloned().ok_or_else(|| trc("err.move_no_session"))?;
     if sess.provider != "claude" { return Err(trc("err.move_only_claude")); }
@@ -1073,7 +1073,7 @@ fn move_to(app: &AppHandle, key: &str, to: &str, project_name: Option<&str>, mai
     } else {
         let m = find(to)?;
         let info = up(&m)?;
-        let cwd = machines::cwd_or_vault(machines::folder_on(&m, project_name), &info);
+        let cwd = machines::cwd_or_vault(String::new(), &info);
         let text = machines::rewrite(&text, &roots, &machines::roots_on(&info));
         state.machines.client(&m).session_put(&sess.sid, &cwd, text.as_bytes())?;
         state.machines.set_bind(key, machines::Bind { machine: to.into(), cwd });
@@ -1662,7 +1662,7 @@ async fn calendar_meetings(state: State<'_, App>) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || calendar::upcoming(&s)).await.map_err(|e| e.to_string())
 }
 
-// ---------- Work machines (machines.rs, packages/relay-server): pairing, status, folders per project.
+// ---------- Work machines (machines.rs, packages/relay-server): pairing, status, the mirror.
 
 /// Save settings changed here (not by the settings window), and tell both windows.
 fn save_settings(app: &AppHandle, s: &Value) -> Result<(), String> {
@@ -1676,7 +1676,7 @@ async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name:
     let (id, me) = (state.machines.id.clone(), sys_name());
     let (l, info) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::pair(&line, &id, &me)).await.map_err(|e| e.to_string())??;
     let name: String = if name.trim().is_empty() { info.host.clone() } else { name.trim().chars().take(60).collect() };
-    let m = json!({"id": &l.fp[..12], "name": name, "host": l.host, "port": l.port, "fp": l.fp, "folders": {}});
+    let m = json!({"id": &l.fp[..12], "name": name, "host": l.host, "port": l.port, "fp": l.fp});
     let mut s = state.settings.lock().unwrap();
     let list = s["machines"].as_array_mut().unwrap();
     list.retain(|x| x["fp"] != m["fp"]);
@@ -1741,20 +1741,10 @@ fn mirror_status(state: State<App>, id: String) -> Value { json!(state.mirrors.s
 /// Where the running round of a machine's mirror is, null between rounds.
 #[tauri::command]
 fn mirror_progress(state: State<App>, id: String) -> Value { json!(state.mirrors.progress.lock().unwrap().get(&id)) }
-/// A machine's folders: vault project -> absolute folder there.
-#[tauri::command]
-fn set_machine_folders(app: AppHandle, state: State<App>, id: String, folders: serde_json::Map<String, Value>) -> Result<(), String> {
-    if let Some((p, _)) = folders.iter().find(|(p, d)| !machines::folder_ok(p, d)) { return Err(trc_v("err.machine_folder", p)); }
-    let mut s = state.settings.lock().unwrap();
-    let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
-    m["folders"] = Value::Object(folders);
-    if !machines::valid(m) { return Err(trc("err.machine")); }
-    save_settings(&app, &s)
-}
 /// The machines for the composer's pick, from the poller (no network): [{id, name, online, default}], `default` the one
-/// the project runs on without a pick.
+/// a conversation runs on without a pick.
 #[tauri::command]
-fn machines_list(state: State<App>, project: Option<String>) -> Value { state.machines.status_list(&state.settings.lock().unwrap(), project.as_deref()) }
+fn machines_list(state: State<App>) -> Value { state.machines.status_list(&state.settings.lock().unwrap()) }
 /// Where new conversations run when nothing is picked: "" this Mac, or a machine's id (Settings › Machines).
 #[tauri::command]
 fn set_machines_default(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
@@ -1899,7 +1889,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

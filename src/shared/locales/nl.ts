@@ -688,11 +688,10 @@ export default {
   "composer.machineOnlyClaude": "Enkel Claude Code loopt op een werkmachine.",
   "composer.machineNoMail": "Een gesprek over een mail blijft op deze Mac, want de mailtools draaien hier.",
   "mc.intro":
-    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Een ander gesprek kan er ook lopen: kies de machine naast het model, vóór het eerste bericht. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je vault, zodat gesprekken daar weten wat Claude hier weet.",
+    "Een gesprek kan op een machine lopen en blijft draaien als deze Mac dicht is: kies de machine naast het model vóór het eerste bericht, of maak ze hieronder de standaard. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je vault, zodat gesprekken daar weten wat Claude hier weet.",
   "mc.runDefaultTitle": "Waar gesprekken draaien",
   "mc.runDefault": "Nieuwe gesprekken draaien op",
-  "mc.runDefaultHelp":
-    "Een project met een map op een machine draait daar. Elk nieuw gesprek kan naast het model nog een andere plek kiezen.",
+  "mc.runDefaultHelp": "Elk nieuw gesprek kan nog een andere plek kiezen naast het model.",
   "mc.pairTitle": "Machine koppelen",
   "mc.line": "Koppelregel",
   "mc.lineHelp":
@@ -730,16 +729,7 @@ export default {
   "mc.cancel": "Annuleren",
   "mc.forgetHelp":
     "Dit verwijdert {name} enkel hier. Om de toegang helemaal in te trekken draai je <code>relay-server revoke {name}</code> op de machine.",
-  "mc.folders": "Projectmappen",
-  "mc.noFolders":
-    "Nog geen mappen. Koppel een project aan een repo op deze machine om de gesprekken daar te starten. Zonder map starten ze in de gespiegelde vault.",
-  "mc.addFolder": "Map toevoegen",
   "mc.removeFolder": "Verwijderen",
-  "mc.project": "Project",
-  "mc.pickProject": "Kies een project",
-  "mc.path": "Map op de machine",
-  "mc.save": "Opslaan",
-  "mc.errPath": "Elke rij heeft een project en een absoluut pad dat met / begint nodig.",
   "mc.mirror": "Deze Mac spiegelen",
   "mc.mirrorHelp":
     "Je Claude-context, plugins, vault en het geheugen ervan, altijd gesynchroniseerd en versleuteld op de machine. Vergeten verwijdert de kopie daar.",

@@ -694,11 +694,10 @@ export default {
   "composer.machineOnlyClaude": "Nur Claude Code läuft auf einer Arbeitsmaschine.",
   "composer.machineNoMail": "Ein Gespräch über eine Mail bleibt auf diesem Mac: Die Mail-Werkzeuge laufen hier.",
   "mc.intro":
-    "Gespräche eines Projekts, das mit einer Maschine verknüpft ist, laufen dort und laufen weiter, wenn dieser Mac zu ist. Ein anderes Gespräch kann dort auch laufen: Wähle die Maschine neben dem Modell vor der ersten Nachricht. Mail bleibt auf diesem Mac. Jede Maschine bekommt einen Spiegel deines Vaults, damit Gespräche dort wissen, was Claude hier weiß.",
+    "Ein Gespräch kann auf einer Maschine laufen und läuft weiter, wenn dieser Mac zu ist: Wähle die Maschine neben dem Modell vor der ersten Nachricht, oder mache sie unten zum Standard. Mail bleibt auf diesem Mac. Jede Maschine bekommt einen Spiegel deines Vaults, damit Gespräche dort wissen, was Claude hier weiß.",
   "mc.runDefaultTitle": "Wo Gespräche laufen",
   "mc.runDefault": "Neue Gespräche laufen auf",
-  "mc.runDefaultHelp":
-    "Ein Projekt mit einem Ordner auf einer Maschine läuft dort. Jedes neue Gespräch kann neben dem Modell noch einen anderen Ort wählen.",
+  "mc.runDefaultHelp": "Jedes neue Gespräch kann neben dem Modell noch einen anderen Ort wählen.",
   "mc.pairTitle": "Maschine koppeln",
   "mc.line": "Kopplungszeile",
   "mc.lineHelp":
@@ -738,16 +737,7 @@ export default {
   "mc.cancel": "Abbrechen",
   "mc.forgetHelp":
     "Das entfernt {name} nur hier. Um den Zugang ganz zu widerrufen, führe <code>relay-server revoke {name}</code> auf der Maschine aus.",
-  "mc.folders": "Projektordner",
-  "mc.noFolders":
-    "Noch keine Ordner. Verknüpfe ein Projekt mit einem Repo auf dieser Maschine, damit seine Gespräche dort starten. Ohne Ordner starten sie im gespiegelten Vault.",
-  "mc.addFolder": "Ordner hinzufügen",
   "mc.removeFolder": "Entfernen",
-  "mc.project": "Projekt",
-  "mc.pickProject": "Projekt wählen",
-  "mc.path": "Ordner auf der Maschine",
-  "mc.save": "Speichern",
-  "mc.errPath": "Jede Zeile braucht ein Projekt und einen absoluten Pfad, der mit / beginnt.",
   "mc.mirror": "Diesen Mac spiegeln",
   "mc.mirrorHelp":
     "Dein Claude-Kontext, Plugins, Vault und dessen Gedächtnis, immer synchron gehalten und verschlüsselt auf der Maschine. Vergessen entfernt die Kopie dort.",

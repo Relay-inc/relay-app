@@ -32,13 +32,13 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 - The agent picker in the composer is a menu with each agent's icon, the ticket window's status and assignee open a menu, due dates read Yesterday, Today or Tomorrow, Reminders show "Fri 2/10" and undo as a compact chip, pull requests show their project and "Review with Claude" (#87)
 - Settings opens at 900 x 660 with hairline rows, and Agents and Integrations list every item with an on/off switch, switched-off ones stay visible, dimmed (#87)
 - Smaller polish from the redesign: the sidebar search reads "Search", step lines start with a capital, Answer stays disabled until you pick an answer, darker raised surfaces in dark mode (#87)
-- Every paired work machine mirrors this Mac: the vault, its memory, your Claude context and plugins always go along, Settings › Machines no longer has a switch for it. A conversation whose project has no folder on the machine starts in the mirrored vault there. Forget removes the copy on the machine
+- Every paired work machine mirrors this Mac: the vault, its memory, your Claude context and plugins always go along, Settings › Machines no longer has a switch for it. A conversation on a machine starts in the mirrored vault there. Where a conversation runs is the composer's pick, or the default in Settings › Machines. Forget removes the copy on the machine
 - The machine pick in the composer is Relay's own menu, with a green or red dot per machine for whether it is reachable
 
 ### Removed
 
 - The Working/Ready pill in the conversation title bar: the sidebar already shows whether a turn runs (#87)
-- The default folder per machine and "Remove the copy on this machine": a conversation without a project folder starts in the mirrored vault, Forget removes the copy
+- Project folders and the default folder per machine, and "Remove the copy on this machine": a conversation on a machine starts in the mirrored vault, Forget removes the copy
 
 ## [0.0.4] - 2026-10-03
 

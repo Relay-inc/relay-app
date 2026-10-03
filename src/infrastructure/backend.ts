@@ -102,8 +102,7 @@ type SendArgs = {
   model: string;
   effort: string;
   provider: string;
-  projectName: string | null; // the conversation's project: a project bound to a machine runs there
-  machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the project's machine
+  machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the default
   /** The project to tell the agent about; the backend puts the project line in front of `text`. */
   told: string | null;
   context: string | null;
@@ -136,18 +135,16 @@ export const appSessions = () => invoke<SessionOf>("app_sessions");
 /** The machine each conversation runs on, by conversation key. */
 export const chatMachines = () => invoke<Record<string, { machine: string; id: string; cwd: string }>>("chat_machines");
 /** Moves a conversation, between two turns, to another place: "" this Mac, or a machine id. */
-export const moveConversation = (key: string, to: string, projectName: string | null, mail: boolean) =>
-  invoke("move_conversation", { key, to, projectName, mail });
+export const moveConversation = (key: string, to: string, mail: boolean) =>
+  invoke("move_conversation", { key, to, mail });
 /** Every paired machine as the backend last heard it, no network: for the composer's pick. */
-export const machinesList = (project: string | null) => invoke<MachineChoice[]>("machines_list", { project });
+export const machinesList = () => invoke<MachineChoice[]>("machines_list");
 /** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */
 export const machinePair = (line: string, name: string) => invoke<Machine>("machine_pair", { line, name });
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
 /** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
 export const serverSetup = () => invoke<ServerSetup>("server_setup");
 export const machineForget = (id: string) => invoke("machine_forget", { id });
-export const setMachineFolders = (id: string, folders: Record<string, string>) =>
-  invoke("set_machine_folders", { id, folders });
 /** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
 export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
 /** The vault folders that stay on this Mac, out of a machine's mirror. */

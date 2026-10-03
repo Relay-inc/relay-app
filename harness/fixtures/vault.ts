@@ -280,7 +280,6 @@ export function settings(fixture: string) {
               host: "192.168.1.2",
               port: 47800,
               fp: "0f9534960dd3570a".padEnd(64, "0"),
-              folders: {},
               mirror: { exclude: [] },
             },
           ],

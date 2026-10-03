@@ -1,12 +1,12 @@
 import { t } from "../../shared/i18n";
 import type { Machine } from "../../domain/settings/types";
-import { excludePath, folderRows, foldersOf, type FolderRow } from "../../domain/settings/machines";
+import { excludePath } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
 import { commit } from "./window";
 import { useSettingsStore } from "./store";
 
-// Settings › Machines: other computers in the LAN running relay-server. Pairing, the online check and the project
-// folders on each machine. The backend saves machines itself; the window then reads the settings again.
+// Settings › Machines: other computers in the LAN running relay-server. Pairing, the online check and the mirror on
+// each machine. The backend saves machines itself; the window then reads the settings again.
 const st = () => useSettingsStore.getState();
 type Page = ReturnType<typeof st>["machinesPage"];
 const change = (recipe: (draft: Page) => void) =>
@@ -16,8 +16,8 @@ const change = (recipe: (draft: Page) => void) =>
 const machines = () => st().settings.machines ?? [];
 const reload = async () => commit(await backend.getSettings());
 
-/** When the page first shows: the vault's projects, and whether every machine is online. */
-export async function showMachinesPage() {
+/** When the page first shows: whether every machine is online. */
+export function showMachinesPage() {
   if (st().machinesPage.checked) return;
   change(draft => {
     draft.checked = true;
@@ -31,11 +31,6 @@ export async function showMachinesPage() {
       }),
     )
     .catch(() => {}); // an older backend: no setup section
-  const snapshot = await backend.snapshot().catch(() => ({ projects: [] }));
-  const projects = (snapshot.projects || []).map(project => String(project.name)).sort((a, b) => a.localeCompare(b));
-  change(draft => {
-    draft.projects = projects;
-  });
 }
 export async function checkMachine(id: string) {
   change(draft => {
@@ -81,36 +76,6 @@ export async function forgetMachine(id: string) {
   }
 }
 
-/** A machine's folder rows: the draft, else what is saved. */
-const rowsOf = (machine: Machine): FolderRow[] => st().machinesPage.drafts[machine.id] ?? folderRows(machine);
-/** One edit to a machine's folder rows; it stays a draft until Save. */
-export function editRows(machine: Machine, edit: (rows: FolderRow[]) => void) {
-  const rows = rowsOf(machine).map(row => ({ ...row }));
-  edit(rows);
-  change(draft => {
-    draft.drafts[machine.id] = rows;
-    draft.messages[machine.id] = null;
-  });
-}
-export async function saveFolders(machine: Machine) {
-  const folders = foldersOf(rowsOf(machine));
-  if (!folders)
-    return change(draft => {
-      draft.messages[machine.id] = { text: t("mc.errPath"), ok: false };
-    });
-  try {
-    await backend.setMachineFolders(machine.id, folders);
-    await reload();
-    change(draft => {
-      delete draft.drafts[machine.id];
-      draft.messages[machine.id] = { text: t("set.saved"), ok: true };
-    });
-  } catch (error) {
-    change(draft => {
-      draft.messages[machine.id] = { text: String(error), ok: false };
-    });
-  }
-}
 /** Where new conversations run without a pick: "" this Mac, or a machine id. Resolves with an error to show, or "". */
 export async function setRunDefault(id: string) {
   try {

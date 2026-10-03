@@ -88,12 +88,12 @@ export async function pollAgents() {
   await syncBusy();
 }
 export const agentsStale = () => Date.now() - agentsAt > 4000;
-/** The machines for the composer's pick in a conversation of `project`, while a new one's composer shows: the backend
+/** The machines for the composer's pick, while a conversation's composer shows: the backend
  *  answers from what its poller heard, so this is cheap to call every few seconds. */
-export async function pollMachines(project: string | null) {
-  const list = await backend.machinesList(project).catch(() => null); // older backends have no machines_list
-  if (!list || unchanged(list, cs().machineLists[project ?? ""])) return;
+export async function pollMachines() {
+  const list = await backend.machinesList().catch(() => null); // older backends have no machines_list
+  if (!list || unchanged(list, cs().machineList)) return;
   set(draft => {
-    draft.machineLists[project ?? ""] = list;
+    draft.machineList = list;
   });
 }

@@ -687,11 +687,10 @@ const en = {
   "composer.machineOnlyClaude": "Only Claude Code runs on a work machine.",
   "composer.machineNoMail": "A conversation about a mail stays on this Mac: the mail tools run here.",
   "mc.intro":
-    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Another conversation can run there too: pick the machine next to the model before its first message. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here.",
+    "A conversation can run on a machine and keeps running when this Mac is closed: pick the machine next to the model before its first message, or make it the default below. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here.",
   "mc.runDefaultTitle": "Where conversations run",
   "mc.runDefault": "New conversations run on",
-  "mc.runDefaultHelp":
-    "A project with a folder on a machine runs there. Each new conversation can still pick another place next to the model.",
+  "mc.runDefaultHelp": "Each new conversation can still pick another place next to the model.",
   "mc.pairTitle": "Pair a machine",
   "mc.line": "Pairing line",
   "mc.lineHelp":
@@ -728,16 +727,7 @@ const en = {
   "mc.cancel": "Cancel",
   "mc.forgetHelp":
     "This only removes {name} here. To revoke it fully, run <code>relay-server revoke {name}</code> on the machine.",
-  "mc.folders": "Project folders",
-  "mc.noFolders":
-    "No folders yet. Link a project to a repo on this machine to start its conversations there. Without one they start in the mirrored vault.",
-  "mc.addFolder": "Add folder",
   "mc.removeFolder": "Remove",
-  "mc.project": "Project",
-  "mc.pickProject": "Choose a project",
-  "mc.path": "Folder on the machine",
-  "mc.save": "Save",
-  "mc.errPath": "Every row needs a project and an absolute path starting with /.",
   "mc.mirror": "Mirror this Mac",
   "mc.mirrorHelp":
     "Your Claude context, plugins, vault and its memory, always kept in sync and encrypted on the machine. Forget removes the copy there.",

@@ -87,15 +87,14 @@ export function Composer({ className }: { className: string }) {
   });
   // where the conversation runs or is to start: the machines are asked every few seconds while it shows
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
-  const chatProject = useConversationsStore(s => s.chats[selected]?.project ?? null);
   const where = useDerived(() => machineChoice(selected));
   const [moving, setMoving] = useState(false);
   useEffect(() => {
     if (!hasChat) return;
-    pollMachines(chatProject);
-    const timer = window.setInterval(() => pollMachines(chatProject), 3000);
+    pollMachines();
+    const timer = window.setInterval(pollMachines, 3000);
     return () => window.clearInterval(timer);
-  }, [hasChat, chatProject]);
+  }, [hasChat]);
   // the open conversation's agent's slash commands and skills
   const commands = useDerived(() => commandsOf(selected));
   const [dropping, setDropping] = useState(false);
