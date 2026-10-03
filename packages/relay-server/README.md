@@ -34,8 +34,8 @@ the repos in another folder (for example `~/repos`), or give `relay-server` Full
 
 ## In Docker (a home server such as Unraid)
 
-Every Relay release also publishes `ghcr.io/laurentme/relay-server` for amd64 and arm64, tagged with the same version
-(`:latest` is the newest), so a server and an app of the same version speak the same protocol. Claude Code is not in the
+Every Relay release also gets `ghcr.io/laurentme/relay-server` for amd64 and arm64 (`scripts/push-server-image.sh`,
+run on a Mac after the release), tagged with the same version (`:latest` is the newest), so a server and an app of the same version speak the same protocol. Claude Code is not in the
 image: the first start installs it with Anthropic's installer into the `.local` volume, where its own updates stay.
 
 1. The package is private. Log in once with a GitHub token that has `read:packages`:
