@@ -17,6 +17,7 @@ export type ConversationsState = {
   closing: Set<string>; // conversations being closed: the process stops and its worktrees go, which can take a while
   routeChoice: RouteChoice | null;
   pendingList: Pending[];
+  pendingAt: Record<string, number>; // when this page first saw a pending request (the backend gives no time), by id
   pendingPolled: boolean; // the cards already waiting at start get no banner
   agentsList: AgentSession[]; // the providers' sessions (`agents`), terminal and background
   hidden: string[];
@@ -54,6 +55,7 @@ export const initialConversations = (stored: {
   commands: {},
   routeChoice: null,
   pendingList: [],
+  pendingAt: {},
   pendingPolled: false,
   agentsList: [],
   appSids: [],

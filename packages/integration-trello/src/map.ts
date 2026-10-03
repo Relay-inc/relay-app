@@ -28,4 +28,5 @@ export const mapCards = (cards: any[], me?: string): Card[] => cards
   .filter((c: any) => !c.closed && (!me || (c.idMembers || []).includes(me)))
   .map((c: any) => ({ id: c.id, title: c.name, number: c.idShort != null ? String(c.idShort) : "", column: c.idList, placement: Number(c.pos) || 0,
     due: typeof c.due === "string" ? c.due.slice(0, 10) : null, who: String((c.members || [])[0]?.fullName || "").split(" ")[0],
+    ...((c.members || [])[0]?.fullName ? { whoName: String(c.members[0].fullName) } : {}),
     ...((c.labels || []).some((l: any) => l.name) ? { labels: c.labels.map((l: any) => l.name).filter(Boolean) } : {}), ...(c.dateLastActivity ? { updated: c.dateLastActivity } : {}) }));

@@ -241,7 +241,7 @@ const SCENARIOS = {
     await s.load();
     await s.load({ sel: s.keys.permission });
     const { page } = s;
-    s.check("permission card shown", await waitText(page, "git push origin fix/portal-redirect"));
+    s.check("permission card shown", await waitText(page, "push origin fix/portal-redirect"));
     await click(button(page, "Allow"), 300);
     s.check("answer called", await s.waitCall("answer"));
     const perm = await s.calls("answer");
@@ -371,7 +371,7 @@ const SCENARIOS = {
     s.fact("secOrder", order);
     await click(head("AGENCY"));
     s.check("section open again", await navHas(page, "Push the portal fix"));
-    const search = page.getByPlaceholder("Search projects");
+    const search = page.getByPlaceholder("Search", { exact: true });
     await search.fill("Harbor");
     await settle(page);
     s.check("search keeps the match", await navHas(page, "Contact sync strategy"));
@@ -535,9 +535,9 @@ const SCENARIOS = {
     const pr = await s.calls("github_pr");
     s.check("github_pr for the PR", pr.some(c => c.args.repo === "acme/northwind-portal" && c.args.number === 412));
     s.check("list and PR side by side", await hasText(page, "Replace balance instead of adding it"));
-    await click(button(page, "AI review"), 400);
+    await click(button(page, "Review with Claude"), 400);
     const sends = await s.calls("send");
-    s.check("AI review sends one review prompt", sends.length === 1 && String(sends[0].args.text).includes("Review PR https://github.com/acme/northwind-portal/pull/412"));
+    s.check("Review with Claude sends one review prompt", sends.length === 1 && String(sends[0].args.text).includes("Review PR https://github.com/acme/northwind-portal/pull/412"));
     const created = Object.values(await s.chatChanges()).filter(c => c !== "removed");
     s.check("in a new conversation under the PR's project", created.length === 1 && created[0].project === "Northwind Portal" && created[0].title === "Review northwind-portal #412");
     s.fact("sel", (await s.local(["sel"])).sel);
@@ -557,9 +557,9 @@ const SCENARIOS = {
     const writes = async () => (await s.calls("integration_call")).filter(c => c.args.method !== "GET");
     s.check("comment posted once", (await writes()).filter(c => String(c.args.path).startsWith("/comments")).length === 1);
     s.check("comment box emptied", (await comment.inputValue().catch(() => null)) === "");
-    const status = visible(page.getByRole("combobox").filter({ has: page.getByRole("option", { name: "In review", exact: true }) })).first();
-    await status.selectOption({ label: "In progress" });
-    await settle(page, 500);
+    // the status pill opens a menu of the workflow's statuses
+    await click(button(page, "Status"), 200);
+    await click(page.getByRole("menuitemradio", { name: "In progress", exact: true }), 500);
     const status_ = (await writes()).filter(c => String(c.args.path).startsWith("/tasks"));
     s.check("status changed once", status_.length === 1 && JSON.stringify(status_[0].args.body).includes("ws2"));
     s.fact("writes", await writes());
@@ -578,6 +578,37 @@ const SCENARIOS = {
     const sends = await s.calls("send");
     s.check("the card goes in front of the first message", sends.length === 1 && String(sends[0].args.text).includes("Invoice export CSV") && String(sends[0].args.text).endsWith("What is left?"));
     s.fact("card send", sends[0]?.args ?? null);
+  },
+
+  async boardNewTask(s) {
+    await s.load();
+    const { page } = s;
+    await click(nav(page).getByText("Productive", { exact: true }), 300);
+    s.check("board shown", await waitText(page, "Invoice export CSV"));
+    const posts = async () => (await s.calls("integration_call")).filter(c => c.args.method === "POST" && c.args.path === "/tasks");
+    // New task in the title bar: the first column, Enter in the title creates it
+    await click(button(page, "New task"), 300);
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Parity task");
+    await page.keyboard.press("Enter");
+    await settle(page, 500);
+    const first = await posts();
+    s.check("one task created, in the first task list", first.length === 1 && JSON.stringify(first[0].args.body).includes('"title":"Parity task"') && JSON.stringify(first[0].args.body).includes('"tl1"'));
+    s.check("the card shows on the board", await waitText(page, "Parity task"));
+    s.check("the board says 21 tasks", await waitText(page, "21 tasks"));
+    // a lane's + puts it in that lane, with its description
+    await click(button(page, "New task in Review"), 300);
+    await page.getByRole("textbox", { name: "Title", exact: true }).fill("Review the parity task");
+    await page.getByRole("textbox", { name: "Description (optional)", exact: true }).fill("Check it twice");
+    await click(button(page, "Create task"), 500);
+    const both = await posts();
+    s.check("the lane's task goes in its task list", both.length === 2 && JSON.stringify(both[1].args.body).includes('"tl4"') && JSON.stringify(both[1].args.body).includes("Check it twice"));
+    s.check("the second card shows", await waitText(page, "Review the parity task"));
+    // Escape closes the dialog without creating anything, and leaves the board open
+    await click(button(page, "New task"), 300);
+    await page.keyboard.press("Escape");
+    await settle(page, 300);
+    s.check("Escape creates nothing", (await posts()).length === 2 && !(await hasText(page, "Create task")) && (await hasText(page, "Review the parity task")));
+    s.fact("creates", (await posts()).map(c => c.args.body));
   },
 
   async boardTools(s) {
@@ -729,11 +760,13 @@ const SCENARIOS = {
     const field = id => visible(page.locator(`#${id}`)).first();
     const add = () => visible(button(page, "Add calendar")).first();
     await click(navButton(page, "Integrations"), 300);
-    await click(button(page, "+ Add integration"), 300);
-    await click(visible(page.getByRole("button", { name: /^Calendar/ })).first(), 400);
+    // switching a row on opens its page
+    await click(visible(page.getByRole("switch", { name: "Calendar" })).first(), 400);
     let saves = await s.calls("set_settings");
-    s.check("added from the menu, switched on", saves.length === 1 && saves[0].args.settings?.calendar?.on === true);
-    s.check("its page opens", await waitText(page, "Add a calendar"));
+    s.check("switched on from its row", saves.length === 1 && saves[0].args.settings?.calendar?.on === true);
+    s.check("its page opens on the list of calendars", await waitText(page, "Calendars"));
+    await click(button(page, "+ Add calendar"), 300);
+    s.check("+ Add calendar opens the form", await waitText(page, "Add a calendar"));
     s.check("Add calendar waits for both fields", await add().isDisabled());
     await field("calemail").fill("laurent@example.com");
     await field("calurl").fill("https://example.com/calendar.ics");
@@ -750,7 +783,7 @@ const SCENARIOS = {
     s.check("a calendar that loads is saved by its email only", saves.length === 2 && JSON.stringify(saves[1].args.settings?.calendar) === JSON.stringify({ feeds: [{ email: "laurent@example.com" }], on: true }));
     s.check("the address never reaches the settings", !JSON.stringify(saves.map(c => c.args)).includes("calendar.google.com"));
     s.check("it says how many meetings", await waitText(page, "laurent@example.com added: 3 meetings in the next 7 days", 2000));
-    s.check("the fields empty", (await field("calemail").inputValue()) === "" && (await field("calurl").inputValue()) === "");
+    s.check("back on the list with the calendar", await waitText(page, "laurent@example.com", 2000));
     // the calendar's own Remove comes before the integration's in the page
     await click(visible(button(page, "Remove")).first(), 300);
     connects = await s.calls("calendar_connect");
@@ -760,7 +793,7 @@ const SCENARIOS = {
     await click(visible(button(page, "Remove")).last(), 300);
     saves = await s.calls("set_settings");
     s.check("Remove switches the integration off", saves.at(-1)?.args.settings?.calendar?.on === false);
-    s.check("back on the list", await waitText(page, "+ Add integration", 2000));
+    s.check("back on the list, switched off", !(await visible(page.getByRole("switch", { name: "Calendar" })).first().isChecked()));
     s.fact("calendar_connect", connects.map(c => c.args));
     s.fact("saved", saves.map(c => c.args.settings?.calendar));
   },

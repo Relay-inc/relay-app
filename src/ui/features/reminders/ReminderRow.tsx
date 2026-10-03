@@ -12,6 +12,7 @@ import { tintText } from "../../../shared/tints";
 /** red when overdue, orange today and in the next 2 days, grey after that (decided 29/9) */
 const DUE = { late: "due-late", soon: "due-soon", "": "" };
 // some translations get markup around their numbers, so those go in raw; the values are escaped first
+const tabNumber = (value: string | number) => raw(`<span class="tabular-nums">${esc(value)}</span>`);
 const monoNumber = (value: string | number) => raw(`<span class="font-mono tabular-nums">${esc(value)}</span>`);
 
 // small outline buttons 26px high, icon buttons 28px with a grey glyph
@@ -52,16 +53,17 @@ export function ReminderRow({
 
   const due = () => {
     if (reminder.days < 0)
-      return <Html className={DUE[urgency]} html={th("due.overdue", { n: monoNumber(-reminder.days) })} />;
-    if (reminder.days === 0) return <span className={DUE[urgency]}>{t("due.today")}</span>;
+      return <Html className={DUE[urgency]} html={th("due.overdue", { n: tabNumber(-reminder.days) })} />;
+    if (reminder.days === 0) return <span className={DUE[urgency]}>{t("rem.today")}</span>;
+    if (reminder.days === 1) return <span className={DUE[urgency]}>{t("rem.tomorrow")}</span>;
     const [year, month, day] = reminder.date.split("-").map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day));
-    const format = (options: Intl.DateTimeFormatOptions) =>
-      new Intl.DateTimeFormat(locale, { ...options, timeZone: "UTC" }).format(date);
+    const weekday = new Intl.DateTimeFormat(locale, { weekday: "short", timeZone: "UTC" }).format(
+      new Date(Date.UTC(year, month - 1, day)),
+    );
+    // day/month without zero padding, whatever the locale pads or orders
     return (
-      <span className={DUE[urgency]}>
-        {format({ weekday: "short" })}{" "}
-        <span className="font-mono tabular-nums">{format({ day: "numeric", month: "numeric" })}</span>
+      <span className={`${DUE[urgency]} tabular-nums`}>
+        {weekday} {day}/{month}
       </span>
     );
   };

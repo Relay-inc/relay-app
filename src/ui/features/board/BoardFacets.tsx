@@ -32,7 +32,7 @@ export function BoardFacets({
                   return (
                     <button
                       key={value}
-                      className={`inline-flex items-center gap-1.5 h-6.5 px-2.5 rounded-md border text-xs font-medium cursor-default ${on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong text-label hover:bg-fill"}`}
+                      className={`inline-flex items-center gap-1.5 h-6.5 px-[9px] rounded-[7px] border text-xs font-medium cursor-default ${on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong text-label hover:bg-fill"}`}
                       aria-pressed={!!on}
                       onClick={() => toggleFilter(provider, facet, value)}
                     >
@@ -46,15 +46,15 @@ export function BoardFacets({
           ))}
         </div>
       </div>
-      <div className="flex items-center gap-2 px-3.5 py-2.5 border-t border-separator">
+      <div className="sticky bottom-0 flex items-center gap-2 px-3.5 py-2.5 border-t border-separator bg-raised rounded-b-xl">
         <button
-          className="h-7 px-2.5 border-0 rounded-md bg-transparent text-secondary text-xs font-medium hover:bg-fill-2 hover:text-label"
+          className="h-7 px-2.5 border-0 rounded-[7px] bg-transparent text-secondary text-xs font-medium hover:bg-fill-2 hover:text-label"
           onClick={() => clearFilters(provider)}
         >
           {t("kb.clearAll")}
         </button>
         <span className="flex-1"></span>
-        <button className="btn btn-primary h-7 px-3 text-xs" onClick={onClose}>
+        <button className="btn btn-primary h-7 px-3 text-xs rounded-[7px]" onClick={onClose}>
           {t("kb.show", { n: filtered(board).length })}
         </button>
       </div>

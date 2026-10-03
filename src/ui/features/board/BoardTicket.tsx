@@ -12,6 +12,7 @@ import { TicketActivity } from "./TicketActivity";
 import { TicketFiles } from "./TicketFiles";
 import { TicketHeading } from "./TicketHeading";
 import { TicketSidebar } from "./TicketSidebar";
+import { TicketLinked } from "./TicketLinked";
 import { numbered } from "./format";
 import "../../styles/board.css";
 
@@ -20,7 +21,7 @@ const viewOf = (detail: CardDetail, data: unknown, _lang: string) => (data ? det
 
 /** The card open in the ticket window over the board: the main column (title, description, files, activity with the
  *  comment box) and the sidebar with its fields. Previous and next step through the cards the board shows, in
- *  column order. The window is inert while an action runs. */
+ *  column order, round from the last to the first. The window is inert while an action runs. */
 export function BoardTicket({ provider, board }: { provider: BoardProvider; board: Board }) {
   const { t, lang } = useT();
   const modal = useNavigationStore(s => s.panel.modal);
@@ -75,7 +76,7 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
             <section className="flex flex-col gap-2">
               <TicketHeading>{t("kb.files")}</TicketHeading>
               {view.files.length ? (
-                <TicketFiles files={view.files} />
+                <TicketFiles provider={provider.id} files={view.files} />
               ) : (
                 <div className="text-secondary text-sm">{t("kb.noFiles")}</div>
               )}
@@ -94,9 +95,11 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
               </label>
             </section>
           )}
+          <TicketLinked provider={provider} card={modal} number={number} />
           <TicketActivity
             key={modal}
             feed={view.feed}
+            providerId={provider.id}
             providerName={provider.name}
             onComment={text => act("comment", text)}
           />
@@ -124,9 +127,12 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
           </>
         }
         position={at >= 0 ? t("kb.tasksOf", { n: at + 1, total: order.length }) : ""}
-        first={at <= 0}
-        last={at < 0 || at >= order.length - 1}
-        onStep={by => order[at + by] && openBoardCard(provider, order[at + by].id)}
+        // previous and next go round: from the last card on to the first
+        first={order.length < 2}
+        last={order.length < 2}
+        onStep={by =>
+          order.length && openBoardCard(provider, order[(Math.max(at, 0) + by + order.length) % order.length].id)
+        }
         onClose={closeTicket}
         link={view?.url ? <ModalLink href={view.url}>{t("kb.openIn", { name: provider.name })}</ModalLink> : undefined}
       />

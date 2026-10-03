@@ -44,3 +44,23 @@
   border-left: 3px solid color-mix(in srgb, var(--secondary) 35%, transparent);
   color: var(--secondary);
 }
+/* code coloured by shared/highlight.ts: in answers, PR bodies, a permission card's command and a step's command */
+.tok-kw {
+  color: var(--syn-kw);
+}
+.tok-str {
+  color: var(--syn-str);
+}
+.tok-num {
+  color: var(--syn-num);
+}
+.tok-fn {
+  color: var(--syn-fn);
+}
+.tok-com {
+  color: var(--syn-com);
+  font-style: italic;
+}
+.tok-prop {
+  color: var(--syn-prop);
+}

@@ -67,7 +67,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
     { id: "de", name: "Deutsch" },
   ];
   const themes = [
-    ["system", t("set.system")],
+    ["system", t("set.themeSystem")],
     ["light", t("set.themeLight")],
     ["dark", t("set.themeDark")],
   ] as const;
@@ -128,8 +128,9 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
         />
       </Section>
       <Section
-        title={t("set.sec.folders")}
+        title={t("vault.map")}
         desc={<Html html={th("vault.mapHelp")} />}
+        rows
         footer={
           <Footer message={message}>
             <button className={buttonClass("primary")} onClick={() => saveFolders(trimmed(map))}>
@@ -141,16 +142,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
         {KEYS.map(mapping)}
       </Section>
       <ActionsSection ext="reminders" name={t("act.reminders")} />
-      <Section title={t("set.sec.interface")}>
-        <Field label={t("set.language")} id="language" hint={<Html html={th("set.languageHelp")} />}>
-          <Select
-            className={SELECT}
-            id="language"
-            options={languages}
-            value={language || "system"}
-            onChange={changeLanguage}
-          />
-        </Field>
+      <Section title={t("set.sec.interface")} rows>
         <Field label={t("set.theme")} hint={<Html html={th("set.themeHelp")} />}>
           <Segmented label={t("set.theme")} options={themes} value={theme} onPick={changeTheme} />
         </Field>
@@ -170,6 +162,15 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
             ))}
           </div>
         </Field>
+        <Field label={t("set.language")} id="language" hint={<Html html={th("set.languageHelp")} />}>
+          <Select
+            className={SELECT}
+            id="language"
+            options={languages}
+            value={language || "system"}
+            onChange={changeLanguage}
+          />
+        </Field>
         <Field label={t("set.faviconsOn")} id="favon" hint={<Html html={th("set.faviconsHelp")} />}>
           <Switch id="favon" on={faviconsOn} onToggle={saveFavicons} />
         </Field>
@@ -183,7 +184,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
           />
         </Field>
       </Section>
-      <Section title={t("set.sec.sidebar")}>
+      <Section title={t("set.sec.sidebar")} rows>
         <Field label={t("set.sidebarLayout")} hint={<Html html={th("set.sidebarLayoutHelp")} />}>
           <Segmented
             label={t("set.sidebarLayout")}

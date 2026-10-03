@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type { CardView } from "../../../domain/board/types";
 import { copyText } from "../../components/copy";
 import { Icon } from "../../components/Icon";
@@ -8,8 +9,9 @@ import { TicketField } from "./TicketField";
 import { TicketPicker } from "./TicketPicker";
 import { due } from "./format";
 
-/** The ticket window's sidebar: status, task list, assignee (one, or Trello's members as checkboxes), due day, labels
- *  and project, then "Start conversation" and "Copy link". */
+/** The ticket window's sidebar: status, folder › task list, assignee (one, or Trello's members as checkboxes), due day
+ *  (Yesterday, Today, Tomorrow when it is), labels (added and removed here when the provider writes them) and project,
+ *  then "Start conversation" and "Copy link". */
 export function TicketSidebar({
   view,
   projectName,
@@ -23,6 +25,19 @@ export function TicketSidebar({
 }) {
   const { t, locale } = useT();
   const day = due(view.due || null, locale);
+  // the label being typed after + Label, null while it is not
+  const [label, setLabel] = useState<string | null>(null);
+  // Escape drops what was typed: the blur that follows must not add it
+  const cancelled = useRef(false);
+  const near =
+    day && day.left >= -1 && day.left <= 1
+      ? t(day.left < 0 ? "kb.yesterday" : day.left ? "kb.tomorrow" : "kb.today")
+      : "";
+  const addLabel = () => {
+    if (label?.trim() && !cancelled.current) onAct("label-add", label.trim());
+    cancelled.current = false;
+    setLabel(null);
+  };
   const { assignee, assignees } = view;
   // everyone who can be a member, the current members first among them when the board's list lacks one
   const members = assignees ? [...new Map([...(view.people || []), ...assignees].map(p => [p.id, p])).values()] : [];
@@ -37,7 +52,7 @@ export function TicketSidebar({
             label={t("kb.fStatus")}
             onPick={id => onAct("status", id)}
           >
-            <Ring state={view.status.state} />
+            <Ring state={view.status.state} tone={view.status.tone} />
             {view.status.name}
           </TicketPicker>
         </TicketField>
@@ -46,7 +61,7 @@ export function TicketSidebar({
         <TicketField label={t("kb.fList")}>
           <span className="inline-flex items-center gap-1.5 text-[13px]">
             <Icon name="folder" className="glyph size-3.5 text-secondary" />
-            {view.list}
+            {[view.folder, view.list].filter(Boolean).join(" › ")}
           </span>
         </TicketField>
       )}
@@ -62,7 +77,7 @@ export function TicketSidebar({
           >
             {assignee ? (
               <>
-                <Avatar name={assignee.name.split(" ")[0]} />
+                <Avatar name={assignee.name} />
                 {assignee.name}
               </>
             ) : (
@@ -87,22 +102,66 @@ export function TicketSidebar({
           </div>
         </TicketField>
       )}
-      {day && (
-        <TicketField label={t("kb.fDue")}>
-          <span className={`inline-flex items-center gap-1.5 text-[13px] ${day.tone}`}>
-            <Icon name="cal" className="glyph size-3.5" />
-            {day.long}
-          </span>
-        </TicketField>
-      )}
-      {!!view.labels.length && (
+      <TicketField label={t("kb.fDue")}>
+        <span className={`inline-flex items-center gap-1.5 text-[13px] ${day?.tone ?? "text-secondary"}`}>
+          <Icon name="cal" className="glyph size-3.5" />
+          {day ? (near ? `${near}, ${day.dayMonth}` : day.long) : t("kb.noDue")}
+        </span>
+      </TicketField>
+      {(!!view.labels.length || view.editLabels) && (
         <TicketField label={t("kb.fLabels")}>
           <div className="flex flex-wrap gap-1.5">
             {view.labels.map((name, i) => (
-              <span key={`${i}:${name}`} className="h-5.5 px-2 rounded-md bg-fill-2 text-xs inline-flex items-center">
+              <span
+                key={`${i}:${name}`}
+                className="group h-5.5 px-2 rounded-md bg-fill-2 text-xs inline-flex items-center gap-1"
+              >
                 {name}
+                {view.editLabels && (
+                  <button
+                    type="button"
+                    className="hidden group-hover:grid size-3.5 -mr-1 place-items-center border-0 rounded-sm bg-transparent text-secondary hover:text-label"
+                    title={t("kb.labelRemove", { name })}
+                    aria-label={t("kb.labelRemove", { name })}
+                    onClick={() => onAct("label-remove", name)}
+                  >
+                    <Icon name="close" className="glyph size-2.5 stroke-2" />
+                  </button>
+                )}
               </span>
             ))}
+            {view.editLabels &&
+              (label === null ? (
+                <button
+                  type="button"
+                  className="h-5.5 px-1.5 rounded-md border border-dashed border-separator-strong bg-transparent text-xs text-tertiary hover:text-label cursor-default"
+                  onClick={() => {
+                    cancelled.current = false;
+                    setLabel("");
+                  }}
+                >
+                  {t("kb.labelAdd")}
+                </button>
+              ) : (
+                <input
+                  className="h-5.5 w-24 px-1.5 rounded-md border border-separator-strong bg-raised text-xs text-label outline-none"
+                  aria-label={t("kb.fLabels")}
+                  autoFocus
+                  value={label}
+                  onChange={e => setLabel(e.target.value)}
+                  onBlur={addLabel}
+                  onKeyDown={e => {
+                    if (e.key === "Enter") addLabel();
+                    else if (e.key === "Escape") {
+                      // the label, not the ticket window
+                      e.preventDefault();
+                      e.stopPropagation();
+                      cancelled.current = true;
+                      setLabel(null);
+                    }
+                  }}
+                />
+              ))}
           </div>
         </TicketField>
       )}

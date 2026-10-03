@@ -40,6 +40,9 @@ pub struct Provider {
     /// whether a picture's preview may be fetched from this URL for the card panel (Productive: its public thumbs),
     /// never with the secrets
     pub thumb: fn(url: &str) -> bool,
+    /// whether a picture's original may open in Relay's viewer window (Productive: its attachments' originals), which
+    /// loads it as a browser would, with the tracker's own login and never with the secrets
+    pub original: fn(url: &str) -> bool,
     /// whether a 2xx answer is a success: a GraphQL API (Linear) answers its errors with 200 and `errors`
     pub ok: fn(body: &Value) -> bool,
     /// an error answer as one line: HTTP status and the API's own message

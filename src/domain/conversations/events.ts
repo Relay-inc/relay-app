@@ -27,13 +27,14 @@ function pushText(items: Item[], text: string, delta: boolean) {
   if (delta && last?.kind === "ai") last.text += text;
   else items.push({ kind: "ai", text });
 }
-const toolItem = (id: string, name: string, input: ToolInput, state: Item["state"]): Item => ({
+const toolItem = (id: string, name: string, input: ToolInput, state: Item["state"], at: number): Item => ({
   kind: "tool",
   id,
   text: name,
   tool: { name, input },
   state,
   path: input?.file_path,
+  ...(at ? { at } : {}),
 });
 // "Klaar" with the turn's duration when it is known
 export const doneText = (seconds: number, t: Translate) =>
@@ -69,10 +70,18 @@ export function applyAgentEvent(
       pushText((state.messages[key] ||= []), event.text, event.delta);
       return [];
     case "tool_call":
-      return onToolCall(state, key, event);
+      return onToolCall(state, key, event, env.now);
     case "tool_result": {
       const item = state.messages[key]?.find(x => x.id === event.id);
-      if (item) item.state = event.error ? "err" : "ok";
+      if (item) {
+        item.state = event.error ? "err" : "ok";
+        if (item.at) item.end = env.now;
+      }
+      return [];
+    }
+    case "patch": {
+      const item = state.messages[key]?.find(x => x.id === event.id);
+      if (item) item.hunks = event.hunks;
       return [];
     }
     case "turn_end":
@@ -98,8 +107,8 @@ function draftNote(saved: EventOf<"draft_saved">, t: Translate) {
   return text;
 }
 
-function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_call">): Effect[] {
-  push(state, key, toolItem(call.id, call.name, call.input, "run"));
+function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_call">, now: number): Effect[] {
+  push(state, key, toolItem(call.id, call.name, call.input, "run", now));
   // a chat that touched mail stays restricted: every later spawn of it starts with the mail limits
   const conversation = state.chats[key];
   if (call.name.startsWith("mcp__relay-mail__") && conversation && !conversation.fromMail) {
@@ -152,8 +161,20 @@ function onProcessExit(state: ConversationsState, key: string, env: EventEnv): E
 /** A transcript's events as items. `imageUrl` turns an inline image into something to show (a blob url). */
 export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, data: string) => string): Item[] {
   const items: Item[] = [];
+  // the transcript's line times: a tool call starts at its line, and its result line (which gives no event of its
+  // own) is the time before the next one. A user's message is a new prompt, not a result
+  let at = 0;
+  let line = 0;
+  const settle = () => {
+    const last = items[items.length - 1];
+    if (line && last?.kind === "tool" && last.at) last.end = line;
+  };
   for (const entry of history) {
-    if (entry.type === "user") {
+    if (entry.type === "time") {
+      settle();
+      at = line = Date.parse(entry.at) || 0;
+    } else if (entry.type === "user") {
+      line = 0;
       // an image from the transcript as a thumbnail, or "" (a placeholder) when it is not inline
       const imgs = entry.images.map(image =>
         image && IMG_OK.includes(image.media_type) ? imageUrl(image.media_type, image.data) : "",
@@ -161,8 +182,14 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
       const { text, files } = splitFiles(entry.text);
       items.push({ kind: "me", text, ...(imgs.length ? { imgs } : {}), ...(files.length ? { files } : {}) });
     } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
-    else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok"));
+    else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok", at));
+    else if (entry.type === "patch") {
+      // ponytail: a followed transcript read in pieces loses the patch whose call was in an earlier piece (it shows without line numbers)
+      const tool = items.find(x => x.id === entry.id);
+      if (tool) tool.hunks = entry.hunks;
+    }
   }
+  settle();
   return items;
 }
 

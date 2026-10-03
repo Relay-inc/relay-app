@@ -159,7 +159,12 @@ function handle(cmd: string, a: Args): unknown {
     case "pasted_files":
       return [...harness.pastedFiles];
     case "read_image": {
-      const type = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<string, string>)[String(a.path).split(".").pop()!.toLowerCase()];
+      const type = (
+        { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<
+          string,
+          string
+        >
+      )[String(a.path).split(".").pop()!.toLowerCase()];
       if (!type) return Promise.reject("not a picture");
       return [type, pngBase64(120, 80, "#e8efe3", "#3f8f4f")];
     }
@@ -341,6 +346,8 @@ function handle(cmd: string, a: Args): unknown {
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":
       return "https://files.example/upload/1";
+    case "open_viewer":
+      return null;
     case "integration_thumb":
       return a.url === integ.THUMB_URL ? thumb : Promise.reject("not a picture");
   }

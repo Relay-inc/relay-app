@@ -131,6 +131,8 @@ pub enum Event {
     Thinking { text: String, delta: bool },
     ToolCall { id: String, name: String, input: Value },
     ToolResult { id: String, error: bool },
+    /// The change a file tool made, as unified-diff hunks with line numbers, when the provider reports it.
+    Patch { id: String, hunks: Vec<Hunk> },
     /// A permission request or question raised in the provider's own protocol. The app writes it to the
     /// pending folder; the answer comes back through [`AgentProvider::respond`].
     Permission { request: pending::Request },
@@ -146,6 +148,11 @@ pub enum Event {
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },
 }
+
+/// One hunk of a change: where it starts in the old and the new file, and its lines prefixed " ", "-" or "+".
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Hunk { pub old_start: u64, pub new_start: u64, pub lines: Vec<String> }
 
 /// Tokens of one turn, as the provider reports them.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
@@ -232,6 +239,8 @@ mod tests {
         assert_eq!(e, serde_json::json!({"type": "tool_call", "id": "t1", "name": "Read", "input": {"file_path": "/a"}}));
         let e = serde_json::to_value(Event::TurnEnd { ok: true, error: None, usage: Some(TurnUsage { input: 1, cache_read: 2, ..Default::default() }), duration_ms: Some(5) }).unwrap();
         assert_eq!(e["usage"]["cacheRead"], 2);
+        let e = serde_json::to_value(Event::Patch { id: "t1".into(), hunks: vec![Hunk { old_start: 4, new_start: 5, lines: vec!["+a".into()] }] }).unwrap();
+        assert_eq!(e, serde_json::json!({"type": "patch", "id": "t1", "hunks": [{"oldStart": 4, "newStart": 5, "lines": ["+a"]}]}));
         assert_eq!(serde_json::to_value(Caps { persistent: true, ..Default::default() }).unwrap()["persistent"], true);
     }
     #[test]

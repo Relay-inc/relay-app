@@ -1,14 +1,29 @@
 import { t, currentLocale } from "../../shared/i18n";
 import { PROVIDERS } from "../../shared/plugins";
 import type { BoardProvider, Card, Column, View } from "../../domain/board/types";
-import { refOf, colOf, sameRef, storageKey, isFolded, tidied, link, type Board } from "../../domain/board/rules";
+import {
+  refOf,
+  colOf,
+  sameRef,
+  storageKey,
+  isFolded,
+  tidied,
+  link,
+  draftCard,
+  type Board,
+} from "../../domain/board/rules";
 import { parsePresets, savePreset, type Facet, type Filters, type Preset } from "../../domain/board/filter";
 import { moveCard } from "../../domain/board/moves";
 import { storage } from "../../infrastructure/storage";
 import { saveMainSettings, settings } from "../settings/settings";
+import { PRS } from "../../domain/navigation/views";
+import { prKey } from "../../domain/navigation/keys";
 import { useNavigationStore } from "../navigation/store";
-import { closeTicket, openCard } from "../navigation/panel";
-import { select } from "../navigation/navigation";
+import { closeTicket, openCard, openPr } from "../navigation/panel";
+import { select, toast } from "../navigation/navigation";
+import { useConversationsStore } from "../conversations/store";
+import { label } from "../conversations/selectors";
+import { usePullRequestsStore } from "../pull-requests/store";
 import { newChat } from "../conversations/chats";
 import { typeInto } from "../conversations/actions";
 import { useWorkspaceStore } from "../workspace/store";
@@ -151,6 +166,7 @@ async function loadCards(provider: BoardProvider, live: () => boolean, boardId: 
     draft.views = views;
     draft.presets = parsePresets(storage.getRaw(presetsKey(provider, boardId)) || null);
     draft.filters = tidied(draft);
+    draft.loadedAt = Date.now();
   });
   const key = storageKey(provider);
   storage.setRaw(`${key}Project`, boardState(provider).project);
@@ -260,12 +276,65 @@ export function dropCard(provider: BoardProvider, id: string, column: string) {
     column,
   );
 }
+// ---------- a new card: the New task dialog, then the card at the end of its column at once, in the tracker after
+/** Open the New task dialog for a column, the board's first when none is given. */
+export function openComposer(provider: BoardProvider, column = boardState(provider).columns[0]?.id ?? "") {
+  if (!provider.create || !column) return;
+  useBoardStore.setState(draft => {
+    draft.composing = { provider: provider.id, column };
+  });
+}
+export const closeComposer = () =>
+  useBoardStore.setState(draft => {
+    draft.composing = null;
+  });
+let drafts = 0;
+/** Make the card in the tracker. It shows at once at the end of its column, and is replaced by the tracker's card
+ *  when it answers. A failure takes it away again and says why in a toast. A reload in between drops the answer. */
+export async function createCard(provider: BoardProvider, column: string, title: string, description: string) {
+  const state = boardState(provider);
+  if (!provider.create || !title.trim()) return;
+  const id = `new:${++drafts}`;
+  const { gen, group } = state;
+  const ref = refOf(provider, state);
+  change(provider, draft => {
+    draft.cards.push(draftCard(provider, draft, id, title.trim(), column));
+  });
+  const live = () => boardState(provider).gen === gen;
+  try {
+    const made = await provider.create(ctxOf(provider), ref, {
+      title: title.trim(),
+      description,
+      column,
+      group: group || undefined,
+    });
+    if (live())
+      change(provider, draft => {
+        draft.cards = draft.cards.map(card => (card.id === id ? made : card));
+      });
+  } catch (e) {
+    if (live())
+      change(provider, draft => {
+        draft.cards = draft.cards.filter(card => card.id !== id);
+      });
+    toast(t("kb.createFailed", { e: String(e) }));
+  }
+}
+
 export const openBoardCard = (provider: BoardProvider, id: string) =>
   openCard(provider, refOf(provider, boardState(provider)), id);
 /** "Start conversation" in the ticket window: a new conversation under the board's vault project, with the card's
  *  number, title and link typed in its composer; the draft keeps its title. */
 export async function ticketChat(provider: BoardProvider, text: string) {
   const key = newChat(linkedProject(provider) || null);
+  // remembered, so the ticket lists it under Linked
+  const card = useNavigationStore.getState().panel.modal;
+  if (card) {
+    useBoardStore.setState(draft => {
+      draft.ticketChats[card] = [...(draft.ticketChats[card] ?? []), key];
+    });
+    storage.set("ticketChats", bs().ticketChats);
+  }
   closeTicket();
   await select(key);
   typeInto(key, text);
@@ -293,4 +362,38 @@ export async function linkBoard(provider: BoardProvider, vaultProject: string) {
     change(provider, state => {
       state.err = failed;
     });
+}
+
+// ---------- what a ticket links to
+/** The conversations Start conversation began from the card (those still there), and the pull requests of the board's
+ *  vault project whose title names the card's number (#212, ENG-12). */
+export function ticketLinks(provider: BoardProvider, card: string, number: string) {
+  const chats = useConversationsStore.getState().chats;
+  const conversations = (bs().ticketChats[card] ?? [])
+    .filter(key => chats[key])
+    .map(key => ({ key, title: label(key), project: chats[key].project ?? "" }));
+  const project = linkedProject(provider);
+  const list = usePullRequestsStore.getState().list;
+  const token = /^\d+$/.test(number) ? `#${number}` : number;
+  // ponytail: a title match only, so a PR that names the ticket in its body or branch is missed. The PR list's
+  // detail (body, headRefName) would catch those, at a fetch per PR
+  const named = new RegExp(`(^|[^\\w#-])${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\w-])`, "i");
+  const prs =
+    project && number && list
+      ? [
+          ...new Map(
+            [...list.mine, ...list.review]
+              .filter(pr => pr.project === project && named.test(pr.title))
+              .map(pr => [pr.url, pr]),
+          ).values(),
+        ]
+      : [];
+  return { conversations, prs };
+}
+/** A linked conversation or pull request from the ticket: the window closes and it opens. */
+export async function openLinked(link: { conversation: string } | { repo: string; number: number }) {
+  closeTicket();
+  if ("conversation" in link) return select(link.conversation);
+  await select(PRS);
+  return openPr(prKey(link.repo, link.number));
 }

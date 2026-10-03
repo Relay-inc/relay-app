@@ -44,6 +44,8 @@ export async function pollPending() {
     }
   }
   set(draft => {
+    const now = Date.now();
+    draft.pendingAt = Object.fromEntries(next.map(x => [x.id, draft.pendingAt[x.id] ?? now]));
     draft.pendingList = next;
     draft.pendingPolled = true;
   });

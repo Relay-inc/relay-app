@@ -15,9 +15,11 @@ import { prHeading, reviewPr } from "../../../application/pull-requests/prs";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
+import { Glyph } from "../../components/Glyph";
 import { Markdown } from "../../components/Markdown";
 import { Avatar } from "../../components/Avatar";
 import { ModalLink } from "../../components/ModalLink";
+import { agent } from "../../../shared/plugins";
 import { tintText } from "../../../shared/tints";
 import { CI, age } from "./prState";
 
@@ -83,6 +85,7 @@ export function PrPane({ prKey }: { prKey: string }) {
   const pr = useNavigationStore(s => s.panel.detail[prKey]) as PrDetail | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const heading = useDerived(() => prHeading(prKey));
+  const claude = agent("claude");
   const formatDate = (iso: string) => dayMonth(iso, locale);
 
   const entry = (key: number, who: string, at: string, body: string | undefined, extra?: ReactNode) => (
@@ -109,14 +112,16 @@ export function PrPane({ prKey }: { prKey: string }) {
         <span className={`size-2 rounded-full flex-none ${DOT[tone]}`}></span>
         <span className="flex-1 min-w-0 truncate font-mono text-xs">
           {item.url ? (
-            <a className="underline" href={item.url}>
+            <a className="hover:underline" href={item.url}>
               {item.name}
             </a>
           ) : (
             item.name
           )}
         </span>
-        <span className={`text-xs ${CHECK_TEXT[tone]}`}>{String(item.state || "").toLowerCase()}</span>
+        <span className={`text-xs ${CHECK_TEXT[tone]}`}>
+          {!(item.state in CHECK) ? t("pr.checkRun") : String(item.state || "").toLowerCase()}
+        </span>
       </div>
     );
   };
@@ -169,7 +174,7 @@ export function PrPane({ prKey }: { prKey: string }) {
               title={t("pr.reviewTitle")}
               onClick={() => reviewPr(prKey)}
             >
-              <Icon name="chat" className="glyph size-3.5" />
+              {claude ? <Glyph svg={claude.glyph} className="glyph size-3.25" /> : null}
               {t("pr.review")}
             </button>
           </div>
@@ -189,7 +194,7 @@ export function PrPane({ prKey }: { prKey: string }) {
               {code(pr.headRefName)}→{code(pr.baseRefName)}
             </span>
             {diffStat(pr.additions, pr.deletions)}
-            <span>{tn("pr.files", Number(pr.changedFiles) || 0)}</span>
+            <span className="whitespace-nowrap">{tn("pr.files", Number(pr.changedFiles) || 0)}</span>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {ci ? chip(ci[0], t(ci[1])) : null}

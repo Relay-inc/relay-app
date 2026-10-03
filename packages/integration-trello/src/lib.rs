@@ -1,6 +1,7 @@
 //! Trello on the backend: an API key and a user token, both in the keychain (vault-app.trello/key and /token),
 //! sent in the OAuth header (not in the URL). GET under the member, a board or a workspace; PUT only on a
-//! single card for list changes; comments and individual member changes. File uploads use a separate allowlist.
+//! single card for list changes, a new card in a list, comments and individual member changes. File uploads use a
+//! separate allowlist.
 
 use board_core::{arg, arg_ok, only_keys, path_ok, read, t, write, Action, Provider, Req, Text};
 use serde_json::{json, Value};
@@ -37,7 +38,10 @@ pub const PROVIDER: Provider = Provider {
         let read = method == "GET" && (card_read || ["/members/me", "/boards/", "/organizations/"].iter().any(|p| path.starts_with(p)));
         let one_card = path.strip_prefix("/cards/").is_some_and(trello_id);
         let move_only = only_keys(body, &["idList", "pos"]) && body.as_ref().is_some_and(|b| b["idList"].as_str().is_some_and(trello_id));
-        (path_ok(path) && (read || comment || add || remove || (method == "PUT" && one_card && move_only))).then(|| format!("https://api.trello.com/1{path}"))
+        // a new card from the board: in a list, with a name, nothing else
+        let create = method == "POST" && path == "/cards" && only_keys(body, &["idList", "name", "desc", "pos"])
+            && body.as_ref().is_some_and(|b| b["idList"].as_str().is_some_and(trello_id) && b["name"].as_str().is_some_and(|s| !s.trim().is_empty()) && b["pos"] == "bottom");
+        (path_ok(path) && (read || comment || add || remove || create || (method == "PUT" && one_card && move_only))).then(|| format!("https://api.trello.com/1{path}"))
     },
     headers: |_, s| vec![format!("Authorization: OAuth oauth_consumer_key=\"{}\", oauth_token=\"{}\"", s[0], s[1]),
         "Content-Type: application/json".into(), "Accept: application/json".into()],
@@ -45,6 +49,7 @@ pub const PROVIDER: Provider = Provider {
         .and_then(|r| r.strip_suffix("/attachments")).is_some_and(trello_id),
     upload_kind: board_core::UploadKind::Trello,
     thumb: |_| false,
+    original: |_| false,
     ok: |_| true,
     error: |code, v| match code {
         "401" | "403" => t(TEXT, "auth"),
@@ -110,6 +115,10 @@ mod tests {
         assert!(allowed("GET", &format!("/cards/{id}?fields=name,desc&attachments=true"), None));
         assert!(allowed("GET", &format!("/cards/{id}/actions?filter=all&limit=1000&before={id}"), None));
         assert!(allowed("POST", &format!("/cards/{id}/actions/comments"), Some(json!({ "text": "hello" }))));
+        assert!(allowed("POST", "/cards", Some(json!({ "idList": id, "name": "T", "desc": "", "pos": "bottom" }))));
+        assert!(!allowed("POST", "/cards", Some(json!({ "idList": id, "name": " ", "pos": "bottom" }))));
+        assert!(!allowed("POST", "/cards", Some(json!({ "idList": id, "name": "T", "pos": "bottom", "idMembers": [id] }))));
+        assert!(!allowed("POST", "/cards", Some(json!({ "idList": "bad", "name": "T", "pos": "bottom" }))));
         assert!(allowed("POST", &format!("/cards/{id}/idMembers"), Some(json!({ "value": id }))));
         assert!(allowed("DELETE", &format!("/cards/{id}/idMembers/{id}"), None));
         assert!(!allowed("DELETE", &format!("/cards/{id}"), None));

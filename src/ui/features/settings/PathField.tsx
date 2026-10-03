@@ -33,7 +33,7 @@ export function PathField({
 }) {
   const input = (
     <ChangeInput
-      className="h-6 min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-xs text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:ring-1 ring-s-primary focus-visible:outline-none"
+      className="h-6 min-w-0 w-auto flex-1 rounded-none border-0 bg-transparent p-0 font-mono text-[11.5px] text-s-fg placeholder:font-sans placeholder:text-s-subtle focus-visible:ring-1 ring-s-primary focus-visible:outline-none"
       value={value}
       title={tip}
       placeholder={placeholder || undefined}
@@ -59,7 +59,10 @@ export function PathField({
     <div className="flex h-7 w-62.5 items-center gap-2 overflow-hidden rounded-[7px] bg-fill-2 pr-1 pl-2.5 text-xs focus-within:ring-1 ring-s-primary">
       {input}
       {found != null && (
-        <span className={`size-1.5 flex-none rounded-full ${found ? "bg-s-ok" : "bg-s-warn"}`} title={foundTip}></span>
+        <span
+          className={`size-[7px] flex-none rounded-full ${found ? "bg-s-ok" : "bg-s-warn"}`}
+          title={foundTip}
+        ></span>
       )}
       <button
         className="grid size-5 flex-none place-items-center rounded-md text-s-muted hover:bg-s-hover hover:text-s-fg focus-visible:ring-1 ring-s-primary"

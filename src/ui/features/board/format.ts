@@ -7,7 +7,8 @@ const day = (iso: string) => {
   const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
   return new Date(y, m - 1, d);
 };
-/** A due day (yyyy-mm-dd): 3/10 short, "Sat 3 Oct" long, red when past, orange up to tomorrow. */
+/** A due day (yyyy-mm-dd): 3/10 short, "Sat 3 Oct" long, "3 Oct" for after Yesterday, Today or Tomorrow (`left`
+ *  days from today), red when past, orange up to two days ahead. */
 export function due(iso: string | null | undefined, locale: string, now = new Date()) {
   if (!iso) return null;
   const at = day(iso);
@@ -15,7 +16,9 @@ export function due(iso: string | null | undefined, locale: string, now = new Da
   return {
     short: `${at.getDate()}/${at.getMonth() + 1}`,
     long: dateFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(at),
-    tone: left < 0 ? "text-late" : left <= 1 ? "text-soon" : "text-secondary",
+    dayMonth: dateFormat(locale, { day: "numeric", month: "short" }).format(at),
+    left,
+    tone: left < 0 ? "text-late" : left <= 2 ? "text-soon" : "text-secondary",
   };
 }
 /** The last update as "Sep 29". */

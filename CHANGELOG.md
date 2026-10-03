@@ -12,9 +12,30 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ## [Unreleased]
 
+### Added
+
+- New task on the board, from the title bar or a lane's +, for Productive, Linear and Trello: the card shows at once and is made in the tracker (#87)
+- The ticket window shows a preview of a Productive ticket's pictures, in its files and in the comments. A click opens the picture at full size in Relay's own viewer window: log in to Productive there once, after that it shows the picture right away (#87)
+- The ticket window lists the conversations started from it and the pull requests that name its number, and a Productive ticket takes new labels (#87)
+- Code in conversations is coloured by language (TypeScript, JSON, shell, PHP, Python, Rust, CSS, HTML, SQL, YAML), the command on a permission card too (#87)
+- An edit in a Claude Code conversation shows its diff with line numbers and the surrounding lines, also when the conversation is reopened (#87)
+- A group of steps says how long it took ("3 steps · 4 s"), and Waiting for you says how long a request has waited (#87)
+- Enter allows a permission card when it is the only one waiting and nothing is typed, the Allow button shows ↵ then (#87)
+
 ### Fixed
 
 - Settings › Machines › Set up a machine in a development build of Relay uses relay-server:latest: it gave the build's own version, which has no image
+
+### Changed
+
+- The Relay redesign: view title bars show an icon and a summary ("3 waiting", "2 due · 7 total", "2 to review", "21 unread"), the board's project and board pickers, its last sync, New task and refresh moved into the title bar, lanes and cards have the new look with a status ring per workflow status and both initials on avatars (#87)
+- The agent picker in the composer is a menu with each agent's icon, the ticket window's status and assignee open a menu, due dates read Yesterday, Today or Tomorrow, Reminders show "Fri 2/10" and undo as a compact chip, pull requests show their project and "Review with Claude" (#87)
+- Settings opens at 900 x 660 with hairline rows, and Agents and Integrations list every item with an on/off switch, switched-off ones stay visible, dimmed (#87)
+- Smaller polish from the redesign: the sidebar search reads "Search", step lines start with a capital, Answer stays disabled until you pick an answer, darker raised surfaces in dark mode (#87)
+
+### Removed
+
+- The Working/Ready pill in the conversation title bar: the sidebar already shows whether a turn runs (#87)
 
 ## [0.0.4] - 2026-10-03
 

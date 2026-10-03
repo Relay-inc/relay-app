@@ -24,7 +24,8 @@ Uploads go as a form to Productive's S3 bucket, without the token.
 Attachments, measured on the API (1/10): an original (`url`) redirects to the login page, also with the API token, so
 the ticket window opens it in the browser (http(s) links only). The 100×100 `thumb` is public; the backend can fetch it
 (`thumb`, only `https://files.productive.io/attachments/…/thumb/…`, no token, no redirects, 2 MB, kept only when its
-first bytes are a PNG, JPEG, GIF or WebP), though the ticket window does not show thumbnails. `/attachments?filter[task_id]=` also returns the task's
+first bytes are a PNG, JPEG, GIF or WebP), and the ticket window shows it as the picture's preview, for the task's files
+and a comment's. `/attachments?filter[task_id]=` also returns the task's
 comments' attachments.
 
 ## Files

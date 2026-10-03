@@ -15,6 +15,8 @@ const MOVE: &str = "mutation Move($id: String!, $stateId: String!) { issueUpdate
 const ASSIGN: &str = "mutation Assign($id: String!, $assigneeId: String) { issueUpdate(id: $id, input: { assigneeId: $assigneeId }) { success } }";
 const COMMENT: &str = "mutation Comment($id: String!, $body: String!) { commentCreate(input: { issueId: $id, body: $body }) { success } }";
 const UPLOAD: &str = "mutation Upload($contentType: String!, $filename: String!, $size: Int!) { fileUpload(contentType: $contentType, filename: $filename, size: $size) { success uploadFile { uploadUrl assetUrl headers { key value } } } }";
+/// A new issue from the board (a lane's state, the board's Linear project or null), its variables checked below.
+const CREATE: &str = "mutation Create($teamId: String!, $stateId: String!, $title: String!, $description: String!, $projectId: String) { issueCreate(input: { teamId: $teamId, stateId: $stateId, title: $title, description: $description, projectId: $projectId }) { success issue { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } } }";
 const ATTACH: &str = "mutation Attach($id: String!, $title: String!, $url: String!) { attachmentCreate(input: { issueId: $id, title: $title, url: $url }) { success } }";
 fn squash(s: &str) -> String { s.split_whitespace().collect::<Vec<_>>().join(" ") }
 /// A Linear id: a UUID.
@@ -48,6 +50,8 @@ pub const PROVIDER: Provider = Provider {
             ASSIGN => count == 2 && linear_id(&vars["id"]) && vars.get("assigneeId").is_some_and(|v| v.is_null() || linear_id(v)),
             COMMENT => count == 2 && linear_id(&vars["id"]) && text("body"),
             UPLOAD => count == 3 && text("contentType") && text("filename") && vars["size"].as_u64().is_some_and(|s| s <= 50_000_000),
+            CREATE => count == 5 && linear_id(&vars["teamId"]) && linear_id(&vars["stateId"]) && text("title") && vars["description"].is_string()
+                && vars.get("projectId").is_some_and(|v| v.is_null() || linear_id(v)),
             ATTACH => count == 3 && linear_id(&vars["id"]) && text("title") && vars["url"].as_str().is_some_and(|s| s.starts_with("https://uploads.linear.app/") && !s.chars().any(char::is_control)),
             _ => false,
         };
@@ -58,6 +62,7 @@ pub const PROVIDER: Provider = Provider {
         ["https://uploads.linear.app/", "https://storage.googleapis.com/"].iter().any(|prefix| url.starts_with(prefix)),
     upload_kind: board_core::UploadKind::Put,
     thumb: |_| false,
+    original: |_| false,
     ok: |v| v["errors"].as_array().is_none_or(|e| e.is_empty()),
     error: |code, v| {
         let c = gql_code(v);
@@ -131,6 +136,11 @@ mod tests {
         assert!(!allowed(UPLOAD, json!({ "contentType": "text/plain", "filename": "a.txt", "size": 50_000_001 })));
         assert!(!allowed(UPLOAD, json!({ "contentType": "text/plain", "filename": "a.txt", "size": -1 })));
         assert!(allowed(ATTACH, json!({ "id": id, "title": "a.txt", "url": "https://uploads.linear.app/a" })));
+        assert!(allowed(CREATE, json!({ "teamId": id, "stateId": id, "title": "T", "description": "", "projectId": null })));
+        assert!(allowed(CREATE, json!({ "teamId": id, "stateId": id, "title": "T", "description": "body", "projectId": id })));
+        assert!(!allowed(CREATE, json!({ "teamId": id, "stateId": id, "title": " ", "description": "", "projectId": null })));
+        assert!(!allowed(CREATE, json!({ "teamId": "x y", "stateId": id, "title": "T", "description": "", "projectId": null })));
+        assert!(!allowed(CREATE, json!({ "teamId": id, "stateId": id, "title": "T", "description": "" })));
         assert!(!allowed(ATTACH, json!({ "id": id, "title": "a.txt", "url": "https://uploads.linear.app.evil/a" })));
         assert!(!allowed(COMMENT, json!({ "id": id, "body": "hello", "extra": true })));
         assert!(!allowed(COMMENT, json!([])));

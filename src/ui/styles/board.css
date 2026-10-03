@@ -6,3 +6,22 @@
   text-decoration-color: var(--secondary);
   text-underline-offset: 2px;
 }
+
+/* The ticket window and the New task dialog float over the app window: its shadow, a hairline edge in dark mode */
+.ticket-window {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.2),
+    0 24px 64px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ticket-window {
+    box-shadow:
+      0 0 0 0.5px rgba(255, 255, 255, 0.16),
+      0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme="dark"] .ticket-window {
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.16),
+    0 24px 64px rgba(0, 0, 0, 0.5);
+}

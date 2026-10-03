@@ -73,7 +73,7 @@ const VIEWS = {
   },
   "conversation-permission": async () => {
     await open(page, server.url, { sel: keys.permission });
-    await waitText("git push origin fix/portal-redirect");
+    await waitText("push origin fix/portal-redirect");
   },
   "conversation-action": async () => {
     await open(page, server.url, { sel: keys.action });

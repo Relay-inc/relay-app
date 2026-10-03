@@ -59,11 +59,13 @@ test("a tool starts running and ends ok or with an error", () => {
     next,
     { type: "tool_result", id: "t1", error: false },
     { type: "tool_result", id: "t2", error: true },
+    { type: "patch", id: "t1", hunks: [{ oldStart: 3, newStart: 3, lines: ["-a", "+b"] }] },
   );
   assert.deepEqual(
     done.messages["c:1"].map(item => item.state),
     ["ok", "err"],
   );
+  assert.equal(done.messages["c:1"][0].hunks?.[0].oldStart, 3);
 });
 
 test("a mail tool marks the conversation as touching mail, once", () => {

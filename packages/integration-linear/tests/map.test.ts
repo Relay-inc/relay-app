@@ -27,10 +27,10 @@ test("the filter narrows to a project and to open states", () => {
     { team: { id: { eq: T1 } }, project: { id: { eq: "c1" } }, state: { type: { nin: ["completed", "canceled"] } } });
 });
 
-test("issues carry identifier, state, assignee's first name, priority and url", () => {
+test("issues carry identifier, state, assignee's first and full name, priority and url", () => {
   const r = mapIssues(fx("issues-1").data);
   assert.deepEqual(r.cards[0], { id: "d0000000-0000-4000-8000-000000000001", title: "Fix the header", number: "ANT-12", column: "s-todo",
-    placement: -42.5, due: "2026-10-03", who: "kristof", priority: 1 });
+    placement: -42.5, due: "2026-10-03", who: "kristof", priority: 1, whoName: "Kristof Example" });
   assert.equal(r.cards[1].who, "");
   assert.equal(r.cards[1].due, null);
   assert.equal(r.urls[1][1], "https://linear.app/antenna/issue/ANT-13/write-docs");
@@ -53,4 +53,16 @@ test("an issue carries its state kind, status name, labels and last update when 
     labels: { nodes: [{ name: "bug" }] }, updatedAt: "2026-09-30T10:00:00Z" }], pageInfo: {} } }).cards;
   assert.deepEqual([c.state, c.status, c.labels, c.updated], ["doing", "In Review", ["bug"], "2026-09-30T10:00:00Z"]);
   assert.equal(mapStates(fx("states").data, true).find(s => s.name === "Done")?.state, "done");
+});
+
+test("each state gets its ring colour: backlog waits, unstarted is planned, started by its name", () => {
+  const tones = Object.fromEntries(mapStates(fx("states").data, true).map(s => [s.name, s.tone]));
+  assert.equal(tones["Backlog"], "idle");
+  assert.equal(tones["Todo"], "planned");
+  assert.equal(tones["In Progress"], "active");
+  assert.equal(tones["In Review"], "review");
+  assert.equal(tones["Done"], "done");
+  const [c] = mapIssues({ issues: { nodes: [{ id: "i", identifier: "A-1", title: "t", state: { id: "s", name: "Blocked", type: "started" }, assignee: { name: "Jana Vos", displayName: "jana" } }] } }).cards;
+  assert.equal(c.tone, "blocked");
+  assert.equal(c.whoName, "Jana Vos");
 });

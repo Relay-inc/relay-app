@@ -26,13 +26,13 @@ export function SettingsApp() {
           {TABS.map(([id, name, glyph], index) => (
             <button
               key={id}
-              className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg hover:bg-s-hover focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : ""}`}
+              className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
               onClick={() => go(id)}
               aria-current={tab === id ? "page" : undefined}
             >
               <Icon
                 name={glyph}
-                className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : ""}`}
+                className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : "text-secondary"}`}
               />
               <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
               <span className="text-[11px] font-normal text-tertiary">⌘{index + 1}</span>

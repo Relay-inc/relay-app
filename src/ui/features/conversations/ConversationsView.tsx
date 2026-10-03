@@ -26,7 +26,9 @@ import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { PrsReload } from "./PrsReload";
-import { column, strip } from "./layout";
+import { Toast } from "./Toast";
+import { MailReload } from "../mail/MailReload";
+import { column } from "./layout";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
@@ -83,9 +85,9 @@ export function ConversationsView({ className }: { className: string }) {
       heading={bar.heading}
       img={bar.img}
       tint={bar.tint}
-      state={bar.state}
+      icon={bar.icon}
       editable={!onView}
-      sub={bar.waiting}
+      sub={bar.sub}
       value={bar.title}
       readonly={!!bar.session}
       renamable={bar.renamable}
@@ -94,7 +96,15 @@ export function ConversationsView({ className }: { className: string }) {
       tools={bar.tools}
       drawer={drawer}
       back={!!bar.tools?.back}
-      actions={selected === REM ? <NewReminder /> : selected === PRS ? <PrsReload /> : null}
+      actions={
+        selected === REM ? (
+          <NewReminder />
+        ) : selected === PRS ? (
+          <PrsReload />
+        ) : selected === MAIL ? (
+          <MailReload />
+        ) : null
+      }
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
       onRename={rename}
       onOpenTerminal={openTerminal}
@@ -115,27 +125,30 @@ export function ConversationsView({ className }: { className: string }) {
     <div className={`${className} flex flex-col relative bg-bg`}>
       {chatBarEl}
       {projectPanel ? <ProjectPanel /> : null}
-      <div id="log" ref={log} className="flex-1 overflow-y-auto pt-7 pb-3" onScroll={onScroll}>
+      <div
+        id="log"
+        ref={log}
+        className={`flex-1 overflow-y-auto pb-3 ${selected === REM ? "pt-6" : "pt-7"}`}
+        onScroll={onScroll}
+      >
         <div
           ref={msgs}
           id="msgs"
           className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : "max-w-170 px-8"}`}
         >
           <SelectedView />
+          {/* on Reminders the chip sticks to the bottom of the scroller */}
+          {toast && selected === REM ? (
+            <div className="sticky bottom-3 pt-2 pb-1">
+              <Toast toast={toast} />
+            </div>
+          ) : null}
         </div>
       </div>
       {hasSubagents ? <Subagents className={`${column} mb-1.5`} /> : null}
-      {toast ? (
-        <div className={column}>
-          <div className={`${strip} mb-2 bg-label text-bg select-none`}>
-            <span>{toast.text}</span>
-            <span className="flex-1"></span>
-            {toast.undo ? (
-              <button className="btn bg-transparent! text-bg border-bg/40!" onClick={toast.undo}>
-                {toast.btn}
-              </button>
-            ) : null}
-          </div>
+      {toast && selected !== REM ? (
+        <div className={`${column} mb-2`}>
+          <Toast toast={toast} />
         </div>
       ) : null}
       <RepoBar className={column} />

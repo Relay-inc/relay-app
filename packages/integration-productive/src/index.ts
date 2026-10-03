@@ -1,4 +1,5 @@
-import { currentLocale, translator, type BoardProvider, type BoardRef, type CardView, type Ctx, type Opt, type State } from "@relay/board-core";
+import { currentLocale, translator, type BoardProvider, type BoardRef, type Card, type CardView, type Ctx, type Opt, type State, type Tone } from "@relay/board-core";
+import { toneOf } from "@relay/board-core/tone";
 import { safeUrl } from "@relay/board-core/detail";
 import strings, { type Key } from "./locales";
 import { toHtml, uploadFile } from "./write";
@@ -58,22 +59,25 @@ async function ready(c: Ctx) {
   })]);
 }
 // per project: its workflow's statuses (the status columns, in Productive's order) and its people, for the panel's pickers
-type Opts = { statuses: (Opt & { placement: number; state: State })[]; people: (Opt & { first: string })[] };
+type Opts = { statuses: (Opt & { placement: number; state: State; tone: Tone })[]; people: (Opt & { first: string })[] };
 const opts = new Map<string, Promise<Opts>>(), optsDone = new Map<string, Opts>();
 function optsOf(c: Ctx, project: string) {
   if (!opts.has(project)) opts.set(project, (async () => {
     const pr = await c.call("GET", `/projects/${project}?include=workflow`), wf = pr.data?.relationships?.workflow?.data?.id;
     const [st, pp] = await Promise.all([wf ? all(c, `/workflow_statuses?filter[workflow_id]=${wf}`) : { data: [] }, all(c, `/people?filter[project_id]=${project}&filter[status]=1`)]);
-    const o: Opts = { statuses: st.data.map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.position ?? 0, state: stateOf(x.attributes.category_id) })).sort((a: any, b: any) => a.placement - b.placement),
+    const sorted = st.data.map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.position ?? 0, state: stateOf(x.attributes.category_id) })).sort((a: any, b: any) => a.placement - b.placement);
+    const o: Opts = { statuses: sorted.map((x: any, i: number) => ({ ...x, tone: toneOf(x.state, x.name, !sorted.slice(0, i).some((y: any) => y.state === x.state)) })),
       people: pp.data.map((x: any) => ({ id: x.id, name: person(x), first: x.attributes.first_name || "" })).sort(byName) };
     optsDone.set(project, o);
     return o;
   })().catch(e => { opts.delete(project); throw e; }));
   return opts.get(project)!;
 }
-// an attachment as the ticket window shows it; Productive keeps deleted ones with deleted_at
-type File_ = { id: string; name: string; size: number; url: string };
-const fileOf = (x: any): File_ => ({ id: x.id, name: x.attributes.name || "", size: x.attributes.size || 0, url: safeUrl(x.attributes.url) });
+// an attachment as the ticket window shows it; Productive keeps deleted ones with deleted_at. A picture also has its
+// 100x100 thumb: the original wants a browser login, the thumb is public, so the backend fetches it for the preview
+type File_ = { id: string; name: string; size: number; url: string; thumb: string };
+const fileOf = (x: any): File_ => ({ id: x.id, name: x.attributes.name || "", size: x.attributes.size || 0, url: safeUrl(x.attributes.url),
+  thumb: x.attributes.resized && /^image\//.test(x.attributes.content_type || "") ? x.attributes.thumb || "" : "" });
 const live = (x: any) => x.type === "attachments" && !x.attributes?.deleted_at;
 const onComment = (x: any) => x.attributes?.attachable_type === "comment" || !!x.relationships?.comment?.data;
 const pick = (included: any[], type: string, rel: any) => included.find((i: any) => i.type === type && i.id === rel?.data?.id);
@@ -127,6 +131,17 @@ async function prefetch(c: Ctx, ref: BoardRef, tk: { data: any[]; included: any[
   } catch { /* see above */ }
 }
 
+// a task as a card, `o` the project's statuses for the ring's colour
+function toCard(c: Ctx, ref: BoardRef, x: any, included: any[], o: Opts | null): Card {
+  const status = pick(included, "workflow_statuses", x.relationships.workflow_status)?.attributes, who = pick(included, "people", x.relationships.assignee);
+  const sid = x.relationships.workflow_status?.data?.id ?? "", state: State = x.attributes.closed ? "done" : stateOf(status?.category_id);
+  return { id: x.id, title: x.attributes.title, number: String(x.attributes.number ?? ""), placement: x.attributes.placement ?? 0, due: x.attributes.due_date ?? null,
+    column: x.relationships.task_list?.data?.id ?? "", in: { status: sid }, who: who?.attributes.first_name || "", whoName: person(who), me: !!who && who.id === String(c.config.user || ""),
+    status: status?.name, state, tone: o?.statuses.find(s => s.id === sid)?.tone ?? toneOf(state, status?.name || "", state !== "doing"),
+    folder: boardNames.get(ref.board), list: pick(included, "task_lists", x.relationships.task_list)?.attributes.name, labels: x.attributes.tag_list || [],
+    updated: x.attributes.last_activity_at || x.attributes.updated_at };
+}
+
 const productive: BoardProvider<Key> = {
   id: "productive",
   name: "Productive",
@@ -148,17 +163,26 @@ const productive: BoardProvider<Key> = {
   columns: async (c, ref, group) => group === "status" ? (await optsOf(c, ref.project)).statuses : (await all(c, `/task_lists?filter[folder_id]=${ref.board}&filter[status]=1`)).data
     .map((x: any) => ({ id: x.id, name: x.attributes.name, placement: x.attributes.placement ?? 0 })).sort((a, b) => a.placement - b.placement),
   cards: async (c, ref) => {
-    // include=task_list is required: without it the relationship comes back without an id
-    const tk = await all(c, `/tasks?filter[folder_id]=${ref.board}&filter[status]=1&include=task_list,assignee,workflow_status,creator`);
-    const people = new Map<string, string>(tk.included.filter((i: any) => i.type === "people").map((i: any) => [i.id, i.attributes.first_name || ""]));
-    const named = (type: string) => new Map<string, any>(tk.included.filter((i: any) => i.type === type).map((i: any) => [i.id, i.attributes]));
-    const lists = named("task_lists"), statuses = named("workflow_statuses");
+    // include=task_list is required: without it the relationship comes back without an id. The project's statuses
+    // give the rings their colour. Without them a card still shows, coloured by its status' kind
+    const [tk, o] = await Promise.all([all(c, `/tasks?filter[folder_id]=${ref.board}&filter[status]=1&include=task_list,assignee,workflow_status,creator`),
+      optsOf(c, ref.project).catch(() => null)]);
     prefetch(c, ref, tk);
-    return tk.data.map((x: any) => ({ id: x.id, title: x.attributes.title, number: x.attributes.number, placement: x.attributes.placement ?? 0, due: x.attributes.due_date,
-      column: x.relationships.task_list?.data?.id ?? "", in: { status: x.relationships.workflow_status?.data?.id ?? "" }, who: people.get(x.relationships.assignee?.data?.id) || "",
-      status: statuses.get(x.relationships.workflow_status?.data?.id)?.name, state: x.attributes.closed ? "done" : stateOf(statuses.get(x.relationships.workflow_status?.data?.id)?.category_id),
-      folder: boardNames.get(ref.board), list: lists.get(x.relationships.task_list?.data?.id)?.name, labels: x.attributes.tag_list || [], updated: x.attributes.last_activity_at || x.attributes.updated_at }));
+    return tk.data.map((x: any) => toCard(c, ref, x, tk.included, o));
   },
+  // at the end of the lane: a task in the column's task list, or with the column's status in the board's first task list
+  create: async (c, ref, { title, description, column, group }) => {
+    const list = group === "status" ? (await all(c, `/task_lists?filter[folder_id]=${ref.board}&filter[status]=1`)).data
+      .sort((a: any, b: any) => (a.attributes.placement ?? 0) - (b.attributes.placement ?? 0))[0]?.id : column;
+    if (!list) throw new Error(t("noTaskList"));
+    const rel: any = { project: { data: { type: "projects", id: ref.project } }, task_list: { data: { type: "task_lists", id: list } } };
+    if (group === "status") rel.workflow_status = { data: { type: "workflow_statuses", id: column } };
+    const made = await c.call("POST", "/tasks", { data: { type: "tasks", attributes: { title, description: description.trim() ? toHtml(description) : "" }, relationships: rel } });
+    // read back with what the board shows (list, status, assignee by name)
+    const [tk, o] = await Promise.all([c.call("GET", `/tasks/${made.data.id}?include=task_list,assignee,workflow_status,creator`), optsOf(c, ref.project).catch(() => null)]);
+    return toCard(c, ref, tk.data, tk.included || [], o);
+  },
+  groupHint: "groupHint",
   move: async (c, _ref, card, to, group) => {
     const rel = group === "status" ? { workflow_status: { data: { type: "workflow_statuses", id: to } } } : { task_list: { data: { type: "task_lists", id: to } } };
     const r = await c.call("PATCH", `/tasks/${card.id}`, { data: { type: "tasks", id: card.id, relationships: rel } });
@@ -195,7 +219,8 @@ const productive: BoardProvider<Key> = {
     view(tk: Task): CardView {
       const o = optsDone.get(tk.project);
       return { title: tk.title, number: tk.number, closed: tk.closed, url: tk.url, board: tk.board, list: tk.list, project: tk.project, created: tk.created, creator: tk.creator,
-        description: tk.description, status: tk.statusId ? { id: tk.statusId, name: tk.statusName, state: tk.state } : undefined,
+        description: tk.description, status: tk.statusId ? { id: tk.statusId, name: tk.statusName, state: tk.state, tone: o?.statuses.find(s => s.id === tk.statusId)?.tone } : undefined,
+        editLabels: true, folder: tk.board,
         assignee: tk.assigneeId ? { id: tk.assigneeId, name: tk.assignee } : undefined, due: tk.due, labels: tk.labels,
         statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed };
     },
@@ -205,6 +230,12 @@ const productive: BoardProvider<Key> = {
       if (action === "comment" && value.trim()) await c.call("POST", "/comments", { data: { type: "comments", attributes: { body: toHtml(value) }, relationships: { task: { data: { type: "tasks", id } } } } });
       else if (action === "status" && value) await patch({ workflow_status: { data: { type: "workflow_statuses", id: value } } });
       else if (action === "assignee") await patch({ assignee: { data: value ? { type: "people", id: value } : null } });
+      else if ((action === "label-add" || action === "label-remove") && value.trim()) {
+        // tags are the whole list: read now, a background load may be older than what someone else just added
+        const now: string[] = (await c.call("GET", `/tasks/${id}`)).data?.attributes?.tag_list || [];
+        const next = action === "label-add" ? [...new Set([...now, value.trim()])] : now.filter(x => x !== value);
+        await c.call("PATCH", `/tasks/${id}`, { data: { type: "tasks", id, attributes: { tag_list: next } } });
+      }
       else if (action === "attach" && files.length) {
         // the relationship is the whole list: the ones already there and the new ones
         // read now, not from the panel: a background load may have dropped them from the cache meanwhile

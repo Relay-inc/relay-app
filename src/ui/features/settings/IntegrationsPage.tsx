@@ -15,7 +15,7 @@ import { Icon } from "../../components/Icon";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { ActionsSection } from "./ActionsSection";
-import { BUTTON_GLYPH, buttonClass, EMPTY_LIST, TILE } from "./blocks";
+import { BUTTON_GLYPH, buttonClass, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
 import { CalendarSettings } from "./CalendarSettings";
 import { Footer } from "./Footer";
@@ -23,7 +23,6 @@ import { GithubSettings } from "./GithubSettings";
 import { MailSettings } from "./MailSettings";
 import { Section } from "./Section";
 import { SettingsFold } from "./SettingsFold";
-import { SettingsMenu } from "./SettingsMenu";
 import { StatusLine } from "./StatusLine";
 
 // a provider's 16×16 glyph on the 24×24 tile
@@ -44,9 +43,9 @@ const GITHUB_MARK = (
 /** An integration: its row, and its page (sections of its own). */
 type Entry = { id: string; icon: ReactNode; name: string; status: ReactNode; on: boolean; page: () => ReactNode };
 
-/** Integrations: the ones in use are listed (a board provider set up or added, GitHub and Mail switched on), the
- *  others are in the Add menu (Calendar too: it shows under Waiting). In the list means in the sidebar; a row opens the integration's own page, Remove
- *  switches it off and keeps the token. A page reads its own state; this one only knows which rows are listed and
+/** Integrations: every one is listed (the board providers, GitHub, Mail, Calendar) and a switch turns it on or off,
+ *  off ones are dimmed. On means in the sidebar (Calendar: under Waiting); a row opens the integration's own page,
+ *  switching off keeps the token. A page reads its own state; this one only knows which rows are listed and
  *  which page is open. */
 export function IntegrationsPage({ active }: { active: boolean }) {
   const { t, th, tn } = useT();
@@ -178,35 +177,26 @@ export function IntegrationsPage({ active }: { active: boolean }) {
         />
       </>
     );
-  const listed = entries.filter(entry => entry.on);
   return (
     <Section
       title={t("set.tab.integrations")}
       desc={<Html html={th("int.listHelp")} />}
       list
       footer={listMessage && <Footer message={listMessage} />}
-      action={
-        <SettingsMenu
-          label={t("int.add")}
-          items={entries.filter(entry => !entry.on).map(({ id, icon, name, status }) => ({ id, icon, name, status }))}
-          onPick={id => switchTo(id, true)}
-        />
-      }
     >
-      {listed.length ? (
-        listed.map(entry => (
-          <SettingsFold
-            key={entry.id}
-            nav
-            icon={entry.icon}
-            name={entry.name}
-            status={entry.status}
-            onToggle={() => setDetail(entry.id)}
-          />
-        ))
-      ) : (
-        <div className={EMPTY_LIST}>{t("int.empty")}</div>
-      )}
+      {entries.map(entry => (
+        <SettingsFold
+          key={entry.id}
+          id={entry.id}
+          nav
+          on={entry.on}
+          icon={entry.icon}
+          name={entry.name}
+          status={entry.status}
+          onSwitch={on => switchTo(entry.id, on)}
+          onToggle={() => setDetail(entry.id)}
+        />
+      ))}
     </Section>
   );
 }

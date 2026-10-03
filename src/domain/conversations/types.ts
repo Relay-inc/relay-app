@@ -1,3 +1,5 @@
+import type { Hunk } from "../agents/types";
+
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
 // what is waiting for the user (permission cards, questions, background sessions that block).
 
@@ -42,6 +44,11 @@ export type Item = {
   imgs?: string[];
   files?: string[]; // a user message's attached paths
   tool?: { name: string; input: ToolInput };
+  /** a tool call: when it started and when its result came (ms), for the duration of a group of steps */
+  at?: number;
+  end?: number;
+  /** the change a file tool made, with line numbers, when the provider reports it (Claude Code) */
+  hunks?: Hunk[];
 };
 export type Chat = {
   key: string;

@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import { CODE } from "./blocks";
 
-const LABEL = "block text-[13px] leading-7 text-s-fg";
-const FIELD_HINT = `-mt-1 text-xs leading-snug text-s-muted ${CODE}`;
+const LABEL = "block text-[13px] leading-snug text-s-fg";
+const FIELD_HINT = `mt-px text-xs leading-[1.45] text-s-muted ${CODE}`;
 
 /** A field: its label and hint on the left, the control on the right. With `id` the label points at the control. */
 export function Field({
@@ -19,7 +19,7 @@ export function Field({
   children: ReactNode;
 }) {
   return (
-    <div className={`flex items-start justify-between gap-6 ${className}`}>
+    <div className={`flex items-center justify-between gap-4 ${className}`}>
       <div className="min-w-0 flex-1">
         {id ? (
           <label htmlFor={id} className={LABEL}>

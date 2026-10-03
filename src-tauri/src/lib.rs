@@ -1420,6 +1420,24 @@ async fn integration_thumb(provider: String, url: String) -> Result<String, Stri
     tauri::async_runtime::spawn_blocking(move || providers::thumb(p, &url)).await.map_err(|e| e.to_string())?
 }
 
+/// A picture at full size in Relay's viewer window, one window that each picture reuses. Only a URL the provider's
+/// `original` allows. The window loads the tracker's page as a browser would: its login once, then the picture. A
+/// remote page gets no IPC, and no capability names this window.
+#[tauri::command]
+fn open_viewer(app: AppHandle, provider: String, url: String, name: String) -> Result<(), String> {
+    let p = providers::get(&provider)?;
+    let url = providers::original(p, &url)?;
+    if let Some(w) = app.get_webview_window("viewer") {
+        w.navigate(url).map_err(|e| e.to_string())?;
+        w.set_title(&name).ok();
+        w.set_focus().ok();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, "viewer", tauri::WebviewUrl::External(url))
+        .title(name).inner_size(1000.0, 760.0).min_inner_size(320.0, 240.0).build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// A board provider's credentials from Claude Code's MCP config (board_core::from_claude): ~/.claude.json for the user
 /// and for the vault as a project, and the vault's .mcp.json.
 fn claude_creds(state: &App, p: &providers::Provider) -> Option<(Vec<(String, String)>, serde_json::Map<String, Value>)> {
@@ -1814,7 +1832,7 @@ fn open_settings(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
     let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
     tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
-        .title(title).inner_size(860.0, 620.0).min_inner_size(720.0, 480.0)
+        .title(title).inner_size(900.0, 660.0).min_inner_size(720.0, 480.0)
         .minimizable(false).maximizable(false).build().ok();
 }
 /// The settings row at the bottom of the sidebar: the same window as Relay › Settings….
@@ -1905,7 +1923,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, mirror_wipe, move_conversation, server_setup, machines_list, set_machine_default_folder, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, set_machine_folders, chat_machines, set_machine_mirror, mirror_status, mirror_progress, mirror_wipe, move_conversation, server_setup, machines_list, set_machine_default_folder, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

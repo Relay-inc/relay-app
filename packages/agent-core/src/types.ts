@@ -13,6 +13,8 @@ export type Detect = { installed: boolean; bin: string; version?: string | null;
 export type AgentStatus = { id: string; name: string; on: boolean; caps: Caps; detect: Detect; models: Choice[]; efforts: Choice[]; bin: string; defaultBin: string };
 
 export type Image = { media_type: string; data: string };
+/** One hunk of a file change: its start in the old and new file, its lines prefixed " ", "-" or "+". */
+export type Hunk = { oldStart: number; newStart: number; lines: string[] };
 export type TurnUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost?: number | null };
 /** A permission request or question in the pending folder (pending/<id>.json). */
 export type PermissionRequest = { id: string; project: string; provider?: string; kind?: "tool" | "question" | ""; tool_name: string; input: any; tool_use_id?: string; relay?: boolean; at: number };
@@ -28,6 +30,7 @@ export type AgentEvent =
   | { type: "thinking"; text: string; delta: boolean }
   | { type: "tool_call"; id: string; name: string; input: any }
   | { type: "tool_result"; id: string; error: boolean }
+  | { type: "patch"; id: string; hunks: Hunk[] } // the change a file tool made, when the provider reports it
   | { type: "permission"; request: PermissionRequest }
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }
   | { type: "time"; at: string }       // history only: when the transcript line after it was written

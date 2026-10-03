@@ -6,7 +6,6 @@ import { mailKey } from "../../../domain/navigation/keys";
 import { sender, unread } from "../../../domain/mail/rules";
 import {
   inbox,
-  loadMails,
   mailSeen,
   moreMails,
   openMailSetup,
@@ -55,14 +54,7 @@ export function MailView({ className = "" }: { className?: string }) {
         className="min-h-0 overflow-y-auto border-r border-separator px-2 pt-3 pb-4"
         onPointerDown={() => setMailPane(true)}
       >
-        <MailBar
-          className="block px-2"
-          filter={filter}
-          projects={projects}
-          busy={busy}
-          onFilter={setMailFilter}
-          onReload={loadMails}
-        />
+        <MailBar className="block px-2" filter={filter} projects={projects} onFilter={setMailFilter} />
         {err ? <div className="err-box">{err}</div> : null}
         {loaded ? (
           <section>

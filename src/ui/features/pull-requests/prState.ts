@@ -12,10 +12,11 @@ export const CI: Record<string, ["ok" | "bad" | "run", Key]> = {
 };
 export const CI_TEXT = { ok: "text-ok", bad: "text-late", run: "text-soon" };
 
-/** The colour of a PR's glyph: draft grey, changes requested red, approved green, else the accent. */
+/** The colour of a PR's glyph: draft grey, changes requested red, approved green, else the accent (no decision yet,
+ *  decided to stay accent against the design's green). */
 export const prColor = (pr: Pick<PR, "draft" | "review">) =>
   pr.draft
-    ? "text-secondary"
+    ? "text-tertiary"
     : pr.review === "CHANGES_REQUESTED"
       ? "text-bad"
       : pr.review === "APPROVED"

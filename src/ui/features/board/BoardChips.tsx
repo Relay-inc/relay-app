@@ -11,21 +11,21 @@ export function BoardChips({ provider, filters }: { provider: BoardProvider; fil
   const active = FACETS.filter(facet => filters[facet]?.length);
   if (!active.length) return null;
   return (
-    <div className="flex items-center flex-wrap gap-1.5 mb-3">
+    <div className="flex-none flex items-center flex-wrap gap-1.5 px-4 py-2 border-b border-separator">
       {active.map(facet => (
         <span
           key={facet}
-          className="inline-flex items-center gap-1.5 h-6 pl-2.5 pr-1 rounded-md bg-accent-soft text-accent-text text-xs"
+          className="inline-flex items-center gap-1.5 h-6 pl-[9px] pr-1 rounded-[7px] bg-accent-soft text-accent-text text-xs"
         >
           <span className="text-secondary">{t(FACET_LABEL[facet])}</span>
           <b className="font-medium">{filters[facet]!.map(v => facetName(t, facet, v)).join(", ")}</b>
           <button
-            className="size-4.5 grid place-items-center border-0 rounded-sm bg-transparent text-secondary hover:text-label"
+            className="size-4.5 grid place-items-center border-0 rounded-[5px] bg-transparent text-accent-text hover:bg-accent-soft"
             title={t("kb.remove")}
             aria-label={t("kb.remove")}
             onClick={() => clearFilters(provider, facet)}
           >
-            <Icon name="close" className="glyph size-3" />
+            <Icon name="close" className="glyph size-[11px] stroke-2" />
           </button>
         </span>
       ))}

@@ -27,6 +27,8 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { ImageThumbs } from "../../components/ImageThumbs";
+import { allowOnlyCard } from "../../components/PermissionCard";
+import { AgentPicker } from "./AgentPicker";
 import { FileChips } from "../../components/FileChips";
 import { onPasteFiles } from "../../components/image-files";
 import { uiRequests } from "../../../application/navigation/requests";
@@ -141,6 +143,8 @@ export function Composer({ className }: { className: string }) {
     if (onCompletionKey(e)) return;
     if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
+      // nothing to send: Enter allows the permission card that waits, as its button shows
+      if (!e.repeat && !typed.trim() && !attached.length && allowOnlyCard()) return;
       sendMsg();
     }
   };
@@ -267,22 +271,7 @@ export function Composer({ className }: { className: string }) {
           {/* with one agent there is nothing to pick */}
           {view.agents.length > 1 && !isTerminal(selected) && !agentFixed ? (
             <>
-              <span className="relative inline-flex items-center rounded-[7px] bg-fill-2 text-label">
-                <select
-                  className="text-label!"
-                  title={t("composer.agent")}
-                  aria-label={t("composer.agent")}
-                  value={view.agentId}
-                  onChange={e => setAgent(e.target.value)}
-                >
-                  {view.agents.map(option => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
-                {chevron}
-              </span>
+              <AgentPicker agents={view.agents} value={view.agentId} label={t("composer.agent")} onPick={setAgent} />
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}

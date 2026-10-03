@@ -14,7 +14,7 @@ const hostOf = (url: string | undefined) => {
   }
 };
 
-/** One tool call as a short line ("read x.md", a command, "searched for ..."). Its `<code>` is styled by the line that
+/** One tool call as a short line ("Read x.md", a command, "Searched for ..."). Its `<code>` is styled by the line that
  *  holds it (`[&_code]:…`). `linked`: the file is a note that opens, so its name is drawn as a link. */
 export function ToolLine({
   name,
