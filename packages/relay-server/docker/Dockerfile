@@ -1,6 +1,6 @@
 # relay-server in a container: `server` installs the real Claude Code on its first start (entrypoint.sh, log in once:
 # docker exec -it relay-server claude), `test` has a stand-in claude (fake-claude) to try Relay's work machines without
-# a Claude login. Released as ghcr.io/laurentme/relay-server for amd64 and arm64 (.github/workflows/release.yml).
+# a Claude login. Released as ghcr.io/laurentme/relay-server for amd64 and arm64 (scripts/push-server-image.sh).
 # Build from the repo root: docker compose -f packages/relay-server/docker/compose.yml up --build
 FROM rust:1-slim AS build
 WORKDIR /src

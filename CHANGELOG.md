@@ -5,8 +5,9 @@ that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, ref
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
 `src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
-builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes; run
-the workflow by hand (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes. Then
+push relay-server's image from a checkout of the tag with `scripts/push-server-image.sh`. Run the workflow by hand
+(Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
