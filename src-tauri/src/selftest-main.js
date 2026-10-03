@@ -36,7 +36,7 @@
     steps.push("answered by the machine");
     // after the first message the pick says where it runs (and moves it when changed)
     label = await until("the composer pick on the machine", () => {
-      const shown = document.querySelector(".relay-composer select[aria-label='Runs on']")?.selectedOptions[0]?.textContent || "";
+      const shown = document.querySelector(".relay-composer button[aria-label='Runs on']")?.textContent || "";
       return shown.startsWith("docker") && shown;
     }, 15000);
     steps.push("pick shows the machine");

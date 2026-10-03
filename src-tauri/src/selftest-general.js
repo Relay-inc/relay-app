@@ -25,12 +25,13 @@
     (await until("the new conversation button", () => document.querySelector('.relay-sidebar button[aria-label="New conversation"]'))).click();
     await until("an empty composer", () => composer()?.querySelector("textarea")?.value === "");
     steps.push("general conversation");
-    const pick = await until("the machine pick", () => composer()?.querySelector('select[aria-label="Runs on"]'));
-    steps.push("pick shows " + pick.selectedOptions[0]?.textContent);
-    const option = await until("__MACHINE__ available", () => [...pick.options].find(o => o.textContent.startsWith("__MACHINE__ ") && !o.disabled));
-    set(pick, option.value, "change");
-    await until("__MACHINE__ picked", () => composer().querySelector('select[aria-label="Runs on"]')?.value === option.value);
-    steps.push("picked " + option.textContent);
+    const pick = () => composer()?.querySelector('button[aria-label="Runs on"]');
+    steps.push("pick shows " + (await until("the machine pick", pick)).textContent);
+    pick().click();
+    const option = await until("__MACHINE__ available", () => [...composer().querySelectorAll('[role="menuitemradio"]')].find(o => o.textContent === "__MACHINE__" && !o.disabled));
+    option.click();
+    await until("__MACHINE__ picked", () => pick()?.textContent === "__MACHINE__");
+    steps.push("picked __MACHINE__");
     const field = composer().querySelector("textarea");
     set(field, "hi general", "input");
     await sleep(100);
@@ -41,8 +42,8 @@
     steps.push("answered by the machine");
     // after the first message the pick stays, now saying where it runs (and moving it when changed)
     label = await until("the composer pick on __MACHINE__", () => {
-      const shown = composer().querySelector("select[aria-label='Runs on']")?.selectedOptions[0]?.textContent || "";
-      return shown.startsWith("__MACHINE__ ") && shown;
+      const shown = pick()?.textContent || "";
+      return shown === "__MACHINE__" && shown;
     }, 15000);
     steps.push("pick shows the machine");
     report(true);

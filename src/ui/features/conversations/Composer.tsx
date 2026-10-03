@@ -26,13 +26,20 @@ import { project } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
+import { Glyph } from "../../components/Glyph";
+import { agent as plugin } from "../../../shared/plugins";
 import { ImageThumbs } from "../../components/ImageThumbs";
 import { allowOnlyCard } from "../../components/PermissionCard";
-import { AgentPicker } from "./AgentPicker";
+import { PickMenu } from "./PickMenu";
 import { FileChips } from "../../components/FileChips";
 import { onPasteFiles } from "../../components/image-files";
 import { uiRequests } from "../../../application/navigation/requests";
 import "../../styles/conversations.css";
+
+const glyphOf = (id: string) => {
+  const svg = plugin(id)?.glyph;
+  return svg ? <Glyph svg={svg} className="glyph size-3.5 flex-none" /> : null;
+};
 
 // called from a keydown: focus at once so the key lands in the field. A focus asked for while no composer is drawn (at
 // the start, or coming from a view) waits here for the field to mount
@@ -271,35 +278,45 @@ export function Composer({ className }: { className: string }) {
           {/* with one agent there is nothing to pick */}
           {view.agents.length > 1 && !isTerminal(selected) && !agentFixed ? (
             <>
-              <AgentPicker agents={view.agents} value={view.agentId} label={t("composer.agent")} onPick={setAgent} />
+              <PickMenu
+                pill
+                options={view.agents.map(option => ({ ...option, icon: glyphOf(option.id) }))}
+                value={view.agentId}
+                label={t("composer.agent")}
+                onPick={setAgent}
+              />
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
           {hasChat && where.value !== null ? (
             <>
               {/* before the first message: where it starts. After it: where it runs, and another pick moves it */}
-              <span className="relative inline-flex items-center">
-                <select
-                  title={where.why ? t(where.why) : t(where.started ? "composer.moveHelp" : "composer.runOn")}
-                  aria-label={t("composer.runOn")}
-                  value={where.value}
-                  disabled={where.started && (busy || moving)}
-                  onChange={async e => {
-                    if (!where.started) return setMachine(e.target.value);
-                    setMoving(true);
-                    await moveConversation(e.target.value);
-                    setMoving(false);
-                  }}
-                >
-                  <option value="">{t("composer.thisMac")}</option>
-                  {where.list.map(option => (
-                    <option key={option.id} value={option.id} disabled={!!where.why || !option.online}>
-                      {`${option.name} · ${t(option.online ? "composer.available" : "composer.unavailable")}`}
-                    </option>
-                  ))}
-                </select>
-                {chevron}
-              </span>
+              <PickMenu
+                options={[
+                  { id: "", name: t("composer.thisMac") },
+                  ...where.list.map(option => ({
+                    id: option.id,
+                    name: option.name,
+                    icon: (
+                      <span
+                        className={`size-1.5 rounded-full flex-none ${option.online ? "bg-ok" : "bg-late"}`}
+                        title={t(option.online ? "composer.available" : "composer.unavailable")}
+                      ></span>
+                    ),
+                    disabled: !!where.why || !option.online,
+                  })),
+                ]}
+                value={where.value}
+                label={t("composer.runOn")}
+                title={where.why ? t(where.why) : t(where.started ? "composer.moveHelp" : "composer.runOn")}
+                disabled={where.started && (busy || moving)}
+                onPick={async id => {
+                  if (!where.started) return setMachine(id);
+                  setMoving(true);
+                  await moveConversation(id);
+                  setMoving(false);
+                }}
+              />
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : machine ? (

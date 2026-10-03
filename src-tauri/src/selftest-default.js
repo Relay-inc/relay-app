@@ -28,8 +28,8 @@
       steps.push("default set");
     } else {
       (await until("the new conversation button", () => document.querySelector('.relay-sidebar button[aria-label="New conversation"]'))).click();
-      const pick = () => document.querySelector('.relay-composer select[aria-label="Runs on"]');
-      picked = await until("__MACHINE__ preselected", () => pick()?.selectedOptions[0]?.textContent.startsWith("__MACHINE__ ") && pick().selectedOptions[0].textContent);
+      const pick = () => document.querySelector('.relay-composer button[aria-label="Runs on"]');
+      picked = await until("__MACHINE__ preselected", () => pick()?.textContent === "__MACHINE__" && pick().textContent);
       steps.push("pick preselected");
     }
     report(true);
