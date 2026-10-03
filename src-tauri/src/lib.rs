@@ -1689,7 +1689,11 @@ async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, Stri
 }
 /// For setting up a machine: this Relay's version, the relay-server image of the same version speaks its protocol.
 #[tauri::command]
-fn server_setup() -> Value { json!({"version": env!("CARGO_PKG_VERSION"), "image": "ghcr.io/laurentme/relay-server"}) }
+fn server_setup() -> Value {
+    // a development build sits between two releases: no image has its version, the newest one is the closest
+    let dev = cfg!(debug_assertions);
+    json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/laurentme/relay-server", "dev": dev})
+}
 /// Forget a machine here. Its conversations there stop (nothing would ever reach them again) and lose their bind; on
 /// the machine `relay-server revoke` unpairs this Mac.
 #[tauri::command]

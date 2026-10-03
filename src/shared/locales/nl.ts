@@ -669,6 +669,8 @@ export default {
   "mc.setupTitle": "Machine opzetten",
   "mc.setupHelp":
     "relay-server draait in Docker op een thuisserver of een NAS. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
+  "mc.setupHelpDev":
+    "relay-server draait in Docker op een thuisserver of een NAS. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupShow": "Toon de commando's",
   "mc.setupFolder": "Map op de machine",
   "mc.setupFolderHelp":

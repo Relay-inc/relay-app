@@ -668,6 +668,8 @@ const en = {
   "mc.setupTitle": "Set up a machine",
   "mc.setupHelp":
     "relay-server runs in Docker on a home server or a NAS. These commands are for relay-server {version}, the version of this Relay. Run them on the machine, in this order.",
+  "mc.setupHelpDev":
+    "relay-server runs in Docker on a home server or a NAS. This is a development build of Relay, there is no image of its own version: these commands use the newest one, relay-server:latest. Run them on the machine, in this order.",
   "mc.setupShow": "Show the commands",
   "mc.setupFolder": "Folder on the machine",
   "mc.setupFolderHelp": "Keeps the pairing, Claude's login, Claude Code and the repos. On Unraid a folder in appdata.",

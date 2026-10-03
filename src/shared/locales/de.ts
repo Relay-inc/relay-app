@@ -675,6 +675,8 @@ export default {
   "mc.setupTitle": "Maschine einrichten",
   "mc.setupHelp":
     "relay-server läuft in Docker auf einem Heimserver oder einem NAS. Diese Befehle sind für relay-server {version}, die Version dieses Relay. Führe sie auf der Maschine in dieser Reihenfolge aus.",
+  "mc.setupHelpDev":
+    "relay-server läuft in Docker auf einem Heimserver oder einem NAS. Dies ist eine Entwicklungsversion von Relay, für ihre Version gibt es kein Image: Diese Befehle nutzen das neueste, relay-server:latest. Führe sie auf der Maschine in dieser Reihenfolge aus.",
   "mc.setupShow": "Befehle zeigen",
   "mc.setupFolder": "Ordner auf der Maschine",
   "mc.setupFolderHelp":
