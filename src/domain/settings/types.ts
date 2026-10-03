@@ -33,8 +33,7 @@ export type Machine = {
   port: number;
   fp: string;
   folders: Record<string, string>;
-  mirror?: { on: boolean; exclude: string[] }; // "Mirror this Mac": exclude = vault folders that stay on this Mac
-  default_folder?: string; // where a conversation runs when its project has no folder there; "" or none: the home
+  mirror?: { exclude: string[] }; // vault folders that stay on this Mac, out of the machine's mirror
 };
 /** A machine in the composer's pick (`machines_list`): `default` when the project runs there without a pick. */
 export type MachineChoice = { id: string; name: string; online: boolean; default: boolean };

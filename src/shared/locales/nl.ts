@@ -688,7 +688,7 @@ export default {
   "composer.machineOnlyClaude": "Enkel Claude Code loopt op een werkmachine.",
   "composer.machineNoMail": "Een gesprek over een mail blijft op deze Mac, want de mailtools draaien hier.",
   "mc.intro":
-    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Een ander gesprek kan er ook lopen: kies de machine naast het model, vóór het eerste bericht. Mail blijft op deze Mac. De vault gaat enkel mee als je deze Mac naar een machine spiegelt, hieronder.",
+    "Gesprekken van een project dat aan een machine gekoppeld is, lopen daar en blijven draaien als deze Mac dicht is. Een ander gesprek kan er ook lopen: kies de machine naast het model, vóór het eerste bericht. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je vault, zodat gesprekken daar weten wat Claude hier weet.",
   "mc.runDefaultTitle": "Waar gesprekken draaien",
   "mc.runDefault": "Nieuwe gesprekken draaien op",
   "mc.runDefaultHelp":
@@ -732,7 +732,7 @@ export default {
     "Dit verwijdert {name} enkel hier. Om de toegang helemaal in te trekken draai je <code>relay-server revoke {name}</code> op de machine.",
   "mc.folders": "Projectmappen",
   "mc.noFolders":
-    "Nog geen mappen. Koppel een project aan een map op deze machine om de gesprekken daar te laten lopen.",
+    "Nog geen mappen. Koppel een project aan een repo op deze machine om de gesprekken daar te starten. Zonder map starten ze in de gespiegelde vault.",
   "mc.addFolder": "Map toevoegen",
   "mc.removeFolder": "Verwijderen",
   "mc.project": "Project",
@@ -740,16 +740,9 @@ export default {
   "mc.path": "Map op de machine",
   "mc.save": "Opslaan",
   "mc.errPath": "Elke rij heeft een project en een absoluut pad dat met / begint nodig.",
-  "mc.defaultFolder": "Standaardmap",
-  "mc.defaultFolderHelp":
-    "Waar een gesprek op deze machine loopt als zijn project hier geen map heeft. Leeg: de thuismap van de machine.",
-  "mc.errDefaultFolder": "Gebruik een absoluut pad dat met / begint, of laat het leeg voor de thuismap van de machine.",
   "mc.mirror": "Deze Mac spiegelen",
   "mc.mirrorHelp":
-    "Je Claude-context, plugins, vault en het geheugen ervan, gesynchroniseerd en versleuteld op de machine. Gesprekken daar weten wat Claude hier weet.",
-  "mc.mirrorConfirm":
-    "Een kopie van je vault gaat naar deze machine, versleuteld op de schijf. Mappen die je uitsluit blijven hier.",
-  "mc.mirrorTurnOn": "Aanzetten",
+    "Je Claude-context, plugins, vault en het geheugen ervan, altijd gesynchroniseerd en versleuteld op de machine. Vergeten verwijdert de kopie daar.",
   "mc.mirrorExclude": "Mappen die op deze Mac blijven",
   "mc.mirrorNoExclude": "Geen uitgesloten mappen. De hele vault wordt gekopieerd.",
   "mc.mirrorExcludePath": "Vaultmap om uit te sluiten",
@@ -773,6 +766,4 @@ export default {
   "mc.mirrorConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
   "mc.mirrorConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
   "mc.mirrorConflict": "conflictkopie: {path}",
-  "mc.mirrorWipe": "Kopie op deze machine verwijderen",
-  "mc.mirrorWipeSure": "De kopie verwijderen en de spiegel uitzetten?",
 } satisfies Record<Key, string>;

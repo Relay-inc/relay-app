@@ -695,7 +695,7 @@ export default {
   "composer.machineOnlyClaude": "Seul Claude Code s'exécute sur une machine de travail.",
   "composer.machineNoMail": "Une conversation sur un e-mail reste sur ce Mac : les outils de courrier tournent ici.",
   "mc.intro":
-    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Une autre conversation peut aussi s'y exécuter : choisissez la machine à côté du modèle avant son premier message. Le courrier reste sur ce Mac. Le vault ne suit que si vous mettez ce Mac en miroir sur une machine, plus bas.",
+    "Les conversations d'un projet lié à une machine s'y exécutent et continuent quand ce Mac est fermé. Une autre conversation peut aussi s'y exécuter : choisissez la machine à côté du modèle avant son premier message. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici.",
   "mc.runDefaultTitle": "Où s'exécutent les conversations",
   "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
   "mc.runDefaultHelp":
@@ -741,7 +741,7 @@ export default {
     "Cela retire {name} ici seulement. Pour révoquer l'accès complètement, lancez <code>relay-server revoke {name}</code> sur la machine.",
   "mc.folders": "Dossiers des projets",
   "mc.noFolders":
-    "Aucun dossier pour l'instant. Liez un projet à un dossier de cette machine pour y exécuter ses conversations.",
+    "Aucun dossier pour l'instant. Liez un projet à un dépôt de cette machine pour y démarrer ses conversations. Sans dossier, elles démarrent dans le vault en miroir.",
   "mc.addFolder": "Ajouter un dossier",
   "mc.removeFolder": "Retirer",
   "mc.project": "Projet",
@@ -749,17 +749,9 @@ export default {
   "mc.path": "Dossier sur la machine",
   "mc.save": "Enregistrer",
   "mc.errPath": "Chaque ligne demande un projet et un chemin absolu commençant par /.",
-  "mc.defaultFolder": "Dossier par défaut",
-  "mc.defaultFolderHelp":
-    "Où une conversation s'exécute sur cette machine quand son projet n'y a pas de dossier. Vide : le dossier personnel de la machine.",
-  "mc.errDefaultFolder":
-    "Indiquez un chemin absolu commençant par /, ou laissez vide pour le dossier personnel de la machine.",
   "mc.mirror": "Mettre ce Mac en miroir",
   "mc.mirrorHelp":
-    "Votre contexte Claude, vos plugins, votre vault et sa mémoire, synchronisés et chiffrés sur la machine. Les conversations qui s'y déroulent savent ce que Claude sait ici.",
-  "mc.mirrorConfirm":
-    "Une copie de votre vault est envoyée sur cette machine, chiffrée sur son disque. Les dossiers exclus restent ici.",
-  "mc.mirrorTurnOn": "Activer",
+    "Votre contexte Claude, vos plugins, votre vault et sa mémoire, toujours synchronisés et chiffrés sur la machine. Oublier supprime la copie là-bas.",
   "mc.mirrorExclude": "Dossiers qui restent sur ce Mac",
   "mc.mirrorNoExclude": "Aucun dossier exclu. Tout le vault est copié.",
   "mc.mirrorExcludePath": "Dossier du vault à exclure",
@@ -783,6 +775,4 @@ export default {
   "mc.mirrorConflicts_one": "{n} conflit. Les deux versions ont été conservées :",
   "mc.mirrorConflicts_other": "{n} conflits. Les deux versions ont été conservées :",
   "mc.mirrorConflict": "copie en conflit : {path}",
-  "mc.mirrorWipe": "Supprimer la copie sur cette machine",
-  "mc.mirrorWipeSure": "Supprimer la copie et désactiver le miroir ?",
 } satisfies Record<Key, string>;

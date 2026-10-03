@@ -687,7 +687,7 @@ const en = {
   "composer.machineOnlyClaude": "Only Claude Code runs on a work machine.",
   "composer.machineNoMail": "A conversation about a mail stays on this Mac: the mail tools run here.",
   "mc.intro":
-    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Another conversation can run there too: pick the machine next to the model before its first message. Mail stays on this Mac. The vault goes along only when you mirror this Mac to a machine, below.",
+    "Conversations of a project linked to a machine run there and keep running when this Mac is closed. Another conversation can run there too: pick the machine next to the model before its first message. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here.",
   "mc.runDefaultTitle": "Where conversations run",
   "mc.runDefault": "New conversations run on",
   "mc.runDefaultHelp":
@@ -729,7 +729,8 @@ const en = {
   "mc.forgetHelp":
     "This only removes {name} here. To revoke it fully, run <code>relay-server revoke {name}</code> on the machine.",
   "mc.folders": "Project folders",
-  "mc.noFolders": "No folders yet. Link a project to a folder on this machine to run its conversations there.",
+  "mc.noFolders":
+    "No folders yet. Link a project to a repo on this machine to start its conversations there. Without one they start in the mirrored vault.",
   "mc.addFolder": "Add folder",
   "mc.removeFolder": "Remove",
   "mc.project": "Project",
@@ -737,16 +738,9 @@ const en = {
   "mc.path": "Folder on the machine",
   "mc.save": "Save",
   "mc.errPath": "Every row needs a project and an absolute path starting with /.",
-  "mc.defaultFolder": "Default folder",
-  "mc.defaultFolderHelp":
-    "Where a conversation runs on this machine when its project has no folder here. Empty: the machine's home folder.",
-  "mc.errDefaultFolder": "Use an absolute path starting with /, or leave it empty for the machine's home folder.",
   "mc.mirror": "Mirror this Mac",
   "mc.mirrorHelp":
-    "Your Claude context, plugins, vault and its memory, kept in sync and encrypted on the machine. Conversations there know what Claude knows here.",
-  "mc.mirrorConfirm":
-    "A copy of your vault goes to this machine, encrypted on its disk. Folders you exclude stay here.",
-  "mc.mirrorTurnOn": "Turn on",
+    "Your Claude context, plugins, vault and its memory, always kept in sync and encrypted on the machine. Forget removes the copy there.",
   "mc.mirrorExclude": "Folders that stay on this Mac",
   "mc.mirrorNoExclude": "No excluded folders. The whole vault is copied.",
   "mc.mirrorExcludePath": "Vault folder to exclude",
@@ -770,8 +764,6 @@ const en = {
   "mc.mirrorConflicts_one": "{n} conflict. Both versions were kept:",
   "mc.mirrorConflicts_other": "{n} conflicts. Both versions were kept:",
   "mc.mirrorConflict": "conflict copy: {path}",
-  "mc.mirrorWipe": "Remove the copy on this machine",
-  "mc.mirrorWipeSure": "Remove the copy and turn the mirror off?",
 };
 export type Key = keyof typeof en;
 export default en;

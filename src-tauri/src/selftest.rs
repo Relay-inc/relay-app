@@ -214,11 +214,10 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     r.step("dropped connection taken back", dropped);
     r.step("talk after the drop", expect(app, ev, "after the drop", "echo from relay-docker: after the drop"));
 
-    // the mirror: switched on, the vault and the context reach the machine, a session there reads the vault, gets the
+    // the mirror (on from pairing): the vault and the context reach the machine, a session there reads the vault, gets the
     // context flags, writes a note, and the note comes back here
     let id = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
     let started = now_s();
-    r.step("mirror switched on", set_machine_mirror(app.clone(), app.state::<App>(), id.clone(), true, vec![]).map(|_| "on".into()));
     r.step("first mirror round", mirror_round(app, &id, started - 1).map(|s| s.to_string()));
     r.step("a session there reads the vault", ask(app, ev, MIRROR_KEY, &id, "read Notes/Uit de vault.md")
         .and_then(|t| if t.contains("content: geheim 42") { Ok(t) } else { Err(t) }));

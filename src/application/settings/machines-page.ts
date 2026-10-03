@@ -111,19 +111,6 @@ export async function saveFolders(machine: Machine) {
     });
   }
 }
-/** The folder used on the machine when a project has none there: an absolute path, or empty for its home. Resolves with
- *  an error to show, or "". */
-export async function saveDefaultFolder(machine: Machine, folder: string) {
-  const path = folder.trim();
-  if (path && !path.startsWith("/")) return t("mc.errDefaultFolder");
-  try {
-    await backend.setMachineDefaultFolder(machine.id, path);
-    await reload();
-    return "";
-  } catch (error) {
-    return String(error);
-  }
-}
 /** Where new conversations run without a pick: "" this Mac, or a machine id. Resolves with an error to show, or "". */
 export async function setRunDefault(id: string) {
   try {
@@ -135,16 +122,15 @@ export async function setRunDefault(id: string) {
   }
 }
 
-// "Mirror this Mac": the machine keeps a sealed copy of the Claude context, plugins, vault and its memory. A failed
+// The mirror: every machine keeps a sealed copy of the Claude context, plugins, vault and its memory. A failed
 // command shows under the mirror section and leaves the page as it was.
 const mirrorMessage = (id: string, text: string, ok = false) =>
   change(draft => {
     draft.mirrorMessages[id] = text ? { text, ok } : null;
   });
-/** Reads the last mirror round and the running one of every machine with the mirror on; a failing command keeps
- *  what was there. */
+/** Reads the last mirror round and the running one of every machine; a failing command keeps what was there. */
 export async function pollMirrors() {
-  for (const machine of machines().filter(machine => machine.mirror?.on)) {
+  for (const machine of machines()) {
     const [status, progress] = await Promise.all([
       backend.mirrorStatus(machine.id).catch(() => undefined),
       backend.mirrorProgress(machine.id).catch(() => undefined),
@@ -155,11 +141,11 @@ export async function pollMirrors() {
     });
   }
 }
-/** Saves the mirror switch and the excluded folders. True when it worked. */
-export async function saveMirror(machine: Machine, on: boolean, exclude: string[]) {
+/** Saves the excluded folders. True when it worked. */
+async function saveExclude(machine: Machine, exclude: string[]) {
   mirrorMessage(machine.id, "");
   try {
-    await backend.setMachineMirror(machine.id, on, exclude);
+    await backend.setMachineMirror(machine.id, exclude);
     await reload();
     pollMirrors();
     return true;
@@ -174,27 +160,13 @@ export async function addMirrorExclude(machine: Machine, input: string) {
   if (!path) return t("mc.mirrorErrExclude");
   const current = machine.mirror?.exclude ?? [];
   if (current.includes(path)) return "";
-  return (await saveMirror(machine, !!machine.mirror?.on, [...current, path])) ? "" : t("mc.mirrorErrSave");
+  return (await saveExclude(machine, [...current, path])) ? "" : t("mc.mirrorErrSave");
 }
 export const removeMirrorExclude = (machine: Machine, path: string) =>
-  saveMirror(
+  saveExclude(
     machine,
-    !!machine.mirror?.on,
     (machine.mirror?.exclude ?? []).filter(item => item !== path),
   );
-/** Removes the copy on the machine, which turns the mirror off. */
-export async function wipeMirror(machine: Machine) {
-  mirrorMessage(machine.id, "");
-  try {
-    await backend.mirrorWipe(machine.id);
-    await reload();
-    change(draft => {
-      delete draft.mirror[machine.id];
-    });
-  } catch (error) {
-    mirrorMessage(machine.id, String(error));
-  }
-}
 /** The folder on the machine the setup commands use. */
 export const setSetupFolder = (folder: string) =>
   change(draft => {

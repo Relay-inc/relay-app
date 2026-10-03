@@ -88,8 +88,9 @@ and takes the conversation back after a restart. The report is in `/tmp/relay-se
 
 ## The mirror
 
-Switch on Settings › Machines › Mirror this Mac and Relay keeps four folders in sync on the machine, so a conversation
-there knows what Claude Code knows on the laptop:
+Every paired machine gets the mirror, there is no switch: Relay keeps four folders in sync on it, so a conversation
+there knows what Claude Code knows on the laptop. A conversation whose project has no folder on the machine starts in
+the mirrored vault:
 
 | Folder | From the laptop | Direction |
 |---|---|---|
@@ -105,7 +106,7 @@ transcripts, MCP servers and repos never go along: what a repo needs for Claude 
 
 The machine only ever stores ciphertext. The key stays with the laptop.
 
-- **The key.** Relay makes a random 256-bit key per machine the first time the mirror is switched on, and keeps it in
+- **The key.** Relay makes a random 256-bit key per machine the first time it syncs with it, and keeps it in
   its app data as `mirror-<machine>.key` (0600). It sends the key with an `unlock` request over the mutual-TLS
   connection at the start of every sync round. The server keeps it in memory only, never on disk.
 - **Two keys from one.** HKDF-SHA256 derives a key to encrypt and a key to name the blobs from it, so neither is
@@ -136,8 +137,8 @@ Known limits:
 - The blobs are sealed one by one, nothing binds the set together. Someone who can write to the disk can delete a blob
   or put back an older one of the same file, and the server would unpack that older version.
 - A tmpfs can be swapped to disk when the machine has swap. Unraid has none by default.
-- Losing the key file on the laptop makes the copy unreadable. Nothing is lost: Remove the copy, switch the mirror on
-  again, and the next round sends everything again.
+- Losing the key file on the laptop makes the copy unreadable. Nothing is lost: Forget the machine, pair it again,
+  and the next round sends everything again.
 
 Without a RAM disk the server logs a warning and Settings › Machines says the working copy is on disk.
 
@@ -145,7 +146,7 @@ Without a RAM disk the server logs a warning and Settings › Machines says the 
 
 Between two turns a conversation can move between this Mac and a machine, or between machines: pick another place in
 the composer's machine list. Relay stops the agent, takes its transcript from where it ran (`session_get`), rewrites
-the vault's paths and its memory's to the other side's (only with the mirror on there), puts it where Claude Code on the
+the vault's paths and its memory's to the other side's, puts it where Claude Code on the
 other side looks for it (`session_put`), and the next message resumes the same session there.
 
 What moves is the conversation. Files that exist on one side only stay there: work not committed in a repo, or a vault

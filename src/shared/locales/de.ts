@@ -694,7 +694,7 @@ export default {
   "composer.machineOnlyClaude": "Nur Claude Code läuft auf einer Arbeitsmaschine.",
   "composer.machineNoMail": "Ein Gespräch über eine Mail bleibt auf diesem Mac: Die Mail-Werkzeuge laufen hier.",
   "mc.intro":
-    "Gespräche eines Projekts, das mit einer Maschine verknüpft ist, laufen dort und laufen weiter, wenn dieser Mac zu ist. Ein anderes Gespräch kann dort auch laufen: Wähle die Maschine neben dem Modell vor der ersten Nachricht. Mail bleibt auf diesem Mac. Der Vault kommt nur mit, wenn du diesen Mac auf eine Maschine spiegelst, unten.",
+    "Gespräche eines Projekts, das mit einer Maschine verknüpft ist, laufen dort und laufen weiter, wenn dieser Mac zu ist. Ein anderes Gespräch kann dort auch laufen: Wähle die Maschine neben dem Modell vor der ersten Nachricht. Mail bleibt auf diesem Mac. Jede Maschine bekommt einen Spiegel deines Vaults, damit Gespräche dort wissen, was Claude hier weiß.",
   "mc.runDefaultTitle": "Wo Gespräche laufen",
   "mc.runDefault": "Neue Gespräche laufen auf",
   "mc.runDefaultHelp":
@@ -740,7 +740,7 @@ export default {
     "Das entfernt {name} nur hier. Um den Zugang ganz zu widerrufen, führe <code>relay-server revoke {name}</code> auf der Maschine aus.",
   "mc.folders": "Projektordner",
   "mc.noFolders":
-    "Noch keine Ordner. Verknüpfe ein Projekt mit einem Ordner auf dieser Maschine, damit seine Gespräche dort laufen.",
+    "Noch keine Ordner. Verknüpfe ein Projekt mit einem Repo auf dieser Maschine, damit seine Gespräche dort starten. Ohne Ordner starten sie im gespiegelten Vault.",
   "mc.addFolder": "Ordner hinzufügen",
   "mc.removeFolder": "Entfernen",
   "mc.project": "Projekt",
@@ -748,17 +748,9 @@ export default {
   "mc.path": "Ordner auf der Maschine",
   "mc.save": "Speichern",
   "mc.errPath": "Jede Zeile braucht ein Projekt und einen absoluten Pfad, der mit / beginnt.",
-  "mc.defaultFolder": "Standardordner",
-  "mc.defaultFolderHelp":
-    "Wo ein Gespräch auf dieser Maschine läuft, wenn sein Projekt hier keinen Ordner hat. Leer: der Home-Ordner der Maschine.",
-  "mc.errDefaultFolder":
-    "Gib einen absoluten Pfad an, der mit / beginnt, oder lass das Feld leer für den Home-Ordner der Maschine.",
   "mc.mirror": "Diesen Mac spiegeln",
   "mc.mirrorHelp":
-    "Dein Claude-Kontext, Plugins, Vault und dessen Gedächtnis, synchron gehalten und verschlüsselt auf der Maschine. Gespräche dort wissen, was Claude hier weiß.",
-  "mc.mirrorConfirm":
-    "Eine Kopie deines Vaults geht auf diese Maschine, verschlüsselt auf ihrer Festplatte. Ausgeschlossene Ordner bleiben hier.",
-  "mc.mirrorTurnOn": "Einschalten",
+    "Dein Claude-Kontext, Plugins, Vault und dessen Gedächtnis, immer synchron gehalten und verschlüsselt auf der Maschine. Vergessen entfernt die Kopie dort.",
   "mc.mirrorExclude": "Ordner, die auf diesem Mac bleiben",
   "mc.mirrorNoExclude": "Keine ausgeschlossenen Ordner. Der ganze Vault wird kopiert.",
   "mc.mirrorExcludePath": "Auszuschließender Vault-Ordner",
@@ -782,6 +774,4 @@ export default {
   "mc.mirrorConflicts_one": "{n} Konflikt. Beide Versionen wurden behalten:",
   "mc.mirrorConflicts_other": "{n} Konflikte. Beide Versionen wurden behalten:",
   "mc.mirrorConflict": "Konfliktkopie: {path}",
-  "mc.mirrorWipe": "Kopie auf dieser Maschine entfernen",
-  "mc.mirrorWipeSure": "Die Kopie entfernen und den Spiegel ausschalten?",
 } satisfies Record<Key, string>;

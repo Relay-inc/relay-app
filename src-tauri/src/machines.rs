@@ -7,7 +7,7 @@
 // conversation key -> {machine, cwd}. Where it runs is picked in the composer before the first message ("" for this
 // Mac, or a machine id); without a pick, a project with a folder on a machine runs there. Between two turns it can
 // move (move_conversation in lib.rs): its transcript goes along, with `rewrite` for the vault's paths. The folder: the project's
-// on that machine, else the machine's default folder, else its home.
+// on that machine, else the vault's mirror there.
 // Only Claude Code runs there, and never a conversation about a mail: the mail tools are answered by this app.
 
 use relay_remote::client::Client;
@@ -41,7 +41,6 @@ pub fn valid(m: &Value) -> bool {
     hex(s("id"), 12) && hex(s("fp"), 64) && !s("host").is_empty() && s("host").len() <= 253
         && s("host").chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c)) && m["port"].as_u64().is_some_and(|p| (1..=65535).contains(&p))
         && s("name").chars().count() <= 60 && m["folders"].as_object().is_some_and(|f| f.len() <= 200 && f.iter().all(|(p, d)| folder_ok(p, d)))
-        && (m["default_folder"].is_null() || s("default_folder").is_empty() || folder_ok("default", &m["default_folder"]))
         && crate::mirror::valid(m)
 }
 /// A vault project and an absolute folder on the machine.
@@ -50,18 +49,18 @@ pub fn folder_ok(project: &str, dir: &Value) -> bool {
     !project.is_empty() && project.len() <= 120 && d.starts_with('/') && d.len() <= 500 && !d.contains(['\n', '\0'])
 }
 
-/// The folder a conversation of `project` runs in on machine `m`: the project's there, else the machine's default
-/// folder, else "" (`cwd_or_home` fills that in once the machine's Info is known).
+/// The folder a conversation of `project` runs in on machine `m`: the project's there, else "" (`cwd_or_vault` fills
+/// that in once the machine's Info is known).
 pub fn folder_on(m: &Value, project: Option<&str>) -> String {
-    project.and_then(|p| m["folders"][p].as_str()).or(m["default_folder"].as_str()).unwrap_or("").to_string()
+    project.and_then(|p| m["folders"][p].as_str()).unwrap_or("").to_string()
 }
-/// No folder for it there: the vault's mirror when the machine has one, else the machine's home.
-pub fn cwd_or_home(cwd: String, m: &Value, info: &Info) -> String {
-    if !cwd.is_empty() { cwd } else if crate::mirror::on(m) { format!("{}/vault", info.work) } else { info.home.clone() }
+/// No folder for it there: the vault's mirror on the machine.
+pub fn cwd_or_vault(cwd: String, info: &Info) -> String {
+    if cwd.is_empty() { format!("{}/vault", info.work) } else { cwd }
 }
-/// The vault's folder and its memory's at a place where the vault is: this Mac, or a machine that mirrors it.
-pub fn roots_on(m: &Value, info: &Info) -> Option<[String; 2]> {
-    crate::mirror::on(m).then(|| [format!("{}/vault", info.work), format!("{}/memory", info.work)])
+/// The vault's folder and its memory's on a machine: its mirror.
+pub fn roots_on(info: &Info) -> [String; 2] {
+    [format!("{}/vault", info.work), format!("{}/memory", info.work)]
 }
 /// A transcript moving to another place: each `from` folder becomes its `to`, so the paths in the history point at
 /// files that exist where the conversation goes on. Whole folders only: not where a name goes on (`Vault2`, `Vault.bak`),
@@ -221,11 +220,8 @@ mod tests {
         // picked in the composer: this Mac wins over the project's folder, a machine works without one (its home)
         assert!(ms.bind_for(&s, "c:4", Some("Weemaes"), false, Some("")).is_none());
         assert_eq!(ms.bind_for(&s, "c:5", None, false, Some("0123456789ab")).unwrap().1.cwd, "");
-        let mut dm = s.clone();
-        dm["machines"][0]["default_folder"] = json!("/home/l/repos");
-        assert!(valid(&dm["machines"][0]));
-        assert_eq!(ms.bind_for(&dm, "c:6", Some("Other"), false, Some("0123456789ab")).unwrap().1.cwd, "/home/l/repos");
-        assert_eq!(ms.bind_for(&dm, "c:7", Some("Weemaes"), false, Some("0123456789ab")).unwrap().1.cwd, "/home/l/weemaes");
+        assert_eq!(ms.bind_for(&s, "c:6", Some("Other"), false, Some("0123456789ab")).unwrap().1.cwd, "");
+        assert_eq!(ms.bind_for(&s, "c:7", Some("Weemaes"), false, Some("0123456789ab")).unwrap().1.cwd, "/home/l/weemaes");
         assert!(ms.bind_for(&s, "c:8", None, false, Some("ffffffffffff")).is_none(), "an unknown machine runs nowhere");
         assert_eq!(ms.status_list(&s, Some("Weemaes"))[0]["default"], true);
         assert_eq!(ms.status_list(&s, None)[0]["online"], false);

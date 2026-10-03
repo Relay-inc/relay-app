@@ -32,8 +32,8 @@ export function MachinesPage({ active }: { active: boolean }) {
   useEffect(() => {
     if (active) showMachinesPage();
   }, [active]);
-  // the mirror status of the machines that have it on, every second while the page shows (the progress bar)
-  const mirrored = machines.some(machine => machine.mirror?.on);
+  // the mirror status of the machines, every second while the page shows (the progress bar)
+  const mirrored = machines.length > 0;
   useEffect(() => {
     if (!active || !mirrored) return;
     pollMirrors();
