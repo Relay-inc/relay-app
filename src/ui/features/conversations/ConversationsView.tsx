@@ -37,7 +37,8 @@ export function ConversationsView({ className }: { className: string }) {
   const projectPanel = useNavigationStore(s => s.projectPanel);
   const toast = useNavigationStore(s => s.toast);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
-  const dismissed = useConversationsStore(s => s.dismissed.has(selected));
+  // answered no, or a Cmd-K offer still waiting in the conversation
+  const dismissed = useConversationsStore(s => s.dismissed.has(selected) || !!s.chats[selected]?.ask);
   const onView = isView(selected);
   const board = boardOf(selected);
   const hasSubagents = useConversationsStore(s => !onView && !!s.subs[selected]?.length);

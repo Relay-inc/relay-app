@@ -128,12 +128,12 @@ async function forkTerminalAndSend(text: string): Promise<void> {
   await select(key);
   return sendMsg(text);
 }
-// first message of a general conversation: if it names one project, it goes under that project
-// (also from Cmd-K, which passes `to`; the resend after the route question passes neither and must not ask again).
+// first message typed in a general conversation: if it names one project, it goes under that project
+// (Cmd-K and the resend after the route question pass `forced`: they never move or ask here).
 // True when several projects match and the user is asked instead.
-function routeFirstMessage(key: string, text: string, forced?: string, to?: string): boolean {
+function routeFirstMessage(key: string, text: string, forced?: string): boolean {
   const conversation = cs().chats[key];
-  const first = !conversation.project && (!forced || to) && !(cs().messages[key] || []).length;
+  const first = !forced && !conversation.project && !(cs().messages[key] || []).length;
   if (!first) return false;
   const hits = findProjects(text);
   if (hits.length === 1)
@@ -253,7 +253,7 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], 
   if (plan.take) takeTyped();
   if (plan.kind === "fork") return forkTerminalAndSend(plan.text);
   const { key, text } = plan;
-  if (cs().chats[key] && routeFirstMessage(key, text, forced, to)) return;
+  if (cs().chats[key] && routeFirstMessage(key, text, forced)) return;
   const isFirst = !(cs().messages[key] || []).length;
   const images = to ? toImgs : drafts().attached;
   const files = to ? toFiles : drafts().files;
@@ -346,6 +346,14 @@ export function moveTo(project: string | null) {
     } else draft.dismissed.add(key);
   });
   if (project) saveChats();
+}
+/** The Cmd-K question's project offer, answered once: move the open conversation there, or keep it general (""). */
+export function answerAsk(project: string) {
+  set(draft => {
+    delete draft.chats[selected()].ask;
+  });
+  moveTo(project || null);
+  saveChats();
 }
 
 // ---------- permission and question cards
@@ -506,9 +514,15 @@ export function escStop() {
 /** Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed. */
 export const ctrlC = () => (cs().status[selected()] === "busy" ? stopChat() : setTyped(""));
 
-// ---------- Cmd-K: a question that becomes a new general conversation in the background, the open screen stays
+// ---------- Cmd-K: a question that becomes a new general conversation in the background, the open screen stays.
+// It always starts general; the projects it names are offered once in the conversation afterwards.
 export function quickSend(text: string, imgs: Img[], files: string[] = []) {
   const key = newChat(null);
+  const hits = findProjects(text);
+  if (hits.length)
+    set(draft => {
+      draft.chats[key].ask = hits;
+    });
   sendMsg(text, key, imgs, files);
   toast(
     t("toast.started", { text: (text || (files[0] ? fileName(files[0]) : t("chat.image"))).slice(0, 60) }),
