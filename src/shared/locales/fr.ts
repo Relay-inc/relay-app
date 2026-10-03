@@ -676,6 +676,8 @@ export default {
   "mc.setupTitle": "Configurer une machine",
   "mc.setupHelp":
     "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
+  "mc.setupHelpDev":
+    "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ceci est une version de développement de Relay, aucune image n'existe pour sa version : ces commandes utilisent la plus récente, relay-server:latest. Lancez-les sur la machine, dans cet ordre.",
   "mc.setupShow": "Afficher les commandes",
   "mc.setupFolder": "Dossier sur la machine",
   "mc.setupFolderHelp":

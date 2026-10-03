@@ -12,6 +12,10 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ## [Unreleased]
 
+### Fixed
+
+- Settings › Machines › Set up a machine in a development build of Relay uses relay-server:latest: it gave the build's own version, which has no image
+
 ## [0.0.4] - 2026-10-03
 
 ### Added
