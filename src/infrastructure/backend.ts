@@ -205,6 +205,9 @@ export const integrationUpload = (args: {
 /** A picture's preview from a URL the provider's `thumb` allows, fetched without secrets, as a data URL. */
 export const integrationThumb = (provider: string, url: string) =>
   invoke<string>("integration_thumb", { provider, url });
+/** A picture's original in Relay's viewer window (the tracker's login once, then the picture). */
+export const openViewer = (provider: string, url: string, name: string) =>
+  invoke<void>("open_viewer", { provider, url, name });
 /** Switched on, config complete and a token in the keychain. */
 export const integrationStatus = (provider: string) => invoke<boolean>("integration_status", { provider });
 export const integrationHasToken = (provider: string) => invoke<boolean>("integration_has_token", { provider });

@@ -40,3 +40,6 @@ export const thumbOf = (provider: string, url: string) => {
   }
   return got;
 };
+/** A picture at full size in Relay's viewer window, or in the browser when the provider does not allow that. */
+export const openPicture = (provider: string, url: string, name: string) =>
+  backend.openViewer(provider, url, name).catch(() => backend.openUrl(url));

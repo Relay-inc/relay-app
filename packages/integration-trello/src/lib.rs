@@ -49,6 +49,7 @@ pub const PROVIDER: Provider = Provider {
         .and_then(|r| r.strip_suffix("/attachments")).is_some_and(trello_id),
     upload_kind: board_core::UploadKind::Trello,
     thumb: |_| false,
+    original: |_| false,
     ok: |_| true,
     error: |code, v| match code {
         "401" | "403" => t(TEXT, "auth"),

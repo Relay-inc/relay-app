@@ -46,6 +46,8 @@ pub const PROVIDER: Provider = Provider {
     // an attachment's thumb (100×100) is public; the original wants a browser login, the API token gets the login page
     upload_kind: board_core::UploadKind::Form,
     thumb: |url| url.strip_prefix("https://files.productive.io/attachments/").is_some_and(|r| r.contains("/thumb/")) && url.len() < 2000 && !url.chars().any(char::is_control),
+    // the original redirects to Productive's login: the viewer window shows that once, then the picture
+    original: |url| url.strip_prefix("https://files.productive.io/attachments/").is_some_and(|r| r.contains("/original/")) && url.len() < 2000 && !url.chars().any(char::is_control),
     headers: |c, s| vec![format!("X-Auth-Token: {}", s[0]), format!("X-Organization-Id: {}", c["org"].as_str().unwrap_or("")),
         "Content-Type: application/vnd.api+json".into()],
     ok: |_| true,
@@ -144,6 +146,9 @@ mod tests {
         assert!((p.thumb)("https://files.productive.io/attachments/files/009/675/225/thumb/Scherm%C2%ADafbeelding.png?1790771917"));
         for bad in ["https://files.productive.io/attachments/files/009/675/225/original/a.png", "http://files.productive.io/attachments/x/thumb/a.png",
             "https://files.productive.io.evil.com/attachments/x/thumb/a.png", "https://files.productive.io/attachments/x/thumb/a\n.png"] { assert!(!(p.thumb)(bad), "{bad}"); }
+        assert!((p.original)("https://files.productive.io/attachments/files/009/675/225/original/a.png?1790771917"));
+        for bad in ["https://files.productive.io/attachments/files/009/675/225/thumb/a.png", "http://files.productive.io/attachments/x/original/a.png",
+            "https://files.productive.io.evil.com/attachments/x/original/a.png", "https://app.productive.io/attachments/x/original/a.png", "javascript:alert(1)//https://files.productive.io/attachments/x/original/a.png"] { assert!(!(p.original)(bad), "{bad}"); }
         assert!((p.url)(&c, "DELETE", "/tasks/42", &None).is_none());
         assert!((p.url)(&c, "GET", "/../x", &None).is_none());
         assert!((p.ready)(&c) && !(p.ready)(&json!({ "org": "" })));

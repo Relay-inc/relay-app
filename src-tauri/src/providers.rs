@@ -175,6 +175,11 @@ pub fn thumb(p: &Provider, url: &str) -> Result<String, String> {
     if !o.status.success() { return Err(trc_v("err.down", String::from_utf8_lossy(&o.stderr).trim()).replace("{p}", p.name)); }
     picture(&o.stdout).ok_or_else(|| format!("{}: not a picture", p.name))
 }
+/// A picture's original that the provider's `original` allows, for the viewer window.
+pub fn original(p: &Provider, url: &str) -> Result<tauri::Url, String> {
+    if !(p.original)(url) { return Err(trc_v("err.call", p.name)); }
+    tauri::Url::parse(url).map_err(|e| e.to_string())
+}
 /// Bytes as a data URL when they are a PNG, JPEG, GIF or WebP, told by their first bytes, not by what the server says.
 fn picture(b: &[u8]) -> Option<String> {
     use base64::Engine;

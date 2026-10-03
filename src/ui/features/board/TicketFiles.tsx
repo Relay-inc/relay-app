@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import type { CardView } from "../../../domain/board/types";
-import { thumbOf } from "../../../application/board/ctx";
+import { openPicture, thumbOf } from "../../../application/board/ctx";
 import { size } from "./format";
 
 type TicketFile = NonNullable<CardView["files"]>[number];
 
-/** A card's or a comment's files: the pictures' previews first, then every file by name. Opening one needs the
- *  tracker's session, so a click goes to the browser. */
+/** A card's or a comment's files: the pictures' previews first, then every file by name. A picture opens at full size
+ *  in Relay's viewer window, any other file in the browser: both need the tracker's own login. */
 export function TicketFiles({ provider, files }: { provider: string; files: TicketFile[] }) {
   const pictures = files.filter(file => file.thumb);
   return (
@@ -22,7 +22,7 @@ export function TicketFiles({ provider, files }: { provider: string; files: Tick
         {files.map(file => (
           <li key={file.id} className="flex items-baseline gap-2 min-w-0">
             {file.url ? (
-              <a className="truncate" href={file.url}>
+              <a className="truncate" href={file.url} onClick={file.thumb ? viewer(provider, file) : undefined}>
                 {file.name}
               </a>
             ) : (
@@ -54,10 +54,16 @@ function Preview({ provider, file }: { provider: string; file: TicketFile }) {
     <img className="block size-24 object-cover rounded-lg border border-separator" src={src} alt={file.name} />
   );
   return file.url ? (
-    <a href={file.url} title={file.name}>
+    <a href={file.url} title={file.name} onClick={viewer(provider, file)}>
       {img}
     </a>
   ) : (
     img
   );
 }
+
+/** A click that opens the picture in the viewer window instead of following the link to the browser. */
+const viewer = (provider: string, file: TicketFile) => (e: MouseEvent) => {
+  e.preventDefault();
+  openPicture(provider, file.url, file.name);
+};

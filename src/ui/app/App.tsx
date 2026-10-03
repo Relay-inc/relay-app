@@ -126,6 +126,8 @@ function onKey(e: KeyboardEvent) {
 }
 // links in a conversation, a PR or a mail open in the default browser or mail app, a webview window cannot open them itself
 function onLink(e: MouseEvent) {
+  // a component that handled the click itself (a picture that opens in the viewer window)
+  if (e.defaultPrevented) return;
   // a vault note named in markdown opens in the right drawer (shared/markdown.ts)
   const noteLink = closest(e, node => !!node.dataset.note);
   if (noteLink) {

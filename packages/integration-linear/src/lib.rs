@@ -62,6 +62,7 @@ pub const PROVIDER: Provider = Provider {
         ["https://uploads.linear.app/", "https://storage.googleapis.com/"].iter().any(|prefix| url.starts_with(prefix)),
     upload_kind: board_core::UploadKind::Put,
     thumb: |_| false,
+    original: |_| false,
     ok: |v| v["errors"].as_array().is_none_or(|e| e.is_empty()),
     error: |code, v| {
         let c = gql_code(v);

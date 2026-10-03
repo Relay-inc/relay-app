@@ -15,7 +15,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 ### Added
 
 - New task on the board, from the title bar or a lane's +, for Productive, Linear and Trello: the card shows at once and is made in the tracker
-- The ticket window shows a preview of a Productive ticket's pictures, in its files and in the comments, a click opens the original in the browser
+- The ticket window shows a preview of a Productive ticket's pictures, in its files and in the comments. A click opens the picture at full size in Relay's own viewer window: log in to Productive there once, after that it shows the picture right away
 - The ticket window lists the conversations started from it and the pull requests that name its number, and a Productive ticket takes new labels
 - Code in conversations is coloured by language (TypeScript, JSON, shell, PHP, Python, Rust, CSS, HTML, SQL, YAML), the command on a permission card too
 - An edit in a Claude Code conversation shows its diff with line numbers and the surrounding lines, also when the conversation is reopened
