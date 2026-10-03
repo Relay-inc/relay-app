@@ -34,19 +34,10 @@
     await set(document.getElementById("mcline"), "__LINE__", "input");
     await set(document.getElementById("mcname"), "docker", "input");
     (await until("Pair button", () => button("Pair"))).click();
-    await until("the paired machine", () => page().textContent.includes("docker") && button("Add folder"), 15000);
+    await until("the paired machine", () => page().textContent.includes("docker") && button("Forget"), 15000);
     steps.push("paired");
     await until("online", () => page().textContent.includes("Online"), 10000);
     steps.push("online");
-    button("Add folder").click();
-    const select = await until("project select", () => page().querySelector('select[aria-label="Project"]'));
-    await until("the project in the list", () => [...select.options].some(o => o.value === "__PROJECT__"));
-    await set(select, "__PROJECT__", "change");
-    const path = await until("path field", () => [...page().querySelectorAll("input")].find(i => i.placeholder.startsWith("/home/")));
-    await set(path, "__PATH__", "input");
-    button("Save").click();
-    await until("saved", () => page().textContent.includes("Saved"), 8000);
-    steps.push("folder saved");
     await sleep(500);
     report(true);
   } catch (e) {

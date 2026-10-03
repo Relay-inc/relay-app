@@ -25,7 +25,7 @@ export type ConversationsState = {
   appSids: string[];
   sidOf: SessionOf; // app conversation key: its provider and session id
   machines: Record<string, { machine: string; id: string; cwd: string }>; // conversation key: the machine it runs on (`chat_machines`)
-  machineLists: Record<string, MachineChoice[]>; // the composer's machine pick per project ("" general), `machines_list`
+  machineList: MachineChoice[]; // the composer's machine pick, `machines_list`
   // app conversations whose turn runs in a process this page gets no events from (it outlived an app restart):
   // the transcript offset read so far. The page follows the transcript until the provider's sessions say the turn ended
   outside: Record<string, number>;
@@ -61,7 +61,7 @@ export const initialConversations = (stored: {
   appSids: [],
   sidOf: {},
   machines: {},
-  machineLists: {},
+  machineList: [],
   outside: {},
   outsideAt: {},
   termOffset: {},

@@ -1,13 +1,13 @@
 // Work machines: another computer in the LAN running relay-server (packages/relay-server), where a project's
 // conversations run so they keep going while this Mac is closed. settings.machines holds each paired machine (its
-// address, the fingerprint its certificate must have, and folders: vault project -> folder on that machine); this
+// address and the fingerprint its certificate must have); this
 // Mac's own certificate is remote-identity.*.der in the app data folder.
 //
 // A conversation is bound to a machine at its first spawn and stays bound (its transcript lives there): remote.json,
 // conversation key -> {machine, cwd}. Where it runs is picked in the composer before the first message ("" for this
-// Mac, or a machine id); without a pick, a project with a folder on a machine runs there. Between two turns it can
-// move (move_conversation in lib.rs): its transcript goes along, with `rewrite` for the vault's paths. The folder: the project's
-// on that machine, else the machine's default folder, else its home.
+// Mac, or a machine id); without a pick, where Settings › Machines says new conversations run. Between two turns it can
+// move (move_conversation in lib.rs): its transcript goes along, with `rewrite` for the vault's paths. There it runs
+// in the vault's mirror.
 // Only Claude Code runs there, and never a conversation about a mail: the mail tools are answered by this app.
 
 use relay_remote::client::Client;
@@ -40,28 +40,18 @@ pub fn valid(m: &Value) -> bool {
     let hex = |v: &str, n: usize| v.len() == n && v.chars().all(|c| c.is_ascii_hexdigit());
     hex(s("id"), 12) && hex(s("fp"), 64) && !s("host").is_empty() && s("host").len() <= 253
         && s("host").chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c)) && m["port"].as_u64().is_some_and(|p| (1..=65535).contains(&p))
-        && s("name").chars().count() <= 60 && m["folders"].as_object().is_some_and(|f| f.len() <= 200 && f.iter().all(|(p, d)| folder_ok(p, d)))
-        && (m["default_folder"].is_null() || s("default_folder").is_empty() || folder_ok("default", &m["default_folder"]))
+        && s("name").chars().count() <= 60
         && crate::mirror::valid(m)
 }
-/// A vault project and an absolute folder on the machine.
-pub fn folder_ok(project: &str, dir: &Value) -> bool {
-    let d = dir.as_str().unwrap_or("");
-    !project.is_empty() && project.len() <= 120 && d.starts_with('/') && d.len() <= 500 && !d.contains(['\n', '\0'])
-}
 
-/// The folder a conversation of `project` runs in on machine `m`: the project's there, else the machine's default
-/// folder, else "" (`cwd_or_home` fills that in once the machine's Info is known).
-pub fn folder_on(m: &Value, project: Option<&str>) -> String {
-    project.and_then(|p| m["folders"][p].as_str()).or(m["default_folder"].as_str()).unwrap_or("").to_string()
+/// Where a conversation runs on a machine: its bind's folder (one bound before the mirror kept its own), else the
+/// vault's mirror there.
+pub fn cwd_or_vault(cwd: String, info: &Info) -> String {
+    if cwd.is_empty() { format!("{}/vault", info.work) } else { cwd }
 }
-/// No folder for it there: the vault's mirror when the machine has one, else the machine's home.
-pub fn cwd_or_home(cwd: String, m: &Value, info: &Info) -> String {
-    if !cwd.is_empty() { cwd } else if crate::mirror::on(m) { format!("{}/vault", info.work) } else { info.home.clone() }
-}
-/// The vault's folder and its memory's at a place where the vault is: this Mac, or a machine that mirrors it.
-pub fn roots_on(m: &Value, info: &Info) -> Option<[String; 2]> {
-    crate::mirror::on(m).then(|| [format!("{}/vault", info.work), format!("{}/memory", info.work)])
+/// The vault's folder and its memory's on a machine: its mirror.
+pub fn roots_on(info: &Info) -> [String; 2] {
+    [format!("{}/vault", info.work), format!("{}/memory", info.work)]
 }
 /// A transcript moving to another place: each `from` folder becomes its `to`, so the paths in the history point at
 /// files that exist where the conversation goes on. Whole folders only: not where a name goes on (`Vault2`, `Vault.bak`),
@@ -102,30 +92,25 @@ impl Machines {
     }
 
     pub fn bind_of(&self, key: &str) -> Option<Bind> { self.binds.lock().unwrap().get(key).cloned() }
-    /// The machine a project runs on without a pick: the first with a folder for it.
-    /// The machine a conversation runs on without a pick: the first with a folder for its project, else the one chosen
-    /// in Settings › Machines as where new conversations run (`machines_default`, "" this Mac).
-    pub fn default_for(settings: &Value, project: Option<&str>) -> Option<Value> {
-        let list = settings["machines"].as_array()?;
-        project.and_then(|p| list.iter().find(|m| m["folders"][p].is_string()))
-            .or_else(|| list.iter().find(|m| m["id"] == settings["machines_default"] && m["id"] != ""))
-            .cloned()
+    /// The machine a conversation runs on without a pick: the one chosen in Settings › Machines as where new
+    /// conversations run (`machines_default`, "" this Mac).
+    pub fn default_for(settings: &Value) -> Option<Value> {
+        settings["machines"].as_array()?.iter().find(|m| m["id"] == settings["machines_default"] && m["id"] != "").cloned()
     }
     /// The conversation's machine: its bind, or a new one for a conversation without a session on this Mac yet, on the
-    /// machine picked (`choice`: Some("") this Mac, Some(id) a machine) or else the project's. cwd "" means the
-    /// machine's home, which the caller knows from its Info.
-    pub fn bind_for(&self, settings: &Value, key: &str, project: Option<&str>, local_session: bool, choice: Option<&str>) -> Option<(Value, Bind)> {
+    /// machine picked (`choice`: Some("") this Mac, Some(id) a machine) or else the default. cwd "" means the vault's
+    /// mirror there, which the caller knows from its Info.
+    pub fn bind_for(&self, settings: &Value, key: &str, local_session: bool, choice: Option<&str>) -> Option<(Value, Bind)> {
         if let Some(b) = self.bind_of(key) { return Some((Self::find(settings, &b.machine)?, b)); }
         if local_session { return None; }
-        let m = match choice { Some("") => return None, Some(id) => Self::find(settings, id)?, None => Self::default_for(settings, project)? };
-        let cwd = folder_on(&m, project);
-        Some((m.clone(), Bind { machine: m["id"].as_str()?.into(), cwd }))
+        let m = match choice { Some("") => return None, Some(id) => Self::find(settings, id)?, None => Self::default_for(settings)? };
+        Some((m.clone(), Bind { machine: m["id"].as_str()?.into(), cwd: String::new() }))
     }
-    /// Every machine with what the poller last heard: {id, name, online, default: whether `project` runs there without
-    /// a pick}, for the composer's pick. No network.
-    pub fn status_list(&self, settings: &Value, project: Option<&str>) -> Value {
+    /// Every machine with what the poller last heard: {id, name, online, default: whether a conversation runs there
+    /// without a pick}, for the composer's pick. No network.
+    pub fn status_list(&self, settings: &Value) -> Value {
         let seen = self.seen.lock().unwrap();
-        let def = Self::default_for(settings, project).and_then(|m| m["id"].as_str().map(String::from));
+        let def = Self::default_for(settings).and_then(|m| m["id"].as_str().map(String::from));
         json!(settings["machines"].as_array().into_iter().flatten().map(|m| {
             let id = m["id"].as_str().unwrap_or("");
             let s = seen.get(id);
@@ -203,9 +188,10 @@ mod tests {
     }
     #[test]
     fn machines_validate_and_bind() {
+        // an older settings file still has project folders: ignored
         let m = json!({"id": "0123456789ab", "name": "LServer", "host": "192.168.1.2", "port": 47800, "fp": "a".repeat(64), "folders": {"Weemaes": "/home/l/weemaes"}});
         assert!(valid(&m));
-        for bad in [json!({"folders": {"Weemaes": "relative"}}), json!({"host": "a b"}), json!({"port": 0}), json!({"fp": "xyz"})] {
+        for bad in [json!({"host": "a b"}), json!({"port": 0}), json!({"fp": "xyz"})] {
             let mut b = m.clone();
             for (k, v) in bad.as_object().unwrap() { b[k] = v.clone(); }
             assert!(!valid(&b), "{bad}");
@@ -214,31 +200,24 @@ mod tests {
         std::fs::create_dir_all(&d).unwrap();
         let ms = Machines::load(&d).unwrap();
         let s = json!({"machines": [m]});
-        // a project with a folder there and no session here: bound; with a session here: stays on this Mac
-        assert_eq!(ms.bind_for(&s, "c:1", Some("Weemaes"), false, None).unwrap().1, Bind { machine: "0123456789ab".into(), cwd: "/home/l/weemaes".into() });
-        assert!(ms.bind_for(&s, "c:2", Some("Weemaes"), true, None).is_none());
-        assert!(ms.bind_for(&s, "c:3", Some("Other"), false, None).is_none());
-        // picked in the composer: this Mac wins over the project's folder, a machine works without one (its home)
-        assert!(ms.bind_for(&s, "c:4", Some("Weemaes"), false, Some("")).is_none());
-        assert_eq!(ms.bind_for(&s, "c:5", None, false, Some("0123456789ab")).unwrap().1.cwd, "");
-        let mut dm = s.clone();
-        dm["machines"][0]["default_folder"] = json!("/home/l/repos");
-        assert!(valid(&dm["machines"][0]));
-        assert_eq!(ms.bind_for(&dm, "c:6", Some("Other"), false, Some("0123456789ab")).unwrap().1.cwd, "/home/l/repos");
-        assert_eq!(ms.bind_for(&dm, "c:7", Some("Weemaes"), false, Some("0123456789ab")).unwrap().1.cwd, "/home/l/weemaes");
-        assert!(ms.bind_for(&s, "c:8", None, false, Some("ffffffffffff")).is_none(), "an unknown machine runs nowhere");
-        assert_eq!(ms.status_list(&s, Some("Weemaes"))[0]["default"], true);
-        assert_eq!(ms.status_list(&s, None)[0]["online"], false);
-        // where new conversations run by default: a general one goes there too, a pick of this Mac still wins
+        // without a pick or a default: this Mac, also for a project that had a folder there
+        assert!(ms.bind_for(&s, "c:1", false, None).is_none());
+        // picked in the composer: that machine, in its vault mirror (cwd "" until its Info is known); this Mac wins too
+        assert_eq!(ms.bind_for(&s, "c:5", false, Some("0123456789ab")).unwrap().1, Bind { machine: "0123456789ab".into(), cwd: String::new() });
+        assert!(ms.bind_for(&s, "c:4", false, Some("")).is_none());
+        assert!(ms.bind_for(&s, "c:8", false, Some("ffffffffffff")).is_none(), "an unknown machine runs nowhere");
+        assert_eq!(ms.status_list(&s)[0]["online"], false);
+        // where new conversations run by default: a conversation goes there, unless it has a session here or picks this Mac
         let mut g = s.clone();
         g["machines_default"] = json!("0123456789ab");
-        assert_eq!(ms.bind_for(&g, "c:9", None, false, None).unwrap().1.machine, "0123456789ab");
-        assert!(ms.bind_for(&g, "c:10", None, false, Some("")).is_none());
-        assert_eq!(ms.status_list(&g, None)[0]["default"], true);
-        assert_eq!(ms.status_list(&s, None)[0]["default"], false);
+        assert_eq!(ms.bind_for(&g, "c:9", false, None).unwrap().1.machine, "0123456789ab");
+        assert!(ms.bind_for(&g, "c:2", true, None).is_none());
+        assert!(ms.bind_for(&g, "c:10", false, Some("")).is_none());
+        assert_eq!(ms.status_list(&g)[0]["default"], true);
+        assert_eq!(ms.status_list(&s)[0]["default"], false);
         ms.set_bind("c:1", Bind { machine: "0123456789ab".into(), cwd: "/x".into() });
         // once bound, the folder in the bind wins, also after a reload
-        assert_eq!(Machines::load(&d).unwrap().bind_for(&s, "c:1", None, true, None).unwrap().1.cwd, "/x");
+        assert_eq!(Machines::load(&d).unwrap().bind_for(&s, "c:1", true, None).unwrap().1.cwd, "/x");
         ms.rebind("c:1", "c:9");
         assert!(ms.bind_of("c:1").is_none() && ms.bind_of("c:9").is_some());
         assert_eq!(ms.chat_machines(&s)["c:9"]["machine"], "LServer");

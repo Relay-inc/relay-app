@@ -138,7 +138,7 @@ export function chatBar(key: string) {
  *  it where it runs: picking another place then moves it (`moveConversation`). */
 export function machineChoice(key: string) {
   const conversation = cs().chats[key];
-  const list = cs().machineLists[conversation?.project ?? ""] ?? [];
+  const list = cs().machineList;
   const started = !!cs().sidOf[key];
   const why: Key | null =
     chatAgent(key) !== "claude"

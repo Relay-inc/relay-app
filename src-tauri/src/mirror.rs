@@ -1,5 +1,5 @@
 // The mirror of a work machine (relay-server mirror.rs): what this Mac keeps in sync there, so an agent on the
-// machine knows what Claude Code here knows. Opt-in per machine (machine.mirror.on). Four roots:
+// machine knows what Claude Code here knows. Every paired machine has one. Four roots:
 //   context  ~/.claude/CLAUDE.md, skills, agents, commands      this Mac -> machine, an exact copy
 //   plugins  the switched-on plugins (installed_plugins.json)   this Mac -> machine, an exact copy
 //   vault    the vault, minus .obsidian, .git and the excludes  both ways, a conflict copy when both changed
@@ -28,14 +28,13 @@ pub struct Progress { pub root: &'static str, pub step: usize, pub done: usize, 
 #[derive(Default)]
 pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, pub progress: Mutex<HashMap<String, Progress>>, busy: Mutex<std::collections::HashSet<String>> }
 
-pub fn on(m: &Value) -> bool { m["mirror"]["on"] == true }
 /// The machine's excluded vault folders (relative paths).
 pub fn excludes(m: &Value) -> Vec<String> {
     m["mirror"]["exclude"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).map(|x| x.trim_matches('/').to_string()).filter(|x| sync::safe_rel(x)).collect()
 }
 pub fn valid(m: &Value) -> bool {
     let x = &m["mirror"];
-    x.is_null() || (x["on"].is_boolean() && (x["exclude"].is_null() || x["exclude"].as_array().is_some_and(|a| a.len() <= 100 && a.iter().all(|e| e.as_str().is_some_and(|s| s.len() <= 300 && sync::safe_rel(s.trim_matches('/')))))))
+    x.is_null() || (x["exclude"].is_null() || x["exclude"].as_array().is_some_and(|a| a.len() <= 100 && a.iter().all(|e| e.as_str().is_some_and(|s| s.len() <= 300 && sync::safe_rel(s.trim_matches('/'))))))
 }
 
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
@@ -190,9 +189,10 @@ mod tests {
     use super::*;
     #[test]
     fn settings_validate_and_flags() {
-        assert!(valid(&json!({})) && valid(&json!({"mirror": {"on": true, "exclude": ["Communication/transcripts", "/Archive/"]}})));
-        assert!(!valid(&json!({"mirror": {"on": "yes"}})) && !valid(&json!({"mirror": {"on": true, "exclude": ["../x"]}})));
-        assert_eq!(excludes(&json!({"mirror": {"on": true, "exclude": ["/Archive/", "a/../b"]}})), vec!["Archive".to_string()]);
+        assert!(valid(&json!({})) && valid(&json!({"mirror": {"exclude": ["Communication/transcripts", "/Archive/"]}})));
+        // an older settings file still has the switch: ignored
+        assert!(valid(&json!({"mirror": {"on": false}})) && !valid(&json!({"mirror": {"exclude": ["../x"]}})));
+        assert_eq!(excludes(&json!({"mirror": {"exclude": ["/Archive/", "a/../b"]}})), vec!["Archive".to_string()]);
         let info = Info { work: "/w/dev".into(), ..Default::default() };
         let (args, env) = session_args(&info, "/w/dev/vault");
         assert_eq!(&args[..2], ["--add-dir", "/w/dev/context"]);

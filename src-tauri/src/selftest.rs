@@ -85,7 +85,7 @@ fn turn_of(ev: &Events, key: &str, timeout: Duration) -> Result<Vec<String>, Str
 }
 /// One message in a general conversation on the machine `id`.
 fn ask(app: &AppHandle, ev: &Events, key: &str, id: &str, text: &str) -> Result<String, String> {
-    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, None, Some(id.into()))?;
+    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.into()))?;
     Ok(turn_of(ev, key, Duration::from_secs(30))?.join("\n"))
 }
 /// The mirror's next round that has run without errors.
@@ -99,7 +99,7 @@ fn now_s() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_
 const MIRROR_KEY: &str = "c:mirror";
 
 fn say(app: &AppHandle, text: &str) -> Result<(), String> {
-    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, Some(PROJECT.into()), None)
+    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, None)
 }
 fn expect(app: &AppHandle, ev: &Events, text: &str, want: &str) -> Result<String, String> {
     say(app, text)?;
@@ -135,38 +135,23 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     // the pairing line from the container, pointed at the proxy
     let line = std::env::var("RELAY_SELFTEST_LINE").unwrap_or_default().replace(":47800#", &format!(":{PROXY}#"));
 
-    // Settings › Machines, through the page itself: paste the line, Pair, add the project's folder, Save
+    // Settings › Machines, through the page itself: paste the line, Pair
     std::thread::sleep(Duration::from_secs(2));
     open_settings(app);
     std::thread::sleep(Duration::from_secs(3));
-    let js = include_str!("selftest-ui.js").replace("__LINE__", &line).replace("__PROJECT__", PROJECT).replace("__PATH__", "/home/relay/repos/testproject");
+    let js = include_str!("selftest-ui.js").replace("__LINE__", &line);
     let ran = app.get_webview_window("settings").ok_or("no settings window".to_string()).and_then(|w| w.eval(&js).map_err(|e| e.to_string()));
     let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(25)).map_err(|_| "the page did not report back".to_string()));
-    r.step("settings page: pair and folder", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+    r.step("settings page: pair", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
     let m = st.settings.lock().unwrap()["machines"][0].clone();
-    r.step("machine saved", if m["folders"][PROJECT].is_string() { Ok(format!("{} {}:{}", m["name"], m["host"], m["port"])) } else { Err(format!("{m}")) });
+    r.step("machine saved", if m["fp"].is_string() { Ok(format!("{} {}:{}", m["name"], m["host"], m["port"])) } else { Err(format!("{m}")) });
     if m.is_null() { return; }
+    // every machine mirrors this Mac: conversations there run in the vault's mirror, which the first round brings
+    let mid = m["id"].as_str().unwrap_or("").to_string();
+    r.step("first mirror round after pairing", mirror_round(app, &mid, 0).map(|s| s.to_string()));
 
-    // the main window the way a user does it: the composer passes the project, the label says where it runs
-    if let Some(w) = app.get_webview_window("settings") { w.close().ok(); }
-    let js = include_str!("selftest-main.js").replace("__PROJECT__", PROJECT);
-    let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| { w.show().ok(); w.eval(&js).map_err(|e| e.to_string()) });
-    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(40)).map_err(|_| "the page did not report back".to_string()));
-    r.step("main window: a conversation in the project runs on the machine", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
-
-    // a general conversation sent to the machine through the composer's pick: it runs in the machine's home there
-    let js = include_str!("selftest-general.js").replace("__MACHINE__", "docker");
-    let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| w.eval(&js).map_err(|e| e.to_string()));
-    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(60)).map_err(|_| "the page did not report back".to_string()));
-    r.step("main window: a general conversation picked onto the machine", said.and_then(|s| {
-        if !s.contains("\"ok\":true") { return Err(s); }
-        let c = chat_machines(app.state::<App>());
-        // the project's conversation runs in its folder, the general one in the machine's home
-        let home = c.as_object().into_iter().flatten().find(|(_, b)| b["machine"] == "docker" && b["cwd"] != "/home/relay/repos/testproject");
-        home.map(|(k, b)| format!("{s}, {k} bound {b}")).ok_or(format!("no general conversation bound: {c}"))
-    }));
-
-    // Settings › Machines: new conversations run on the machine; a new general conversation's pick then shows it
+    // Settings › Machines: new conversations run on the machine (a project's too); a new general conversation's pick
+    // then shows it
     let ui_ok = |s: String| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) };
     open_settings(app);
     std::thread::sleep(Duration::from_secs(3));
@@ -181,6 +166,25 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| w.eval(js.replace("__STEP__", "main")).map_err(|e| e.to_string()));
     let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(20)).map_err(|_| "the page did not report back".to_string()));
     r.step("main window: a new general conversation starts on the default machine", said.and_then(ui_ok));
+
+    // the main window the way a user does it: the composer passes the project, the label says where it runs
+    if let Some(w) = app.get_webview_window("settings") { w.close().ok(); }
+    let js = include_str!("selftest-main.js").replace("__PROJECT__", PROJECT);
+    let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| { w.show().ok(); w.eval(&js).map_err(|e| e.to_string()) });
+    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(40)).map_err(|_| "the page did not report back".to_string()));
+    r.step("main window: a conversation in the project runs on the machine", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+
+    // a general conversation sent to the machine through the composer's pick: it runs in the vault's mirror there
+    let js = include_str!("selftest-general.js").replace("__MACHINE__", "docker");
+    let ran = app.get_webview_window("main").ok_or("no main window".to_string()).and_then(|w| w.eval(&js).map_err(|e| e.to_string()));
+    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(60)).map_err(|_| "the page did not report back".to_string()));
+    r.step("main window: a general conversation picked onto the machine", said.and_then(|s| {
+        if !s.contains("\"ok\":true") { return Err(s); }
+        let c = chat_machines(app.state::<App>());
+        let home = c.as_object().into_iter().flatten().find(|(_, b)| b["machine"] == "docker" && b["cwd"].as_str().is_some_and(|d| d.ends_with("/vault")));
+        home.map(|(k, b)| format!("{s}, {k} bound {b}")).ok_or(format!("no general conversation bound: {c}"))
+    }));
+
 
     r.step("first turn on the machine", expect(app, ev, "hallo", "echo from relay-docker: hallo"));
     r.step("bound to the machine", { let c = chat_machines(app.state::<App>()); if c[KEY]["machine"].is_string() { Ok(c[KEY].to_string()) } else { Err(c.to_string()) } });
@@ -214,11 +218,10 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     r.step("dropped connection taken back", dropped);
     r.step("talk after the drop", expect(app, ev, "after the drop", "echo from relay-docker: after the drop"));
 
-    // the mirror: switched on, the vault and the context reach the machine, a session there reads the vault, gets the
+    // the mirror (on from pairing): the vault and the context reach the machine, a session there reads the vault, gets the
     // context flags, writes a note, and the note comes back here
     let id = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
     let started = now_s();
-    r.step("mirror switched on", set_machine_mirror(app.clone(), app.state::<App>(), id.clone(), true, vec![]).map(|_| "on".into()));
     r.step("first mirror round", mirror_round(app, &id, started - 1).map(|s| s.to_string()));
     r.step("a session there reads the vault", ask(app, ev, MIRROR_KEY, &id, "read Notes/Uit de vault.md")
         .and_then(|t| if t.contains("content: geheim 42") { Ok(t) } else { Err(t) }));
@@ -236,21 +239,21 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     // moving a conversation: refused mid-turn, then to this Mac (its transcript comes along with this Mac's paths) and
     // back to the machine (the machine's paths again), where it goes on in the same session
     let msid = st.sids.lock().unwrap().get(MIRROR_KEY).map(|s| s.sid.clone()).unwrap_or_default();
-    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, None, Some(id.clone())).ok();
+    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.clone())).ok();
     std::thread::sleep(Duration::from_millis(800));
-    r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", None, false) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
+    r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", false) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
     turn_of(ev, MIRROR_KEY, Duration::from_secs(20)).ok();
     let v = vault.to_string_lossy().to_string();
     let local = PathBuf::from(home()).join(".claude/projects").join(agent_claude::slug(&v)).join(format!("{msid}.jsonl"));
     let m = machines::Machines::find(&st.settings.lock().unwrap(), &id).unwrap_or_default();
     let work = st.machines.info(&m).map(|i| i.work).unwrap_or_default();
-    r.step("moved to this Mac", move_to(app, MIRROR_KEY, "", None, false).and_then(|_| {
+    r.step("moved to this Mac", move_to(app, MIRROR_KEY, "", false).and_then(|_| {
         let t = fs::read_to_string(&local).map_err(|e| format!("{}: {e}", local.display()))?;
         // the vault's paths are this Mac's now; the machine's own (its plugins, its permission tool) stay as they were
         let ok = st.machines.bind_of(MIRROR_KEY).is_none() && t.contains("read Notes/Uit de vault.md") && t.contains(&format!("{v}\"")) && !t.contains(&format!("{work}/vault"));
         if ok { Ok(format!("{} bytes, this Mac's paths", t.len())) } else { Err(t) }
     }));
-    r.step("moved back to the machine", move_to(app, MIRROR_KEY, &id, None, false).and_then(|_| {
+    r.step("moved back to the machine", move_to(app, MIRROR_KEY, &id, false).and_then(|_| {
         let m = machines::Machines::find(&st.settings.lock().unwrap(), &id).ok_or("no machine")?;
         let t = String::from_utf8(st.machines.client(&m).session_get(&msid)?).map_err(|e| e.to_string())?;
         if t.contains(&format!("{work}/vault\"")) && !t.contains(&format!("{v}\"")) { Ok(format!("{} bytes, the machine's paths", t.len())) } else { Err(t) }
@@ -286,7 +289,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     proxy.cut(Duration::from_secs(8));
     std::thread::sleep(Duration::from_secs(3)); // a poller round or two
     let t = Instant::now();
-    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, Some(PROJECT.into()), None);
+    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, None);
     let took = t.elapsed();
     r.step("machine away: refused fast", match res { Err(e) if took < Duration::from_millis(1000) => Ok(format!("{took:?}: {e}")), other => Err(format!("{took:?}: {other:?}")) });
     std::thread::sleep(Duration::from_secs(7)); // back, and the poller sees it again
@@ -322,7 +325,7 @@ fn forget_ui(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     open_settings(app);
     std::thread::sleep(Duration::from_secs(3));
     let w = app.get_webview_window("settings").unwrap();
-    let js = include_str!("selftest-ui.js").replace("__LINE__", &line).replace("__PROJECT__", PROJECT).replace("__PATH__", "/home/relay/repos/testproject");
+    let js = include_str!("selftest-ui.js").replace("__LINE__", &line);
     w.eval(&js).ok();
     r.step("paired through the page", ui.recv_timeout(Duration::from_secs(25)).map_err(|_| "no report".to_string()));
     w.eval(include_str!("selftest-forget.js")).ok();

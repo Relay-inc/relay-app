@@ -269,7 +269,7 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
  * archive, delete, Inbox/Other) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
-  // a paired work machine that speaks an older protocol, its mirror on (Settings › Machines)
+  // a paired work machine that speaks an older protocol (Settings › Machines)
   const machines =
     fixture === "machines"
       ? {
@@ -280,8 +280,7 @@ export function settings(fixture: string) {
               host: "192.168.1.2",
               port: 47800,
               fp: "0f9534960dd3570a".padEnd(64, "0"),
-              folders: {},
-              mirror: { on: true, exclude: [] },
+              mirror: { exclude: [] },
             },
           ],
         }

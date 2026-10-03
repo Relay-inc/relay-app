@@ -17,17 +17,17 @@ going while your laptop is closed. Relay connects to it over the LAN, or over yo
 - **Each device its own conversations.** Two paired laptops never see or stop each other's conversations or cards.
 
 What it does not change: an agent here runs with the same rights as on your laptop, and the permission cards still
-come to Relay. Mail never runs here (Relay answers the mail tools itself), and neither does the vault.
+come to Relay. Mail never runs here (Relay answers the mail tools itself). The vault comes as an encrypted mirror (below).
 
 ## Set up
 
 1. Install Claude Code on this machine and log in with your own account: `claude`, then `/login`. Relay never sends
    your login anywhere, this machine has its own.
-2. Clone the repos you want to work on here, outside `~/Documents` on a Mac (see below).
+2. Optional: clone repos you want Claude to work in here, outside `~/Documents` on a Mac (see below).
 3. Build and run: `cargo build --release -p relay-server`, then `target/release/relay-server serve`.
 4. Keep it running: `relay-server service` prints a LaunchAgent (Mac) or a systemd user unit (Linux) with the steps.
-5. Pair: `relay-server pair` on this machine, paste the line in Relay › Settings › Machines.
-6. In the same settings page, link a project to its folder here. New conversations of that project run here.
+5. Pair: `relay-server pair` on this machine, paste the line in Relay › Settings › Machines. Pick the machine next to
+   the model in a new conversation, or make it the default on that settings page.
 
 **On a Mac:** a LaunchAgent may not read `~/Documents`, `~/Desktop` or `~/Downloads` without Full Disk Access. Keep
 the repos in another folder (for example `~/repos`), or give `relay-server` Full Disk Access in System Settings.
@@ -58,11 +58,11 @@ image: the first start installs it with Anthropic's installer into the `.local` 
    `docker logs relay-server` shows Claude Code being installed, then `listening on 0.0.0.0:47800`.
 4. Log in to Claude once: `docker exec -it relay-server claude`, then `/login` (it shows a URL to open on your laptop).
    The login stays in the `claude` folder.
-5. Clone the repos into `repos`, e.g. `docker exec relay-server git clone <url> /home/relay/repos/<name>`. Private repos
-   need a deploy key or a token inside the container.
+5. Optional: clone repos into `repos`, e.g. `docker exec relay-server git clone <url> /home/relay/repos/<name>`. Private
+   repos need a deploy key or a token inside the container. A conversation starts in the vault's mirror, Claude can
+   work in a repo there when you point it at the folder.
 6. Pair: `docker exec relay-server relay-server pair --host 192.168.1.2` with the server's LAN address. Inside a
    container the server cannot see that address itself.
-7. In Relay, link the project to `/home/relay/repos/<name>`.
 
 **Update:** `docker pull ghcr.io/laurentme/relay-server:latest`, then `docker rm -f relay-server` and the same
 `docker run`. The folders keep the pairing, the login, Claude Code and the repos; the mirror is locked until Relay
@@ -88,8 +88,8 @@ and takes the conversation back after a restart. The report is in `/tmp/relay-se
 
 ## The mirror
 
-Switch on Settings › Machines › Mirror this Mac and Relay keeps four folders in sync on the machine, so a conversation
-there knows what Claude Code knows on the laptop:
+Every paired machine gets the mirror, there is no switch: Relay keeps four folders in sync on it, so a conversation
+there knows what Claude Code knows on the laptop. Every conversation there starts in the mirrored vault:
 
 | Folder | From the laptop | Direction |
 |---|---|---|
@@ -105,7 +105,7 @@ transcripts, MCP servers and repos never go along: what a repo needs for Claude 
 
 The machine only ever stores ciphertext. The key stays with the laptop.
 
-- **The key.** Relay makes a random 256-bit key per machine the first time the mirror is switched on, and keeps it in
+- **The key.** Relay makes a random 256-bit key per machine the first time it syncs with it, and keeps it in
   its app data as `mirror-<machine>.key` (0600). It sends the key with an `unlock` request over the mutual-TLS
   connection at the start of every sync round. The server keeps it in memory only, never on disk.
 - **Two keys from one.** HKDF-SHA256 derives a key to encrypt and a key to name the blobs from it, so neither is
@@ -120,9 +120,8 @@ The machine only ever stores ciphertext. The key stays with the laptop.
 - **Unlocked**, the server opens every blob into the working copy in `RELAY_SERVER_WORKDIR`, which should be a RAM disk
   (compose.yml and the `docker run` above mount a tmpfs at `/home/relay/work`). The agents work there. Every 5 seconds
   the server seals what changed back into blobs and removes the blobs of deleted files.
-- **Locked** after a restart: only the blobs are left, the working copy is gone with the RAM disk. Conversations in the
-  vault wait until the laptop connects and unlocks again. Conversations in a repo run. `relay-server revoke` and Remove
-  the copy in Relay delete a device's store.
+- **Locked** after a restart: only the blobs are left, the working copy is gone with the RAM disk. Conversations wait
+  until the laptop connects and unlocks again. `relay-server revoke` and Forget in Relay delete a device's store.
 
 What this protects, and what it does not:
 
@@ -136,8 +135,8 @@ Known limits:
 - The blobs are sealed one by one, nothing binds the set together. Someone who can write to the disk can delete a blob
   or put back an older one of the same file, and the server would unpack that older version.
 - A tmpfs can be swapped to disk when the machine has swap. Unraid has none by default.
-- Losing the key file on the laptop makes the copy unreadable. Nothing is lost: Remove the copy, switch the mirror on
-  again, and the next round sends everything again.
+- Losing the key file on the laptop makes the copy unreadable. Nothing is lost: Forget the machine, pair it again,
+  and the next round sends everything again.
 
 Without a RAM disk the server logs a warning and Settings › Machines says the working copy is on disk.
 
@@ -145,7 +144,7 @@ Without a RAM disk the server logs a warning and Settings › Machines says the 
 
 Between two turns a conversation can move between this Mac and a machine, or between machines: pick another place in
 the composer's machine list. Relay stops the agent, takes its transcript from where it ran (`session_get`), rewrites
-the vault's paths and its memory's to the other side's (only with the mirror on there), puts it where Claude Code on the
+the vault's paths and its memory's to the other side's, puts it where Claude Code on the
 other side looks for it (`session_put`), and the next message resumes the same session there.
 
 What moves is the conversation. Files that exist on one side only stay there: work not committed in a repo, or a vault

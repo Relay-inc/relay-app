@@ -1,43 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  agoParts,
-  conflictPath,
-  excludePath,
-  foldersOf,
-  machinePick,
-  projectChoices,
-  setupCommands,
-  SETUP_FOLDER,
-} from "./machines.ts";
-
-test("folders: empty rows drop out, paths are trimmed", () => {
-  assert.deepEqual(
-    foldersOf([
-      { project: "Radar", path: " /srv/radar " },
-      { project: "", path: "  " },
-    ]),
-    { Radar: "/srv/radar" },
-  );
-});
-test("folders: a row without a project or with a relative path refuses the save", () => {
-  assert.equal(foldersOf([{ project: "", path: "/srv/x" }]), null);
-  assert.equal(foldersOf([{ project: "Radar", path: "srv/radar" }]), null);
-});
-test("a project linked in another row is not offered again", () => {
-  const rows = [
-    { project: "Radar", path: "/a" },
-    { project: "", path: "" },
-  ];
-  assert.deepEqual(projectChoices(["C-All", "Radar"], rows, rows[1]), ["C-All"]);
-  assert.deepEqual(projectChoices(["C-All", "Radar"], rows, rows[0]), ["C-All", "Radar"]);
-});
+import { agoParts, conflictPath, excludePath, machinePick, setupCommands, SETUP_FOLDER } from "./machines.ts";
 
 const list = [
   { id: "a", name: "LServer", online: true, default: false },
   { id: "b", name: "docker", online: false, default: true },
 ];
-test("machine pick: the user's, else the project's machine, else this Mac", () => {
+test("machine pick: the user's, else the default machine, else this Mac", () => {
   assert.equal(machinePick(list, "a", true), "a");
   assert.equal(machinePick(list, "", true), "");
   assert.equal(machinePick(list, undefined, true), "b");

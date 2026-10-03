@@ -14,7 +14,7 @@ import {
   type Message,
   type Settings,
 } from "../../domain/settings/types";
-import { SETUP_FOLDER, type FolderRow } from "../../domain/settings/machines";
+import { SETUP_FOLDER } from "../../domain/settings/machines";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
@@ -44,13 +44,11 @@ export type SettingsState = {
     finding: boolean;
   };
   machinesPage: {
-    checked: boolean; // the projects read and every machine checked, once when the page first shows
-    projects: string[]; // the vault's project names, sorted
+    checked: boolean; // every machine checked, once when the page first shows
     status: Record<string, MachineStatus | "checking">;
     pairing: boolean;
     pairError: string;
-    drafts: Record<string, FolderRow[]>; // folder rows being edited per machine, until Save
-    messages: Record<string, Message | null>; // per machine: why the last save or forget failed, or that it saved
+    messages: Record<string, Message | null>; // per machine: why the last forget failed
     mirror: Record<string, MirrorStatus | null>; // the last mirror round per machine, polled while the page shows
     mirrorMessages: Record<string, Message | null>; // per machine: why the last mirror change failed
     mirrorProgress: Record<string, MirrorProgress | null>; // per machine: the running round, null between rounds
@@ -99,11 +97,9 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
   machinesPage: {
     checked: false,
-    projects: [],
     status: {},
     pairing: false,
     pairError: "",
-    drafts: {},
     messages: {},
     mirror: {},
     mirrorMessages: {},
