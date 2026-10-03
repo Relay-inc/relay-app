@@ -21,7 +21,6 @@ import {
 import { useT } from "../hooks/useT";
 import { Html } from "../components/Html";
 import { copyText } from "../components/copy";
-import { hasFiles } from "../components/image-files";
 import { NavigationView } from "../features/navigation/NavigationView";
 import { ConversationsView } from "../features/conversations/ConversationsView";
 import { DrawerView } from "../features/drawer/DrawerView";
@@ -146,10 +145,6 @@ function onLink(e: MouseEvent) {
   e.preventDefault();
   if (urlOk(anchor.href)) openExternal(anchor.href);
 }
-// no stray drop outside the composer opens the file in the webview
-function noDrop(e: DragEvent) {
-  if (hasFiles(e)) e.preventDefault();
-}
 
 /** The main window: sidebar, the open conversation or view, the right drawer, and the overlays. */
 export function App() {
@@ -163,13 +158,9 @@ export function App() {
   useEffect(() => {
     window.addEventListener("keydown", onKey);
     document.addEventListener("click", onLink);
-    window.addEventListener("dragover", noDrop);
-    window.addEventListener("drop", noDrop);
     return () => {
       window.removeEventListener("keydown", onKey);
       document.removeEventListener("click", onLink);
-      window.removeEventListener("dragover", noDrop);
-      window.removeEventListener("drop", noDrop);
     };
   }, []);
 

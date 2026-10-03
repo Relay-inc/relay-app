@@ -3,6 +3,7 @@ import type { ConversationsState, Translate } from "./state";
 import type { Item, ToolInput } from "./types";
 import { formatDuration, lastAi } from "./rules.ts";
 import { cleanCommands } from "./commands.ts";
+import { splitFiles } from "./files.ts";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) as a reducer over the conversations
 // state, and the transcripts behind a conversation as items. Pure: what needs the outside (a banner, saving, a vault
@@ -157,7 +158,8 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
       const imgs = entry.images.map(image =>
         image && IMG_OK.includes(image.media_type) ? imageUrl(image.media_type, image.data) : "",
       );
-      items.push({ kind: "me", text: entry.text, ...(imgs.length ? { imgs } : {}) });
+      const { text, files } = splitFiles(entry.text);
+      items.push({ kind: "me", text, ...(imgs.length ? { imgs } : {}), ...(files.length ? { files } : {}) });
     } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok"));
   }

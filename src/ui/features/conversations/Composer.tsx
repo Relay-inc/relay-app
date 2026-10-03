@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { isTerminal } from "../../../domain/navigation/keys";
 import type { PickKind } from "../../../domain/agents/types";
 import { useConversationsStore } from "../../../application/conversations/store";
@@ -8,6 +8,8 @@ import { matchCommands, type SlashCommand } from "../../../domain/conversations/
 import { chatBar, commandsOf, machineChoice } from "../../../application/conversations/selectors";
 import {
   attach,
+  attachPaths,
+  pickAndAttach,
   sendMsg,
   sendOrStop,
   setAgent,
@@ -15,7 +17,9 @@ import {
   setMachine,
   setTyped,
   unattach,
+  unattachFile,
 } from "../../../application/conversations/actions";
+import { dropTarget } from "../../../application/conversations/attachments";
 import { pollMachines } from "../../../application/conversations/polls";
 import { agentOf, chatAgent, inherited, onAgents, picks, setPick } from "../../../application/agents/agents";
 import { project } from "../../../application/workspace/vault";
@@ -23,7 +27,8 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { ImageThumbs } from "../../components/ImageThumbs";
-import { hasFiles, pastedImages } from "../../components/image-files";
+import { FileChips } from "../../components/FileChips";
+import { onPasteFiles } from "../../components/image-files";
 import { uiRequests } from "../../../application/navigation/requests";
 import "../../styles/conversations.css";
 
@@ -43,12 +48,13 @@ const fieldMounted = (el: HTMLTextAreaElement | null) => {
   }
 };
 
-/** The message field with the images waiting, the agent, model and effort picks and the send button. */
+/** The message field with the images and files waiting, the agent, model and effort picks and the send button. */
 export function Composer({ className }: { className: string }) {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
   const typed = useDraftsStore(s => s.typed[selected] ?? "");
   const attached = useDraftsStore(s => s.attached);
+  const files = useDraftsStore(s => s.files);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
   // a conversation of a project bound to a machine runs there
   const machine = useConversationsStore(s => s.machines[selected]?.machine);
@@ -88,7 +94,16 @@ export function Composer({ className }: { className: string }) {
   // the text Escape closed the list on: it stays closed until the text changes
   const [dismissed, setDismissed] = useState("");
   const field = useRef<HTMLTextAreaElement | null>(null);
-  const files = useRef<HTMLInputElement>(null);
+
+  // files dropped anywhere on the window land here, unless Cmd-K is open over it
+  useEffect(
+    () =>
+      dropTarget({
+        over: setDropping,
+        drop: paths => attachPaths(paths).then(() => field.current?.focus()),
+      }),
+    [],
+  );
 
   // the field grows with its text, also when switching puts another conversation's text in it
   useLayoutEffect(() => {
@@ -128,17 +143,6 @@ export function Composer({ className }: { className: string }) {
       e.preventDefault();
       sendMsg();
     }
-  };
-  const onDragOver = (e: DragEvent) => {
-    if (!hasFiles(e)) return;
-    e.preventDefault();
-    setDropping(true);
-  };
-  const onDrop = (e: DragEvent) => {
-    setDropping(false);
-    if (!hasFiles(e)) return;
-    e.preventDefault();
-    attach([...e.dataTransfer.files]);
   };
 
   // the default names what the agent ran on, once a conversation has shown it
@@ -188,9 +192,6 @@ export function Composer({ className }: { className: string }) {
     <div className={`relay-composer flex-none ${className}`}>
       <div
         className={`relative rounded-[14px] bg-raised border pt-3 pr-3 pb-2 pl-3.5 shadow-md focus-within:border-accent ${dropping ? "border-accent" : "border-separator-strong"}`}
-        onDragOver={onDragOver}
-        onDragLeave={() => setDropping(false)}
-        onDrop={onDrop}
       >
         {completions.length ? (
           <ul
@@ -227,6 +228,16 @@ export function Composer({ className }: { className: string }) {
             }}
           />
         ) : null}
+        {files.length ? (
+          <FileChips
+            className="mb-2"
+            paths={files}
+            onRemove={i => {
+              unattachFile(i);
+              field.current?.focus();
+            }}
+          />
+        ) : null}
         <textarea
           ref={el => {
             field.current = el;
@@ -241,32 +252,18 @@ export function Composer({ className }: { className: string }) {
             setTyped(e.target.value);
             setPicked(0);
           }}
-          onPaste={e => {
-            const files = pastedImages(e);
-            if (files.length) attach(files);
-          }}
+          onPaste={e => onPasteFiles(e, attach, attachPaths)}
         ></textarea>
         <div className="flex items-center gap-0.5 mt-2 -ml-1.5 text-secondary">
-          {/* the + opens the file dialog for images; they join the ones pasted or dropped */}
+          {/* the + opens the file dialog; what it picks joins what is pasted or dropped, by its path */}
           <button
             className="grid place-items-center size-7 rounded-[7px] border-0 bg-transparent text-secondary hover:bg-fill-2 hover:text-label"
             title={t("composer.attach")}
             aria-label={t("composer.attach")}
-            onClick={() => files.current?.click()}
+            onClick={() => pickAndAttach().then(() => field.current?.focus())}
           >
             <Icon name="add" className="glyph size-4" />
           </button>
-          <input
-            ref={files}
-            type="file"
-            accept="image/*"
-            multiple
-            hidden
-            onChange={e => {
-              attach([...(e.target.files ?? [])]);
-              e.target.value = "";
-            }}
-          />
           {/* with one agent there is nothing to pick */}
           {view.agents.length > 1 && !isTerminal(selected) && !agentFixed ? (
             <>

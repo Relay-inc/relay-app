@@ -153,6 +153,18 @@ function handle(cmd: string, a: Args): unknown {
       return harness.pickFolder;
     case "pick_path":
       return null;
+    // files attached by their path (src-tauri/src/files.rs)
+    case "pick_files":
+      return [...harness.pickFiles];
+    case "pasted_files":
+      return [...harness.pastedFiles];
+    case "read_image": {
+      const type = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<string, string>)[String(a.path).split(".").pop()!.toLowerCase()];
+      if (!type) return Promise.reject("not a picture");
+      return [type, pngBase64(120, 80, "#e8efe3", "#3f8f4f")];
+    }
+    case "open_file":
+      return String(a.path).includes("missing") ? Promise.reject("not found") : null;
     case "snapshot":
       return vault.snapshot(reminders);
     case "vault_notes":
@@ -431,6 +443,10 @@ const harness = {
   autoReply: true,
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,
+  /** What `pick_files` answers (the + button's dialog): [] is cancelled. */
+  pickFiles: [] as string[],
+  /** What `pasted_files` answers: the paths of files copied in Finder. */
+  pastedFiles: [] as string[],
   fixture,
   now: NOW,
   keys: {
@@ -464,6 +480,16 @@ const harness = {
   nextPaint,
   /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
   deepLink: (url: string) => emit("deep-link://new-url", [url]),
+  /** a permission card that turns up in the next `pending` poll */
+  addPending: (request: (typeof pending)[number]) => void pending.push(request),
+  /** files dragged in from Finder: Tauri's drag-enter, then drag-drop with the paths (the webview's onDragDropEvent) */
+  dropPaths: async (paths: string[]) => {
+    const position = { x: 400, y: 300 };
+    emit("tauri://drag-enter", { paths, position });
+    await nextTask();
+    emit("tauri://drag-drop", { paths, position });
+    await nextTask();
+  },
   /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
   resolved: (key: string, model = "opus", effort = "high") =>
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),

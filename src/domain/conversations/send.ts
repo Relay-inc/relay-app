@@ -10,10 +10,10 @@ type SendPlan =
   | { kind: "wait-outside"; key: string } // a turn runs in a process outside the app: a second one would fork the transcript
   | { kind: "send"; key: string; text: string; take: boolean };
 
-/** `forced` text, or what is typed in the open conversation (`selected`) with its images; `to` a conversation that is
- *  not open (Cmd-K) with `toImages` of its own. */
+/** `forced` text, or what is typed in the open conversation (`selected`) with its images and files; `to` a conversation
+ *  that is not open (Cmd-K) with `toImages` attachments of its own. */
 export function planSend(
-  state: Pick<DraftsState, "typed" | "attached"> & Pick<ConversationsState, "outside">,
+  state: Pick<DraftsState, "typed" | "attached" | "files"> & Pick<ConversationsState, "outside">,
   selected: string,
   forced?: string,
   to?: string,
@@ -22,7 +22,7 @@ export function planSend(
   const fromComposer = forced === undefined;
   const text = forced ?? (state.typed[selected] ?? "").trim();
   const take = fromComposer && !!text;
-  if ((!text && !(to ? toImages : state.attached.length)) || (!to && selected === VIEW.wait))
+  if ((!text && !(to ? toImages : state.attached.length + state.files.length)) || (!to && selected === VIEW.wait))
     return { kind: "nothing" };
   if (!to && isTerminal(selected)) return { kind: "fork", text, take };
   const key = to ?? selected;
