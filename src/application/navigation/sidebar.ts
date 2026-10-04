@@ -14,7 +14,6 @@ import {
   type Trail,
   type ViewRow,
   type Meta,
-  type OrchRow,
 } from "../../domain/navigation/sidebar";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
@@ -180,20 +179,7 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
   };
 }
 
-// ---------- the orchestrator's coordinator, above the views: its working state like a conversation's, its running workers
-const orchRow = (): OrchRow => {
-  const running = runningWorkers();
-  return {
-    key: ORCH,
-    icon: "agent",
-    name: t("nav.orch"),
-    meta: running ? { kind: "count", n: running, title: tn("nav.orchRunning", running) } : undefined,
-    unseen: cs().unseen.has(ORCH),
-    trail: trailOf([ORCH]),
-  };
-};
-
-// ---------- the view rows: waiting, reminders, the boards, pull requests and mail, in the user's order
+// ---------- the view rows: the orchestrator, waiting, reminders, the boards, pull requests and mail, in the user's order
 const waitingMeta = (): Meta | undefined => {
   const waiting = waitCount();
   return waiting ? { kind: "badge", n: waiting } : undefined;
@@ -212,7 +198,13 @@ const mailMeta = (): Meta | undefined => {
   const unreadCount = useMailStore.getState().list?.filter(unread).length ?? 0;
   return unreadCount ? { kind: "count", n: unreadCount } : undefined;
 };
+// the orchestrator's coordinator: its running workers
+const orchMeta = (): Meta | undefined => {
+  const running = runningWorkers();
+  return running ? { kind: "count", n: running, title: tn("nav.orchRunning", running) } : undefined;
+};
 const META: Record<string, () => Meta | undefined> = {
+  [ORCH]: orchMeta,
   [WAIT]: waitingMeta,
   [REM]: remindersMeta,
   [PRS]: prsMeta,
@@ -221,13 +213,19 @@ const META: Record<string, () => Meta | undefined> = {
 
 export const sidebarCfg = (): SidebarCfg => settings().sidebar ?? {};
 export const viewsLayout = () => sidebarCfg().layout ?? "list";
+export const moreOn = () => sidebarCfg().more !== false;
 /** Every view there is now, in the user's order, the switched-off ones included. */
 const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), t), sidebarCfg());
 export const hiddenViews = () => allViews().filter(view => isHidden(view.key, sidebarCfg()));
 const viewRows = (): ViewRow[] =>
   allViews()
     .filter(view => !isHidden(view.key, sidebarCfg()))
-    .map(view => ({ ...view, meta: META[view.key]?.() }));
+    .map(view => ({
+      ...view,
+      meta: META[view.key]?.(),
+      // the coordinator is a conversation: it shows its working state like one
+      ...(view.key === ORCH ? { unseen: cs().unseen.has(ORCH), trail: trailOf([ORCH]) } : {}),
+    }));
 
 /** Changes the sidebar's settings: shown at once, then saved (the settings window follows). */
 export function setSidebar(patch: SidebarCfg) {
@@ -339,5 +337,5 @@ export function sidebarModel(): SidebarModel {
   });
   // sections the user never dragged follow in the index order
   const ids = [...sb().secOrder, ...Object.keys(byId).filter(id => !sb().secOrder.includes(id))];
-  return { orch: orchRow(), views: viewRows(), sections: ids.filter(id => byId[id]).map(id => byId[id]) };
+  return { views: viewRows(), sections: ids.filter(id => byId[id]).map(id => byId[id]) };
 }

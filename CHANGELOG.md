@@ -11,10 +11,11 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
-- **Orchestrator**, at the top of the sidebar: one conversation you keep talking to that hands work out to workers. Each worker is a normal conversation under its own project, so you can read along and step in, and a board lists them with their state, report and diff, with Open and Stop. A worker on a repo gets its own git worktree on a fresh `relay/…` branch and may commit there, never on main; pushing or opening a PR still asks on a card. Only the coordinator writes the shared vault files (work-state, memory, reminders). The orchestrator's conversations run on this Mac (#90)
+- **Orchestrator**, among the views on top of the sidebar (hide it, drag it or show it as an icon like the others): one conversation you keep talking to that hands work out to workers. Each worker is a normal conversation under its own project, so you can read along and step in, and a board lists them with their state, report and diff, with Open and Stop. A worker on a repo gets its own git worktree on a fresh `relay/…` branch and may commit there, never on main; pushing or opening a PR still asks on a card. Only the coordinator writes the shared vault files (work-state, memory, reminders). The orchestrator's conversations run on this Mac (#90)
 
 ### Added
 
+- Views you switch off in the sidebar stay reachable under "…" after the views, a dropdown with their icons; turn the "…" off in Settings › General or from the views' right-click menu (#PR)
 - The Mac stays awake while a conversation has a turn running, so you can leave it working; closing the lid still sleeps it. Switch it off in Settings › General (#91)
 - New task on the board, from the title bar or a lane's +, for Productive, Linear and Trello: the card shows at once and is made in the tracker (#87)
 - The ticket window shows a preview of a Productive ticket's pictures, in its files and in the comments. A click opens the picture at full size in Relay's own viewer window: log in to Productive there once, after that it shows the picture right away (#87)
