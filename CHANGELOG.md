@@ -13,6 +13,8 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-10-04
+
 ### Added
 
 - **Update a machine from Relay** (Settings › Machines): when Relay is newer than a machine's relay-server, Update to <version> sends it the Linux binary of Relay's own version from the GitHub release. The server checks it and restarts on it, conversations keep running. Releases now carry `relay-server-linux-x86_64` and `-aarch64`. A machine before this version needs one update by hand (#94)
@@ -191,7 +193,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/LaurentMe/relay-app/compare/v0.0.5...HEAD
+[0.0.5]: https://github.com/LaurentMe/relay-app/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...v0.0.2
