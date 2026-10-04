@@ -1,6 +1,6 @@
 [package]
 name = "relay"
-version = "0.0.4"
+version.workspace = true
 description = "Relay control room"
 authors = []
 edition = "2021"
@@ -55,6 +55,8 @@ portable-pty = "0.9"
 
 # the broker and the link to a work machine (src/machines.rs, packages/relay-server)
 relay-remote = { path = "../packages/relay-remote" }
+# this Mac as a work machine: the app runs relay-server itself (src/host.rs, `relay --relay-server`)
+relay-server = { path = "../packages/relay-server" }
 
 # the agent providers, registered in src/agents.rs (PROVIDERS)
 agent-core.workspace = true

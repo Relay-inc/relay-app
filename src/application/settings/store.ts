@@ -11,10 +11,11 @@ import {
   type MirrorProgress,
   type MirrorStatus,
   type ServerSetup,
+  type HostStatus,
   type Message,
   type Settings,
 } from "../../domain/settings/types";
-import { SETUP_FOLDER } from "../../domain/settings/machines";
+import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
@@ -48,11 +49,17 @@ export type SettingsState = {
     status: Record<string, MachineStatus | "checking">;
     pairing: boolean;
     pairError: string;
-    messages: Record<string, Message | null>; // per machine: why the last forget failed
+    messages: Record<string, Message | null>; // per machine: why the last forget or update failed, or that it updated
+    updating: string; // the machine being updated from here, "" for none
     mirror: Record<string, MirrorStatus | null>; // the last mirror round per machine, polled while the page shows
     mirrorMessages: Record<string, Message | null>; // per machine: why the last mirror change failed
     mirrorProgress: Record<string, MirrorProgress | null>; // per machine: the running round, null between rounds
     setup: ServerSetup | null; // this Relay's version and the image, for the setup commands
+    setupPlatform: SetupPlatform; // the kind of machine the setup commands are for
+    setupMacWay: "app" | "docker"; // how a Mac becomes a machine: Relay itself, or Docker
+    host: HostStatus | null; // this Mac as a machine, null until read
+    hostLine: string; // the pairing line made for another Mac
+    hostError: string;
     setupFolder: string; // where the machine keeps relay-server's folders, as typed in the setup section
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
@@ -101,11 +108,17 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     pairing: false,
     pairError: "",
     messages: {},
+    updating: "",
     mirror: {},
     mirrorMessages: {},
     mirrorProgress: {},
     setup: null,
-    setupFolder: SETUP_FOLDER,
+    setupPlatform: "linux",
+    setupFolder: SETUP_FOLDERS.linux,
+    setupMacWay: "app",
+    host: null,
+    hostLine: "",
+    hostError: "",
   },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {

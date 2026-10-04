@@ -35,14 +35,44 @@ export function agoParts(
 /** A conflict as the backend names it, "vault/<path>", without its "vault/" prefix. */
 export const conflictPath = (conflict: string) => conflict.replace(/^vault\//, "");
 
-/** Where a machine keeps relay-server's folders unless the page says otherwise: an Unraid appdata folder. */
-export const SETUP_FOLDER = "/mnt/user/appdata/relay-server";
-/** The commands that set up relay-server in Docker on a machine (a home server, a NAS), to run there in this order.
- *  `folder` keeps the pairing, Claude's login, Claude Code itself and the repos. The image of this Relay's `version`
- *  speaks its protocol. `update` replaces a running one with that version, the folders stay. */
-export function setupCommands(image: string, version: string, folder: string) {
-  const dir = folder.trim().replace(/\/+$/, "") || SETUP_FOLDER;
-  const q = (path: string) => (/^[\w./:-]+$/.test(path) ? path : `"${path.replace(/(["$`\\])/g, "\\$1")}"`);
+/** `a` is a later version than `b` ("0.0.10" after "0.0.9"). */
+export function newerVersion(a: string, b: string) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0);
+  }
+  return false;
+}
+
+/** The kinds of machine the setup section has commands for, in the order the page shows them. */
+export const SETUP_PLATFORMS = ["mac", "linux", "unraid"] as const;
+export type SetupPlatform = (typeof SETUP_PLATFORMS)[number];
+/** Where each kind of machine keeps relay-server's folders unless the page says otherwise. */
+export const SETUP_FOLDERS: Record<SetupPlatform, string> = {
+  mac: "~/relay-server",
+  linux: "/srv/relay-server",
+  unraid: "/mnt/user/appdata/relay-server",
+};
+// the machine's own LAN address in the pairing line, so it can be copied as is: on a Mac the first network port with
+// one (en0 is Ethernet on a desktop Mac, Wi-Fi on a laptop), on Linux the address of the default route
+const LAN_ADDRESS: Record<SetupPlatform, string> = {
+  mac: "$(ipconfig getifaddr en0 || ipconfig getifaddr en1)",
+  linux: "$(ip route get 1 | sed -n 's/.*src \\([0-9.]*\\).*/\\1/p')",
+  unraid: "$(ip route get 1 | sed -n 's/.*src \\([0-9.]*\\).*/\\1/p')",
+};
+/** The commands that set up relay-server in Docker on a machine of `platform`, to run there in this order. `folder`
+ *  keeps the pairing, Claude's login, Claude Code itself and the repos. The image of this Relay's `version` speaks its
+ *  protocol. `update` replaces a running one with that version, the folders stay. */
+export function setupCommands(image: string, version: string, folder: string, platform: SetupPlatform) {
+  const dir = folder.trim().replace(/\/+$/, "") || SETUP_FOLDERS[platform];
+  // a leading ~/ stays outside the quotes, or the shell would not expand it
+  const q = (path: string): string =>
+    path.startsWith("~/")
+      ? `~/${q(path.slice(2))}`
+      : /^[\w./:~-]+$/.test(path)
+        ? path
+        : `"${path.replace(/(["$`\\])/g, "\\$1")}"`;
   const volumes = [
     "data:/home/relay/data",
     "claude:/home/relay/.claude",
@@ -56,11 +86,18 @@ export function setupCommands(image: string, version: string, folder: string) {
     `  ${image}:${version}`,
   ].join("\n");
   const folders = ["data", "claude", "repos", "local"].map(name => q(`${dir}/${name}`)).join(" ");
+  // the container runs as uid 1000: Linux needs the folders to be its own (sudo for a folder like /srv, Unraid's
+  // terminal is root already), Docker Desktop on a Mac lets the container write a shared folder as it is
+  const folderSetup = {
+    mac: `mkdir -p ${folders}`,
+    linux: `sudo mkdir -p ${folders}\nsudo chown -R 1000:1000 ${q(dir)}`,
+    unraid: `mkdir -p ${folders}\nchown -R 1000:1000 ${q(dir)}`,
+  }[platform];
   return {
     login: "docker login ghcr.io -u <your GitHub user>",
-    install: `mkdir -p ${folders}\nchown -R 1000:1000 ${q(dir)}\n${run}`,
+    install: `${folderSetup}\n${run}`,
     claude: "docker exec -it relay-server claude",
-    pair: "docker exec relay-server relay-server pair --host <this machine's LAN address>",
+    pair: `docker exec relay-server relay-server pair --host "${LAN_ADDRESS[platform]}"`,
     update: `docker pull ${image}:${version}\ndocker rm -f relay-server\n${run}`,
   };
 }

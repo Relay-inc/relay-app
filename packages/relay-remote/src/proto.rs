@@ -8,6 +8,7 @@
 //! `sync_put {root,path,len,mtime}` (the bytes follow the request line), `sync_put_many {root,files:[{path,len,mtime}]}`
 //! (the files' bytes follow one after the other, the reply has `errors` per path), `sync_delete {root,path,hash}`, `wipe`, moving
 //! a conversation's `session_get {sid}` (len and bytes like sync_get) and `session_put {sid,cwd,len}` (bytes follow),
+//! `update {version,sha256,len}` (relay-server's binary follows, the server goes on in it after the reply),
 //! and from a device that is not paired yet only `pair {name,proof}`.
 
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,11 @@ pub struct Info {
     pub mirror_open: bool,
     #[serde(default)]
     pub in_ram: bool,
+    /// The CPU (`x86_64`, `aarch64`), and whether the server takes an `update` (not Relay on a Mac).
+    #[serde(default)]
+    pub arch: String,
+    #[serde(default)]
+    pub update: bool,
 }
 
 /// One JSON line, at most `max` bytes. EOF before any byte is an error too: a request or an answer always comes.
@@ -62,6 +68,8 @@ pub fn write_json<W: Write>(w: &mut W, v: &Value) -> io::Result<()> {
 pub const MAX_REPLY: u64 = 64 << 20;
 /// A Claude session's transcript, moved with its conversation: long sessions run to tens of MB.
 pub const MAX_SESSION: u64 = 512 << 20;
+/// relay-server's binary in an `update`.
+pub const MAX_BINARY: u64 = 128 << 20;
 /// Exactly `len` raw bytes after a JSON line: a file in `sync_get` and `sync_put`.
 pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8>> {
     if len > max { return Err(io::Error::new(io::ErrorKind::InvalidData, "file too big")); }

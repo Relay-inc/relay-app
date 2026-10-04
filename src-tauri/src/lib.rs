@@ -22,6 +22,7 @@ pub use relay_remote::broker;
 mod calendar;
 mod commits;
 mod files;
+mod host;
 mod machines;
 mod mirror;
 mod favicon;
@@ -194,6 +195,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_token", ["No {v} token. Fill it in under Relay › Settings… › Integrations.", "Geen {v}-token. Vul het in bij Relay › Instellingen… › Integraties.", "Aucun jeton {v}. Renseignez-le dans Relay › Réglages… › Intégrations.", "Kein {v}-Token. Trag es unter Relay › Einstellungen… › Integrationen ein."]),
     ("err.down", ["{p} unreachable: {v}", "{p} niet bereikbaar: {v}", "{p} injoignable : {v}", "{p} nicht erreichbar: {v}"]),
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
+    ("err.update_dev", ["A development build has no release to update a machine from: use the commands below.", "Een ontwikkelbuild heeft geen release om een machine mee bij te werken: gebruik de commando's hieronder.", "Une version de développement n'a pas de release pour mettre une machine à jour : utilisez les commandes ci-dessous.", "Ein Entwicklungsbuild hat kein Release, um eine Maschine zu aktualisieren: nutze die Befehle unten."]),
+    ("err.update_old", ["This relay-server cannot update from Relay yet: update it once with the commands below, after that it can.", "Deze relay-server kan nog niet bijgewerkt worden vanuit Relay: werk hem één keer bij met de commando's hieronder, daarna wel.", "Ce relay-server ne se met pas encore à jour depuis Relay : mettez-le à jour une fois avec les commandes ci-dessous, ensuite oui.", "Dieser relay-server lässt sich noch nicht aus Relay aktualisieren: aktualisiere ihn einmal mit den Befehlen unten, danach schon."]),
+    ("err.update_download", ["The binary for {v} could not be downloaded from the release", "De binary voor {v} kon niet gedownload worden uit de release", "Le binaire pour {v} n'a pas pu être téléchargé depuis la release", "Die Binärdatei für {v} konnte nicht aus dem Release geladen werden"]),
+    ("err.update_back", ["Updated, but the machine does not answer with the new version yet. Try Refresh in a moment.", "Bijgewerkt, maar de machine antwoordt nog niet met de nieuwe versie. Probeer zo dadelijk Vernieuwen.", "Mis à jour, mais la machine ne répond pas encore avec la nouvelle version. Réessayez Actualiser dans un instant.", "Aktualisiert, aber die Maschine antwortet noch nicht mit der neuen Version. Versuch gleich Aktualisieren."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
     ("err.mail_pw", ["The app password is the 16-letter code Google showed (spaces are fine)", "Het app-wachtwoord is de code van 16 letters die Google toonde (spaties mogen)",
@@ -1762,12 +1767,45 @@ async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, Stri
     let r = tauri::async_runtime::spawn_blocking(move || c.info_any()).await.map_err(|e| e.to_string())?;
     let proto = relay_remote::proto::PROTO;
     Ok(match r {
-        Ok(i) if i.proto == proto => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os}),
+        Ok(i) if i.proto == proto => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os, "update": i.update}),
         // it answers but speaks another protocol: the page says which side to update, with the commands
-        Ok(i) => json!({"ok": false, "outdated": if i.proto < proto { "server" } else { "app" }, "version": i.version,
+        Ok(i) => json!({"ok": false, "outdated": if i.proto < proto { "server" } else { "app" }, "version": i.version, "update": i.update,
             "error": format!("relay-server {} speaks protocol {}, this Relay {proto}", i.version, i.proto)}),
         Err(e) => json!({"ok": false, "error": e}),
     })
+}
+/// Update a machine's relay-server to this Relay's version from here: the Linux binary for its CPU from this version's
+/// GitHub release (with gh, the repo is private), sent over the connection. The server checks it and goes on in it;
+/// this waits until it answers with the new version.
+#[tauri::command]
+async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, String> {
+    if cfg!(debug_assertions) { return Err(trc("err.update_dev")); }
+    let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    let c = state.machines.client(&m);
+    let gh = in_path(&state, "gh").ok_or_else(|| trc("err.no_gh"))?;
+    let path = state.path.clone();
+    let version = env!("CARGO_PKG_VERSION");
+    tauri::async_runtime::spawn_blocking(move || {
+        let info = c.info_any()?;
+        if !info.update || info.os != "linux" { return Err(trc("err.update_old")); }
+        let dir = std::env::temp_dir().join(format!("relay-update-{}", std::process::id()));
+        let asset = format!("relay-server-linux-{}", info.arch);
+        let out = std::process::Command::new(&gh).env("PATH", &path)
+            .args(["release", "download", &format!("v{version}"), "-R", "LaurentMe/vault-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
+            .output().map_err(|e| e.to_string())?;
+        let bin = fs::read(dir.join(&asset));
+        fs::remove_dir_all(&dir).ok();
+        let bin = match bin {
+            Ok(b) if out.status.success() => b,
+            _ => return Err(format!("{}: {}", trc_v("err.update_download", version), String::from_utf8_lossy(&out.stderr).trim())),
+        };
+        c.update(version, &bin)?;
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if c.info_any().is_ok_and(|i| i.version == version) { return Ok(json!({"version": version})); }
+        }
+        Err(trc("err.update_back"))
+    }).await.map_err(|e| e.to_string())?
 }
 /// For setting up a machine: this Relay's version, the relay-server image of the same version speaks its protocol.
 #[tauri::command]
@@ -1776,6 +1814,15 @@ fn server_setup() -> Value {
     let dev = cfg!(debug_assertions);
     json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/laurentme/relay-server", "dev": dev})
 }
+/// This Mac as a work machine (host.rs): whether it runs, its RAM disk, the devices paired with it.
+#[tauri::command]
+async fn host_status() -> Value { tauri::async_runtime::spawn_blocking(host::status).await.unwrap_or_default() }
+/// Turn this Mac as a work machine on or off; its status after.
+#[tauri::command]
+async fn host_set(on: bool) -> Result<Value, String> { tauri::async_runtime::spawn_blocking(move || host::set(on)).await.map_err(|e| e.to_string())? }
+/// A one-time line to pair another Mac's Relay with this one's server.
+#[tauri::command]
+async fn host_pair() -> Result<String, String> { tauri::async_runtime::spawn_blocking(host::pair).await.map_err(|e| e.to_string())? }
 /// Forget a machine here. Its conversations there stop (nothing would ever reach them again) and lose their bind; on
 /// the machine `relay-server revoke` unpairs this Mac.
 #[tauri::command]
@@ -1922,6 +1969,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
+            std::thread::spawn(host::refresh); // a new Relay restarts this Mac's relay-server on its own binary
             orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
             actions::start(app.handle());
             awake::start(app.handle());
@@ -1957,7 +2005,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default, retry::retries, retry::retry_cancel])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

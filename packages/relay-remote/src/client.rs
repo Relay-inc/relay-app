@@ -80,6 +80,11 @@ impl Client {
     pub fn session_put(&self, sid: &str, cwd: &str, data: &[u8]) -> Result<(), String> {
         self.call_bin(json!({"op": "session_put", "sid": sid, "cwd": cwd, "len": data.len()}), Some(data.to_vec()), None, Duration::ZERO).map(|_| ())
     }
+    /// Send relay-server's binary of `version` there: it checks it and goes on in it once it has answered.
+    pub fn update(&self, version: &str, data: &[u8]) -> Result<(), String> {
+        let req = json!({"op": "update", "version": version, "sha256": crate::sync::sha256_hex(data), "len": data.len()});
+        self.call_bin(req, Some(data.to_vec()), None, Duration::from_secs(60)).map(|_| ())
+    }
     /// One mirrored folder there, as the other side of a sync round.
     pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
 

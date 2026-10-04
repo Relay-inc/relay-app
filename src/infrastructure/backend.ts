@@ -22,6 +22,7 @@ import type {
   MirrorProgress,
   MirrorStatus,
   ServerSetup,
+  HostStatus,
   MailAcct,
   Settings,
 } from "../domain/settings/types";
@@ -162,7 +163,14 @@ export const machinePair = (line: string, name: string) => invoke<Machine>("mach
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
 /** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
 export const serverSetup = () => invoke<ServerSetup>("server_setup");
+/** This Mac as a work machine: whether its LaunchAgent and server run. */
+export const hostStatus = () => invoke<HostStatus>("host_status");
+/** Turns this Mac as a machine on or off, gives the new status. */
+export const hostSet = (on: boolean) => invoke<HostStatus>("host_set", { on });
+/** A one-time pairing line for another Mac, valid 10 minutes. */
+export const hostPair = () => invoke<string>("host_pair");
 export const machineForget = (id: string) => invoke("machine_forget", { id });
+export const machineUpdate = (id: string) => invoke<{ version: string }>("machine_update", { id });
 /** Where new conversations run without a pick ("" this Mac); the backend emits settings-changed. */
 export const setMachinesDefault = (id: string) => invoke("set_machines_default", { id });
 /** The vault folders that stay on this Mac, out of a machine's mirror. */
