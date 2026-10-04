@@ -13,8 +13,9 @@ export const isView = (key: string) => {
   const kind = opened(key).kind;
   return kind === "view" || kind === "board";
 };
-/** What the right drawer shows, "" while it is closed: a note's detail, or one of the project's tools. */
-export type Drawer = "" | "detail" | "terminal" | "notes";
+/** What the right drawer shows, "" while it is closed: a note's detail, one of the project's tools, or the
+ *  orchestrator's workers. */
+export type Drawer = "" | "detail" | "terminal" | "notes" | "workers";
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 export type Toast = { text: string; undo?: () => void; btn?: string };

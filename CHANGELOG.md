@@ -11,6 +11,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+- **Orchestrator**, at the top of the sidebar: one conversation you keep talking to that hands work out to workers. Each worker is a normal conversation under its own project, so you can read along and step in, and a board lists them with their state, report and diff, with Open and Stop. A worker on a repo gets its own git worktree on a fresh `relay/…` branch and may commit there, never on main; pushing or opening a PR still asks on a card. Only the coordinator writes the shared vault files (work-state, memory, reminders). The orchestrator's conversations run on this Mac
 
 ### Added
 

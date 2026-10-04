@@ -4,6 +4,7 @@ import type { Settings } from "../settings/types";
 import type { Project, SessionItem } from "../workspace/types";
 import { findProjects } from "../workspace/rules.ts";
 import { termKey } from "../navigation/keys.ts";
+import { ORCH } from "../orchestrator/rules.ts";
 import type { ConversationsState, DraftsState, Translate } from "./state";
 import type { CardChoice, Chat, Item, Pending, TerminalSession } from "./types";
 
@@ -21,10 +22,14 @@ export const UNTITLED = [NEW, "Gesprek", "Algemeen gesprek"];
 export const displayTitle = (title: string, t: Translate) => (PLACEHOLDER[title] ? t(PLACEHOLDER[title]) : title);
 export const projectOf = (s: Pick<S, "chats">, key: string) => s.chats[key]?.project ?? null;
 export const label = (s: Pick<S, "chats">, key: string, t: Translate) => displayTitle(s.chats[key]?.title || key, t);
-/** A project's open conversations (null: the general ones), newest first. */
+/** A project's open conversations (null: the general ones), newest first. The orchestrator's coordinator is never one
+ *  of them: it has its own row on top of the sidebar. */
 export const chatsOf = (s: Pick<S, "chats">, project: string | null) =>
   Object.values(s.chats)
-    .filter(conversation => conversation.project === project && !conversation.draft && !conversation.closed)
+    .filter(
+      conversation =>
+        conversation.project === project && !conversation.draft && !conversation.closed && conversation.key !== ORCH,
+    )
     .sort((newer, older) => older.at - newer.at);
 /** What is stored under `chats`: a draft only once something is typed in it. */
 export const chatsToStore = (s: Pick<ConversationsState, "chats"> & Pick<DraftsState, "typed">) =>

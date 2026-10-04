@@ -28,6 +28,7 @@ import { NewReminder } from "./NewReminder";
 import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
+import { WorkersToggle } from "../orchestrator/WorkersToggle";
 import { column } from "./layout";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
@@ -79,7 +80,7 @@ export function ConversationsView({ className }: { className: string }) {
     requestAnimationFrame(() => log.current && (log.current.scrollTop = 0));
   });
 
-  const asked = onView || !!bar.session || !!bar.projectName || dismissed || busy;
+  const asked = onView || !!bar.session || !!bar.projectName || bar.coordinator || dismissed || busy;
   const chatBarEl = (
     <ChatBar
       key={selected}
@@ -87,7 +88,7 @@ export function ConversationsView({ className }: { className: string }) {
       img={bar.img}
       tint={bar.tint}
       icon={bar.icon}
-      editable={!onView}
+      editable={!onView && !bar.coordinator}
       sub={bar.sub}
       value={bar.title}
       readonly={!!bar.session}
@@ -104,6 +105,8 @@ export function ConversationsView({ className }: { className: string }) {
           <PrsReload />
         ) : selected === MAIL ? (
           <MailReload />
+        ) : bar.coordinator ? (
+          <WorkersToggle />
         ) : null
       }
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}

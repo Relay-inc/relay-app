@@ -8,11 +8,18 @@ import { Icon } from "../../components/Icon";
 import { PanelDetail } from "../navigation/PanelDetail";
 import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { ScratchPanel } from "../scratch/ScratchPanel";
+import { WorkerBoard } from "../orchestrator/WorkerBoard";
 import "../../styles/navigation.css";
 
-const TITLES = { detail: "drawer.detail", terminal: "drawer.terminal", notes: "drawer.notes" } as const;
+const TITLES = {
+  detail: "drawer.detail",
+  terminal: "drawer.terminal",
+  notes: "drawer.notes",
+  workers: "orch.workers",
+} as const;
 
-/** The right drawer, open on demand: a note's detail, or one of the project's tools (terminals, notes). */
+/** The right drawer, open on demand: a note's detail, one of the project's tools (terminals, notes), or the
+ *  orchestrator's workers next to its coordinator. */
 export function DrawerView({ className, drawer }: { className: string; drawer: Exclude<Drawer, ""> }) {
   const { t } = useT();
   const project = useDerived(() => selectedProject()) ?? "";
@@ -33,11 +40,12 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           </button>
         </div>
         <div
-          className={`min-w-115 ${drawer === "detail" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
+          className={`min-w-115 ${drawer === "detail" || drawer === "workers" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}
           {drawer === "detail" ? <PanelDetail /> : null}
+          {drawer === "workers" ? <WorkerBoard /> : null}
         </div>
       </div>
     </aside>

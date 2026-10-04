@@ -26,6 +26,7 @@ mod mirror;
 mod favicon;
 mod mail;
 pub mod notify;
+mod orch;
 mod providers;
 mod pty;
 mod relay_config;
@@ -301,6 +302,7 @@ struct App {
     asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
     machines: machines::Machines,          // work machines, this Mac's certificate and which conversation runs where
     mirrors: mirror::Mirrors,              // what this Mac keeps in sync on each work machine (mirror.rs)
+    orch: Mutex<()>,                       // one writer of orch.json at a time (orch.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -613,7 +615,7 @@ fn taint(settings: &[Value], all_read: bool) -> [Value; 2] {
     deny.extend(settings.iter().flat_map(|s| s["permissions"]["allow"].as_array().into_iter().flatten())
         .filter_map(|r| r.as_str()).filter(|r| !r.starts_with("mcp__relay-mail")).map(String::from));
     deny.sort(); deny.dedup();
-    [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"allow": MAIL_TOOLS, "deny": deny}}}}),
+    [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"allow": MAIL_TOOLS.iter().chain(orch::WORKER_TOOLS.iter()).collect::<Vec<_>>(), "deny": deny}}}}),
      json!({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})]
 }
 /// The settings a session in the vault loads that can allow tools, the user's and the vault's, shared and local,
@@ -636,8 +638,9 @@ fn write_taint(p: &mut Proc, vault: &str) {
     if let Some(m) = broker::load_meta(&broker::meta_path(&p.key)) { broker::save_meta(&broker::Meta { tainted: true, ..m }); }
 }
 /// The request that opens the pipe: which in-process MCP servers the app answers for.
-fn pipe_init(mail_on: bool) -> Value {
-    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": if mail_on { json!(["relay-mail"]) } else { json!([]) }}})
+fn pipe_init(mail_on: bool, orch_on: bool) -> Value {
+    let servers: Vec<&str> = [(mail_on, "relay-mail"), (orch_on, "relay-orch")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
+    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": servers}})
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -673,6 +676,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     } else {
         let mut eb = env_of(app, state, p);
         if p.caps().accounts { eb.opts["account"] = json!(account); }
+        if claude { orch::flags(&mut eb.opts, project, &dir); } // the orchestrator's coordinator and workers (orch.rs)
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
@@ -680,7 +684,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
         (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.opts["mail"] == true, false)
     };
     let broker::Conn { agent, mut stdin, frames, backlog } = c;
-    if claude { writeln!(stdin, "{}", pipe_init(mail_on)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
+    // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)
+    if claude { writeln!(stdin, "{}", pipe_init(mail_on, !remote && orch::is_orch(project))).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
     // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
@@ -706,6 +711,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
         let mut exited = false;
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
         let mut err: Vec<String> = vec![];
+        let mut last = String::new(); // the agent's last text block, for a worker that ends without a report (orch.rs)
         // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
         let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
         // the same for the repos' reflogs around a tool call that may commit (see commits.rs)
@@ -777,10 +783,14 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                         if !replay { emit(json!({"type": "resolved", "model": model, "effort": effort, "default_model": inherit.0, "default_effort": inherit.1})); }
                         continue;
                     }
+                    Event::Text { text, delta } => { if !delta { last.clear(); } last.push_str(text); }
                     Event::TurnEnd { error, .. } => {
                         let e = error.as_deref().unwrap_or("").to_lowercase();
                         if e.contains("usage limit") || e.contains("hit your limit") { spend(&a); }
                         if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.saturating_sub(1)); }
+                        // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
+                        if orch::is_worker(&k) { orch::turn_end(&a, &k, &last); }
+                        last.clear();
                     }
                     _ => {}
                 }
@@ -799,6 +809,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
             if procs.get(&k).is_some_and(|x| x.child.id() != pid) { return; }
             procs.remove(&k);
         }
+        if orch::is_worker(&k) { orch::exited(&a, &k); }
         emit(json!({"type": "exit"}));
     });
 }
@@ -873,6 +884,7 @@ fn reattach(app: &AppHandle) {
 /// reader thread so the conversation keeps streaming while IMAP works.
 fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
     let (rid, req) = (ev["request_id"].clone(), &ev["request"]);
+    if req["subtype"] == "mcp_message" && req["server_name"] == "relay-orch" && orch::is_orch(key) { return orch::control(app, key, pid, rid, &req["message"]); }
     if req["subtype"] != "mcp_message" || req["server_name"] != "relay-mail" {
         return pipe_reply(app, key, pid, json!({"subtype": "error", "request_id": rid, "error": "unsupported"}));
     }
@@ -919,6 +931,8 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
         model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
+    // the orchestrator's conversations stay on this Mac, its tools are answered over this pipe (orch.rs)
+    let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
     // the project the agent is told about: the line in front of the message (agent_core::envelope)
     let text = match told.filter(|t| !t.is_empty()) { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
     // pasted images, only the types the webview allows, for a provider that takes them
@@ -960,8 +974,37 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
 }
 
 #[tauri::command]
-fn stop(state: State<App>, project: String) {
+fn stop(app: AppHandle, state: State<App>, project: String) {
+    if orch::is_worker(&project) { orch::stop(&app, &project); return; }
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+}
+
+/// The orchestrator's workers, oldest first (orch.rs).
+#[tauri::command]
+fn orch_workers(app: AppHandle) -> Vec<orch::Worker> { orch::load(&app) }
+#[tauri::command]
+fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
+
+/// Relay itself writes a turn into a conversation of the app (the orchestrator's briefs and reports): its process
+/// is started when it is not running, on this Mac, on the model it runs with, else `model`. `taint`: the text may
+/// carry a stranger's words, so the conversation is restricted first.
+fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool, text: &str) -> Result<(), String> {
+    let state = app.state::<App>();
+    let p = provider_of(&state, key, Some("claude"));
+    if p.id() != "claude" { return Err("the orchestrator runs on Claude Code".into()); }
+    let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
+    let account = account_of(&state, p, key, &model);
+    let mut procs = state.procs.lock().unwrap();
+    if !procs.contains_key(key) {
+        let x = spawn(app, &state, p, key, name, None, (model, String::new()), None, taint, &account, Some(""))?;
+        procs.insert(key.to_string(), x);
+    }
+    let x = procs.get_mut(key).unwrap();
+    if taint && !x.tainted { let v = vault(&state); write_taint(x, &v); }
+    let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or("claude: no input")?;
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+    x.set_turns(x.turns + 1);
+    Ok(())
 }
 
 /// A conversation closes: remove the worktrees it made that are safe to remove (see worktrees::remove). The ones
@@ -1854,7 +1897,7 @@ pub fn run() {
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
             actions::start(app.handle());
@@ -1889,7 +1932,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -1981,11 +2024,14 @@ mod mail_tests {
         let [unread, _] = super::taint(&[user], false);
         assert!(unread["request"]["settings"]["permissions"]["deny"].as_array().unwrap().contains(&serde_json::json!("Bash")), "an unreadable settings file costs Bash");
         assert!(!deny.iter().any(|d| d.starts_with("mcp__relay-mail")), "the mail tools themselves stay");
-        assert_eq!(rules["request"]["settings"]["permissions"]["allow"], serde_json::json!(super::MAIL_TOOLS), "the mail tools need no card");
+        let mut allow: Vec<&str> = super::MAIL_TOOLS.to_vec();
+        allow.push("mcp__relay-orch__report");
+        assert_eq!(rules["request"]["settings"]["permissions"]["allow"], serde_json::json!(allow), "the mail tools and a worker's report need no card");
         assert_eq!((rules["request"]["subtype"].as_str(), mode["request"]["subtype"].as_str(), mode["request"]["mode"].as_str()),
                    (Some("apply_flag_settings"), Some("set_permission_mode"), Some("default")));
-        assert_eq!(super::pipe_init(true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
-        assert_eq!(super::pipe_init(false)["request"]["sdkMcpServers"], serde_json::json!([]));
+        assert_eq!(super::pipe_init(true, false)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
+        assert_eq!(super::pipe_init(false, false)["request"]["sdkMcpServers"], serde_json::json!([]));
+        assert_eq!(super::pipe_init(true, true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail", "relay-orch"]));
     }
     #[test]
     fn only_the_apps_own_pages_navigate() {

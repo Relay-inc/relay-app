@@ -6,6 +6,7 @@ import { outgoing, planSend, refusesImages } from "../../domain/conversations/se
 import { fileName, withFiles } from "../../domain/conversations/files";
 import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
+import { ORCH } from "../../domain/orchestrator/rules";
 import type { Settings } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
@@ -129,11 +130,11 @@ async function forkTerminalAndSend(text: string): Promise<void> {
   return sendMsg(text);
 }
 // first message typed in a general conversation: if it names one project, it goes under that project
-// (Cmd-K and the resend after the route question pass `forced`: they never move or ask here).
+// (Cmd-K and the resend after the route question pass `forced`: they never move or ask here, nor does the orchestrator).
 // True when several projects match and the user is asked instead.
 function routeFirstMessage(key: string, text: string, forced?: string): boolean {
   const conversation = cs().chats[key];
-  const first = !forced && !conversation.project && !(cs().messages[key] || []).length;
+  const first = !forced && key !== ORCH && !conversation.project && !(cs().messages[key] || []).length;
   if (!first) return false;
   const hits = findProjects(text);
   if (hits.length === 1)
@@ -258,7 +259,7 @@ export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], 
   const images = to ? toImgs : drafts().attached;
   const files = to ? toFiles : drafts().files;
   if (cs().chats[key]) startConversation(key, text, files);
-  if (cs().chats[key] && text && isFirst) generateTitle(key, cs().chats[key].title, text);
+  if (cs().chats[key] && text && isFirst && key !== ORCH) generateTitle(key, cs().chats[key].title, text);
   if (!to)
     setDrafts(draft => {
       draft.attached = [];
@@ -442,7 +443,7 @@ const worktreeNote = (removed: number, kept: number) =>
   (removed ? ` · ${tn("toast.worktreesRemoved", removed)}` : "") +
   (kept ? ` · ${tn("toast.worktreesKept", kept)}` : "");
 export async function closeChat(key: string) {
-  if (cs().closing.has(key)) return;
+  if (cs().closing.has(key) || key === ORCH) return; // the coordinator is permanent
   const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
   const worktrees = await hide(key);
   toast(t("toast.closed", { title: title ?? "" }) + worktreeNote(worktrees?.removed ?? 0, worktrees?.kept ?? 0), () =>

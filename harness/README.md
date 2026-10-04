@@ -38,7 +38,7 @@ the installed Google Chrome.
 
 ## The mock
 
-URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp` (dark: settings theme dark; graphite: the graphite accent;
+URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|orch` (orch: `orch_workers` gives three workers (running, done with a diff, silent), `c:orch` has a folded `[Relay]` report, `__harness.orchLive()` emits the live `orch` events; dark: settings theme dark; graphite: the graphite accent;
 icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; accounts: Claude Code
 on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split), `?sel=<key>` the view or
 conversation the window opens on, `?link=<relay:// url>` the deep link the app was launched with (`plugin:deep-link|get_current`). On every load the mock resets localStorage to the fixture:
@@ -56,6 +56,7 @@ transparent over the macOS sidebar material in Tauri; the mock gives `html` the 
 | `stream({ key, deltas, tokensPerDelta, ratePerSecond })` | A turn as the backend sends it: `tool_call`, `tool_result`, text deltas, `turn_end`. `ratePerSecond: 0` sends each delta in the task after the previous one. Resolves with per-delta handling times and the total until painted. |
 | `deepLink(url)` | A `relay://` link while the app runs (the `deep-link://new-url` event). |
 | `resolved(key, model?, effort?)` | The `resolved` agent event: what a fresh session ran on when model and effort were left to the CLI. |
+| `orchLive()` | The orchestrator's live `orch` events (fixture orch): a new worker, a worker that reports, the `sent` report into `c:orch`. |
 | `liveTail(key?)` | Live events on the long conversation: a running tool, a failed one, an error, a draft note. |
 | `pickFolder` | What `pick_folder` answers (null, the default, is cancelled). |
 | `pickFiles`, `pastedFiles` | What `pick_files` (the + dialog) and `pasted_files` (Finder copy) answer; `[]` by default. |
@@ -82,7 +83,7 @@ in-memory tasks loosely, and a new task (`POST /tasks`) is added to them.
 
 ## Views (`screens.mjs`)
 
-69 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+73 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
@@ -90,7 +91,7 @@ mail-second-account, mail-list, mail-plain, mail-html, mail-experimental (Inbox/
 mail's bar), mail-other (the Other tab), mail-selection (three mails ticked, the bulk bar), prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity.
 Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
-deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Settings
+deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Orchestrator: orchestrator (the coordinator with the worker board in the drawer), orchestrator-open (the report and a worker's details unfolded), orchestrator-live (a worker starts, another reports), orchestrator-worker (a worker under its project). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),

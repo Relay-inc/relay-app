@@ -33,6 +33,10 @@ fn on_account(cmd: &mut Command, account: &str) {
 /// and the app asks on a card for the ones that need it.
 pub const RELAY_TOOL: &str = "Bash(relay *)";
 
+/// The relay-orch tools of the orchestrator's coordinator and of its workers, without a card (src-tauri orch.rs).
+pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
+pub const ORCH_WORKER_TOOLS: [&str; 1] = ["mcp__relay-orch__report"];
+
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
@@ -115,11 +119,23 @@ impl AgentProvider for Claude {
             "env": {"PENDING": env.pending.to_string_lossy(), "PROJECT": l.key}}}});
         // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
         if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
+        // opts.orch, set by the app for the orchestrator's coordinator and workers: the relay-orch tools, their
+        // role prompt, and the denies and asks that hold whatever the user's settings allow (ask beats allow)
+        let strs = |k: &str| env.opts[k].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect::<Vec<_>>();
+        let mut allowed: Vec<String> = MAIL_TOOLS.iter().chain([RELAY_TOOL].iter()).map(|t| t.to_string()).collect();
+        if let Some(role) = env.opts["orch"].as_str() {
+            mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
+            allowed.extend(if role == "coordinator" { &ORCH_COORD_TOOLS[..] } else { &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
+        }
+        let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(strs("deny")).collect();
+        let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
-            .arg(mcp.to_string()).arg("--allowedTools").args(MAIL_TOOLS).arg(RELAY_TOOL).arg("--disallowedTools").args(DENIED)
-            .args(["--append-system-prompt", agent_core::envelope::HINT, "-n", l.name]);
+            .arg(mcp.to_string()).arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
+            .arg("--append-system-prompt").arg(&system).args(["-n", l.name]);
+        let ask = strs("ask");
+        if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }
@@ -219,6 +235,14 @@ mod tests {
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[9].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
+        let opts = json!({"orch": "worker", "system": "be a worker", "deny": ["Edit(//v/x)"], "ask": ["Bash(git push*)"]});
+        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args[9].contains("\"relay-orch\":{\"name\":\"relay-orch\",\"type\":\"sdk\"}"));
+        let at = |f: &str| args.iter().position(|a| a == f).unwrap();
+        assert_eq!(args[at("--allowedTools") + 1..at("--disallowedTools")].last().unwrap(), "mcp__relay-orch__report");
+        assert_eq!(args[at("--disallowedTools") + 1..at("--append-system-prompt")].last().unwrap(), "Edit(//v/x)");
+        assert!(args[at("--append-system-prompt") + 1].starts_with(agent_core::envelope::HINT) && args[at("--append-system-prompt") + 1].ends_with("be a worker"));
+        assert_eq!(args[at("--settings") + 1], r#"{"permissions":{"ask":["Bash(git push*)"]}}"#);
     }
     #[test]
     fn terminal_commands() {

@@ -14,7 +14,9 @@ import {
   type Trail,
   type ViewRow,
   type Meta,
+  type OrchRow,
 } from "../../domain/navigation/sidebar";
+import { ORCH } from "../../domain/orchestrator/rules";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
 import type { SidebarCfg } from "../../domain/settings/types";
 import { viewItems } from "../../domain/navigation/sidebar-views";
@@ -42,6 +44,7 @@ import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../s
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
 import { usePullRequestsStore } from "../pull-requests/store";
+import { runningWorkers } from "../orchestrator/orchestrator";
 import { useNavigationStore } from "./store";
 
 // The sidebar: its own state (search, folds, dragged order) and the rows it shows, built from every context's state.
@@ -126,6 +129,7 @@ const convRow = (conversation: Chat): ConvRow => ({
   // only a draft reads what is typed: a keystroke in a started conversation leaves the sidebar alone
   closable: !(conversation.draft && !typedOf(conversation.key)),
   closing: cs().closing.has(conversation.key),
+  orch: !!conversation.orch,
 });
 const termRow = (session: TerminalSession): ConvRow => ({
   key: session.key,
@@ -139,6 +143,7 @@ const termRow = (session: TerminalSession): ConvRow => ({
   ...subsOf(session.key),
   closable: true,
   closing: false,
+  orch: false,
 });
 
 // the label without the emoji projectLabel puts in front: the row draws the project's icon next to it already
@@ -174,6 +179,19 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
     fold: foldLabel(conversations.length, unfolded),
   };
 }
+
+// ---------- the orchestrator's coordinator, above the views: its working state like a conversation's, its running workers
+const orchRow = (): OrchRow => {
+  const running = runningWorkers();
+  return {
+    key: ORCH,
+    icon: "agent",
+    name: t("nav.orch"),
+    meta: running ? { kind: "count", n: running, title: tn("nav.orchRunning", running) } : undefined,
+    unseen: cs().unseen.has(ORCH),
+    trail: trailOf([ORCH]),
+  };
+};
 
 // ---------- the view rows: waiting, reminders, the boards, pull requests and mail, in the user's order
 const waitingMeta = (): Meta | undefined => {
@@ -321,5 +339,5 @@ export function sidebarModel(): SidebarModel {
   });
   // sections the user never dragged follow in the index order
   const ids = [...sb().secOrder, ...Object.keys(byId).filter(id => !sb().secOrder.includes(id))];
-  return { views: viewRows(), sections: ids.filter(id => byId[id]).map(id => byId[id]) };
+  return { orch: orchRow(), views: viewRows(), sections: ids.filter(id => byId[id]).map(id => byId[id]) };
 }
