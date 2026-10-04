@@ -338,6 +338,9 @@ const en = {
   "set.faviconsOn": "Use the website favicon as icon",
   "set.faviconsHelp":
     "Once a day the app looks for a website in the notes of each project without an icon and uses its favicon. A project is tried once per website, a reset icon does not come back.",
+  "set.keepAwake": "Keep Mac awake while conversations run",
+  "set.keepAwakeHelp":
+    "While a conversation has a turn running, the Mac doesn't go to sleep when idle, so you can leave it working. Closing the lid still puts it to sleep.",
   "set.system": "System (default)",
   "set.themeSystem": "System",
   "set.sec.folders": "Folders",

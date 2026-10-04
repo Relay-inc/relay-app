@@ -14,6 +14,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ### Added
 
+- The Mac stays awake while a conversation has a turn running, so you can leave it working; closing the lid still sleeps it. Switch it off in Settings › General (#80)
 - New task on the board, from the title bar or a lane's +, for Productive, Linear and Trello: the card shows at once and is made in the tracker (#87)
 - The ticket window shows a preview of a Productive ticket's pictures, in its files and in the comments. A click opens the picture at full size in Relay's own viewer window: log in to Productive there once, after that it shows the picture right away (#87)
 - The ticket window lists the conversations started from it and the pull requests that name its number, and a Productive ticket takes new labels (#87)

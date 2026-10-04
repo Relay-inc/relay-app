@@ -56,6 +56,7 @@ export async function changeAccent(accent: Accent) {
   await save({ ...current(), accent });
 }
 export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), terminal });
+export const saveKeepAwake = (keepAwake: boolean) => save({ ...current(), keepAwake });
 /** The sidebar's views: the layout, the order, the ones switched off (each patch keeps the rest). */
 export const saveSidebar = (patch: SidebarCfg) => save({ ...current(), sidebar: { ...current().sidebar, ...patch } });
 /** One view on top of the sidebar switched on or off. */

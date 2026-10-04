@@ -342,6 +342,9 @@ export default {
   "set.faviconsOn": "Utiliser le favicon du site comme icône",
   "set.faviconsHelp":
     "Une fois par jour, l'app cherche un site web dans les notes de chaque projet sans icône et utilise son favicon. Chaque site n'est essayé qu'une fois par projet, une icône réinitialisée ne revient pas.",
+  "set.keepAwake": "Garder le Mac éveillé pendant les conversations",
+  "set.keepAwakeHelp":
+    "Tant qu'une conversation a un tour en cours, le Mac ne se met pas en veille par inactivité, vous pouvez donc le laisser travailler. Fermer l'écran le met quand même en veille.",
   "set.system": "Système (par défaut)",
   "set.themeSystem": "Système",
   "set.sec.folders": "Dossiers",
