@@ -12,7 +12,7 @@ FROM scratch AS bin
 COPY --from=build /src/target/release/relay-server /relay-server
 
 FROM debian:stable-slim AS base
-LABEL org.opencontainers.image.source="https://github.com/LaurentMe/vault-app"
+LABEL org.opencontainers.image.source="https://github.com/LaurentMe/relay-app"
 # git for the repos, curl for the Claude Code installer
 RUN apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* && useradd -m relay

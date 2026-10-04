@@ -1791,7 +1791,7 @@ async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, Stri
         let dir = std::env::temp_dir().join(format!("relay-update-{}", std::process::id()));
         let asset = format!("relay-server-linux-{}", info.arch);
         let out = std::process::Command::new(&gh).env("PATH", &path)
-            .args(["release", "download", &format!("v{version}"), "-R", "LaurentMe/vault-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
+            .args(["release", "download", &format!("v{version}"), "-R", "LaurentMe/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
             .output().map_err(|e| e.to_string())?;
         let bin = fs::read(dir.join(&asset));
         fs::remove_dir_all(&dir).ok();
