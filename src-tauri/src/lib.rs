@@ -678,7 +678,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     } else {
         let mut eb = env_of(app, state, p);
         if p.caps().accounts { eb.opts["account"] = json!(account); }
-        if claude { orch::flags(&mut eb.opts, project, &dir); } // the orchestrator's coordinator and workers (orch.rs)
+        if claude && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();

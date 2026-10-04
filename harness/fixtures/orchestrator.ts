@@ -76,7 +76,7 @@ const REPORT = `[Relay] Report from worker ${done.key} (Beacon Billing, "Patch t
 
 ${done.report!.summary}
 
-Questions for Laurent:
+Questions for the user:
 ${done.report!.questions}
 
 Branch ${done.branch} in ${done.worktree}
@@ -139,7 +139,7 @@ export function live(): Ev[] {
     {
       type: "sent",
       key: ORCH,
-      text: `[Relay] Report from worker ${running.key} (Northwind Portal, "${running.title}"): blocked\n\n${report.summary}\n\nQuestions for Laurent:\n${report.questions}`,
+      text: `[Relay] Report from worker ${running.key} (Northwind Portal, "${running.title}"): blocked\n\n${report.summary}\n\nQuestions for the user:\n${report.questions}`,
     },
   ];
 }

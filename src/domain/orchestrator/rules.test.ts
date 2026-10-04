@@ -100,7 +100,7 @@ test("the orchestrator's keys", () => {
 test("turns Relay wrote itself", () => {
   assert.equal(isRelayTurn("[Relay] Report from worker c:orch-w-x (Harbor CRM): done"), true);
   assert.equal(isRelayTurn("[Relay]without a space"), false);
-  assert.equal(isRelayTurn("Laurent says [Relay] "), false);
+  assert.equal(isRelayTurn("Someone says [Relay] "), false);
   assert.equal(relayText("[Relay] Task"), "Task");
   assert.equal(relayText("plain"), "plain");
 });

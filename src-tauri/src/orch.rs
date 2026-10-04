@@ -1,4 +1,4 @@
-// The orchestrator: one coordinating conversation (COORD) that Laurent keeps talking to, and the workers it starts
+// The orchestrator: one coordinating conversation (COORD) that the user keeps talking to, and the workers it starts
 // with its own tools. Both are ordinary conversations of the app, run by their broker in the vault; what makes them
 // the orchestrator's is the in-process MCP server `relay-orch` on their pipe (answered here, like relay-mail) and
 // the flags `flags` adds at spawn. A worker ends with `report`, which Relay writes into the coordinator as a new
@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
 
@@ -15,14 +15,30 @@ use super::{data_dir, need_vault, pipe_ok, pipe_reply, spawn_or_get, App};
 
 pub const COORD: &str = "c:orch";
 const WORKER_PREFIX: &str = "c:orch-w-";
-/// Every turn Relay itself writes starts with this, so the webview draws it as Relay's, not Laurent's.
+/// Every turn Relay itself writes starts with this, so the webview draws it as Relay's, not the user's.
 pub const PREFIX: &str = "[Relay] ";
 /// Workers running at once, unless settings.orch.max says otherwise.
 const MAX_DEFAULT: usize = 12;
 /// Branches a worker never moves: a change to one of them is flagged in its report.
 const PROTECTED: [&str; 4] = ["main", "master", "develop", "dev"];
-/// The vault files only the coordinator writes, relative to the vault.
-const SHARED: [&str; 4] = ["System/rules/core/work-state.md", "System/rules/core/memory.md", "System/reminders.md", "System/index/repos.json"];
+/// The vault-wide files only the coordinator writes, from the vault's own mapping (see vault.rs): the project index
+/// (work-state) and the reminders file, plus the brain's core rules and generated index as folders. Absolute paths.
+pub struct Shared { pub files: Vec<String>, pub dirs: Vec<String> }
+pub fn shared(app: &AppHandle, vault: &str) -> Shared {
+    let s = app.state::<App>().settings.lock().unwrap().clone();
+    let map = super::vault_map(&s, vault);
+    let files = ["workState", "reminders"].iter().filter_map(|k| map[*k].as_str()).filter(|p| !p.is_empty())
+        .map(|p| super::vault::resolve(vault, p).to_string_lossy().into_owned()).collect();
+    let dirs = super::brain(vault).map(|b| vec![format!("{b}/rules/core"), format!("{b}/index")]).unwrap_or_default();
+    Shared { files, dirs }
+}
+impl Shared {
+    /// For the prompts: the paths as the agent sees them, relative to the vault it runs in.
+    fn listed(&self, vault: &str) -> String {
+        let rel = |p: &String| p.strip_prefix(&format!("{vault}/")).unwrap_or(p).to_string();
+        self.files.iter().map(rel).chain(self.dirs.iter().map(|d| format!("{}/", rel(d)))).collect::<Vec<_>>().join(", ")
+    }
+}
 
 pub use agent_claude::ORCH_WORKER_TOOLS as WORKER_TOOLS;
 
@@ -77,37 +93,37 @@ fn update(app: &AppHandle, key: &str, f: impl FnOnce(&mut Worker)) -> Option<Wor
 
 // ---------- the flags a conversation of the orchestrator starts with (agent-claude reads them from its opts)
 
-const COORD_PROMPT: &str = "You are Relay's orchestrator for Laurent's vault. Laurent keeps this one conversation open and gives you work across his projects. You do not do the project work yourself beyond quick lookups: you split it into independent tasks and start a worker per task with `dispatch`. A worker is a full Claude Code session in the vault that Laurent sees in his sidebar under its project.
+const COORD_PROMPT: &str = "You are Relay's orchestrator for the user's vault. The user keeps this one conversation open and gives you work across their projects. You do not do the project work yourself beyond quick lookups: you split it into independent tasks and start a worker per task with `dispatch`. A worker is a full Claude Code session in the vault that the user sees in the sidebar under its project.
 Rules:
-- Dispatch without asking first. Ask Laurent only when a big decision depends on it that his request did not settle (scope, money, anything outward-facing or irreversible), and then ask before dispatching that part.
+- Dispatch without asking first. Ask the user only when a big decision depends on it that their request did not settle (scope, money, anything outward-facing or irreversible), and then ask before dispatching that part.
 - Give every worker a complete brief: the goal, what done looks like, constraints, where to look. One project per worker. Two workers never write in the same project or the same repo at the same time: run those one after the other.
-- Code changes: pass `repo`, a checkout path listed in the project's repos. Relay makes a git worktree on a fresh branch. Workers commit on that branch, never on main. Pushing and opening a PR ask Laurent on a card.
+- Code changes: pass `repo`, a checkout path listed in the project's repos. Relay makes a git worktree on a fresh branch. Workers commit on that branch, never on main. Pushing and opening a PR ask the user on a card.
 - Reports arrive as user turns starting with [Relay]. Read them, dispatch follow-ups, use `message` to steer a worker, `workers` for the overview.
-- Only you write the shared files: System/rules/core/work-state.md (run python3 System/scripts/build-index.py after the workers updated their project cards), System/rules/core/memory.md and System/reminders.md. Workers put what those need in their report.
-- When a batch is done, tell Laurent in a few lines what is done, what waits on him, and where.";
+- Only you write the vault-wide files: {shared}. Update them the way the vault's own instructions say, once the workers reported. Workers put what those need in their report.
+- When a batch is done, tell the user in a few lines what is done, what waits on them, and where.";
 
-const WORKER_PROMPT: &str = "You are a worker of Relay's orchestrator. Your task is in the first message, from the coordinator. Laurent can read along and may write to you directly.
+const WORKER_PROMPT: &str = "You are a worker of Relay's orchestrator. Your task is in the first message, from the coordinator. The user can read along and may write to you directly.
 Rules:
-- Do the task completely, then call `report` exactly once with status done, blocked (you need a decision from Laurent: put the question in questions) or failed. Then end your turn.
-- Update your project's note and Log.md as the vault's session protocol says, but do not edit System/rules/core/work-state.md, System/rules/core/memory.md, System/reminders.md or System/index/, and do not run build-index.py: the coordinator does that. Put what they need in your report.
+- Do the task completely, then call `report` exactly once with status done, blocked (you need a decision from the user: put the question in questions) or failed. Then end your turn.
+- Keep your project's own notes up to date the way the vault's instructions say, but do not edit or regenerate the vault-wide files ({shared}): the coordinator does that. Put what they need in your report.
 - In a repo, work only in the worktree from your brief and commit on its branch. Never check out, commit on or push to main, master, develop or dev. Push or open a PR only when the task asks for it.
 - Keep the report short: what changed, where, what is left.";
 
 /// The extra start flags of a coordinator or worker: role, its system prompt, its tools, denies and asks.
-pub fn flags(opts: &mut Value, key: &str, vault: &str) {
+pub fn flags(opts: &mut Value, key: &str, vault: &str, shared: &Shared) {
     if !is_orch(key) { return; }
     if !opts.is_object() { *opts = json!({}); }
     let coord = key == COORD;
     opts["orch"] = json!(if coord { "coordinator" } else { "worker" });
-    opts["system"] = json!(if coord { COORD_PROMPT } else { WORKER_PROMPT });
+    opts["system"] = json!(if coord { COORD_PROMPT } else { WORKER_PROMPT }.replace("{shared}", &shared.listed(vault)));
     // push and PRs always ask, also when the user's settings allow them (ask beats allow)
     // `git -C <dir> push` and `gh -R <repo> pr create` do not start with `git push` or `gh pr`: the `* ` forms catch them
     // (scripts/orch-check.py). ponytail: a commit message with "push" in it asks too, fine for now
     opts["ask"] = json!(["Bash(git push*)", "Bash(git * push*)", "Bash(gh pr create*)", "Bash(gh * pr create*)", "Bash(gh pr merge*)", "Bash(gh * pr merge*)", "Bash(gh pr comment*)", "Bash(gh * pr comment*)"]);
     if !coord {
-        let mut deny: Vec<String> = SHARED.iter().chain(["System/index/**"].iter())
-            .flat_map(|f| [format!("Edit(/{vault}/{f})"), format!("Write(/{vault}/{f})")]).collect();
-        deny.push("Bash(*build-index.py*)".into());
+        // `//` in front: an absolute path for Claude Code's rules
+        let paths = shared.files.iter().cloned().chain(shared.dirs.iter().map(|d| format!("{d}/**")));
+        let mut deny: Vec<String> = paths.flat_map(|f| [format!("Edit(/{f})"), format!("Write(/{f})")]).collect();
         for b in PROTECTED { deny.push(format!("Bash(git checkout {b}*)")); deny.push(format!("Bash(git switch {b}*)")); }
         opts["deny"] = json!(deny);
     }
@@ -124,7 +140,7 @@ pub fn tool_list(coord: bool) -> Value {
         return json!({"tools": [tool("report", "Report the end of your task to the coordinator. Call it once, at the end, then end your turn.",
             json!({"status": {"type": "string", "enum": ["done", "blocked", "failed"]},
                    "summary": {"type": "string", "maxLength": 4000, "description": "What changed, where, what is left"},
-                   "questions": {"type": "string", "maxLength": 2000, "description": "For blocked: what Laurent has to decide"}}), &["status", "summary"])]});
+                   "questions": {"type": "string", "maxLength": 2000, "description": "For blocked: what the user has to decide"}}), &["status", "summary"])]});
     }
     json!({"tools": [
         tool("dispatch", "Start a worker: a new conversation in the vault that does one task and reports back. Returns its key.",
@@ -199,7 +215,7 @@ fn repo_project(vault: &str, repo: &str) -> Result<(String, String), String> {
     if git(&repo, &["rev-parse", "--show-toplevel"]).as_deref() != Some(repo.as_str()) { return Err(format!("{repo} is not the top of a git checkout")); }
     idx.iter().map(|(d, n)| (super::vault::canon(d), n)).find(|(d, _)| repo == *d || repo.starts_with(&format!("{d}/")))
         .and_then(|(_, n)| n.as_str()?.rsplit('/').next().map(|n| (repo.clone(), n.trim_end_matches(".md").to_string())))
-        .ok_or_else(|| format!("{repo} is not in any project's repos (System/index/repos.json)"))
+        .ok_or_else(|| format!("{repo} is not in any project's repos (the vault's index/repos.json)"))
 }
 /// A worktree for one worker next to the checkout, on a new branch from the base: (its path, its branch, the
 /// base commit, kept so the report's diff is against where the worker started).
@@ -225,16 +241,16 @@ fn slug(s: &str) -> String {
     s.split('-').filter(|p| !p.is_empty()).take(6).collect::<Vec<_>>().join("-")
 }
 /// What to compare at the report: the protected branches of the repo and the mtimes of the shared files.
-fn snapshot(vault: &str, repo: Option<&str>) -> HashMap<String, String> {
+fn snapshot(vault: &str, files: &[String], repo: Option<&str>) -> HashMap<String, String> {
     let mut out = HashMap::new();
     if let Some(r) = repo {
         for b in PROTECTED { if let Some(sha) = git(r, &["rev-parse", "--verify", "-q", &format!("refs/heads/{b}")]) { out.insert(format!("branch:{b}"), sha); } }
         if let Some(s) = git(r, &["status", "--porcelain"]) { out.insert("checkout".into(), s); }
     }
-    for f in SHARED {
-        let m = std::fs::metadata(Path::new(vault).join(f)).and_then(|m| m.modified()).ok()
+    for f in files {
+        let m = std::fs::metadata(f).and_then(|m| m.modified()).ok()
             .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).map(|d| d.as_millis().to_string()).unwrap_or_default();
-        out.insert(format!("file:{f}"), m);
+        out.insert(format!("file:{}", f.strip_prefix(&format!("{vault}/")).unwrap_or(f)), m);
     }
     out
 }
@@ -243,7 +259,7 @@ fn flags_of(before: &HashMap<String, String>, after: &HashMap<String, String>) -
     let mut f: Vec<String> = before.iter().filter(|(k, v)| after.get(*k) != Some(v)).map(|(k, _)| match k.split_once(':') {
         Some(("branch", b)) => format!("branch {b} moved"),
         Some(("file", f)) => format!("{f} changed while it ran (by this worker or someone else)"),
-        _ => "Laurent's own checkout changed while it ran".to_string(),
+        _ => "the user's own checkout changed while it ran".to_string(),
     }).collect();
     f.sort();
     f
@@ -313,7 +329,7 @@ fn dispatch(app: &AppHandle, title: Option<String>, task: Option<String>, projec
     }
     let w = Worker { key: key.clone(), project: project.clone(), title: title.clone(), task: task.clone(), repo: repo.clone(), worktree: worktree.clone(), branch: branch.clone(),
         state: "running".into(), at: now(), ended: None, report: None,
-        base: snapshot(&vault, repo.as_deref()).into_iter().chain(start.map(|s| ("start".to_string(), s))).collect(), reported: false, model: model.clone().unwrap_or_default() };
+        base: snapshot(&vault, &shared(app, &vault).files, repo.as_deref()).into_iter().chain(start.map(|s| ("start".to_string(), s))).collect(), reported: false, model: model.clone().unwrap_or_default() };
     let mut all = load(app);
     all.push(w.clone());
     save(app, &all);
@@ -360,14 +376,14 @@ fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<St
     let w = load(app).into_iter().find(|w| w.key == key).ok_or("this conversation is no worker of the orchestrator")?;
     // Relay reads the diff itself, the worker's word for it is not the record
     let diff = w.worktree.as_deref().zip(w.base.get("start")).and_then(|(d, b)| diff_of(d, b));
-    let mut after = snapshot(&vault, w.repo.as_deref());
+    let mut after = snapshot(&vault, &shared(app, &vault).files, w.repo.as_deref());
     if let Some(s) = w.base.get("start") { after.insert("start".into(), s.clone()); }
     let flags = flags_of(&w.base, &after);
     let r = Report { status: status.clone(), summary, questions, diff, flags };
     let w = update(app, key, |w| { w.state = status.clone(); w.ended = Some(now()); w.report = Some(r.clone()); w.reported = true; }).ok_or("worker gone")?;
     let tainted = tainted(app, key);
     let mut t = format!("{PREFIX}Report from worker {} ({}, \"{}\"): {}\n\n{}", w.key, w.project.as_deref().unwrap_or("Algemeen"), w.title, r.status, r.summary);
-    if let Some(q) = &r.questions { t += &format!("\n\nQuestions for Laurent:\n{q}"); }
+    if let Some(q) = &r.questions { t += &format!("\n\nQuestions for the user:\n{q}"); }
     if let Some(b) = &w.branch { t += &format!("\n\nBranch {b} in {}", w.worktree.as_deref().unwrap_or("")); }
     if let Some(d) = &r.diff { t += &format!("\n\nDiff (read by Relay):\n{d}"); }
     if !r.flags.is_empty() { t += &format!("\n\nFlags:\n- {}", r.flags.join("\n- ")); }
@@ -461,18 +477,21 @@ mod tests {
     #[test]
     fn keys_and_flags() {
         assert!(is_orch(COORD) && !is_worker(COORD) && is_worker("c:orch-w-abc") && !is_orch("c:abc"));
+        let sh = Shared { files: vec!["/v/Brain/work-state.md".into(), "/v/reminders.md".into()], dirs: vec!["/v/Brain/index".into()] };
         let mut o = json!(null);
-        flags(&mut o, "c:abc", "/v");
+        flags(&mut o, "c:abc", "/v", &sh);
         assert!(o.is_null(), "a normal conversation gets nothing");
-        flags(&mut o, COORD, "/v");
+        flags(&mut o, COORD, "/v", &sh);
+        assert!(o["system"].as_str().unwrap().contains("Brain/work-state.md, reminders.md, Brain/index/"), "the prompt names the vault's own files");
         assert_eq!(o["orch"], "coordinator");
         assert!(o["deny"].is_null(), "the coordinator writes the shared files");
         assert!(o["ask"].as_array().unwrap().contains(&json!("Bash(git push*)")) && o["ask"].as_array().unwrap().contains(&json!("Bash(git * push*)")));
         let mut o = json!({"mail": true});
-        flags(&mut o, "c:orch-w-1", "/v");
+        flags(&mut o, "c:orch-w-1", "/v", &sh);
         assert_eq!((o["orch"].as_str(), o["mail"].as_bool()), (Some("worker"), Some(true)));
         let deny: Vec<&str> = o["deny"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-        assert!(deny.contains(&"Edit(//v/System/rules/core/work-state.md)") && deny.contains(&"Bash(git checkout main*)"));
+        assert!(deny.contains(&"Edit(//v/Brain/work-state.md)") && deny.contains(&"Write(//v/Brain/index/**)") && deny.contains(&"Bash(git checkout main*)"));
+        assert!(!o["system"].as_str().unwrap().contains("{shared}"));
     }
 
     #[test]
@@ -485,12 +504,12 @@ mod tests {
 
     #[test]
     fn flags_what_moved() {
-        let before: HashMap<String, String> = [("branch:main", "a"), ("file:System/reminders.md", "1"), ("checkout", "")].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
+        let before: HashMap<String, String> = [("branch:main", "a"), ("file:reminders.md", "1"), ("checkout", "")].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         let mut after = before.clone();
         assert!(flags_of(&before, &after).is_empty());
         after.insert("branch:main".into(), "b".into());
         after.insert("checkout".into(), " M x".into());
-        assert_eq!(flags_of(&before, &after), ["Laurent's own checkout changed while it ran", "branch main moved"]);
+        assert_eq!(flags_of(&before, &after), ["branch main moved", "the user's own checkout changed while it ran"]);
     }
 
     #[test]
@@ -508,7 +527,7 @@ mod tests {
 
     #[test]
     fn names() {
-        assert_eq!(slug("Smappee: prijsvork klaarzetten!"), "smappee-prijsvork-klaarzetten");
+        assert_eq!(slug("Garden: plant the apple trees!"), "garden-plant-the-apple-trees");
         assert_eq!(radix36(36 * 36 + 1), "101");
     }
 
@@ -521,13 +540,13 @@ mod tests {
         std::fs::create_dir_all(vault.join("System/rules/core")).unwrap();
         std::fs::write(vault.join("System/rules/core/work-state.md"), "").unwrap();
         let root = root.canonicalize().unwrap();
-        let (vault, repo) = (root.join("vault"), root.join("Antenna/Weemaes/backend"));
+        let (vault, repo) = (root.join("vault"), root.join("Clients/Acme/backend"));
         std::fs::create_dir_all(&repo).unwrap();
         assert!(Command::new("git").args(["init", "-q"]).current_dir(&repo).status().unwrap().success());
-        std::fs::write(vault.join("System/index/repos.json"), json!({root.join("Antenna/Weemaes").to_string_lossy(): "Contexts/Antenna/Projects/Weemaes/Weemaes.md"}).to_string()).unwrap();
+        std::fs::write(vault.join("System/index/repos.json"), json!({root.join("Clients/Acme").to_string_lossy(): "Contexts/Work/Projects/Acme/Acme.md"}).to_string()).unwrap();
         let v = vault.to_string_lossy();
-        assert_eq!(repo_project(&v, &repo.to_string_lossy()).unwrap(), (repo.to_string_lossy().to_string(), "Weemaes".to_string()));
-        assert!(repo_project(&v, &root.join("Antenna/Weemaes").to_string_lossy()).is_err(), "a folder of checkouts is no checkout");
+        assert_eq!(repo_project(&v, &repo.to_string_lossy()).unwrap(), (repo.to_string_lossy().to_string(), "Acme".to_string()));
+        assert!(repo_project(&v, &root.join("Clients/Acme").to_string_lossy()).is_err(), "a folder of checkouts is no checkout");
         assert!(repo_project(&v, &vault.to_string_lossy()).is_err());
         // the worktree: a new branch next to the checkout, the diff read from git, the checkout itself untouched
         let r = repo.to_string_lossy().to_string();
