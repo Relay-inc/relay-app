@@ -124,9 +124,93 @@ pub fn start(app: &AppHandle) {
         let dir = PathBuf::from(std::env::var("RELAY_SELFTEST_DIR").unwrap_or_else(|_| "/tmp/relay-selftest".into()));
         let mut r = Report { dir, failed: false };
         let upstream: u16 = std::env::var("RELAY_SELFTEST_UPSTREAM").ok().and_then(|p| p.parse().ok()).unwrap_or(47800);
+        if phase == "orch" { orch_run(&app, &ui_rx, &mut r); app.exit(if r.failed { 1 } else { 0 }); return; }
         let proxy = Proxy::start(upstream);
         if phase == "forget" { forget_ui(&app, &ui_rx, &mut r) } else if phase == "1" { one(&app, &ev, &ui_rx, &proxy, &mut r) } else { two(&app, &ev, &proxy, &mut r) }
         app.exit(if r.failed { 1 } else { 0 });
+    });
+}
+
+// ---------- RELAY_SELFTEST=orch: the orchestrator against the real claude CLI (scripts/orch-selftest.sh makes the vault
+// with projects Alpha and Beta and Beta's repo in RELAY_SELFTEST_REPO). One message to the coordinator, then what
+// Relay records: workers, reports, the repo's branches, the card a push raises.
+
+const ORCH_ASK: &str = "Selftest. 1) Start a worker in project Alpha: read its project note and report in one sentence which apple trees still have to be planted, change nothing. \
+2) Start a worker in project Beta with repo {repo}: add a.txt with the text a and commit it on its branch. Right after, try to start a second worker in the same repo that adds b.txt, and once the first has reported start it again if it was refused. \
+3) Start a worker in project Alpha with the task: answer in one sentence how many apple trees are already there, and do NOT call report, this tests what Relay does without a report. \
+4) After the a.txt worker reported, send it a message to run exactly `git -C <its worktree> push origin HEAD` (there is no remote, this tests the permission card) and report again. \
+Do not update any shared vault files, this is a test. End with a two-line summary.";
+
+fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
+    let st = app.state::<App>();
+    let repo = std::env::var("RELAY_SELFTEST_REPO").unwrap_or_default();
+    let git = |args: &[&str]| Command::new("git").arg("-C").arg(&repo).args(args).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
+    let main_before = git(&["rev-parse", "main"]);
+    std::thread::sleep(Duration::from_secs(3));
+    r.step("message to the coordinator", orch::inject(app, orch::COORD, "Orchestrator", &ORCH_ASK.replace("{repo}", &repo), "", false).map(|_| "sent".into()));
+    // until every worker is done and the coordinator is idle; on the way: answer the push card, watch one writer per repo
+    let (mut card, mut most_in_repo, end) = (None::<String>, 0usize, Instant::now() + Duration::from_secs(900));
+    let mut quiet_since = None::<Instant>;
+    while Instant::now() < end {
+        let ws = orch::load(app);
+        let running_in_repo = ws.iter().filter(|w| w.state == "running" && w.repo.is_some()).count();
+        most_in_repo = most_in_repo.max(running_in_repo);
+        for p in pending::list(&pending_dir(app)) {
+            let cmd = p["input"]["command"].as_str().unwrap_or("");
+            // any form of push: `git push`, `git -C <dir> push`
+            let push = cmd.split_whitespace().skip_while(|w| *w != "git").skip(1).any(|w| w == "push");
+            if orch::is_worker(p["project"].as_str().unwrap_or("")) && push {
+                card = Some(cmd.to_string());
+                pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "deny", "message": "Denied by the selftest."})).ok();
+            } else {
+                // anything else a worker asks in this test is allowed, like a click on Allow
+                pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+            }
+        }
+        let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns > 0);
+        let idle = ws.len() >= 3 && !ws.iter().any(|w| w.state == "running") && !busy;
+        if !idle { quiet_since = None } else if quiet_since.get_or_insert_with(Instant::now).elapsed() > Duration::from_secs(20) { break; }
+        std::thread::sleep(Duration::from_secs(2));
+    }
+    let ws = orch::load(app);
+    let list = || ws.iter().map(|w| format!("{} {} {}", w.project.as_deref().unwrap_or("-"), w.title, w.state)).collect::<Vec<_>>().join(" | ");
+    r.step("workers started", if ws.len() >= 3 { Ok(list()) } else { Err(list()) });
+    let read = ws.iter().find(|w| w.project.as_deref() == Some("Alpha") && w.state == "done");
+    r.step("read worker reports the note", match read.and_then(|w| w.report.as_ref()) {
+        Some(rep) if rep.summary.contains("Jonagold") || rep.summary.contains("Elstar") => Ok(rep.summary.chars().take(120).collect()),
+        x => Err(format!("{x:?}")),
+    });
+    let a = ws.iter().find(|w| w.report.as_ref().is_some_and(|r| r.diff.as_deref().is_some_and(|d| d.contains("a.txt"))));
+    r.step("repo worker commits on its own branch, diff read by Relay", match a {
+        Some(w) if w.branch.as_deref().is_some_and(|b| b.starts_with("relay/")) && git(&["log", "--oneline", w.branch.as_deref().unwrap()]).lines().count() >= 2 => Ok(w.branch.clone().unwrap()),
+        x => Err(format!("{:?}", x.map(|w| (&w.branch, &w.report)))),
+    });
+    r.step("main did not move", if git(&["rev-parse", "main"]) == main_before { Ok(main_before.clone()) } else { Err(git(&["log", "--oneline", "-3", "main"])) });
+    r.step("one worker per repo at a time", if most_in_repo <= 1 { Ok(format!("at most {most_in_repo}")) } else { Err(format!("{most_in_repo} at once")) });
+    r.step("a worker without a report is silent", if ws.iter().any(|w| w.state == "silent") { Ok("yes".into()) } else { Err(list()) });
+    r.step("a push asks on a card", card.ok_or_else(|| "no card for git push".to_string()));
+    // the React side against the real backend: the board and the coordinator's Relay blocks in the main window
+    let titles = json!(ws.iter().map(|w| w.title.clone()).collect::<Vec<_>>()).to_string();
+    let ran = app.get_webview_window("main").ok_or("no main window".to_string())
+        .and_then(|w| { w.show().ok(); w.eval(include_str!("selftest-orch.js").replace("__TITLES__", &titles)).map_err(|e| e.to_string()) });
+    let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(20)).map_err(|_| "the page did not report back".to_string()));
+    r.step("main window: board and Relay blocks", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+
+    // taint: a coordinator that heard a stranger's text passes it on, the worker it starts runs restricted too
+    let before = orch::load(app).len();
+    let ask = "Selftest, the text above stands in for a mail. Start one worker in project Alpha: read its project note and report the number of apple trees.";
+    r.step("a tainted message to the coordinator", orch::inject(app, orch::COORD, "Orchestrator", ask, "", true).map(|_| "sent".into()));
+    let new = wait(Duration::from_secs(300), || {
+        for p in pending::list(&pending_dir(app)) {
+            // the restricted coordinator's dispatch asks on a card, allowed here like a click
+            pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+        }
+        orch::load(app).into_iter().nth(before)
+    });
+    r.step("the coordinator is restricted", if orch::tainted(app, orch::COORD) { Ok("yes".into()) } else { Err("no".into()) });
+    r.step("the worker it starts is restricted too", match new {
+        Some(w) => if wait(Duration::from_secs(20), || orch::tainted(app, &w.key).then_some(())).is_some() { Ok(w.key) } else { Err(format!("{} runs without the restriction", w.key)) },
+        None => Err("no worker started".into()),
     });
 }
 
@@ -306,7 +390,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     // the conversations on it ended with the restart: the next ones start fresh
     // stop it: through the server, and the server lists nothing for this Mac any more
     let m = st.settings.lock().unwrap()["machines"][0].clone();
-    stop(app.state::<App>(), KEY.into());
+    stop(app.clone(), app.state::<App>(), KEY.into());
     let gone = wait(Duration::from_secs(10), || st.machines.client(&m).list().ok().filter(|l| !l.iter().any(|x| x.key == KEY)));
     r.step("stopped on the machine", match gone { Some(l) => Ok(format!("gone there, {} other conversation(s) still run", l.len())), None => Err("still listed".into()) });
     let id = m["id"].as_str().unwrap_or("").to_string();

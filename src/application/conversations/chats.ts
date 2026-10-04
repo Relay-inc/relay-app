@@ -1,5 +1,7 @@
 import { newChatKey } from "../../domain/navigation/keys";
 import { chatsToStore, newChatEntry } from "../../domain/conversations/rules";
+import { ensureCoordinator, ensureWorkerChat } from "../../domain/orchestrator/rules";
+import type { Worker } from "../../domain/orchestrator/types";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "./store";
 import { typedOf, useDraftsStore } from "./drafts";
@@ -51,3 +53,18 @@ export const markSeen = (key: string) =>
     draft.unseen.delete(key);
     draft.routeChoice = draft.routeChoice?.key === key ? draft.routeChoice : null;
   });
+/** The orchestrator's coordinator as a conversation: general, Claude's, never closed (application/orchestrator). */
+export function ensureCoordinatorChat() {
+  useConversationsStore.setState(draft => {
+    ensureCoordinator(draft.chats);
+  });
+  saveChats();
+}
+/** A conversation under its project for each worker the app did not know yet. */
+export function adoptWorkers(workers: Worker[]) {
+  let changed = false;
+  useConversationsStore.setState(draft => {
+    for (const worker of workers) changed = ensureWorkerChat(draft.chats, worker) || changed;
+  });
+  if (changed) saveChats();
+}

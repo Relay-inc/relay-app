@@ -22,6 +22,7 @@ import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
+import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -130,6 +131,12 @@ export const subagents = (keys: string[]) => invoke<Record<string, Sub[]>>("suba
 export const agents = () => invoke<AgentSession[]>("agents");
 export const appSids = () => invoke<string[]>("app_sids");
 export const appSessions = () => invoke<SessionOf>("app_sessions");
+
+// ---------- the orchestrator (src-tauri/src/orch.rs): its coordinator talks through `send` like any conversation
+/** Every worker the coordinator started, also the ones made while no page listened. */
+export const orchWorkers = () => invoke<Worker[]>("orch_workers");
+/** Stops a worker; the backend reports its new state as an `orch` event. */
+export const orchStop = (key: string) => invoke<boolean>("orch_stop", { key });
 
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */
@@ -246,6 +253,8 @@ export const onAgent = (handler: (key: string, event: AgentEvent, provider: stri
   listen<{ project: string; provider: string; event: AgentEvent }>("agent", e =>
     handler(e.payload.project, e.payload.event, e.payload.provider),
   );
+/** A worker made or changed, or a user turn Relay wrote into a conversation itself. */
+export const onOrch = (handler: (event: OrchEvent) => void) => listen<OrchEvent>("orch", e => handler(e.payload));
 /** A notification banner was clicked: open that conversation. */
 export const onOpenChat = (handler: (key: string) => void) => listen<string>("open-chat", e => handler(e.payload));
 /** A link clicked inside a mail's sandboxed frame. */

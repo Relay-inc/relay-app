@@ -1,4 +1,4 @@
-import { t, type Key } from "../../shared/i18n";
+import { t, tn, type Key } from "../../shared/i18n";
 import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
@@ -17,6 +17,8 @@ import { agentOf, chatAgent } from "../agents/agents";
 import { projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
+import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
+import { runningWorkers } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
 
@@ -55,7 +57,13 @@ export const aboutItems = (items: Item[] | undefined, projects: Project[]) =>
   rules.aboutProject({ messages: { about: items ?? [] } }, "about", projects);
 export const lastAi = (key: string) => rules.lastAi(cs().messages[key], t);
 
-const VIEW_ICONS: Record<string, string> = { [WAIT]: "bell", [REM]: "list", [PRS]: "pr", [MAIL]: "mail" };
+const VIEW_ICONS: Record<string, string> = {
+  [WAIT]: "bell",
+  [REM]: "list",
+  [PRS]: "pr",
+  [MAIL]: "mail",
+  [ORCH]: "agent",
+};
 
 // the phrase after the view's name in the title bar: what needs you now
 function viewSummary(key: string) {
@@ -76,6 +84,10 @@ function viewSummary(key: string) {
     if (!list) return "";
     const n = list.filter(unread).length;
     return n ? t("mail.unread", { n }) : t("bar.mailRead");
+  }
+  if (key === ORCH) {
+    const n = runningWorkers();
+    return n ? tn("nav.orchRunning", n) : t("bar.orchIdle");
   }
   return "";
 }
@@ -101,6 +113,7 @@ export function chatBar(key: string) {
     [MAIL]: "nav.mail",
     [REM]: "nav.reminders",
     [WAIT]: "nav.waiting",
+    [ORCH]: "nav.orch",
   };
   const viewName = board ? board.name : VIEW_NAMES[key] ? t(VIEW_NAMES[key]) : "";
   const linkedRef = toolProject ? settings().boards?.[toolProject] : undefined;
@@ -115,6 +128,8 @@ export function chatBar(key: string) {
     icon: tool ? "" : (VIEW_ICONS[key] ?? ""),
     title: session ? session.title : label(key),
     renamable: !!conversation,
+    // the orchestrator's coordinator reads like a view: its name and what runs, no title, no project to move it to
+    coordinator: key === ORCH,
     // the terminal would resume a conversation that touched mail without the app's restrictions
     locked: !!conversation?.fromMail,
     noTerm: onView ? true : session ? session.kind !== "background" : agentOf(chatAgent(key))?.caps.terminal === false,
@@ -140,6 +155,8 @@ export function machineChoice(key: string) {
   const conversation = cs().chats[key];
   const list = cs().machineList;
   const started = !!cs().sidOf[key];
+  // the orchestrator's conversations run on this Mac in this version: nothing to pick
+  if (isOrchKey(key)) return { list, value: null, why: null, started };
   const why: Key | null =
     chatAgent(key) !== "claude"
       ? "composer.machineOnlyClaude"

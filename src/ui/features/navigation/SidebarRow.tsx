@@ -28,6 +28,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   trail?: Trail;
   subs?: number; // subagents working
   subsTitle?: string;
+  mark?: string; // a worker of the orchestrator: its small marker carries this tooltip
   meta?: Meta;
   addTitle?: string; // the "+" of a project row
   dragging?: boolean;
@@ -79,6 +80,7 @@ export function SidebarRow({
   trail = "",
   subs = 0,
   subsTitle = "",
+  mark = "",
   meta,
   addTitle = "",
   dragging = false,
@@ -157,6 +159,11 @@ export function SidebarRow({
       >
         {name}
       </span>
+      {mark ? (
+        <span className="flex-none text-tertiary" title={mark}>
+          <Icon name="agent" className="glyph size-3" />
+        </span>
+      ) : null}
       {meta ? (
         <span title={meta.title ?? ""} className={metaClass(meta)}>
           {meta.n}

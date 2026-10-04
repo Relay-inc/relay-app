@@ -40,9 +40,14 @@ export function ConversationView() {
   const askHits = useConversationsStore(s => s.chats[selected]?.ask);
   // the project it is under (for the empty line), whether a terminal session is writing, and the agent's name
   const where = useDerived(() => {
-    const { session, projectName } = chatBar(selected);
+    const { session, projectName, coordinator } = chatBar(selected);
     const id = chatAgent(selected);
-    return { name: project(projectName) ? projectName : null, writing: !!session?.busy, agent: agent(id)?.name ?? id };
+    return {
+      name: project(projectName) ? projectName : null,
+      coordinator,
+      writing: !!session?.busy,
+      agent: agent(id)?.name ?? id,
+    };
   });
   const waiting = pendingList.filter(request => request.project === selected);
   const working = t("work.working", { agent: where.agent });
@@ -58,7 +63,15 @@ export function ConversationView() {
           ),
         )
       ) : (
-        <NoteLine text={where.name ? t("chat.emptyProject", { name: where.name }) : t("chat.emptyGeneral")} />
+        <NoteLine
+          text={
+            where.coordinator
+              ? t("chat.emptyOrch")
+              : where.name
+                ? t("chat.emptyProject", { name: where.name })
+                : t("chat.emptyGeneral")
+          }
+        />
       )}
       {routeHits ? <RouteChoice hits={routeHits} onRoute={routeTo} /> : null}
       {askHits ? <RouteChoice hits={askHits} onRoute={answerAsk} /> : null}

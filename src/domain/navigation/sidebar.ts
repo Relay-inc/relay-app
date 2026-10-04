@@ -21,6 +21,7 @@ export type ConvRow = {
   subsTitle: string;
   closable: boolean;
   closing: boolean; // being closed: greyed out and pulsing until it is gone
+  orch: boolean; // a worker of the orchestrator: a small marker
 };
 export type ProjectBlock = {
   name: string;
@@ -46,7 +47,9 @@ export type Section = {
   convs: ConvRow[];
   projects: ProjectBlock[];
 };
-export type SidebarModel = { views: ViewRow[]; sections: Section[] };
+/** The orchestrator's coordinator on top: a conversation that opens with the composer, with its running workers as the count. */
+export type OrchRow = ViewRow & { unseen: boolean; trail: Trail };
+export type SidebarModel = { orch: OrchRow; views: ViewRow[]; sections: Section[] };
 export type ReorderKind = "sec" | "proj" | "conv" | "view";
 
 // contexts come from the vault index, in its order, each takes the next of three colours

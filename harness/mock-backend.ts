@@ -1,13 +1,14 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|orch, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
+import * as orch from "./fixtures/orchestrator";
 
 type Args = Record<string, any>;
 type Call = { cmd: string; args: Args; at: number };
@@ -46,6 +47,9 @@ let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
+// the orchestrator's workers (fixture "orch"), changed by orch_stop
+const orchOn = fixture === "orch";
+let workers = orchOn ? structuredClone(orch.workers) : [];
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -207,7 +211,8 @@ function handle(cmd: string, a: Args): unknown {
       else delete actionConfig[a.ext];
       return structuredClone(actionConfig);
     case "chats":
-      return conv.conversations.map(c => c.key);
+      // the backend has a session for the coordinator and its workers too
+      return [...conv.conversations.map(c => c.key), ...(orchOn ? [orch.ORCH, ...workers.map(w => w.key)] : [])];
     case "chat_providers":
       return Object.fromEntries(conv.conversations.map(c => [c.key, c.provider]));
     case "app_sids":
@@ -222,7 +227,17 @@ function handle(cmd: string, a: Args): unknown {
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
-      return conv.history(a.project);
+      return (orchOn && orch.history(a.project)) || conv.history(a.project);
+    // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
+    case "orch_workers":
+      return structuredClone(workers);
+    case "orch_stop": {
+      const worker = workers.find(w => w.key === a.key);
+      if (!worker || worker.state !== "running") return false;
+      Object.assign(worker, { state: "stopped", ended: Date.now() });
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return true;
+    }
     case "history_sid": {
       const items = conv.terminalHistory(a.sid);
       return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
@@ -462,6 +477,8 @@ const harness = {
     permission: conv.PERMISSION_KEY,
     question: conv.QUESTION_KEY,
     action: conv.ACTION_KEY,
+    orch: orch.ORCH,
+    orchWorker: orch.workers[1].key,
     terminal: `t:${vault.terminalSessions[0].sessionId}`,
   },
   titles: {
@@ -479,6 +496,7 @@ const harness = {
     htmlMail: integ.HTML_MAIL.subject,
     studioMail: integ.STUDIO_MAIL.subject,
     otherMail: integ.OTHER_MAIL.subject,
+    orchReport: orch.REPORT_MARKER,
   },
   emit,
   emitAgent,
@@ -502,6 +520,17 @@ const harness = {
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
+  /** the orchestrator's live events (fixture "orch"): a worker starts, another reports into the coordinator, one task each */
+  orchLive: async () => {
+    for (const event of orch.live()) {
+      if (event.type === "worker") {
+        const worker = event.worker as orch.Worker;
+        workers = [...workers.filter(w => w.key !== worker.key), worker];
+      }
+      emit("orch", event);
+      await nextTask();
+    }
+  },
 };
 (window as any).__harness = harness;
 export type Harness = typeof harness;

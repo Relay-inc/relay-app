@@ -46,7 +46,7 @@ type MenuTarget = { x: number; y: number; chatKey: string; project: string | nul
  *  The rows come from the application (sidebarModel); the drag to reorder and the menu live here. */
 export function NavigationView({ className }: { className: string }) {
   const { t } = useT();
-  const { views, sections } = useDerived(() => sidebarModel());
+  const { orch, views, sections } = useDerived(() => sidebarModel());
   const usage = useDerived(() => usageSummary());
   const layout = useDerived(() => viewsLayout());
   const dark = useDerived(() => isDark());
@@ -179,6 +179,7 @@ export function NavigationView({ className }: { className: string }) {
       trail={row.trail}
       subs={row.subs}
       subsTitle={row.subsTitle}
+      mark={row.orch ? t("nav.orchWorker") : ""}
       {...dropzone("conv", row.key)}
       onPointerDown={press("conv", row.key, row.parent)}
       onClick={unlessDragged(() => select(row.key))}
@@ -264,6 +265,17 @@ export function NavigationView({ className }: { className: string }) {
         />
       </label>
       <nav className="flex-1 overflow-y-auto px-2 pt-1.5 pb-4 flex flex-col gap-px">
+        {/* the orchestrator's coordinator: a conversation, so it is never dragged, hidden or shown as a tile */}
+        <SidebarRow
+          data-key={orch.key}
+          icon={orch.icon}
+          name={orch.name}
+          meta={orch.meta}
+          unseen={orch.unseen}
+          trail={orch.trail}
+          selected={selected === orch.key}
+          onClick={() => select(orch.key)}
+        />
         {renderViews()}
         {sections.map(renderSection)}
       </nav>

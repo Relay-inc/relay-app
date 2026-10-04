@@ -2,6 +2,7 @@ import { t } from "../../shared/i18n";
 import { WAIT, PRS, MAIL, isView, boardIdOf, type Tool } from "../../domain/navigation/views";
 import { provider } from "../../shared/plugins";
 import { isTerminal } from "../../domain/navigation/keys";
+import { ORCH } from "../../domain/orchestrator/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
@@ -34,6 +35,9 @@ export async function select(key: string, tool: Tool | null = null) {
       draft.drawer = "";
       draft.panel.open = "";
     }
+    // the coordinator opens with its workers next to it, anything else closes them
+    if (key === ORCH) draft.drawer = "workers";
+    else if (draft.drawer === "workers") draft.drawer = "";
     draft.selected = key;
   });
   const project = isView(key) ? null : selectedProject();
@@ -99,13 +103,14 @@ export function closeTool() {
   else openProject(tool.project);
 }
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
-export const toggleDrawer = (tool: "terminal" | "notes") =>
+export const toggleDrawer = (tool: "terminal" | "notes" | "workers") =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
     draft.panel.open = "";
   });
 export const openProjectPanel = () => {
-  if (isView(nav().selected)) return;
+  // the coordinator belongs to no project and never moves
+  if (isView(nav().selected) || nav().selected === ORCH) return;
   set(draft => {
     draft.projectPanel = true;
   });

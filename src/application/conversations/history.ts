@@ -2,14 +2,16 @@ import { t } from "../../shared/i18n";
 import type { AgentEvent } from "../../domain/agents/types";
 import { adoptOwnedTurns, toItems, trackTimes, doneText, push } from "../../domain/conversations/events";
 import { UNTITLED } from "../../domain/conversations/rules";
+import { lastTurnIs } from "../../domain/orchestrator/rules";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
 import { useNavigationStore } from "../navigation/store";
+import { request } from "../navigation/requests";
 import { useConversationsStore } from "./store";
 import { imageUrl } from "./images";
 import { saveChats } from "./chats";
 import { lastAi } from "./selectors";
-import { notify } from "./events";
+import { flush, notify } from "./events";
 
 // The transcripts behind a conversation: its history when it opens, a terminal session followed, and a turn that
 // runs in a process this page gets no events from.
@@ -47,6 +49,21 @@ export async function ensureHistory(key: string, fresh = false) {
     }
   });
   if (retitled) saveChats();
+}
+
+/** Relay wrote a user turn itself (a worker's brief, a report into the coordinator): it shows and counts as a turn, like
+ *  one sent from the composer, and the agent's events follow. */
+export async function relayWrote(key: string, text: string) {
+  // a conversation not read yet gets its transcript first, the events that follow land on top of it
+  if (!cs().messages[key]) await ensureHistory(key).catch(() => {});
+  flush();
+  set(draft => {
+    // the transcript just read may hold this turn already
+    if (!lastTurnIs(draft.messages[key], text)) push(draft, key, { kind: "me", text });
+    draft.status[key] = "busy";
+    draft.queued[key] = (draft.queued[key] || 0) + 1;
+  });
+  if (key === useNavigationStore.getState().selected) request("scroll-bottom");
 }
 
 // ---------- a turn this page did not start: after a reload of the page (the app's process still sends its events, only

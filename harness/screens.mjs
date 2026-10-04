@@ -317,6 +317,27 @@ const VIEWS = {
     await page.getByRole("button", { name: "Pull requests", exact: true, pressed: false }).click();
     await settle(page, 400);
   },
+  // the orchestrator: the coordinator with a folded [Relay] report and the worker board in the drawer (running, done
+  // with a diff, silent); the report and a worker's details unfolded; live `orch` events; a worker under its project
+  orchestrator: async () => {
+    await open(page, server.url, { fixture: "orch", sel: keys.orch });
+    await waitText(markers.orchReport, 10000).catch(() => waitText("From Relay"));
+  },
+  "orchestrator-open": async () => {
+    await VIEWS.orchestrator();
+    await click("From Relay");
+    await click("Details");
+  },
+  "orchestrator-live": async () => {
+    await VIEWS.orchestrator();
+    await page.evaluate(() => window.__harness.orchLive());
+    await waitText("Draft the depot import ticket");
+    await settle(page, 300);
+  },
+  "orchestrator-worker": async () => {
+    await open(page, server.url, { fixture: "orch", sel: keys.orchWorker });
+    await waitText("From Relay");
+  },
   ...Object.fromEntries(["General", "Projects", "Agents", "Integrations"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
   "settings-interface": async () => {
     await settingsPage("General");
