@@ -25,8 +25,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(node -p 'require("./package.json").version')
-          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
-          [ "$version" = "$cargo" ] || { echo "::error::package.json is $version, src-tauri/Cargo.toml is $cargo"; exit 1; }
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          [ "$version" = "$cargo" ] || { echo "::error::package.json is $version, Cargo.toml is $cargo"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if gh release view "v$version" >/dev/null 2>&1; then
             echo "v$version is already released"

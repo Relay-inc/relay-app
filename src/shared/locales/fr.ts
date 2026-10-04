@@ -820,23 +820,63 @@ export default {
   "mc.pairing": "Association…",
   "mc.setupTitle": "Configurer une machine",
   "mc.setupHelp":
-    "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
+    "relay-server tourne dans Docker sur un autre ordinateur de votre réseau. Ces commandes sont pour relay-server {version}, la version de ce Relay. Lancez-les sur la machine, dans cet ordre.",
   "mc.setupHelpDev":
-    "relay-server tourne dans Docker sur un serveur domestique ou un NAS. Ceci est une version de développement de Relay, aucune image n'existe pour sa version : ces commandes utilisent la plus récente, relay-server:latest. Lancez-les sur la machine, dans cet ordre.",
+    "relay-server tourne dans Docker sur un autre ordinateur de votre réseau. Ceci est une version de développement de Relay, aucune image n'existe pour sa version : ces commandes utilisent la plus récente, relay-server:latest. Lancez-les sur la machine, dans cet ordre.",
   "mc.setupShow": "Afficher les commandes",
+  "mc.setupKind": "Type de machine",
+  "mc.setupPrep.mac":
+    "Installez Docker Desktop ou OrbStack et laissez-le démarrer à l'ouverture de session. Dans Réglages Système › Énergie, empêchez le Mac de se mettre en veille : les conversations s'arrêtent avec lui.",
+  "mc.setupPrep.linux":
+    "Installez Docker Engine (docs.docker.com/engine/install). Si votre utilisateur n'est pas dans le groupe docker, mettez sudo devant chaque commande docker ci-dessous.",
+  "mc.setupPrep.unraid":
+    "Docker doit être activé (Settings › Docker). Lancez les commandes dans le terminal d'Unraid, l'icône >_ en haut à droite.",
   "mc.setupFolder": "Dossier sur la machine",
   "mc.setupFolderHelp":
-    "Garde l'appairage, la connexion de Claude, Claude Code et les dépôts. Sur Unraid un dossier dans appdata.",
+    "Garde l'appairage, la connexion de Claude, Claude Code et les dépôts. Tout dossier qui survit à un redémarrage de la machine.",
   "mc.setupLogin":
     "Seulement tant que l'image est privée : connectez-vous une fois avec un jeton GitHub qui a read:packages.",
   "mc.setupInstall": "Créez les dossiers et démarrez relay-server. Le premier démarrage installe Claude Code.",
   "mc.setupClaude": "Connectez-vous une fois à Claude. Un lien s'affiche à ouvrir sur ce Mac.",
   "mc.setupPair":
-    "Créez une ligne d'appairage avec l'adresse LAN de la machine et collez-la sous Appairer une machine.",
+    "Créez une ligne d'appairage, la commande remplit elle-même l'adresse LAN de la machine. Collez la ligne sous Appairer une machine.",
+  "mc.setupWay": "Méthode",
+  "mc.setupWayApp": "Avec l'app Relay (recommandé)",
+  "mc.setupWayDocker": "Avec Docker",
+  "mc.setupAppGet":
+    "Sur le Mac qui deviendra la machine, téléchargez Relay et placez-le dans Applications. Puis, une fois, dans Terminal (Relay n'est pas encore signé par Apple) :",
+  "mc.setupAppDownload": "Télécharger Relay",
+  "mc.setupAppQuarantine": "À exécuter une fois dans Terminal.",
+  "mc.setupAppClaude": "Installez-y Claude Code. Lancez ensuite claude et tapez /login.",
+  "mc.setupAppSleep":
+    "Dans Réglages Système › Énergie, empêchez ce Mac de se mettre en veille : les conversations s'arrêtent pendant la veille.",
+  "mc.setupAppSwitch":
+    "Dans Relay sur ce Mac, ouvrez Réglages › Machines › Ce Mac comme machine. Activez-le, puis créez une ligne d'association.",
+  "mc.setupAppPair": "Collez la ligne ici sous Associer une machine.",
+  "mc.hostTitle": "Ce Mac comme machine",
+  "mc.hostHelp":
+    "Un autre Mac peut lancer des conversations ici. Relay lui-même sert de serveur et continue de tourner quand vous le quittez.",
+  "mc.hostSwitch": "Exécuter ici les conversations d'autres Mac",
+  "mc.hostUnsupported": "Seul Relay installé dans Applications en est capable, pas une version de développement.",
+  "mc.hostRunning": "En marche",
+  "mc.hostStopped": "Arrêté",
+  "mc.hostRam": "La copie de travail est en RAM",
+  "mc.hostDisk": "La copie de travail est sur le disque",
+  "mc.hostClaudeMissing": "Claude Code n'est pas installé sur ce Mac. Installez-le dans Terminal.",
+  "mc.hostClaudeLogin":
+    "Claude Code n'est pas connecté. Connectez-vous une fois dans Terminal : lancez claude, puis tapez /login.",
+  "mc.hostPair": "Créer une ligne d'association",
+  "mc.hostPairHelp":
+    "Collez-la dans Relay sur l'autre Mac sous Réglages › Machines › Associer une machine. Valable une fois, 10 minutes.",
+  "mc.hostClients": "Appareils associés :",
+  "mc.hostNoClients": "Aucun appareil associé pour l'instant.",
   "mc.copy": "Copier",
   "mc.copied": "Copié",
   "mc.outdatedServer": "relay-server y parle un protocole plus ancien que ce Relay : mettez-le à jour sur la machine",
   "mc.outdatedApp": "relay-server y parle un protocole plus récent que ce Relay : mettez Relay à jour",
+  "mc.update": "Mettre à jour vers {version}",
+  "mc.updating": "Mise à jour…",
+  "mc.updated": "Mis à jour vers {version}",
   "mc.updateHelp": "À lancer sur la machine. Les dossiers gardent l'appairage, la connexion et les conversations.",
   "mc.empty": "Aucune machine pour l'instant. Associez-en une pour y exécuter des conversations.",
   "mc.refresh": "Actualiser",

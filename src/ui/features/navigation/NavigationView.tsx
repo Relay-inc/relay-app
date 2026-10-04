@@ -41,7 +41,13 @@ import { DROP_LINE_AFTER } from "./rows";
 import "../../styles/navigation.css";
 
 // a view's menu has its key in `chatKey`
-type MenuTarget = { x: number; y: number; chatKey: string; project: string | null; kind: "conv" | "proj" | "view" | "more" };
+type MenuTarget = {
+  x: number;
+  y: number;
+  chatKey: string;
+  project: string | null;
+  kind: "conv" | "proj" | "view" | "more";
+};
 
 /** The whole left sidebar: search, the sections with their conversations, the footer buttons and the right-click menu.
  *  The rows come from the application (sidebarModel); the drag to reorder and the menu live here. */
@@ -98,7 +104,8 @@ export function NavigationView({ className }: { className: string }) {
   };
   const menuItems = (target: MenuTarget): MenuItem[] => {
     if (target.kind === "view") return viewMenuItems(target);
-    if (target.kind === "more") return hidden.map(view => ({ id: view.key, label: view.name, icon: view.icon, mark: view.mark }));
+    if (target.kind === "more")
+      return hidden.map(view => ({ id: view.key, label: view.name, icon: view.icon, mark: view.mark }));
     if (target.kind === "conv")
       return [
         { id: "assign", label: t("ctx.assign") },

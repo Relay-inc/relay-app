@@ -12,6 +12,7 @@ import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, EMPTY_LIST, ERROR_MESSAGE, FIELD, HINT, SELECT } from "./blocks";
 import { Field } from "./Field";
+import { MachineHost } from "./MachineHost";
 import { MachineRow } from "./MachineRow";
 import { MachineSetup } from "./MachineSetup";
 import { Section } from "./Section";
@@ -71,6 +72,7 @@ export function MachinesPage({ active }: { active: boolean }) {
         </Section>
       ) : null}
       <MachineSetup open={!machines.length} />
+      <MachineHost />
       <Section title={t("mc.pairTitle")}>
         <Field label={t("mc.line")} hint={<Html html={th("mc.lineHelp")} />} id="mcline">
           <input

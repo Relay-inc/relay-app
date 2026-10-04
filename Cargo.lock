@@ -3892,6 +3892,7 @@ dependencies = [
  "portable-pty",
  "regex",
  "relay-remote",
+ "relay-server",
  "rrule",
  "serde",
  "serde_json",
@@ -3924,10 +3925,11 @@ dependencies = [
 
 [[package]]
 name = "relay-server"
-version = "0.1.0"
+version = "0.0.4"
 dependencies = [
  "agent-claude",
  "agent-core",
+ "libc",
  "relay-remote",
  "ring",
  "serde",

@@ -64,9 +64,19 @@ export type MachineStatus = {
   os?: string;
   error?: string;
   outdated?: "server" | "app"; // it answers but speaks another protocol: the side to update
+  update?: boolean; // it takes an update from Relay (machine_update), not Relay on a Mac
 };
 /** What `server_setup` gives for setting up a machine: this Relay's version and the relay-server image. */
 export type ServerSetup = { version: string; image: string; dev?: boolean }; // dev: a development build, version "latest"
+/** This Mac as a work machine (`host_status`): Relay's own relay-server under a LaunchAgent. */
+export type HostStatus = {
+  supported: boolean; // false in a development build: launchd can only run the Relay installed in Applications
+  on: boolean; // the LaunchAgent is installed
+  running: boolean; // and its server is running
+  ram: boolean; // the mirror's working copy is on a RAM disk
+  fingerprint: string;
+  clients: string[]; // names of the paired devices
+};
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder

@@ -810,20 +810,61 @@ const en = {
   "mc.pairing": "Pairing…",
   "mc.setupTitle": "Set up a machine",
   "mc.setupHelp":
-    "relay-server runs in Docker on a home server or a NAS. These commands are for relay-server {version}, the version of this Relay. Run them on the machine, in this order.",
+    "relay-server runs in Docker on another computer in your network. These commands are for relay-server {version}, the version of this Relay. Run them on the machine, in this order.",
   "mc.setupHelpDev":
-    "relay-server runs in Docker on a home server or a NAS. This is a development build of Relay, there is no image of its own version: these commands use the newest one, relay-server:latest. Run them on the machine, in this order.",
+    "relay-server runs in Docker on another computer in your network. This is a development build of Relay, there is no image of its own version: these commands use the newest one, relay-server:latest. Run them on the machine, in this order.",
   "mc.setupShow": "Show the commands",
+  "mc.setupKind": "Kind of machine",
+  "mc.setupPrep.mac":
+    "Install Docker Desktop or OrbStack and let it start at login. In System Settings › Energy, keep the Mac from going to sleep: conversations stop when it sleeps.",
+  "mc.setupPrep.linux":
+    "Install Docker Engine (docs.docker.com/engine/install). If your user is not in the docker group, put sudo before every docker command below.",
+  "mc.setupPrep.unraid":
+    "Docker must be on (Settings › Docker). Run the commands in Unraid's terminal, the >_ icon at the top right.",
   "mc.setupFolder": "Folder on the machine",
-  "mc.setupFolderHelp": "Keeps the pairing, Claude's login, Claude Code and the repos. On Unraid a folder in appdata.",
+  "mc.setupFolderHelp":
+    "Keeps the pairing, Claude's login, Claude Code and the repos. Any folder that survives a restart of the machine.",
   "mc.setupLogin": "Only while the image is private: log in once with a GitHub token that has read:packages.",
   "mc.setupInstall": "Make the folders and start relay-server. The first start installs Claude Code.",
   "mc.setupClaude": "Log in to Claude once. It shows a link to open on this Mac.",
-  "mc.setupPair": "Make a pairing line with the machine's LAN address, and paste it under Pair a machine.",
+  "mc.setupPair":
+    "Make a pairing line, the command fills in the machine's LAN address. Paste the line under Pair a machine.",
+  "mc.setupWay": "How",
+  "mc.setupWayApp": "With the Relay app (recommended)",
+  "mc.setupWayDocker": "With Docker",
+  "mc.setupAppGet":
+    "On the Mac that will be the machine, download Relay and move it to Applications. Then once, in Terminal (Relay is not signed by Apple yet):",
+  "mc.setupAppDownload": "Download Relay",
+  "mc.setupAppQuarantine": "Run once in Terminal.",
+  "mc.setupAppClaude": "Install Claude Code there. Then run claude and type /login.",
+  "mc.setupAppSleep":
+    "In System Settings › Energy, keep that Mac from going to sleep: conversations stop when it sleeps.",
+  "mc.setupAppSwitch":
+    "In Relay on that Mac, open Settings › Machines › This Mac as a machine. Switch it on, then make a pairing line.",
+  "mc.setupAppPair": "Paste the line here under Pair a machine.",
+  "mc.hostTitle": "This Mac as a machine",
+  "mc.hostHelp":
+    "Another Mac can run conversations here. Relay itself is the server and keeps running when you quit it.",
+  "mc.hostSwitch": "Run conversations from other Macs on this Mac",
+  "mc.hostUnsupported": "Only the Relay installed in Applications can do this, not a development build.",
+  "mc.hostRunning": "Running",
+  "mc.hostStopped": "Stopped",
+  "mc.hostRam": "The working copy is in RAM",
+  "mc.hostDisk": "The working copy is on disk",
+  "mc.hostClaudeMissing": "Claude Code is not installed on this Mac. Install it in Terminal.",
+  "mc.hostClaudeLogin": "Claude Code is not logged in. Log in once in Terminal: run claude, then type /login.",
+  "mc.hostPair": "Make a pairing line",
+  "mc.hostPairHelp":
+    "Paste it in Relay on the other Mac under Settings › Machines › Pair a machine. Works once, for 10 minutes.",
+  "mc.hostClients": "Paired devices:",
+  "mc.hostNoClients": "No device paired yet.",
   "mc.copy": "Copy",
   "mc.copied": "Copied",
   "mc.outdatedServer": "relay-server there speaks an older protocol than this Relay: update it on the machine",
   "mc.outdatedApp": "relay-server there speaks a newer protocol than this Relay: update Relay",
+  "mc.update": "Update to {version}",
+  "mc.updating": "Updating…",
+  "mc.updated": "Updated to {version}",
   "mc.updateHelp": "Run on the machine. The folders keep the pairing, the login and the conversations.",
   "mc.empty": "No machines yet. Pair one to run conversations on it.",
   "mc.refresh": "Refresh",
