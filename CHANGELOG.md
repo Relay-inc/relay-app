@@ -19,7 +19,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- Which project a conversation belongs to, the sidebar's order and folds and the other UI state live in a file in Relay's data folder instead of the window's storage, so the installed Relay and a development build show the same, also after a reinstall. The first start takes over what the window had
+- Which project a conversation belongs to, the sidebar's order and folds and the other UI state live in a file in Relay's data folder instead of the window's storage, so the installed Relay and a development build show the same, also after a reinstall. The first start takes over what the window had (#98)
 
 ## [0.0.5] - 2026-10-04
 
