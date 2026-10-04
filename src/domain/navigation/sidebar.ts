@@ -7,7 +7,8 @@ export { place, ordered } from "./sidebar-order.ts";
 export type Trail = "" | "dot" | "spin";
 /** The badge or count at the end of a view row. */
 export type Meta = { kind: "badge" | "count" | "late" | "soon"; n: number; title?: string };
-export type ViewRow = ViewItem & { meta?: Meta };
+/** `unseen` and `trail` only on the orchestrator's coordinator, the one view that is a conversation. */
+export type ViewRow = ViewItem & { meta?: Meta; unseen?: boolean; trail?: Trail };
 export type ConvRow = {
   key: string;
   parent: string;
@@ -47,9 +48,7 @@ export type Section = {
   convs: ConvRow[];
   projects: ProjectBlock[];
 };
-/** The orchestrator's coordinator on top: a conversation that opens with the composer, with its running workers as the count. */
-export type OrchRow = ViewRow & { unseen: boolean; trail: Trail };
-export type SidebarModel = { orch: OrchRow; views: ViewRow[]; sections: Section[] };
+export type SidebarModel = { views: ViewRow[]; sections: Section[] };
 export type ReorderKind = "sec" | "proj" | "conv" | "view";
 
 // contexts come from the vault index, in its order, each takes the next of three colours
