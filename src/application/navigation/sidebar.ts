@@ -168,6 +168,8 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
       [...sessions.map(termRow), ...shownConversations.map(convRow)],
       row => row.key,
       sb().convOrder[project.name],
+      undefined,
+      true,
     ),
     fold: foldLabel(conversations.length, unfolded),
   };
@@ -255,6 +257,8 @@ function generalSection(query: string, sessions: TerminalSession[]): Section {
       [...conversations.map(convRow), ...generalSessions.map(termRow)],
       row => row.key,
       sb().convOrder[""],
+      undefined,
+      true,
     ),
     projects: [],
   });

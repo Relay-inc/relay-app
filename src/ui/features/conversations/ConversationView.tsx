@@ -3,7 +3,7 @@ import { agent } from "../../../shared/plugins";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
-import { routeTo } from "../../../application/conversations/actions";
+import { answerAsk, routeTo } from "../../../application/conversations/actions";
 import { chatAgent } from "../../../application/agents/agents";
 import { project } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
@@ -37,6 +37,7 @@ export function ConversationView() {
   const outside = useConversationsStore(s => selected in s.outside);
   const pendingList = useConversationsStore(s => s.pendingList);
   const routeHits = useConversationsStore(s => (s.routeChoice?.key === selected ? s.routeChoice.hits : null));
+  const askHits = useConversationsStore(s => s.chats[selected]?.ask);
   // the project it is under (for the empty line), whether a terminal session is writing, and the agent's name
   const where = useDerived(() => {
     const { session, projectName } = chatBar(selected);
@@ -60,6 +61,7 @@ export function ConversationView() {
         <NoteLine text={where.name ? t("chat.emptyProject", { name: where.name }) : t("chat.emptyGeneral")} />
       )}
       {routeHits ? <RouteChoice hits={routeHits} onRoute={routeTo} /> : null}
+      {askHits ? <RouteChoice hits={askHits} onRoute={answerAsk} /> : null}
       {waiting.map(request => (
         <PendingRequest key={request.id} request={request} />
       ))}

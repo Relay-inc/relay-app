@@ -62,6 +62,7 @@ export type Chat = {
   provider?: string; // its agent, set at the first message
   fromMail?: boolean; /* about a mail or has read mail */
   told?: string; // the project the agent was last told this conversation is about
+  ask?: string[]; // the projects a Cmd-K question named: offered once, after it started
 };
 /** An image waiting to be sent: its media type, base64 data, and a blob url to show it. */
 export type Img = { mt: string; data: string; url: string };

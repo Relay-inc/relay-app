@@ -10,12 +10,14 @@ export const place = (list: string[], id: string, ref: string, after: boolean) =
   rest.splice(at, 0, id);
   return rest;
 };
-/** Rows in the user's dragged order first, the rest after them in their own order. */
+/** Rows in the user's dragged order, the rest after them in their own order (`restFirst`: above them, so a new
+ *  conversation lands on top). */
 export const ordered = <T>(
   rows: T[],
   key: (row: T) => string,
   order: string[] = [],
   byRest: (a: T, b: T) => number = () => 0,
+  restFirst = false,
 ) =>
   rows
     .map((row, index) => ({ row, index }))
@@ -23,8 +25,8 @@ export const ordered = <T>(
       const posA = order.indexOf(key(a.row));
       const posB = order.indexOf(key(b.row));
       if (posA >= 0 && posB >= 0) return posA - posB;
-      if (posA >= 0) return -1;
-      if (posB >= 0) return 1;
+      if (posA >= 0) return restFirst ? 1 : -1;
+      if (posB >= 0) return restFirst ? -1 : 1;
       return byRest(a.row, b.row) || a.index - b.index;
     })
     .map(x => x.row);

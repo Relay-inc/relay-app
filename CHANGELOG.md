@@ -24,6 +24,8 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ### Fixed
 
+- Cmd-K always starts a general conversation and sends at once: a question that named several projects waited on a hidden "Which project?" and was lost when another conversation opened. The projects it names are offered once in the conversation afterwards (#89)
+- A new conversation shows at the top of General and of its project, also after the list was reordered by dragging (#89)
 - Settings › Machines › Set up a machine in a development build of Relay uses relay-server:latest: it gave the build's own version, which has no image
 
 ### Changed
