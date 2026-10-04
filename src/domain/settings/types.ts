@@ -81,6 +81,7 @@ export type Settings = {
   accent?: Accent;
   terminal?: TerminalApp;
   keepAwake?: boolean; // hold off idle sleep while a turn runs, on unless false
+  autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;

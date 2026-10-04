@@ -4,7 +4,15 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
-import type { AgentSession, Pending, SessionOf, Sub, Transcript } from "../domain/conversations/types";
+import type {
+  AgentSession,
+  Pending,
+  Retry,
+  RetryEvent,
+  SessionOf,
+  Sub,
+  Transcript,
+} from "../domain/conversations/types";
 import type {
   ActionConfig,
   ActionEntry,
@@ -135,6 +143,9 @@ export const appSessions = () => invoke<SessionOf>("app_sessions");
 // ---------- the orchestrator (src-tauri/src/orch.rs): its coordinator talks through `send` like any conversation
 /** Every worker the coordinator started, also the ones made while no page listened. */
 export const orchWorkers = () => invoke<Worker[]>("orch_workers");
+/** The conversations waiting for a provider limit to reset (src-tauri/src/retry.rs). */
+export const retries = () => invoke<Retry[]>("retries");
+export const retryCancel = (key: string) => invoke("retry_cancel", { key });
 /** Stops a worker; the backend reports its new state as an `orch` event. */
 export const orchStop = (key: string) => invoke<boolean>("orch_stop", { key });
 
@@ -255,6 +266,8 @@ export const onAgent = (handler: (key: string, event: AgentEvent, provider: stri
   );
 /** A worker made or changed, or a user turn Relay wrote into a conversation itself. */
 export const onOrch = (handler: (event: OrchEvent) => void) => listen<OrchEvent>("orch", e => handler(e.payload));
+/** The waiting retries changed, or one is due: send it. */
+export const onRetry = (handler: (event: RetryEvent) => void) => listen<RetryEvent>("retry", e => handler(e.payload));
 /** A notification banner was clicked: open that conversation. */
 export const onOpenChat = (handler: (key: string) => void) => listen<string>("open-chat", e => handler(e.payload));
 /** A link clicked inside a mail's sandboxed frame. */

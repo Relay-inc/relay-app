@@ -192,6 +192,8 @@ function queueMessage(key: string, text: string, images: Img[], files: string[])
   if (key === selected()) request("scroll-bottom");
 }
 async function deliver(key: string, text: string, images: Img[], files: string[]) {
+  // a message sent before the limit reset replaces the retry waiting for it
+  if (cs().retries[key]) backend.retryCancel(key);
   const conversation = cs().chats[key];
   const name = `${conversation?.project || t("general")}: ${displayTitle(conversation?.title || key)}`;
   // the agent only hears the project through the message: with the first one, and again after a move
@@ -445,6 +447,7 @@ const worktreeNote = (removed: number, kept: number) =>
 export async function closeChat(key: string) {
   if (cs().closing.has(key) || key === ORCH) return; // the coordinator is permanent
   const title = isTerminal(key) ? terminalOf(key)?.title : label(key);
+  if (cs().retries[key]) backend.retryCancel(key);
   const worktrees = await hide(key);
   toast(t("toast.closed", { title: title ?? "" }) + worktreeNote(worktrees?.removed ?? 0, worktrees?.kept ?? 0), () =>
     reopen(key),

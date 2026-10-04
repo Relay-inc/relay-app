@@ -366,6 +366,13 @@ export default {
   "set.keepAwake": "Mac wach halten, während Unterhaltungen laufen",
   "set.keepAwakeHelp":
     "Solange eine Unterhaltung einen laufenden Zug hat, schläft der Mac bei Inaktivität nicht ein, du kannst ihn also weiterarbeiten lassen. Zuklappen schickt ihn trotzdem in den Ruhezustand.",
+  "set.autoRetry": "Erneut versuchen, wenn ein Nutzungslimit zurückgesetzt wird",
+  "set.autoRetryHelp":
+    "Wird eine Unterhaltung abgelehnt, weil das Nutzungslimit des Anbieters erreicht ist, und gibt es kein anderes Konto zum Wechseln, sendet Relay sie erneut, sobald das Limit zurückgesetzt ist. Ist <b>Mac wach halten</b> an, bleibt der Mac bis dahin wach.",
+  "retry.at": "Nutzungslimit erreicht. Neuer Versuch um {time}.",
+  "retry.check": "Nutzungslimit erreicht. Erneute Prüfung um {time}.",
+  "retry.cancel": "Abbrechen",
+  "retry.started": "Nutzungslimit zurückgesetzt, es geht weiter.",
   "set.system": "System (Standard)",
   "set.themeSystem": "System",
   "set.sec.folders": "Ordner",

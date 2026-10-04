@@ -367,6 +367,13 @@ export default {
   "set.keepAwake": "Garder le Mac éveillé pendant les conversations",
   "set.keepAwakeHelp":
     "Tant qu'une conversation a un tour en cours, le Mac ne se met pas en veille par inactivité, vous pouvez donc le laisser travailler. Fermer l'écran le met quand même en veille.",
+  "set.autoRetry": "Réessayer quand une limite d'utilisation se réinitialise",
+  "set.autoRetryHelp":
+    "Quand une conversation est refusée parce que la limite d'utilisation du fournisseur est atteinte et qu'aucun autre compte n'est disponible, Relay la renvoie dès que la limite se réinitialise. Le Mac reste éveillé jusque-là si <b>Garder le Mac éveillé</b> est activé.",
+  "retry.at": "Limite d'utilisation atteinte. Nouvel essai à {time}.",
+  "retry.check": "Limite d'utilisation atteinte. Nouvelle vérification à {time}.",
+  "retry.cancel": "Annuler",
+  "retry.started": "Limite d'utilisation réinitialisée, la conversation continue.",
   "set.system": "Système (par défaut)",
   "set.themeSystem": "Système",
   "set.sec.folders": "Dossiers",

@@ -101,3 +101,8 @@ export type SessionOf = Record<string, { provider: string; sid: string }>;
 /** The answer a card gives: allow or deny a permission, or a question's picked labels and typed "other" per question. */
 export type CardChoice = "allow" | "deny" | { picked: string[][]; other: string[] };
 export type RouteChoice = { key: string; text: string; hits: string[] };
+
+/** A conversation refused for its provider's limit, waiting to be sent again: at the reset (`known`), or `at` is when
+ *  the limits are read again. `fresh`: the refused turn did nothing yet, so its message goes again. */
+export type Retry = { key: string; at: number; known: boolean; fresh: boolean };
+export type RetryEvent = { type: "list"; retries: Retry[] } | { type: "fire"; key: string; fresh: boolean };
