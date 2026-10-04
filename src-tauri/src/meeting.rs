@@ -166,13 +166,14 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     super::dictation::with_meeting_model(app, |model, options| {
         for (n, (t, (a, b))) in regions.iter().enumerate() {
             let text = model.transcribe(&tracks[*t].1[*a..*b], options).map_err(|e| e.to_string())?.text;
-            if !text.trim().is_empty() { lines.push((*a as f32 / RATE as f32, tracks[*t].0, text.trim().to_string())); }
+            let secs = |i: usize| i as f32 / RATE as f32;
+            if !text.trim().is_empty() { lines.push(Line { at: secs(*a), end: secs(*b), mic: *t == 0, who: tracks[*t].0, text: text.trim().to_string() }); }
             progress.send((n + 1) as f64 / regions.len() as f64).ok();
         }
         Ok(())
     })?;
     let md = folder.join(format!("{stem}.md"));
-    std::fs::write(&md, format!("# {title}\n\n{}", transcript(lines))).map_err(|e| e.to_string())?;
+    std::fs::write(&md, format!("# {title}\n\n{}", transcript(drop_echo(lines)))).map_err(|e| e.to_string())?;
     let rel = |p: &Path| p.strip_prefix(vault).unwrap_or(p).to_string_lossy().to_string();
     let seconds = tracks.iter().map(|(_, s)| s.len()).max().unwrap_or(0) / RATE;
     Ok(json!({ "audio": audio.as_deref().map(rel), "transcript": rel(&md), "seconds": seconds }))
@@ -239,12 +240,33 @@ pub(crate) fn speech_regions(s: &[f32]) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// A transcribed stretch: when (seconds), from which track, and what was said.
+struct Line<'a> { at: f32, end: f32, mic: bool, who: &'a str, text: String }
+
+fn words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric()).filter(|w| w.chars().count() > 1).map(str::to_lowercase).collect()
+}
+/// Drops what the microphone heard from the speakers: a microphone stretch whose words are mostly in what the others
+/// said at the same time (1.5 s either side, for the room's delay). With headphones nothing matches; your own words
+/// said over someone else's differ from theirs, so they stay. Works for any speaker, no output device detection.
+fn drop_echo(lines: Vec<Line>) -> Vec<Line> {
+    let others: Vec<(f32, f32, Vec<String>)> = lines.iter().filter(|l| !l.mic).map(|l| (l.at, l.end, words(&l.text))).collect();
+    lines.into_iter().filter(|line| {
+        if !line.mic { return true; }
+        let mine = words(&line.text);
+        let heard: std::collections::HashSet<&String> = others.iter()
+            .filter(|(at, end, _)| *at <= line.end + 1.5 && *end >= line.at - 1.5)
+            .flat_map(|(_, _, w)| w).collect();
+        let echoed = mine.iter().filter(|w| heard.contains(w)).count();
+        mine.is_empty() || (echoed as f32) < 0.6 * mine.len() as f32
+    }).collect()
+}
+
 /// The transcript in time order, one paragraph per turn: a speaker's stretches that follow each other are joined.
-/// ponytail: on speakers instead of headphones the microphone also hears the others, so their words show twice.
-fn transcript(mut lines: Vec<(f32, &str, String)>) -> String {
-    lines.sort_by(|a, b| a.0.total_cmp(&b.0));
+fn transcript(mut lines: Vec<Line>) -> String {
+    lines.sort_by(|a, b| a.at.total_cmp(&b.at));
     let mut turns: Vec<(f32, &str, String)> = vec![];
-    for (at, who, text) in lines {
+    for Line { at, who, text, .. } in lines {
         match turns.last_mut() {
             Some(turn) if turn.1 == who => { turn.2.push(' '); turn.2.push_str(&text); }
             _ => turns.push((at, who, text)),
@@ -376,10 +398,26 @@ mod tests {
         assert!(speech_regions(&quiet(5.0)).is_empty());
     }
 
+    fn line(at: f32, mic: bool, text: &str) -> Line<'static> {
+        Line { at, end: at + 3.0, mic, who: if mic { "Me" } else { "Others" }, text: text.into() }
+    }
+
     #[test]
     fn transcript_joins_turns_in_time_order() {
-        let text = transcript(vec![(61.0, "Others", "Hoi.".into()), (2.0, "Me", "Goedemorgen.".into()), (5.0, "Me", "Alles goed?".into())]);
+        let text = transcript(vec![line(61.0, false, "Hoi."), line(2.0, true, "Goedemorgen."), line(5.0, true, "Alles goed?")]);
         assert_eq!(text, "**[00:02] Me:** Goedemorgen. Alles goed?\n\n**[01:01] Others:** Hoi.\n\n");
+    }
+
+    #[test]
+    fn the_microphone_hearing_the_speakers_is_dropped() {
+        let kept = |lines: Vec<Line<'static>>| drop_echo(lines).into_iter().map(|l| (l.who, l.text)).collect::<Vec<_>>();
+        // on speakers: the mic hears the others' sentence a moment later, slightly misheard
+        let echo = kept(vec![line(10.0, false, "De release staat op donderdag gepland."), line(10.4, true, "release staat op donderdag gepland")]);
+        assert_eq!(echo, vec![("Others", "De release staat op donderdag gepland.".to_string())]);
+        // talking over someone: other words, so both stay
+        assert_eq!(kept(vec![line(10.0, false, "De release staat op donderdag."), line(11.0, true, "Wacht, welke week bedoel je?")]).len(), 2);
+        // the same words long after are not an echo
+        assert_eq!(kept(vec![line(10.0, false, "Donderdag gepland."), line(60.0, true, "Donderdag gepland.")]).len(), 2);
     }
 
     #[test]
