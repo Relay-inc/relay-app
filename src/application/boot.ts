@@ -35,6 +35,7 @@ import { loadMeetings, tick } from "./calendar/calendar";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
+import { loadRetries, onRetryEvent } from "./conversations/retry";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
 // versions, then the polls. Every poll of the app starts here, once.
@@ -87,6 +88,7 @@ export async function boot() {
   await loadSettingsAndVault();
   await adoptEarlierConversations();
   await loadWorkers();
+  await loadRetries();
   await pickStartView();
   listenToLinks();
   startPolls();
@@ -101,6 +103,7 @@ function listenToBackend() {
   backend.onSettingsChanged(settingsChanged);
   backend.onMenu(onMenu);
   backend.onOrch(onOrchEvent);
+  backend.onRetry(onRetryEvent);
   listenToFileDrops();
 }
 

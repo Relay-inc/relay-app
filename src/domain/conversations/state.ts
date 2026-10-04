@@ -1,7 +1,7 @@
 import type { Key } from "../../shared/i18n";
 import type { MachineChoice } from "../settings/types";
 import type { SlashCommand } from "./commands";
-import type { AgentSession, Chat, Img, Item, Pending, RouteChoice, SessionOf, Sub } from "./types";
+import type { AgentSession, Chat, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
 
 /** A translation, handed to the rules that write text into the state (notes, titles). */
 export type Translate = (key: Key, params?: Record<string, string | number>) => string;
@@ -37,6 +37,7 @@ export type ConversationsState = {
   subLog: Record<string, string[]>; // agent id: its last messages, while unfolded
   // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
   commands: Record<string, SlashCommand[]>;
+  retries: Record<string, Retry>; // conversations waiting for a limit to reset, by key (retry.rs)
 };
 
 /** The state on a fresh start, with what was stored. */
@@ -68,6 +69,7 @@ export const initialConversations = (stored: {
   subs: {},
   subsOpen: new Set(),
   subLog: {},
+  retries: {},
 });
 
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is

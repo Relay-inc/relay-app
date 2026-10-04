@@ -363,6 +363,13 @@ const en = {
   "set.keepAwake": "Keep Mac awake while conversations run",
   "set.keepAwakeHelp":
     "While a conversation has a turn running, the Mac doesn't go to sleep when idle, so you can leave it working. Closing the lid still puts it to sleep.",
+  "set.autoRetry": "Retry when a usage limit resets",
+  "set.autoRetryHelp":
+    "When a conversation is refused because the provider's usage limit is reached and there's no other account to switch to, Relay sends it again once the limit resets. The Mac stays awake until then if <b>Keep Mac awake</b> is on.",
+  "retry.at": "Usage limit reached. Retrying at {time}.",
+  "retry.check": "Usage limit reached. Checking again at {time}.",
+  "retry.cancel": "Cancel",
+  "retry.started": "Usage limit reset, continuing.",
   "set.system": "System (default)",
   "set.themeSystem": "System",
   "set.sec.folders": "Folders",

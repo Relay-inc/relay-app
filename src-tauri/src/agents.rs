@@ -101,11 +101,13 @@ pub fn pick_account(list: &[String], cur: &str, auto: bool, spent: impl Fn(&str)
 
 /// Limits (`Limits::json`) that leave no room for a conversation on `model`: a window at 100% that applies to it. A
 /// model's own window (weekly Opus) only counts for that model, never for the CLI's default ("", which falls back).
-pub fn used_up(limits: &Value, model: &str) -> bool {
+pub fn used_up(limits: &Value, model: &str) -> bool { full(limits, model).next().is_some() }
+/// The windows of `limits` at 100% that apply to `model`, as in [`used_up`].
+pub fn full<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Value> {
     let model = model.to_lowercase();
     limits["windows"].as_array().into_iter().flatten()
-        .filter(|w| w["name"].as_str().is_none_or(|n| !model.is_empty() && model.contains(&n.to_lowercase())))
-        .any(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
+        .filter(move |w| w["name"].as_str().is_none_or(|n| !model.is_empty() && model.contains(&n.to_lowercase())))
+        .filter(|w| w["pct"].as_f64().is_some_and(|x| x >= 100.0))
 }
 /// Limits read without a login: the account was never signed in (an expired token the CLI refreshes itself).
 pub fn no_login(limits: &Value) -> bool { limits["ok"] == false && limits["reason"] == "no-login" }

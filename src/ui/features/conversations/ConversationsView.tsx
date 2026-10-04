@@ -22,6 +22,7 @@ import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
 import { MoveBar } from "./MoveBar";
+import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
@@ -156,6 +157,7 @@ export function ConversationsView({ className }: { className: string }) {
         </div>
       ) : null}
       <RepoBar className={column} />
+      <RetryBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
       {onView ? null : <Composer className={`${column} mt-2 mb-4.5`} />}
     </div>

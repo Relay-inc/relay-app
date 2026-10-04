@@ -365,6 +365,13 @@ export default {
   "set.keepAwake": "Mac wakker houden terwijl gesprekken lopen",
   "set.keepAwakeHelp":
     "Zolang een gesprek een beurt heeft lopen, gaat de Mac niet slapen bij inactiviteit, zodat je hem kan laten doorwerken. De klep sluiten laat hem wel slapen.",
+  "set.autoRetry": "Opnieuw proberen als een gebruikslimiet vrijkomt",
+  "set.autoRetryHelp":
+    "Wordt een gesprek geweigerd omdat de gebruikslimiet van de provider bereikt is en is er geen ander account om naar over te schakelen, dan stuurt Relay het opnieuw zodra de limiet vrijkomt. Staat <b>Mac wakker houden</b> aan, dan blijft de Mac tot dan wakker.",
+  "retry.at": "Gebruikslimiet bereikt. Opnieuw om {time}.",
+  "retry.check": "Gebruikslimiet bereikt. Opnieuw kijken om {time}.",
+  "retry.cancel": "Annuleren",
+  "retry.started": "Gebruikslimiet vrijgekomen, gaat verder.",
   "set.system": "Systeem (standaard)",
   "set.themeSystem": "Systeem",
   "set.sec.folders": "Mappen",

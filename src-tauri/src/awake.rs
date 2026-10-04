@@ -1,4 +1,4 @@
-// Keeps the Mac from idle-sleeping while a conversation has a turn running (#80): an IOKit
+// Keeps the Mac from idle-sleeping while a conversation has a turn running (#80) or waits to retry (#81): an IOKit
 // PreventUserIdleSystemSleep assertion, taken when the first turn starts and released when the last one ends.
 // Idle sleep only, so closing the lid still sleeps the Mac. macOS drops the assertion with the process, also on a crash.
 // Checked every 2 s instead of at each change of turns: procs come and go in many places (stop, exit, move, quit).
@@ -47,7 +47,7 @@ pub fn start(app: &AppHandle) {
             loop {
                 let st = h.state::<App>();
                 let on = st.settings.lock().unwrap()["keepAwake"] != false;
-                let running = on && st.procs.lock().unwrap().values().any(|p| p.turns > 0);
+                let running = on && (st.procs.lock().unwrap().values().any(|p| p.turns > 0) || super::retry::pending());
                 match (running, held) {
                     (true, None) => held = iokit::take(),
                     (false, Some(id)) => { iokit::release(id); held = None; }

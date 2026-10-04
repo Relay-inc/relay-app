@@ -32,6 +32,7 @@ mod providers;
 mod pty;
 mod relay_config;
 mod reminders;
+mod retry;
 mod scratch;
 #[cfg(feature = "selftest")]
 mod selftest;
@@ -715,6 +716,8 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
         let mut err: Vec<String> = vec![];
         let mut last = String::new(); // the agent's last text block, for a worker that ends without a report (orch.rs)
+        // this turn: refused for the account's limit (and the reset Claude named, epoch ms), and whether it did anything
+        let (mut limited, mut hint, mut worked) = (false, None::<i64>, false);
         // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
         let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
         // the same for the repos' reflogs around a tool call that may commit (see commits.rs)
@@ -722,10 +725,16 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
         for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
             let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => { exited = true; break } };
             let replay = n < backlog;
+            // the refusal itself comes as an assistant message of model "<synthetic>": not work the turn did
+            let synthetic = claude && line.contains("\"<synthetic>\"");
             // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
             if claude {
                 if let Ok(ev) = serde_json::from_str::<Value>(&line) {
-                    if ev["type"] == "rate_limit_event" && ev["rate_limit_info"]["status"] == "rejected" { spend(&a); }
+                    if ev["type"] == "rate_limit_event" && ev["rate_limit_info"]["status"] == "rejected" {
+                        spend(&a);
+                        limited = true;
+                        hint = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
+                    }
                     if ev["type"] == "control_request" { control(&a, &k, pid, &ev); continue; }
                     if ev["type"] == "control_response" {
                         if ev["response"]["subtype"] == "error" {
@@ -747,6 +756,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
             for ev in parse(&line) {
                 // Replayed activity restores turns surviving an app restart. Repeated model steps never
                 // count as extra user messages; Claude's assistant blocks also provide this signal.
+                if !synthetic && matches!(&ev, Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) { worked = true; }
                 if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
                     if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.max(1)); }
                 }
@@ -789,8 +799,11 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                     Event::Text { text, delta } => { if !delta { last.clear(); } last.push_str(text); }
                     Event::TurnEnd { error, .. } => {
                         let e = error.as_deref().unwrap_or("").to_lowercase();
-                        if e.contains("usage limit") || e.contains("hit your limit") { spend(&a); }
-                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.saturating_sub(1)); }
+                        // "usage limit" (Codex), "You've hit your limit" and "You've hit your weekly limit · resets 9pm" (Claude)
+                        if e.contains("usage limit") || (e.contains("hit your") && e.contains("limit")) { spend(&a); limited = true; }
+                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(1)); x.opts.0.clone() });
+                        retry::turn_end(&a, &k, p, &account, &model.unwrap_or_default(), limited, hint, !worked);
+                        (limited, hint, worked) = (false, None, false);
                         // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
                         if orch::is_worker(&k) { orch::turn_end(&a, &k, &last); }
                         if !replay && orch::is_orch(&k) { orch::flush(&a, &k); } // what Relay queued while the turn ran
@@ -1912,6 +1925,7 @@ pub fn run() {
             orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
             actions::start(app.handle());
             awake::start(app.handle());
+            retry::start(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines)
@@ -1943,7 +1957,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default])
+        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machines_list, set_machines_default, retry::retries, retry::retry_cancel])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

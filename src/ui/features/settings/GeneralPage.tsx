@@ -12,6 +12,7 @@ import {
   pickVaultFolder,
   saveFavicons,
   saveKeepAwake,
+  saveAutoRetry,
   saveFolders,
   saveSidebar,
   saveTerminal,
@@ -51,6 +52,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
   const views = useDerived(sidebarViews);
   const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
   const keepAwake = useSettingsStore(s => s.settings.keepAwake !== false);
+  const autoRetry = useSettingsStore(s => s.settings.autoRetry === true);
   const message = useSettingsStore(s => s.message);
   // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
   const [map, setMap] = useState(vaultStatus.map);
@@ -187,6 +189,9 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
         </Field>
         <Field label={t("set.keepAwake")} id="awake" hint={<Html html={th("set.keepAwakeHelp")} />}>
           <Switch id="awake" on={keepAwake} onToggle={saveKeepAwake} />
+        </Field>
+        <Field label={t("set.autoRetry")} id="retry" hint={<Html html={th("set.autoRetryHelp")} />}>
+          <Switch id="retry" on={autoRetry} onToggle={saveAutoRetry} />
         </Field>
       </Section>
       <Section title={t("set.sec.sidebar")} rows>
