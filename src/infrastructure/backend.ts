@@ -31,6 +31,7 @@ import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
+import type { SpeechModelInfo } from "../domain/settings/voice";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -257,6 +258,29 @@ export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_l
 export const scratchSave = (project: string, id: string | null, text: string) =>
   invoke<string>("scratch_save", { project, id, text });
 export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
+
+// ---------- dictation in the composer (src-tauri/src/dictation.rs)
+/** Every speech model Settings › Voice offers, with whether it is on this Mac. */
+export const dictationModels = () => invoke<SpeechModelInfo[]>("dictation_models");
+/** Whether the model picked in Settings › Voice is on this Mac. */
+export const dictationModel = () => invoke<boolean>("dictation_model");
+/** Downloads a speech model (`id`, or the picked one), `onProgress` from 0 to 1. Rejects with "busy" while it already
+ *  downloads. */
+export const dictationDownload = (id: string | null, onProgress: (done: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke("dictation_download", { id, onProgress: channel });
+};
+export const dictationDelete = (id: string) => invoke("dictation_delete", { id });
+/** Starts recording the microphone, its level (0..1) on `onLevel`. Rejects with "model" while the model is missing. */
+export const dictationStart = (onLevel: (level: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onLevel;
+  return invoke("dictation_start", { onLevel: channel });
+};
+/** Stops recording; resolves with the text, rejects with "silent" when the microphone gave nothing. */
+export const dictationStop = () => invoke<string>("dictation_stop");
+export const dictationCancel = () => invoke("dictation_cancel");
 
 // ---------- events from the backend
 /** One normalised event of an agent process. */

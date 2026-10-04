@@ -2,7 +2,18 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { isTerminal } from "../../../domain/navigation/keys";
 import type { PickKind } from "../../../domain/agents/types";
 import { useConversationsStore } from "../../../application/conversations/store";
-import { useDraftsStore } from "../../../application/conversations/drafts";
+import { typedOf, useDraftsStore } from "../../../application/conversations/drafts";
+import {
+  cancelDictation,
+  dismissDictationError,
+  downloadModel,
+  startDictation,
+  stopDictation,
+  useDictationStore,
+} from "../../../application/conversations/dictation";
+import { insertDictated } from "../../../domain/conversations/dictation";
+import { isShortcut, shortcutCode, shortcutLabel, voiceOf } from "../../../domain/settings/voice";
+import { useSettingsStore } from "../../../application/settings/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
 import { chatBar, commandsOf, machineChoice } from "../../../application/conversations/selectors";
@@ -57,6 +68,66 @@ const fieldMounted = (el: HTMLTextAreaElement | null) => {
   }
 };
 
+// dictation (src-tauri/src/dictation.rs): what was said lands at the cursor, or at the end when the field has no focus
+async function dictateIntoField() {
+  const text = await stopDictation();
+  const el = mounted;
+  if (!text || !el) return;
+  const value = typedOf(useNavigationStore.getState().selected);
+  const focused = document.activeElement === el;
+  const next = insertDictated(
+    value,
+    focused ? el.selectionStart : value.length,
+    focused ? el.selectionEnd : value.length,
+    text,
+  );
+  setTyped(next.value);
+  requestAnimationFrame(() => {
+    el.focus();
+    el.setSelectionRange(next.cursor, next.cursor);
+  });
+}
+const toggleDictation = () =>
+  useDictationStore.getState().phase === "recording" ? dictateIntoField() : startDictation();
+// the shortcut of Settings › Voice while a composer shows, recording as its mode says: held, until the key comes up;
+// tapped, until the next press. Escape throws the recording away, before the window's Escape stops a running turn
+const voice = () => voiceOf(useSettingsStore.getState().settings.voice);
+let pressedAt = 0;
+window.addEventListener(
+  "keydown",
+  e => {
+    const phase = useDictationStore.getState().phase;
+    if (e.key === "Escape" && (phase === "recording" || phase === "offer")) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      cancelDictation();
+      return;
+    }
+    const { on, shortcut, mode } = voice();
+    if (!on || !mounted || !isShortcut(e, shortcut)) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    if (phase === "recording") {
+      if (mode !== "hold") dictateIntoField();
+    } else {
+      pressedAt = Date.now();
+      startDictation();
+    }
+  },
+  true,
+);
+window.addEventListener(
+  "keyup",
+  e => {
+    const { shortcut, mode } = voice();
+    if (e.code !== shortcutCode(shortcut) || !pressedAt) return;
+    const held = Date.now() - pressedAt > 400;
+    if (mode === "hold" || (mode === "both" && held)) dictateIntoField();
+    pressedAt = 0;
+  },
+  true,
+);
+
 /** The message field with the images and files waiting, the agent, model and effort picks and the send button. */
 export function Composer({ className }: { className: string }) {
   const { t } = useT();
@@ -65,6 +136,12 @@ export function Composer({ className }: { className: string }) {
   const attached = useDraftsStore(s => s.attached);
   const files = useDraftsStore(s => s.files);
   const busy = useConversationsStore(s => s.status[selected] === "busy");
+  const dictation = useDictationStore(s => s.phase);
+  const level = useDictationStore(s => s.level);
+  const progress = useDictationStore(s => s.progress);
+  const dictationError = useDictationStore(s => s.error);
+  const voiceCfg = useSettingsStore(s => s.settings.voice);
+  const { on: voiceOn, shortcut } = voiceOf(voiceCfg);
   // a conversation of a project bound to a machine runs there
   const machine = useConversationsStore(s => s.machines[selected]?.machine);
   // the agent is fixed once a conversation has a message, and the sidebar shows it then
@@ -228,6 +305,36 @@ export function Composer({ className }: { className: string }) {
             ))}
           </ul>
         ) : null}
+        {dictation === "offer" || dictation === "downloading" || dictationError ? (
+          <div className="flex items-center gap-2 mb-2 text-xs text-secondary">
+            <span className="flex-1">
+              {dictationError
+                ? t(dictationError === "silent" ? "composer.dictationSilent" : "composer.dictationFailed", {
+                    error: dictationError,
+                  })
+                : dictation === "downloading"
+                  ? t("composer.dictationDownloading", { pct: Math.round(progress * 100) })
+                  : t("composer.dictationModel")}
+            </span>
+            {dictation === "offer" ? (
+              <button className="text-accent bg-transparent border-0 p-0" onClick={downloadModel}>
+                {t("composer.dictationDownload")}
+              </button>
+            ) : null}
+            {dictation !== "downloading" ? (
+              <button
+                className="grid place-items-center size-5 rounded border-0 bg-transparent text-secondary hover:bg-fill-2"
+                aria-label={t("nav.close")}
+                onClick={() => {
+                  dismissDictationError();
+                  cancelDictation();
+                }}
+              >
+                <Icon name="close" className="glyph size-3" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {attached.length ? (
           <ImageThumbs
             className="mb-2"
@@ -329,6 +436,32 @@ export function Composer({ className }: { className: string }) {
           {pick("model", true)}
           {pick("effort", showEffort)}
           <span className="flex-1"></span>
+          {/* dictates, or stops dictating; the ring grows with the voice */}
+          {voiceOn ? (
+            <button
+              className={`grid place-items-center size-7 mr-1 rounded-full border-0 ${dictation === "recording" ? "bg-late text-on-accent" : "bg-transparent text-secondary hover:bg-fill-2 hover:text-label"}`}
+              style={
+                dictation === "recording"
+                  ? { boxShadow: `0 0 0 ${Math.round(level * 6)}px var(--color-fill-2)` }
+                  : undefined
+              }
+              title={t(
+                dictation === "recording"
+                  ? "composer.dictateStop"
+                  : dictation === "transcribing"
+                    ? "composer.transcribing"
+                    : "composer.dictate",
+                { key: shortcutLabel(shortcut) },
+              )}
+              aria-label={t(dictation === "recording" ? "composer.dictateStop" : "composer.dictate", {
+                key: shortcutLabel(shortcut),
+              })}
+              disabled={dictation === "transcribing" || dictation === "downloading"}
+              onClick={toggleDictation}
+            >
+              <Icon name="mic" className={`glyph size-4 ${dictation === "transcribing" ? "animate-pulse" : ""}`} />
+            </button>
+          ) : null}
           {/* sends, or stops the running turn */}
           <button
             className={`grid place-items-center size-7 rounded-full border-0 ${busy ? "bg-label" : "bg-accent hover:bg-accent-hover"} text-on-accent`}

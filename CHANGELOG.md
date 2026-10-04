@@ -14,6 +14,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ### Added
 
+- **Dictation in the composer**: the microphone button or a shortcut (⌥Space by default) turns what you say into text at the cursor, on this Mac without sending audio anywhere. **Settings › Voice** switches it on or off, picks the speech model (Parakeet V3 by default for 25 European languages including Dutch; Parakeet V2, Canary, Cohere and Moonshine to download or remove there), the spoken language, the shortcut and whether you hold it, tap it or either. Escape throws a recording away
 - **Retry when a usage limit resets** (Settings › General, off by default): a conversation refused because the provider's usage limit is reached, with no other account to switch to, shows "Retrying at …" with a Cancel button and goes on by itself once the limit resets, also after an app restart. A refused message that never started is sent again, otherwise the agent is asked to continue. It retries once; the Mac stays awake for it while Keep Mac awake is on (#92)
 - Views you switch off in the sidebar stay reachable under "…" after the views, a dropdown with their icons; turn the "…" off in Settings › General or from the views' right-click menu (#93)
 - The Mac stays awake while a conversation has a turn running, so you can leave it working; closing the lid still sleeps it. Switch it off in Settings › General (#91)

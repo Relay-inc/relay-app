@@ -52,6 +52,9 @@ rrule = "0.14"
 chrono-tz = "0.10"
 # the shells of the embedded terminals (src/pty.rs)
 portable-pty = "0.9"
+# dictation in the composer (src/dictation.rs): the microphone, and Parakeet speech to text on ONNX Runtime
+cpal = "0.18"
+transcribe-rs = { version = "0.3.12", features = ["onnx"] }
 
 # the broker and the link to a work machine (src/machines.rs, packages/relay-server)
 relay-remote = { path = "../packages/relay-remote" }
