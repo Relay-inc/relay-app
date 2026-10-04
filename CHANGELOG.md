@@ -11,7 +11,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
-- **Retry when a usage limit resets** (Settings › General, off by default): a conversation refused because the provider's usage limit is reached, with no other account to switch to, shows "Retrying at …" with a Cancel button and goes on by itself once the limit resets, also after an app restart. A refused message that never started is sent again, otherwise the agent is asked to continue. It retries once; the Mac stays awake for it while Keep Mac awake is on (#81)
+- **Retry when a usage limit resets** (Settings › General, off by default): a conversation refused because the provider's usage limit is reached, with no other account to switch to, shows "Retrying at …" with a Cancel button and goes on by itself once the limit resets, also after an app restart. A refused message that never started is sent again, otherwise the agent is asked to continue. It retries once; the Mac stays awake for it while Keep Mac awake is on (#92)
 - **Orchestrator**, at the top of the sidebar: one conversation you keep talking to that hands work out to workers. Each worker is a normal conversation under its own project, so you can read along and step in, and a board lists them with their state, report and diff, with Open and Stop. A worker on a repo gets its own git worktree on a fresh `relay/…` branch and may commit there, never on main; pushing or opening a PR still asks on a card. Only the coordinator writes the shared vault files (work-state, memory, reminders). The orchestrator's conversations run on this Mac (#90)
 
 ### Added
