@@ -18,6 +18,7 @@ import {
   setViewHidden,
   sidebarCfg,
   viewsLayout,
+  moreOn,
   hiddenViews,
   isDark,
   toggleTheme,
@@ -40,15 +41,17 @@ import { DROP_LINE_AFTER } from "./rows";
 import "../../styles/navigation.css";
 
 // a view's menu has its key in `chatKey`
-type MenuTarget = { x: number; y: number; chatKey: string; project: string | null; kind: "conv" | "proj" | "view" };
+type MenuTarget = { x: number; y: number; chatKey: string; project: string | null; kind: "conv" | "proj" | "view" | "more" };
 
 /** The whole left sidebar: search, the sections with their conversations, the footer buttons and the right-click menu.
  *  The rows come from the application (sidebarModel); the drag to reorder and the menu live here. */
 export function NavigationView({ className }: { className: string }) {
   const { t } = useT();
-  const { orch, views, sections } = useDerived(() => sidebarModel());
+  const { views, sections } = useDerived(() => sidebarModel());
   const usage = useDerived(() => usageSummary());
   const layout = useDerived(() => viewsLayout());
+  const hidden = useDerived(() => hiddenViews());
+  const more = useDerived(() => moreOn());
   const dark = useDerived(() => isDark());
   const selected = useNavigationStore(s => s.selected);
   const find = useNavigationStore(s => s.sidebar.find);
@@ -63,20 +66,21 @@ export function NavigationView({ className }: { className: string }) {
   }, [selected]);
 
   // ---------- the right-click menu
-  useDismiss(menuElement, !!menu, () => setMenu(null));
+  // the "…" toggles its own dropdown: the click that opens it must not also close it
+  useDismiss(menuElement, !!menu, () => setMenu(null), { inside: target => !!target.closest("[data-more]") });
   const openMenu = (target: Omit<MenuTarget, "x" | "y">) => (e: MouseEvent) => {
     e.preventDefault();
     setMenu({ ...target, x: e.clientX, y: e.clientY });
   };
   const viewMenuItems = (target: MenuTarget): MenuItem[] => {
     const name = views.find(view => view.key === target.chatKey)?.name ?? "";
-    const hidden = hiddenViews();
     return [
       { id: "hide", label: t("nav.hide", { name }) },
       { id: "layout", label: t(layout === "icons" ? "nav.asList" : "nav.asIcons") },
       ...(sidebarCfg().order?.length ? [{ id: "resetorder", label: t("nav.resetOrder") }] : []),
       ...(hidden.length
         ? [
+            { id: "more", label: t(more ? "nav.hideMore" : "nav.showMore") },
             { id: "", label: t("nav.hidden"), head: true },
             ...hidden.map(view => ({ id: `show:${view.key}`, label: t("nav.show", { name: view.name }) })),
           ]
@@ -88,11 +92,13 @@ export function NavigationView({ className }: { className: string }) {
     if (itemId === "hide") setViewHidden(target.chatKey, true);
     else if (itemId === "layout") setSidebar({ layout: layout === "icons" ? "list" : "icons" });
     else if (itemId === "resetorder") setSidebar({ order: [] });
+    else if (itemId === "more") setSidebar({ more: !more });
     else if (itemId === "sidebarsettings") openSettings();
     else setViewHidden(itemId.slice("show:".length), false);
   };
   const menuItems = (target: MenuTarget): MenuItem[] => {
     if (target.kind === "view") return viewMenuItems(target);
+    if (target.kind === "more") return hidden.map(view => ({ id: view.key, label: view.name, icon: view.icon, mark: view.mark }));
     if (target.kind === "conv")
       return [
         { id: "assign", label: t("ctx.assign") },
@@ -117,6 +123,7 @@ export function NavigationView({ className }: { className: string }) {
   const pick = async (target: MenuTarget, itemId: string) => {
     setMenu(null);
     if (target.kind === "view") pickView(target, itemId);
+    else if (target.kind === "more") select(itemId);
     else if (itemId === "assign") {
       await select(target.chatKey);
       openProjectPanel();
@@ -146,6 +153,8 @@ export function NavigationView({ className }: { className: string }) {
       box="0 0 24 24"
       name={view.name}
       meta={view.meta}
+      unseen={view.unseen}
+      trail={view.trail}
       selected={selected === view.key}
       {...dropzone("view", view.key)}
       onPointerDown={press("view", view.key)}
@@ -153,12 +162,35 @@ export function NavigationView({ className }: { className: string }) {
       onContextMenu={openMenu({ chatKey: view.key, project: null, kind: "view" })}
     />
   );
+  // the switched-off views stay reachable: "…" after the views opens them in a dropdown below it
+  const openMore = (e: MouseEvent<HTMLElement>) => {
+    if (menu?.kind === "more") return setMenu(null);
+    const box = e.currentTarget.getBoundingClientRect();
+    setMenu({ x: box.left, y: box.bottom + 2, chatKey: "", project: null, kind: "more" });
+  };
+  const renderMore = (tile: boolean) =>
+    hidden.length && more ? (
+      <SidebarRow
+        kind={tile ? "tile" : "view"}
+        data-more
+        icon="more"
+        name={t("nav.moreViews")}
+        selected={hidden.some(view => view.key === selected)}
+        onClick={openMore}
+      />
+    ) : null;
   // the views on top: rows with their names, or a row of icons
   const renderViews = () =>
     layout === "icons" ? (
-      <div className="flex flex-wrap gap-1 px-0.5 pb-1">{views.map(view => renderView(view, true))}</div>
+      <div className="flex flex-wrap gap-1 px-0.5 pb-1">
+        {views.map(view => renderView(view, true))}
+        {renderMore(true)}
+      </div>
     ) : (
-      views.map(view => renderView(view, false))
+      <>
+        {views.map(view => renderView(view, false))}
+        {renderMore(false)}
+      </>
     );
   const renderConversation = (row: ConvRow, indent: boolean) => (
     <SidebarRow
@@ -265,17 +297,6 @@ export function NavigationView({ className }: { className: string }) {
         />
       </label>
       <nav className="flex-1 overflow-y-auto px-2 pt-1.5 pb-4 flex flex-col gap-px">
-        {/* the orchestrator's coordinator: a conversation, so it is never dragged, hidden or shown as a tile */}
-        <SidebarRow
-          data-key={orch.key}
-          icon={orch.icon}
-          name={orch.name}
-          meta={orch.meta}
-          unseen={orch.unseen}
-          trail={orch.trail}
-          selected={selected === orch.key}
-          onClick={() => select(orch.key)}
-        />
         {renderViews()}
         {sections.map(renderSection)}
       </nav>

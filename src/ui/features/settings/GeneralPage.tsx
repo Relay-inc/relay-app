@@ -50,6 +50,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
   const sidebarLayout = useSettingsStore(s => s.settings.sidebar?.layout ?? "list");
   const reordered = useSettingsStore(s => !!s.settings.sidebar?.order?.length);
   const views = useDerived(sidebarViews);
+  const more = useSettingsStore(s => s.settings.sidebar?.more !== false);
   const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
   const keepAwake = useSettingsStore(s => s.settings.keepAwake !== false);
   const autoRetry = useSettingsStore(s => s.settings.autoRetry === true);
@@ -229,6 +230,17 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
             <Switch id={`sb-${view.key}`} on={view.shown} onToggle={on => showView(view.key, on)} />
           </Field>
         ))}
+        <Field
+          id="sb-more"
+          label={
+            <span className="inline-flex items-center gap-2">
+              <Icon name="more" className={TILE} />
+              {t("set.sidebarMore")}
+            </span>
+          }
+        >
+          <Switch id="sb-more" on={more} onToggle={on => saveSidebar({ more: on })} />
+        </Field>
       </Section>
     </>
   );
