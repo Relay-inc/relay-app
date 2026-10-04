@@ -24,12 +24,18 @@ fn bin() -> Command {
     c.stdin(Stdio::null());
     c
 }
-fn start(tag: &str) -> Server {
+fn start(tag: &str) -> Server { start_on(tag, 0) }
+/// On `port`: 0 is any free one, a restart of the process then takes another.
+fn start_on(tag: &str, port: u16) -> Server {
     let data = std::env::temp_dir().join(format!("relay-e2e-{tag}-{}", std::process::id()));
     // short: a socket path has a 104-byte limit on macOS
     let agents = PathBuf::from(format!("/tmp/rse-{tag}-{}", std::process::id()));
     std::fs::remove_dir_all(&data).ok();
-    let child = bin().args(["serve", "--port", "0", "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &data).env("RELAY_AGENTS_DIR", &agents)
+    let mut cmd = bin();
+    // the mirror links transcripts into Claude Code's projects folder: a folder of the test's own, except for the real
+    // Claude turn, which needs this Mac's login
+    if tag != "claude" { cmd.env("CLAUDE_CONFIG_DIR", data.join("claude")); }
+    let child = cmd.args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &data).env("RELAY_AGENTS_DIR", &agents)
         .stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
     while !data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10), "server did not start"); std::thread::sleep(Duration::from_millis(50)); }
@@ -140,6 +146,33 @@ fn pair_launch_reattach_and_walls() {
     assert!(t.elapsed() < Duration::from_secs(5), "the revoked stream took {:?}", t.elapsed());
     assert!(other.info().is_err());
     assert!(c.info().is_ok());
+}
+
+#[test]
+fn update_goes_on_in_the_binary_sent() {
+    // a fixed port, as on a real machine: the server goes on with the arguments it started with
+    let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+    let s = start_on("update", port);
+    let c = paired(&s, "laptop");
+    let me = env!("CARGO_PKG_VERSION");
+    // a stand-in that is relay-server of this version: it answers `version` and runs the real binary for the rest
+    let real = env!("CARGO_BIN_EXE_relay-server");
+    let script = format!("#!/bin/sh\nif [ \"$1\" = version ]; then echo {me}; exit 0; fi\nexec {real} \"$@\"\n");
+    if cfg!(target_os = "macos") {
+        assert!(c.update(me, script.as_bytes()).unwrap_err().contains("Relay on a Mac"));
+        return;
+    }
+    assert!(c.update("9.9.9", script.as_bytes()).unwrap_err().contains("not relay-server 9.9.9"), "a binary of another version is refused");
+    assert!(!s.data.join("bin/relay-server").exists());
+    std::fs::remove_file(s.data.join("serve.json")).unwrap();
+    c.update(me, script.as_bytes()).unwrap();
+    assert!(s.data.join("bin/relay-server").exists());
+    // it restarted: serve writes serve.json again at its start, and answers on the same connection details
+    let t = Instant::now();
+    while !s.data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10), "no restart"); std::thread::sleep(Duration::from_millis(50)); }
+    let t = Instant::now();
+    while c.info().is_err() { assert!(t.elapsed() < Duration::from_secs(10), "not back after the update"); std::thread::sleep(Duration::from_millis(100)); }
+    assert!(c.info().unwrap().update);
 }
 
 #[test]
@@ -307,6 +340,7 @@ fn restart(mut s: Server) -> Server {
     std::fs::remove_dir_all(s.data.join("work")).ok();
     std::fs::remove_file(s.data.join("serve.json")).ok();
     s.child = bin().args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &s.data).env("RELAY_AGENTS_DIR", &s.agents)
+        .env("CLAUDE_CONFIG_DIR", s.data.join("claude"))
         .stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
     while !s.data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10)); std::thread::sleep(Duration::from_millis(50)); }

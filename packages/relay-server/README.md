@@ -19,12 +19,23 @@ going while your laptop is closed. Relay connects to it over the LAN, or over yo
 What it does not change: an agent here runs with the same rights as on your laptop, and the permission cards still
 come to Relay. Mail never runs here (Relay answers the mail tools itself). The vault comes as an encrypted mirror (below).
 
-## Set up
+## On a Mac, with the Relay app
+
+The simplest way on a Mac: Relay itself is the server. Install Relay on that Mac (in Applications, then once
+`xattr -dr com.apple.quarantine /Applications/Relay.app`), install Claude Code there and log in (`claude`, then
+`/login`), and switch on Settings › Machines › This Mac as a machine. Relay installs a LaunchAgent that runs
+`Relay --relay-server serve --ram-disk` (this same code, inside Relay's binary), so it keeps running while Relay is
+closed and a new Relay restarts it on its own version. Make a pairing line on that page and paste it in the other Mac's
+Relay. `--ram-disk` keeps the mirror's working copy on a RAM disk that is hidden from Finder and ejected when the server
+stops, as a tmpfs does on Linux.
+
+## Set up from the source
 
 1. Install Claude Code on this machine and log in with your own account: `claude`, then `/login`. Relay never sends
    your login anywhere, this machine has its own.
 2. Optional: clone repos you want Claude to work in here, outside `~/Documents` on a Mac (see below).
-3. Build and run: `cargo build --release -p relay-server`, then `target/release/relay-server serve`.
+3. Build and run: `cargo build --release -p relay-server`, then `target/release/relay-server serve` (on a Mac with
+   `--ram-disk`).
 4. Keep it running: `relay-server service` prints a LaunchAgent (Mac) or a systemd user unit (Linux) with the steps.
 5. Pair: `relay-server pair` on this machine, paste the line in Relay › Settings › Machines. Pick the machine next to
    the model in a new conversation, or make it the default on that settings page.
@@ -32,7 +43,7 @@ come to Relay. Mail never runs here (Relay answers the mail tools itself). The v
 **On a Mac:** a LaunchAgent may not read `~/Documents`, `~/Desktop` or `~/Downloads` without Full Disk Access. Keep
 the repos in another folder (for example `~/repos`), or give `relay-server` Full Disk Access in System Settings.
 
-## In Docker (a home server such as Unraid)
+## In Docker (a Linux server, Unraid, or a Mac with Docker Desktop)
 
 Every Relay release also gets `ghcr.io/laurentme/relay-server` for amd64 and arm64 (`scripts/push-server-image.sh`,
 run on a Mac after the release), tagged with the same version (`:latest` is the newest), so a server and an app of the same version speak the same protocol. Claude Code is not in the
@@ -64,7 +75,15 @@ image: the first start installs it with Anthropic's installer into the `.local` 
 6. Pair: `docker exec relay-server relay-server pair --host 192.168.1.2` with the server's LAN address. Inside a
    container the server cannot see that address itself.
 
-**Update:** `docker pull ghcr.io/laurentme/relay-server:latest`, then `docker rm -f relay-server` and the same
+**Update from Relay:** when Relay is newer than the server, Settings › Machines shows Update to <version>. Relay
+downloads relay-server's Linux binary for the server's CPU from its own GitHub release (with `gh`, the repo is
+private) and sends it over the connection. The server checks the checksum and that the binary runs and is that
+version, keeps it as `data/bin/relay-server` and goes on in it in the same process. Conversations keep running, the
+mirror locks until Relay's next sync round a few seconds later. Every start prefers that binary while it is newer than
+the image's, so recreating the container keeps the update and a newer image wins again. A relay-server from before
+0.0.5 cannot take this yet: update it once by hand.
+
+**Update by hand:** `docker pull ghcr.io/laurentme/relay-server:latest`, then `docker rm -f relay-server` and the same
 `docker run`. The folders keep the pairing, the login, Claude Code and the repos; the mirror is locked until Relay
 connects again.
 
@@ -97,6 +116,11 @@ there knows what Claude Code knows on the laptop. Every conversation there start
 | `plugins` | the switched-on plugins | laptop to machine |
 | `vault` | the vault, without `.obsidian`, `.git`, `.trash`, `.relay` and the excluded folders | both ways |
 | `memory` | the vault's auto memory | both ways, `MEMORY.md` merged line by line |
+
+The transcripts of the device's conversations are sealed the same way, as a fifth folder (`sessions`) that never
+comes from the laptop: Claude Code keeps them in `<config>/projects/<slug of the vault's working copy>/`, and the server
+makes that folder a link into the working copy at every unlock. Transcripts that were there before move in and are
+sealed. A conversation that runs outside the vault's working copy (a repo) keeps its transcript in plain text.
 
 A file changed on both sides keeps both versions: the machine's becomes `Name (conflict <machine> <date>).md`. Hooks,
 transcripts, MCP servers and repos never go along: what a repo needs for Claude belongs in the repo.
@@ -134,7 +158,10 @@ What this protects, and what it does not:
 Known limits:
 - The blobs are sealed one by one, nothing binds the set together. Someone who can write to the disk can delete a blob
   or put back an older one of the same file, and the server would unpack that older version.
-- A tmpfs can be swapped to disk when the machine has swap. Unraid has none by default.
+- A tmpfs can be swapped to disk when the machine has swap. Unraid has none by default. A Mac encrypts its swap.
+- Claude Code keeps more than transcripts in its config folder, in plain text on disk: `history.jsonl` (the prompts),
+  `file-history/` (a copy of each file before an edit), `paste-cache/`, `todos/`, and on Linux the login
+  (`.credentials.json`). Only the transcripts are sealed.
 - Losing the key file on the laptop makes the copy unreadable. Nothing is lost: Forget the machine, pair it again,
   and the next round sends everything again.
 
@@ -155,12 +182,13 @@ terminal's history do not move.
 
 | Command | What it does |
 |---|---|
-| `relay-server serve [--port 47800] [--bind 0.0.0.0]` | Run |
+| `relay-server serve [--port 47800] [--bind 0.0.0.0] [--ram-disk]` | Run, on a Mac with the working copy on a RAM disk |
 | `relay-server pair [--host <ip>] [--port <port>]` | Print a one-time pairing line |
 | `relay-server clients` | The paired devices |
 | `relay-server revoke <name or fingerprint>` | Unpair a device |
 | `relay-server service` | A service file that keeps `serve` running |
 | `relay-server info` | This server's fingerprint and data folder |
+| `relay-server version` | This binary's version, the same as Relay's |
 
 ## Files
 
@@ -174,7 +202,8 @@ In `~/Library/Application Support/relay-server` (Mac) or `~/.local/share/relay-s
 | `serve.json` | The port the running server listens on |
 | `pending/<device>/` | Open permission cards, per device |
 
-The agents' transcripts are Claude Code's own, in `~/.claude/projects/`. The brokers' sockets are in
+The agents' transcripts are Claude Code's own, in `~/.claude/projects/` (sealed for conversations in the vault, see The
+mirror). The brokers' sockets are in
 `$TMPDIR/relay-server-agents`. An agent without Relay connected keeps its process for 24 hours, a running turn always
 finishes.
 

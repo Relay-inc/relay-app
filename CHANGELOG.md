@@ -4,7 +4,8 @@ Every PR adds a line under **Unreleased**, in the group that fits (Added, Change
 that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, refactors nobody notices).
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
-`src-tauri/Cargo.toml` (`tauri.conf.json` reads it from `package.json`). Once that is on main, the release workflow
+the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
+`package.json`). Once that is on main, the release workflow
 builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes. Then
 push relay-server's image from a checkout of the tag with `scripts/push-server-image.sh`. Run the workflow by hand
 (Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
@@ -14,6 +15,10 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ### Added
 
+- **Update a machine from Relay** (Settings › Machines): when Relay is newer than a machine's relay-server, Update to <version> sends it the Linux binary of Relay's own version from the GitHub release. The server checks it and restarts on it, conversations keep running. Releases now carry `relay-server-linux-x86_64` and `-aarch64`. A machine before this version needs one update by hand (#94)
+- A machine seals the transcripts of conversations in the vault like the vault itself: on disk only ciphertext, in plain text only in RAM while your laptop has unlocked it, back after a restart once it connects again (#94)
+- **This Mac as a machine** (Settings › Machines): Relay on a spare Mac runs other Macs' conversations, also while it is closed. A switch installs a LaunchAgent with Relay's own relay-server (`relay --relay-server serve`), so app and server always have the same version, and makes the pairing line. The working copy of the mirrored vault sits on a RAM disk that is ejected when the server stops (#94)
+- Set up a machine has steps per kind of machine: Mac (with the Relay app, or Docker), Linux and Unraid, each with its own folder and preparation. The pairing command fills in the machine's LAN address itself (#94)
 - **Retry when a usage limit resets** (Settings › General, off by default): a conversation refused because the provider's usage limit is reached, with no other account to switch to, shows "Retrying at …" with a Cancel button and goes on by itself once the limit resets, also after an app restart. A refused message that never started is sent again, otherwise the agent is asked to continue. It retries once; the Mac stays awake for it while Keep Mac awake is on (#92)
 - Views you switch off in the sidebar stay reachable under "…" after the views, a dropdown with their icons; turn the "…" off in Settings › General or from the views' right-click menu (#93)
 - The Mac stays awake while a conversation has a turn running, so you can leave it working; closing the lid still sleeps it. Switch it off in Settings › General (#91)
@@ -27,6 +32,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ### Fixed
 
+- A machine in Settings › Machines shows the Relay version it runs (0.0.5 and later), instead of a fixed 0.1.0 (#94)
 - Cmd-K always starts a general conversation and sends at once: a question that named several projects waited on a hidden "Which project?" and was lost when another conversation opened. The projects it names are offered once in the conversation afterwards (#89)
 - A new conversation shows at the top of General and of its project, also after the list was reordered by dragging (#89)
 - Settings › Machines › Set up a machine in a development build of Relay uses relay-server:latest: it gave the build's own version, which has no image

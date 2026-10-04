@@ -1,6 +1,6 @@
 [package]
 name = "relay-server"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Runs Relay's agent conversations on a machine in the LAN; the app connects over mutual TLS with pinned certificates"
 
@@ -11,5 +11,6 @@ relay-remote = { path = "../relay-remote" }
 agent-core.workspace = true
 agent-claude = { path = "../agent-claude" }
 ring = "0.17"
+libc = "0.2"
 
 [dev-dependencies]

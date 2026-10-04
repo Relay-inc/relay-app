@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { Machine } from "../../../domain/settings/types";
-import { setupCommands } from "../../../domain/settings/machines";
+import { newerVersion, setupCommands } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { forgetMachine } from "../../../application/settings/machines-page";
+import { forgetMachine, updateMachine } from "../../../application/settings/machines-page";
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, PILL } from "./blocks";
@@ -18,7 +18,19 @@ export function MachineRow({ machine }: { machine: Machine }) {
   const message = useSettingsStore(s => s.machinesPage.messages[machine.id]);
   const setup = useSettingsStore(s => s.machinesPage.setup);
   const setupFolder = useSettingsStore(s => s.machinesPage.setupFolder);
+  const setupPlatform = useSettingsStore(s => s.machinesPage.setupPlatform);
+  const updating = useSettingsStore(s => s.machinesPage.updating === machine.id);
   const [confirming, setConfirming] = useState(false);
+  // a release of Relay brings a machine to its own version, never back to an older one: with the button when the
+  // server takes updates, else with the commands (a relay-server from before remote updates)
+  const behind =
+    !!status &&
+    status !== "checking" &&
+    !!setup &&
+    !setup.dev &&
+    !!status.version &&
+    newerVersion(setup.version, status.version);
+  const canUpdate = behind && !!status.update;
 
   const statusLine =
     !status || status === "checking" ? (
@@ -42,6 +54,11 @@ export function MachineRow({ machine }: { machine: Machine }) {
           {(machine.fp ?? "").slice(0, 16)}
         </span>
         <span className="flex-1"></span>
+        {canUpdate || updating ? (
+          <button className={buttonClass("primary")} disabled={updating} onClick={() => updateMachine(machine.id)}>
+            {updating ? t("mc.updating") : t("mc.update", { version: setup!.version })}
+          </button>
+        ) : null}
         {confirming ? (
           <>
             <span className="text-xs text-s-muted">{t("mc.forgetSure")}</span>
@@ -65,13 +82,13 @@ export function MachineRow({ machine }: { machine: Machine }) {
         )}
       </div>
       {confirming ? <Html as="p" className={HINT_IN_ROW} html={th("mc.forgetHelp", { name: machine.name })} /> : null}
-      {status && status !== "checking" && status.outdated === "server" && setup ? (
+      {status && status !== "checking" && (status.outdated === "server" || (behind && !status.update)) && setup ? (
         <CommandBlock
           hint={t("mc.updateHelp")}
-          command={setupCommands(setup.image, setup.version, setupFolder).update}
+          command={setupCommands(setup.image, setup.version, setupFolder, setupPlatform).update}
         />
       ) : null}
-      {message ? <span className={ERROR_MESSAGE}>{message.text}</span> : null}
+      {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
       <MachineMirror machine={machine} />
     </div>
   );

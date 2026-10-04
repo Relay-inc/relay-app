@@ -738,21 +738,61 @@ export default {
   "mc.pairing": "Koppelen…",
   "mc.setupTitle": "Machine opzetten",
   "mc.setupHelp":
-    "relay-server draait in Docker op een thuisserver of een NAS. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
+    "relay-server draait in Docker op een andere computer in je netwerk. Deze commando's zijn voor relay-server {version}, de versie van deze Relay. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupHelpDev":
-    "relay-server draait in Docker op een thuisserver of een NAS. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
+    "relay-server draait in Docker op een andere computer in je netwerk. Dit is een ontwikkelversie van Relay, voor haar eigen versie bestaat geen image: deze commando's gebruiken het nieuwste, relay-server:latest. Voer ze uit op de machine, in deze volgorde.",
   "mc.setupShow": "Toon de commando's",
+  "mc.setupKind": "Soort machine",
+  "mc.setupPrep.mac":
+    "Installeer Docker Desktop of OrbStack en laat het starten bij het inloggen. Zet in Systeeminstellingen › Energie de sluimerstand uit: als de Mac slaapt, stoppen de gesprekken.",
+  "mc.setupPrep.linux":
+    "Installeer Docker Engine (docs.docker.com/engine/install). Zit je gebruiker niet in de groep docker, zet dan sudo voor elk docker-commando hieronder.",
+  "mc.setupPrep.unraid":
+    "Docker moet aan staan (Settings › Docker). Voer de commando's uit in de terminal van Unraid, het >_-icoon rechtsboven.",
   "mc.setupFolder": "Map op de machine",
   "mc.setupFolderHelp":
-    "Bewaart de koppeling, de login van Claude, Claude Code en de repos. Op Unraid een map in appdata.",
+    "Bewaart de koppeling, de login van Claude, Claude Code en de repos. Elke map die een herstart van de machine overleeft.",
   "mc.setupLogin": "Enkel zolang het image privé is: log eenmalig in met een GitHub-token met read:packages.",
   "mc.setupInstall": "Maak de mappen en start relay-server. De eerste start installeert Claude Code.",
   "mc.setupClaude": "Log eenmalig in bij Claude. Je krijgt een link om op deze Mac te openen.",
-  "mc.setupPair": "Maak een koppelregel met het LAN-adres van de machine en plak die bij Machine koppelen.",
+  "mc.setupPair":
+    "Maak een koppelregel, het commando vult het LAN-adres van de machine zelf in. Plak de regel bij Machine koppelen.",
+  "mc.setupWay": "Hoe",
+  "mc.setupWayApp": "Met de Relay-app (aanbevolen)",
+  "mc.setupWayDocker": "Met Docker",
+  "mc.setupAppGet":
+    "Download Relay op de Mac die de machine wordt en zet het in Programma's. Voer dan eenmalig in Terminal uit (Relay is nog niet door Apple ondertekend):",
+  "mc.setupAppDownload": "Download Relay",
+  "mc.setupAppQuarantine": "Eenmalig in Terminal uitvoeren.",
+  "mc.setupAppClaude": "Installeer daar Claude Code. Voer dan claude uit en typ /login.",
+  "mc.setupAppSleep":
+    "Zet in Systeeminstellingen › Energie de sluimerstand van die Mac uit: als hij slaapt, stoppen de gesprekken.",
+  "mc.setupAppSwitch":
+    "Open in Relay op die Mac Instellingen › Machines › Deze Mac als machine. Zet het aan en maak dan een koppelregel.",
+  "mc.setupAppPair": "Plak de regel hier onder Machine koppelen.",
+  "mc.hostTitle": "Deze Mac als machine",
+  "mc.hostHelp":
+    "Een andere Mac kan hier gesprekken laten draaien. Relay zelf is de server en blijft draaien als je het afsluit.",
+  "mc.hostSwitch": "Gesprekken van andere Macs op deze Mac laten draaien",
+  "mc.hostUnsupported": "Enkel de Relay in Programma's kan dit, een ontwikkelbuild niet.",
+  "mc.hostRunning": "Draait",
+  "mc.hostStopped": "Gestopt",
+  "mc.hostRam": "De werkkopie staat in RAM",
+  "mc.hostDisk": "De werkkopie staat op schijf",
+  "mc.hostClaudeMissing": "Claude Code is niet geïnstalleerd op deze Mac. Installeer het in Terminal.",
+  "mc.hostClaudeLogin": "Claude Code is niet ingelogd. Log eenmalig in via Terminal: voer claude uit en typ /login.",
+  "mc.hostPair": "Koppelregel maken",
+  "mc.hostPairHelp":
+    "Plak hem in Relay op de andere Mac onder Instellingen › Machines › Machine koppelen. Werkt één keer, 10 minuten.",
+  "mc.hostClients": "Gekoppelde apparaten:",
+  "mc.hostNoClients": "Nog geen apparaat gekoppeld.",
   "mc.copy": "Kopieer",
   "mc.copied": "Gekopieerd",
   "mc.outdatedServer": "relay-server daar spreekt een ouder protocol dan deze Relay: werk hem bij op de machine",
   "mc.outdatedApp": "relay-server daar spreekt een nieuwer protocol dan deze Relay: werk Relay bij",
+  "mc.update": "Bijwerken naar {version}",
+  "mc.updating": "Bijwerken…",
+  "mc.updated": "Bijgewerkt naar {version}",
   "mc.updateHelp": "Voer uit op de machine. De mappen bewaren de koppeling, de login en de gesprekken.",
   "mc.empty": "Nog geen machines. Koppel er een om gesprekken erop te laten lopen.",
   "mc.refresh": "Vernieuwen",

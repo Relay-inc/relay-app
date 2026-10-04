@@ -7,6 +7,10 @@
 //! blobs. A store from before (v1 sealed and named with the raw key) is migrated in place on the first unlock. Unlocked, the blobs are unpacked into a working copy (RELAY_SERVER_WORKDIR, meant
 //! to be a RAM disk) where the agents work; what they change is sealed back every few seconds. After a restart the
 //! mirror is locked until the laptop connects again: conversations in the vault wait for it, the rest runs.
+//!
+//! The transcripts of a device's conversations are sealed the same way, as one more root (`sessions`) that only this
+//! server writes: Claude Code keeps them in `<config>/projects/<slug of the cwd>/`, and for a conversation in the
+//! device's vault that folder is a link into the working copy (`link_sessions`).
 
 use relay_remote::sync::{self, Filter, Manifest, Walker};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
@@ -20,6 +24,8 @@ use std::{fs, thread};
 
 /// The folders a device may mirror. Anything else is refused.
 pub const ROOTS: [&str; 4] = ["context", "plugins", "vault", "memory"];
+/// Every root sealed here: the mirrored ones and the transcripts, which never come from the app.
+const SEALED: [&str; 5] = ["context", "plugins", "vault", "memory", "sessions"];
 /// How often what the agents wrote is sealed back to disk.
 const FLUSH: Duration = Duration::from_secs(5);
 /// One file at most; the app skips bigger ones already (20 MB in the vault).
@@ -43,7 +49,7 @@ fn blob_name(names: &hmac::Key, root: &str, rel: &str) -> String {
 /// Reseal a v1 store (raw key for both sealing and naming) with the derived keys, blob by blob. The new blob is
 /// written before the old one goes, and the caller writes the v2 check last, so an interrupted run is simply redone.
 fn migrate(store: &Path, old: &LessSafeKey, key: &LessSafeKey, names: &hmac::Key) -> Result<(), String> {
-    for root in ROOTS {
+    for root in SEALED {
         let dir = store.join(root);
         let blobs: Vec<PathBuf> = fs::read_dir(&dir).into_iter().flatten().flatten().map(|e| e.path()).collect();
         for path in blobs {
@@ -70,9 +76,12 @@ struct Open {
 // `unlocking`: one unlock at a time. A first unlock of a big store (converting it, unpacking thousands of files) takes
 // longer than the app waits, and its next round asks again: two at once would convert the same blobs.
 // ponytail: one lock for every device, per-device locks if several laptops unlock big stores at the same moment
-pub struct Mirror { data: PathBuf, work: PathBuf, pub in_ram: bool, open: Mutex<HashMap<String, Open>>, unlocking: Mutex<()> }
+pub struct Mirror { data: PathBuf, work: PathBuf, projects: PathBuf, pub in_ram: bool, open: Mutex<HashMap<String, Open>>, unlocking: Mutex<()> }
 
-/// Whether `dir` is on a tmpfs or ramfs (Linux, from /proc/mounts); false elsewhere.
+/// Whether `dir` is on a RAM disk: a tmpfs or ramfs on Linux (from /proc/mounts), `serve --ram-disk`'s on a Mac.
+#[cfg(target_os = "macos")]
+fn on_ram(dir: &Path) -> bool { crate::ramdisk::device_at(dir).is_some() }
+#[cfg(not(target_os = "macos"))]
 fn on_ram(dir: &Path) -> bool {
     let Ok(m) = fs::read_to_string("/proc/mounts") else { return false };
     let d = dir.to_string_lossy();
@@ -86,8 +95,8 @@ impl Mirror {
         let work = std::env::var_os("RELAY_SERVER_WORKDIR").map(PathBuf::from).unwrap_or_else(|| data.join("work"));
         fs::create_dir_all(&work).ok();
         let in_ram = on_ram(&work);
-        if !in_ram { eprintln!("relay-server: the mirror's working copy {} is not on a RAM disk, plaintext lands on disk (set RELAY_SERVER_WORKDIR to a tmpfs)", work.display()); }
-        let m = Arc::new(Mirror { data: data.into(), work, in_ram, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) });
+        if !in_ram { eprintln!("relay-server: the mirror's working copy {} is not on a RAM disk, plaintext lands on disk (set RELAY_SERVER_WORKDIR to a tmpfs, or serve --ram-disk on a Mac)", work.display()); }
+        let m = Arc::new(Mirror { data: data.into(), work, projects: claude_projects(), in_ram, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) });
         let m2 = m.clone();
         thread::spawn(move || loop { thread::sleep(FLUSH); m2.flush_all(); });
         m
@@ -119,7 +128,7 @@ impl Mirror {
             Err(_) => fs::write(&check, seal(&key, b"check", CHECK)?).map_err(|e| e.to_string())?,
         }
         let mut o = Open { key, names, sealed: HashMap::new(), walkers: HashMap::new() };
-        for root in ROOTS {
+        for root in SEALED {
             let (dir, work) = (store.join(root), self.work_of(ns).join(root));
             fs::create_dir_all(&dir).ok();
             fs::create_dir_all(&work).ok();
@@ -137,6 +146,7 @@ impl Mirror {
             o.sealed.insert(root.into(), sealed);
             o.walkers.insert(root.into(), Walker::default());
         }
+        self.link_sessions(ns)?;
         self.open.lock().unwrap().insert(ns.into(), o);
         self.flush(ns); // what the working copy had that the store did not
         Ok(())
@@ -179,6 +189,7 @@ impl Mirror {
     /// Forget everything of a device here: store, working copy, key.
     pub fn wipe(&self, ns: &str) {
         self.open.lock().unwrap().remove(ns);
+        fs::remove_file(self.sessions_link(ns)).ok();
         fs::remove_dir_all(self.store(ns)).ok();
         fs::remove_dir_all(self.work_of(ns)).ok();
     }
@@ -187,6 +198,26 @@ impl Mirror {
     pub fn drop_unknown(&self, known: &[String]) {
         let gone: Vec<String> = self.open.lock().unwrap().keys().filter(|ns| !known.contains(ns)).cloned().collect();
         for ns in gone { self.wipe(&ns); }
+    }
+    /// Where Claude Code keeps the transcripts of a device's conversations: they run in its vault's working copy.
+    fn sessions_link(&self, ns: &str) -> PathBuf {
+        self.projects.join(agent_claude::slug(&self.work_of(ns).join("vault").to_string_lossy()))
+    }
+    /// Make that folder a link to the working copy's `sessions`, so the transcripts live in RAM and are sealed with
+    /// the rest. Transcripts written there before (a real folder, plaintext on disk) move in and are sealed by the
+    /// flush after the unlock; their folder goes.
+    fn link_sessions(&self, ns: &str) -> Result<(), String> {
+        let (link, dir) = (self.sessions_link(ns), self.work_of(ns).join("sessions"));
+        match fs::symlink_metadata(&link) {
+            Ok(m) if m.is_dir() => {
+                move_into(&link, &dir).map_err(|e| format!("moving the transcripts in: {e}"))?;
+                fs::remove_dir_all(&link).map_err(|e| e.to_string())?;
+            }
+            Ok(_) => { fs::remove_file(&link).ok(); } // the link of an earlier run
+            Err(_) => {}
+        }
+        fs::create_dir_all(&self.projects).map_err(|e| e.to_string())?;
+        std::os::unix::fs::symlink(&dir, &link).map_err(|e| e.to_string())
     }
     fn check(&self, ns: &str, root: &str, rel: &str) -> Result<(), String> {
         if !ROOTS.contains(&root) { return Err("unknown root".into()); }
@@ -208,7 +239,7 @@ impl Mirror {
     pub fn flush(&self, ns: &str) {
         let mut open = self.open.lock().unwrap();
         let Some(o) = open.get_mut(ns) else { return };
-        for root in ROOTS {
+        for root in SEALED {
             let dir = self.work_of(ns).join(root);
             let Ok((now, _)) = o.walkers.get_mut(root).unwrap().scan(&dir, &Filter::default()) else { continue };
             let sealed = o.sealed.get(root).cloned().unwrap_or_default();
@@ -226,6 +257,23 @@ impl Mirror {
         let open: Vec<String> = self.open.lock().unwrap().keys().cloned().collect();
         for ns in open { self.flush(&ns); }
     }
+}
+
+/// Claude Code's transcripts on this server: `<CLAUDE_CONFIG_DIR or ~/.claude>/projects`.
+pub fn claude_projects() -> PathBuf {
+    std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".claude")).join("projects")
+}
+
+/// Copy `from` into `to`, files overwritten (they are newer than what the store had). A copy, not a rename: the
+/// working copy is on another file system (the RAM disk).
+fn move_into(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+    for e in fs::read_dir(from)?.flatten() {
+        let (src, dst) = (e.path(), to.join(e.file_name()));
+        if e.file_type()?.is_dir() { move_into(&src, &dst)?; } else if e.file_type()?.is_file() { fs::copy(&src, &dst)?; }
+    }
+    Ok(())
 }
 
 fn pack(path: &str, data: &[u8]) -> Vec<u8> {
@@ -267,7 +315,7 @@ mod tests {
     fn mirror(name: &str) -> Mirror {
         let base = std::env::temp_dir().join(format!("relay-mirror-{name}-{}", std::process::id()));
         fs::remove_dir_all(&base).ok();
-        Mirror { data: base.join("data"), work: base.join("work"), in_ram: false, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) }
+        Mirror { data: base.join("data"), work: base.join("work"), projects: base.join("projects"), in_ram: false, open: Mutex::new(HashMap::new()), unlocking: Mutex::new(()) }
     }
     fn names_in(dir: &Path) -> Vec<String> {
         let mut v: Vec<String> = fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into()).collect();
@@ -366,6 +414,37 @@ mod tests {
         fs::write(store.join("check"), &c).unwrap();
         assert!(m.unlock("old", &hex(&[9; 32])).unwrap_err().contains("another key"));
         assert_eq!(fs::read(store.join("check")).unwrap(), c);
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn transcripts_are_sealed_and_come_back_after_a_restart() {
+        let m = mirror("sessions");
+        // a transcript written before the link: plaintext in Claude Code's projects folder
+        let old = m.sessions_link("dev");
+        fs::create_dir_all(old.join("s1/subagents")).unwrap();
+        fs::write(old.join("s1.jsonl"), b"turn one").unwrap();
+        fs::write(old.join("s1/subagents/a.jsonl"), b"sub").unwrap();
+
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        assert!(fs::symlink_metadata(&old).unwrap().file_type().is_symlink(), "the folder became a link");
+        assert_eq!(fs::read(m.work_of("dev").join("sessions/s1.jsonl")).unwrap(), b"turn one");
+        assert_eq!(names_in(&m.store("dev").join("sessions")).len(), 2, "both files sealed");
+        // Claude Code writes through the link, the flush seals it
+        fs::write(old.join("s2.jsonl"), b"turn two").unwrap();
+        m.flush("dev");
+        assert_eq!(names_in(&m.store("dev").join("sessions")).len(), 3);
+
+        // a restart: the key and the RAM working copy are gone, only blobs are left
+        m.open.lock().unwrap().clear();
+        fs::remove_dir_all(m.work_of("dev")).unwrap();
+        assert!(fs::read(old.join("s2.jsonl")).is_err(), "nothing readable while locked");
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        assert_eq!(fs::read(old.join("s2.jsonl")).unwrap(), b"turn two");
+        assert_eq!(fs::read(old.join("s1/subagents/a.jsonl")).unwrap(), b"sub");
+
+        m.wipe("dev");
+        assert!(fs::symlink_metadata(&old).is_err(), "forget removes the link");
         fs::remove_dir_all(m.data.parent().unwrap()).ok();
     }
 

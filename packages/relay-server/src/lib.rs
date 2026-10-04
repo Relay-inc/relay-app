@@ -11,7 +11,11 @@
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
 //! port the running server listens on), pending/.
 
+pub mod cli;
 pub mod mirror;
+#[cfg(target_os = "macos")]
+pub mod ramdisk;
+pub mod upgrade;
 
 use relay_remote::broker::{self, Meta, Spec};
 use relay_remote::proto::{self, Info, MAX_LINE, MAX_SESSION, PROTO};
@@ -118,7 +122,8 @@ pub fn info(data: &Path, path: &str) -> Info {
         if Path::new(&def).is_file() { def } else { agent_core::which("claude", path).unwrap_or(def) }
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
-        pending: data.join("pending").to_string_lossy().into(), perm: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(), ..Default::default() }
+        pending: data.join("pending").to_string_lossy().into(), perm: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+        arch: std::env::consts::ARCH.into(), update: upgrade::CAN, ..Default::default() }
 }
 
 // ---------- serving
@@ -204,6 +209,15 @@ impl Server {
                 let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), MAX_SESSION)?;
                 reply(&mut w, self.session_put(ns, &req, &body))
             }
+            "update" => {
+                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), proto::MAX_BINARY)?;
+                let done = upgrade::install(&self.data, req["version"].as_str().unwrap_or(""), req["sha256"].as_str().unwrap_or(""), &body);
+                let ok = done.is_ok();
+                reply(&mut w, done.map(|_| json!({})))?;
+                // after the reply is out: the app waits for it, then sees the new version once the server is back
+                if ok { let data = self.data.clone(); thread::spawn(move || { thread::sleep(Duration::from_millis(300)); upgrade::restart(&data) }); }
+                Ok(())
+            }
             "list" => reply(&mut w, Ok(json!({"metas": metas(ns)}))),
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
@@ -258,9 +272,7 @@ impl Server {
     }
 
     /// Claude Code's transcripts here, one folder per working directory.
-    fn projects(&self) -> PathBuf {
-        std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from).unwrap_or_else(|| Path::new(&self.info.home).join(".claude")).join("projects")
-    }
+    fn projects(&self) -> PathBuf { mirror::claude_projects() }
     /// A session's transcript here, the newest when Claude Code left copies in several folders. None for a bad id.
     fn session_find(&self, sid: &str) -> Option<PathBuf> {
         if !sid_ok(sid) { return None; }
@@ -378,23 +390,32 @@ pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Re
 }
 
 
-/// A service definition that keeps `relay-server serve` running and restarts it: a LaunchAgent on a Mac, a systemd
-/// user unit on Linux, with the steps to install it.
-pub fn service_file() -> String {
-    let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "relay-server".into());
-    if cfg!(target_os = "macos") {
-        format!(r#"<!-- ~/Library/LaunchAgents/be.laurentmeersman.relay-server.plist, then:
-     launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/be.laurentmeersman.relay-server.plist -->
-<?xml version="1.0" encoding="UTF-8"?>
+/// The label of relay-server's LaunchAgent, also the one the Relay app installs for "this Mac as a machine".
+pub const LAUNCH_LABEL: &str = "be.laurentmeersman.relay-server";
+
+/// A LaunchAgent that runs `args` (the program first) at login and restarts it when it stops.
+pub fn launch_agent(args: &[String]) -> String {
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let args: String = args.iter().map(|a| format!("<string>{}</string>", esc(a))).collect();
+    format!(r#"<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>be.laurentmeersman.relay-server</string>
-  <key>ProgramArguments</key><array><string>{exe}</string><string>serve</string></array>
+  <key>Label</key><string>{LAUNCH_LABEL}</string>
+  <key>ProgramArguments</key><array>{args}</array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>StandardErrorPath</key><string>/tmp/relay-server.err</string>
 </dict></plist>
 "#)
+}
+
+/// A service definition that keeps `relay-server serve` running and restarts it: a LaunchAgent on a Mac (the working
+/// copy on a RAM disk), a systemd user unit on Linux, with the steps to install it.
+pub fn service_file() -> String {
+    let exe = std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| "relay-server".into());
+    if cfg!(target_os = "macos") {
+        let agent = launch_agent(&[exe, "serve".into(), "--ram-disk".into()]);
+        format!("# ~/Library/LaunchAgents/{LAUNCH_LABEL}.plist, then:\n#   launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/{LAUNCH_LABEL}.plist\n\n{agent}")
     } else {
         format!("# ~/.config/systemd/user/relay-server.service, then:\n#   systemctl --user enable --now relay-server\n#   loginctl enable-linger $USER   (keeps it running without a login)\n\
 [Unit]\nDescription=Relay server\nAfter=network-online.target\n\n[Service]\nExecStart={exe} serve\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n")

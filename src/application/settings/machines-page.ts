@@ -1,7 +1,8 @@
 import { t } from "../../shared/i18n";
 import type { Machine } from "../../domain/settings/types";
-import { excludePath } from "../../domain/settings/machines";
+import { excludePath, SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
+import { checkAgents } from "./agents-page";
 import { commit } from "./window";
 import { useSettingsStore } from "./store";
 
@@ -31,6 +32,53 @@ export function showMachinesPage() {
       }),
     )
     .catch(() => {}); // an older backend: no setup section
+  refreshHost();
+}
+/** Reads this Mac as a machine, and what Claude Code here is (the Agents check, kept shown meanwhile). */
+export function refreshHost() {
+  backend
+    .hostStatus()
+    .then(host =>
+      change(draft => {
+        draft.host = host;
+      }),
+    )
+    .catch(() => {}); // an older backend: no section
+  checkAgents(true);
+}
+/** Turns this Mac as a machine on or off. */
+export async function setHost(on: boolean) {
+  change(draft => {
+    draft.hostError = "";
+    if (!on) draft.hostLine = "";
+  });
+  try {
+    const host = await backend.hostSet(on);
+    change(draft => {
+      draft.host = host;
+    });
+  } catch (error) {
+    change(draft => {
+      draft.hostError = String(error);
+    });
+    refreshHost();
+  }
+}
+/** Makes a pairing line for another Mac. */
+export async function makeHostLine() {
+  change(draft => {
+    draft.hostError = "";
+  });
+  try {
+    const line = await backend.hostPair();
+    change(draft => {
+      draft.hostLine = line;
+    });
+  } catch (error) {
+    change(draft => {
+      draft.hostError = String(error);
+    });
+  }
 }
 export async function checkMachine(id: string) {
   change(draft => {
@@ -63,6 +111,28 @@ export async function pairMachine(line: string, name: string) {
     change(draft => {
       draft.pairing = false;
     });
+  }
+}
+/** Update a machine's relay-server to this Relay's version, sent from here; then check it again. */
+export async function updateMachine(id: string) {
+  change(draft => {
+    draft.updating = id;
+    draft.messages[id] = null;
+  });
+  try {
+    const { version } = await backend.machineUpdate(id);
+    change(draft => {
+      draft.messages[id] = { text: t("mc.updated", { version }), ok: true };
+    });
+  } catch (error) {
+    change(draft => {
+      draft.messages[id] = { text: String(error), ok: false };
+    });
+  } finally {
+    change(draft => {
+      draft.updating = "";
+    });
+    checkMachine(id);
   }
 }
 export async function forgetMachine(id: string) {
@@ -132,6 +202,17 @@ export const removeMirrorExclude = (machine: Machine, path: string) =>
     machine,
     (machine.mirror?.exclude ?? []).filter(item => item !== path),
   );
+/** The kind of machine the setup commands are for, with that kind's folder. */
+export const setSetupPlatform = (platform: SetupPlatform) =>
+  change(draft => {
+    draft.setupPlatform = platform;
+    draft.setupFolder = SETUP_FOLDERS[platform];
+  });
+/** How a Mac becomes a machine: with the Relay app, or with Docker. */
+export const setSetupMacWay = (way: "app" | "docker") =>
+  change(draft => {
+    draft.setupMacWay = way;
+  });
 /** The folder on the machine the setup commands use. */
 export const setSetupFolder = (folder: string) =>
   change(draft => {
