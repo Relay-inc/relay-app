@@ -354,6 +354,41 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     Ok(snap)
 }
 
+/// The UI's own state, what the webview used to keep in localStorage (the conversations' metadata, the sidebar's order
+/// and folds, the board's last pick): one JSON object of strings in ui-state.json, so every window and every build of
+/// Relay on this Mac (a development build and the installed app) see the same.
+#[tauri::command]
+async fn ui_state_get(app: AppHandle) -> Value {
+    let path = data_dir(&app).join("ui-state.json");
+    tauri::async_runtime::spawn_blocking(move || fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()))
+        .await.ok().flatten().unwrap_or_else(|| json!({}))
+}
+/// One change to ui-state.json at a time, so two windows never undo each other's keys.
+static UI_STATE: Mutex<()> = Mutex::new(());
+/// The first start with the file: `state` (what the window's localStorage held) becomes the file in one write, so a
+/// reload halfway can never leave half of it. When another window was first, its file stays. The file's content.
+#[tauri::command]
+async fn ui_state_init(app: AppHandle, state: serde_json::Map<String, Value>) -> Result<Value, String> {
+    let path = data_dir(&app).join("ui-state.json");
+    tauri::async_runtime::spawn_blocking(move || {
+        let _one = UI_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) { return Ok(v); }
+        relay_remote::sync::write_atomic(&path, serde_json::to_string(&state).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
+        Ok(Value::Object(state))
+    }).await.map_err(|e| e.to_string())?
+}
+/// One key of it: read, change, write whole.
+#[tauri::command]
+async fn ui_state_set(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    let path = data_dir(&app).join("ui-state.json");
+    tauri::async_runtime::spawn_blocking(move || {
+        let _one = UI_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state: serde_json::Map<String, Value> = fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        state.insert(key, Value::String(value));
+        relay_remote::sync::write_atomic(&path, serde_json::to_string(&state).unwrap().as_bytes(), None).map_err(|e| e.to_string())
+    }).await.map_err(|e| e.to_string())?
+}
+
 /// The favicon of each project's website, guessed from its notes (favicon.rs), for the projects
 /// ([{name, aliases}]) whose guess is not in favicons.tried yet: {name: {site, data}}, data the raw icon or null.
 #[tauri::command]
@@ -2005,7 +2040,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

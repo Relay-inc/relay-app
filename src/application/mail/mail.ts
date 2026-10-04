@@ -337,10 +337,10 @@ export function mailLinkGo(open: boolean) {
   });
   if (open && urlOk(url)) backend.openUrl(url);
 }
-// the settings window opens on Integrations › Mail (it reads its pane from the shared localStorage)
-export function openMailSetup() {
-  storage.setRaw("prefsTab", "integrations");
-  storage.setRaw("prefsAcct", "mail");
+// the settings window opens on Integrations › Mail (it reads its pane from the shared UI state when it starts)
+export async function openMailSetup() {
+  await storage.setRaw("prefsTab", "integrations");
+  await storage.setRaw("prefsAcct", "mail");
   backend.openSettingsWindow();
 }
 /** A conversation about the open mail, under its project. The agent reads the mail itself through the relay-mail
