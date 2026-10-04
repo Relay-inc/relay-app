@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-10-04
+
 ### Changed
 
 - Releases are built on a Mac with `scripts/release.sh` instead of in GitHub Actions, which only run the checks of a PR (#97)
@@ -201,7 +203,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/relay-app/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/LaurentMe/relay-app/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/LaurentMe/relay-app/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/LaurentMe/relay-app/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...v0.0.3
