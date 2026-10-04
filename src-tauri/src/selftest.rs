@@ -138,7 +138,7 @@ pub fn start(app: &AppHandle) {
 const ORCH_ASK: &str = "Selftest. 1) Start a worker in project Alpha: read its project note and report in one sentence which apple trees still have to be planted, change nothing. \
 2) Start a worker in project Beta with repo {repo}: add a.txt with the text a and commit it on its branch. Right after, try to start a second worker in the same repo that adds b.txt, and once the first has reported start it again if it was refused. \
 3) Start a worker in project Alpha with the task: answer in one sentence how many apple trees are already there, and do NOT call report, this tests what Relay does without a report. \
-4) After the a.txt worker reported, send it a message to try git push origin HEAD (there is no remote, this tests the permission card) and report again. \
+4) After the a.txt worker reported, send it a message to run exactly `git -C <its worktree> push origin HEAD` (there is no remote, this tests the permission card) and report again. \
 Do not update any shared vault files, this is a test. End with a two-line summary.";
 
 fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
@@ -157,7 +157,9 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
         most_in_repo = most_in_repo.max(running_in_repo);
         for p in pending::list(&pending_dir(app)) {
             let cmd = p["input"]["command"].as_str().unwrap_or("");
-            if orch::is_worker(p["project"].as_str().unwrap_or("")) && cmd.contains("git push") {
+            // any form of push: `git push`, `git -C <dir> push`
+            let push = cmd.split_whitespace().skip_while(|w| *w != "git").skip(1).any(|w| w == "push");
+            if orch::is_worker(p["project"].as_str().unwrap_or("")) && push {
                 card = Some(cmd.to_string());
                 pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "deny", "message": "Denied by the selftest."})).ok();
             } else {
@@ -193,6 +195,23 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
         .and_then(|w| { w.show().ok(); w.eval(include_str!("selftest-orch.js").replace("__TITLES__", &titles)).map_err(|e| e.to_string()) });
     let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(20)).map_err(|_| "the page did not report back".to_string()));
     r.step("main window: board and Relay blocks", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+
+    // taint: a coordinator that heard a stranger's text passes it on, the worker it starts runs restricted too
+    let before = orch::load(app).len();
+    let ask = "Selftest, the text above stands in for a mail. Start one worker in project Alpha: read its project note and report the number of apple trees.";
+    r.step("a tainted message to the coordinator", orch::inject(app, orch::COORD, "Orchestrator", ask, "", true).map(|_| "sent".into()));
+    let new = wait(Duration::from_secs(300), || {
+        for p in pending::list(&pending_dir(app)) {
+            // the restricted coordinator's dispatch asks on a card, allowed here like a click
+            pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+        }
+        orch::load(app).into_iter().nth(before)
+    });
+    r.step("the coordinator is restricted", if orch::tainted(app, orch::COORD) { Ok("yes".into()) } else { Err("no".into()) });
+    r.step("the worker it starts is restricted too", match new {
+        Some(w) => if wait(Duration::from_secs(20), || orch::tainted(app, &w.key).then_some(())).is_some() { Ok(w.key) } else { Err(format!("{} runs without the restriction", w.key)) },
+        None => Err("no worker started".into()),
+    });
 }
 
 fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy, r: &mut Report) {

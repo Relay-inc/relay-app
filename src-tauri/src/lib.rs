@@ -605,7 +605,9 @@ use agent_claude::{DENIED, MAIL_TOOLS};
 /// (scripts/pipe-check.py proves both). A settings file that does not parse costs Bash as a whole.
 /// ponytail: skills with a broad allowed-tools are named here, a new one needs adding.
 fn taint(settings: &[Value], all_read: bool) -> [Value; 2] {
-    let mut deny: Vec<String> = ["Bash(git push*)", "Bash(gh pr create*)", "Bash(gh pr comment*)", "Bash(gh api*)", "Bash(gh gist*)", "Bash(launchctl*)",
+    // the `* ` forms: `git -C <dir> push` and `gh -R <repo> pr create` do not start with `git push` or `gh pr`
+    let mut deny: Vec<String> = ["Bash(git push*)", "Bash(git * push*)", "Bash(gh pr create*)", "Bash(gh * pr create*)", "Bash(gh pr comment*)", "Bash(gh * pr comment*)",
+        "Bash(gh api*)", "Bash(gh * api*)", "Bash(gh gist*)", "Bash(launchctl*)",
         "mcp__claude_ai_Slack__slack_send_message", "mcp__claude_ai_Slack__slack_schedule_message",
         "mcp__claude_ai_Google_Calendar__create_event", "mcp__claude_ai_Google_Calendar__update_event",
         "RemoteTrigger", "CronCreate", "ScheduleWakeup", "SendMessage", "ShareOnboardingGuide", "DesignSync", "Workflow",
@@ -790,6 +792,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                         if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.saturating_sub(1)); }
                         // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
                         if orch::is_worker(&k) { orch::turn_end(&a, &k, &last); }
+                        if !replay && orch::is_orch(&k) { orch::flush(&a, &k); } // what Relay queued while the turn ran
                         last.clear();
                     }
                     _ => {}
@@ -948,6 +951,8 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let opts = (model, effort);
     let name = name.unwrap_or_else(|| project.clone());
     let mut account = account_of(&state, p, &project, &opts.0);
+    // an orchestrator conversation that heard a stranger's text stays restricted, also in a new process (orch.rs)
+    let orch_taint = orch::is_orch(&project) && orch::tainted(&app, &project);
     let mut procs = state.procs.lock().unwrap();
     // a turn still running stays where it is: the account moves once the conversation is idle
     if let Some(x) = procs.get(&project).filter(|x| x.turns > 0 && x.provider == p.id()) { account = x.account.clone(); }
@@ -963,7 +968,7 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
     if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || (x.account != account && !x.remote)) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted, &account, machine.as_deref())?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted || orch_taint, &account, machine.as_deref())?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -987,14 +992,16 @@ fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
 
 /// Relay itself writes a turn into a conversation of the app (the orchestrator's briefs and reports): its process
 /// is started when it is not running, on this Mac, on the model it runs with, else `model`. `taint`: the text may
-/// carry a stranger's words, so the conversation is restricted first.
-fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool, text: &str) -> Result<(), String> {
+/// carry a stranger's words, so the conversation is restricted first. False, and nothing written, while a turn runs.
+fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool, text: &str) -> Result<bool, String> {
     let state = app.state::<App>();
     let p = provider_of(&state, key, Some("claude"));
     if p.id() != "claude" { return Err("the orchestrator runs on Claude Code".into()); }
     let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
     let account = account_of(&state, p, key, &model);
+    let taint = taint || orch::tainted(app, key);
     let mut procs = state.procs.lock().unwrap();
+    if procs.get(key).is_some_and(|x| x.turns > 0) { return Ok(false); }
     if !procs.contains_key(key) {
         let x = spawn(app, &state, p, key, name, None, (model, String::new()), None, taint, &account, Some(""))?;
         procs.insert(key.to_string(), x);
@@ -1004,7 +1011,7 @@ fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool
     let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or("claude: no input")?;
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.set_turns(x.turns + 1);
-    Ok(())
+    Ok(true)
 }
 
 /// A conversation closes: remove the worktrees it made that are safe to remove (see worktrees::remove). The ones
@@ -1053,6 +1060,7 @@ async fn history(app: AppHandle, state: State<'_, App>, project: String) -> Resu
 fn reset(app: AppHandle, state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
     state.machines.unbind(&project); // a fresh start goes where the composer or the default says now
+    orch::unmark(&app, &project); // a fresh session holds no stranger's text
     let mut sids = state.sids.lock().unwrap();
     sids.remove(&project);
     save_sids(&app, &sids);
@@ -1900,6 +1908,7 @@ pub fn run() {
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
             app.manage(pty::Ptys::default());
             reattach(app.handle());
+            orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
             actions::start(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
