@@ -79,6 +79,7 @@ export type Settings = {
   theme?: Theme;
   accent?: Accent;
   terminal?: TerminalApp;
+  keepAwake?: boolean; // hold off idle sleep while a turn runs, on unless false
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;

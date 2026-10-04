@@ -17,6 +17,7 @@ use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, 
 
 mod actions;
 mod agents;
+mod awake;
 pub use relay_remote::broker;
 mod calendar;
 mod commits;
@@ -1910,6 +1911,7 @@ pub fn run() {
             reattach(app.handle());
             orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
             actions::start(app.handle());
+            awake::start(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines)

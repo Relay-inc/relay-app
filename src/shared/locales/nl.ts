@@ -362,6 +362,9 @@ export default {
   "set.faviconsOn": "Favicon van de website als icoon",
   "set.faviconsHelp":
     "Eén keer per dag zoekt de app in de notities van elk project zonder icoon een website en gebruikt de favicon. Per website wordt een project één keer geprobeerd, een hersteld icoon komt niet terug.",
+  "set.keepAwake": "Mac wakker houden terwijl gesprekken lopen",
+  "set.keepAwakeHelp":
+    "Zolang een gesprek een beurt heeft lopen, gaat de Mac niet slapen bij inactiviteit, zodat je hem kan laten doorwerken. De klep sluiten laat hem wel slapen.",
   "set.system": "Systeem (standaard)",
   "set.themeSystem": "Systeem",
   "set.sec.folders": "Mappen",

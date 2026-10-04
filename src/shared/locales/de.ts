@@ -363,6 +363,9 @@ export default {
   "set.faviconsOn": "Favicon der Website als Symbol",
   "set.faviconsHelp":
     "Einmal am Tag sucht die App in den Notizen jedes Projekts ohne Symbol eine Website und nutzt deren Favicon. Pro Website wird ein Projekt einmal versucht, ein zurückgesetztes Symbol kommt nicht wieder.",
+  "set.keepAwake": "Mac wach halten, während Unterhaltungen laufen",
+  "set.keepAwakeHelp":
+    "Solange eine Unterhaltung einen laufenden Zug hat, schläft der Mac bei Inaktivität nicht ein, du kannst ihn also weiterarbeiten lassen. Zuklappen schickt ihn trotzdem in den Ruhezustand.",
   "set.system": "System (Standard)",
   "set.themeSystem": "System",
   "set.sec.folders": "Ordner",

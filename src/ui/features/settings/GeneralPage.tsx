@@ -11,6 +11,7 @@ import {
   pickMappedFile,
   pickVaultFolder,
   saveFavicons,
+  saveKeepAwake,
   saveFolders,
   saveSidebar,
   saveTerminal,
@@ -49,6 +50,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
   const reordered = useSettingsStore(s => !!s.settings.sidebar?.order?.length);
   const views = useDerived(sidebarViews);
   const faviconsOn = useSettingsStore(s => s.settings.favicons?.on !== false);
+  const keepAwake = useSettingsStore(s => s.settings.keepAwake !== false);
   const message = useSettingsStore(s => s.message);
   // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
   const [map, setMap] = useState(vaultStatus.map);
@@ -182,6 +184,9 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
             value={terminal}
             onChange={value => saveTerminal(value as TerminalApp)}
           />
+        </Field>
+        <Field label={t("set.keepAwake")} id="awake" hint={<Html html={th("set.keepAwakeHelp")} />}>
+          <Switch id="awake" on={keepAwake} onToggle={saveKeepAwake} />
         </Field>
       </Section>
       <Section title={t("set.sec.sidebar")} rows>
