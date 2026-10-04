@@ -1,7 +1,8 @@
 #!/bin/sh
 # relay-server's image for amd64 and arm64, built on this Mac and pushed to GHCR as ghcr.io/laurentme/relay-server
 # with the release's version and `latest`. CI no longer builds it: arm64 under QEMU took most of a release's minutes,
-# here arm64 is native and amd64 runs under Rosetta. Run it from a checkout of the release tag, after the release.
+# here arm64 is native and amd64 runs under Rosetta. scripts/release.sh runs it at the end, by hand run it from a
+# checkout of the release tag.
 # Needs Docker and a gh login that may write packages (gh auth refresh -h github.com -s write:packages).
 # It also attaches relay-server's Linux binaries to the GitHub release (relay-server-linux-x86_64, -aarch64), from the
 # same build: Relay sends them to a machine that updates remotely (Settings › Machines).
