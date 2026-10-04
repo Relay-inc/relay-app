@@ -754,6 +754,35 @@ export default {
     "Eine feste Sprache hilft, wenn du nur eine sprichst. Canary hört sie nicht: ohne Wahl nimmt es die Sprache des Mac.",
   "voice.langAuto": "Automatisch erkennen",
   "voice.langMac": "Die Sprache des Mac",
+  "voice.sec.meetings": "Meetings",
+  "voice.meetingsHelp":
+    "Nimm über die Karte eines Meetings in Wartet auf dich auf: dein Mikrofon und was der Mac abspielt, auf diesem Mac transkribiert.",
+  "voice.meetingModel": "Modell für Meetings",
+  "voice.meetingModelHelp":
+    "Ein Meeting darf ein langsameres, genaueres Modell nehmen als das Diktieren. Nur geladene Modelle stehen zur Wahl.",
+  "voice.sameModel": "Wie beim Diktieren",
+  "voice.keepAudio": "Audio behalten",
+  "voice.keepAudioHelp": "Speichert die Aufnahme als .m4a neben dem Transkript, im Anhangordner von Obsidian.",
+  "voice.summarize": "Meeting-Notiz schreiben",
+  "voice.summarizeHelp":
+    "Nach dem Transkript erstellt eine Unterhaltung die Meeting-Notiz und fasst sie zusammen, wie der Vault Meeting-Notizen macht.",
+  "rec.record": "Aufnehmen",
+  "rec.recordHelp": "Nimmt dein Mikrofon und das, was der Mac abspielt, auf und transkribiert es auf diesem Mac",
+  "rec.stop": "Stoppen",
+  "rec.cancel": "Abbrechen",
+  "rec.me": "Ich",
+  "rec.others": "Andere",
+  "rec.mac": "Mac",
+  "rec.consent": "Sag allen im Meeting, dass du aufnimmst.",
+  "rec.noSystem":
+    "Nur dein Mikrofon wird aufgenommen, der Ton des Mac nicht: {why}. Erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
+  "rec.silentMac":
+    "Noch kein Ton vom Mac. Läuft der Call schon, erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
+  "rec.saving": "{title} wird transkribiert…",
+  "rec.saved": "Transkript gespeichert: {path}",
+  "rec.failed": "Die Aufnahme konnte nicht geschrieben werden: {error}",
+  "rec.noModel":
+    "Das Sprachmodell für Meetings ist noch nicht geladen. Lade es in Einstellungen › Sprache; die Aufnahme bleibt erhalten.",
   "voice.sec.when": "Wann es aufnimmt",
   "voice.shortcut": "Tastenkürzel",
   "voice.shortcutHelp": "Wirkt, solange das Eingabefeld einer Unterhaltung zu sehen ist, wie die Mikrofontaste.",

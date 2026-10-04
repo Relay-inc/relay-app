@@ -747,6 +747,35 @@ const en = {
     "A fixed language helps when you only speak one. Canary cannot hear it: without a pick it takes the Mac's language.",
   "voice.langAuto": "Detect automatically",
   "voice.langMac": "The Mac's language",
+  "voice.sec.meetings": "Meetings",
+  "voice.meetingsHelp":
+    "Record from a meeting's card in Waiting for you: your microphone and what the Mac plays, transcribed on this Mac.",
+  "voice.meetingModel": "Model for meetings",
+  "voice.meetingModelHelp":
+    "A meeting can take a slower, more accurate model than dictation. Only downloaded models are listed.",
+  "voice.sameModel": "Same as dictation",
+  "voice.keepAudio": "Keep the audio",
+  "voice.keepAudioHelp": "Saves the recording as .m4a next to the transcript, in Obsidian's attachment folder.",
+  "voice.summarize": "Write the meeting note",
+  "voice.summarizeHelp":
+    "After the transcript, a conversation makes the meeting note and summarises it, the way the vault does meeting notes.",
+  "rec.record": "Record",
+  "rec.recordHelp": "Records your microphone and what the Mac plays, then transcribes it on this Mac",
+  "rec.stop": "Stop",
+  "rec.cancel": "Cancel",
+  "rec.me": "Me",
+  "rec.others": "Others",
+  "rec.mac": "Mac",
+  "rec.consent": "Let everyone in the meeting know you are recording.",
+  "rec.noSystem":
+    "Only your microphone is recorded, the Mac's audio is not: {why}. Allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
+  "rec.silentMac":
+    "No sound from the Mac yet. If the call is already playing, allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
+  "rec.saving": "Transcribing {title}…",
+  "rec.saved": "Transcript saved: {path}",
+  "rec.failed": "The recording could not be written: {error}",
+  "rec.noModel":
+    "The speech model for meetings is not downloaded yet. Download it in Settings › Voice; the recording is kept.",
   "voice.sec.when": "When it records",
   "voice.shortcut": "Shortcut",
   "voice.shortcutHelp": "Works while a conversation's composer shows, like the microphone button.",

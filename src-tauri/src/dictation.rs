@@ -68,10 +68,12 @@ fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
 // a model counts once its archive was checked and unpacked: the marker is written last
 fn installed(dir: &Path) -> bool { dir.join(".relay-ok").is_file() }
 
-/// The voice settings the backend uses: the model, and the language to pass ("" to let the model hear it).
-fn picked(app: &AppHandle) -> Result<(&'static Model, String), String> {
+/// The voice settings the backend uses: the model (for a meeting its own, when one is set), and the language to pass
+/// ("" to let the model hear it).
+fn picked(app: &AppHandle, meeting: bool) -> Result<(&'static Model, String), String> {
     let voice = app.state::<super::App>().settings.lock().unwrap().get("voice").cloned().unwrap_or(Value::Null);
-    let m = model(voice["model"].as_str().unwrap_or(DEFAULT)).or_else(|_| model(DEFAULT))?;
+    let own = voice["meetingModel"].as_str().filter(|id| meeting && !id.is_empty());
+    let m = model(own.or(voice["model"].as_str()).unwrap_or(DEFAULT)).or_else(|_| model(DEFAULT))?;
     let set = voice["language"].as_str().filter(|l| !l.is_empty() && *l != "auto").map(str::to_string);
     // a model that cannot hear the language gets the Mac's, else English
     let lang = match set {
@@ -93,6 +95,16 @@ fn with_model<T>(loaded: &Loaded, m: &'static Model, dir: &Path, f: impl FnOnce(
     f(held.as_mut().unwrap().1.as_mut())
 }
 
+/// Runs `f` with the model a meeting uses, loaded, and the options to transcribe with (src/meeting.rs).
+/// Err("model") when that model is not downloaded.
+pub(crate) fn with_meeting_model<T>(app: &AppHandle, f: impl FnOnce(&mut dyn SpeechModel, &TranscribeOptions) -> Result<T, String>) -> Result<T, String> {
+    let (m, language) = picked(app, true)?;
+    let dir = models_dir(app)?.join(m.id);
+    if !installed(&dir) { return Err("model".into()); }
+    let options = TranscribeOptions { language: (!language.is_empty()).then_some(language), ..Default::default() };
+    with_model(&app.state::<Dictation>().loaded, m, &dir, |model| f(model, &options))
+}
+
 #[derive(Serialize)]
 pub struct ModelInfo { id: &'static str, mb: u32, langs: &'static [&'static str], auto: bool, installed: bool, downloading: bool }
 
@@ -106,13 +118,13 @@ pub fn dictation_models(app: AppHandle, state: State<Dictation>) -> Result<Vec<M
 
 /// Whether the model picked in Settings › Voice is on this Mac.
 #[tauri::command]
-pub fn dictation_model(app: AppHandle) -> Result<bool, String> { Ok(installed(&models_dir(&app)?.join(picked(&app)?.0.id))) }
+pub fn dictation_model(app: AppHandle) -> Result<bool, String> { Ok(installed(&models_dir(&app)?.join(picked(&app, false)?.0.id))) }
 
 /// Downloads a model (`id`, or the picked one), checks and unpacks it, reporting 0..1 on `on_progress`. curl, shasum
 /// and tar are on every Mac.
 #[tauri::command]
 pub async fn dictation_download(app: AppHandle, state: State<'_, Dictation>, id: Option<String>, on_progress: Channel<f64>) -> Result<(), String> {
-    let m = match id { Some(id) => model(&id)?, None => picked(&app)?.0 };
+    let m = match id { Some(id) => model(&id)?, None => picked(&app, false)?.0 };
     if !state.downloading.lock().unwrap().insert(m.id) { return Err("busy".into()); }
     let dir = models_dir(&app)?;
     let done = tauri::async_runtime::spawn_blocking(move || download(m, &dir, &on_progress)).await.map_err(|e| e.to_string());
@@ -167,7 +179,7 @@ pub fn dictation_delete(app: AppHandle, state: State<Dictation>, id: String) -> 
 /// Loads the model meanwhile, so it is ready when the recording stops. Err("model") when it is not downloaded yet.
 #[tauri::command]
 pub fn dictation_start(app: AppHandle, state: State<Dictation>, on_level: Channel<f32>) -> Result<(), String> {
-    let (m, _) = picked(&app)?;
+    let (m, _) = picked(&app, false)?;
     let dir = models_dir(&app)?.join(m.id);
     if !installed(&dir) { return Err("model".into()); }
     let mut rec = state.rec.lock().unwrap();
@@ -241,7 +253,7 @@ fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
 pub async fn dictation_stop(app: AppHandle, state: State<'_, Dictation>) -> Result<String, String> {
     let Some(rec) = state.rec.lock().unwrap().take() else { return Ok(String::new()) };
     rec.stop.send(()).ok();
-    let (m, language) = picked(&app)?;
+    let (m, language) = picked(&app, false)?;
     let dir = models_dir(&app)?.join(m.id);
     let loaded = state.loaded.clone();
     tauri::async_runtime::spawn_blocking(move || {

@@ -32,6 +32,7 @@ import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
+import type { Recording } from "../domain/calendar/rules";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -281,6 +282,23 @@ export const dictationStart = (onLevel: (level: number) => void) => {
 /** Stops recording; resolves with the text, rejects with "silent" when the microphone gave nothing. */
 export const dictationStop = () => invoke<string>("dictation_stop");
 export const dictationCancel = () => invoke("dictation_cancel");
+
+// ---------- recording a meeting (src-tauri/src/meeting.rs)
+/** A quarter-second tick while recording: the seconds, and the levels (0..1) of `me` and, when tapped, `others`. */
+export type RecordingTick = { secs: number; me?: number; others?: number };
+/** Starts recording the microphone and, when macOS allows it, what the Mac plays (`system`, else `why` not). */
+export const meetingRecordStart = (onTick: (tick: RecordingTick) => void) => {
+  const channel = new Channel<RecordingTick>();
+  channel.onmessage = onTick;
+  return invoke<{ system: boolean; why: string | null }>("meeting_record_start", { onTick: channel });
+};
+/** Stops, then writes the audio and transcript into the vault, `onProgress` 0..1 while it transcribes. */
+export const meetingRecordStop = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
+};
+export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 
 // ---------- events from the backend
 /** One normalised event of an agent process. */

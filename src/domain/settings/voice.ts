@@ -1,6 +1,15 @@
 /** Settings › Voice: dictation on or off, the speech model and language, and when it records. */
 export type VoiceMode = "both" | "hold" | "tap"; // both: held records until release, tapped until the next tap
-export type VoiceCfg = { on?: boolean; model?: string; language?: string; mode?: VoiceMode; shortcut?: string };
+export type VoiceCfg = {
+  on?: boolean;
+  model?: string;
+  language?: string;
+  mode?: VoiceMode;
+  shortcut?: string;
+  meetingModel?: string; // "" or unset: the dictation model
+  keepAudio?: boolean; // a recorded meeting's audio goes into the vault, on unless false
+  summarize?: boolean; // a recorded meeting starts the conversation that writes its note, on unless false
+};
 /** A speech model as `dictation_models` lists it: `langs` the languages it knows, `auto` whether it hears which. */
 export type SpeechModelInfo = {
   id: string;
@@ -28,6 +37,9 @@ export const voiceOf = (cfg: VoiceCfg | undefined) => ({
   language: cfg?.language || "auto",
   mode: cfg?.mode || "both",
   shortcut: VOICE_SHORTCUTS.some(([id]) => id === cfg?.shortcut) ? cfg!.shortcut! : DEFAULT_SHORTCUT,
+  meetingModel: cfg?.meetingModel || "",
+  keepAudio: cfg?.keepAudio !== false,
+  summarize: cfg?.summarize !== false,
 });
 export const shortcutLabel = (id: string) => VOICE_SHORTCUTS.find(([key]) => key === id)?.[1] ?? id;
 

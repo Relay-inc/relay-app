@@ -55,6 +55,8 @@ portable-pty = "0.9"
 # dictation in the composer (src/dictation.rs): the microphone, and Parakeet speech to text on ONNX Runtime
 cpal = "0.18"
 transcribe-rs = { version = "0.3.12", features = ["onnx"] }
+# the meeting recordings (src/meeting.rs): their tracks on disk
+hound = "3"
 
 # the broker and the link to a work machine (src/machines.rs, packages/relay-server)
 relay-remote = { path = "../packages/relay-remote" }
@@ -71,6 +73,9 @@ tauri-plugin-deep-link = "2"
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
+# the tap on what the Mac plays, for recording meetings (src/meeting.rs)
+objc2-core-audio = "0.3"
+objc2-core-foundation = "0.3"
 # banners for a finished turn or a waiting card (src/notify.rs), with the click coming back to the app
 mac-notification-sys = "0.6"
 agent-pi = { path = "../packages/agent-pi" }

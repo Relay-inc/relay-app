@@ -756,6 +756,36 @@ export default {
     "Une langue fixe aide si vous n'en parlez qu'une. Canary ne l'entend pas : sans choix, il prend celle du Mac.",
   "voice.langAuto": "Détecter automatiquement",
   "voice.langMac": "La langue du Mac",
+  "voice.sec.meetings": "Réunions",
+  "voice.meetingsHelp":
+    "Enregistrez depuis la carte d'une réunion dans En attente : votre micro et ce que joue le Mac, transcrits sur ce Mac.",
+  "voice.meetingModel": "Modèle pour les réunions",
+  "voice.meetingModelHelp":
+    "Une réunion peut prendre un modèle plus lent et plus précis que la dictée. Seuls les modèles téléchargés sont listés.",
+  "voice.sameModel": "Le même que la dictée",
+  "voice.keepAudio": "Garder l'audio",
+  "voice.keepAudioHelp":
+    "Enregistre l'audio en .m4a à côté de la transcription, dans le dossier des pièces jointes d'Obsidian.",
+  "voice.summarize": "Écrire la note de réunion",
+  "voice.summarizeHelp":
+    "Après la transcription, une conversation crée la note de réunion et la résume, comme le coffre fait ses notes de réunion.",
+  "rec.record": "Enregistrer",
+  "rec.recordHelp": "Enregistre votre micro et ce que joue le Mac, puis le transcrit sur ce Mac",
+  "rec.stop": "Arrêter",
+  "rec.cancel": "Annuler",
+  "rec.me": "Moi",
+  "rec.others": "Les autres",
+  "rec.mac": "Mac",
+  "rec.consent": "Prévenez tout le monde dans la réunion que vous enregistrez.",
+  "rec.noSystem":
+    "Seul votre micro est enregistré, pas le son du Mac : {why}. Autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
+  "rec.silentMac":
+    "Pas encore de son du Mac. Si l'appel joue déjà, autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
+  "rec.saving": "Transcription de {title}…",
+  "rec.saved": "Transcription enregistrée : {path}",
+  "rec.failed": "L'enregistrement n'a pas pu être écrit : {error}",
+  "rec.noModel":
+    "Le modèle vocal pour les réunions n'est pas encore téléchargé. Téléchargez-le dans Réglages › Voix ; l'enregistrement est gardé.",
   "voice.sec.when": "Quand il enregistre",
   "voice.shortcut": "Raccourci",
   "voice.shortcutHelp": "Fonctionne tant que le champ de saisie d'une conversation est affiché, comme le bouton micro.",

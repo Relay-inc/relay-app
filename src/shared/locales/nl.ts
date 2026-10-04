@@ -748,6 +748,35 @@ export default {
     "Een vaste taal helpt als je er maar één spreekt. Canary hoort de taal niet: zonder keuze neemt het de taal van de Mac.",
   "voice.langAuto": "Automatisch herkennen",
   "voice.langMac": "De taal van de Mac",
+  "voice.sec.meetings": "Meetings",
+  "voice.meetingsHelp":
+    "Neem op vanaf de kaart van een meeting in Wacht op jou: je microfoon en wat de Mac afspeelt, uitgeschreven op deze Mac.",
+  "voice.meetingModel": "Model voor meetings",
+  "voice.meetingModelHelp":
+    "Een meeting mag een trager, nauwkeuriger model nemen dan dicteren. Enkel gedownloade modellen staan erbij.",
+  "voice.sameModel": "Hetzelfde als dicteren",
+  "voice.keepAudio": "Audio bewaren",
+  "voice.keepAudioHelp": "Bewaart de opname als .m4a naast de transcriptie, in de bijlagenmap van Obsidian.",
+  "voice.summarize": "Meeting note schrijven",
+  "voice.summarizeHelp":
+    "Na de transcriptie maakt een gesprek de meeting note en vat ze samen, zoals de vault meeting notes maakt.",
+  "rec.record": "Opnemen",
+  "rec.recordHelp": "Neemt je microfoon en wat de Mac afspeelt op, en schrijft het uit op deze Mac",
+  "rec.stop": "Stoppen",
+  "rec.cancel": "Annuleren",
+  "rec.me": "Ik",
+  "rec.others": "Anderen",
+  "rec.mac": "Mac",
+  "rec.consent": "Laat iedereen in de meeting weten dat je opneemt.",
+  "rec.noSystem":
+    "Enkel je microfoon wordt opgenomen, het geluid van de Mac niet: {why}. Sta Relay toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
+  "rec.silentMac":
+    "Nog geen geluid van de Mac. Speelt de call al, sta Relay dan toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
+  "rec.saving": "{title} uitschrijven…",
+  "rec.saved": "Transcriptie bewaard: {path}",
+  "rec.failed": "De opname kon niet weggeschreven worden: {error}",
+  "rec.noModel":
+    "Het spraakmodel voor meetings is nog niet gedownload. Download het in Instellingen › Spraak; de opname blijft bewaard.",
   "voice.sec.when": "Wanneer het opneemt",
   "voice.shortcut": "Sneltoets",
   "voice.shortcutHelp": "Werkt zolang het invoerveld van een gesprek zichtbaar is, net als de microfoonknop.",

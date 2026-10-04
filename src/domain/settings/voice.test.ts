@@ -25,6 +25,9 @@ test("voice settings fall back to their defaults", () => {
     language: "auto",
     mode: "both",
     shortcut: "alt+Space",
+    meetingModel: "",
+    keepAudio: true,
+    summarize: true,
   });
   assert.equal(voiceOf({ on: false, shortcut: "nonsense" }).shortcut, "alt+Space");
   assert.equal(voiceOf({ on: false }).on, false);

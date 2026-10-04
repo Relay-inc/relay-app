@@ -100,6 +100,28 @@ export function VoicePage({ active }: { active: boolean }) {
           />
         </Field>
       </Section>
+      <Section title={t("voice.sec.meetings")} desc={t("voice.meetingsHelp")} rows>
+        <Field label={t("voice.meetingModel")} id="voicemeet" hint={t("voice.meetingModelHelp")}>
+          <Select
+            className={SELECT}
+            id="voicemeet"
+            options={[
+              { id: "", name: t("voice.sameModel") },
+              ...models
+                .filter(model => model.installed || model.id === voice.meetingModel)
+                .map(model => ({ id: model.id, name: MODEL_NAMES[model.id] ?? model.id })),
+            ]}
+            value={voice.meetingModel}
+            onChange={meetingModel => saveVoice({ meetingModel })}
+          />
+        </Field>
+        <Field label={t("voice.keepAudio")} id="voiceaudio" hint={t("voice.keepAudioHelp")}>
+          <Switch id="voiceaudio" on={voice.keepAudio} onToggle={keepAudio => saveVoice({ keepAudio })} />
+        </Field>
+        <Field label={t("voice.summarize")} id="voicesum" hint={t("voice.summarizeHelp")}>
+          <Switch id="voicesum" on={voice.summarize} onToggle={summarize => saveVoice({ summarize })} />
+        </Field>
+      </Section>
       <Section title={t("voice.sec.when")} rows>
         <Field label={t("voice.shortcut")} id="voicekey" hint={t("voice.shortcutHelp")}>
           <Select

@@ -4,5 +4,7 @@
 <dict>
   <key>NSMicrophoneUsageDescription</key>
   <string>Relay turns what you dictate into text, on this Mac.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Relay records what the Mac plays during a meeting you record, to transcribe it on this Mac.</string>
 </dict>
 </plist>
