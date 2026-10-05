@@ -21,12 +21,14 @@ import {
 } from "../../../application/today/review";
 import { useDetailsStore } from "../../../application/today/details";
 import { anchorOf } from "../../../domain/pull-requests/diff";
+import { fileTree, type TreeNode } from "../../../domain/pull-requests/tree";
 import { timeOf } from "../../../application/calendar/calendar";
 import { agent } from "../../../shared/plugins";
 import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { minutes } from "./parts";
+import { useState, type ReactNode } from "react";
 
 const SEVERITY: Record<string, string> = {
   bug: "text-late",
@@ -125,30 +127,29 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px]">
+      <div className="flex-1 min-h-0 grid grid-cols-[260px_minmax(0,1fr)_400px]">
+        <FileTree
+          groups={(several ? prs.map(pr => pr.url) : [""]).map(url => ({
+            label: several ? prLabel(url) : "",
+            files: files.flatMap((f, index) => (several && f.pr !== url ? [] : [{ path: f.path, index }])),
+          }))}
+          current={fileIndex}
+          stats={files.map((f, i) => ({
+            add: f.additions,
+            del: f.deletions,
+            notes: r.findings.filter(x => x.state !== "dismissed" && indexOf(x.pr, x.path) === i).length,
+          }))}
+          onPick={i => showFile(id, i)}
+        />
         <div className="min-w-0 min-h-0 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-2.5 select-text">
-          {/* the files per PR, one row each, the PR named once in front when there are several */}
-          {(several ? prs.map(pr => pr.url) : [""]).map(url => (
-            <div key={url} className="flex flex-wrap items-center gap-1.5">
-              {several ? (
-                <span className="text-xs font-semibold text-secondary whitespace-nowrap mr-1">{prLabel(url)}</span>
-              ) : null}
-              {files.map((f, i) =>
-                several && f.pr !== url ? null : (
-                  <button
-                    key={`${f.pr}|${f.path}`}
-                    onClick={() => showFile(id, i)}
-                    className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-[7px] border font-mono text-xs cursor-pointer ${f === file ? "border-accent bg-accent-soft" : "border-separator-strong hover:bg-fill"}`}
-                  >
-                    <Icon name="file" className="glyph size-3 text-tertiary" />
-                    {f.path}
-                    <span className="text-add-fg">+{f.additions}</span>
-                    <span className="text-del-fg">−{f.deletions}</span>
-                  </button>
-                ),
-              )}
+          {file ? (
+            <div className="flex items-center gap-2 font-mono text-xs">
+              {several ? <span className="text-tertiary">{prLabel(file.pr)} ·</span> : null}
+              <span className="font-semibold text-label">{file.path}</span>
+              <span className="text-add-fg">+{file.additions}</span>
+              <span className="text-del-fg">−{file.deletions}</span>
             </div>
-          ))}
+          ) : null}
           {r.err ? <div className="err-box">{r.err}</div> : null}
           {!r.files ? <div className="text-sm text-secondary">{t("kb.loading")}</div> : null}
           {file ? (
@@ -427,5 +428,82 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
         </div>
       ) : null}
     </div>
+  );
+}
+
+type Stat = { add: number; del: number; notes: number };
+/** The changed files as a tree, like GitHub's: a block per PR when the review has several, folders to fold. */
+function FileTree({
+  groups,
+  current,
+  stats,
+  onPick,
+}: {
+  groups: { label: string; files: { path: string; index: number }[] }[];
+  current: number;
+  stats: Stat[];
+  onPick: (index: number) => void;
+}) {
+  const [folded, setFolded] = useState<string[]>([]);
+  const toggle = (key: string) =>
+    setFolded(list => (list.includes(key) ? list.filter(k => k !== key) : [...list, key]));
+  const rows = (nodes: TreeNode[], depth: number, group: string): ReactNode[] =>
+    nodes.flatMap(node => {
+      const pad = { paddingLeft: `${8 + depth * 14}px` };
+      if (node.kind === "dir") {
+        const key = `${group}|${node.path}`;
+        const open = !folded.includes(key);
+        return [
+          <button
+            key={key}
+            onClick={() => toggle(key)}
+            style={pad}
+            className="flex items-center gap-1.5 h-7 pr-2 rounded-md text-left text-[13px] text-secondary cursor-pointer hover:bg-fill-2"
+          >
+            <Icon
+              name="chevron"
+              className={`glyph size-3 flex-none transition-transform ${open ? "" : "-rotate-90"}`}
+            />
+            <Icon name="folder" className="glyph size-3.5 flex-none text-tertiary" />
+            <span className="truncate">{node.name}</span>
+          </button>,
+          ...(open ? rows(node.children, depth + 1, group) : []),
+        ];
+      }
+      const stat = stats[node.index];
+      return [
+        <button
+          key={`${group}|${node.path}`}
+          onClick={() => onPick(node.index)}
+          style={pad}
+          title={node.path}
+          className={`flex items-center gap-1.5 h-7 pr-2 rounded-md text-left text-[13px] cursor-pointer ${node.index === current ? "bg-accent-soft text-label font-medium" : "text-label hover:bg-fill-2"}`}
+        >
+          <span className="size-3 flex-none" />
+          <Icon name="file" className="glyph size-3.5 flex-none text-tertiary" />
+          <span className="flex-1 min-w-0 truncate">{node.name}</span>
+          {stat?.notes ? (
+            <span className="min-w-4 h-4 px-1 rounded-full bg-soon text-on-accent text-[10px] grid place-items-center">
+              {stat.notes}
+            </span>
+          ) : null}
+          <span className="font-mono text-[11px] text-add-fg">+{stat?.add ?? 0}</span>
+          <span className="font-mono text-[11px] text-del-fg">−{stat?.del ?? 0}</span>
+        </button>,
+      ];
+    });
+  return (
+    <nav className="min-h-0 overflow-y-auto border-r border-separator px-2 py-3 flex flex-col gap-0.5">
+      {groups.map(group => (
+        <div key={group.label} className="flex flex-col gap-0.5">
+          {group.label ? (
+            <span className="px-2 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+              {group.label}
+            </span>
+          ) : null}
+          {rows(fileTree(group.files), 0, group.label)}
+        </div>
+      ))}
+    </nav>
   );
 }
