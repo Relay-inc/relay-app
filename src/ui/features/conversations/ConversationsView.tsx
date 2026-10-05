@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isView, MAIL, PRS, REM } from "../../../domain/navigation/views";
+import { isView, MAIL, PRS, REM, USAGE } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -26,6 +26,7 @@ import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
+import { UsageReload } from "../usage/UsageReload";
 import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
@@ -104,6 +105,8 @@ export function ConversationsView({ className }: { className: string }) {
           <NewReminder />
         ) : selected === PRS ? (
           <PrsReload />
+        ) : selected === USAGE ? (
+          <UsageReload />
         ) : selected === MAIL ? (
           <MailReload />
         ) : bar.coordinator ? (
@@ -139,7 +142,7 @@ export function ConversationsView({ className }: { className: string }) {
         <div
           ref={msgs}
           id="msgs"
-          className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : "max-w-170 px-8"}`}
+          className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : selected === USAGE ? "w-full max-w-245 px-7" : "max-w-170 px-8"}`}
         >
           <SelectedView />
           {/* on Reminders the chip sticks to the bottom of the scroller */}

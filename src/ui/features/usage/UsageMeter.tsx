@@ -1,10 +1,24 @@
 import { Html } from "../../components/Html";
-import { useT } from "../../hooks/useT";
 
-// the fill follows how close the limit is (the reminders' urgency colours)
+type Level = "" | "soon" | "late";
+// the fill and the percentage follow how close the limit is (the reminders' urgency colours)
 const FILL = { "": "bg-secondary", soon: "bg-soon", late: "bg-late" };
+const PCT = { "": "font-medium", soon: "font-semibold text-soon", late: "font-semibold text-late" };
+export const DOT = { "": "bg-ok", soon: "bg-soon", late: "bg-late" };
 
-/** One limit window: its name (`label`, markup from the provider's strings), the share used, a thin bar and when it
+/** A bar filled to `percent`. */
+export function UsageBar({ percent, level }: { percent: number; level: Level }) {
+  return (
+    <div className="h-1.5 rounded-xs bg-fill-2 overflow-hidden">
+      <span
+        className={`block h-full rounded-xs ${FILL[level]}`}
+        style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+      ></span>
+    </div>
+  );
+}
+
+/** One limit window: its name (`label`, markup from the provider's strings), the share used, a bar and when it
  *  resets. */
 export function UsageMeter({
   label,
@@ -14,23 +28,17 @@ export function UsageMeter({
 }: {
   label: string;
   percent: number;
-  level: "" | "soon" | "late";
+  level: Level;
   resets: string;
 }) {
-  const { t } = useT();
   return (
-    <div className="pt-2 pb-2.5 border-b border-separator">
+    <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-3 text-sm">
         <Html className="flex-1 min-w-0 truncate" html={label} />
-        <span className="tabular-nums">{t("usage.used", { pct: Math.round(percent) })}</span>
+        <span className={`tabular-nums ${PCT[level]}`}>{Math.round(percent)}%</span>
       </div>
-      <div className="h-1 rounded-xs bg-fill mt-1.5 mb-1 overflow-hidden">
-        <span
-          className={`block h-full rounded-xs ${FILL[level]}`}
-          style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-        ></span>
-      </div>
-      <div className="text-sm text-secondary">{resets}</div>
+      <UsageBar percent={percent} level={level} />
+      {resets && <div className="text-xs text-secondary">{resets}</div>}
     </div>
   );
 }
