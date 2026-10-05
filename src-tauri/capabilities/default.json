@@ -4,13 +4,15 @@
   "description": "Capability for the main window",
   "windows": [
     "main",
-    "settings"
+    "settings",
+    "dictation-pill"
   ],
   "permissions": [
     "core:default",
     "opener:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-title",
-    "core:window:allow-set-theme"
+    "core:window:allow-set-theme",
+    "deep-link:default"
   ]
 }

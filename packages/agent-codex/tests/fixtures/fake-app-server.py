@@ -1,5 +1,5 @@
 #!/usr/bin/python3
-# A stand-in for `codex app-server` for bridge.py's test (src/lib.rs): answers the handshake (a resume that fails, a
+# A stand-in for `codex app-server` for the bridge's test (src/lib.rs): answers the handshake (a resume that fails, a
 # new thread), echoes turn/start, asks for one approval and one thing the app has no card for, reports the answers.
 import json, sys
 
@@ -17,6 +17,8 @@ for line in sys.stdin:
     seen.append(m["method"])
     if m["method"] == "initialize":
         say({"id": m["id"], "result": {"userAgent": "fake"}})
+    elif m["method"] == "skills/list":
+        say({"id": m["id"], "result": {"data": []}})
     elif m["method"] == "thread/resume":
         say({"id": m["id"], "error": {"code": -32600, "message": "no rollout found for thread id " + m["params"]["threadId"]}})
     elif m["method"] == "thread/start":

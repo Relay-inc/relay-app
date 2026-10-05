@@ -9,26 +9,43 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use std::os::unix::net::UnixStream;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_deep_link::DeepLinkExt;
 use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
 
+mod actions;
 mod agents;
-pub mod broker;
+mod anywhere;
+mod awake;
+pub use relay_remote::broker;
+mod calendar;
+mod commits;
+mod dictation;
+mod files;
+mod host;
+mod machines;
+mod mirror;
+mod favicon;
 mod mail;
+mod meeting;
 pub mod notify;
+mod orch;
 mod providers;
+mod pty;
 mod related;
 mod relay_config;
 mod reminders;
+mod retry;
+mod scratch;
+#[cfg(feature = "selftest")]
+mod selftest;
+mod snapshot;
 mod tray;
 mod vault;
 mod worktrees;
 
-// ponytail: REPO is fixed, fine as long as the app runs from its own checkout.
-const REPO: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/..");
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 /// The vault folder from the settings, "" before one is chosen.
 fn vault(st: &App) -> String {
@@ -74,11 +91,13 @@ fn norm(mut v: Value) -> Value {
     for k in ["projects", "overrides", "vaults", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
     providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
     agents::migrate(&mut v);    // agents.default and agents.providers.<id>: on, bin
+    calendar::norm(&mut v);     // calendar.on and calendar.feeds[].email, the addresses are in the keychain
     if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
     if !v["mail"]["on"].is_boolean() { v["mail"]["on"] = json!(false); }
     if !v["mail"]["account"].is_string() { v["mail"]["account"] = json!(""); }
     if !v["mail"]["accounts"].is_array() { v["mail"]["accounts"] = json!([]); }
+    if !v["mail"]["experimental"].is_boolean() { v["mail"]["experimental"] = json!(false); }
     // the old himalaya account names are no emails: those fall back to the first account
     let known = v["mail"]["accounts"].as_array().unwrap().iter().any(|a| a["email"] == v["mail"]["account"]);
     if !known { v["mail"]["account"] = json!(""); }
@@ -91,6 +110,13 @@ fn norm(mut v: Value) -> Value {
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     if !v["accent"].as_str().is_some_and(|a| ["relay", "graphite"].contains(&a)) { v["accent"] = json!("relay"); }
+    if !v["terminal"].as_str().is_some_and(|t| t == "auto" || TERMINALS.iter().any(|(id, _)| *id == t)) { v["terminal"] = json!("auto"); }
+    // work machines (machines.rs): only complete ones, a broken entry is dropped rather than half used
+    if !v["machines"].is_array() { v["machines"] = json!([]); }
+    v["machines"].as_array_mut().unwrap().retain(machines::valid);
+    // where new conversations run: "" this Mac, or a paired machine's id
+    let known = v["machines"].as_array().unwrap().iter().any(|m| m["id"] == v["machines_default"]);
+    if !known { v["machines_default"] = json!(""); }
     v
 }
 
@@ -173,21 +199,46 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.no_token", ["No {v} token. Fill it in under Relay › Settings… › Integrations.", "Geen {v}-token. Vul het in bij Relay › Instellingen… › Integraties.", "Aucun jeton {v}. Renseignez-le dans Relay › Réglages… › Intégrations.", "Kein {v}-Token. Trag es unter Relay › Einstellungen… › Integrationen ein."]),
     ("err.down", ["{p} unreachable: {v}", "{p} niet bereikbaar: {v}", "{p} injoignable : {v}", "{p} nicht erreichbar: {v}"]),
     ("err.no_gh", ["gh not found. Install it with `brew install gh`.", "gh niet gevonden. Installeer het met `brew install gh`.", "gh introuvable. Installez-le avec `brew install gh`.", "gh nicht gefunden. Installiere es mit `brew install gh`."]),
+    ("err.update_dev", ["A development build has no release to update a machine from: use the commands below.", "Een ontwikkelbuild heeft geen release om een machine mee bij te werken: gebruik de commando's hieronder.", "Une version de développement n'a pas de release pour mettre une machine à jour : utilisez les commandes ci-dessous.", "Ein Entwicklungsbuild hat kein Release, um eine Maschine zu aktualisieren: nutze die Befehle unten."]),
+    ("err.update_old", ["This relay-server cannot update from Relay yet: update it once with the commands below, after that it can.", "Deze relay-server kan nog niet bijgewerkt worden vanuit Relay: werk hem één keer bij met de commando's hieronder, daarna wel.", "Ce relay-server ne se met pas encore à jour depuis Relay : mettez-le à jour une fois avec les commandes ci-dessous, ensuite oui.", "Dieser relay-server lässt sich noch nicht aus Relay aktualisieren: aktualisiere ihn einmal mit den Befehlen unten, danach schon."]),
+    ("err.update_download", ["The binary for {v} could not be downloaded from the release", "De binary voor {v} kon niet gedownload worden uit de release", "Le binaire pour {v} n'a pas pu être téléchargé depuis la release", "Die Binärdatei für {v} konnte nicht aus dem Release geladen werden"]),
+    ("err.update_back", ["Updated, but the machine does not answer with the new version yet. Try Refresh in a moment.", "Bijgewerkt, maar de machine antwoordt nog niet met de nieuwe versie. Probeer zo dadelijk Vernieuwen.", "Mis à jour, mais la machine ne répond pas encore avec la nouvelle version. Réessayez Actualiser dans un instant.", "Aktualisiert, aber die Maschine antwortet noch nicht mit der neuen Version. Versuch gleich Aktualisieren."]),
     ("err.gh_login", ["Not signed in to gh. Run `gh auth login` in the terminal.", "Niet ingelogd bij gh. Voer `gh auth login` uit in de terminal.", "Pas connecté à gh. Lancez `gh auth login` dans le terminal.", "Nicht bei gh angemeldet. Führe `gh auth login` im Terminal aus."]),
     ("err.bad_repo", ["Invalid repo", "Ongeldige repo", "Dépôt invalide", "Ungültiges Repo"]),
     ("err.mail_pw", ["The app password is the 16-letter code Google showed (spaces are fine)", "Het app-wachtwoord is de code van 16 letters die Google toonde (spaties mogen)",
         "Le mot de passe d'application est le code de 16 lettres affiché par Google (les espaces sont acceptés)", "Das App-Passwort ist der 16-stellige Code, den Google angezeigt hat (Leerzeichen sind ok)"]),
+    ("err.mail_pw_any", ["The password must be 1 to 256 characters, without control characters", "Het wachtwoord moet 1 tot 256 tekens zijn, zonder stuurtekens", "Le mot de passe doit faire de 1 à 256 caractères, sans caractères de contrôle", "Das Passwort muss 1 bis 256 Zeichen lang sein, ohne Steuerzeichen"]),
     ("err.no_mail_account", ["Mail: no account set up. Add one under Relay › Settings… › Integrations › Mail.", "Mail: nog geen account. Voeg er een toe bij Relay › Instellingen… › Integraties › Mail.", "Mail : aucun compte. Ajoutez-en un dans Relay › Réglages… › Intégrations › Mail.", "Mail: noch kein Konto. Füge eins unter Relay › Einstellungen… › Integrationen › Mail hinzu."]),
     ("err.bad_mail", ["Invalid mail id", "Ongeldige mail-id", "Identifiant de mail invalide", "Ungültige Mail-ID"]),
-    ("err.mail_account", ["Mail: invalid account (email, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
+    ("err.mail_account", ["Mail: invalid account (email, server, port, keychain service and account, at most 5 accounts)", "Mail: ongeldig account (e-mail, server, poort, sleutelhangerdienst en -account, hoogstens 5 accounts)", "Mail : compte invalide (e-mail, serveur, port, service et compte du trousseau, 5 comptes au plus)", "Mail: ungültiges Konto (E-Mail, Server, Port, Schlüsselbunddienst und -konto, höchstens 5 Konten)"]),
     ("err.no_pr", ["PR not found", "PR niet gevonden", "PR introuvable", "PR nicht gefunden"]),
     ("err.no_agent", ["Unknown agent '{v}'", "Onbekende agent '{v}'", "Agent inconnu '{v}'", "Unbekannter Agent '{v}'"]),
     ("err.no_import", ["Claude Code has no {v} MCP server with credentials", "Claude Code heeft geen {v}-MCP-server met inloggegevens", "Claude Code n'a pas de serveur MCP {v} avec des identifiants", "Claude Code hat keinen {v}-MCP-Server mit Zugangsdaten"]),
     ("err.icons_no_claude", ["Finding websites needs Claude Code switched on under Agents", "Websites zoeken heeft Claude Code nodig, aangezet onder Agents", "La recherche de sites nécessite Claude Code activé dans Agents", "Websites suchen braucht Claude Code, eingeschaltet unter Agents"]),
     ("err.agent_none", ["Switch on at least one agent", "Zet minstens één agent aan", "Activez au moins un agent", "Schalte mindestens einen Agenten ein"]),
+    ("err.agent_account", ["{v}: an account needs a name of 1 to 40 characters and an absolute folder", "{v}: een account heeft een naam van 1 tot 40 tekens en een absolute map nodig", "{v} : un compte a besoin d'un nom de 1 à 40 caractères et d'un dossier absolu", "{v}: ein Konto braucht einen Namen mit 1 bis 40 Zeichen und einen absoluten Ordner"]),
+    ("err.agent_account_dir", ["{v}: each account needs its own folder, other than ~/.claude", "{v}: elk account heeft een eigen map nodig, niet ~/.claude", "{v} : chaque compte a besoin de son propre dossier, autre que ~/.claude", "{v}: jedes Konto braucht einen eigenen Ordner, nicht ~/.claude"]),
     ("err.agent_bin", ["{v}: the program path must be absolute", "{v}: het pad naar het programma moet absoluut zijn", "{v} : le chemin du programme doit être absolu", "{v}: der Programmpfad muss absolut sein"]),
     ("err.agent_busy", ["Still answering the previous message", "Nog bezig met het vorige bericht", "Encore occupé avec le message précédent", "Noch mit der vorigen Nachricht beschäftigt"]),
+    ("err.no_terminal", ["{v} is not installed: pick another terminal in Settings › General", "{v} is niet geïnstalleerd: kies een andere terminal in Instellingen › Algemeen", "{v} n'est pas installé : choisissez un autre terminal dans Réglages › Général", "{v} ist nicht installiert: wähle ein anderes Terminal unter Einstellungen › Allgemein"]),
     ("err.agent_terminal", ["{v} cannot be opened in the terminal", "{v} kan niet in de terminal geopend worden", "{v} ne peut pas s'ouvrir dans le terminal", "{v} lässt sich nicht im Terminal öffnen"]),
+    ("err.move_no_session", ["This conversation has not started yet: pick where it runs next to the model", "Dit gesprek is nog niet gestart: kies naast het model waar het loopt", "Cette conversation n'a pas encore commencé : choisissez où elle s'exécute à côté du modèle", "Dieses Gespräch hat noch nicht begonnen: Wähle neben dem Modell, wo es läuft"]),
+    ("err.move_only_claude", ["Only a Claude Code conversation can move to another machine", "Enkel een gesprek met Claude Code kan naar een andere machine", "Seule une conversation Claude Code peut changer de machine", "Nur ein Claude-Code-Gespräch kann auf eine andere Maschine wechseln"]),
+    ("err.move_busy", ["Wait until the turn ends and no card is open, then move it", "Wacht tot de beurt klaar is en er geen kaart openstaat, verhuis het dan", "Attendez la fin du tour et qu'aucune carte ne soit ouverte, puis déplacez-la", "Warte, bis die Runde endet und keine Karte offen ist, dann verschiebe es"]),
+    ("err.machine_mail", ["A conversation about a mail runs on this Mac, not on a work machine", "Een gesprek over een mail loopt op deze Mac, niet op een werkmachine",
+        "Une conversation sur un mail tourne sur ce Mac, pas sur une machine de travail", "Ein Gespräch über eine Mail läuft auf diesem Mac, nicht auf einer Arbeitsmaschine"]),
+    ("err.machine_down", ["Work machine unreachable: {v}", "Werkmachine niet bereikbaar: {v}", "Machine de travail injoignable : {v}", "Arbeitsmaschine nicht erreichbar: {v}"]),
+    ("err.machine_terminal", ["This conversation runs on {v}: open it in the terminal there", "Dit gesprek loopt op {v}: open het daar in de terminal",
+        "Cette conversation tourne sur {v} : ouvrez-la là-bas dans le terminal", "Dieses Gespräch läuft auf {v}: öffne es dort im Terminal"]),
+    ("err.machine", ["Invalid work machine in the settings", "Ongeldige werkmachine in de instellingen", "Machine de travail invalide dans les réglages", "Ungültige Arbeitsmaschine in den Einstellungen"]),
+    ("err.machine_folder", ["{v}: a folder needs a vault project and an absolute path on the machine", "{v}: een map heeft een vaultproject en een absoluut pad op de machine nodig",
+        "{v} : un dossier a besoin d'un projet du coffre et d'un chemin absolu sur la machine", "{v}: ein Ordner braucht ein Vault-Projekt und einen absoluten Pfad auf der Maschine"]),
+    ("err.no_machine", ["No such work machine", "Onbekende werkmachine", "Machine de travail inconnue", "Unbekannte Arbeitsmaschine"]),
+    ("err.cal_email", ["Calendar: enter the calendar's email address", "Agenda: vul het e-mailadres van de agenda in", "Agenda : saisissez l'adresse e-mail de l'agenda", "Kalender: Gib die E-Mail-Adresse des Kalenders ein"]),
+    ("err.cal_url", ["That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.", "Dat is geen geheim iCal-adres. In Google Agenda: Instellingen › je agenda › Agenda integreren › Geheim adres in iCal-indeling.", "Ce n'est pas une adresse iCal secrète. Dans Google Agenda : Paramètres › votre agenda › Intégrer l'agenda › Adresse secrète au format iCal.", "Das ist keine geheime iCal-Adresse. In Google Kalender: Einstellungen › dein Kalender › Kalender integrieren › Geheime Adresse im iCal-Format."]),
+    ("err.cal_keychain", ["Could not save the calendar address in the keychain", "Kon het agenda-adres niet in de sleutelhanger bewaren", "Impossible d'enregistrer l'adresse de l'agenda dans le trousseau", "Die Kalenderadresse konnte nicht im Schlüsselbund gespeichert werden"]),
+    ("err.cal_down", ["Calendar unreachable: {v}", "Agenda niet bereikbaar: {v}", "Agenda injoignable : {v}", "Kalender nicht erreichbar: {v}"]),
+    ("err.cal_no_url", ["no address in the keychain, add {v} again under Settings › Integrations › Calendar", "geen adres in de sleutelhanger, voeg {v} opnieuw toe bij Instellingen › Integraties › Agenda", "pas d'adresse dans le trousseau, ajoutez {v} à nouveau dans Réglages › Intégrations › Agenda", "keine Adresse im Schlüsselbund, füge {v} unter Einstellungen › Integrationen › Kalender neu hinzu"]),
 ];
 fn tr(lang: &str, key: &str) -> String {
     let i = LANGS.iter().position(|l| *l == lang).unwrap_or(0);
@@ -238,18 +289,31 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 }
 
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
-// with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart.
+// with. tainted: it holds mail text (see mark_tainted), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
-struct Proc { child: broker::Agent, stdin: UnixStream, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32 }
+// account: the config folder it runs on ("" the CLI's own), see agents::accounts
+// remote: on a work machine (machines.rs), stopped and taken back through its relay-server
+struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, account: String, remote: bool }
+impl Proc {
+    /// The turns running, also in the broker's file: a restart takes them from there.
+    fn set_turns(&mut self, turns: u32) {
+        if turns != self.turns { self.turns = turns; broker::save_turns(&self.key, self.child.id(), turns); }
+    }
+}
 
 struct App {
     procs: Mutex<HashMap<String, Proc>>,
     sids: Mutex<HashMap<String, agents::Sess>>, // conversation key -> provider and session id, persisted
     path: String,                          // login-shell PATH, so the agent's tools find gh, himalaya, node
     settings: Mutex<Value>,                // settings.json: vault, projects, overrides, agents, mail
-    limits: Mutex<HashMap<String, (i64, Value)>>, // per provider: its last limits answer and when
+    limits: Mutex<HashMap<String, (i64, Value)>>, // per provider and account (limit_key): its last limits answer and when
+    spent: Mutex<std::collections::HashSet<String>>, // limit_keys a turn was refused on, until their limits read below 100% again
     mail: mail::Mail,                      // one IMAP session per account, shared by the UI and the relay-mail tools
     worktrees: Mutex<HashMap<String, Vec<String>>>, // conversation key -> the git worktrees it made, persisted (worktrees.rs)
+    asked: Mutex<std::collections::HashSet<String>>, // "conversation\nrepo" already offered for linking this run (commits.rs)
+    machines: machines::Machines,          // work machines, this Mac's certificate and which conversation runs where
+    mirrors: mirror::Mirrors,              // what this Mac keeps in sync on each work machine (mirror.rs)
+    orch: Mutex<()>,                       // one writer of orch.json at a time (orch.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -274,7 +338,7 @@ fn login_path() -> String {
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
-/// Everything the sidebar shows, read by snapshot.py from the mapped paths. Also returns the vault
+/// Everything the sidebar shows, read from the mapped paths (snapshot.rs). Also returns the vault
 /// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
 fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
@@ -282,18 +346,11 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let v = st["vault"].as_str().unwrap();
     if v.is_empty() { return Err(tr(lang, "err.no_vault_set")); }
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
-    // the first time a vault is used, its .relay/config.json is written from what is detected (snapshot.py reads it)
+    // the first time a vault is used, its .relay/config.json is written from what is detected
     relay_config::ensure(v, &st["map"]);
     let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let out = Command::new("/usr/bin/python3").arg(format!("{REPO}/snapshot.py"))
-        .env("PATH", &state.path).env("VAULT", v).env("VAULT_WORK_STATE", path("workState"))
-        .env("VAULT_NOTES", path("notes"))
-        .output().map_err(|e| e.to_string())?;
-    let mut snap: Value = serde_json::from_slice(&out.stdout).map_err(|e| {
-        // a crash leaves stdout empty: its last stderr line says more than "EOF while parsing"
-        let err = String::from_utf8_lossy(&out.stderr);
-        format!("snapshot: {}", err.lines().rev().find(|l| !l.trim().is_empty()).map_or(e.to_string(), str::to_string))
-    })?;
+    let mut snap = snapshot::snapshot(v, &path("workState"), &path("notes"), chrono::Local::now().date_naive(), &state.path,
+        &data_dir(&app).join("topics.json"), &home())?;
     snap["vault"] = st;
     let (file, _, _) = rem_ctx(&app)?;
     snap["reminders"] = reminders::list(&file, chrono::Local::now().date_naive()).into();
@@ -301,7 +358,42 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     Ok(snap)
 }
 
-/// The favicon of each project's website, guessed from its notes by favicon.py, for the projects
+/// The UI's own state, what the webview used to keep in localStorage (the conversations' metadata, the sidebar's order
+/// and folds, the board's last pick): one JSON object of strings in ui-state.json, so every window and every build of
+/// Relay on this Mac (a development build and the installed app) see the same.
+#[tauri::command]
+async fn ui_state_get(app: AppHandle) -> Value {
+    let path = data_dir(&app).join("ui-state.json");
+    tauri::async_runtime::spawn_blocking(move || fs::read_to_string(path).ok().and_then(|s| serde_json::from_str(&s).ok()))
+        .await.ok().flatten().unwrap_or_else(|| json!({}))
+}
+/// One change to ui-state.json at a time, so two windows never undo each other's keys.
+static UI_STATE: Mutex<()> = Mutex::new(());
+/// The first start with the file: `state` (what the window's localStorage held) becomes the file in one write, so a
+/// reload halfway can never leave half of it. When another window was first, its file stays. The file's content.
+#[tauri::command]
+async fn ui_state_init(app: AppHandle, state: serde_json::Map<String, Value>) -> Result<Value, String> {
+    let path = data_dir(&app).join("ui-state.json");
+    tauri::async_runtime::spawn_blocking(move || {
+        let _one = UI_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(v) = fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) { return Ok(v); }
+        relay_remote::sync::write_atomic(&path, serde_json::to_string(&state).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
+        Ok(Value::Object(state))
+    }).await.map_err(|e| e.to_string())?
+}
+/// One key of it: read, change, write whole.
+#[tauri::command]
+async fn ui_state_set(app: AppHandle, key: String, value: String) -> Result<(), String> {
+    let path = data_dir(&app).join("ui-state.json");
+    tauri::async_runtime::spawn_blocking(move || {
+        let _one = UI_STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state: serde_json::Map<String, Value> = fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        state.insert(key, Value::String(value));
+        relay_remote::sync::write_atomic(&path, serde_json::to_string(&state).unwrap().as_bytes(), None).map_err(|e| e.to_string())
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// The favicon of each project's website, guessed from its notes (favicon.rs), for the projects
 /// ([{name, aliases}]) whose guess is not in favicons.tried yet: {name: {site, data}}, data the raw icon or null.
 #[tauri::command]
 async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, String> {
@@ -309,15 +401,11 @@ async fn favicons(state: State<'_, App>, projects: Value) -> Result<Value, Strin
     if st["ok"] != true { return Ok(json!({})); }
     let v = st["vault"].as_str().unwrap();
     let notes = if st["found"]["notes"] == true { vault::resolve(v, st["map"]["notes"].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let mut child = Command::new("/usr/bin/python3").arg(format!("{REPO}/favicon.py"))
-        .env("PATH", &state.path).env("VAULT", v).env("VAULT_NOTES", notes)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
     // a website set as a project's icon in the vault's .relay/config.json wins over a guess
     let sites: serde_json::Map<String, Value> = relay_config::icons(v).into_iter()
         .filter_map(|(n, i)| match relay_config::icon_kind(i["value"].as_str()?) { relay_config::Icon::Site(s) => Some((n, json!(s))), _ => None }).collect();
-    child.stdin.take().unwrap().write_all(json!({"projects": projects, "tried": tried, "sites": sites}).to_string().as_bytes()).map_err(|e| e.to_string())?;
-    let out = child.wait_with_output().map_err(|e| e.to_string())?;
-    serde_json::from_slice(&out.stdout).map_err(|e| format!("favicon: {}", String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or(&e.to_string())))
+    let v = v.to_string();
+    tauri::async_runtime::spawn_blocking(move || favicon::run(&v, &notes, &projects, &tried, &sites)).await.map_err(|e| e.to_string())
 }
 
 /// The project icons from the vault's .relay/config.json: {project: {value, img | icon}}. The first call for a vault
@@ -344,6 +432,8 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
 async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Value>) -> Result<Value, String> {
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude").ok_or_else(|| trc("err.icons_no_claude"))?;
     let eb = env_of(&app, &state, p);
+    // on the account a new conversation gets now, never one inherited from the app's environment
+    let account = account_of(&state, p, "", "sonnet");
     // the repos linked to a project say a lot about what it is (lemahieu-shopware: a shop)
     let mut repos: HashMap<String, Vec<String>> = HashMap::new();
     for (r, p) in repo_projects(&eb.vault) { repos.entry(p).or_default().push(r); }
@@ -363,10 +453,13 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
         {{\"<project name>\": \"domain.tld\" or null}}, no other text.\n\n{}", serde_json::to_string(&list).unwrap());
     // the prompt on stdin: --allowedTools takes a list and would swallow it as an argument
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
-        let mut c = Command::new(&eb.bin).args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
+        let mut c = Command::new(&eb.bin);
+        c.args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config",
                 "--tools", "WebSearch", "--allowedTools", "WebSearch"])
             .current_dir(std::env::temp_dir()).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
-            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
+        if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
+        let mut c = c.spawn()?;
         c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
         c.wait_with_output()
     }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
@@ -388,8 +481,27 @@ fn project_repos(state: State<App>) -> Value {
 }
 /// A project's repos in the vault's .relay/config.json.
 #[tauri::command]
-fn set_project_repos(state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
-    relay_config::set_repos(&need_vault(&state)?, &project, &repos)
+fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
+    relay_config::set_repos(&need_vault(&state)?, &project, &repos)?;
+    // the main window's title bar shows the PRs button by them
+    app.emit("repos-changed", ()).ok();
+    Ok(())
+}
+/// "Not now" on a repo a conversation committed to: unlinked on purpose, it is not offered again.
+#[tauri::command]
+fn ignore_repo(state: State<App>, repo: String) -> Result<(), String> { relay_config::ignore_repo(&need_vault(&state)?, &repo) }
+/// The repos a conversation committed to that no project has, and that the vault did not unlink on purpose, each
+/// only once per conversation and run (a general conversation, which never asks, must not use up a project's ask).
+/// `dirs`: checkouts or their main repos, found by commits.rs.
+fn unlinked_repos(app: &AppHandle, key: &str, dirs: Vec<PathBuf>) -> Vec<String> {
+    let st = app.state::<App>();
+    let vault = st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    let Some(cfg) = relay_config::load(&vault) else { return vec![] };
+    let known = repo_projects(&vault);
+    let mut asked = st.asked.lock().unwrap();
+    dirs.iter().filter_map(|d| gh_repo(&d.to_string_lossy())).filter(|r| {
+        !known.contains_key(r) && !cfg["repos"].as_object().is_some_and(|m| m.keys().any(|k| k.to_lowercase() == *r)) && asked.insert(format!("{key}\n{r}"))
+    }).collect()
 }
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
@@ -400,6 +512,17 @@ fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: St
     app.emit("icons-changed", ()).ok();
     Ok(())
 }
+
+/// A project's scratch notes, newest first: [{id, text, modified}].
+#[tauri::command]
+fn scratch_list(state: State<App>, project: String) -> Result<Value, String> { scratch::list(&need_vault(&state)?, &project) }
+/// Create (no id) or overwrite a scratch note; returns its id.
+#[tauri::command]
+fn scratch_save(state: State<App>, project: String, id: Option<String>, text: String) -> Result<String, String> {
+    scratch::save(&need_vault(&state)?, &project, id, &text)
+}
+#[tauri::command]
+fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { scratch::delete(&need_vault(&state)?, &project, &id) }
 
 /// A vault note a conversation links to, for the right panel: {path (relative to the vault), text}.
 #[tauri::command]
@@ -450,11 +573,44 @@ impl EnvBuf {
     fn env(&self) -> agent_core::Env<'_> { agent_core::Env { home: &self.home, vault: &self.vault, path: &self.path, bin: &self.bin, pending: &self.pending, opts: &self.opts } }
 }
 fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
+    // the accounts conversations were recorded on, also one removed from the list since: its transcripts are still there
+    let recorded: Vec<String> = st.sids.lock().unwrap().values().filter(|x| x.provider == p.id() && !x.account.is_empty()).map(|x| x.account.clone()).collect();
     let s = st.settings.lock().unwrap();
     let mut opts = s["agents"]["providers"][p.id()].clone();
     // Claude Code gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
     if p.id() == "claude" && opts.is_object() { opts["mail"] = json!(mail_on(&s)); }
+    // the account calls run on unless they say otherwise (spawn, limits): the active one
+    if p.caps().accounts && opts.is_object() {
+        opts["account"] = opts["active"].clone();
+        let mut list = opts["accounts"].as_array().cloned().unwrap_or_default();
+        for d in recorded { if !list.iter().any(|a| a["dir"] == d.as_str()) { list.push(json!({"name": "", "dir": d})); } }
+        opts["accounts"] = json!(list);
+    }
     EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), opts }
+}
+/// The key of a provider's account in `limits` and `spent`.
+fn limit_key(p: &dyn AgentProvider, account: &str) -> String { format!("{}:{account}", p.id()) }
+/// An account with no room for `model`: a turn was refused on it, or a window it last read that applies is at 100%.
+fn is_spent(st: &App, p: &dyn AgentProvider, account: &str, model: &str) -> bool {
+    let k = limit_key(p, account);
+    st.spent.lock().unwrap().contains(&k) || st.limits.lock().unwrap().get(&k).is_some_and(|(_, v)| agents::used_up(v, model))
+}
+/// An account auto-switch may move to: its limits did not come back without a login (not read yet counts as fine).
+fn is_ready(st: &App, p: &dyn AgentProvider, account: &str) -> bool {
+    !st.limits.lock().unwrap().get(&limit_key(p, account)).is_some_and(|(_, v)| agents::no_login(v))
+}
+/// The account a conversation runs on: its session's, else the active one; with auto-switch on and that one used up
+/// for `model`, the next signed-in one that is not. Reads what the limits last said, never asks (no network in a send).
+/// ponytail: the limits are at most 5 minutes old (the webview's poll); a refused turn marks an account at once
+fn account_of(st: &App, p: &dyn AgentProvider, key: &str, model: &str) -> String {
+    if !p.caps().accounts { return String::new(); }
+    let own = st.sids.lock().unwrap().get(key).filter(|x| x.provider == p.id()).map(|x| x.account.clone());
+    let (list, cur, auto) = {
+        let s = st.settings.lock().unwrap();
+        let c = &s["agents"]["providers"][p.id()];
+        (agents::accounts(&s, p), own.unwrap_or_else(|| c["active"].as_str().unwrap_or("").into()), c["auto"] == true)
+    };
+    agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a, model), |a| is_ready(st, p, a))
 }
 fn mail_on(s: &Value) -> bool { s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() }
 /// A conversation's provider: its session's, else the one asked for when switched on, else the default.
@@ -463,109 +619,139 @@ fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentPr
     let s = st.settings.lock().unwrap();
     asked.and_then(|a| agents::enabled(&s).into_iter().find(|p| p.id() == a)).unwrap_or_else(|| agents::get_or_first(Some(&agents::default_id(&s))))
 }
-/// Run a shell command in a new iTerm window.
-fn iterm(cmd: &str) -> Result<(), String> {
-    let script = format!(
-        "tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {}\nend tell",
-        serde_json::to_string(cmd).unwrap());
-    Command::new("/usr/bin/osascript").args(["-e", &script]).spawn().map(|_| ()).map_err(|e| e.to_string())
+/// The terminals a session opens in, by settings.terminal; "auto" takes the first one installed (Terminal always is).
+const TERMINALS: [(&str, &str); 3] = [("iterm", "iTerm"), ("wezterm", "WezTerm"), ("terminal", "Terminal")];
+fn app_path(app: &str) -> Option<PathBuf> {
+    [format!("/Applications/{app}.app"), format!("{}/Applications/{app}.app", home()), format!("/System/Applications/Utilities/{app}.app")]
+        .into_iter().map(PathBuf::from).find(|p| p.exists())
 }
-
-/// DENIED and MAIL_TOOLS are agent_claude's: the flags it starts every Claude session with.
-use agent_claude::{DENIED, MAIL_TOOLS};
-
-/// What a session loses once it holds mail text, a stranger's words that may try to steer it: pushing, PRs, gh
-/// api and comments, Slack posts, calendar invites, agents, work handed to the cloud or to later, messages to other
-/// sessions, the skills whose own allowed-tools would skip the cards, and every rule the user's settings allow
-/// without asking (deny beats allow). It also goes to default mode, so everything else asks first on a card. Sent
-/// over the pipe: at spawn for a chat about a mail, else right before the first mail tool answers
-/// (scripts/pipe-check.py proves both). A settings file that does not parse costs Bash as a whole.
-/// ponytail: skills with a broad allowed-tools are named here, a new one needs adding.
-fn taint(settings: &[Value], all_read: bool) -> [Value; 2] {
-    let mut deny: Vec<String> = ["Bash(git push*)", "Bash(gh pr create*)", "Bash(gh pr comment*)", "Bash(gh api*)", "Bash(gh gist*)", "Bash(launchctl*)",
-        "mcp__claude_ai_Slack__slack_send_message", "mcp__claude_ai_Slack__slack_schedule_message",
-        "mcp__claude_ai_Google_Calendar__create_event", "mcp__claude_ai_Google_Calendar__update_event",
-        "RemoteTrigger", "CronCreate", "ScheduleWakeup", "SendMessage", "ShareOnboardingGuide", "DesignSync", "Workflow",
-        "Skill(skill:initcraftcms)", "Skill(skill:code-review:code-review)"].map(String::from).to_vec();
-    deny.extend(DENIED.map(String::from)); // the flag layer may not keep the CLI's own denies, so they go along
-    if !all_read { deny.push("Bash".into()); }
-    deny.extend(settings.iter().flat_map(|s| s["permissions"]["allow"].as_array().into_iter().flatten())
-        .filter_map(|r| r.as_str()).filter(|r| !r.starts_with("mcp__relay-mail")).map(String::from));
-    deny.sort(); deny.dedup();
-    [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"allow": MAIL_TOOLS, "deny": deny}}}}),
-     json!({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})]
+fn terminal_of(choice: &str, installed: impl Fn(&str) -> bool) -> &'static str {
+    TERMINALS.iter().find(|(id, app)| if choice == "auto" { installed(app) } else { *id == choice }).map_or("terminal", |(id, _)| id)
 }
-/// The settings a session in the vault loads that can allow tools, the user's and the vault's, shared and local,
-/// and whether every one that exists parsed (Claude Code rewrites them, a half-written file gets one more try).
-fn allow_sources(vault: &str) -> (Vec<Value>, bool) {
-    let files = [format!("{}/.claude/settings.json", home()), format!("{}/.claude/settings.local.json", home()),
-                 format!("{vault}/.claude/settings.json"), format!("{vault}/.claude/settings.local.json")];
-    let (mut out, mut all) = (vec![], true);
-    for f in files.iter().filter(|f| PathBuf::from(f).is_file()) {
-        let read = || fs::read_to_string(f).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
-        match read().or_else(|| { std::thread::sleep(std::time::Duration::from_millis(100)); read() }) { Some(v) => out.push(v), None => all = false }
+/// Run a shell command in a new window of the terminal from the settings.
+fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
+    let choice = st.settings.lock().unwrap()["terminal"].as_str().unwrap_or("auto").to_string();
+    let osa = |script: String| {
+        let o = Command::new("/usr/bin/osascript").args(["-e", &script]).output().map_err(|e| e.to_string())?;
+        if o.status.success() { Ok(()) } else { Err(String::from_utf8_lossy(&o.stderr).trim().to_string()) }
+    };
+    let q = serde_json::to_string(cmd).unwrap();
+    match terminal_of(&choice, |app| app_path(app).is_some()) {
+        "iterm" => osa(format!("tell application \"iTerm\"\n activate\n set w to (create window with default profile)\n tell current session of w to write text {q}\nend tell")),
+        "wezterm" => {
+            let bin = app_path("WezTerm").ok_or_else(|| trc_v("err.no_terminal", "WezTerm"))?.join("Contents/MacOS/wezterm");
+            // a login shell: a GUI app's PATH has no `claude`. The shell stays after the command, as in iTerm
+            let sh = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
+            Command::new(bin).args(["start", "--", &sh, "-lc", &format!("{cmd}; exec {sh} -l")]).spawn().map(|_| ()).map_err(|e| e.to_string())
+        }
+        _ => osa(format!("tell application \"Terminal\"\n activate\n do script {q}\nend tell")),
     }
-    (out, all)
 }
-fn write_taint(p: &mut Proc, vault: &str) {
-    let (settings, all_read) = allow_sources(vault);
-    for m in taint(&settings, all_read) { writeln!(p.stdin, "{m}").ok(); }
-    p.stdin.flush().ok();
+
+/// Marks a session that holds mail text: it stays on this Mac (see send) and a worker's report says so. Its
+/// permissions do not change, it runs in the user's own mode.
+fn mark_tainted(p: &mut Proc) {
     p.tainted = true;
     if let Some(m) = broker::load_meta(&broker::meta_path(&p.key)) { broker::save_meta(&broker::Meta { tainted: true, ..m }); }
 }
 /// The request that opens the pipe: which in-process MCP servers the app answers for.
-fn pipe_init(mail_on: bool) -> Value {
-    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": if mail_on { json!(["relay-mail"]) } else { json!([]) }}})
+fn pipe_init(mail_on: bool, orch_on: bool) -> Value {
+    let servers: Vec<&str> = [(mail_on, "relay-mail"), (orch_on, "relay-orch")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
+    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": servers}})
 }
 
 #[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool) -> Result<Proc, String> {
+fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str, machine: Option<&str>) -> Result<Proc, String> {
     let dir = need_vault(state)?;
-    let eb = env_of(app, state, p);
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
-    let mut cmd = p.command(&eb.env(), &l)?;
-    cmd.current_dir(&dir).env("PATH", &state.path);
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0 };
-    let c = broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?;
-    let mut stdin = c.stdin.try_clone().map_err(|e| e.to_string())?;
     let claude = p.id() == "claude";
-    if claude { writeln!(stdin, "{}", pipe_init(eb.opts["mail"] == true)).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
-    let mut proc = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()) };
-    read_agent(app, project, p, c);
+    let settings = state.settings.lock().unwrap().clone();
+    // where the composer or Settings › Machines says (machines.rs); a fork copies a session of this Mac, so stays
+    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
+    // a work machine has its own login: no account of this Mac goes along
+    let account = if remote.is_some() { "" } else { account };
+    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: u32::from(turn.is_some()) };
+    let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
+        if from_mail { return Err(trc("err.machine_mail")); }
+        let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
+        bind.cwd = machines::cwd_or_vault(bind.cwd, &info);
+        let mut eb = env_of(app, state, p);
+        // that machine's paths, its claude and its permission tool (relay-server --perm-server); no mail tools there
+        eb.opts["mail"] = json!(false);
+        eb.opts["perm_server"] = json!(info.perm);
+        let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
+        let mut cmd = p.command(&eb.env(), &l)?;
+        cmd.current_dir(&bind.cwd).env("PATH", &info.path);
+        // the mirror gives the session there what Claude Code here has: context, plugins, permissions, the vault's memory
+        let (args, env) = mirror::session_args(&info, &bind.cwd);
+        cmd.args(args).envs(env);
+        let c = state.machines.client(&m).launch(&meta, &broker::Spec::of(&cmd)).map_err(|e| format!("{} start ({}): {e}", p.id(), m["name"].as_str().unwrap_or("")))?;
+        state.machines.set_bind(project, bind);
+        (c, false, true)
+    } else {
+        let mut eb = env_of(app, state, p);
+        if p.caps().accounts { eb.opts["account"] = json!(account); }
+        if claude && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
+        let mut cmd = p.command(&eb.env(), &l)?;
+        // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
+        let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
+        cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
+        (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.opts["mail"] == true, false)
+    };
+    let broker::Conn { agent, mut stdin, frames, backlog } = c;
+    // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)
+    if claude { writeln!(stdin, "{}", pipe_init(mail_on, !remote && orch::is_orch(project))).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
+    // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
+    let fresh = resume.is_none() && fork.is_none();
+    let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
+    let pid = agent.id();
+    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), account: account.into(), remote };
+    read_agent(app, project, p, pid, frames, backlog, inherit, account);
     // a chat about a mail, or one that read mail before a restart, starts restricted
-    if claude && from_mail { write_taint(&mut proc, &dir); }
+    if from_mail { mark_tainted(&mut proc); }
     Ok(proc)
 }
 
 /// The agent's output, from its broker: each stdout line through the provider's parser to the webview as `agent`
 /// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
 /// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
-/// end, it reads the rest from the transcript.
-fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: broker::Conn) {
-    let (a, k, pid, id, claude, pend, mut parse) = (app.clone(), key.to_string(), c.agent.id(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
-    let (frames, backlog) = (c.frames, c.backlog);
+/// end, it reads the rest from the transcript. `inherit`: whether the model and the effort were left to the CLI.
+#[allow(clippy::too_many_arguments)]
+fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32, frames: Box<dyn BufRead + Send>, backlog: usize, inherit: (bool, bool), account: &str) {
+    let (a, k, id, claude, pend, mut parse) = (app.clone(), key.to_string(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
+    let (account, lk) = (account.to_string(), limit_key(p, account));
+    // the account's limits are used up: the next message moves to another one (with auto-switch on)
+    let spend = move |a: &AppHandle| { a.state::<App>().spent.lock().unwrap().insert(lk.clone()); };
     std::thread::spawn(move || {
+        let mut exited = false;
         let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
         let mut err: Vec<String> = vec![];
+        let mut last = String::new(); // the agent's last text block, for a worker that ends without a report (orch.rs)
+        // this turn: refused for the account's limit (and the reset Claude named, epoch ms), and whether it did anything
+        let (mut limited, mut hint, mut worked) = (false, None::<i64>, false);
         // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
         let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
+        // the same for the repos' reflogs around a tool call that may commit (see commits.rs)
+        let mut commit_before = HashMap::<String, commits::Snapshot>::new();
         for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
-            let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => break };
+            let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => { exited = true; break } };
             let replay = n < backlog;
+            // the refusal itself comes as an assistant message of model "<synthetic>": not work the turn did
+            let synthetic = claude && line.contains("\"<synthetic>\"");
             // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
             if claude {
                 if let Ok(ev) = serde_json::from_str::<Value>(&line) {
+                    if ev["type"] == "rate_limit_event" && ev["rate_limit_info"]["status"] == "rejected" {
+                        spend(&a);
+                        limited = true;
+                        hint = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
+                    }
                     if ev["type"] == "control_request" { control(&a, &k, pid, &ev); continue; }
                     if ev["type"] == "control_response" {
                         if ev["response"]["subtype"] == "error" {
                             let rid = ev["response"]["request_id"].as_str().unwrap_or("");
-                            // a session that holds mail text and could not be restricted does not go on
-                            if rid.starts_with("taint") {
-                                if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.child.kill().ok(); }
-                            }
                             emit(json!({"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}));
                         }
                         // the slash commands and skills this vault has, for the composer's completion
@@ -577,11 +763,25 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                 }
             }
             for ev in parse(&line) {
+                // Replayed activity restores turns surviving an app restart. Repeated model steps never
+                // count as extra user messages; Claude's assistant blocks also provide this signal.
+                if !synthetic && matches!(&ev, Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) { worked = true; }
+                if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
+                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.max(1)); }
+                }
+                match &ev {
+                    Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
+                    Event::ToolResult { id: call, .. } if commit_before.contains_key(call) => {
+                        let before = commit_before.remove(call).unwrap_or_default();
+                        for repo in unlinked_repos(&a, &k, commits::changed(&before, &commits::snapshot(&wt_root))) { a.emit("repo-unlinked", json!({"key": k, "repo": repo})).ok(); }
+                    }
+                    _ => {}
+                }
                 match &ev {
                     Event::Session { id: sid } => {
                         let st = a.state::<App>();
                         let mut sids = st.sids.lock().unwrap();
-                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone() });
+                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone(), account: account.clone() });
                         save_sids(&a, &sids);
                     }
                     // raised in the provider's own protocol: a card like any other, answered through respond()
@@ -601,8 +801,22 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
                             save_worktrees(&a, &w);
                         }
                     }
-                    Event::TurnEnd { .. } => {
-                        if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.turns = x.turns.saturating_sub(1); }
+                    Event::Resolved { model, effort } => {
+                        if !replay { emit(json!({"type": "resolved", "model": model, "effort": effort, "default_model": inherit.0, "default_effort": inherit.1})); }
+                        continue;
+                    }
+                    Event::Text { text, delta } => { if !delta { last.clear(); } last.push_str(text); }
+                    Event::TurnEnd { error, .. } => {
+                        let e = error.as_deref().unwrap_or("").to_lowercase();
+                        // "usage limit" (Codex), "You've hit your limit" and "You've hit your weekly limit · resets 9pm" (Claude)
+                        if e.contains("usage limit") || (e.contains("hit your") && e.contains("limit")) { spend(&a); limited = true; }
+                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(1)); x.opts.0.clone() });
+                        retry::turn_end(&a, &k, p, &account, &model.unwrap_or_default(), limited, hint, !worked);
+                        (limited, hint, worked) = (false, None, false);
+                        // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
+                        if orch::is_worker(&k) { orch::turn_end(&a, &k, &last); }
+                        if !replay && orch::is_orch(&k) { orch::flush(&a, &k); } // what Relay queued while the turn ran
+                        last.clear();
                     }
                     _ => {}
                 }
@@ -610,6 +824,9 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
             }
         }
         if !err.is_empty() { emit(json!({"type": "stderr", "text": err.join("\n")})); }
+        // a work machine's connection that dropped without the agent ending (the Mac slept, the wifi went): its
+        // agent goes on there, take it back once the machine answers again
+        if !exited && a.state::<App>().machines.bind_of(&k).is_some() && reconnect(&a, &k, p, pid) { return; }
         broker::forget(&k, pid);
         // a process replaced for a model or effort switch exits quietly, its successor keeps the slot
         {
@@ -618,6 +835,7 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
             if procs.get(&k).is_some_and(|x| x.child.id() != pid) { return; }
             procs.remove(&k);
         }
+        if orch::is_worker(&k) { orch::exited(&a, &k); }
         emit(json!({"type": "exit"}));
     });
 }
@@ -625,19 +843,66 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, c: brok
 /// The app quits: an agent with no turn running stops (the next message resumes its session, nothing is lost), so
 /// only a running turn keeps an agent and its broker alive while the app is closed.
 fn quit(app: &AppHandle) {
-    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| x.turns == 0) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
+    // a work machine's agents stay: that is what the machine is for, and its server winds an idle one down itself
+    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| x.turns == 0 && !x.remote) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
+}
+
+/// Take a work machine's conversation back after its connection dropped: every few seconds while its slot still holds
+/// this agent, for at most an hour. False when it is gone (it ended there, or was stopped).
+fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32) -> bool {
+    let st = app.state::<App>();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3600);
+    while std::time::Instant::now() < deadline {
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        if !st.procs.lock().unwrap().get(key).is_some_and(|x| x.child.id() == pid) { return true; } // stopped or replaced: nothing to do
+        let Some(m) = st.machines.bind_of(key).and_then(|b| machines::Machines::find(&st.settings.lock().unwrap(), &b.machine)) else { return false };
+        match st.machines.client(&m).attach(key) {
+            Ok(Some(c)) if c.agent.id() == pid => {
+                let broker::Conn { agent, stdin, frames, backlog } = c;
+                if let Some(x) = st.procs.lock().unwrap().get_mut(key) { x.stdin = stdin; x.child = agent; }
+                read_agent(app, key, p, pid, frames, backlog, (false, false), "");
+                return true;
+            }
+            Ok(_) => return false,
+            Err(_) => continue,
+        }
+    }
+    false
+}
+
+/// After a restart, a work machine's conversations: the ones whose broker still runs there are the app's again.
+/// Off the setup thread, a machine that does not answer only delays its own conversations.
+fn reattach_remote(app: &AppHandle) {
+    let st = app.state::<App>();
+    let list = st.settings.lock().unwrap()["machines"].as_array().cloned().unwrap_or_default();
+    for m in list {
+        let c = st.machines.client(&m);
+        let Ok(metas) = c.list() else { continue };
+        for meta in metas.into_iter().filter(|x| st.machines.bind_of(&x.key).is_some_and(|b| m["id"] == b.machine.as_str())) {
+            let (Ok(p), Ok(Some(conn))) = (agents::get(&meta.provider), c.attach(&meta.key)) else { continue };
+            if st.procs.lock().unwrap().contains_key(&meta.key) { continue; }
+            let broker::Conn { agent, stdin, frames, backlog } = conn;
+            let pid = agent.id();
+            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, account: String::new(), remote: true };
+            st.procs.lock().unwrap().insert(meta.key.clone(), x);
+            read_agent(app, &meta.key, p, pid, frames, backlog, (false, false), "");
+        }
+    }
 }
 
 /// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
+/// Each with the turns its file says are running: a turn that ended before the restart is not running again, one that
+/// ended while the app was away ends with its replayed turn end.
 fn reattach(app: &AppHandle) {
     let Ok(dir) = fs::read_dir(broker::dir()) else { return };
     for f in dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
         let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
-        let Ok(stdin) = c.stdin.try_clone() else { continue };
-        let x = Proc { child: broker::Agent::from(c.agent.id()), stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: 1 };
+        let broker::Conn { agent, stdin, frames, backlog } = c;
+        let pid = agent.id();
+        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, account: m.account.clone(), remote: false };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        read_agent(app, &m.key, p, c);
+        read_agent(app, &m.key, p, pid, frames, backlog, (false, false), &m.account);
     }
 }
 
@@ -645,19 +910,18 @@ fn reattach(app: &AppHandle) {
 /// reader thread so the conversation keeps streaming while IMAP works.
 fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
     let (rid, req) = (ev["request_id"].clone(), &ev["request"]);
+    if req["subtype"] == "mcp_message" && req["server_name"] == "relay-orch" && orch::is_orch(key) { return orch::control(app, key, pid, rid, &req["message"]); }
     if req["subtype"] != "mcp_message" || req["server_name"] != "relay-mail" {
         return pipe_reply(app, key, pid, json!({"subtype": "error", "request_id": rid, "error": "unsupported"}));
     }
     match mail::rpc(&req["message"]) {
         mail::Rpc::Reply(r) => pipe_reply(app, key, pid, pipe_ok(rid, r)),
         mail::Rpc::Call { id, name, args } => {
-            // mail text is about to enter this session: restrict it before the answer goes out, and before the
-            // tool runs, so a stranger's text never reaches a session that still has its allow rules
+            // mail text is about to enter this session: marked before the tool runs
             if ["search", "read", "thread", "attachment"].contains(&name.as_str()) {
                 let st = app.state::<App>();
-                let v = vault(&st);
                 let mut procs = st.procs.lock().unwrap();
-                if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid && !p.tainted) { write_taint(p, &v); }
+                if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid && !p.tainted) { mark_tainted(p); }
             }
             let (app, key) = (app.clone(), key.to_string());
             tauri::async_runtime::spawn(async move {
@@ -689,8 +953,12 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>) -> Result<(), String> {
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>) -> Result<(), String> {
     let p = provider_of(&state, &project, provider.as_deref());
+    // the orchestrator's conversations stay on this Mac, its tools are answered over this pipe (orch.rs)
+    let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
+    // the project the agent is told about: the line in front of the message (agent_core::envelope)
+    let text = match told.filter(|t| !t.is_empty()) { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
         images.unwrap_or_default().into_iter().filter_map(|i| Some(Image { media_type: i["media_type"].as_str()?.into(), data: i["data"].as_str()?.into() }))
@@ -703,31 +971,68 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
     let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
     let opts = (model, effort);
     let name = name.unwrap_or_else(|| project.clone());
+    let mut account = account_of(&state, p, &project, &opts.0);
+    // an orchestrator conversation that heard a stranger's text stays restricted, also in a new process (orch.rs)
+    let orch_taint = orch::is_orch(&project) && orch::tainted(&app, &project);
     let mut procs = state.procs.lock().unwrap();
+    // a turn still running stays where it is: the account moves once the conversation is idle
+    if let Some(x) = procs.get(&project).filter(|x| x.turns > 0 && x.provider == p.id()) { account = x.account.clone(); }
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account, machine.as_deref())?;
         procs.insert(project, x);
         return Ok(());
     }
-    // model and effort are start flags: a switch restarts the process on the same session
+    // model, effort and account are start flags: a switch restarts the process on the same session
     let mut was_tainted = false;
-    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id()) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
+    // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
+    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || (x.account != account && !x.remote)) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
     if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted)?;
+        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted || orch_taint, &account, machine.as_deref())?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
     let x = procs.get_mut(&project).unwrap();
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
-    x.turns += 1;
+    x.set_turns(x.turns + 1);
     Ok(())
 }
 
 #[tauri::command]
-fn stop(state: State<App>, project: String) {
+fn stop(app: AppHandle, state: State<App>, project: String) {
+    if orch::is_worker(&project) { orch::stop(&app, &project); return; }
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+}
+
+/// The orchestrator's workers, oldest first (orch.rs).
+#[tauri::command]
+fn orch_workers(app: AppHandle) -> Vec<orch::Worker> { orch::load(&app) }
+#[tauri::command]
+fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
+
+/// Relay itself writes a turn into a conversation of the app (the orchestrator's briefs and reports): its process
+/// is started when it is not running, on this Mac, on the model it runs with, else `model`. `taint`: the text may
+/// carry a stranger's words, so the conversation is restricted first. False, and nothing written, while a turn runs.
+fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool, text: &str) -> Result<bool, String> {
+    let state = app.state::<App>();
+    let p = provider_of(&state, key, Some("claude"));
+    if p.id() != "claude" { return Err("the orchestrator runs on Claude Code".into()); }
+    let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
+    let account = account_of(&state, p, key, &model);
+    let taint = taint || orch::tainted(app, key);
+    let mut procs = state.procs.lock().unwrap();
+    if procs.get(key).is_some_and(|x| x.turns > 0) { return Ok(false); }
+    if !procs.contains_key(key) {
+        let x = spawn(app, &state, p, key, name, None, (model, String::new()), None, taint, &account, Some(""))?;
+        procs.insert(key.to_string(), x);
+    }
+    let x = procs.get_mut(key).unwrap();
+    if taint && !x.tainted { mark_tainted(x); }
+    let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or("claude: no input")?;
+    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+    x.set_turns(x.turns + 1);
+    Ok(true)
 }
 
 /// A conversation closes: remove the worktrees it made that are safe to remove (see worktrees::remove). The ones
@@ -752,22 +1057,31 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
         provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().title)).or_else(|| on.iter().copied().find(|p| p.caps().title))
     };
     let p = p.ok_or_else(|| trc("err.no_agent"))?;
-    let eb = env_of(&app, &state, p);
+    // on the account a new conversation gets now (Haiku: no model window of its own)
+    let mut eb = env_of(&app, &state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "haiku")); }
     tauri::async_runtime::spawn_blocking(move || p.title(&eb.env(), &text)).await.map_err(|e| e.to_string())?
 }
 
 /// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
 #[tauri::command]
-fn history(app: AppHandle, state: State<App>, project: String) -> Value {
-    let Some(s) = state.sids.lock().unwrap().get(&project).cloned() else { return json!([]) };
+async fn history(app: AppHandle, state: State<'_, App>, project: String) -> Result<Value, String> {
+    let Some(s) = state.sids.lock().unwrap().get(&project).cloned() else { return Ok(json!([])) };
     let p = agents::get_or_first(Some(&s.provider));
-    json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0)
+    // a work machine's conversation: its transcript is there
+    if let Some((m, b)) = state.machines.bind_of(&project).and_then(|b| Some((machines::Machines::find(&state.settings.lock().unwrap(), &b.machine)?, b))) {
+        let c = state.machines.client(&m);
+        return tauri::async_runtime::spawn_blocking(move || c.history(&s.sid, 0, &b.cwd).map(|(items, _)| items)).await.map_err(|e| e.to_string())?;
+    }
+    Ok(json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0))
 }
 
 /// "Nieuw gesprek": stop the process and forget the session, the next message starts fresh.
 #[tauri::command]
 fn reset(app: AppHandle, state: State<App>, project: String) {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
+    state.machines.unbind(&project); // a fresh start goes where the composer or the default says now
+    orch::unmark(&app, &project); // a fresh session holds no stranger's text
     let mut sids = state.sids.lock().unwrap();
     sids.remove(&project);
     save_sids(&app, &sids);
@@ -778,11 +1092,64 @@ fn reset(app: AppHandle, state: State<App>, project: String) {
 #[tauri::command]
 fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&from) { p.child.kill().ok(); }
+    state.machines.rebind(&from, &to);
     let mut sids = state.sids.lock().unwrap();
     if let Some(sid) = sids.remove(&from) { sids.insert(to.clone(), sid); }
     save_sids(&app, &sids);
     let mut w = state.worktrees.lock().unwrap();
     if let Some(paths) = w.remove(&from) { w.insert(to, paths); save_worktrees(&app, &w); }
+    Ok(())
+}
+
+/// Moves a conversation between this Mac and a work machine (`to`: "" this Mac, else a machine id), between two turns:
+/// its agent stops, its transcript goes along with the vault's paths rewritten (machines::rewrite), and the next
+/// message resumes the session there. A conversation that read mail stays on this Mac. What is only on one side (work
+/// not committed in a repo there) does not move.
+#[tauri::command]
+async fn move_conversation(app: AppHandle, key: String, to: String, mail: bool) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || move_to(&app, &key, &to, mail)).await.map_err(|e| e.to_string())?
+}
+fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), String> {
+    let state = app.state::<App>();
+    let sess = state.sids.lock().unwrap().get(key).cloned().ok_or_else(|| trc("err.move_no_session"))?;
+    if sess.provider != "claude" { return Err(trc("err.move_only_claude")); }
+    let from = state.machines.bind_of(key);
+    if from.as_ref().map_or("", |b| b.machine.as_str()) == to { return Ok(()); }
+    {
+        let procs = state.procs.lock().unwrap();
+        let x = procs.get(key);
+        if !to.is_empty() && (mail || x.is_some_and(|x| x.tainted)) { return Err(trc("err.machine_mail")); }
+        let card = pending::list(&pending_dir(app)).into_iter().chain(state.machines.pending()).any(|c| c["project"] == key);
+        if x.is_some_and(|x| x.turns > 0) || card { return Err(trc("err.move_busy")); }
+    }
+    let settings = state.settings.lock().unwrap().clone();
+    let vault = need_vault(&state)?;
+    let find = |id: &str| machines::Machines::find(&settings, id).ok_or_else(|| trc("err.no_machine"));
+    let up = |m: &Value| state.machines.info(m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))));
+    let p = agents::get_or_first(Some("claude"));
+    // this Mac's transcript folder for the session, on the account it was recorded on
+    let here = || { let mut eb = env_of(app, &state, p); eb.opts["account"] = json!(sess.account); eb };
+    let mac = [vault.clone(), format!("{}/.claude/projects/{}/memory", home(), agent_claude::slug(&vault))];
+    // the agent stops first, so the transcript is complete; a failed move leaves the conversation where it was
+    if let Some(mut x) = state.procs.lock().unwrap().remove(key) { x.child.kill().ok(); }
+    let (data, roots) = match &from {
+        None => (fs::read(PathBuf::from(agent_claude::transcripts_of(&here().env(), &sess.sid)).join(format!("{}.jsonl", sess.sid))).map_err(|e| format!("transcript: {e}"))?, mac.clone()),
+        Some(b) => { let m = find(&b.machine)?; let info = up(&m)?; (state.machines.client(&m).session_get(&sess.sid)?, machines::roots_on(&info)) }
+    };
+    let text = String::from_utf8(data).map_err(|_| "transcript: not UTF-8".to_string())?;
+    if to.is_empty() {
+        let text = machines::rewrite(&text, &roots, &mac);
+        let to = PathBuf::from(agent_claude::transcripts(&here().env())).join(format!("{}.jsonl", sess.sid));
+        relay_remote::sync::write_atomic(&to, text.as_bytes(), None).map_err(|e| format!("transcript: {e}"))?;
+        state.machines.unbind(key);
+    } else {
+        let m = find(to)?;
+        let info = up(&m)?;
+        let cwd = machines::cwd_or_vault(String::new(), &info);
+        let text = machines::rewrite(&text, &roots, &machines::roots_on(&info));
+        state.machines.client(&m).session_put(&sess.sid, &cwd, text.as_bytes())?;
+        state.machines.set_bind(key, machines::Bind { machine: to.into(), cwd });
+    }
     Ok(())
 }
 
@@ -837,11 +1204,18 @@ fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<
 }
 
 #[tauri::command]
-fn running(state: State<App>) -> Vec<String> { state.procs.lock().unwrap().keys().cloned().collect() }
+fn running(state: State<App>) -> HashMap<String, u32> {
+    state.procs.lock().unwrap().iter().map(|(key, proc)| (key.clone(), proc.turns)).collect()
+}
 
 /// The open permission requests and questions of every provider.
 #[tauri::command]
-fn pending(app: AppHandle) -> Vec<Value> { pending::list(&pending_dir(&app)) }
+fn pending(app: AppHandle, state: State<App>) -> Vec<Value> {
+    // the work machines' cards as their poller last saw them (machines.rs), after this Mac's own
+    let mut list = pending::list(&pending_dir(&app));
+    list.extend(state.machines.pending());
+    list
+}
 
 /// The user's decision. A provider that raised the request in its own protocol gets it over stdin.
 #[tauri::command]
@@ -849,6 +1223,14 @@ fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Res
     if !pending::valid_id(&id) { return Err("bad id".into()); }
     let dir = pending_dir(&app);
     let req = pending::read(&dir, &id);
+    // a card of a work machine: its permission tool waits for the answer file there
+    if req.is_none() {
+        if let Some(m) = state.machines.pending_owner(&id).and_then(|m| machines::Machines::find(&state.settings.lock().unwrap(), &m)) {
+            state.machines.client(&m).answer(&id, &decision)?;
+            state.machines.seen.lock().unwrap().values_mut().for_each(|s| s.pending.retain(|x| x["id"] != id.as_str()));
+            return Ok(());
+        }
+    }
     pending::answer(&dir, &id, &decision)?;
     if let Some(r) = req.filter(|r| r.relay) {
         pending::take(&dir, &id);
@@ -876,6 +1258,10 @@ fn agents(app: AppHandle, state: State<App>) -> Value {
 /// write the same session.
 #[tauri::command]
 fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
+    if let Some(b) = state.machines.bind_of(&project) {
+        let m = machines::Machines::find(&state.settings.lock().unwrap(), &b.machine).map(|m| m["name"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+        return Err(trc_v("err.machine_terminal", &m));
+    }
     if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
     need_vault(&state)?;
     let p = provider_of(&state, &project, None);
@@ -884,7 +1270,7 @@ fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Op
     let cmd = sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
         .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(&project))))
         .ok_or_else(|| trc_v("err.agent_terminal", p.name()))?;
-    iterm(&cmd)
+    in_terminal(&state, &cmd)
 }
 
 /// Background sessions of a provider (not started by the app): step into one in iTerm, or stop it.
@@ -895,7 +1281,7 @@ fn bg(app: AppHandle, state: State<App>, action: String, id: String, provider: O
     let eb = env_of(&app, &state, p);
     match action.as_str() {
         "stop" => p.stop_background(&eb.env(), &id),
-        "attach" => iterm(&p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
+        "attach" => in_terminal(&state, &p.terminal(&eb.env(), Terminal::Attach(&id)).ok_or_else(|| trc_v("err.agent_terminal", p.name()))?),
         _ => Err("unknown action".into()),
     }
 }
@@ -912,26 +1298,16 @@ async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, S
     }).await.map_err(|e| e.to_string())
 }
 
-/// Claude Code's slash commands and skills for the vault, from a Claude that only answers `initialize` (hooks off, no
-/// message, so no session): the composer completes before any conversation has started a process of its own.
+/// Provider-specific discovery in the active vault; only commands executable by Relay are returned.
 #[tauri::command]
-async fn claude_commands(app: AppHandle, state: State<'_, App>) -> Result<Value, String> {
-    let dir = need_vault(&state)?;
-    let eb = env_of(&app, &state, agents::get_or_first(Some("claude")));
+async fn agent_commands(app: AppHandle, state: State<'_, App>, provider: String) -> Result<Value, String> {
+    need_vault(&state)?;
+    let p = agents::PROVIDERS.iter().copied().find(|p| p.id() == provider).ok_or("unknown provider")?;
+    let eb = env_of(&app, &state, p);
     tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new(&eb.bin)
-            .args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--settings", r#"{"disableAllHooks":true}"#])
-            .current_dir(&dir).env("PATH", &eb.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null())
-            .spawn().map_err(|e| format!("claude start: {e}"))?;
-        // stdin closes after the request: Claude answers it and exits
-        writeln!(child.stdin.take().unwrap(), "{}", pipe_init(false)).map_err(|e| e.to_string())?;
-        let out = std::io::BufReader::new(child.stdout.take().unwrap());
-        let commands = out.lines().map_while(Result::ok).filter_map(|l| serde_json::from_str::<Value>(&l).ok())
-            .find(|ev| ev["type"] == "control_response").map(|ev| ev["response"]["response"]["commands"].clone());
-        child.kill().ok();
-        child.wait().ok();
-        commands.filter(Value::is_array).ok_or_else(|| "claude: no commands".to_string())
-    }).await.map_err(|e| e.to_string())?
+        let commands = p.commands(&eb.env());
+        if commands.is_array() { commands } else { json!([]) }
+    }).await.map_err(|e| e.to_string())
 }
 
 /// Token usage per switched-on provider and over all of them. `today` and `week` are the local starts of the
@@ -966,17 +1342,35 @@ async fn usage_limits(app: AppHandle, state: State<'_, App>) -> Result<Value, St
     let on: Vec<_> = agents::enabled(&state.settings.lock().unwrap()).into_iter().filter(|p| p.caps().limits).collect();
     let mut out = vec![];
     for p in on {
-        let cached = state.limits.lock().unwrap().get(p.id()).filter(|(at, _)| usage::now_ms() - at < 60_000).map(|(_, v)| v.clone());
-        let v = match cached {
-            Some(v) => v,
-            None => {
-                let eb = env_of(&app, &state, p);
-                let v = tauri::async_runtime::spawn_blocking(move || p.limits(&eb.env()).json()).await.unwrap_or_else(|_| json!({"ok": false, "reason": "unavailable"}));
-                state.limits.lock().unwrap().insert(p.id().to_string(), (usage::now_ms(), v.clone()));
-                v
-            }
+        // every account's, so auto-switch knows which are used up; the view shows the one a new conversation gets
+        let (list, names) = {
+            let s = state.settings.lock().unwrap();
+            let c = &s["agents"]["providers"][p.id()];
+            let names: HashMap<String, String> = c["accounts"].as_array().into_iter().flatten()
+                .filter_map(|a| Some((a["dir"].as_str()?.to_string(), a["name"].as_str()?.to_string()))).collect();
+            (agents::accounts(&s, p), names)
         };
-        out.push(json!({"provider": p.id(), "limits": v}));
+        let mut accounts = vec![];
+        for acct in &list {
+            let k = limit_key(p, acct);
+            let cached = state.limits.lock().unwrap().get(&k).filter(|(at, _)| usage::now_ms() - at < 60_000).map(|(_, v)| v.clone());
+            let v = match cached {
+                Some(v) => v,
+                None => {
+                    let mut eb = env_of(&app, &state, p);
+                    if p.caps().accounts { eb.opts["account"] = json!(acct); }
+                    let v = tauri::async_runtime::spawn_blocking(move || p.limits(&eb.env()).json()).await.unwrap_or_else(|_| json!({"ok": false, "reason": "unavailable"}));
+                    state.limits.lock().unwrap().insert(k.clone(), (usage::now_ms(), v.clone()));
+                    // limits that read again: a refused turn no longer counts, unless a window is still full
+                    if v["ok"] == true { state.spent.lock().unwrap().remove(&k); }
+                    v
+                }
+            };
+            accounts.push(json!({"dir": acct, "name": names.get(acct), "limits": v}));
+        }
+        let now = account_of(&state, p, "", "");
+        let shown = accounts.iter().find(|a| a["dir"] == now.as_str()).unwrap_or(&accounts[0])["limits"].clone();
+        out.push(json!({"provider": p.id(), "limits": shown, "accounts": if list.len() > 1 { json!(accounts) } else { json!(null) }}));
     }
     Ok(json!(out))
 }
@@ -1027,6 +1421,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     *state.settings.lock().unwrap() = s.clone();
+    anywhere::apply(&app); // the shortcut follows Settings › Voice
     set_cur_lang(lang);
     tray::refresh(&app); // another vault or language
     if relang { // the menu bar and the settings window title follow a new language right away
@@ -1094,6 +1489,24 @@ async fn integration_upload(provider: String, url: String, fields: serde_json::M
 async fn integration_thumb(provider: String, url: String) -> Result<String, String> {
     let p = providers::get(&provider)?;
     tauri::async_runtime::spawn_blocking(move || providers::thumb(p, &url)).await.map_err(|e| e.to_string())?
+}
+
+/// A picture at full size in Relay's viewer window, one window that each picture reuses. Only a URL the provider's
+/// `original` allows. The window loads the tracker's page as a browser would: its login once, then the picture. A
+/// remote page gets no IPC, and no capability names this window.
+#[tauri::command]
+fn open_viewer(app: AppHandle, provider: String, url: String, name: String) -> Result<(), String> {
+    let p = providers::get(&provider)?;
+    let url = providers::original(p, &url)?;
+    if let Some(w) = app.get_webview_window("viewer") {
+        w.navigate(url).map_err(|e| e.to_string())?;
+        w.set_title(&name).ok();
+        w.set_focus().ok();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, "viewer", tauri::WebviewUrl::External(url))
+        .title(name).inner_size(1000.0, 760.0).min_inner_size(320.0, 240.0).build().map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 /// A board provider's credentials from Claude Code's MCP config (board_core::from_claude): ~/.claude.json for the user
@@ -1227,9 +1640,9 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
-// ---------- Mail: Gmail over IMAP in mail/, the app password stays in the macOS keychain.
-// Listing and reading never change a flag (EXAMINE and BODY.PEEK). The one write is read/unread, on the user's
-// click. Nothing here sends, moves or deletes: a reply only becomes a draft, from a conversation.
+// ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
+// Listing and reading never change a flag (EXAMINE and BODY.PEEK). The writes are read/unread and, with the
+// experimental flag on, archive/trash, all on the user's click. Nothing here sends: a reply only becomes a draft.
 
 /// A configured account by email, "" for the one the sidebar shows (chosen in the settings, else the first).
 fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
@@ -1238,11 +1651,11 @@ fn mail_acct(state: &App, want: &str) -> Result<mail::Account, String> {
     mail::pick_account(&mail::accounts(&s["mail"]), want).ok_or_else(|| trc("err.no_mail_account"))
 }
 
-/// One page of 50 mails from the inbox, page 1 is the newest.
+/// One page of 50 mails from one account's inbox, page 1 is the newest. The window merges the accounts.
 #[tauri::command]
-async fn mail_list(state: State<'_, App>, page: u32) -> Result<Value, String> {
-    let a = mail_acct(&state, "")?;
-    state.mail.list(&a, page.clamp(1, 1000)).await
+async fn mail_list(state: State<'_, App>, account: String, page: u32) -> Result<Value, String> {
+    let a = mail_acct(&state, &account)?;
+    state.mail.list(&a, page.clamp(1, 1000), mail_experimental(&state)).await
 }
 
 /// One mail for the panel: its text, the sanitized HTML as a srcdoc document (or null), the attachments.
@@ -1259,18 +1672,39 @@ async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: boo
     state.mail.set_seen(&a, &id, seen).await
 }
 
-/// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
-/// the email, over stdin so it never shows in the process list), then a login test. A code Gmail refuses is
-/// removed again. Returns the account for the settings, the window adds and saves it.
+fn mail_experimental(state: &App) -> bool { state.settings.lock().unwrap()["mail"]["experimental"] == true }
+
+/// Archive (`trash` false) or move to Trash, the mails the user picked. Only with the experimental mail flag on.
 #[tauri::command]
-async fn mail_connect(state: State<'_, App>, email: String, password: String) -> Result<Value, String> {
+async fn mail_move(state: State<'_, App>, account: String, ids: Vec<String>, trash: bool) -> Result<(), String> {
+    if !mail_experimental(&state) { return Err("Archive and delete are experimental, switch them on in Settings › Mail".into()); }
+    let a = mail_acct(&state, &account)?;
+    state.mail.move_to(&a, &ids, trash).await
+}
+
+/// Settings › Mail the guided way: the app password goes straight into the keychain (service relay-mail, account
+/// the email, over stdin so it never shows in the process list), then a login test. A password the server refuses
+/// is removed again. No host is Gmail (app password), else any IMAP server. Returns the account for the settings,
+/// the window adds and saves it.
+#[tauri::command]
+async fn mail_connect(state: State<'_, App>, email: String, password: String, host: Option<String>, port: Option<u16>) -> Result<Value, String> {
     let email = email.trim().to_string();
-    let account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    let host = host.map(|h| h.trim().to_string()).unwrap_or_default();
+    let mut account = json!({"email": email, "keychain_service": "relay-mail", "keychain_account": email});
+    if !host.is_empty() { account["host"] = json!(host); account["port"] = json!(port.unwrap_or(993)); }
     let a = mail::accounts(&json!({"accounts": [account.clone()]})).pop().ok_or_else(|| trc("err.mail_account"))?;
-    let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
-    if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+    let pw = if host.is_empty() {
+        let pw: String = password.chars().filter(|c| !c.is_whitespace()).collect(); // Google shows it in groups of four
+        if !(8..=64).contains(&pw.len()) || !pw.chars().all(|c| c.is_ascii_alphanumeric()) { return Err(trc("err.mail_pw")); }
+        pw
+    } else {
+        if !(1..=256).contains(&password.chars().count()) || password.chars().any(char::is_control) { return Err(trc("err.mail_pw_any")); }
+        password
+    };
+    // hex (-X) so no password character can end the command line `security -i` reads
+    let hex: String = pw.bytes().map(|b| format!("{b:02x}")).collect();
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -w {pw}").map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s relay-mail -a {email} -X {hex}").map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     match state.mail.test(&a).await {
         Ok(n) => Ok(json!({"account": account, "result": n})),
@@ -1287,6 +1721,156 @@ async fn mail_test(state: State<'_, App>, account: Value) -> Result<String, Stri
     let a = mail::accounts(&json!({"accounts": [account]})).pop().ok_or_else(|| trc("err.mail_account"))?;
     state.mail.test(&a).await
 }
+
+/// Settings › Calendar: save a calendar's secret iCal address in the keychain and try it (calendar::connect).
+#[tauri::command]
+async fn calendar_connect(email: String, url: String) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || calendar::connect(&email, &url)).await.map_err(|e| e.to_string())?
+}
+
+/// The meetings of the next hours, for Waiting: { meetings, errors }.
+#[tauri::command]
+async fn calendar_meetings(state: State<'_, App>) -> Result<Value, String> {
+    let s = state.settings.lock().unwrap().clone();
+    tauri::async_runtime::spawn_blocking(move || calendar::upcoming(&s)).await.map_err(|e| e.to_string())
+}
+
+// ---------- Work machines (machines.rs, packages/relay-server): pairing, status, the mirror.
+
+/// Save settings changed here (not by the settings window), and tell both windows.
+fn save_settings(app: &AppHandle, s: &Value) -> Result<(), String> {
+    fs::write(data_dir(app).join("settings.json"), serde_json::to_string_pretty(s).unwrap()).map_err(|e| e.to_string())?;
+    app.emit("settings-changed", s).ok();
+    Ok(())
+}
+/// Pair with the line `relay-server pair` printed. The machine is saved under the name given, else its host name.
+#[tauri::command]
+async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name: String) -> Result<Value, String> {
+    let (id, me) = (state.machines.id.clone(), sys_name());
+    let (l, info) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::pair(&line, &id, &me)).await.map_err(|e| e.to_string())??;
+    let name: String = if name.trim().is_empty() { info.host.clone() } else { name.trim().chars().take(60).collect() };
+    let m = json!({"id": &l.fp[..12], "name": name, "host": l.host, "port": l.port, "fp": l.fp});
+    let mut s = state.settings.lock().unwrap();
+    let list = s["machines"].as_array_mut().unwrap();
+    list.retain(|x| x["fp"] != m["fp"]);
+    list.push(m.clone());
+    save_settings(&app, &s)?;
+    Ok(m)
+}
+/// This Mac's name, for the server's list of paired devices.
+fn sys_name() -> String {
+    Command::new("/usr/sbin/scutil").args(["--get", "ComputerName"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|n| !n.is_empty()).unwrap_or_else(|| "Relay".into())
+}
+/// Whether a machine answers, with what it says about itself.
+#[tauri::command]
+async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, String> {
+    let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    let c = state.machines.client(&m);
+    let r = tauri::async_runtime::spawn_blocking(move || c.info_any()).await.map_err(|e| e.to_string())?;
+    let proto = relay_remote::proto::PROTO;
+    Ok(match r {
+        Ok(i) if i.proto == proto => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os, "update": i.update}),
+        // it answers but speaks another protocol: the page says which side to update, with the commands
+        Ok(i) => json!({"ok": false, "outdated": if i.proto < proto { "server" } else { "app" }, "version": i.version, "update": i.update,
+            "error": format!("relay-server {} speaks protocol {}, this Relay {proto}", i.version, i.proto)}),
+        Err(e) => json!({"ok": false, "error": e}),
+    })
+}
+/// Update a machine's relay-server to this Relay's version from here: the Linux binary for its CPU from this version's
+/// GitHub release (with gh, the repo is private), sent over the connection. The server checks it and goes on in it;
+/// this waits until it answers with the new version.
+#[tauri::command]
+async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, String> {
+    if cfg!(debug_assertions) { return Err(trc("err.update_dev")); }
+    let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    let c = state.machines.client(&m);
+    let gh = in_path(&state, "gh").ok_or_else(|| trc("err.no_gh"))?;
+    let path = state.path.clone();
+    let version = env!("CARGO_PKG_VERSION");
+    tauri::async_runtime::spawn_blocking(move || {
+        let info = c.info_any()?;
+        if !info.update || info.os != "linux" { return Err(trc("err.update_old")); }
+        let dir = std::env::temp_dir().join(format!("relay-update-{}", std::process::id()));
+        let asset = format!("relay-server-linux-{}", info.arch);
+        let out = std::process::Command::new(&gh).env("PATH", &path)
+            .args(["release", "download", &format!("v{version}"), "-R", "Relay-inc/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
+            .output().map_err(|e| e.to_string())?;
+        let bin = fs::read(dir.join(&asset));
+        fs::remove_dir_all(&dir).ok();
+        let bin = match bin {
+            Ok(b) if out.status.success() => b,
+            _ => return Err(format!("{}: {}", trc_v("err.update_download", version), String::from_utf8_lossy(&out.stderr).trim())),
+        };
+        c.update(version, &bin)?;
+        for _ in 0..30 {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if c.info_any().is_ok_and(|i| i.version == version) { return Ok(json!({"version": version})); }
+        }
+        Err(trc("err.update_back"))
+    }).await.map_err(|e| e.to_string())?
+}
+/// For setting up a machine: this Relay's version, the relay-server image of the same version speaks its protocol.
+#[tauri::command]
+fn server_setup() -> Value {
+    // a development build sits between two releases: no image has its version, the newest one is the closest
+    let dev = cfg!(debug_assertions);
+    json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/relay-inc/relay-server", "dev": dev})
+}
+/// This Mac as a work machine (host.rs): whether it runs, its RAM disk, the devices paired with it.
+#[tauri::command]
+async fn host_status() -> Value { tauri::async_runtime::spawn_blocking(host::status).await.unwrap_or_default() }
+/// Turn this Mac as a work machine on or off; its status after.
+#[tauri::command]
+async fn host_set(on: bool) -> Result<Value, String> { tauri::async_runtime::spawn_blocking(move || host::set(on)).await.map_err(|e| e.to_string())? }
+/// A one-time line to pair another Mac's Relay with this one's server.
+#[tauri::command]
+async fn host_pair() -> Result<String, String> { tauri::async_runtime::spawn_blocking(host::pair).await.map_err(|e| e.to_string())? }
+/// Forget a machine here. Its conversations there stop (nothing would ever reach them again) and lose their bind; on
+/// the machine `relay-server revoke` unpairs this Mac.
+#[tauri::command]
+fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
+    for k in state.machines.keys_on(&id) { if let Some(mut p) = state.procs.lock().unwrap().remove(&k) { p.child.kill().ok(); } }
+    let mut s = state.settings.lock().unwrap();
+    // its mirror there goes too, when it still answers
+    if let Some(m) = machines::Machines::find(&s, &id) { state.machines.client(&m).wipe().ok(); }
+    s["machines"].as_array_mut().unwrap().retain(|m| m["id"] != id.as_str());
+    if s["machines_default"] == id.as_str() { s["machines_default"] = json!(""); }
+    state.mirrors.forget(&data_dir(&app), &id);
+    state.machines.forget(&id);
+    save_settings(&app, &s)
+}
+/// The vault folders that stay on this Mac, out of a machine's mirror.
+#[tauri::command]
+fn set_machine_mirror(app: AppHandle, state: State<App>, id: String, exclude: Vec<String>) -> Result<(), String> {
+    let exclude: Vec<String> = exclude.into_iter().map(|e| e.trim().trim_matches('/').to_string()).filter(|e| !e.is_empty()).collect();
+    if let Some(e) = exclude.iter().find(|e| !relay_remote::sync::safe_rel(e)) { return Err(trc_v("err.machine_folder", e)); }
+    let mut s = state.settings.lock().unwrap();
+    let m = s["machines"].as_array_mut().unwrap().iter_mut().find(|m| m["id"] == id.as_str()).ok_or_else(|| trc("err.no_machine"))?;
+    m["mirror"] = json!({"exclude": exclude});
+    save_settings(&app, &s)
+}
+/// What the mirror of a machine did lately: {at, pushed, pulled, conflicts, skipped, errors, locked, in_ram}, or null.
+#[tauri::command]
+fn mirror_status(state: State<App>, id: String) -> Value { json!(state.mirrors.status.lock().unwrap().get(&id)) }
+/// Where the running round of a machine's mirror is, null between rounds.
+#[tauri::command]
+fn mirror_progress(state: State<App>, id: String) -> Value { json!(state.mirrors.progress.lock().unwrap().get(&id)) }
+/// The machines for the composer's pick, from the poller (no network): [{id, name, online, default}], `default` the one
+/// a conversation runs on without a pick.
+#[tauri::command]
+fn machines_list(state: State<App>) -> Value { state.machines.status_list(&state.settings.lock().unwrap()) }
+/// Where new conversations run when nothing is picked: "" this Mac, or a machine's id (Settings › Machines).
+#[tauri::command]
+fn set_machines_default(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
+    let mut s = state.settings.lock().unwrap();
+    if !id.is_empty() && machines::Machines::find(&s, &id).is_none() { return Err(trc("err.no_machine")); }
+    s["machines_default"] = json!(id);
+    save_settings(&app, &s)
+}
+/// Conversation key -> machine name and folder, for the conversations that run on one.
+#[tauri::command]
+fn chat_machines(state: State<App>) -> Value { state.machines.chat_machines(&state.settings.lock().unwrap()) }
 
 /// Native folder picker (blocking, so async keeps it off the main thread). None when cancelled.
 #[tauri::command]
@@ -1329,7 +1913,7 @@ fn open_settings(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("settings") { w.set_focus().ok(); return; }
     let title = tr(ui_lang_of(&app.state::<App>().settings.lock().unwrap()), "settings.title");
     tauri::WebviewWindowBuilder::new(app, "settings", tauri::WebviewUrl::App("settings.html".into()))
-        .title(title).inner_size(860.0, 620.0).min_inner_size(720.0, 480.0)
+        .title(title).inner_size(900.0, 660.0).min_inner_size(720.0, 480.0)
         .minimizable(false).maximizable(false).build().ok();
 }
 /// The settings row at the bottom of the sidebar: the same window as Relay › Settings….
@@ -1344,6 +1928,9 @@ fn nav_internal(url: &tauri::Url) -> bool {
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
+/// `relay --cli …`, see actions.rs.
+pub fn cli(args: &[String]) -> i32 { actions::cli(args) }
+
 pub fn run() {
     tauri::Builder::default()
         // settings live in their own small window, the Mac way: open it, or bring it forward when it is open
@@ -1365,6 +1952,9 @@ pub fn run() {
         }).build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        // relay:// links from Raycast or a browser: the UI handles them (src/app/deep-links.ts), the window comes forward here
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_window_state::Builder::default()
             .with_state_flags(tauri_plugin_window_state::StateFlags::SIZE | tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::MAXIMIZED)
             .build())
@@ -1379,18 +1969,56 @@ pub fn run() {
             set_cur_lang(ui_lang_of(&settings));
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), mail: mail::Mail::new() });
+            let machines = machines::Machines::load(&data_dir(app.handle()))?;
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
+            app.manage(pty::Ptys::default());
+            app.manage(dictation::Dictation::default());
+            app.manage(meeting::MeetingRec::default());
+            anywhere::apply(app.handle());
             reattach(app.handle());
+            std::thread::spawn(host::refresh); // a new Relay restarts this Mac's relay-server on its own binary
+            orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
+            actions::start(app.handle());
+            awake::start(app.handle());
+            retry::start(app.handle());
+            #[cfg(feature = "selftest")]
+            selftest::start(app.handle());
+            // the work machines: their conversations back, then their cards every second (only when there are machines)
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                reattach_remote(&h);
+                loop {
+                    let s = h.state::<App>().settings.lock().unwrap().clone();
+                    if s["machines"].as_array().is_some_and(|m| !m.is_empty()) { h.state::<App>().machines.poll(&s); }
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                }
+            });
+            // the mirrors: a round every 5 s for each machine that has one and answers, on a thread of their own so a
+            // first big copy never holds up the cards
+            let h = app.handle().clone();
+            std::thread::spawn(move || loop {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let st = h.state::<App>();
+                let s = st.settings.lock().unwrap().clone();
+                let vault = s["vault"].as_str().unwrap_or("").to_string();
+                for m in s["machines"].as_array().into_iter().flatten() {
+                    let id = m["id"].as_str().unwrap_or("");
+                    let Some(info) = st.machines.seen.lock().unwrap().get(id).filter(|x| x.error.is_none()).and_then(|x| x.info.clone()) else { continue };
+                    st.mirrors.round(&data_dir(&h), m, &st.machines.client(m), &info, &vault);
+                }
+            });
             tray::init(app.handle())?;
+            let handle = app.handle().clone();
+            app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, open_settings_window, usage_tokens, usage_limits, agents_status, claude_commands, chat_providers, send, ai_title, stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_test, mail_connect, notify::notify])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
         .run(|app, e| match e {
             tauri::RunEvent::Reopen { .. } => tray::show_main(app),
-            tauri::RunEvent::Exit => quit(app),
+            tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); }
             _ => {}
         });
 }
@@ -1465,22 +2093,10 @@ mod github_tests {
 #[cfg(test)]
 mod mail_tests {
     #[test]
-    fn sessions_can_never_send_mail() {
-        // a session with mail text loses the user's allow rules (deny beats allow) and goes to default mode
-        let user = serde_json::json!({"permissions": {"allow": ["Bash(git push *)", "Bash(pandoc *)", "mcp__relay-mail__read", "mcp__pencil"]}});
-        let [rules, mode] = super::taint(&[user.clone(), serde_json::json!({"hooks": {}})], true);
-        let deny: Vec<&str> = rules["request"]["settings"]["permissions"]["deny"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-        for t in ["Bash(git push *)", "Bash(pandoc *)", "mcp__pencil", "Bash(git push*)", "Bash(gh api*)", "mcp__claude_ai_Google_Calendar__create_event",
-                  "mcp__claude_ai_Gmail__*", "Bash(himalaya*)", "RemoteTrigger", "SendMessage", "Skill(skill:initcraftcms)"] { assert!(deny.contains(&t), "{t}"); }
-        assert!(!deny.contains(&"Bash"), "Bash stays when every settings file parsed");
-        let [unread, _] = super::taint(&[user], false);
-        assert!(unread["request"]["settings"]["permissions"]["deny"].as_array().unwrap().contains(&serde_json::json!("Bash")), "an unreadable settings file costs Bash");
-        assert!(!deny.iter().any(|d| d.starts_with("mcp__relay-mail")), "the mail tools themselves stay");
-        assert_eq!(rules["request"]["settings"]["permissions"]["allow"], serde_json::json!(super::MAIL_TOOLS), "the mail tools need no card");
-        assert_eq!((rules["request"]["subtype"].as_str(), mode["request"]["subtype"].as_str(), mode["request"]["mode"].as_str()),
-                   (Some("apply_flag_settings"), Some("set_permission_mode"), Some("default")));
-        assert_eq!(super::pipe_init(true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
-        assert_eq!(super::pipe_init(false)["request"]["sdkMcpServers"], serde_json::json!([]));
+    fn pipe_init_names_the_apps_servers() {
+        assert_eq!(super::pipe_init(true, false)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
+        assert_eq!(super::pipe_init(false, false)["request"]["sdkMcpServers"], serde_json::json!([]));
+        assert_eq!(super::pipe_init(true, true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail", "relay-orch"]));
     }
     #[test]
     fn only_the_apps_own_pages_navigate() {
@@ -1503,5 +2119,19 @@ mod mail_tests {
         assert!(!ok((0..6).map(|i| a(&format!("u{i}@y.be"))).collect(), ""));
         assert!(!ok(vec![a("x@y.be"), a("X@Y.be")], ""), "the same email twice");
         assert!(!ok(vec![a("x@y.be")], "other@y.be"), "a sidebar account that is not configured");
+    }
+}
+
+#[cfg(test)]
+mod terminal_tests {
+    // "auto" takes the first installed terminal in TERMINALS order, an explicit choice stays even when not installed
+    #[test]
+    fn terminal_choice() {
+        use super::terminal_of;
+        assert_eq!(terminal_of("auto", |a| a == "WezTerm" || a == "Terminal"), "wezterm");
+        assert_eq!(terminal_of("auto", |a| a == "iTerm" || a == "WezTerm"), "iterm");
+        assert_eq!(terminal_of("auto", |_| false), "terminal");
+        assert_eq!(terminal_of("iterm", |_| false), "iterm");
+        assert_eq!(terminal_of("bogus", |_| true), "terminal");
     }
 }

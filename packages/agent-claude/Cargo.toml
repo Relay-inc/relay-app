@@ -2,8 +2,9 @@
 name = "agent-claude"
 version = "0.1.0"
 edition = "2021"
-description = "Claude Code as an agent provider: spawn args, stream-json, perm_server.py, transcripts, subagents, usage"
+description = "Claude Code as an agent provider: spawn args, stream-json, the permission server, transcripts, subagents, usage"
 
 [dependencies]
 agent-core.workspace = true
 serde_json.workspace = true
+sha2 = "0.10"

@@ -2,8 +2,10 @@
 name = "agent-opencode"
 version = "0.1.0"
 edition = "2021"
-description = "OpenCode as an agent provider: opencode serve over bridge.py, permissions and questions, its SQLite storage, usage and cost"
+description = "OpenCode as an agent provider: opencode serve over its in-process bridge, permissions and questions, its SQLite storage, usage and cost"
 
 [dependencies]
 agent-core.workspace = true
 serde_json.workspace = true
+libc = "0.2"
+ureq = { version = "3", default-features = false }

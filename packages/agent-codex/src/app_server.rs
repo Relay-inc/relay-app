@@ -1,5 +1,5 @@
 //! `codex app-server` (JSON-RPC 2.0 over stdio, v2 protocol of codex-cli 0.159) as the contract's events, the turns
-//! the app sends, and the answers to its approval requests. bridge.py does the handshake and fills in the thread id.
+//! the app sends, and the answers to its approval requests. bridge.rs does the handshake and fills in the thread id.
 
 use agent_core::{pending::Request, Event, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
@@ -9,7 +9,7 @@ use std::sync::Mutex;
 /// The newest rate limits an app-server pushed (`account/rateLimits/updated`): epoch ms and the snapshot.
 pub static LIVE_LIMITS: Mutex<Option<(i64, Value)>> = Mutex::new(None);
 
-/// A turn as `turn/start`; bridge.py fills in `threadId` (and the model and effort it was started with).
+/// A turn as `turn/start`; bridge.rs fills in `threadId` (and the model and effort it was started with).
 /// Images go inline as data URLs.
 pub fn turn_start(turn: &Turn) -> Value {
     let mut input: Vec<Value> = vec![];
@@ -101,20 +101,23 @@ impl State {
         let mut out = vec![];
         let p = &m["params"];
         let Some(method) = m["method"].as_str() else {
-            // a response: the thread bridge.py started or resumed, or an error (a turn that could not start)
+            // a response: the thread bridge.rs started or resumed, or an error (a turn that could not start)
             if let Some(e) = m.get("error") {
                 let text = e["message"].as_str().unwrap_or("codex error").to_string();
                 out.push(Event::Error { text: text.clone() });
                 out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None });
             }
             self.session(m["result"]["thread"]["id"].as_str(), &mut out);
+            if let Some(model) = m["result"]["model"].as_str() {
+                out.push(Event::Resolved { model: model.into(), effort: m["result"]["reasoningEffort"].as_str().map(Into::into) });
+            }
             return out;
         };
         let ask = m.get("id").filter(|_| m.get("params").is_some()).cloned();
         match method {
             "thread/started" => self.session(p["thread"]["id"].as_str(), &mut out),
             // a resumed thread reports its old total first: the turn's tokens are what it adds
-            "turn/started" => self.base = self.total.clone(),
+            "turn/started" => { self.base = self.total.clone(); out.push(Event::Working); },
             "item/agentMessage/delta" => out.extend(self.piece(p["itemId"].as_str().unwrap_or(""), p["delta"].as_str().unwrap_or(""), false)),
             "item/reasoning/summaryTextDelta" | "item/reasoning/textDelta" =>
                 out.extend(self.piece(p["itemId"].as_str().unwrap_or(""), p["delta"].as_str().unwrap_or(""), true)),
@@ -127,6 +130,8 @@ impl State {
                 let it = &p["item"];
                 let id = it["id"].as_str().unwrap_or("");
                 match it["type"].as_str().unwrap_or("") {
+                    "contextCompaction" => out.push(Event::Text { text: "Conversation context compacted.".into(), delta: false }),
+                    "exitedReviewMode" => if let Some(text) = it["review"].as_str() { out.push(Event::Text { text: text.into(), delta: false }); },
                     // not streamed (or only in part): the whole message
                     "agentMessage" if !self.streamed.contains_key(id) => out.extend(self.piece(id, it["text"].as_str().unwrap_or(""), false)),
                     "reasoning" if !self.streamed.contains_key(id) => {
@@ -194,6 +199,8 @@ mod tests {
         let ev: Vec<Event> = LIVE.lines().flat_map(|l| st.parse(l)).collect();
         let mut it = ev.iter();
         assert_eq!(it.next(), Some(&Event::Session { id: "019a0000-aaaa-7000-8000-000000000001".into() })); // once, not again for thread/started
+        assert_eq!(it.next(), Some(&Event::Resolved { model: "gpt-6.1-sol".into(), effort: Some("medium".into()) }));
+        assert_eq!(it.next(), Some(&Event::Working));
         assert_eq!(it.next(), Some(&Event::Thinking { text: "Looking at".into(), delta: false }));
         assert_eq!(it.next(), Some(&Event::Thinking { text: " the notes".into(), delta: true }));
         assert!(matches!(it.next(), Some(Event::ToolCall { id, name, input }) if id == "call_1" && name == "Bash" && input["command"] == "ls -la"));
@@ -214,6 +221,7 @@ mod tests {
         let Some(Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(5100) }) = it.next() else { panic!() };
         assert_eq!((u.input, u.cache_read, u.output), (800, 1200, 150));
         // a second turn: only what it added, a message that came whole, and a failure
+        assert_eq!(it.next(), Some(&Event::Working));
         assert_eq!(it.next(), Some(&Event::Text { text: "Klaar.".into(), delta: false }));
         let Some(Event::TurnEnd { ok: false, error: Some(e), usage: Some(u), .. }) = it.next() else { panic!() };
         assert_eq!((e.as_str(), u.input, u.output), ("stream disconnected", 100, 10));

@@ -1,0 +1,27 @@
+/* Links in the ticket window's description and comments, like the app's other links (md-chat): md-defaults.css
+   gives md-panel links the browser's link blue, so this needs the ticket root in front to beat it. */
+.ticket .md-panel a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: var(--secondary);
+  text-underline-offset: 2px;
+}
+
+/* The ticket window and the New task dialog float over the app window: its shadow, a hairline edge in dark mode */
+.ticket-window {
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.2),
+    0 24px 64px rgba(0, 0, 0, 0.18);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ticket-window {
+    box-shadow:
+      0 0 0 0.5px rgba(255, 255, 255, 0.16),
+      0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme="dark"] .ticket-window {
+  box-shadow:
+    0 0 0 0.5px rgba(255, 255, 255, 0.16),
+    0 24px 64px rgba(0, 0, 0, 0.5);
+}
