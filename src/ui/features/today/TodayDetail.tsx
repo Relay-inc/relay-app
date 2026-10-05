@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Status } from "../../../domain/today/plan";
 import {
   actionsOf,
@@ -19,6 +19,8 @@ import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { PendingRequest } from "../conversations/PendingRequest";
+import { MailDetail } from "../mail/MailDetail";
+import { openMail } from "../../../application/navigation/panel";
 import { CI } from "../pull-requests/prState";
 import { Caps, KIND_ICON, Kbd, StatusDot, TONE_TEXT, minutes } from "./parts";
 
@@ -52,6 +54,11 @@ export function TodayDetail({ model }: { model: TodayModel }) {
   const pinned = useTodayStore(s => (entry ? s.pins[entry.id] : undefined));
   const recording = useRecordingStore(s => s.phase !== "idle");
   const chatText = useDerived(() => (entry?.subject.type === "chat" ? lastAi(entry.subject.key) : ""));
+  // a mail is read in place: its body loads when it is opened, as in Mail
+  const mail = entry?.subject.type === "mail" ? entry.subject.key : "";
+  useEffect(() => {
+    if (mail) openMail(mail);
+  }, [mail]);
 
   if (!entry) {
     const next = model.meetings.find(meeting => Date.parse(meeting.start) > model.now);
@@ -107,11 +114,13 @@ export function TodayDetail({ model }: { model: TodayModel }) {
           <span className="flex-1 min-w-0 truncate">{entry.where}</span>
           <span className={`font-semibold whitespace-nowrap ${TONE_TEXT[entry.tone]}`}>{entry.why}</span>
         </div>
-        <div className="text-[22px] leading-tight font-semibold tracking-tight text-pretty select-text">
-          {entry.title}
-        </div>
+        {mail ? null : (
+          <div className="text-[22px] leading-tight font-semibold tracking-tight text-pretty select-text">
+            {entry.title}
+          </div>
+        )}
         {entry.kind === "ask" ? null : <StatusPicker key={entry.id} entry={entry} />}
-        <ItemBody entry={entry} chatText={chatText} recording={recording} />
+        {mail ? null : <ItemBody entry={entry} chatText={chatText} recording={recording} />}
         <div className="flex flex-wrap items-center gap-2">
           <button
             className={`${button} px-2.5 text-secondary hover:bg-fill-2 hover:text-label`}
@@ -201,6 +210,9 @@ export function TodayDetail({ model }: { model: TodayModel }) {
               </button>
             ))}
           </div>
+        ) : null}
+        {mail ? (
+          <MailDetail mailKey={mail} readOnReply className="pt-4 border-t border-separator select-text cursor-auto" />
         ) : null}
       </div>
     </div>

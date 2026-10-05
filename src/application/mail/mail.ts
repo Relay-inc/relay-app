@@ -346,7 +346,7 @@ export async function openMailSetup() {
 /** A conversation about the open mail, under its project. The agent reads the mail itself through the relay-mail
  *  tools, so the whole thread and its attachments are there. "talk" waits for the user's question, "draft" asks for a
  *  reply as a draft right away. Sending stays with the user (decided 29/9). */
-export async function mailChat(key: string, how: "talk" | "draft") {
+export async function mailChat(key: string, how: "talk" | "draft" | "draftAll") {
   const target = ms().list?.find(x => mailKey(x) === key);
   if (!target) return;
   const reference = mailReference(target);
@@ -358,5 +358,5 @@ export async function mailChat(key: string, how: "talk" | "draft") {
     ...(how === "talk" ? { mail: reference } : {}),
   });
   await select(chatKey);
-  if (how === "draft") sendMsg(draftPrompt(reference));
+  if (how !== "talk") sendMsg(draftPrompt(reference, how === "draftAll"));
 }

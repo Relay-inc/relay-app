@@ -540,16 +540,18 @@ export function actionsOf(entry: Entry): { primary?: Action; secondary?: Action;
             extra: [{ label: t("today.onGithub"), run: () => backend.openUrl(s.pr.url) }],
           };
     case "mail":
+      // a reply is a draft Claude writes (nothing is sent from the app); replying, archiving or trashing takes the
+      // mail off Today: a reply marks it read first
       return {
-        primary: {
-          label: t("today.draftReply"),
-          run: after(
-            () => mailChat(s.key, "draft"),
-            () => mailSeen(s.key, true),
-          ),
-        },
-        secondary: { label: t("today.markRead"), run: () => mailSeen(s.key, true) },
-        extra: [{ label: t("today.talkMail"), run: () => mailChat(s.key, "talk") }],
+        primary: { label: t("today.reply"), run: () => replyToMail(s.key, "draft") },
+        secondary: mailExperimental()
+          ? { label: t("mail.archive"), run: () => mailMove([s.key], false) }
+          : { label: t("today.markRead"), run: () => mailSeen(s.key, true) },
+        extra: [
+          { label: t("today.replyAll"), run: () => replyToMail(s.key, "draftAll") },
+          ...(mailExperimental() ? [{ label: t("mail.trash"), run: () => trashMail(s.key) }] : []),
+          { label: t("today.talkMail"), run: () => mailChat(s.key, "talk") },
+        ],
       };
     case "chat":
       return {
@@ -559,6 +561,14 @@ export function actionsOf(entry: Entry): { primary?: Action; secondary?: Action;
       };
   }
 }
+
+/** A reply to a mail under Today: marked read (it leaves the queue), then Claude drafts it; nothing is sent. */
+export async function replyToMail(key: string, how: "draft" | "draftAll") {
+  await mailSeen(key, true);
+  await mailChat(key, how);
+}
+/** Trash a mail under Today (with the experimental mail flag, as in Mail). */
+export const trashMail = (key: string) => mailMove([key], true);
 
 const trackerOf = (item: TodayCard) => provider(item.provider)!;
 /** The card in the ticket window, with the board it came from. */

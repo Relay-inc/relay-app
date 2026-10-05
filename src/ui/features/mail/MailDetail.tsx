@@ -45,7 +45,15 @@ const formatAddresses = (addresses: Mail["from"]) =>
 /** One mail next to the Mail list: who, when, the mail, and the ways into a conversation. Headers show at once, the body
  *  loads. Opening never marks it read, only the read button does. HTML goes in a frame sandboxed without any allowance
  *  (no scripts, no same origin; the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
-export function MailDetail({ mailKey: key, className }: { mailKey: string; className?: string }) {
+export function MailDetail({
+  mailKey: key,
+  className,
+  readOnReply = false,
+}: {
+  mailKey: string;
+  className?: string;
+  readOnReply?: boolean; // Today: a reply marks the mail read, so it leaves the day's queue
+}) {
   const { t, locale } = useT();
   const item = useMailStore(s => s.list?.find(candidate => mailKey(candidate) === key));
   const textView = useMailStore(s => s.textView.has(key));
@@ -54,6 +62,10 @@ export function MailDetail({ mailKey: key, className }: { mailKey: string; class
   const err = useNavigationStore(s => s.panel.err);
   const experimental = useSettingsStore(s => mailExperimental(s.settings));
 
+  const reply = async (how: "draft" | "draftAll") => {
+    if (readOnReply && item && unread(item)) await mailSeen(key, true);
+    await mailChat(key, how);
+  };
   // two groups: reading this mail on the left, the ways into a conversation on the right
   const isUnread = item ? unread(item) : false;
   const bar = (
@@ -96,9 +108,16 @@ export function MailDetail({ mailKey: key, className }: { mailKey: string; class
           {iconButton(
             "reply",
             t("mail.draft"),
-            () => mailChat(key, "draft"),
+            () => reply("draft"),
             "btn btn-icon",
             `${t("mail.draft")}: ${t("mail.draftTitle")}`,
+          )}
+          {iconButton(
+            "replyAll",
+            t("mail.draftAll"),
+            () => reply("draftAll"),
+            "btn btn-icon",
+            `${t("mail.draftAll")}: ${t("mail.draftTitle")}`,
           )}
           {iconButton(
             "talk",

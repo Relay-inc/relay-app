@@ -10,8 +10,10 @@ import {
   noteSeen,
   openTodayCard,
   putOff,
+  replyToMail,
   selectEntry,
   setStatus,
+  trashMail,
   todayModel,
 } from "../../../application/today/today";
 import { useDerived } from "../../hooks/useDerived";
@@ -73,6 +75,12 @@ export function TodayView({ className = "" }: { className?: string }) {
       else if (e.key === "ArrowUp" || e.key === "k") step(-1);
       else if (!entry) return;
       else if (e.key === "l" || e.key === "L") putOff(entry.id);
+      // a mail: R replies, A replies to all (both a draft by Claude), # trashes; Backspace archives
+      else if (entry.subject.type === "mail" && (e.key === "r" || e.key === "R"))
+        replyToMail(entry.subject.key, "draft");
+      else if (entry.subject.type === "mail" && (e.key === "a" || e.key === "A"))
+        replyToMail(entry.subject.key, "draftAll");
+      else if (entry.subject.type === "mail" && e.key === "#") trashMail(entry.subject.key);
       else if ((e.key === "d" || e.key === "D") && entry.kind !== "ask") setStatus(entry, "done").catch(console.error);
       else if ((e.key === "p" || e.key === "P") && entry.kind !== "ask")
         setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
