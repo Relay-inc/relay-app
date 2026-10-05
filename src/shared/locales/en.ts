@@ -296,6 +296,7 @@ const en = {
   "today.alsoIn": "Also in {project}",
   "today.progress": "{cleared} of {total} cleared · {planned} planned today",
   "today.boardsDown": "{n} board(s) not loaded",
+  "today.backToToday": "Back to Today",
   "today.work.gone.review": "This pull request no longer waits on you (merged, closed or reviewed)",
   "today.work.gone.mail": "This mail is no longer on Today (read or archived elsewhere)",
   "today.work.discard": "Discard",

@@ -11,7 +11,7 @@ import { useMailStore } from "../mail/store";
 import { mailProject } from "../mail/mail";
 import { useDetailsStore } from "./details";
 import { closeCompose } from "./mail";
-import { discardReview, useReviewStore, openReview } from "./review";
+import { discardReview, useReviewStore } from "./review";
 import { entries, focusEntry, openMeeting } from "./today";
 import { useTodayStore } from "./store";
 
@@ -53,7 +53,7 @@ export const workOf = (project: string | null, now = Date.now()) => currentWork(
 /** Whether the row is what Today shows now. */
 export function isOpenWork(work: Work) {
   if (useNavigationStore.getState().selected !== WAIT) return false;
-  if (work.kind === "review") return useReviewStore.getState().work === work.id;
+  if (work.kind === "review") return useNavigationStore.getState().selected === work.key;
   return useTodayStore.getState().selected === work.item;
 }
 
@@ -62,6 +62,8 @@ export function isOpenWork(work: Work) {
 export async function openWork(key: string) {
   const target = opened(key);
   if (target.kind !== "work") return;
+  // a review is a view of its own: its screen loads itself, and says so when the PR left Today
+  if (target.work === "review") return void (await select(key));
   await select(WAIT);
   if (target.work === "meeting") {
     openMeeting(target.id);
@@ -71,7 +73,6 @@ export async function openWork(key: string) {
   const item = entries().find(entry => entry.id === id);
   if (!item) return toast(t(`today.work.gone.${target.work}`), () => closeWork(key), t("today.work.discard"));
   focusEntry(item.id);
-  if (target.work === "review" && item.subject.type === "pr") openReview(item.id, item.subject.pr);
 }
 
 /** A work row closed: the review or the draft is discarded (a meeting cannot be closed). */

@@ -4,8 +4,6 @@ import { newBoard } from "../../../domain/board/rules";
 import { useTodayStore } from "../../../application/today/store";
 import { setPop, useDetailsStore } from "../../../application/today/details";
 import { closeCompose } from "../../../application/today/mail";
-import { closeReview, useReviewStore } from "../../../application/today/review";
-import { ReviewScreen } from "./ReviewScreen";
 import { ContextFilter } from "./ContextFilter";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { cardOf } from "../../../application/navigation/panel";
@@ -49,7 +47,6 @@ export function TodayView({ className = "" }: { className?: string }) {
   const cards = useTodayStore(s => s.cards);
   const errors = useTodayStore(s => s.errors);
   const toast = useNavigationStore(s => s.toast);
-  const work = useReviewStore(s => s.work);
 
   // what is in the queue now counts as cleared once it leaves it
   const seen = model.queue.map(({ id, title, kind, project }) => ({ id, title, kind, project }));
@@ -71,14 +68,6 @@ export function TodayView({ className = "" }: { className?: string }) {
       if (selected !== "__wait" || panel.modal || zoom || quickAsk || e.defaultPrevented || e.isComposing) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || inControl(e)) return;
       const details = useDetailsStore.getState();
-      // the review screen: Esc goes back to Today, its own fields take the rest
-      if (useReviewStore.getState().work) {
-        if (e.key === "Escape" && !useReviewStore.getState().reviews[useReviewStore.getState().work]?.confirm) {
-          e.preventDefault();
-          closeReview();
-        }
-        return;
-      }
       if (e.key === "Escape" && (details.pop || details.compose)) {
         e.preventDefault();
         return details.pop ? setPop("") : closeCompose();
@@ -143,41 +132,35 @@ export function TodayView({ className = "" }: { className?: string }) {
   };
 
   const date = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(clock);
-  const reviewing = model.selected && work === model.selected.id ? model.selected : null;
   return (
     <div className={`${className} relative flex flex-col min-h-0`}>
-      {reviewing ? (
-        <ReviewScreen model={model} entry={reviewing} />
-      ) : (
-        <>
-          <div className="flex-none h-10 flex items-center gap-3 px-5 border-b border-separator">
-            <span className="text-secondary capitalize whitespace-nowrap">{date}</span>
-            <div className="flex-1 flex gap-0.75 max-w-75">
-              {Array.from({ length: model.total }, (_, i) => (
-                <span
-                  key={i}
-                  className={`flex-1 h-1 rounded-sm ${i < model.cleared ? "bg-ok" : i === model.cleared ? "bg-accent" : "bg-fill-2"}`}
-                />
-              ))}
-            </div>
-            <span className="text-xs text-secondary tabular-nums whitespace-nowrap">
-              {t("today.progress", { cleared: model.cleared, total: model.total, planned: minutes(model.planned) })}
-            </span>
-            <span className="flex-1" />
-            <ContextFilter model={model} />
-            {errors.length ? (
-              <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
-                {t("today.boardsDown", { n: errors.length })}
-              </span>
-            ) : null}
-          </div>
-          <TodayTimeline model={model} />
-          <div className="flex-1 min-h-0 grid grid-cols-[300px_minmax(0,1fr)]">
-            <TodayQueue model={model} />
-            <TodayDetail model={model} />
-          </div>
-        </>
-      )}
+      <div className="flex-none h-10 flex items-center gap-3 px-5 border-b border-separator">
+        <span className="text-secondary capitalize whitespace-nowrap">{date}</span>
+        <div className="flex-1 flex gap-0.75 max-w-75">
+          {Array.from({ length: model.total }, (_, i) => (
+            <span
+              key={i}
+              className={`flex-1 h-1 rounded-sm ${i < model.cleared ? "bg-ok" : i === model.cleared ? "bg-accent" : "bg-fill-2"}`}
+            />
+          ))}
+        </div>
+        <span className="text-xs text-secondary tabular-nums whitespace-nowrap">
+          {t("today.progress", { cleared: model.cleared, total: model.total, planned: minutes(model.planned) })}
+        </span>
+        <span className="flex-1" />
+        <ContextFilter model={model} />
+        {errors.length ? (
+          <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
+            {t("today.boardsDown", { n: errors.length })}
+          </span>
+        ) : null}
+      </div>
+      <TodayTimeline model={model} />
+      <div className="flex-1 min-h-0 grid grid-cols-[300px_minmax(0,1fr)]">
+        <TodayQueue model={model} />
+        <TodayDetail model={model} />
+      </div>
+
       {toast ? (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
           <Toast toast={toast} />

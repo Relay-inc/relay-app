@@ -48,7 +48,7 @@ import { mailExperimental, mailOn } from "../settings/settings";
 import { startRecording } from "../calendar/recording";
 import { openCompose } from "./mail";
 import { forgetDetails } from "./load";
-import { openReview } from "./review";
+import { startReview } from "./review";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
 import { linkPrs, relinkPr, ticketOf, ticketState } from "./links";
@@ -746,7 +746,7 @@ export function actionsOf(entry: Entry): Actions {
                 label: t("today.reviewWithClaude"),
                 key: "↵",
                 tip: t("today.reviewTip"),
-                run: () => openReview(entry.id, s.pr),
+                run: () => startReview(entry.id, s.pr),
               },
               github,
               inRelay,

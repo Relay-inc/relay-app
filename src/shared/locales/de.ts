@@ -301,6 +301,7 @@ export default {
   "today.alsoIn": "Auch in {project}",
   "today.progress": "{cleared} von {total} erledigt · {planned} heute geplant",
   "today.boardsDown": "{n} Board(s) nicht geladen",
+  "today.backToToday": "Zurück zu Heute",
   "today.work.gone.review": "Dieser Pull Request wartet nicht mehr auf dich (gemergt, geschlossen oder geprüft)",
   "today.work.gone.mail": "Diese Mail ist nicht mehr unter Heute (anderswo gelesen oder archiviert)",
   "today.work.discard": "Verwerfen",

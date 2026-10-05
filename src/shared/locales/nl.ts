@@ -300,6 +300,7 @@ export default {
   "today.alsoIn": "Ook in {project}",
   "today.progress": "{cleared} van {total} afgewerkt · {planned} gepland vandaag",
   "today.boardsDown": "{n} bord(en) niet geladen",
+  "today.backToToday": "Terug naar Vandaag",
   "today.work.gone.review": "Deze pull request wacht niet meer op jou (gemerged, gesloten of gereviewd)",
   "today.work.gone.mail": "Deze mail staat niet meer op Vandaag (elders gelezen of gearchiveerd)",
   "today.work.discard": "Weggooien",

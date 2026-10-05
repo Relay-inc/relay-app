@@ -4,7 +4,10 @@ import { anchorOf, inPatch, parsePatch, type DiffLine, type Side } from "../../d
 import * as backend from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
 import { storage } from "../../infrastructure/storage";
-import { toast } from "../navigation/navigation";
+import { select, toast } from "../navigation/navigation";
+import { useNavigationStore } from "../navigation/store";
+import { WAIT } from "../../domain/navigation/views";
+import { workKey } from "../../domain/navigation/keys";
 import { loadPrs } from "../pull-requests/prs";
 
 // The review screen under Today: the PR's diff per file, a comment on any line, Claude's findings to add or dismiss,
@@ -40,14 +43,13 @@ type Review = {
   busy: boolean;
   err: string;
 };
-type ReviewState = { work: string; reviews: Record<string, Review> }; // work: the item the review screen is open on
+type ReviewState = { reviews: Record<string, Review> }; // per Today item (the PR's), the review in progress
 // a started review is kept in Relay's store until it is posted or discarded: the comments, the summary, the verdict and
 // Claude's findings; the files are read again, what runs is not kept
 const KEY = "todayReviews";
 type Kept = Pick<Review, "title" | "project" | "findings" | "ran" | "comments" | "body" | "verdict" | "file">;
 const kept = storage.get<Record<string, Kept>>(KEY, {});
 export const useReviewStore = makeStore<ReviewState>(() => ({
-  work: "",
   reviews: Object.fromEntries(Object.entries(kept).map(([id, k]) => [id, { ...fresh(), ...k }])),
 }));
 const set = useReviewStore.setState;
@@ -100,10 +102,15 @@ let seq = 0;
 const nextId = () => `r${++seq}`;
 export const lineKey = (path: string, side: Side, line: number) => `${path}|${side}|${line}`;
 
-/** Open the review screen on a PR item: its files, and Claude's findings the first time. */
+/** Start (or go back to) the review of a PR item: its own view, in the sidebar under the PR's project. */
+export async function startReview(id: string, pr: PR) {
+  await select(workKey("review", id));
+  return openReview(id, pr);
+}
+/** The review screen on a PR item: its files, and Claude's findings the first time. Called by the view itself, so a
+ *  review opened from the sidebar or after a restart loads too. */
 export async function openReview(id: string, pr: PR) {
   set(draft => {
-    draft.work = id;
     const review = (draft.reviews[id] ??= fresh());
     review.title = `#${pr.number} ${pr.title}`;
     review.project = pr.project;
@@ -121,17 +128,14 @@ export async function openReview(id: string, pr: PR) {
   if (!review(id).ran) findings(id, pr);
 }
 /** Back to Today: the review stays in progress (in the sidebar), to come back to. */
-export const closeReview = () =>
-  set(draft => {
-    draft.work = "";
-  });
-/** Discard a review in progress: its comments, summary and verdict are gone. */
+export const closeReview = () => select(WAIT);
+/** Discard a review in progress: its comments, summary and verdict are gone; its view, when open, goes back to Today. */
 export function discardReview(id: string) {
   set(draft => {
     delete draft.reviews[id];
-    if (draft.work === id) draft.work = "";
   });
   save();
+  if (useNavigationStore.getState().selected === workKey("review", id)) select(WAIT);
 }
 export const showFile = (id: string, file: number) =>
   change(id, r => {
@@ -277,9 +281,9 @@ export async function submitReview(id: string, pr: PR) {
     );
     set(draft => {
       delete draft.reviews[id];
-      draft.work = "";
     });
     save();
+    select(WAIT);
     toast(t("review.posted", { verdict: t(`review.verdict.${r.verdict}`) }));
     loadPrs();
   } catch (error) {

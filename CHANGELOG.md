@@ -25,6 +25,7 @@ a PR. Versions follow
 - Everything an agent needs you for is on top of Today: a decision, a blocked session, and a finished result to read
 - **Work in progress shows in the sidebar** under its project, like a conversation: a review you started, a reply you are drafting, a meeting that runs or is being recorded. A click brings Today back on it (the review screen, the mail with its draft, the meeting's prep or note); closing a review or a draft discards it. A started review and a draft are kept when Relay restarts. A meeting's prep, note and transcript conversations now start under the meeting's project instead of General
 - The review screen's diff scrolls: down with the rest of the review, and sideways for long lines
+- A pull request review is a view of its own: from Today or from its row in the sidebar it opens the review screen alone, with its name in the title bar and its sidebar row selected; Back or Esc returns to Today. When the PR no longer waits on you it says so, with Discard and Back
 
 ### Added
 

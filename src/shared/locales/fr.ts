@@ -303,6 +303,7 @@ export default {
   "today.alsoIn": "Aussi dans {project}",
   "today.progress": "{cleared} sur {total} traités · {planned} prévus aujourd'hui",
   "today.boardsDown": "{n} tableau(x) non chargé(s)",
+  "today.backToToday": "Retour à Aujourd'hui",
   "today.work.gone.review": "Cette pull request ne vous attend plus (fusionnée, fermée ou relue)",
   "today.work.gone.mail": "Ce mail n'est plus dans Aujourd'hui (lu ou archivé ailleurs)",
   "today.work.discard": "Abandonner",
