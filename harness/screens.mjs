@@ -252,7 +252,21 @@ const VIEWS = {
   usage: async () => {
     await open(page, server.url);
     await page.getByRole("button", { name: /^(Usage|Claude Code)/ }).first().click();
-    await waitText("claude-opus-5-5", 10000).catch(() => waitText("Plan limits"));
+    await waitText("All of Claude Code", 10000);
+    await settle(page);
+  },
+  // the usage redesign: Claude Code's Details folded open, per model and per conversation (#105)
+  "usage-details": async () => {
+    await VIEWS.usage();
+    await page.getByRole("button", { name: /^Details/ }).first().click();
+    await waitText("By model");
+    await settle(page);
+  },
+  // the usage redesign in dark mode (#105)
+  "dark-usage": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("button", { name: /^(Usage|Claude Code)/ }).first().click();
+    await waitText("All of Claude Code", 10000);
     await settle(page);
   },
   "cmd-k": async () => {
