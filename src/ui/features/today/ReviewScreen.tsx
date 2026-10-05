@@ -17,6 +17,7 @@ import {
   submitReview,
   takeFinding,
   useReviewStore,
+  type Finding,
   type Verdict,
 } from "../../../application/today/review";
 import { useDetailsStore } from "../../../application/today/details";
@@ -37,6 +38,13 @@ const SEVERITY: Record<string, string> = {
   question: "text-accent-text",
   answer: "text-accent-text",
 };
+// a finding's colour, on its number and as a bar down its line: a bug red, a risk orange, the rest blue
+const DOT: Record<string, string> = { bug: "bg-late", risk: "bg-soon", nit: "bg-accent" };
+const BAR: Record<string, string> = {
+  bug: "shadow-[inset_3px_0_0_var(--color-late)]",
+  risk: "shadow-[inset_3px_0_0_var(--color-soon)]",
+  nit: "shadow-[inset_3px_0_0_var(--color-accent)]",
+};
 const VERDICTS: Verdict[] = ["COMMENT", "APPROVE", "REQUEST_CHANGES"];
 const initials = (name: string) => name.slice(0, 2).toUpperCase();
 const iso = (at: number) => new Date(at).toISOString();
@@ -50,6 +58,7 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
   const r = useReviewStore(st => st.reviews[id]);
   const details = useDetailsStore(st => st.pr);
   const at = useDerived(() => todayModel().placed[entry.id]);
+  const [hot, setHot] = useState("");
   if (!r) return null;
   const prs = r.prs;
   const several = prs.length > 1;
@@ -64,12 +73,26 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
     th => th.path === file?.path && !th.isResolved && !th.isOutdated,
   );
   const indexOf = (pr: string, path: string) => files.findIndex(x => x.pr === pr && x.path === path);
-  const marks = new Map(
-    r.findings
-      .filter(f => f.state !== "dismissed" && indexOf(f.pr, f.path) === fileIndex)
-      .map(f => [lineKey(fileIndex, f.side, f.line), f]),
-  );
+  // Claude's open findings on this file, per line: shown under it (added ones are your comments by then)
+  const marks = new Map<string, Finding[]>();
+  for (const f of r.findings)
+    if (f.state === "open" && indexOf(f.pr, f.path) === fileIndex) {
+      const key = lineKey(fileIndex, f.side, f.line);
+      marks.set(key, [...(marks.get(key) ?? []), f]);
+    }
   const comments = r.comments.filter(c => file && c.pr === file.pr && c.path === file.path);
+  // a finding and its line point at each other: the same number on both, hover one to light up the other
+  const numberOf = new Map(r.findings.map((f, i) => [f.id, i + 1]));
+  const go = (f: (typeof r.findings)[number]) => {
+    const i = indexOf(f.pr, f.path);
+    if (i < 0) return;
+    showFile(id, i);
+    requestAnimationFrame(() =>
+      document
+        .querySelector(`[data-line="${lineKey(i, f.side, f.line)}"]`)
+        ?.scrollIntoView({ block: "center", behavior: "smooth" }),
+    );
+  };
   const first = entry.subject.type === "pr" ? entry.subject.pr : null;
   const asked = several
     ? t("review.group", { n: prs.length })
@@ -137,7 +160,7 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
           stats={files.map((f, i) => ({
             add: f.additions,
             del: f.deletions,
-            notes: r.findings.filter(x => x.state !== "dismissed" && indexOf(x.pr, x.path) === i).length,
+            notes: r.findings.filter(x => x.state === "open" && indexOf(x.pr, x.path) === i).length,
           }))}
           onPick={i => showFile(id, i)}
         />
@@ -158,30 +181,48 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
               {file.lines.length ? (
                 // long lines scroll sideways inside the diff; every row is as wide as the widest, so the
                 // colours run through, and a thread or the comment box stays at the left, readable
-                <div className="shrink-0 border border-separator rounded-[10px] overflow-x-auto overflow-y-hidden font-mono text-xs leading-5.5">
+                <div className="shrink-0 border border-separator rounded-[10px] overflow-x-auto overflow-y-hidden font-mono text-xs leading-5.5 [container-type:inline-size]">
                   <div className="w-max min-w-full flex flex-col">
                     {file.lines.map((line, i) => {
                       const anchor = anchorOf(line);
                       const key = anchor ? lineKey(fileIndex, anchor.side, anchor.line) : "";
                       const on = !!key && r.line === key;
-                      const mark = key ? marks.get(key) : undefined;
+                      const notes = (key && marks.get(key)) || [];
+                      const mark = notes[0];
                       const here = anchor ? threads.filter(th => th.line === anchor.line) : [];
                       const mine = anchor ? comments.filter(c => c.side === anchor.side && c.line === anchor.line) : [];
+                      const lit = !!mark && hot === mark.id;
                       const bg = on
                         ? "bg-accent-soft shadow-[inset_3px_0_0_var(--color-accent)]"
-                        : line.kind === "add"
-                          ? "bg-add-bg"
-                          : line.kind === "del"
-                            ? "bg-del-bg"
-                            : line.kind === "hunk"
-                              ? "bg-fill text-tertiary"
-                              : "";
+                        : lit
+                          ? `bg-accent-soft ${BAR[mark.severity] ?? BAR.nit}`
+                          : mark
+                            ? `${line.kind === "add" ? "bg-add-bg" : line.kind === "del" ? "bg-del-bg" : ""} ${BAR[mark.severity] ?? BAR.nit}`
+                            : line.kind === "add"
+                              ? "bg-add-bg"
+                              : line.kind === "del"
+                                ? "bg-del-bg"
+                                : line.kind === "hunk"
+                                  ? "bg-fill text-tertiary"
+                                  : "";
                       return (
                         <div key={i}>
                           <div
+                            data-line={key || undefined}
                             onClick={() => key && pickLine(id, key)}
-                            className={`grid grid-cols-[40px_40px_18px_minmax(0,1fr)_16px] ${key ? "cursor-pointer" : ""} ${bg}`}
+                            onMouseEnter={() => mark && setHot(mark.id)}
+                            onMouseLeave={() => mark && setHot("")}
+                            className={`grid grid-cols-[26px_36px_36px_18px_minmax(0,1fr)] ${key ? "cursor-pointer" : ""} ${bg}`}
                           >
+                            <span className="grid place-items-center">
+                              {mark ? (
+                                <span
+                                  className={`grid place-items-center min-w-4.5 h-4.5 px-1 rounded-full font-sans text-[10px] font-semibold text-on-accent ${DOT[mark.severity] ?? DOT.nit}`}
+                                >
+                                  {numberOf.get(mark.id)}
+                                </span>
+                              ) : null}
+                            </span>
                             <span className="text-right pr-2 text-tertiary">
                               {line.kind === "hunk" ? "" : (line.old ?? "")}
                             </span>
@@ -192,20 +233,13 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
                               {line.kind === "add" ? "+" : line.kind === "del" ? "−" : ""}
                             </span>
                             <span className="whitespace-pre pr-4">{line.text}</span>
-                            <span className="grid place-items-center">
-                              {mark ? (
-                                <span
-                                  className={`size-1.75 rounded-full ${mark.severity === "bug" ? "bg-late" : mark.severity === "risk" ? "bg-soon" : "bg-secondary"}`}
-                                />
-                              ) : null}
-                            </span>
                           </div>
                           {here
                             .flatMap(th => th.comments?.nodes ?? [])
                             .map((c, j) => (
                               <div
                                 key={`t${j}`}
-                                className="sticky left-0 max-w-3xl flex gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-fill border-y border-separator font-sans text-[13px] leading-normal"
+                                className="sticky left-0 w-[100cqw] flex gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-fill border-y border-separator font-sans text-[13px] leading-normal"
                               >
                                 <span className="grid place-items-center size-5.5 flex-none rounded-full bg-raised text-secondary text-[9px] font-semibold">
                                   {initials(c.author?.login ?? "?")}
@@ -219,10 +253,44 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
                                 </div>
                               </div>
                             ))}
+                          {notes.map(f => (
+                            <div
+                              key={f.id}
+                              onMouseEnter={() => setHot(f.id)}
+                              onMouseLeave={() => setHot("")}
+                              className={`sticky left-0 w-[100cqw] flex flex-col gap-2 py-2.5 pr-3.5 pl-24.5 bg-raised border-y border-separator font-sans text-[13px] leading-normal ${BAR[f.severity] ?? BAR.nit}`}
+                            >
+                              <div className="flex items-center gap-2 text-xs">
+                                <span
+                                  className={`grid place-items-center min-w-4.5 h-4.5 px-1 rounded-full text-[10px] font-semibold text-on-accent ${DOT[f.severity] ?? DOT.nit}`}
+                                >
+                                  {numberOf.get(f.id)}
+                                </span>
+                                {claude ? <Glyph svg={claude} className="glyph size-3 text-accent-text" /> : null}
+                                <span className={`font-semibold ${SEVERITY[f.severity]}`}>
+                                  {t(`review.sev.${f.severity}`)}
+                                </span>
+                                <span className="flex-1" />
+                                <button
+                                  className="h-6.5 px-2.25 rounded-[7px] text-xs font-medium text-secondary cursor-pointer hover:text-label"
+                                  onClick={() => takeFinding(id, f.id, false)}
+                                >
+                                  {t("review.dismiss")}
+                                </button>
+                                <button
+                                  className="h-6.5 px-2.25 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer"
+                                  onClick={() => takeFinding(id, f.id, true)}
+                                >
+                                  {t("review.addAsComment")}
+                                </button>
+                              </div>
+                              <span className="whitespace-pre-wrap select-text">{f.text}</span>
+                            </div>
+                          ))}
                           {mine.map(c => (
                             <div
                               key={c.id}
-                              className="sticky left-0 max-w-3xl flex items-start gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-accent-soft border-y border-separator font-sans text-[13px] leading-normal"
+                              className="sticky left-0 w-[100cqw] flex items-start gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-accent-soft border-y border-separator font-sans text-[13px] leading-normal"
                             >
                               <span className="flex-1 whitespace-pre-wrap">{c.body}</span>
                               <span className="text-[11px] font-semibold text-accent-text">{t("review.inReview")}</span>
@@ -235,7 +303,7 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
                             </div>
                           ))}
                           {on ? (
-                            <div className="sticky left-0 max-w-3xl flex flex-col gap-2 pt-2.5 pb-3 pr-3.5 pl-24.5 bg-accent-soft font-sans text-[13px]">
+                            <div className="sticky left-0 w-[100cqw] flex flex-col gap-2 pt-2.5 pb-3 pr-3.5 pl-24.5 bg-accent-soft font-sans text-[13px]">
                               <input
                                 autoFocus
                                 value={r.draft}
@@ -314,51 +382,36 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
                 ? t("review.reading")
                 : t("review.found", { n: r.findings.filter(f => f.severity !== "answer").length })}
             </span>
-            {r.findings.map(f => (
-              <div
-                key={f.id}
-                className={`flex flex-col gap-2 p-3 rounded-[10px] bg-raised shadow-sm ring-1 ${f.state === "added" ? "ring-ok" : "ring-separator-strong"} ${f.state === "dismissed" ? "opacity-50" : ""}`}
-              >
-                <div className="flex items-center gap-2 text-xs">
+            {/* an index of the findings: the full text and the buttons are under their line in the diff */}
+            <div className="flex flex-col gap-0.5">
+              {r.findings.map(f => (
+                <button
+                  key={f.id}
+                  onClick={() => go(f)}
+                  onMouseEnter={() => setHot(f.id)}
+                  onMouseLeave={() => setHot("")}
+                  className={`flex items-start gap-2 px-2 py-1.5 -mx-2 rounded-lg text-left cursor-pointer ${hot === f.id ? "bg-accent-soft" : "hover:bg-fill-2"} ${f.state === "open" ? "" : "opacity-55"}`}
+                >
                   <span
-                    className={`h-5 px-1.75 rounded-[5px] bg-fill-2 font-semibold inline-flex items-center ${SEVERITY[f.severity]}`}
+                    className={`grid place-items-center flex-none min-w-4.5 h-4.5 px-1 mt-px rounded-full text-[10px] font-semibold text-on-accent ${DOT[f.severity] ?? DOT.nit}`}
                   >
-                    {t(`review.sev.${f.severity}`)}
+                    {numberOf.get(f.id)}
                   </span>
-                  <button
-                    onClick={() => {
-                      const i = indexOf(f.pr, f.path);
-                      if (i >= 0) showFile(id, i);
-                    }}
-                    className="font-mono text-[11px] text-accent-text cursor-pointer"
-                  >
-                    {several ? `${prLabel(f.pr)} · ` : ""}
-                    {f.path.split("/").pop()}:{f.line}
-                  </button>
-                  <span className="flex-1" />
-                  <span className="text-[11px] font-semibold text-ok">
-                    {f.state === "added" ? t("review.added") : f.state === "dismissed" ? t("review.dismissed") : ""}
+                  <span className="flex-1 min-w-0 flex flex-col leading-[1.35]">
+                    <span className="text-[13px] line-clamp-2">{f.text}</span>
+                    <span className="font-mono text-[11px] text-tertiary truncate">
+                      {several ? `#${prs.find(x => x.url === f.pr)?.number} · ` : ""}
+                      {f.path.split("/").pop()}:{f.line}
+                      {f.state === "added"
+                        ? ` · ${t("review.added")}`
+                        : f.state === "dismissed"
+                          ? ` · ${t("review.dismissed")}`
+                          : ""}
+                    </span>
                   </span>
-                </div>
-                <div className="text-[13px] leading-normal select-text">{f.text}</div>
-                {f.state === "open" ? (
-                  <div className="flex gap-1.5 justify-end">
-                    <button
-                      className="h-6.5 px-2.25 rounded-[7px] text-xs font-medium text-secondary cursor-pointer"
-                      onClick={() => takeFinding(id, f.id, false)}
-                    >
-                      {t("review.dismiss")}
-                    </button>
-                    <button
-                      className="h-6.5 px-2.25 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer"
-                      onClick={() => takeFinding(id, f.id, true)}
-                    >
-                      {t("review.addAsComment")}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ))}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex-none flex flex-col gap-2.5 px-4 pt-3.5 pb-4 border-t border-separator bg-bg">
             <span className="text-[11px] font-semibold tracking-[0.06em] uppercase text-tertiary">

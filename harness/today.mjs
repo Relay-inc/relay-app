@@ -72,7 +72,7 @@ try {
   await byText(page, "const back = params.get('returnTo') ?? '/';", false).click();
   await shot("06-review-line");
   // the long file: the diff scrolls down and sideways
-  await page.getByRole("button", { name: /src\/long\.ts/ }).first().click();
+  await page.locator("button[title=\"src/long.ts\"]").first().click();
   await settle(page, 300);
   const box = await page.locator("div.overflow-x-auto.font-mono").first().boundingBox();
   await page.mouse.move(box.x + 200, box.y + 150);
