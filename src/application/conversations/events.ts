@@ -20,7 +20,7 @@ export async function notify(key: string, body: string) {
   if (await isFocused()) return;
   backend.notify(
     key,
-    key === WAIT ? t("nav.waiting") : label(key),
+    key === WAIT ? t("nav.today") : label(key),
     body
       .replace(/[#*`>_]+/g, "")
       .replace(/\s+/g, " ")

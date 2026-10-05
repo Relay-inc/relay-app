@@ -1,20 +1,35 @@
 import { dictationCancel, dictationDownload, dictationStart, dictationStop } from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
 import { select } from "../navigation/navigation";
+import { useNavigationStore } from "../navigation/store";
 import { newChat } from "./chats";
 import { sendMsg } from "./actions";
 
 /** The composer's dictation (src-tauri/src/dictation.rs): `offer` asks to download the speech model first. */
 export type DictationPhase = "idle" | "offer" | "downloading" | "recording" | "transcribing";
-type DictationState = { phase: DictationPhase; level: number; progress: number; error: string };
+type DictationState = {
+  phase: DictationPhase;
+  level: number;
+  progress: number;
+  error: string;
+  key: string; // the conversation it started in: the text goes there, and the sidebar's recording row links to it
+  startedAt: number;
+};
 
-export const useDictationStore = makeStore<DictationState>(() => ({ phase: "idle", level: 0, progress: 0, error: "" }));
+export const useDictationStore = makeStore<DictationState>(() => ({
+  phase: "idle",
+  level: 0,
+  progress: 0,
+  error: "",
+  key: "",
+  startedAt: 0,
+}));
 const set = (patch: Partial<DictationState>) => useDictationStore.setState(patch);
 const phase = () => useDictationStore.getState().phase;
 
 export async function startDictation() {
   if (phase() !== "idle") return;
-  set({ phase: "recording", level: 0, error: "" });
+  set({ phase: "recording", level: 0, error: "", key: useNavigationStore.getState().selected, startedAt: Date.now() });
   try {
     await dictationStart(level => set({ level }));
   } catch (e) {

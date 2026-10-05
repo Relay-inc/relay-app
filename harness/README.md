@@ -81,9 +81,32 @@ flag). `mail_move` refuses with the flag off, as the backend does, and otherwise
 thumb URL. `integration_call` serves Productive only (Trello and Linear throw); writes (move, status, comment, labels) patch the
 in-memory tasks loosely, and a new task (`POST /tasks`) is added to them.
 
+## Screenshots for a pull request
+
+A PR that changes what someone sees in the app shows it in its description: the new or changed state, and where it
+helps the before. The screenshots come from this harness, not from a running Relay (that one holds port 1420 and your
+own data).
+
+1. **A view per state.** Add a view to `VIEWS` in `screens.mjs` that opens the fixture and clicks to the state, with a
+   comment saying what it shows and the PR number. Navigate the way a user would (visible text, roles, keys); for what
+   only the backend causes, use a lever of `window.__harness` (`emit`, `recordingTick`, `dictationLevel`, `addPending`,
+   …), or add one to `mock-backend.ts`. `recording-meeting` and `recording-dictation` are small examples.
+2. **Run only those:** `node harness/screens.mjs --label pr<number> --only <view>,<view>` writes
+   `harness/screens/pr<number>/<view>.png` (git ignores `harness/screens/`). Add `--browser webkit` when layout is the
+   point: WebKit is what the app runs in, Chromium hides some overflow. A close-up is a `page.screenshot({ clip })` in a
+   one-off script on `lib.mjs` (`startServer`, `launch`, `newPage`, `open`).
+3. **Look at them** before you upload: the state you meant, no `[harness] unmocked command` warnings, no error toast.
+4. **Upload:** `scripts/pr-screenshots.sh <number> harness/screens/pr<number>/*.png` puts them on the `pr-assets`
+   branch (never merged, so main carries no images) and prints an `<img>` line per file. Paste those under a
+   `## Screenshots` heading in the PR description, with a line on what each shows. Running it again for the same PR
+   replaces its folder, so pass all of its screenshots. The repo is private: the images show to whoever can see it.
+
+A command the app calls that the mock does not answer shows as `unmocked command` and usually breaks the screen. So a
+new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answer in `mock-backend.ts` in the same PR.
+
 ## Views (`screens.mjs`)
 
-73 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+75 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
@@ -97,7 +120,8 @@ settings-interface (appearance, accent, terminal), settings-sidebar, settings-in
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
 settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding, dark-waiting,
-dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail.
+dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail. Recording: recording-meeting (the bar in Waiting
+for you and the sidebar's row), recording-dictation (dictation in a conversation, the row seen from Reminders).
 
 1440x900 at device scale 2, page clock fixed to `NOW`, reduced motion, animations disabled, caret hidden. Navigation
 uses only visible text, roles, keys (Meta+K), `?sel=` and the backend's menu event. Two runs of the same build diff
