@@ -1,5 +1,5 @@
 import type { TodayModel } from "../../../application/today/today";
-import { selectEntry } from "../../../application/today/today";
+import { openMeeting, selectEntry } from "../../../application/today/today";
 import { timeOf } from "../../../application/calendar/calendar";
 import { useT } from "../../hooks/useT";
 
@@ -36,15 +36,20 @@ export function TodayTimeline({ model }: { model: TodayModel }) {
         {meetings.map(meeting => {
           const start = Date.parse(meeting.start);
           const end = Date.parse(meeting.end);
+          // a click opens its prep (before) or its note (after)
+          const item = model.meetingItems[meeting.id];
+          const on = !!item && selected?.id === item;
           return (
-            <div
+            <button
               key={meeting.id}
+              disabled={!item}
+              onClick={() => openMeeting(meeting.id)}
               title={`${timeOf(meeting.start)}–${timeOf(meeting.end)} ${meeting.title}`}
-              className={`absolute top-1 h-7 box-border px-1.5 rounded-md text-[10px] leading-7 font-semibold truncate shadow-[inset_0_-2px_0_var(--color-tertiary)] ${end <= now ? "opacity-50 bg-fill-2" : meeting.join ? "bg-accent-soft" : "bg-fill-2"}`}
+              className={`absolute top-1 h-7 box-border px-1.5 rounded-md text-left text-[10px] leading-7 font-semibold truncate shadow-[inset_0_-2px_0_var(--color-tertiary)] enabled:cursor-pointer enabled:hover:brightness-95 ${end <= now ? "opacity-50 bg-fill-2" : meeting.join ? "bg-accent-soft" : "bg-fill-2"} ${on ? "ring-2 ring-accent opacity-100" : ""}`}
               style={{ left: x(start), width: w(start, end) }}
             >
               {meeting.title || t("wait.meetingUntitled")}
-            </div>
+            </button>
           );
         })}
         {slots.map(slot => {

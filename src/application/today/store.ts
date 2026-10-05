@@ -1,4 +1,5 @@
 import type { TodayCard } from "../../domain/today/rules";
+import type { BoardRef, Card } from "../../domain/board/types";
 import type { Kind } from "../../domain/today/plan";
 import { todayIso } from "../../domain/reminders/rules";
 import { storage } from "../../infrastructure/storage";
@@ -12,17 +13,20 @@ export type DayState = {
   later: string[]; // put off with Later: at the end of the queue, in that order
   pins: Record<string, string>; // item → the slot it was moved to, or "tomorrow"
   doing: string[]; // set in progress on Today (a card's status lives in its tracker)
-  log: Record<string, { title: string; kind: Kind }>; // what each item was, so Done today can still name it once it is gone
+  log: Record<string, { title: string; kind: Kind; project?: string | null }>; // what each item was, so Done today names it and the context filter places it once it is gone
 };
 /** Snoozed items: until which day (yyyy-mm-dd) they stay off Today, and what they were, to list them. Kept across days. */
-export type Snooze = { until: string; title: string; kind: Kind };
-type TodayState = DayState & {
+// `reminder`: a reminder's full text; it was pushed in the vault, so waking it pushes it back to today
+export type Snooze = { until: string; title: string; kind: Kind; project?: string | null; reminder?: string };
+export type TodayState = DayState & {
   snoozed: Record<string, Snooze>;
   cards: TodayCard[]; // the user's cards for today, from every board linked to a vault project
+  boards: Record<string, { provider: string; ref: BoardRef; cards: Card[] }>; // per vault project: its board's open cards, to find a PR's ticket
   errors: string[]; // per board that did not load
   at: number; // when the cards last arrived, ms; 0 before that
   reloading: boolean; // Refresh is reading every source again
   selected: string; // the item open in the detail, "" for the first in the queue
+  context: string; // the context filter: "" all, "-" no project, else a context; kept across days
 };
 
 const fresh = (day: string): DayState => ({ day, seen: [], dismissed: [], later: [], pins: {}, doing: [], log: {} });
@@ -41,10 +45,12 @@ export const useTodayStore = makeStore<TodayState>(() => ({
     ),
   ),
   cards: [],
+  boards: {},
   errors: [],
   at: 0,
   reloading: false,
   selected: "",
+  context: storage.getRaw("todayContext"),
 }));
 
 /** Change the day's state and keep it; past midnight it starts from an empty day first. */
@@ -64,4 +70,13 @@ export function setSnooze(id: string, snooze: Snooze | null) {
     else delete draft.snoozed[id];
   });
   storage.set("todaySnooze", useTodayStore.getState().snoozed);
+}
+
+/** Show only one context's items under Today ("" all, "-" the ones without a project). */
+export function setContext(context: string) {
+  useTodayStore.setState(draft => {
+    draft.context = context;
+    draft.selected = "";
+  });
+  storage.setRaw("todayContext", context);
 }

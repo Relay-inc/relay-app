@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { doingFirst, ordered, plan, rankOf, slots, statusOf, type Item } from "./plan.ts";
+import { NO_PROJECT, doingFirst, inContext, ordered, plan, rankOf, slots, statusOf, type Item } from "./plan.ts";
 
 const H = 3_600_000;
 const M = 60_000;
@@ -83,7 +83,8 @@ test("the plan fills slots in order, keeps a prep before its meeting, and follow
   assert.equal(used.now, 30 * M);
 
   const tooLate = plan([item("x", 25), item("prep", 10, { by: at(11.5) })], free, {});
-  assert.deepEqual(tooLate.tomorrow, ["prep"], "a prep that no longer fits before its meeting is not planned after it");
+  assert.deepEqual(tooLate.tomorrow, [], "a prep that no longer fits before its meeting is not put off to tomorrow");
+  assert.equal(tooLate.placed.prep.slot, "now", "it goes in the first slot, late");
 });
 
 test("an item's status: the tracker's when there is one, else started on Today or not; in progress goes first", () => {
@@ -96,4 +97,10 @@ test("an item's status: the tracker's when there is one, else started on Today o
     doingFirst(queue, item => (item.id === "z" ? "doing" : "todo")).map(item => item.id),
     ["z", "x", "y"],
   );
+});
+
+test("the context filter: everything, the items without a project, or one context", () => {
+  assert.ok(inContext("", "Antenna") && inContext("", undefined));
+  assert.ok(inContext("Antenna", "Antenna") && !inContext("Antenna", "Personal") && !inContext("Antenna", undefined));
+  assert.ok(inContext(NO_PROJECT, undefined) && !inContext(NO_PROJECT, "Antenna"));
 });

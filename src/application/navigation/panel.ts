@@ -1,5 +1,5 @@
 import { provider } from "../../shared/plugins";
-import type { BoardProvider, BoardRef } from "../../domain/board/types";
+import type { BoardProvider, BoardRef, Opt } from "../../domain/board/types";
 import { panelItem, cardKey, type PanelItem } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
 import { ctxOf } from "../board/ctx";
@@ -144,7 +144,7 @@ export function closeTicket() {
 /** An action from a card's panel (comment, status, assignee, attach): the provider does it in the tracker and answers
  *  with the card as it is now. Resolves true when it worked (the UI then empties the comment box); on a failure what
  *  was typed stays and `panel.actErr` says why. */
-export async function cardAct(key: string, action: string, input: { value: string; files: File[] }) {
+export async function cardAct(key: string, action: string, input: { value: string; files: File[]; mentions?: Opt[] }) {
   const card = cardOf(key);
   if (!card?.detail.act || nav().panel.acting) return false;
   set(draft => {

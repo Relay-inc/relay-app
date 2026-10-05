@@ -6,6 +6,7 @@ export type Meeting = {
   start: string; // RFC 3339
   end: string;
   location: string;
+  description?: string; // the invite's text, from whoever sent it (untrusted)
   join: string; // the Meet/Zoom/Teams link, or ""
   organizer: string;
   people: { name: string; email: string }[];

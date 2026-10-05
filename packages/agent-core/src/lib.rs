@@ -204,6 +204,8 @@ pub trait AgentProvider: Sync {
     fn stop_background(&self, _env: &Env, _id: &str) -> Result<(), String> { Err("unsupported".into()) }
     /// A 2 to 5 word title for a conversation that starts with `text`.
     fn title(&self, _env: &Env, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
+    /// A text written from `text` following `system`, with no tools: a reply draft, a rewrite.
+    fn write(&self, _env: &Env, _system: &str, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
 
     /// Plan or rate limits. The app calls it at most once a minute.
     fn limits(&self, _env: &Env) -> usage::Limits { usage::Limits::Off("unsupported".into()) }

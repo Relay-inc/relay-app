@@ -190,6 +190,20 @@ export const usageTokens = (period: { today: number; week: number }) => invoke<A
 // ---------- GitHub
 export const githubPrs = () => invoke<PRs>("github_prs");
 export const githubPr = (repo: string, number: number) => invoke<PrDetail>("github_pr", { repo, number });
+/** A PR's files with their patch, for the review screen. */
+export const githubPrFiles = (repo: string, number: number) =>
+  invoke<{ path: string; status: string; additions: number; deletions: number; patch?: string | null }[]>(
+    "github_pr_files",
+    { repo, number },
+  );
+/** Post a review on GitHub: only after the user confirmed it. */
+export const githubPrReview = (
+  repo: string,
+  number: number,
+  event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT",
+  body: string,
+  comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[],
+) => invoke<void>("github_pr_review", { repo, number, event, body, comments });
 export const githubStatus = () => invoke<string>("github_status");
 
 // ---------- mail
@@ -197,6 +211,13 @@ export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_
 export const mailRead = (account: string, id: string) => invoke<MailBody>("mail_read", { account, id });
 export const mailSeen = (account: string, id: string, seen: boolean) => invoke("mail_seen", { account, id, seen });
 /** Archive (`trash` false) or move to Trash, the mails the user picked. The backend refuses with the experimental mail flag off. */
+/** Today's mail detail: a mail's thread, its reply headers (`read` with `headers`), or a draft saved in Drafts. */
+export const mailTool = <T = unknown>(
+  name: "thread" | "read" | "save_draft" | "attachment",
+  args: Record<string, unknown>,
+) => invoke<T>("mail_tool", { name, args });
+/** A text the agent writes from `text` following `system`, with no tools (a reply draft, a rewrite). */
+export const aiWrite = (system: string, text: string) => invoke<string>("ai_write", { system, text });
 export const mailMove = (account: string, ids: string[], trash: boolean) =>
   invoke<void>("mail_move", { account, ids, trash });
 /** Gmail without a server; a generic IMAP account with its host and port. */

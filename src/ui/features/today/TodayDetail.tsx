@@ -1,65 +1,79 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
 import type { Status } from "../../../domain/today/plan";
 import {
   actionsOf,
-  moveTo,
   putOff,
   selectEntry,
   setStatus,
   snooze,
+  snoozeOptions,
+  type Action,
   type Entry,
   type TodayModel,
+  openTicketOf,
 } from "../../../application/today/today";
+import { setPop, setTab, useDetailsStore } from "../../../application/today/details";
+import { cardAct, loadCard, loadPr, toastAssigned } from "../../../application/today/load";
+import { ticketLinks, openLinked } from "../../../application/board/board";
+import { provider } from "../../../shared/plugins";
+import { t as translate } from "../../../shared/i18n";
+import { isQuestion } from "../../../domain/conversations/rules";
 import { timeOf } from "../../../application/calendar/calendar";
-import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { lastAi } from "../../../application/conversations/selectors";
+import { openMail } from "../../../application/navigation/panel";
 import { projectLabel } from "../../../application/workspace/vault";
-import { useTodayStore } from "../../../application/today/store";
+import { prsOfCard, ticketOf } from "../../../application/today/links";
+import { usePullRequestsStore } from "../../../application/pull-requests/store";
+import { cardKey } from "../../../domain/navigation/keys";
+import { useDismiss } from "../../hooks/useDismiss";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { PendingRequest } from "../conversations/PendingRequest";
-import { MailDetail } from "../mail/MailDetail";
-import { openMail } from "../../../application/navigation/panel";
-import { CI } from "../pull-requests/prState";
-import { Caps, KIND_ICON, Kbd, StatusDot, TONE_TEXT, minutes } from "./parts";
+import { MailComposer, MailSection } from "./sections/MailSection";
+import { PrSection, prTabs } from "./sections/PrSection";
+import { CardSection, cardTabs } from "./sections/CardSection";
+import { MeetingSection } from "./sections/MeetingSection";
+import { Caps, KIND_ICON, Kbd, TONE_TEXT } from "./parts";
 
-const iso = (at: number) => new Date(at).toISOString();
-const CHIP = {
-  "": "bg-fill-2 text-secondary",
-  run: "bg-fill-2 text-soon",
-  bad: "bg-del-bg text-del-fg",
-  ok: "bg-add-bg text-add-fg",
-};
-const chip = (label: string, tone: keyof typeof CHIP = "") => (
-  <span key={label} className={`h-6 px-2 rounded-md text-xs font-medium inline-flex items-center ${CHIP[tone]}`}>
-    {label}
-  </span>
-);
-const initials = (name: string) =>
-  name
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .map(part => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+const BUTTON =
+  "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-[13px] font-medium whitespace-nowrap cursor-pointer";
+const ICON_BUTTON =
+  "grid place-items-center size-7.5 rounded-lg text-secondary cursor-pointer hover:bg-fill-2 hover:text-label";
+const MENU = "absolute top-9 z-20 w-60 p-1 rounded-[10px] bg-raised shadow-xl ring-[0.5px] ring-separator-strong";
 
-/** The item open next to the queue: where it is from and why it is here, what it is about, its actions (Enter,
- *  Backspace, L for later), when it is planned (a click moves it to another slot or to tomorrow), and what else the
- *  same project has today. */
+/** What kind of item it is, as the chip in front of where it is from says it. */
+const kindLabel = (entry: Entry) =>
+  entry.subject.type === "ask"
+    ? isQuestion(entry.subject.request)
+      ? "today.kind.question"
+      : "today.kind.ask"
+    : (`today.kind.${entry.kind}` as const);
+
+/** The item open next to the queue. On top where it is from and why it is here, its title and its actions (the
+ *  main two as buttons, the rest under "…", snooze, later and done on the right). Below that the item itself, per
+ *  kind and per tab, and at the bottom its status, when it is planned, what is known about it and what else in the
+ *  queue it connects to. */
 export function TodayDetail({ model }: { model: TodayModel }) {
-  const { t, locale } = useT();
+  const { t } = useT();
   const entry = model.selected;
-  const pinned = useTodayStore(s => (entry ? s.pins[entry.id] : undefined));
-  const recording = useRecordingStore(s => s.phase !== "idle");
-  const chatText = useDerived(() => (entry?.subject.type === "chat" ? lastAi(entry.subject.key) : ""));
-  // a mail is read in place: its body loads when it is opened, as in Mail
-  const mail = entry?.subject.type === "mail" ? entry.subject.key : "";
-  useEffect(() => {
-    if (mail) openMail(mail);
-  }, [mail]);
+  const tabOf = useDetailsStore(s => (entry ? s.tab[entry.id] : ""));
+  const pop = useDetailsStore(s => s.pop);
+  const prDetail = useDetailsStore(s => (entry?.subject.type === "pr" ? s.pr[entry.id] : undefined));
+  const cardView = useDetailsStore(s => (entry?.subject.type === "card" ? s.card[entry.id] : undefined));
+
+  // what the item needs from its source, fetched when it opens
+  const subject = entry?.subject;
+  const entryId = entry?.id ?? "";
+  // once per item it opens on: the clock rebuilds the items every 30 seconds, that is no reason to read them again
+  const load = useEffectEvent(() => {
+    if (!subject) return;
+    if (subject.type === "mail") openMail(subject.key);
+    if (subject.type === "pr") loadPr(entryId, subject.pr);
+    if (subject.type === "card") loadCard(entryId, subject.card);
+  });
+  useEffect(() => load(), [entryId]);
 
   if (!entry) {
     const next = model.meetings.find(meeting => Date.parse(meeting.start) > model.now);
@@ -76,291 +90,489 @@ export function TodayDetail({ model }: { model: TodayModel }) {
     );
   }
 
-  const { primary, secondary, extra } = actionsOf(entry);
-  // When: every slot of today with how much room it has left for this item, and tomorrow
-  const at = model.placed[entry.id];
-  const when = model.slots.map(slot => {
-    const on = at?.slot === slot.key;
-    const room = Math.round((slot.end - slot.start - model.used[slot.key]) / 60_000);
-    const late = entry.by !== undefined && slot.start + model.used[slot.key] + entry.est * 60_000 > entry.by;
-    const fits = on || (room >= entry.est && !late);
-    const after = model.meetings.find(meeting => meeting.id === slot.after);
-    return {
-      key: slot.key,
-      label: after ? t("today.slotAfter", { title: after.title }) : t("today.slotNow"),
-      sub: on
-        ? `${timeOf(iso(at.start))}–${timeOf(iso(at.start + entry.est * 60_000))}`
-        : fits
-          ? t("today.minFree", { n: room })
-          : late
-            ? t("today.tooLate")
-            : t("today.full"),
-      on,
-      fits,
-    };
-  });
-  const isTomorrow = !at;
-  const related = model.queue
-    .filter(other => other.id !== entry.id && entry.project && other.project === entry.project)
-    .slice(0, 4);
-  const button = "inline-flex items-center gap-2 h-8.5 rounded-[9px] text-[13px] font-medium cursor-pointer";
+  const { acts, done } = actionsOf(entry);
+  const s = entry.subject;
+  const connected = connectedOf(model, entry);
+  const tabs = s.type === "pr" ? prTabs(prDetail) : s.type === "card" ? cardTabs(cardView, connected.length) : [];
+  const tab = tabOf || tabs[0]?.id || "";
+
+  const body = (): ReactNode => {
+    switch (s.type) {
+      case "ask":
+        return <AskBody entry={entry} />;
+      case "blocked":
+        return (
+          <p className="m-0 text-sm text-secondary">
+            {t("wait.bg", { date: s.session.startedAt ? new Date(s.session.startedAt).toLocaleDateString() : "" })}
+          </p>
+        );
+      case "meeting":
+        return <MeetingSection meeting={s.meeting} after={entry.kind === "note"} />;
+      case "reminder":
+        return s.reminder.text !== s.reminder.title ? (
+          <Markdown text={s.reminder.text} className="text-sm leading-relaxed text-secondary max-w-170" />
+        ) : null;
+      case "card":
+        return tab === "linked" ? (
+          <ConnectedList items={connected} />
+        ) : (
+          <CardSection id={entry.id} item={s.card} tab={tab} />
+        );
+      case "pr":
+        return <PrSection id={entry.id} tab={tab} pr={s.pr} />;
+      case "mail":
+        return <MailSection mailKey={s.key} id={s.mail.id} />;
+      case "chat":
+        return <ChatBody chat={s.key} />;
+    }
+  };
 
   return (
-    <div className="min-h-0 overflow-y-auto px-8 py-6">
-      <div className="flex flex-col gap-4.5 max-w-160">
+    <div className="min-w-0 min-h-0 flex flex-col">
+      <div className="flex-none flex flex-col gap-2 px-7 pt-4.5">
         <div className="flex items-center gap-2 text-xs text-secondary">
-          <span className={`grid place-items-center size-6.5 rounded-lg bg-fill-2 ${TONE_TEXT[entry.tone]}`}>
-            <Icon name={KIND_ICON[entry.kind]} className="glyph size-3.75" />
+          <span className="inline-flex items-center gap-1.5 h-6 pl-1 pr-2 rounded-[7px] bg-fill-2 text-label font-medium whitespace-nowrap">
+            <span
+              className={`grid place-items-center size-4.5 rounded-[5px] bg-raised ${entry.tone ? TONE_TEXT[entry.tone] : "text-accent-text"}`}
+            >
+              <Icon name={KIND_ICON[entry.kind]} className="glyph size-3" />
+            </span>
+            {t(kindLabel(entry))}
           </span>
           <span className="flex-1 min-w-0 truncate">{entry.where}</span>
           <span className={`font-semibold whitespace-nowrap ${TONE_TEXT[entry.tone]}`}>{entry.why}</span>
         </div>
-        {mail ? null : (
-          <div className="text-[22px] leading-tight font-semibold tracking-tight text-pretty select-text">
-            {entry.title}
-          </div>
-        )}
-        {entry.kind === "ask" ? null : <StatusPicker key={entry.id} entry={entry} />}
-        {mail ? null : <ItemBody entry={entry} chatText={chatText} recording={recording} />}
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            className={`${button} px-2.5 text-secondary hover:bg-fill-2 hover:text-label`}
-            onClick={() => putOff(entry.id)}
-          >
-            {t("today.later")}
-            <Kbd>L</Kbd>
-          </button>
-          {extra.map(action => (
-            <button
-              key={action.label}
-              className={`${button} px-2.5 text-secondary hover:bg-fill-2 hover:text-label`}
-              onClick={() => action.run()}
-            >
-              {action.label}
-            </button>
-          ))}
-          <span className="flex-1" />
-          {secondary ? (
-            <button
-              className={`${button} px-3 border border-separator-strong hover:bg-fill`}
-              onClick={() => secondary.run()}
-            >
-              {secondary.label}
-              <Kbd>⌫</Kbd>
-            </button>
-          ) : null}
-          {primary ? (
-            <button
-              className={`${button} px-4 bg-accent text-on-accent hover:bg-accent-hover`}
-              onClick={() => primary.run()}
-            >
-              {primary.label}
-              <Kbd onAccent>↵</Kbd>
-            </button>
-          ) : null}
-        </div>
-        <div className="flex flex-col gap-2 pt-4 border-t border-separator">
-          <div className="flex items-baseline gap-2">
-            <Caps>{t("today.when")}</Caps>
-            <span className="text-xs text-secondary">
-              {at
-                ? t(pinned ? "today.plannedPinned" : "today.planned", {
-                    time: timeOf(iso(at.start)),
-                    est: minutes(entry.est),
-                  })
-                : t("today.movedTomorrow")}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {when.map(slot => (
+        <h1 className="m-0 mt-0.5 text-xl leading-snug font-semibold tracking-tight text-pretty select-text">
+          {entry.title}
+        </h1>
+        <Meta entry={entry} />
+        <ActionBar entry={entry} acts={acts} done={done} pop={pop} now={model.now} />
+        {tabs.length ? (
+          <div className="flex gap-4.5 mt-2 border-b border-separator">
+            {tabs.map(item => (
               <button
-                key={slot.key}
-                disabled={!slot.fits}
-                onClick={() => moveTo(entry, slot.key)}
-                className={`flex flex-col items-start px-2.5 py-1.5 rounded-lg border text-xs font-medium leading-tight cursor-pointer disabled:opacity-45 disabled:cursor-default max-w-56 ${slot.on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong"}`}
+                key={item.id}
+                onClick={() => setTab(entry.id, item.id)}
+                className={`inline-flex items-center gap-1.5 h-8.5 text-[13px] font-medium cursor-pointer ${tab === item.id ? "text-label shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-secondary hover:text-label"}`}
               >
-                <span className="truncate max-w-full">{slot.label}</span>
-                <span className="text-[11px] font-normal text-secondary">{slot.sub}</span>
-              </button>
-            ))}
-            <button
-              onClick={() => moveTo(entry, "tomorrow")}
-              className={`flex flex-col items-start px-2.5 py-1.5 rounded-lg border text-xs font-medium leading-tight cursor-pointer ${isTomorrow ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong"}`}
-            >
-              <span>{t("rem.tomorrow")}</span>
-              <span className="text-[11px] font-normal text-secondary">
-                {entry.kind === "reminder" ? t("today.pushes") : t("today.notToday")}
-              </span>
-            </button>
-            <button
-              onClick={() => snooze(entry)}
-              title={t("today.statusKey", { key: "W" })}
-              className="flex flex-col items-start px-2.5 py-1.5 rounded-lg border border-separator-strong text-xs font-medium leading-tight cursor-pointer"
-            >
-              <span>{t("today.inAWeek")}</span>
-              <span className="text-[11px] font-normal text-secondary">
-                {new Date(model.now + 7 * 864e5).toLocaleDateString(locale, {
-                  weekday: "short",
-                  day: "numeric",
-                  month: "short",
-                })}
-              </span>
-            </button>
-          </div>
-        </div>
-        {related.length ? (
-          <div className="flex flex-col gap-0.5 pt-4 border-t border-separator">
-            <span className="mb-1.5">
-              <Caps>{t("today.alsoIn", { project: projectLabel(entry.project) })}</Caps>
-            </span>
-            {related.map((other: Entry) => (
-              <button
-                key={other.id}
-                onClick={() => selectEntry(other.id)}
-                className="flex items-center gap-2.5 h-8.5 px-2 -mx-2 rounded-lg text-left cursor-pointer hover:bg-fill"
-              >
-                <Icon name={KIND_ICON[other.kind]} className="glyph size-3.5 text-secondary" />
-                <span className="flex-1 min-w-0 truncate">{other.title}</span>
-                <span className={`text-xs font-semibold ${TONE_TEXT[other.tone]}`}>{other.why}</span>
+                {t(item.label)}
+                {item.n ? (
+                  <span className="min-w-4.5 h-4.5 px-1.25 rounded-full bg-fill-2 text-secondary text-[11px] grid place-items-center">
+                    {item.n}
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
-        ) : null}
-        {mail ? (
-          <MailDetail mailKey={mail} readOnReply className="pt-4 border-t border-separator select-text cursor-auto" />
         ) : null}
       </div>
+      <div className="flex-1 min-h-0 overflow-y-auto px-7 pt-4.5 pb-7 select-text cursor-auto">
+        {body()}
+        {connected.length && s.type !== "card" ? (
+          <div className="flex flex-col gap-1.5 mt-6 max-w-170">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("today.connected")}
+            </span>
+            <ConnectedList items={connected} />
+          </div>
+        ) : null}
+      </div>
+      {s.type === "mail" ? <MailComposer /> : null}
     </div>
   );
 }
 
-/** What the item is about, per kind: the agent's card, the meeting's people, the PR's state, the mail's sender. */
-function ItemBody({ entry, chatText, recording }: { entry: Entry; chatText: string; recording: boolean }): ReactNode {
-  const { t } = useT();
-  const s = entry.subject;
-
-  switch (s.type) {
-    case "ask":
-      return <PendingRequest request={s.request} />;
-    case "blocked":
-      return (
-        <p className="m-0 text-sm text-secondary">
-          {t("wait.bg", { date: s.session.startedAt ? new Date(s.session.startedAt).toLocaleDateString() : "" })}
-        </p>
-      );
-    case "meeting":
-      return (
-        <div className="flex flex-col gap-3 p-3.5 rounded-[10px] bg-fill">
-          <div className="text-[13px] text-secondary">
-            {timeOf(s.meeting.start)}–{timeOf(s.meeting.end)}
-            {s.meeting.location ? ` · ${s.meeting.location}` : ""}
-          </div>
-          {s.meeting.people.length ? (
-            <div className="flex flex-wrap gap-1.5">
-              {s.meeting.people.map(person => (
-                <span
-                  key={person.email}
-                  className="inline-flex items-center gap-1.5 h-6.5 pl-0.75 pr-2.25 rounded-full bg-raised shadow-[0_0_0_.5px_var(--color-separator-strong)] text-xs"
+/** The main two actions, the rest under "…", and on the right snooze, later and done. */
+function ActionBar({
+  entry,
+  acts,
+  done,
+  pop,
+  now,
+}: {
+  entry: Entry;
+  acts: Action[];
+  done?: Action;
+  pop: string;
+  now: number;
+}) {
+  const { t, locale } = useT();
+  const more = useRef<HTMLDivElement>(null);
+  const snoozeRef = useRef<HTMLDivElement>(null);
+  useDismiss(more, pop === "more", () => setPop(""));
+  useDismiss(snoozeRef, pop === "snooze", () => setPop(""));
+  const main = acts.slice(0, 2);
+  const rest = acts.slice(2);
+  const run = (action: Action) => {
+    setPop("");
+    action.run();
+  };
+  return (
+    <div className="flex items-center gap-1.5 mt-1.5 min-w-0">
+      {main.map((action, i) => (
+        <button
+          key={action.label}
+          title={action.tip}
+          onClick={() => run(action)}
+          className={`${BUTTON} ${i === 0 ? "bg-accent text-on-accent hover:bg-accent-hover" : action.key === "⌫" ? "border border-separator-strong hover:bg-fill" : "text-secondary hover:bg-fill-2 hover:text-label"}`}
+        >
+          {action.icon ? <Icon name={action.icon} className="glyph size-3.5" /> : null}
+          {action.label}
+          {action.key ? <Kbd onAccent={i === 0}>{action.key}</Kbd> : null}
+        </button>
+      ))}
+      {rest.length ? (
+        <div ref={more} className="relative">
+          <button
+            className={`${ICON_BUTTON} ${pop === "more" ? "bg-fill-2" : ""}`}
+            title={t("today.moreActions")}
+            aria-label={t("today.moreActions")}
+            onClick={() => setPop("more")}
+          >
+            <Icon name="more" className="glyph size-4" />
+          </button>
+          {pop === "more" ? (
+            <div className={`${MENU} left-0`}>
+              {rest.map(action => (
+                <button
+                  key={action.label}
+                  title={action.tip}
+                  onClick={() => run(action)}
+                  className="w-full flex items-center gap-2 h-8 px-2 rounded-md text-left text-[13px] cursor-pointer hover:bg-fill-2"
                 >
-                  <span className="grid place-items-center size-5 rounded-full bg-fill-2 text-secondary text-[9px] font-semibold">
-                    {initials(person.name || person.email)}
-                  </span>
-                  {person.name || person.email}
-                </span>
+                  {action.icon ? (
+                    <Icon name={action.icon} className="glyph size-3.5 text-secondary" />
+                  ) : (
+                    <span className="w-3.5" />
+                  )}
+                  <span className="flex-1">{action.label}</span>
+                  {action.key ? <span className="font-mono text-[11px] text-tertiary">{action.key}</span> : null}
+                </button>
               ))}
             </div>
           ) : null}
-          {entry.kind === "prep" ? (
-            <button
-              className="btn self-start inline-flex items-center gap-1.5 cursor-pointer"
-              disabled={recording}
-              title={t("rec.recordHelp")}
-              onClick={() => startRecording(s.meeting.id)}
-            >
-              <span className="size-2 rounded-full bg-late" />
-              {t("rec.record")}
-            </button>
-          ) : null}
         </div>
-      );
-    case "reminder":
-      return s.reminder.text !== s.reminder.title ? (
-        <Markdown text={s.reminder.text} className="text-sm leading-relaxed text-secondary" />
-      ) : null;
-    case "card":
-      return (
-        <div className="flex flex-wrap gap-1.5">
-          {s.card.card.status ? chip(s.card.card.status, s.card.card.state === "doing" ? "run" : "") : null}
-          {s.card.card.due ? chip(t("today.due", { date: s.card.card.due }), entry.tone === "late" ? "bad" : "") : null}
-          {s.card.card.labels?.map(label => chip(label))}
-        </div>
-      );
-    case "pr": {
-      const ci = s.pr.ci ? CI[s.pr.ci] : undefined;
-      return (
-        <div className="flex flex-wrap gap-1.5">
-          {ci ? chip(t(ci[1]), ci[0]) : null}
-          {s.pr.review === "CHANGES_REQUESTED" ? chip(t("rv.changes"), "bad") : null}
-          {s.pr.review === "APPROVED" ? chip(t("rv.approved"), "ok") : null}
-          {s.pr.draft ? chip(t("today.draft")) : null}
-        </div>
-      );
-    }
-    case "mail":
-      return (
-        <div className="flex flex-col gap-2">
-          <div className="px-3.5 py-2.5 border-l-2 border-separator-strong text-sm">
-            {s.mail.from.map(person => person.name || person.email).join(", ")}
+      ) : null}
+      <span className="flex-1" />
+      <div ref={snoozeRef} className="relative">
+        <button
+          className={`${ICON_BUTTON} ${pop === "snooze" ? "bg-fill-2" : ""}`}
+          title={t("today.snoozeKey")}
+          aria-label={t("today.snoozeKey")}
+          onClick={() => setPop("snooze")}
+        >
+          <Icon name="clock" className="glyph size-4" />
+        </button>
+        {pop === "snooze" ? (
+          <div className={`${MENU} right-0`}>
+            <div className="px-2 pt-1.5 pb-1">
+              <Caps>{t("today.offUntil")}</Caps>
+            </div>
+            {snoozeOptions(now).map(option => (
+              <button
+                key={option.id}
+                onClick={() => {
+                  setPop("");
+                  snooze(entry, option.days);
+                }}
+                className="w-full flex items-center gap-2 h-8 px-2 rounded-md text-left text-[13px] cursor-pointer hover:bg-fill-2"
+              >
+                <span className="flex-1">{t(`today.snooze.${option.id}`)}</span>
+                <span className="text-xs text-tertiary">
+                  {new Date(now + option.days * 864e5).toLocaleDateString(locale, {
+                    weekday: "short",
+                    day: "numeric",
+                    month: "short",
+                  })}
+                </span>
+              </button>
+            ))}
           </div>
-          <span className="text-xs text-secondary">{t("today.mailHint")}</span>
-        </div>
-      );
-    case "chat":
-      return <Markdown text={chatText} className="text-sm leading-relaxed text-secondary line-clamp-6" />;
+        ) : null}
+      </div>
+      <button
+        className={ICON_BUTTON}
+        title={t("today.laterKey")}
+        aria-label={t("today.laterKey")}
+        onClick={() => putOff(entry.id)}
+      >
+        <Icon name="later" className="glyph size-4" />
+      </button>
+      {done ? (
+        <button className={`${BUTTON} border border-separator-strong hover:bg-fill`} onClick={() => run(done)}>
+          <Icon name={done.icon ?? "check"} className="glyph size-3.5" />
+          {done.label}
+          <Kbd>E</Kbd>
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/** An agent's permission or question: what it last said, then its card (Enter allows). */
+function AskBody({ entry }: { entry: Entry }) {
+  const { t } = useT();
+  const s = entry.subject;
+  // what the agent last said; lastAi's own fallback ("Done") when it said nothing is no context
+  const said = useDerived(() => (s.type === "ask" && lastAi(s.chat) !== t("work.done") ? lastAi(s.chat) : ""));
+  if (s.type !== "ask") return null;
+  return (
+    <div className="flex flex-col gap-3 max-w-170">
+      {said ? <Markdown text={said} className="md-panel text-sm leading-relaxed text-secondary line-clamp-6" /> : null}
+      <PendingRequest request={s.request} keys />
+    </div>
+  );
+}
+function ChatBody({ chat }: { chat: string }) {
+  const text = useDerived(() => lastAi(chat));
+  return <Markdown text={text} className="md-panel text-sm leading-relaxed text-secondary max-w-170" />;
+}
+
+// ---------- the bottom: status, when, facts, connected
+type Connected = { id: string; icon: string; title: string; meta: string; go: () => unknown };
+/** Other items of the same project in the queue, and for a card the conversations and PRs it links to. */
+function connectedOf(model: TodayModel, entry: Entry): Connected[] {
+  const same = model.queue
+    .filter(other => other.id !== entry.id && entry.project && other.project === entry.project)
+    .slice(0, 5)
+    .map(other => ({
+      id: other.id,
+      icon: KIND_ICON[other.kind],
+      title: other.title,
+      meta: other.why,
+      go: () => selectEntry(other.id),
+    }));
+  const s = entry.subject;
+  // a PR: the ticket it is about first
+  if (s.type === "pr") {
+    const link = ticketOf(s.pr.url);
+    const pr = s.pr;
+    return link?.card
+      ? [
+          {
+            id: `ticket:${link.card}`,
+            icon: "board",
+            title: `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
+            meta: translate("today.link.ticket"),
+            go: () => openTicketOf(pr),
+          },
+          ...same,
+        ]
+      : same;
+  }
+  if (s.type !== "card") return same;
+  const tracker = provider(s.card.provider);
+  if (!tracker) return same;
+  const links = ticketLinks(tracker, cardKey(tracker.id, s.card.card.id), s.card.card.number);
+  // the PRs Relay linked to this card, as their item under Today when they are there
+  const all = usePullRequestsStore.getState().list;
+  const linked = prsOfCard(tracker.id, s.card.card.id)
+    .map(url => [...(all?.review ?? []), ...(all?.mine ?? [])].find(pr => pr.url === url))
+    .filter((pr): pr is NonNullable<typeof pr> => !!pr && !links.prs.some(x => x.url === pr.url))
+    .map(pr => {
+      const item = model.queue.find(other => other.subject.type === "pr" && other.subject.pr.url === pr.url);
+      return {
+        id: pr.url,
+        icon: "pr",
+        title: pr.title,
+        meta: `${pr.repo} #${pr.number}`,
+        go: () => (item ? selectEntry(item.id) : openLinked({ repo: pr.repo, number: pr.number })),
+      };
+    });
+  return [
+    ...linked,
+    ...links.conversations.map(c => ({
+      id: c.key,
+      icon: "chat",
+      title: c.title,
+      meta: projectLabel(c.project),
+      go: () => openLinked({ conversation: c.key }),
+    })),
+    ...links.prs.map(pr => ({
+      id: pr.url,
+      icon: "pr",
+      title: pr.title,
+      meta: `${pr.repo} #${pr.number}`,
+      go: () => openLinked({ repo: pr.repo, number: pr.number }),
+    })),
+    ...same,
+  ];
+}
+function ConnectedList({ items }: { items: Connected[] }) {
+  const { t } = useT();
+  if (!items.length) return <div className="text-[13px] text-secondary">{t("today.nothingConnected")}</div>;
+  return (
+    <div className="flex flex-col gap-0.5">
+      {items.map(item => (
+        <button
+          key={item.id}
+          onClick={item.go}
+          className="flex items-start gap-2 px-2 py-1.5 -mx-2 rounded-lg text-left cursor-pointer hover:bg-fill-2"
+        >
+          <Icon name={item.icon} className="glyph size-3.5 mt-0.5 flex-none text-secondary" />
+          <span className="flex-1 min-w-0 flex flex-col leading-[1.35]">
+            <span className="text-[13px] truncate">{item.title}</span>
+            <span className="text-[11px] text-tertiary truncate">{item.meta}</span>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const PILL =
+  "inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-md border border-separator-strong bg-raised text-xs";
+const PICK = "bg-transparent outline-0 text-xs font-medium cursor-pointer max-w-44";
+// a status' dot: backlog grey, planned blue, active orange, blocked red, review accent, done green
+const DOT: Record<string, string> = {
+  idle: "bg-tertiary",
+  planned: "bg-ctx-a",
+  active: "bg-soon",
+  blocked: "bg-late",
+  review: "bg-accent",
+  done: "bg-ok",
+  todo: "bg-tertiary",
+  doing: "bg-soon",
+};
+
+/** Under the title: the status (the tracker's own for a card) and the assignee as small pickers,
+ *  then what is known that the header does not say already. */
+function Meta({ entry }: { entry: Entry }) {
+  const { locale, t } = useT();
+  const facts = factsOf(entry, locale, t).filter(([, value]) => value && value !== "–");
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {entry.kind === "ask" ? null : <StatusPick entry={entry} />}
+      <AssigneePick entry={entry} />
+      {facts.map(([label, value]) => (
+        <span key={label} className="text-xs whitespace-nowrap max-w-72 truncate" title={value}>
+          <span className="text-tertiary">{label}</span> {value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type T = ReturnType<typeof useT>["t"];
+// what is known about the item that its header (kind, where, why, title) does not show, as label and value
+function factsOf(entry: Entry, locale: string, t: T): [string, string][] {
+  const s = entry.subject;
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+  switch (s.type) {
+    case "mail":
+      return [[t("today.fact.to"), s.mail.to.map(a => a.name || a.email).join(", ")]];
+    case "pr": {
+      const link = ticketOf(s.pr.url);
+      return [
+        [
+          t("today.fact.ticket"),
+          link
+            ? `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`
+            : "",
+        ],
+        [t("today.fact.updated"), day(s.pr.updated)],
+      ];
+    }
+    case "card":
+      return [
+        [t("today.fact.due"), s.card.card.due ? day(s.card.card.due) : ""],
+        [t("today.fact.labels"), (s.card.card.labels ?? []).join(", ")],
+      ];
+    case "meeting":
+      return [
+        [t("today.fact.organizer"), s.meeting.organizer],
+        [t("today.fact.people"), String(s.meeting.people.length || "")],
+      ];
+    case "reminder":
+      return [[t("today.fact.repeat"), s.reminder.repeat ?? ""]];
+    default:
+      return [];
   }
 }
 
-const STATUSES: [Status, string][] = [
-  ["todo", ""],
-  ["doing", "P"],
-  ["done", "D"],
-];
-/** To do, in progress, done: set where the item lives when it can be (see setStatus); a failure shows under it. */
-function StatusPicker({ entry }: { entry: Entry }) {
+/** The status as a small picker: a card's own workflow in its tracker, else to do / in progress / done (setStatus). */
+function StatusPick({ entry }: { entry: Entry }) {
   const { t } = useT();
+  const s = entry.subject;
+  const view = useDetailsStore(st => (s.type === "card" ? st.card[entry.id] : undefined));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const pick = async (status: Status) => {
-    if (status === entry.status || busy) return;
+  const run = async (job: () => Promise<unknown>) => {
     setBusy(true);
     setErr("");
-    try {
-      await setStatus(entry, status);
-    } catch (error) {
-      setErr(String(error));
-    }
+    await job().catch(error => setErr(String(error)));
     setBusy(false);
   };
+  const tracker = s.type === "card" && view?.statuses?.length ? view : null;
+  const current = tracker ? (tracker.statuses!.find(x => x.id === tracker.status?.id) ?? null) : null;
+  const dot = tracker ? DOT[current?.tone ?? current?.state ?? "idle"] : DOT[entry.status];
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-2">
-        <div className={`inline-flex bg-fill-2 rounded-lg p-0.5 ${busy ? "opacity-60" : ""}`}>
-          {STATUSES.map(([status, key]) => (
-            <button
-              key={status}
-              disabled={busy}
-              onClick={() => pick(status)}
-              title={key ? t("today.statusKey", { key }) : undefined}
-              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium cursor-pointer ${entry.status === status ? "bg-raised shadow-sm text-label" : "text-secondary hover:text-label"}`}
-            >
-              <StatusDot status={status} />
-              {t(`today.status.${status}`)}
-            </button>
+    <span className={`${PILL} ${busy ? "opacity-60" : ""}`} title={err || t(`today.doneIn.${entry.kind}`)}>
+      <span className={`size-2 rounded-full flex-none ${err ? "bg-late" : dot}`} />
+      {tracker && s.type === "card" ? (
+        <select
+          className={PICK}
+          disabled={busy}
+          value={current?.id ?? ""}
+          onChange={e => run(() => cardAct(entry.id, s.card, "status", e.target.value))}
+        >
+          {tracker.statuses!.map(x => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
           ))}
-        </div>
-        <span className="text-xs text-tertiary">{t(`today.doneIn.${entry.kind}`)}</span>
-      </div>
-      {err ? <div className="err-box">{err}</div> : null}
-    </div>
+        </select>
+      ) : (
+        <select
+          className={PICK}
+          disabled={busy}
+          value={entry.status}
+          onChange={e => run(() => setStatus(entry, e.target.value as Status))}
+        >
+          {(["todo", "doing", "done"] as Status[]).map(x => (
+            <option key={x} value={x}>
+              {t(`today.status.${x}`)}
+            </option>
+          ))}
+        </select>
+      )}
+    </span>
+  );
+}
+
+/** Who has the card, as a small picker (a tracker with one assignee: Productive, Linear); assigning it to someone
+ *  else takes it off Today, the toast says to whom. */
+function AssigneePick({ entry }: { entry: Entry }) {
+  const { t } = useT();
+  const s = entry.subject;
+  const view = useDetailsStore(st => (s.type === "card" ? st.card[entry.id] : undefined));
+  const [busy, setBusy] = useState(false);
+  if (s.type !== "card" || !view?.people?.length || view.assignees) return null;
+  return (
+    <span className={`${PILL} ${busy ? "opacity-60" : ""}`}>
+      <span className="text-tertiary">{t("today.assignee")}</span>
+      <select
+        className={PICK}
+        disabled={busy}
+        value={view.assignee?.id ?? ""}
+        onChange={async e => {
+          const id = e.target.value;
+          setBusy(true);
+          await cardAct(entry.id, s.card, "assignee", id).then(
+            () => toastAssigned(view.people!.find(p => p.id === id)?.name ?? ""),
+            error => toastAssigned(String(error)),
+          );
+          setBusy(false);
+        }}
+      >
+        <option value="">{t("today.unassigned")}</option>
+        {view.people.map(person => (
+          <option key={person.id} value={person.id}>
+            {person.name}
+          </option>
+        ))}
+      </select>
+    </span>
   );
 }

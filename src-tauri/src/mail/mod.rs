@@ -288,7 +288,7 @@ fn row(f: &Fetch, email: &str, known: Option<&HashSet<String>>) -> Value {
     // ponytail: a top-level multipart/mixed stands for "has attachments", BODYSTRUCTURE when that misleads
     let att = m.as_ref().and_then(|m| m.content_type()).is_some_and(|c| c.ctype().eq_ignore_ascii_case("multipart") && c.subtype().is_some_and(|s| s.eq_ignore_ascii_case("mixed")));
     json!({ "account": email, "id": f.uid.unwrap_or(0).to_string(), "subject": m.as_ref().and_then(|m| m.subject()).unwrap_or(""), "date": date,
-        "unread": !f.flags().any(|x| x == Flag::Seen), "from": addrs(m.as_ref().and_then(|m| m.from())), "to": addrs(m.as_ref().and_then(|m| m.to())), "attachments": att,
+        "unread": !f.flags().any(|x| x == Flag::Seen), "answered": f.flags().any(|x| x == Flag::Answered), "from": addrs(m.as_ref().and_then(|m| m.from())), "to": addrs(m.as_ref().and_then(|m| m.to())), "attachments": att,
         "other": known.zip(m.as_ref()).is_some_and(|(k, m)| other(m, k)) })
 }
 
@@ -561,6 +561,11 @@ impl Mail {
             Ok(v) => json!({ "content": [{ "type": "text", "text": v.to_string() }] }),
             Err(e) => json!({ "content": [{ "type": "text", "text": e }], "isError": true }),
         }
+    }
+
+    /// The same tools for the app itself (Today's mail detail), the answer as data instead of an MCP result.
+    pub async fn run(&self, accts: &[Account], default: &str, name: &str, args: &Value, downloads: &Path) -> Result<Value, String> {
+        self.call(accts, default, name, args, downloads).await
     }
 
     // every argument is checked before anything goes over the network

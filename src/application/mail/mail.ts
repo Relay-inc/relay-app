@@ -1,6 +1,6 @@
 import { t } from "../../shared/i18n";
 import { urlOk } from "../../shared/markdown";
-import { mailKey, isMailKey } from "../../domain/navigation/keys";
+import { mailKey, isMailKey, panelItem } from "../../domain/navigation/keys";
 import type { Mail, MailBox, MailFilter } from "../../domain/mail/types";
 import {
   PAGE_SIZE,
@@ -24,7 +24,7 @@ import { mailExperimental, mailOn, settings } from "../settings/settings";
 import { findProjects, projectLabel } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
-import { select } from "../navigation/navigation";
+import { select, toast } from "../navigation/navigation";
 import { closeMail, forgetDetails, openMail } from "../navigation/panel";
 import { startChat } from "../conversations/chats";
 import { sendMsg } from "../conversations/actions";
@@ -359,4 +359,21 @@ export async function mailChat(key: string, how: "talk" | "draft" | "draftAll") 
   });
   await select(chatKey);
   if (how !== "talk") sendMsg(draftPrompt(reference, how === "draftAll"));
+}
+
+/** An attachment of a mail, on the user's click: saved in Downloads/Relay-mail (never over another file, with the
+ *  quarantine flag Mail sets, a file that runs on a double-click is refused) and opened in its app. */
+export async function openAttachment(key: string, index: number) {
+  const item = panelItem(key);
+  if (item?.kind !== "mail") return;
+  try {
+    const { path } = await backend.mailTool<{ path: string }>("attachment", {
+      account: item.account,
+      id: item.id,
+      index,
+    });
+    await backend.openFile(path, false);
+  } catch (error) {
+    toast(String(error));
+  }
 }

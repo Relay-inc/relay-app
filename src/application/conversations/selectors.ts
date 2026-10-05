@@ -3,7 +3,7 @@ import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
-import { WAIT, REM, PRS, MAIL, USAGE, isView } from "../../domain/navigation/views";
+import { WAIT, REM, PRS, MAIL, USAGE, isView, reviewOf } from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { ghOn, settings } from "../settings/settings";
@@ -21,6 +21,7 @@ import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
 import { runningWorkers } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
+import { useReviewStore } from "../today/review";
 import { todayRest } from "../today/today";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
@@ -117,7 +118,15 @@ export function chatBar(key: string) {
     [WAIT]: "nav.today",
     [ORCH]: "nav.orch",
   };
-  const viewName = board ? board.name : VIEW_NAMES[key] ? t(VIEW_NAMES[key]) : "";
+  // a review of Today's work in progress: named by its PR, under its project
+  const review = reviewOf(key) ? useReviewStore.getState().reviews[reviewOf(key)] : undefined;
+  const viewName = board
+    ? board.name
+    : VIEW_NAMES[key]
+      ? t(VIEW_NAMES[key])
+      : review
+        ? `${t("today.kind.review")} ${review.title}`
+        : "";
   const linkedRef = toolProject ? settings().boards?.[toolProject] : undefined;
   const linked = linkedRef && provider(linkedRef.provider);
   return {

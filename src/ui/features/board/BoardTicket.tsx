@@ -111,7 +111,8 @@ export function BoardTicket({
             feed={view.feed}
             providerId={provider.id}
             providerName={provider.name}
-            onComment={text => act("comment", text)}
+            people={view.people}
+            onComment={(text, mentions) => cardAct(modal, "comment", { value: text, files: [], mentions })}
           />
         </div>
         <TicketSidebar view={view} projectName={projectName} onAct={act} onChat={startChat} />

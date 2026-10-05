@@ -234,6 +234,8 @@ fn meeting(e: &Ev, me: &str, start: DateTime<Utc>, len: Duration) -> Option<Valu
     let organizer = e.get("ORGANIZER").map(|o| o.param("CN").map(String::from).unwrap_or_else(|| mailto(o))).unwrap_or_default();
     Some(json!({
         "id": format!("{uid}@{}", start.timestamp()), "feed": me,
+        // the invite's text, from whoever sent it: the agenda Today shows (untrusted, capped)
+        "description": e.text("DESCRIPTION").chars().take(2000).collect::<String>(),
         "title": e.text("SUMMARY"), "start": start.to_rfc3339(), "end": (start + len).to_rfc3339(),
         "location": e.text("LOCATION"), "join": join(e), "organizer": organizer, "people": people,
     }))

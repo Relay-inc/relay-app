@@ -38,6 +38,7 @@ import { SidebarMenu, type MenuItem } from "./SidebarMenu";
 import { SidebarFooter } from "./SidebarFooter";
 import { useReorder } from "./useReorder";
 import { DROP_LINE_AFTER } from "./rows";
+import { closeWork, openWork } from "../../../application/today/work";
 import "../../styles/navigation.css";
 
 // a view's menu has its key in `chatKey`
@@ -199,34 +200,56 @@ export function NavigationView({ className }: { className: string }) {
         {renderMore(false)}
       </>
     );
-  const renderConversation = (row: ConvRow, indent: boolean) => (
-    <SidebarRow
-      key={row.key}
-      kind="conv"
-      data-kind="conv"
-      data-key={row.key}
-      data-parent={row.parent}
-      title={row.term ? t("nav.inTerminal") : undefined}
-      icon={row.term ? "term" : "chat"}
-      svg={row.glyph}
-      name={row.title}
-      selected={row.selected}
-      unseen={row.unseen}
-      indent={indent}
-      closable={row.closable}
-      closing={row.closing}
-      trail={row.trail}
-      subs={row.subs}
-      subsTitle={row.subsTitle}
-      mark={row.orch ? t("nav.orchWorker") : ""}
-      {...dropzone("conv", row.key)}
-      onPointerDown={press("conv", row.key, row.parent)}
-      onClick={unlessDragged(() => select(row.key))}
-      onAuxClick={closeOnMiddleClick(row.key)}
-      onContextMenu={openMenu({ chatKey: row.key, project: null, kind: "conv" })}
-      onClose={unlessDragged(() => closeChat(row.key))}
-    />
-  );
+  const renderConversation = (row: ConvRow, indent: boolean) =>
+    row.work ? (
+      // Today's work in progress: opens Today on it, closing discards it; not dragged, no conversation menu
+      <SidebarRow
+        key={row.key}
+        kind="conv"
+        data-kind="work"
+        data-key={row.key}
+        icon={row.icon ?? "chat"}
+        name={row.title}
+        selected={row.selected}
+        unseen={false}
+        indent={indent}
+        closable={row.closable}
+        closing={false}
+        trail={row.trail}
+        subs={0}
+        subsTitle=""
+        mark=""
+        onClick={() => openWork(row.key)}
+        onClose={() => closeWork(row.key)}
+      />
+    ) : (
+      <SidebarRow
+        key={row.key}
+        kind="conv"
+        data-kind="conv"
+        data-key={row.key}
+        data-parent={row.parent}
+        title={row.term ? t("nav.inTerminal") : undefined}
+        icon={row.term ? "term" : "chat"}
+        svg={row.glyph}
+        name={row.title}
+        selected={row.selected}
+        unseen={row.unseen}
+        indent={indent}
+        closable={row.closable}
+        closing={row.closing}
+        trail={row.trail}
+        subs={row.subs}
+        subsTitle={row.subsTitle}
+        mark={row.orch ? t("nav.orchWorker") : ""}
+        {...dropzone("conv", row.key)}
+        onPointerDown={press("conv", row.key, row.parent)}
+        onClick={unlessDragged(() => select(row.key))}
+        onAuxClick={closeOnMiddleClick(row.key)}
+        onContextMenu={openMenu({ chatKey: row.key, project: null, kind: "conv" })}
+        onClose={unlessDragged(() => closeChat(row.key))}
+      />
+    );
   const renderProject = (project: ProjectBlock, tint: Section["tint"]) => (
     <Fragment key={project.name}>
       <SidebarRow

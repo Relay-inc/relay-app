@@ -204,6 +204,18 @@ impl AgentProvider for Claude {
         let t: String = t.lines().next().unwrap_or("").trim().trim_matches(|c| c == '"' || c == '\'' || c == '.').chars().take(60).collect();
         if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
     }
+    /// Like `title`: one call outside the vault without settings, tools, MCP or a transcript, here on Sonnet.
+    fn write(&self, env: &Env, system: &str, text: &str) -> Result<String, String> {
+        let text: String = text.chars().take(20_000).collect();
+        let mut cmd = Command::new(env.bin);
+        on_account(&mut cmd, account(env));
+        let out = cmd
+            .args(["-p", "--model", "sonnet", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "", "--system-prompt", system])
+            .arg(text).current_dir(std::env::temp_dir()).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY")
+            .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+        let t = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+    }
     fn limits(&self, env: &Env) -> usage::Limits { usage_log::fetch_limits(env.home, account(env)) }
     fn usage(&self, env: &Env, since: i64) -> Vec<usage::Record> {
         let roots: Vec<PathBuf> = config_dirs(env).iter().map(|d| PathBuf::from(format!("{d}/projects"))).collect();

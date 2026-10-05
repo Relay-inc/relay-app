@@ -9,11 +9,16 @@ const VIEWS: readonly string[] = Object.values(VIEW);
 export const LEGACY_BOARD = "__board";
 const BOARD_PREFIX = "__board:";
 const TERM_PREFIX = "t:";
+const WORK_PREFIX = "work:";
+/** What Today has in progress, shown in the sidebar under its project (domain/today/work.ts). */
+export type WorkKind = "review" | "mail" | "meeting";
 
 /** A provider's board: `__board:<provider id>`. */
 export const boardKey = (provider: string) => `${BOARD_PREFIX}${provider}`;
 /** A session open in the terminal, not started by the app: `t:<session id>`. */
 export const termKey = (sid: string) => `${TERM_PREFIX}${sid}`;
+/** Work in progress on Today: `work:<kind>:<id>` (a review's item, a mail's key, a meeting's id). */
+export const workKey = (kind: WorkKind, id: string) => `${WORK_PREFIX}${kind}:${id}`;
 /** A new app conversation: `c:<time in base 36>`. Older ones are `general:<id>` or a project's name. */
 export const newChatKey = (now: number) => `c:${now.toString(36)}`;
 /** When an app conversation was made, from its key; 0 when the key does not say. */
@@ -27,12 +32,15 @@ type Opened =
   | { kind: "view"; view: ViewKey }
   | { kind: "board"; provider: string }
   | { kind: "term"; sid: string }
+  | { kind: "work"; work: WorkKind; id: string }
   | { kind: "chat"; key: string };
 /** What a selection key opens. */
 export function opened(key: string): Opened {
   if (VIEWS.includes(key)) return { kind: "view", view: key as ViewKey };
   if (key.startsWith(BOARD_PREFIX)) return { kind: "board", provider: key.slice(BOARD_PREFIX.length) };
   if (key.startsWith(TERM_PREFIX)) return { kind: "term", sid: key.slice(TERM_PREFIX.length) };
+  const work = /^work:(review|mail|meeting):(.+)$/.exec(key);
+  if (work) return { kind: "work", work: work[1] as WorkKind, id: work[2] };
   return { kind: "chat", key };
 }
 export const isTerminal = (key: string) => key.startsWith(TERM_PREFIX);
