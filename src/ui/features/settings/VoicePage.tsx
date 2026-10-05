@@ -5,12 +5,14 @@ import {
   downloadModel,
   loadAccess,
   loadModels,
+  pauseShortcuts,
   pickModel,
   removeModel,
+  saveShortcut,
   saveVoice,
   useVoicePageStore,
 } from "../../../application/settings/voice-page";
-import { MODEL_NAMES, VOICE_SHORTCUTS, voiceOf, type VoiceMode } from "../../../domain/settings/voice";
+import { MODEL_NAMES, voiceOf, type ShortcutKey, type VoiceMode } from "../../../domain/settings/voice";
 import type { Key } from "../../../shared/i18n";
 import { Select } from "../../components/Select";
 import { useT } from "../../hooks/useT";
@@ -18,6 +20,7 @@ import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, OK_MESSAGE, SELECT } from "./b
 import { Field } from "./Field";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
+import { ShortcutField } from "./ShortcutField";
 import { Switch } from "./Switch";
 
 /** Voice: dictation on or off, the speech model to use (downloaded or removed here), its language, and the shortcut
@@ -30,6 +33,7 @@ export function VoicePage({ active }: { active: boolean }) {
   const progress = useVoicePageStore(s => s.progress);
   const errors = useVoicePageStore(s => s.errors);
   const access = useVoicePageStore(s => s.access);
+  const shortcutError = useVoicePageStore(s => s.shortcutError);
   useEffect(() => {
     if (active) loadModels();
   }, [active]);
@@ -50,17 +54,40 @@ export function VoicePage({ active }: { active: boolean }) {
       .sort((a, b) => a.name.localeCompare(b.name, locale)),
   ];
   const modes = (["both", "hold", "tap"] as const).map(id => [id, t(`voice.mode.${id}`)] as const);
+  // a way's shortcut, indented under its switch, with why a pick was refused
+  const shortcutRow = (key: ShortcutKey, hint: string) => (
+    <Field
+      label={t("voice.shortcut")}
+      id={`voice-${key}`}
+      className="pl-6"
+      hint={shortcutError[key] ? <span className={ERROR_MESSAGE}>{shortcutError[key]}</span> : hint}
+    >
+      <ShortcutField
+        id={`voice-${key}`}
+        value={voice[key]}
+        onPick={shortcut => saveShortcut(key, shortcut)}
+        onListening={pauseShortcuts}
+      />
+    </Field>
+  );
   return (
     <div className="grid gap-7">
+      {/* each way to dictate: its switch, and once on, its shortcut under it */}
       <Section title={t("voice.sec.dictation")} rows>
         <Field label={t("voice.on")} id="voiceon" hint={t("voice.onHelp")}>
           <Switch id="voiceon" on={voice.on} onToggle={on => saveVoice({ on })} />
         </Field>
-        <Field label={t("voice.anywhere")} id="voiceany" hint={t("voice.anywhereHelp")}>
-          <Switch id="voiceany" on={voice.anywhere} onToggle={anywhere => saveVoice({ anywhere })} />
+        {voice.on ? shortcutRow("shortcut", t("voice.composerShortcutHelp")) : null}
+        <Field label={t("voice.chat")} id="voicechat" hint={t("voice.chatHelp")}>
+          <Switch id="voicechat" on={voice.chatOn} onToggle={chatOn => saveVoice({ chatOn })} />
         </Field>
-        {voice.anywhere ? (
-          <Field label={t("voice.access")} hint={t(access ? "voice.accessOk" : "voice.accessHelp")}>
+        {voice.chatOn ? shortcutRow("chatShortcut", t("voice.anyAppShortcutHelp")) : null}
+        <Field label={t("voice.paste")} id="voicepaste" hint={t("voice.pasteHelp")}>
+          <Switch id="voicepaste" on={voice.pasteOn} onToggle={pasteOn => saveVoice({ pasteOn })} />
+        </Field>
+        {voice.pasteOn ? shortcutRow("pasteShortcut", t("voice.anyAppShortcutHelp")) : null}
+        {voice.pasteOn ? (
+          <Field label={t("voice.access")} className="pl-6" hint={t(access ? "voice.accessOk" : "voice.accessHelp")}>
             {access ? (
               <span className={OK_MESSAGE}>{t("voice.accessAllowed")}</span>
             ) : (
@@ -68,6 +95,16 @@ export function VoicePage({ active }: { active: boolean }) {
                 {t("voice.accessAsk")}
               </button>
             )}
+          </Field>
+        ) : null}
+        {voice.on || voice.chatOn || voice.pasteOn ? (
+          <Field label={t("voice.mode")} hint={t("voice.modeHelp")}>
+            <Segmented<VoiceMode>
+              label={t("voice.mode")}
+              options={modes}
+              value={voice.mode}
+              onPick={mode => saveVoice({ mode })}
+            />
           </Field>
         ) : null}
       </Section>
@@ -144,25 +181,6 @@ export function VoicePage({ active }: { active: boolean }) {
         </Field>
         <Field label={t("voice.summarize")} id="voicesum" hint={t("voice.summarizeHelp")}>
           <Switch id="voicesum" on={voice.summarize} onToggle={summarize => saveVoice({ summarize })} />
-        </Field>
-      </Section>
-      <Section title={t("voice.sec.when")} rows>
-        <Field label={t("voice.shortcut")} id="voicekey" hint={t("voice.shortcutHelp")}>
-          <Select
-            className={SELECT}
-            id="voicekey"
-            options={VOICE_SHORTCUTS.map(([id, name]) => ({ id, name }))}
-            value={voice.shortcut}
-            onChange={shortcut => saveVoice({ shortcut })}
-          />
-        </Field>
-        <Field label={t("voice.mode")} hint={t("voice.modeHelp")}>
-          <Segmented<VoiceMode>
-            label={t("voice.mode")}
-            options={modes}
-            value={voice.mode}
-            onPick={mode => saveVoice({ mode })}
-          />
         </Field>
       </Section>
     </div>

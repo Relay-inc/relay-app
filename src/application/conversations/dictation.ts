@@ -1,5 +1,8 @@
 import { dictationCancel, dictationDownload, dictationStart, dictationStop } from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
+import { select } from "../navigation/navigation";
+import { newChat } from "./chats";
+import { sendMsg } from "./actions";
 
 /** The composer's dictation (src-tauri/src/dictation.rs): `offer` asks to download the speech model first. */
 export type DictationPhase = "idle" | "offer" | "downloading" | "recording" | "transcribing";
@@ -49,3 +52,9 @@ export async function downloadModel() {
 }
 
 export const dismissDictationError = () => set({ error: "" });
+
+/** What was said with the new-conversation shortcut from any app: a new conversation in General, sent at once. */
+export async function chatFromDictation(text: string) {
+  await select(newChat(null));
+  await sendMsg(text);
+}

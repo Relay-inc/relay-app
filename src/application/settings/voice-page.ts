@@ -6,24 +6,29 @@ import {
   dictationDelete,
   dictationDownload,
   dictationModels,
+  dictationPauseShortcuts,
 } from "../../infrastructure/backend";
+import { shortcutLabel, voiceOf, type ShortcutKey } from "../../domain/settings/voice";
+import { t } from "../../shared/i18n";
 import { makeStore } from "../make-store";
 import { useSettingsStore } from "./store";
 import { save } from "./window";
 
-// Settings › Voice: dictation on or off, the speech model (downloaded here, or removed), its language, and the
-// shortcut with how it records. The models and their downloads are this page's own store; the choices are settings.
+// Settings › Voice: the three ways to dictate with their shortcuts, the speech model (downloaded here, or removed), its
+// language, and meetings. The models and their downloads are this page's own store; the choices are settings.
 type VoicePageState = {
   models: SpeechModelInfo[];
   progress: Record<string, number>;
   errors: Record<string, string>;
   access: boolean | null; // Accessibility for pasting into other apps, null until asked
+  shortcutError: Partial<Record<ShortcutKey, string>>; // why a shortcut was not taken
 };
 export const useVoicePageStore = makeStore<VoicePageState>(() => ({
   models: [],
   progress: {},
   errors: {},
   access: null,
+  shortcutError: {},
 }));
 const set = useVoicePageStore.setState;
 const current = (): Settings => useSettingsStore.getState().settings;
@@ -86,3 +91,15 @@ export async function askAccess() {
   await dictationAskAccess().catch(() => false);
   await loadAccess();
 }
+
+const KEYS: ShortcutKey[] = ["shortcut", "chatShortcut", "pasteShortcut"];
+/** One way's shortcut, unless another way already has it: then it stays and the field says why. */
+export async function saveShortcut(key: ShortcutKey, shortcut: string) {
+  const voice = voiceOf(current().voice);
+  const taken = KEYS.some(other => other !== key && voice[other] === shortcut);
+  set(draft => {
+    draft.shortcutError[key] = taken ? t("voice.shortcutTaken", { key: shortcutLabel(shortcut) }) : undefined;
+  });
+  if (!taken) await saveVoice({ [key]: shortcut });
+}
+export const pauseShortcuts = (paused: boolean) => dictationPauseShortcuts(paused).catch(() => {});

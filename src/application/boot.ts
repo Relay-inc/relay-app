@@ -17,6 +17,7 @@ import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from 
 import { onboard } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
 import { saveChats, newChat } from "./conversations/chats";
+import { chatFromDictation } from "./conversations/dictation";
 import { terminalOf } from "./conversations/selectors";
 import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
@@ -104,6 +105,7 @@ function listenToBackend() {
   backend.onMenu(onMenu);
   backend.onOrch(onOrchEvent);
   backend.onRetry(onRetryEvent);
+  backend.onDictatedChat(chatFromDictation);
   listenToFileDrops();
 }
 

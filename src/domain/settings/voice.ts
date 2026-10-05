@@ -1,12 +1,16 @@
-/** Settings › Voice: dictation on or off, the speech model and language, and when it records. */
+/** Settings › Voice: three ways to dictate, each switched on with its own shortcut (in the composer; from any app into a
+ *  new conversation; from any app pasted where the cursor is), the speech model and language, and meetings. */
 export type VoiceMode = "both" | "hold" | "tap"; // both: held records until release, tapped until the next tap
 export type VoiceCfg = {
-  on?: boolean;
-  anywhere?: boolean; // the shortcut works in every app and pastes there (src-tauri/src/anywhere.rs), off unless true
+  on?: boolean; // dictation in the composer, on unless false
+  shortcut?: string; // its shortcut, only while Relay is in front
+  chatOn?: boolean; // the shortcut works in any app and starts a new conversation with what was said, off unless true
+  chatShortcut?: string;
+  pasteOn?: boolean; // the shortcut works in any app and pastes there (src-tauri/src/anywhere.rs), off unless true
+  pasteShortcut?: string;
   model?: string;
   language?: string;
   mode?: VoiceMode;
-  shortcut?: string;
   meetingModel?: string; // "" or unset: the dictation model
   keepAudio?: boolean; // a recorded meeting's audio goes into the vault, on unless false
   summarize?: boolean; // a recorded meeting starts the conversation that writes its note, on unless false
@@ -22,28 +26,52 @@ export type SpeechModelInfo = {
 };
 
 export const DEFAULT_MODEL = "parakeet-v3";
-/** The shortcuts to pick from, with their label. ⌃Space is left out: macOS switches the input source with it. */
-export const VOICE_SHORTCUTS = [
-  ["alt+Space", "⌥Space"],
-  ["alt+shift+Space", "⇧⌥Space"],
-  ["ctrl+alt+Space", "⌃⌥Space"],
-  ["meta+shift+KeyD", "⇧⌘D"],
-] as const;
-export const DEFAULT_SHORTCUT = VOICE_SHORTCUTS[0][0];
+/** Each way's shortcut until one is set. ⌃Space is left out: macOS switches the input source with it. */
+export const DEFAULT_SHORTCUTS = {
+  shortcut: "alt+Space",
+  chatShortcut: "alt+shift+Space",
+  pasteShortcut: "ctrl+alt+Space",
+} as const;
+export type ShortcutKey = keyof typeof DEFAULT_SHORTCUTS;
+const MODS = ["ctrl", "alt", "shift", "meta"] as const;
+const SYMBOLS: Record<(typeof MODS)[number], string> = { ctrl: "⌃", alt: "⌥", shift: "⇧", meta: "⌘" };
+const valid = (id: string | undefined): id is string => !!id && /^((ctrl|alt|shift|meta)\+)*[A-Za-z0-9]+$/.test(id);
 
 /** The voice settings with their defaults filled in. */
 export const voiceOf = (cfg: VoiceCfg | undefined) => ({
   on: cfg?.on !== false,
-  anywhere: cfg?.anywhere === true,
+  shortcut: valid(cfg?.shortcut) ? cfg!.shortcut! : DEFAULT_SHORTCUTS.shortcut,
+  chatOn: cfg?.chatOn === true,
+  chatShortcut: valid(cfg?.chatShortcut) ? cfg!.chatShortcut! : DEFAULT_SHORTCUTS.chatShortcut,
+  pasteOn: cfg?.pasteOn === true,
+  pasteShortcut: valid(cfg?.pasteShortcut) ? cfg!.pasteShortcut! : DEFAULT_SHORTCUTS.pasteShortcut,
   model: cfg?.model || DEFAULT_MODEL,
   language: cfg?.language || "auto",
   mode: cfg?.mode || "both",
-  shortcut: VOICE_SHORTCUTS.some(([id]) => id === cfg?.shortcut) ? cfg!.shortcut! : DEFAULT_SHORTCUT,
   meetingModel: cfg?.meetingModel || "",
   keepAudio: cfg?.keepAudio !== false,
   summarize: cfg?.summarize !== false,
 });
-export const shortcutLabel = (id: string) => VOICE_SHORTCUTS.find(([key]) => key === id)?.[1] ?? id;
+
+/** A shortcut as the Mac writes it: ⌃⌥⇧⌘ in that order, then the key ("KeyD" as D, "Digit1" as 1). */
+export function shortcutLabel(id: string) {
+  const parts = id.split("+");
+  const code = parts.pop() ?? "";
+  const key = code.replace(/^Key(?=[A-Z]$)/, "").replace(/^Digit(?=\d$)/, "");
+  return (
+    MODS.filter(mod => parts.includes(mod))
+      .map(mod => SYMBOLS[mod])
+      .join("") + key
+  );
+}
+/** The shortcut a key press makes, or null while only modifiers are down or none is (a plain letter would type).
+ *  Function keys may go alone. */
+export function shortcutOf(e: Pick<KeyboardEvent, "code" | "altKey" | "shiftKey" | "ctrlKey" | "metaKey">) {
+  if (/^(Shift|Alt|Control|Meta|OS|CapsLock|Fn)/.test(e.code) || !/^[A-Za-z0-9]+$/.test(e.code)) return null;
+  const mods = MODS.filter(mod => e[`${mod}Key`]);
+  if (!mods.length && !/^F\d{1,2}$/.test(e.code)) return null;
+  return [...mods, e.code].join("+");
+}
 
 type Keys = Pick<KeyboardEvent, "code" | "altKey" | "shiftKey" | "ctrlKey" | "metaKey">;
 /** Whether a key event is the shortcut: its key (by `code`, so ⌥ does not change it) with exactly its modifiers. */

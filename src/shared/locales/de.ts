@@ -732,9 +732,6 @@ export default {
   "voice.sec.dictation": "Diktieren",
   "voice.on": "Im Eingabefeld diktieren",
   "voice.onHelp": "Macht aus dem Gesagten Text, auf diesem Mac. Kein Audio verlässt ihn.",
-  "voice.anywhere": "In jeder App diktieren",
-  "voice.anywhereHelp":
-    "Das Tastenkürzel wirkt überall, auch wenn Relay im Hintergrund ist, und fügt den Text beim Cursor ein. Eine kleine Pille unten am Bildschirm zeigt, dass es zuhört.",
   "voice.access": "In andere Apps einfügen",
   "voice.accessHelp":
     "Einfügen braucht Bedienungshilfen. Ohne kommt der Text in die Zwischenablage und du fügst ihn mit ⌘V ein.",
@@ -746,6 +743,17 @@ export default {
   "pill.noModel": "Kein Sprachmodell: siehe Einstellungen › Sprache",
   "pill.silent": "Kein Ton vom Mikrofon",
   "pill.failed": "Diktieren fehlgeschlagen",
+  "voice.chat": "Neue Unterhaltung aus jeder App",
+  "voice.chatHelp": "Sag von überall, was du willst: Relay kommt nach vorne und startet damit eine neue Unterhaltung.",
+  "voice.paste": "In jede App einfügen",
+  "voice.pasteHelp":
+    "Fügt das Gesagte beim Cursor ein, in jeder App. Eine kleine Pille unten am Bildschirm zeigt, dass es zuhört.",
+  "voice.composerShortcutHelp": "Wirkt, wenn Relay vorne ist, wie die Mikrofontaste.",
+  "voice.anyAppShortcutHelp": "Wirkt in jeder App, auch mit Relay im Hintergrund.",
+  "voice.shortcutPress": "Tasten drücken…",
+  "voice.shortcutRecordHelp": "Klicken, dann die Tasten drücken (mit ⌘, ⌥, ⌃ oder ⇧). Escape bricht ab.",
+  "voice.shortcutTaken": "{key} nutzt schon eine andere Art zu diktieren.",
+  "voice.shortcut": "Tastenkürzel",
   "voice.sec.model": "Sprachmodell",
   "voice.modelHelp":
     "Jedes Modell wird einmal geladen; das verwendete bleibt im Speicher. Ein Modell zu wählen, das noch fehlt, lädt es herunter.",
@@ -797,9 +805,6 @@ export default {
   "rec.failed": "Die Aufnahme konnte nicht geschrieben werden: {error}",
   "rec.noModel":
     "Das Sprachmodell für Meetings ist noch nicht geladen. Lade es in Einstellungen › Sprache; die Aufnahme bleibt erhalten.",
-  "voice.sec.when": "Wann es aufnimmt",
-  "voice.shortcut": "Tastenkürzel",
-  "voice.shortcutHelp": "Wirkt, solange das Eingabefeld einer Unterhaltung zu sehen ist, wie die Mikrofontaste.",
   "voice.mode": "Aufnahme",
   "voice.mode.both": "Halten oder tippen",
   "voice.mode.hold": "Halten",

@@ -103,9 +103,8 @@ window.addEventListener(
       cancelDictation();
       return;
     }
-    const { on, anywhere, shortcut, mode } = voice();
-    // in any app macOS hands the shortcut to the backend (anywhere.rs), which pastes into the composer too
-    if (!on || anywhere || !mounted || !isShortcut(e, shortcut)) return;
+    const { on, shortcut, mode } = voice();
+    if (!on || !mounted || !isShortcut(e, shortcut)) return;
     e.preventDefault();
     if (e.repeat) return;
     if (phase === "recording") {

@@ -725,9 +725,6 @@ const en = {
   "voice.sec.dictation": "Dictation",
   "voice.on": "Dictate in the composer",
   "voice.onHelp": "Turns what you say into text on this Mac. No audio leaves it.",
-  "voice.anywhere": "Dictate in any app",
-  "voice.anywhereHelp":
-    "The shortcut works everywhere, also when Relay is in the background, and pastes the text where the cursor is. A small pill at the bottom of the screen shows it listening.",
   "voice.access": "Paste into other apps",
   "voice.accessHelp":
     "Pasting needs Accessibility. Without it the text is put on the clipboard and you paste it yourself with ⌘V.",
@@ -739,6 +736,17 @@ const en = {
   "pill.noModel": "No speech model: see Settings › Voice",
   "pill.silent": "No sound from the microphone",
   "pill.failed": "Dictation failed",
+  "voice.chat": "New conversation from any app",
+  "voice.chatHelp": "Say what you want from anywhere: Relay comes forward and starts a new conversation with it.",
+  "voice.paste": "Paste in any app",
+  "voice.pasteHelp":
+    "Pastes what you say where the cursor is, in any app. A small pill at the bottom of the screen shows it listening.",
+  "voice.composerShortcutHelp": "Works while Relay is in front, like the microphone button.",
+  "voice.anyAppShortcutHelp": "Works in every app, also with Relay in the background.",
+  "voice.shortcutPress": "Press keys…",
+  "voice.shortcutRecordHelp": "Click, then press the keys (with ⌘, ⌥, ⌃ or ⇧). Escape cancels.",
+  "voice.shortcutTaken": "{key} is already used by another way to dictate.",
+  "voice.shortcut": "Shortcut",
   "voice.sec.model": "Speech model",
   "voice.modelHelp":
     "Each model is downloaded once; the one in use stays loaded. Picking one that isn't on this Mac downloads it.",
@@ -790,9 +798,6 @@ const en = {
   "rec.failed": "The recording could not be written: {error}",
   "rec.noModel":
     "The speech model for meetings is not downloaded yet. Download it in Settings › Voice; the recording is kept.",
-  "voice.sec.when": "When it records",
-  "voice.shortcut": "Shortcut",
-  "voice.shortcutHelp": "Works while a conversation's composer shows, like the microphone button.",
   "voice.mode": "Recording",
   "voice.mode.both": "Hold or tap",
   "voice.mode.hold": "Hold",

@@ -1,6 +1,6 @@
-// Dictation in any app (Settings › Voice › Dictate in any app): the shortcut of Settings › Voice registered with macOS,
-// so it records wherever the cursor is, held or tapped as the mode says. The text (dictation.rs) is pasted into the app
-// in front: the clipboard is kept aside, the text put on it, ⌘V sent, and the clipboard put back. Sending ⌘V needs
+// Dictation from any app (Settings › Voice): two shortcuts registered with macOS, so they record wherever the cursor
+// is, held or tapped as the mode says. One starts a new conversation in Relay with what was said (the main window
+// comes forward, src/application/boot.ts sends it); the other pastes the text (dictation.rs) into the app in front: the clipboard is kept aside, the text put on it, ⌘V sent, and the clipboard put back. Sending ⌘V needs
 // Accessibility; without it the text stays on the clipboard to paste by hand. A small pill at the bottom of the screen
 // (overlay.html) shows the level and the transcribing; it never takes the focus, so the app in front keeps it.
 use std::sync::Mutex;
@@ -13,39 +13,62 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 const PILL: &str = "dictation-pill";
 // when the shortcut went down while nothing recorded: a release after 400 ms ends a held recording
 static PRESSED: Mutex<Option<Instant>> = Mutex::new(None);
+// where the running recording's text goes
+static TARGET: Mutex<Target> = Mutex::new(Target::Paste);
+// while Settings records a new shortcut, none is registered: macOS would swallow the keys it waits for
+static PAUSED: Mutex<bool> = Mutex::new(false);
 
-/// The shortcut as Settings › Voice has it, with the settings defaults: Some((shortcut, mode)) when it is on.
-fn wanted(settings: &Value) -> Option<(String, String)> {
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Target { Chat, Paste }
+
+/// The shortcuts Settings › Voice switched on, with the mode: `(shortcut, target)` as global-hotkey parses them.
+fn wanted(settings: &Value) -> (Vec<(String, Target)>, String) {
     let voice = &settings["voice"];
-    if voice["on"] == false || voice["anywhere"] != true { return None; }
-    let shortcut = voice["shortcut"].as_str().filter(|s| !s.is_empty()).unwrap_or("alt+Space");
-    let mode = voice["mode"].as_str().unwrap_or("both").to_string();
-    // the composer's names (domain/settings/voice.ts) as global-hotkey parses them
-    Some((shortcut.replace("meta", "super"), mode))
+    let one = |on: &str, key: &str, default: &str, target| {
+        (voice[on] == true).then(|| {
+            let shortcut = voice[key].as_str().filter(|s| !s.is_empty()).unwrap_or(default);
+            // the composer's names (domain/settings/voice.ts) as global-hotkey parses them
+            (shortcut.replace("meta", "super"), target)
+        })
+    };
+    let list = [one("chatOn", "chatShortcut", "alt+shift+Space", Target::Chat), one("pasteOn", "pasteShortcut", "ctrl+alt+Space", Target::Paste)];
+    (list.into_iter().flatten().collect(), voice["mode"].as_str().unwrap_or("both").to_string())
 }
 
-/// Registers the shortcut, or takes it away, as the settings say. Called at the start and after every save.
+/// Registers the shortcuts, or takes them away, as the settings say. Called at the start and after every save.
 pub fn apply(app: &AppHandle) {
-    let settings = app.state::<super::App>().settings.lock().unwrap().clone();
     let shortcuts = app.global_shortcut();
     shortcuts.unregister_all().ok();
-    let Some((shortcut, mode)) = wanted(&settings) else { return };
-    let registered = shortcuts.on_shortcut(shortcut.as_str(), move |app, _, event| {
-        let held = || PRESSED.lock().unwrap().take().is_some_and(|at| at.elapsed() > Duration::from_millis(400));
-        match event.state {
-            ShortcutState::Pressed if !super::dictation::recording(app) => {
-                *PRESSED.lock().unwrap() = Some(Instant::now());
-                start(app);
+    if *PAUSED.lock().unwrap() { return; }
+    let settings = app.state::<super::App>().settings.lock().unwrap().clone();
+    let (list, mode) = wanted(&settings);
+    for (shortcut, target) in list {
+        let mode = mode.clone();
+        let registered = shortcuts.on_shortcut(shortcut.as_str(), move |app, _, event| {
+            let held = || PRESSED.lock().unwrap().take().is_some_and(|at| at.elapsed() > Duration::from_millis(400));
+            match event.state {
+                ShortcutState::Pressed if !super::dictation::recording(app) => {
+                    *PRESSED.lock().unwrap() = Some(Instant::now());
+                    *TARGET.lock().unwrap() = target;
+                    start(app);
+                }
+                ShortcutState::Pressed if mode != "hold" => finish(app),
+                ShortcutState::Released => {
+                    let held = held();
+                    if super::dictation::recording(app) && (mode == "hold" || (mode == "both" && held)) { finish(app); }
+                }
+                _ => {}
             }
-            ShortcutState::Pressed if mode != "hold" => finish(app),
-            ShortcutState::Released => {
-                let held = held();
-                if super::dictation::recording(app) && (mode == "hold" || (mode == "both" && held)) { finish(app); }
-            }
-            _ => {}
-        }
-    });
-    if let Err(e) = registered { eprintln!("dictation: shortcut {shortcut}: {e}"); }
+        });
+        if let Err(e) = registered { eprintln!("dictation: shortcut {shortcut}: {e}"); }
+    }
+}
+
+/// Settings › Voice records a new shortcut: the registered ones step aside until it is done.
+#[tauri::command]
+pub fn dictation_pause_shortcuts(app: AppHandle, paused: bool) {
+    *PAUSED.lock().unwrap() = paused;
+    apply(&app);
 }
 
 fn pill(app: &AppHandle, state: Value) {
@@ -96,6 +119,11 @@ fn finish(app: &AppHandle) {
     let a = app.clone();
     std::thread::spawn(move || match super::dictation::stop(&a) {
         Ok(text) if text.is_empty() => pill(&a, json!({ "phase": "hidden" })),
+        Ok(text) if *TARGET.lock().unwrap() == Target::Chat => {
+            pill(&a, json!({ "phase": "hidden" }));
+            super::tray::show_main(&a);
+            a.emit_to("main", "dictated-chat", text).ok();
+        }
         Ok(text) => {
             let pasted = mac::trusted();
             let b = a.clone();
@@ -216,15 +244,16 @@ mod mac {
 
 #[cfg(test)]
 mod tests {
-    use super::wanted;
+    use super::{wanted, Target};
     use serde_json::json;
 
     #[test]
-    fn the_shortcut_is_on_only_when_both_switches_are() {
-        assert_eq!(wanted(&json!({})), None);
-        assert_eq!(wanted(&json!({ "voice": { "anywhere": true } })), Some(("alt+Space".into(), "both".into())));
-        assert_eq!(wanted(&json!({ "voice": { "anywhere": true, "on": false } })), None);
-        let picked = json!({ "voice": { "anywhere": true, "shortcut": "meta+shift+KeyD", "mode": "hold" } });
-        assert_eq!(wanted(&picked), Some(("super+shift+KeyD".into(), "hold".into())));
+    fn only_the_switched_on_shortcuts_are_registered() {
+        assert_eq!(wanted(&json!({})), (vec![], "both".into()));
+        assert_eq!(wanted(&json!({ "voice": { "pasteOn": true } })).0, vec![("ctrl+alt+Space".into(), Target::Paste)]);
+        let both = json!({ "voice": { "chatOn": true, "chatShortcut": "shift+meta+KeyD", "pasteOn": true, "mode": "hold" } });
+        assert_eq!(wanted(&both), (vec![("shift+super+KeyD".into(), Target::Chat), ("ctrl+alt+Space".into(), Target::Paste)], "hold".into()));
+        // the composer's switch does not register anything with macOS
+        assert_eq!(wanted(&json!({ "voice": { "on": true, "shortcut": "alt+Space" } })).0, vec![]);
     }
 }

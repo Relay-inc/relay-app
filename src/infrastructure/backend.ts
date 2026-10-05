@@ -283,6 +283,11 @@ export const dictationDownload = (id: string | null, onProgress: (done: number) 
 export const dictationDelete = (id: string) => invoke("dictation_delete", { id });
 /** Whether Relay may send ⌘V to other apps (Accessibility), for dictating into any app (src-tauri/src/anywhere.rs). */
 export const dictationAccess = () => invoke<boolean>("dictation_access");
+/** The global dictation shortcuts step aside while Settings › Voice records a new one (macOS would swallow it). */
+export const dictationPauseShortcuts = (paused: boolean) => invoke("dictation_pause_shortcuts", { paused });
+/** What was said with the new-conversation shortcut, from any app (src-tauri/src/anywhere.rs). */
+export const onDictatedChat = (handler: (text: string) => void) =>
+  listen<string>("dictated-chat", e => handler(e.payload));
 /** Shows macOS's Accessibility dialog; resolves with whether it is already allowed. */
 export const dictationAskAccess = () => invoke<boolean>("dictation_ask_access");
 /** What the dictation pill shows, sent by the backend to its window. */
