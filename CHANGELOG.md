@@ -17,6 +17,10 @@ a PR. Versions follow
 
 - **Claude replies and thinking stream in live**: the answer appears word by word instead of all at once, and what Claude reasons shows above it as a dim, folded "Thinking" line you can open. (#113)
 
+### Fixed
+
+- **Switching model or effort no longer kills a running reply**: a new model applies at once to what you send next without restarting Claude, and a new effort waits until the reply is done. (#114)
+
 ## [0.0.7] - 2026-10-05
 
 ### Added
