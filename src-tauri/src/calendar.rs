@@ -1,8 +1,8 @@
 // Google Calendar, read-only, through each calendar's secret iCal address: no OAuth. The address is the secret
 // (whoever has it reads the calendar), so it lives in the macOS keychain (service relay-calendar, account the
 // calendar's email), goes to curl over stdin and never reaches the webview. settings.json only keeps
-// `calendar.feeds[].email`. The webview asks for the meetings of the next hours and shows the ones about to start
-// under Waiting, with a banner 5 minutes before (src/domain/calendar.ts).
+// `calendar.feeds[].email`. The webview asks for the meetings of the day and shows them under Today, the ones about to
+// start on top, with a banner 5 minutes before (src/domain/calendar/rules.ts).
 // A meeting here: a timed event with at least one other person invited, not declined, not cancelled, not "free".
 
 use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, TimeZone, Utc};
@@ -74,15 +74,19 @@ fn fetch(url: &str) -> Result<String, String> {
     Ok(t)
 }
 
-/// The meetings of every switched-on calendar from an hour ago to 12 hours ahead, sorted, one copy of a meeting that
-/// is on two calendars. A calendar that fails is in `errors`, the others still come.
+/// The meetings of every switched-on calendar from local midnight to the end of the day (at least 12 hours ahead, so a
+/// late evening still sees tomorrow morning's banner), sorted, one copy of a meeting that is on two calendars. A
+/// calendar that fails is in `errors`, the others still come.
 pub fn upcoming(s: &Value) -> Value {
     let now = Utc::now();
+    let midnight = Local::now().date_naive().and_hms_opt(0, 0, 0).and_then(|d| d.and_local_timezone(Local).earliest())
+        .map(|d| d.with_timezone(&Utc)).unwrap_or(now - Duration::hours(1));
+    let until = (midnight + Duration::days(1)).max(now + Duration::hours(12));
     let (mut all, mut errors, mut seen) = (vec![], vec![], HashSet::new());
     for email in feeds(s) {
         let got = secret(&email).ok_or_else(|| super::trc_v("err.cal_no_url", &email)).and_then(|u| fetch(&u));
         match got {
-            Ok(ics) => all.extend(meetings(&ics, &email, now - Duration::hours(1), now + Duration::hours(12)).into_iter().filter(|m| seen.insert((m["title"].to_string(), m["start"].to_string())))),
+            Ok(ics) => all.extend(meetings(&ics, &email, midnight, until).into_iter().filter(|m| seen.insert((m["title"].to_string(), m["start"].to_string())))),
             Err(e) => errors.push(format!("{email}: {e}")),
         }
     }

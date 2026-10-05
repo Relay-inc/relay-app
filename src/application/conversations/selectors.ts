@@ -21,6 +21,7 @@ import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
 import { runningWorkers } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
+import { todayRest } from "../today/today";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
 // `useDerived` (ui/hooks), which redraws when what they return changes.
@@ -58,7 +59,7 @@ export const aboutItems = (items: Item[] | undefined, projects: Project[]) =>
 export const lastAi = (key: string) => rules.lastAi(cs().messages[key], t);
 
 const VIEW_ICONS: Record<string, string> = {
-  [WAIT]: "bell",
+  [WAIT]: "sun",
   [REM]: "list",
   [PRS]: "pr",
   [MAIL]: "mail",
@@ -69,7 +70,8 @@ const VIEW_ICONS: Record<string, string> = {
 function viewSummary(key: string) {
   if (key === WAIT) {
     const n = waitCount();
-    return n ? t("bar.waitingN", { n }) : t("bar.allClear");
+    const rest = todayRest();
+    return n ? t("bar.waitingN", { n }) : rest ? t("bar.todayN", { n: rest }) : t("bar.allClear");
   }
   if (key === REM) {
     const reminders = useWorkspaceStore.getState().snap.reminders;
@@ -112,7 +114,7 @@ export function chatBar(key: string) {
     [USAGE]: "nav.usage",
     [MAIL]: "nav.mail",
     [REM]: "nav.reminders",
-    [WAIT]: "nav.waiting",
+    [WAIT]: "nav.today",
     [ORCH]: "nav.orch",
   };
   const viewName = board ? board.name : VIEW_NAMES[key] ? t(VIEW_NAMES[key]) : "";

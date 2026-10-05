@@ -4,7 +4,7 @@ import { useNavigationStore } from "../../application/navigation/store";
 import { BoardView } from "../features/board/BoardView";
 import { UsageView } from "../features/usage/UsageView";
 import { RemindersView } from "../features/reminders/RemindersView";
-import { WaitingView } from "../features/conversations/WaitingView";
+import { TodayView } from "../features/today/TodayView";
 import { ConversationView } from "../features/conversations/ConversationView";
 
 /** What the middle column's log shows for the selection: a board, a view, or the open conversation (relay-chat's
@@ -16,6 +16,6 @@ export function SelectedView() {
   if (board) return <BoardView key={board.id} provider={board} />;
   if (selected === USAGE) return <UsageView />;
   if (selected === REM) return <RemindersView />;
-  if (selected === WAIT) return <WaitingView />;
+  if (selected === WAIT) return <TodayView />;
   return <ConversationView />;
 }

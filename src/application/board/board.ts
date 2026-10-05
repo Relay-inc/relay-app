@@ -323,10 +323,11 @@ export async function createCard(provider: BoardProvider, column: string, title:
 
 export const openBoardCard = (provider: BoardProvider, id: string) =>
   openCard(provider, refOf(provider, boardState(provider)), id);
-/** "Start conversation" in the ticket window: a new conversation under the board's vault project, with the card's
- *  number, title and link typed in its composer; the draft keeps its title. */
-export async function ticketChat(provider: BoardProvider, text: string) {
-  const key = newChat(linkedProject(provider) || null);
+/** "Start conversation" in the ticket window: a new conversation under the board's vault project (or `project`, a card
+ *  under Today comes from a board that need not be on screen), with the card's number, title and link typed in its
+ *  composer; the draft keeps its title. */
+export async function ticketChat(provider: BoardProvider, text: string, project = linkedProject(provider)) {
+  const key = newChat(project || null);
   // remembered, so the ticket lists it under Linked
   const card = useNavigationStore.getState().panel.modal;
   if (card) {

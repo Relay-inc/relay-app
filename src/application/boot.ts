@@ -32,6 +32,7 @@ import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/pr
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
 import { loadMeetings, tick } from "./calendar/calendar";
+import { loadTodayCards } from "./today/today";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
@@ -78,6 +79,7 @@ async function settingsChanged(next: Settings) {
   checkBoards().then(() => {
     if (boardDown(selected())) select(WAIT);
     loadSnapshot();
+    loadTodayCards(); // a board linked or unlinked, a tracker switched on or off
   });
   // the agents bring the commands and skills of the vault with them
   loadAgents().then(reloadUsage);
@@ -176,6 +178,7 @@ async function adoptEarlierConversations() {
   await Promise.all(untitled.map(conversation => ensureHistory(conversation.key)));
   await pollAgents();
   await checkBoards();
+  loadTodayCards();
 }
 
 // the open view is gone (conversation removed, board or integration switched off): start on the waiting view
@@ -235,5 +238,6 @@ function startPolls() {
   setInterval(loadMails, 5 * 60000);
   loadMeetings(); // the meetings about to start, under Waiting, with a banner 5 minutes before
   setInterval(loadMeetings, 5 * 60000);
+  setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today
   setInterval(tick, 30000);
 }
