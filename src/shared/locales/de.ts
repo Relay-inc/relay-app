@@ -217,6 +217,7 @@ export default {
   "card.in": " in {name}",
   "card.deny": "Ablehnen",
   "card.allow": "Erlauben",
+  "card.always": "Immer erlauben",
   "card.allowed": "Erlaubt {c}",
   "card.denied": "Abgelehnt {c}",
   steps_one: "{n} Schritt",

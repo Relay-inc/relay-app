@@ -1,12 +1,13 @@
 //! The pending folder, for every provider: a permission request or question is `<id>.json`, the app's answer
 //! `<id>.answer.json`. Files, not a socket: nothing listens on a port and a waiting question survives an app
-//! restart. A provider either writes and polls the files itself (Claude's permission server, relay false), or
-//! raises [`crate::Event::Permission`]; the app then writes the request (relay true) and hands the answer to
-//! [`crate::AgentProvider::respond`].
+//! restart. A provider raises [`crate::Event::Permission`] (or the app does for it, from the pipe); the app then writes
+//! the request (relay true) and hands the answer to [`crate::AgentProvider::respond`]. Files with relay false are from
+//! before that: nothing reads their answer any more.
 //!
 //! The decision the app writes: `{"behavior":"allow","updatedInput":{…}}` or `{"behavior":"deny","message":"…"}`.
 //! A question (kind "question") has `input.questions: [{question, options: [{label, description}], multiSelect}]`
-//! and is answered with `updatedInput.answers: {<question>: "label, label"}`.
+//! and is answered with `updatedInput.answers: {<question>: "label, label"}`. An allow may carry `updatedPermissions`
+//! (the request's `suggestions`: "always allow").
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -32,6 +33,13 @@ pub struct Request {
     pub input: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_use_id: Option<String>,
+    /// The provider's own id for the request, for the answer (Claude's control request id).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    /// What the provider offers to remember an allow, as it names it (Claude's `permission_suggestions`). Empty: no
+    /// "always allow" on the card.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggestions: Vec<Value>,
     /// The app passes the answer to the provider (true), or the provider reads the answer file (false).
     #[serde(default)]
     pub relay: bool,
@@ -45,7 +53,7 @@ impl Request {
     pub fn new(kind: &str, tool_name: &str, input: Value) -> Self {
         let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs_f64()).unwrap_or(0.0);
         Request { id: new_id(), project: String::new(), provider: String::new(), kind: kind.into(), tool_name: tool_name.into(),
-            input, tool_use_id: None, relay: true, at }
+            input, tool_use_id: None, request_id: None, suggestions: vec![], relay: true, at }
     }
 }
 

@@ -214,6 +214,7 @@ const en = {
   "card.in": " in {name}",
   "card.deny": "Deny",
   "card.allow": "Allow",
+  "card.always": "Always allow",
   "card.allowed": "Allowed {c}",
   "card.denied": "Denied {c}",
   steps_one: "{n} step",

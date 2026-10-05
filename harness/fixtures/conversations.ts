@@ -159,7 +159,7 @@ export const liveTail = (): Ev[] => [
 // ---------- the pending card and question (pending/<id>.json), and an agent action (`relay`, actions.rs) that asks
 export const pending = [
   { id: "act-0001", project: ACTION_KEY, provider: "claude", kind: "tool", tool_name: "relay productive.create_task", input: { title: "Depot import script", list: "To do" }, tool_use_id: null, relay: true, at: NOW - 2 * 60000 },
-  { id: "perm-0001", project: PERMISSION_KEY, provider: "claude", kind: "tool", tool_name: "Bash", input: { command: "git push origin fix/portal-redirect", description: "Push the fix branch to GitHub" }, tool_use_id: "toolu_perm", relay: false, at: NOW - 4 * 60000 },
+  { id: "perm-0001", project: PERMISSION_KEY, provider: "claude", kind: "tool", tool_name: "Bash", input: { command: "git push origin fix/portal-redirect", description: "Push the fix branch to GitHub" }, tool_use_id: "toolu_perm", request_id: "req-perm", suggestions: [{ type: "addRules", rules: [{ toolName: "Bash", ruleContent: "git push origin fix/portal-redirect" }], behavior: "allow", destination: "localSettings" }], relay: true, at: NOW - 4 * 60000 },
   {
     id: "ask-0001", project: QUESTION_KEY, provider: "claude", kind: "question", tool_name: "AskUserQuestion", tool_use_id: "toolu_ask", at: NOW - 7 * 60000,
     input: {

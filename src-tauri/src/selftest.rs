@@ -161,10 +161,10 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
             let push = cmd.split_whitespace().skip_while(|w| *w != "git").skip(1).any(|w| w == "push");
             if orch::is_worker(p["project"].as_str().unwrap_or("")) && push {
                 card = Some(cmd.to_string());
-                pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "deny", "message": "Denied by the selftest."})).ok();
+                crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "deny", "message": "Denied by the selftest."})).ok();
             } else {
                 // anything else a worker asks in this test is allowed, like a click on Allow
-                pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+                crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
             }
         }
         let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns > 0);
@@ -203,7 +203,7 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     let new = wait(Duration::from_secs(300), || {
         for p in pending::list(&pending_dir(app)) {
             // the restricted coordinator's dispatch asks on a card, allowed here like a click
-            pending::answer(&pending_dir(app), p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+            crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
         }
         orch::load(app).into_iter().nth(before)
     });

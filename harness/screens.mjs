@@ -71,6 +71,7 @@ const VIEWS = {
     await settle(page);
     await scrollMain("bottom");
   },
+  // a card whose request carries Claude's permission_suggestions: Deny, Always allow, Allow
   "conversation-permission": async () => {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");

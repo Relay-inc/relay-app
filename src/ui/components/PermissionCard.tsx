@@ -202,6 +202,11 @@ export function PermissionCard({
         <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
           {t("card.deny")}
         </button>
+        {request.suggestions?.length ? (
+          <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("always")}>
+            {t("card.always")}
+          </button>
+        ) : null}
         <button
           className="btn btn-primary cursor-pointer inline-flex items-center gap-2"
           disabled={busy}

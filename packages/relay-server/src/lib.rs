@@ -5,8 +5,8 @@
 //!
 //! The server stays dumb: the app builds each agent's command with this machine's paths (Info) and sends it; the
 //! server starts a broker for it, the same one the app uses locally, and passes the broker's frames through. The
-//! agents' permission cards are files in this machine's pending folder, written by `relay-server --perm-server` (the
-//! permission tool the agents here run), listed and answered on request.
+//! agents' permission requests travel over their own pipe to the app (agent-claude's permission.rs); the cards in this
+//! machine's pending folder, from before that, are listed and answered on request.
 //!
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
 //! port the running server listens on), pending/.
@@ -122,7 +122,7 @@ pub fn info(data: &Path, path: &str) -> Info {
         if Path::new(&def).is_file() { def } else { agent_core::which("claude", path).unwrap_or(def) }
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
-        pending: data.join("pending").to_string_lossy().into(), perm: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+        pending: data.join("pending").to_string_lossy().into(),
         arch: std::env::consts::ARCH.into(), update: upgrade::CAN, ..Default::default() }
 }
 
