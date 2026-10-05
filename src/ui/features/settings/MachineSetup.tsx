@@ -11,7 +11,7 @@ import { Field } from "./Field";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 
-const RELEASES = "https://github.com/LaurentMe/relay-app/releases/latest";
+const RELEASES = "https://github.com/Relay-inc/relay-app/releases/latest";
 export const CLAUDE_INSTALL = "curl -fsSL https://claude.ai/install.sh | bash";
 // product names, the same in every language
 const PLATFORM_NAMES: Record<SetupPlatform, string> = { mac: "Mac", linux: "Linux", unraid: "Unraid" };
