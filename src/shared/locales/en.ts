@@ -847,6 +847,8 @@ const en = {
   "mail.openAttachment": "Save to Downloads/Relay-mail and open",
   "mail.linkCancel": "Cancel",
   "mail.showMail": "Mail",
+  "mail.imagesBlocked": "Images from the web are not loaded.",
+  "mail.loadImages": "Load images",
   "mail.showText": "What Claude reads",
   "mail.accountsH": "Accounts",
   "mail.setupTitle": "Connect your mail",

@@ -855,6 +855,8 @@ export default {
   "mail.openAttachment": "In Downloads/Relay-mail sichern und öffnen",
   "mail.linkCancel": "Abbrechen",
   "mail.showMail": "Mail",
+  "mail.imagesBlocked": "Bilder aus dem Web werden nicht geladen.",
+  "mail.loadImages": "Bilder laden",
   "mail.showText": "Was Claude liest",
   "mail.accountsH": "Konten",
   "mail.setupTitle": "Mail verbinden",

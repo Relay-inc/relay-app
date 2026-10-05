@@ -852,6 +852,8 @@ export default {
   "mail.openAttachment": "Bewaren in Downloads/Relay-mail en openen",
   "mail.linkCancel": "Annuleer",
   "mail.showMail": "Mail",
+  "mail.imagesBlocked": "Afbeeldingen van het web worden niet geladen.",
+  "mail.loadImages": "Afbeeldingen laden",
   "mail.showText": "Wat Claude leest",
   "mail.accountsH": "Accounts",
   "mail.setupTitle": "Koppel je mail",

@@ -18,6 +18,7 @@ import {
 } from "../../../../application/today/mail";
 import { useMailStore } from "../../../../application/mail/store";
 import { Linked, MailLinkBar } from "../../mail/MailText";
+import { MailFrame } from "../../mail/MailFrame";
 import { openAttachment } from "../../../../application/mail/mail";
 import { useNavigationStore } from "../../../../application/navigation/store";
 import { mailExperimental } from "../../../../application/settings/settings";
@@ -71,7 +72,8 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
   const body = useNavigationStore(s => s.panel.detail[mailKey]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [html, setHtml] = useState(false);
+  // the mail as it was written (HTML) unless the user asks for the plain text
+  const [plain, setPlain] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
   useEffect(() => {
     loadThread(mailKey);
@@ -142,15 +144,8 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
         {err && !body ? <div className="err-box">{err}</div> : null}
         {!body && !err ? <div className="text-sm text-secondary">{t("mail.loadingBody")}</div> : null}
         {body ? (
-          html && body.html ? (
-            // the backend sanitized it and set a CSP; the frame allows nothing (MailDetail does the same)
-            <iframe
-              sandbox=""
-              referrerPolicy="no-referrer"
-              title={mail?.subject || t("mail.noSubject")}
-              srcDoc={body.html}
-              className="block w-full h-120 border border-separator rounded-lg bg-white"
-            />
+          !plain && body.html ? (
+            <MailFrame html={body.html} title={mail?.subject || t("mail.noSubject")} bleed />
           ) : (
             <div className="flex flex-col gap-2 text-[15px] leading-[1.65] select-text">
               {paragraphs.map((p, i) => (
@@ -194,9 +189,9 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
             {body.html ? (
               <button
                 className="ml-auto text-xs text-secondary cursor-pointer hover:text-label"
-                onClick={() => setHtml(!html)}
+                onClick={() => setPlain(!plain)}
               >
-                {html ? t("mail.showText") : t("mail.showMail")}
+                {plain ? t("mail.showMail") : t("mail.showText")}
               </button>
             ) : null}
           </div>
