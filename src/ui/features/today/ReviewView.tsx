@@ -1,6 +1,7 @@
 import { useEffect, useEffectEvent } from "react";
 import { reviewOf } from "../../../domain/navigation/views";
-import { entries } from "../../../application/today/today";
+import { reviewGroupOf, reviewItemsOf } from "../../../application/today/today";
+import { loadPr } from "../../../application/today/load";
 import { closeReview, discardReview, openReview, useReviewStore } from "../../../application/today/review";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { usePullRequestsStore } from "../../../application/pull-requests/store";
@@ -15,14 +16,19 @@ import { ReviewScreen } from "./ReviewScreen";
 export function ReviewView({ className = "" }: { className?: string }) {
   const { t } = useT();
   const id = useNavigationStore(s => reviewOf(s.selected));
-  const entry = useDerived(() => entries().find(item => item.id === id));
+  // the PRs it covers: one, or every PR of its ticket waiting on the user (a group)
+  const items = useDerived(() => reviewItemsOf(id));
   const loaded = usePullRequestsStore(s => !!s.list);
   const confirm = useReviewStore(s => !!s.reviews[id]?.confirm);
-  const pr = entry?.subject.type === "pr" ? entry.subject.pr : null;
+  const prs = items.flatMap(item => (item.subject.type === "pr" ? [item.subject.pr] : []));
+  const urls = prs.map(pr => pr.url).join(" ");
   const load = useEffectEvent(() => {
-    if (pr) openReview(id, pr);
+    if (!prs.length) return;
+    const group = id.startsWith("group:") ? reviewGroupOf(prs[0]) : null;
+    openReview(id, prs, group?.title);
+    items.forEach(item => item.subject.type === "pr" && loadPr(item.id, item.subject.pr));
   });
-  useEffect(() => load(), [id, pr?.url]);
+  useEffect(() => load(), [id, urls]);
   const onKey = useEffectEvent((e: KeyboardEvent) => {
     const typing = e
       .composedPath()
@@ -38,10 +44,10 @@ export function ReviewView({ className = "" }: { className?: string }) {
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
-  if (entry && pr)
+  if (items.length)
     return (
       <div className={`${className} flex flex-col min-h-0`}>
-        <ReviewScreen entry={entry} />
+        <ReviewScreen id={id} entries={items} />
       </div>
     );
   return (

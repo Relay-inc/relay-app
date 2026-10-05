@@ -48,7 +48,7 @@ import { mailExperimental, mailOn } from "../settings/settings";
 import { startRecording } from "../calendar/recording";
 import { openCompose } from "./mail";
 import { forgetDetails } from "./load";
-import { startReview } from "./review";
+import { groupId, startReview } from "./review";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
 import { linkPrs, relinkPr, ticketOf, ticketState } from "./links";
@@ -600,6 +600,33 @@ export function openMeeting(meetingId: string) {
   selectEntry(item.id);
   return true;
 }
+/** The review PRs of one ticket, when the PR's ticket has more than one waiting on you: reviewed together. */
+export function reviewGroupOf(pr: PR) {
+  const link = ticketOf(pr.url);
+  if (!link?.card || !link.provider) return null;
+  const items = groupItems(link.provider, link.card);
+  if (items.length < 2) return null;
+  const number = link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : "";
+  return {
+    id: groupId(link.provider, link.card),
+    items,
+    prs: items.flatMap(item => (item.subject.type === "pr" ? [item.subject.pr] : [])),
+    title: `${number}${link.title ?? ""} · ${t("today.prsCount", { n: items.length })}`,
+  };
+}
+// the review items whose PR is linked to that card
+const groupItems = (providerId: string, card: string) =>
+  entries().filter(entry => {
+    if (entry.kind !== "review" || entry.subject.type !== "pr") return false;
+    const link = ticketOf(entry.subject.pr.url);
+    return link?.provider === providerId && link.card === card;
+  });
+/** The Today items a review covers: one PR's, or (a group id) every review PR of its ticket. */
+export function reviewItemsOf(id: string): Entry[] {
+  const group = /^group:([^:]+):(.+)$/.exec(id);
+  if (group) return groupItems(group[1], group[2]);
+  return entries().filter(entry => entry.id === id);
+}
 /** Open an item under Today, also when the context filter hides it (it goes back to All). */
 export function focusEntry(id: string) {
   const item = entries().find(entry => entry.id === id);
@@ -739,16 +766,27 @@ export function actionsOf(entry: Entry): Actions {
       const github = { label: t("today.onGithub"), icon: "out", key: "⌫", run: () => backend.openUrl(s.pr.url) };
       const inRelay = { label: t("today.openInPrs"), icon: "pr", run: () => openTodayPr(s.pr.repo, s.pr.number) };
       const findTicket = { label: t("today.link.again"), icon: "refresh", run: () => findTicketAgain(s.pr) };
+      // the PRs of the same ticket waiting on your review go together; this one alone stays under "…"
+      const group = entry.kind === "review" ? reviewGroupOf(s.pr) : null;
+      const alone = {
+        label: t("today.reviewWithClaude"),
+        key: "↵",
+        tip: t("today.reviewTip"),
+        run: () => startReview(entry.id, [s.pr]),
+      };
       return entry.kind === "review"
         ? of(
             [
-              {
-                label: t("today.reviewWithClaude"),
-                key: "↵",
-                tip: t("today.reviewTip"),
-                run: () => startReview(entry.id, s.pr),
-              },
+              group
+                ? {
+                    label: t("today.reviewTogether", { n: group.items.length }),
+                    key: "↵",
+                    tip: t("today.reviewTogetherTip", { ticket: group.title }),
+                    run: () => startReview(group.id, group.prs, group.title),
+                  }
+                : alone,
               github,
+              ...(group ? [{ ...alone, label: t("today.reviewAlone"), key: undefined }] : []),
               inRelay,
               { label: t("today.reviewInChat"), icon: "chat", run: () => reviewWithClaude(s.pr) },
               findTicket,
