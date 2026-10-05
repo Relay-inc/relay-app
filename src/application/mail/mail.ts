@@ -133,7 +133,7 @@ export const setMailFilter = (patch: Partial<MailFilter>) => {
 let guessedFor: unknown = null;
 let guesses = new WeakMap<Mail, string | null>();
 /** The project a mail is about: one project named in the subject, the sender or the sender's domain, else none. */
-const mailProject = (message: Mail) => {
+export const mailProject = (message: Mail) => {
   const projects = useWorkspaceStore.getState().snap.projects;
   if (projects !== guessedFor) {
     guessedFor = projects;

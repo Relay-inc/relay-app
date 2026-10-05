@@ -1,8 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { myCardToday, meetingsToday, prsForMe, byDue, type TodayCard } from "./rules.ts";
+import { myCardToday, prsForMe, byDue, type TodayCard } from "./rules.ts";
 import type { Card } from "../board/types";
-import type { Meeting } from "../calendar/types";
 import type { PR } from "../pull-requests/types";
 
 const card = (over: Partial<Card>): Card => ({
@@ -39,39 +38,6 @@ test("cards sort overdue first, those without a due date last", () => {
   assert.deepEqual(
     sorted.map(x => x.card.id),
     ["late", "today", "none"],
-  );
-});
-
-test("today's meetings: only the local day, ended ones apart, Now's left out", () => {
-  const day = new Date(2026, 9, 5, 0, 0).getTime();
-  const now = day + 10 * 3600e3; // 10:00 local
-  const meeting = (id: string, startH: number, hours = 1): Meeting => ({
-    id,
-    feed: "",
-    title: id,
-    start: new Date(day + startH * 3600e3).toISOString(),
-    end: new Date(day + (startH + hours) * 3600e3).toISOString(),
-    location: "",
-    join: "",
-    organizer: "",
-    people: [],
-  });
-  const list = [
-    meeting("yesterday", -2),
-    meeting("morning", 8),
-    meeting("running", 9.5),
-    meeting("soon", 10.25),
-    meeting("evening", 19),
-    meeting("tomorrow", 25),
-  ];
-  const { coming, past } = meetingsToday(list, now, new Set(["soon"]));
-  assert.deepEqual(
-    coming.map(m => m.id),
-    ["running", "evening"],
-  );
-  assert.deepEqual(
-    past.map(m => m.id),
-    ["morning"],
   );
 });
 

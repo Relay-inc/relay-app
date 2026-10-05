@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isView, MAIL, PRS, REM, USAGE } from "../../../domain/navigation/views";
+import { isView, MAIL, PRS, REM, USAGE, WAIT } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -18,6 +18,7 @@ import { useUiRequest } from "../../hooks/useUiRequest";
 import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
 import { MailView } from "../mail/MailView";
+import { TodayView } from "../today/TodayView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
@@ -53,7 +54,7 @@ export function ConversationsView({ className }: { className: string }) {
   const msgs = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   // the Pull requests and Mail views scroll their list and the open item apart, so they fill the pane instead of the log
-  const ownScroll = selected === PRS || selected === MAIL;
+  const ownScroll = selected === PRS || selected === MAIL || selected === WAIT;
   useEffect(() => {
     if (ownScroll) return;
     const logEl = log.current!;
@@ -126,7 +127,13 @@ export function ConversationsView({ className }: { className: string }) {
     return (
       <div className={`${className} flex flex-col relative bg-bg`}>
         {chatBarEl}
-        {selected === PRS ? <PullRequestsView className="flex-1" /> : <MailView className="flex-1" />}
+        {selected === PRS ? (
+          <PullRequestsView className="flex-1" />
+        ) : selected === WAIT ? (
+          <TodayView className="flex-1" />
+        ) : (
+          <MailView className="flex-1" />
+        )}
       </div>
     );
   return (
