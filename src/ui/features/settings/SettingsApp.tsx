@@ -7,6 +7,7 @@ import { GeneralPage } from "./GeneralPage";
 import { IntegrationsPage } from "./IntegrationsPage";
 import { MachinesPage } from "./MachinesPage";
 import { ProjectsPage } from "./ProjectsPage";
+import { VoicePage } from "./VoicePage";
 
 /** The settings window, laid out like bb's: the pages in a sidebar on the left, the shown page on the right. Every
  *  page stays mounted and only the shown one takes part in the column, so what is typed survives switching pages, and
@@ -59,6 +60,9 @@ export function SettingsApp() {
           </div>
           <div className={page("machines")}>
             <MachinesPage active={tab === "machines"} />
+          </div>
+          <div className={page("voice")}>
+            <VoicePage active={tab === "voice"} />
           </div>
         </div>
       </section>

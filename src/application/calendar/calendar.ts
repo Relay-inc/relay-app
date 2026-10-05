@@ -1,6 +1,14 @@
 import { currentLocale, t } from "../../shared/i18n";
 import { clockTime } from "../../shared/format";
-import { bannerDue, joinable, meetingPrompt, soon, type MeetingChat } from "../../domain/calendar/rules";
+import {
+  bannerDue,
+  joinable,
+  meetingPrompt,
+  soon,
+  type MeetingChat,
+  type Recording,
+} from "../../domain/calendar/rules";
+import type { Meeting } from "../../domain/calendar/types";
 import { calendarOn as isCalendarOn } from "../../domain/settings/types";
 import { WAIT } from "../../domain/navigation/views";
 import * as backend from "../../infrastructure/backend";
@@ -75,7 +83,10 @@ export const joinMeeting = (link: string) => joinable(link) && backend.openUrl(l
  *  with Claude switched off it does not start. */
 export async function meetingChat(id: string, how: MeetingChat) {
   const meeting = cal().list.find(x => x.id === id);
-  if (!meeting) return;
+  if (meeting) await chatAbout(meeting, how);
+}
+/** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
+export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: Recording) {
   if (useAgentsStore.getState().loaded && !agentOf("claude")?.on) return toast(t("cal.needClaude"));
   const key = startChat(null, {
     provider: "claude",
@@ -84,5 +95,5 @@ export async function meetingChat(id: string, how: MeetingChat) {
     fromMail: true,
   });
   await select(key);
-  sendMsg(meetingPrompt(meeting, how, timeOf));
+  sendMsg(meetingPrompt(meeting, how, timeOf, undefined, recording));
 }

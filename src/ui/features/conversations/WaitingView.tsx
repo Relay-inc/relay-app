@@ -13,6 +13,8 @@ import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { PendingRequest } from "./PendingRequest";
+import { RecordingBar } from "./RecordingBar";
+import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
 
 const ACTIONS = ["hide", "stop", "attach"] as const;
 type Action = (typeof ACTIONS)[number];
@@ -35,6 +37,9 @@ export function WaitingView() {
   const meetings = useDerived(soonMeetings);
   const now = useCalendarStore(s => s.now);
   const calendarErrors = useCalendarStore(s => s.errors);
+  const recording = useRecordingStore(s => s.phase !== "idle");
+  // the bar stays when the recorded meeting left the list and nothing else waits
+  const recordingShown = useRecordingStore(s => s.phase !== "idle" || !!s.error);
   // the conversations the cards wait in, by key: their title, project and agent glyph for the header
   const chats = useDerived(() =>
     Object.fromEntries(
@@ -97,7 +102,7 @@ export function WaitingView() {
     <div className="text-xs text-secondary">{t("wait.calendarDown", { error: calendarErrors.join("; ") })}</div>
   ) : null;
 
-  if (!count)
+  if (!count && !recordingShown)
     return (
       <div className="flex flex-col items-center gap-2.5 py-24 text-secondary">
         <span className="grid place-items-center size-10 rounded-full bg-add-bg text-add-fg">
@@ -115,6 +120,7 @@ export function WaitingView() {
   }
   return (
     <div className="mx-auto flex max-w-170 flex-col gap-7 px-8 pt-7 pb-8">
+      <RecordingBar />
       {meetings.map(meeting => {
         // a meeting from 30 minutes before its start: when, what, who, and a note or a briefing in a new conversation
         const left = minutesLeft(meeting, now);
@@ -140,6 +146,15 @@ export function WaitingView() {
                 ) : null}
               </div>
               <div className="flex justify-end gap-2">
+                {/* one recording at a time: the bar above shows it */}
+                <button
+                  className="btn cursor-pointer"
+                  disabled={recording}
+                  title={t("rec.recordHelp")}
+                  onClick={() => startRecording(meeting.id)}
+                >
+                  {t("rec.record")}
+                </button>
                 <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "prep")}>
                   {t("wait.meetingPrep")}
                 </button>

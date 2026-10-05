@@ -21,7 +21,7 @@ import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
-export type SettingsTab = "general" | "projects" | "agents" | "integrations" | "machines";
+export type SettingsTab = "general" | "projects" | "agents" | "integrations" | "machines" | "voice";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */

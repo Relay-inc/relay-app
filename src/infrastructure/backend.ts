@@ -32,6 +32,8 @@ import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
+import type { SpeechModelInfo } from "../domain/settings/voice";
+import type { Recording } from "../domain/calendar/rules";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -265,6 +267,62 @@ export const scratchList = (project: string) => invoke<ScratchFile[]>("scratch_l
 export const scratchSave = (project: string, id: string | null, text: string) =>
   invoke<string>("scratch_save", { project, id, text });
 export const scratchDelete = (project: string, id: string) => invoke("scratch_delete", { project, id });
+
+// ---------- dictation in the composer (src-tauri/src/dictation.rs)
+/** Every speech model Settings › Voice offers, with whether it is on this Mac. */
+export const dictationModels = () => invoke<SpeechModelInfo[]>("dictation_models");
+/** Whether the model picked in Settings › Voice is on this Mac. */
+export const dictationModel = () => invoke<boolean>("dictation_model");
+/** Downloads a speech model (`id`, or the picked one), `onProgress` from 0 to 1. Rejects with "busy" while it already
+ *  downloads. */
+export const dictationDownload = (id: string | null, onProgress: (done: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke("dictation_download", { id, onProgress: channel });
+};
+export const dictationDelete = (id: string) => invoke("dictation_delete", { id });
+/** Whether Relay may send ⌘V to other apps (Accessibility), for dictating into any app (src-tauri/src/anywhere.rs). */
+export const dictationAccess = () => invoke<boolean>("dictation_access");
+/** The global dictation shortcuts step aside while Settings › Voice records a new one (macOS would swallow it). */
+export const dictationPauseShortcuts = (paused: boolean) => invoke("dictation_pause_shortcuts", { paused });
+/** What was said with the new-conversation shortcut, from any app (src-tauri/src/anywhere.rs). */
+export const onDictatedChat = (handler: (text: string) => void) =>
+  listen<string>("dictated-chat", e => handler(e.payload));
+/** Shows macOS's Accessibility dialog; resolves with whether it is already allowed. */
+export const dictationAskAccess = () => invoke<boolean>("dictation_ask_access");
+/** What the dictation pill shows, sent by the backend to its window. */
+export type PillState = {
+  phase: "hidden" | "recording" | "transcribing" | "copied" | "error";
+  level?: number;
+  error?: string;
+};
+export const onPill = (handler: (state: PillState) => void) => listen<PillState>("pill", e => handler(e.payload));
+/** Starts recording the microphone, its level (0..1) on `onLevel`. Rejects with "model" while the model is missing. */
+export const dictationStart = (onLevel: (level: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onLevel;
+  return invoke("dictation_start", { onLevel: channel });
+};
+/** Stops recording; resolves with the text, rejects with "silent" when the microphone gave nothing. */
+export const dictationStop = () => invoke<string>("dictation_stop");
+export const dictationCancel = () => invoke("dictation_cancel");
+
+// ---------- recording a meeting (src-tauri/src/meeting.rs)
+/** A quarter-second tick while recording: the seconds, and the levels (0..1) of `me` and, when tapped, `others`. */
+export type RecordingTick = { secs: number; me?: number; others?: number };
+/** Starts recording the microphone and, when macOS allows it, what the Mac plays (`system`, else `why` not). */
+export const meetingRecordStart = (onTick: (tick: RecordingTick) => void) => {
+  const channel = new Channel<RecordingTick>();
+  channel.onmessage = onTick;
+  return invoke<{ system: boolean; why: string | null }>("meeting_record_start", { onTick: channel });
+};
+/** Stops, then writes the audio and transcript into the vault, `onProgress` 0..1 while it transcribes. */
+export const meetingRecordStop = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
+};
+export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 
 // ---------- events from the backend
 /** One normalised event of an agent process. */

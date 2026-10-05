@@ -16,6 +16,7 @@ export const TABS = [
   ["agents", "set.tab.agents", "agent"],
   ["integrations", "set.tab.integrations", "plug"],
   ["machines", "set.tab.machines", "server"],
+  ["voice", "set.tab.voice", "mic"],
 ] as const satisfies readonly (readonly [SettingsTab, Key, string])[];
 
 const st = () => useSettingsStore.getState();

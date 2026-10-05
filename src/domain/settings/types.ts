@@ -1,4 +1,5 @@
 import type { BoardRef } from "../board/types";
+import type { VoiceCfg } from "./voice";
 import type { VaultMap } from "../workspace/types";
 
 // The app's settings as the backend keeps them (settings.json): the main window reads them, the settings window edits them.
@@ -91,6 +92,7 @@ export type Settings = {
   accent?: Accent;
   terminal?: TerminalApp;
   keepAwake?: boolean; // hold off idle sleep while a turn runs, on unless false
+  voice?: VoiceCfg; // Settings › Voice (domain/settings/voice.ts)
   autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
