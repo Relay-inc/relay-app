@@ -657,6 +657,9 @@ export default {
   "set.autoRetry": "Erneut versuchen, wenn ein Nutzungslimit zurückgesetzt wird",
   "set.autoRetryHelp":
     "Wird eine Unterhaltung abgelehnt, weil das Nutzungslimit des Anbieters erreicht ist, und gibt es kein anderes Konto zum Wechseln, sendet Relay sie erneut, sobald das Limit zurückgesetzt ist. Ist <b>Mac wach halten</b> an, bleibt der Mac bis dahin wach.",
+  "set.timeFromSessions": "Die Tageszeit aus Gesprächen vorschlagen",
+  "set.timeFromSessionsHelp":
+    "Ab 16:00 schlägt Today die <b>Productive</b>-Zeiteinträge des Tages vor, danach, wann du in deinen Gesprächen geschrieben hast (Claude Code). Nichts wird ohne deine Zustimmung gebucht. Aus: Relay liest die Transkripte dafür nicht.",
   "retry.at": "Nutzungslimit erreicht. Neuer Versuch um {time}.",
   "retry.check": "Nutzungslimit erreicht. Erneute Prüfung um {time}.",
   "retry.cancel": "Abbrechen",

@@ -94,6 +94,7 @@ export type Settings = {
   keepAwake?: boolean; // hold off idle sleep while a turn runs, on unless false
   voice?: VoiceCfg; // Settings › Voice (domain/settings/voice.ts)
   autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true
+  timeFromSessions?: boolean; // Today proposes the day's Productive time from the conversations, on unless false
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;

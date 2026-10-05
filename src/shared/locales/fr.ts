@@ -657,6 +657,9 @@ export default {
   "set.autoRetry": "Réessayer quand une limite d'utilisation se réinitialise",
   "set.autoRetryHelp":
     "Quand une conversation est refusée parce que la limite d'utilisation du fournisseur est atteinte et qu'aucun autre compte n'est disponible, Relay la renvoie dès que la limite se réinitialise. Le Mac reste éveillé jusque-là si <b>Garder le Mac éveillé</b> est activé.",
+  "set.timeFromSessions": "Proposer le temps de la journée à partir des conversations",
+  "set.timeFromSessionsHelp":
+    "À partir de 16:00, Today propose les saisies de temps <b>Productive</b> de la journée selon les moments où vous avez écrit dans vos conversations (Claude Code). Rien n'est saisi sans votre accord. Désactivé : Relay ne lit pas les transcriptions pour cela.",
   "retry.at": "Limite d'utilisation atteinte. Nouvel essai à {time}.",
   "retry.check": "Limite d'utilisation atteinte. Nouvelle vérification à {time}.",
   "retry.cancel": "Annuler",

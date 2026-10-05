@@ -2,7 +2,7 @@ import { t } from "../../shared/i18n";
 import { timeLines, timePrompt, type Activity } from "../../domain/time/blocks";
 import { todayIso } from "../../domain/reminders/rules";
 import * as backend from "../../infrastructure/backend";
-import { settings } from "../settings/settings";
+import { settings, timeFromSessionsOn } from "../settings/settings";
 import { select } from "../navigation/navigation";
 import { startChat } from "../conversations/chats";
 import { sendMsg } from "../conversations/actions";
@@ -30,7 +30,8 @@ async function linesOf(date: string) {
 
 /** Minutes of activity today that look unbooked: Productive is not asked, the backend only reads local transcripts. */
 export async function loadTodayTime() {
-  const lines = await linesOf(todayIso()).catch(() => []);
+  // switched off: the transcripts are not read at all
+  const lines = timeFromSessionsOn() ? await linesOf(todayIso()).catch(() => []) : [];
   useTodayStore.setState(draft => {
     draft.timeMin = lines.reduce((sum, line) => sum + line.minutes, 0);
   });

@@ -654,6 +654,9 @@ export default {
   "set.autoRetry": "Opnieuw proberen als een gebruikslimiet vrijkomt",
   "set.autoRetryHelp":
     "Wordt een gesprek geweigerd omdat de gebruikslimiet van de provider bereikt is en is er geen ander account om naar over te schakelen, dan stuurt Relay het opnieuw zodra de limiet vrijkomt. Staat <b>Mac wakker houden</b> aan, dan blijft de Mac tot dan wakker.",
+  "set.timeFromSessions": "De dagtijd voorstellen uit gesprekken",
+  "set.timeFromSessionsHelp":
+    "Vanaf 16:00 stelt Today de <b>Productive</b>-tijdsregistraties van de dag voor, op basis van wanneer je in je gesprekken schreef (Claude Code). Niets wordt geboekt zonder jouw akkoord. Uit: Relay leest de transcripten hiervoor niet.",
   "retry.at": "Gebruikslimiet bereikt. Opnieuw om {time}.",
   "retry.check": "Gebruikslimiet bereikt. Opnieuw kijken om {time}.",
   "retry.cancel": "Annuleren",

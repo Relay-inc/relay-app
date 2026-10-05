@@ -650,6 +650,9 @@ const en = {
   "set.autoRetry": "Retry when a usage limit resets",
   "set.autoRetryHelp":
     "When a conversation is refused because the provider's usage limit is reached and there's no other account to switch to, Relay sends it again once the limit resets. The Mac stays awake until then if <b>Keep Mac awake</b> is on.",
+  "set.timeFromSessions": "Propose the day's time from conversations",
+  "set.timeFromSessionsHelp":
+    "From 16:00, Today proposes the day's <b>Productive</b> time entries from when you wrote in your conversations (Claude Code). Nothing is booked without your approval. Off: Relay doesn't read the transcripts for this.",
   "retry.at": "Usage limit reached. Retrying at {time}.",
   "retry.check": "Usage limit reached. Checking again at {time}.",
   "retry.cancel": "Cancel",

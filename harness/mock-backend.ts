@@ -652,6 +652,11 @@ const harness = {
     meetingTicks && sendTo(meetingTicks.channel, meetingTicks.index++, { secs, me, others }),
   /** the composer's dictation hearing something */
   dictationLevel: (level: number) => dictationLevels && sendTo(dictationLevels.channel, dictationLevels.index++, level),
+  /** a setting changed in the Settings window: saved, and the main window told (settings-changed) */
+  changeSettings: (patch: Record<string, unknown>) => {
+    settings = { ...settings, ...structuredClone(patch) };
+    emit("settings-changed", structuredClone(settings));
+  },
   /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
   deepLink: (url: string) => emit("deep-link://new-url", [url]),
   /** a permission card that turns up in the next `pending` poll */

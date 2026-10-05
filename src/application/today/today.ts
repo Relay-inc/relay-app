@@ -45,7 +45,7 @@ import { backgroundAction, typeInto } from "../conversations/actions";
 import { markSeen, newChat } from "../conversations/chats";
 import { useMailStore } from "../mail/store";
 import { loadMails, mailChat, mailMove, mailProject, mailSeen } from "../mail/mail";
-import { mailExperimental, mailOn } from "../settings/settings";
+import { mailExperimental, mailOn, timeFromSessionsOn } from "../settings/settings";
 import { proposeTime, loadTodayTime } from "../time/time";
 import { startRecording } from "../calendar/recording";
 import { openCompose } from "./mail";
@@ -394,7 +394,7 @@ export function entries(now = Date.now()): Entry[] {
   // from 16:00, when the conversations of the day show 15 minutes or more: Productive is not asked, the agent finds
   // out what is booked already
   const { timeMin } = useTodayStore.getState();
-  if (timeMin >= 15 && new Date(now).getHours() >= 16)
+  if (timeFromSessionsOn() && timeMin >= 15 && new Date(now).getHours() >= 16)
     add("time", {
       id: `time:${todayIso()}`,
       at: now,
@@ -462,6 +462,8 @@ export function todayModel(now = Date.now()) {
       !current.has(id) &&
       !everyId.has(id) &&
       !asleep(id) &&
+      // the day's time to book left because Time from sessions was switched off, not because it was booked
+      !(id.startsWith("time:") && !timeFromSessionsOn()) &&
       inContext(state.context, projectOf(state.log[id]?.project ?? null)?.context),
   );
   const cleared = gone.length;

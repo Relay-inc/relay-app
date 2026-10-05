@@ -357,6 +357,10 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("Accent");
   },
+  "settings-time": async () => {
+    await settingsPage("General");
+    await intoView("Propose the day's time from conversations");
+  },
   "settings-sidebar": async () => {
     await settingsPage("General");
     await scrollMain("bottom");
@@ -427,6 +431,14 @@ const VIEWS = {
     await open(page, server.url);
     await waitText("Book today's time");
     await click("Book today's time");
+  },
+  // switched off in Settings › General: the item goes, and the transcripts are not read for it
+  "today-time-off": async () => {
+    await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));
+    await open(page, server.url);
+    await waitText("Book today's time");
+    await page.evaluate(() => window.__harness.changeSettings({ timeFromSessions: false }));
+    await page.waitForFunction(() => !document.body.innerText.includes("Book today's time"));
   },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
