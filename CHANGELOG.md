@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Make ticket from a mail**: a button next to the draft-reply ones starts a conversation that reads the mail and its thread, finds the board (the one linked to the mail's project, else it picks one), and creates one task in the intake list with a short title and a summary, with the full mail as a comment on it. You approve the create before anything is made, and Relay never sends mail (#PR)
+- **Make ticket from a mail**: a button next to the draft-reply ones starts a conversation that reads the mail and its thread, finds the board (the one linked to the mail's project, else it picks one), and creates one task in the intake list with a short title and a summary, with the full mail as a comment on it. You approve the create before anything is made, and Relay never sends mail (#111)
 
 ## [0.0.7] - 2026-10-05
 
