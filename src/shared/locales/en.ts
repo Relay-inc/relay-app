@@ -296,6 +296,7 @@ const en = {
   "today.alsoIn": "Also in {project}",
   "today.progress": "{cleared} of {total} cleared · {planned} planned today",
   "today.boardsDown": "{n} board(s) not loaded",
+  "today.needsYou": "Waiting on your decision",
   "today.ctxAll": "All",
   "today.ctxNone": "No project",
   "today.showQuoted": "Show the quoted history",

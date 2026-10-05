@@ -50,7 +50,7 @@ import { openCompose } from "./mail";
 import { forgetDetails } from "./load";
 import { openReview } from "./review";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
-import { changeDay, setSnooze, useTodayStore } from "./store";
+import { changeDay, setContext, setSnooze, useTodayStore } from "./store";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -388,7 +388,9 @@ export function todayModel(now = Date.now()) {
     const id = contextOf(entry) ?? NO_PROJECT;
     counts.set(id, (counts.get(id) ?? 0) + 1);
   }
-  const queue = doingFirst(ordered(all, state.later) as Entry[], entry => entry.status);
+  // what an agent asks comes first, always (someone waits on the decision), then what is in progress, then the rest
+  const sorted = doingFirst(ordered(all, state.later) as Entry[], entry => entry.status);
+  const queue = [...sorted.filter(entry => entry.kind === "ask"), ...sorted.filter(entry => entry.kind !== "ask")];
   const meetings = meetingsOfToday(now);
   const dayEnd = new Date(now).setHours(18, 0, 0, 0);
   const free = slots(
@@ -433,6 +435,10 @@ export function todayModel(now = Date.now()) {
       { id: NO_PROJECT, n: counts.get(NO_PROJECT) ?? 0 },
     ],
     context: state.context,
+    // per meeting the item a click on it opens: its prep before it, its note after it (filter or not)
+    meetingItems: Object.fromEntries(
+      every.flatMap(entry => (entry.subject.type === "meeting" ? [[entry.subject.meeting.id, entry.id] as const] : [])),
+    ) as Record<string, string>,
     // snoozed and not back yet, soonest first
     snoozed: Object.entries(state.snoozed)
       .filter(
@@ -520,6 +526,15 @@ async function setCardState(item: TodayCard, state: Status) {
     return true;
   }
   return false;
+}
+/** A meeting clicked in the day's track or the queue: its prep before it, its note after it. When the context filter
+ *  hides that item, Today shows all again. False when the meeting has neither (running, or its note was skipped). */
+export function openMeeting(meetingId: string) {
+  const item = entries().find(entry => entry.subject.type === "meeting" && entry.subject.meeting.id === meetingId);
+  if (!item) return false;
+  if (!inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
+  selectEntry(item.id);
+  return true;
 }
 export const selectEntry = (id: string) =>
   useTodayStore.setState(draft => {

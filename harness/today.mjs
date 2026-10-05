@@ -65,6 +65,11 @@ try {
   await page.getByRole("button", { name: /^No project/ }).locator("visible=true").first().click();
   await bottom();
   await shot("11-snoozed-no-project");
+  // a meeting in the day's track opens its prep (the filter goes back to All when it hides it)
+  await page.locator(".bg-sidebar button", { hasText: "Harbor CRM kick-off" }).first().click();
+  await shot("12-meeting-from-bar");
+  await page.locator(".bg-sidebar button", { hasText: "Retro Atlas" }).first().click();
+  await shot("13-past-meeting-from-bar");
 } catch (e) {
   console.error(e);
   await page.screenshot({ path: `${dir}/error.png` });

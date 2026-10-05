@@ -19,6 +19,8 @@ a PR. Versions follow
 - **Review a pull request in Today**: Review with Claude opens a review screen with the queue as a rail, the diff per file with the open threads from GitHub, and Claude's findings (it reads the diff and the description) to add as a comment or dismiss. Click a line to comment on it or to ask Claude about it. Write a summary, pick Comment, Approve or Request changes, and Submit: a dialog says who will see it before the review is posted on GitHub, the one thing Relay posts there
 - An agent's question under Today answers with the number keys: 1 to 9 pick an option, Enter sends the answer
 - **Today per context**: chips next to the progress show All, each context of your vault (with its colour and how many items it has today) and No project; picking one shows and plans only that context's items, and the progress counts only those. The choice stays
+- What an agent asks you to decide is always on top of Today ("Waiting on your decision"), above the meetings, and first for Enter and J K
+- A meeting in Today's day track, or in the list, opens its prep before it and its note after it (back to All when the context filter hides it)
 
 ### Added
 

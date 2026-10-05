@@ -301,6 +301,7 @@ export default {
   "today.alsoIn": "Auch in {project}",
   "today.progress": "{cleared} von {total} erledigt · {planned} heute geplant",
   "today.boardsDown": "{n} Board(s) nicht geladen",
+  "today.needsYou": "Wartet auf deine Entscheidung",
   "today.ctxAll": "Alle",
   "today.ctxNone": "Kein Projekt",
   "today.showQuoted": "Zitierten Verlauf zeigen",
