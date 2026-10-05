@@ -14,7 +14,7 @@ import { useTodayStore } from "./store";
 
 export type Link = {
   at: number; // when it was worked out, ms
-  how: "number" | "title" | "ai" | "none" | "manual"; // manual: the user said it is no ticket of this board
+  how: "number" | "title" | "ai" | "picked" | "none" | "manual"; // picked: chosen by the user; manual: no ticket, the user said
   provider?: string;
   card?: string; // the card's id in its tracker
   number?: string;
@@ -109,6 +109,24 @@ export const prsOfCard = (providerId: string, card: string) =>
   Object.entries(useLinksStore.getState().links)
     .filter(([, link]) => link.provider === providerId && link.card === card)
     .map(([url]) => url);
+/** The ticket the user chose for a PR (the picker): kept like a found one, never worked out again. */
+export const chooseTicket = (url: string, providerId: string, card: { id: string; number: string; title: string }) =>
+  keep(url, {
+    at: Date.now(),
+    how: "picked",
+    provider: providerId,
+    card: card.id,
+    number: card.number,
+    title: card.title,
+  });
+/** Why a PR has no ticket, so Today can offer the fix: its repo has no vault project, the project no linked board, or
+ *  nothing on the board fits (yet). */
+export function ticketState(pr: PR): "linked" | "noProject" | "noBoard" | "none" {
+  if (ticketOf(pr.url)) return "linked";
+  if (!pr.project) return "noProject";
+  if (!useTodayStore.getState().boards[pr.project]) return "noBoard";
+  return "none";
+}
 /** "Not this ticket": the PR stays without one, also next time. */
 export const unlinkPr = (url: string) => keep(url, { at: Date.now(), how: "manual" });
 /** The tracker of a link, for its name. */

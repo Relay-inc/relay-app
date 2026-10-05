@@ -51,7 +51,8 @@ import { forgetDetails } from "./load";
 import { openReview } from "./review";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
-import { linkPrs, relinkPr, ticketOf } from "./links";
+import { linkPrs, relinkPr, ticketOf, ticketState } from "./links";
+import { useDetailsStore } from "./details";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -85,7 +86,10 @@ export async function loadTodayCards() {
   );
   if (mine !== gen) return; // a later load is on its way
   useTodayStore.setState(draft => {
-    draft.cards = lists.flat().sort(byDue);
+    // one card once, also when two vault projects point at the same board (older settings)
+    draft.cards = [...new Map(lists.flat().map(item => [`${item.provider}:${item.card.id}`, item])).values()].sort(
+      byDue,
+    );
     draft.boards = open;
     draft.errors = errors;
     draft.at = Date.now();
@@ -382,6 +386,9 @@ export function meetingsOfToday(now = Date.now()) {
     .list.filter(meeting => Date.parse(meeting.start) < midnight + DAY && Date.parse(meeting.end) > midnight);
 }
 
+/** What an agent needs the user for, in this order on top of Today. */
+export const AGENT_KINDS: Kind[] = ["ask", "blocked", "finished"];
+export const isAgentItem = (entry: { kind: Kind }) => AGENT_KINDS.includes(entry.kind);
 /** Today as a whole: the queue in order, the slots, where each item is planned, and how far the day got. */
 export function todayModel(now = Date.now()) {
   const state = useTodayStore.getState();
@@ -396,7 +403,11 @@ export function todayModel(now = Date.now()) {
   }
   // what an agent asks comes first, always (someone waits on the decision), then what is in progress, then the rest
   const sorted = doingFirst(ordered(all, state.later) as Entry[], entry => entry.status);
-  const queue = [...sorted.filter(entry => entry.kind === "ask"), ...sorted.filter(entry => entry.kind !== "ask")];
+  // everything an agent needs you for first: a decision, a blocked session, a result to read
+  const queue = [
+    ...AGENT_KINDS.flatMap(kind => sorted.filter(entry => entry.kind === kind)),
+    ...sorted.filter(entry => !isAgentItem(entry)),
+  ];
   const meetings = meetingsOfToday(now);
   const dayEnd = new Date(now).setHours(18, 0, 0, 0);
   const free = slots(
@@ -533,20 +544,41 @@ async function setCardState(item: TodayCard, state: Status) {
   }
   return false;
 }
-/** Find the PR's ticket again, Claude included, and say what came out. */
-async function findTicketAgain(pr: PR) {
-  // say what is missing: the repo has no vault project, or the project no board to look in
-  if (!pr.project) return toast(t("today.link.noProject", { repo: pr.repo }));
-  if (!useTodayStore.getState().boards[pr.project])
-    return toast(t("today.link.noBoard", { project: projectLabel(pr.project) }));
+/** Find the PR's ticket again, Claude included, and say what came out; what blocks it comes with its fix. */
+export async function findTicketAgain(pr: PR) {
+  const state = ticketState(pr);
+  if (state === "noProject")
+    return toast(t("today.link.noProject", { repo: pr.repo }), () => linkFor(pr), t("today.link.linkRepo"));
+  if (state === "noBoard")
+    return toast(
+      t("today.link.noBoard", { project: projectLabel(pr.project) }),
+      () => linkFor(pr),
+      t("today.link.linkBoard"),
+    );
   const link = await relinkPr(pr);
-  toast(
-    link
-      ? t("today.link.found", {
-          ticket: `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
-        })
-      : t("today.link.none"),
-  );
+  if (link)
+    return toast(
+      t("today.link.found", {
+        ticket: `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
+      }),
+    );
+  toast(t("today.link.none"), () => pickTicketFor(pr), t("today.link.choose"));
+}
+/** The repo or board linker on a PR's overview (from the toast: its item opens first). */
+export function linkFor(pr: PR) {
+  const item = entries().find(entry => entry.subject.type === "pr" && entry.subject.pr.url === pr.url);
+  if (item) selectEntry(item.id);
+  useDetailsStore.setState(draft => {
+    draft.linking = pr.url;
+  });
+}
+/** The ticket picker on a PR's overview (from the toast: its item opens first). */
+export function pickTicketFor(pr: PR) {
+  const item = entries().find(entry => entry.subject.type === "pr" && entry.subject.pr.url === pr.url);
+  if (item) selectEntry(item.id);
+  useDetailsStore.setState(draft => {
+    draft.picking = pr.url;
+  });
 }
 /** The ticket a PR is about: its item when it is under Today (switching the filter back to All when it hides it),
  *  else the ticket window on it. */

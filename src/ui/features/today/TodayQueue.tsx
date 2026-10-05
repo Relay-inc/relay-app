@@ -3,6 +3,7 @@ import type { Meeting } from "../../../domain/calendar/types";
 import type { Slot } from "../../../domain/today/plan";
 import { joinable } from "../../../domain/calendar/rules";
 import {
+  isAgentItem,
   openMeeting,
   reopen,
   selectEntry,
@@ -55,7 +56,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
         <span className={`flex-1 min-w-0 truncate ${on ? "font-semibold" : ""}`}>{entry.title}</span>
         {pins[entry.id] ? <Icon name="bookmark" className="glyph size-3 flex-none text-accent-text" /> : null}
         <span className="text-[11px] text-tertiary tabular-nums whitespace-nowrap">
-          {entry.kind === "ask"
+          {entry.kind === "ask" || entry.kind === "blocked"
             ? minutes(Math.max(0, Math.floor((now - entry.at) / 60_000)))
             : `${at ? timeOf(iso(at.start)) : t("rem.tomorrow")} · ${minutes(entry.est)}`}
         </span>
@@ -64,7 +65,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   };
 
   const slotGroup = (slot: Slot, index: number) => {
-    const rows = queue.filter(entry => entry.kind !== "ask" && placed[entry.id]?.slot === slot.key);
+    const rows = queue.filter(entry => !isAgentItem(entry) && placed[entry.id]?.slot === slot.key);
     const length = Math.round((slot.end - slot.start) / 60_000);
     const usedMin = Math.round(used[slot.key] / 60_000);
     const full = usedMin / length > 0.9;
@@ -150,9 +151,10 @@ export function TodayQueue({ model }: { model: TodayModel }) {
       .map((meeting): [number, ReactNode] => [Date.parse(meeting.start) - 0.5, meetingRow(meeting)]),
   ];
   parts.sort((a, b) => a[0] - b[0]);
-  const later = queue.filter(entry => entry.kind !== "ask" && tomorrow.includes(entry.id));
-  // an agent waiting on a decision sits on top of the list, above the meetings and the slots
-  const asks = queue.filter(entry => entry.kind === "ask");
+  const later = queue.filter(entry => !isAgentItem(entry) && tomorrow.includes(entry.id));
+  // what an agent needs you for sits on top of the list, above the meetings and the slots: a decision, a blocked
+  // session, a result to read
+  const asks = queue.filter(isAgentItem);
   return (
     <div className="min-h-0 overflow-y-auto border-r border-separator px-2 pt-1 pb-4">
       <RecordingBar />
@@ -160,7 +162,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
         <div className="mb-1">
           <div className="px-2.5 pt-2.5 pb-1">
             <span className="text-[11px] font-semibold tracking-[0.06em] uppercase text-late">
-              {t("today.needsYou")} {asks.length}
+              {t("today.agentsNeedYou")} {asks.length}
             </span>
           </div>
           {asks.map(row)}

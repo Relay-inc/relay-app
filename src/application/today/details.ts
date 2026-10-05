@@ -26,6 +26,8 @@ type DetailsState = {
   original: Record<string, Original>; // per mail key: what a reply needs
   quick: Record<string, string[]>; // per mail key: Claude's quick replies
   compose: Compose | null;
+  picking: string; // the PR (url) whose ticket is being chosen by hand, "" for none
+  linking: string; // the PR (url) whose repo or board is being linked on Today, "" for none
   err: Record<string, string>; // per item: why its detail did not load
 };
 export const useDetailsStore = makeStore<DetailsState>(() => ({
@@ -37,6 +39,8 @@ export const useDetailsStore = makeStore<DetailsState>(() => ({
   original: {},
   quick: {},
   compose: null,
+  picking: "",
+  linking: "",
   err: {},
 }));
 
@@ -48,4 +52,14 @@ export const setPop = (pop: DetailsState["pop"]) =>
 export const setTab = (id: string, tab: string) =>
   useDetailsStore.setState(draft => {
     draft.tab[id] = tab;
+  });
+/** Open the ticket picker on a PR (its url), or close it (""). */
+export const setPicking = (url: string) =>
+  useDetailsStore.setState(draft => {
+    draft.picking = url;
+  });
+/** Open the repo or board linker on a PR (its url), or close it (""). */
+export const setLinking = (url: string) =>
+  useDetailsStore.setState(draft => {
+    draft.linking = url;
   });
