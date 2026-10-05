@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-10-05
+
 ### Added
 
 - The notes drawer (the notes icon in the title bar) lists **Related** notes: the vault notes closest to what the open conversation is about, from a full-text index of the vault that Relay keeps up to date on its own. A click opens the note in the panel (#49)
@@ -217,7 +219,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/Relay-inc/relay-app/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/Relay-inc/relay-app/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
