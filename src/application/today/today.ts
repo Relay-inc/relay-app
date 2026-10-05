@@ -252,7 +252,7 @@ export function entries(now = Date.now()): Entry[] {
     if (start < midnight || start >= midnight + DAY) continue;
     const base = { project: meetingProjectOf(meeting), subject: { type: "meeting", meeting } as Subject };
     const when = `${timeOf(meeting.start)}–${timeOf(meeting.end)}`;
-    const where = [t("today.meeting"), when, meeting.location].filter(Boolean).join(" · ");
+    const where = [when, meeting.location].filter(Boolean).join(" · ");
     if (start > now)
       add("prep", {
         ...base,
@@ -364,12 +364,11 @@ export function entries(now = Date.now()): Entry[] {
     const key = mailKey(mail);
     const waits = mail.unread || (mail.other === false && !mail.answered);
     if (!waits || mail.other || mail.answered || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
-    const sender = mail.from[0]?.name || mail.from[0]?.email || "";
     add("mail", {
       id: `mail:${key}`,
       at,
       title: mail.subject || t("mail.noSubject"),
-      where: [t("nav.mail"), sender, timeOf(mail.date)].filter(Boolean).join(" · "),
+      where: "", // who and when are on the mail itself, right under it
       why: t("today.waiting", { ago: ago(at, now) }),
       tone: now - at > 4 * 60 * MIN ? "soon" : "",
       project: mailProject(mail),
@@ -839,6 +838,9 @@ export function actionsOf(entry: Entry): Actions {
           { label: t("today.replyAll"), icon: "replyAll", key: "A", run: () => openCompose(s.key, "all") },
           { label: t("today.forward"), icon: "forward", key: "F", run: () => openCompose(s.key, "fwd") },
           { label: t("today.askClaude"), icon: "chat", run: () => mailChat(s.key, "talk") },
+          ...(useBoardStore.getState().ready.length
+            ? [{ label: t("mail.ticket"), icon: "notes", key: "T", run: () => mailChat(s.key, "ticket") }]
+            : []),
           { label: t("today.markRead"), icon: "read", key: "U", run: () => mailSeen(s.key, true) },
           ...(experimental ? [{ label: t("mail.trash"), icon: "trash", key: "#", run: () => trashMail(s.key) }] : []),
         ],

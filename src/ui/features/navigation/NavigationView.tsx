@@ -190,7 +190,7 @@ export function NavigationView({ className }: { className: string }) {
   // the views on top: rows with their names, or a row of icons
   const renderViews = () =>
     layout === "icons" ? (
-      <div className="flex flex-wrap gap-1 px-0.5 pb-1">
+      <div className="flex flex-wrap gap-0.5 pb-1.5">
         {views.map(view => renderView(view, true))}
         {renderMore(true)}
       </div>

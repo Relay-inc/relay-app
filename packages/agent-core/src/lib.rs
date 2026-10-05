@@ -144,6 +144,12 @@ pub enum Event {
     Error { text: String },
     /// The conversation started over (`/clear`): what came before is gone; a new Session follows.
     Reset,
+    /// The provider began compacting the conversation (summarising it to free context); `Compacted` ends it.
+    Compacting,
+    /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
+    Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
+    /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
+    Context { used: Option<u64>, window: Option<u64> },
     /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },

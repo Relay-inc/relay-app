@@ -1,6 +1,7 @@
 import { esc } from "../../shared/html";
 import { raw } from "../../shared/i18n";
 import type { ToolInput } from "../../domain/conversations/types";
+import { todosIn } from "../../domain/conversations/todos";
 import { useT } from "../hooks/useT";
 import { Html } from "./Html";
 
@@ -58,8 +59,17 @@ export function ToolLine({
       return line(th("tool.agent", { d: args.description || args.subagent_type || "" }));
     case "Skill":
       return line(th("tool.skill", { s: args.skill ?? "" }));
-    case "TodoWrite":
-      return line(th("tool.todo"));
+    case "TodoWrite": {
+      const todos = todosIn(args);
+      return line(
+        todos.length
+          ? th("tool.todoCount", {
+              done: todos.filter(todo => todo.status === "completed").length,
+              total: todos.length,
+            })
+          : th("tool.todo"),
+      );
+    }
   }
   const mcp = name.match(/^mcp__(.+?)__(.+)$/);
   return <>{mcp ? `${mcp[1].replace(/^claude_ai_|^plugin_/g, "")}: ${mcp[2]}` : name}</>;

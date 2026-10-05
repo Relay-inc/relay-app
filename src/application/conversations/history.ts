@@ -1,6 +1,6 @@
 import { t } from "../../shared/i18n";
 import type { AgentEvent } from "../../domain/agents/types";
-import { adoptOwnedTurns, toItems, trackTimes, doneText, push } from "../../domain/conversations/events";
+import { adoptOwnedTurns, contextOf, toItems, trackTimes, doneText, push } from "../../domain/conversations/events";
 import { UNTITLED } from "../../domain/conversations/rules";
 import { lastTurnIs } from "../../domain/orchestrator/rules";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
@@ -22,7 +22,7 @@ const set = useConversationsStore.setState;
 export async function tailTerm(key: string): Promise<boolean> {
   const transcript = await backend.historySid(termSid(key), cs().termOffset[key] ?? 0);
   const fresh = cs().termOffset[key] === undefined;
-  const added = toItems(transcript.items, imageUrl);
+  const added = toItems(transcript.items, imageUrl, t);
   set(draft => {
     draft.termOffset[key] = transcript.next;
     if (fresh) draft.messages[key] = added;
@@ -37,10 +37,13 @@ export async function ensureHistory(key: string, fresh = false) {
     return;
   }
   if (cs().messages[key] && !fresh) return;
-  const items = toItems(await backend.history(key), imageUrl);
+  const history = await backend.history(key);
+  const items = toItems(history, imageUrl, t);
+  const context = contextOf(history);
   let retitled = false;
   set(draft => {
     draft.messages[key] = items;
+    if (context) draft.context[key] = context;
     const firstMessage = items.find(item => item.kind === "me");
     const conversation = draft.chats[key];
     if (conversation && UNTITLED.includes(conversation.title) && firstMessage) {
@@ -95,7 +98,7 @@ async function adoptRunningTurn(key: string, provider: string, sid: string) {
   });
   const transcript = await backend.historySid(sid, 0, provider);
   set(draft => {
-    draft.messages[key] = toItems(transcript.items, imageUrl);
+    draft.messages[key] = toItems(transcript.items, imageUrl, t);
     draft.outside[key] = transcript.next;
     trackTimes(draft, key, transcript.items);
   });
@@ -119,7 +122,7 @@ async function finishOutsideTurn(key: string) {
 export async function tailOutside(key: string) {
   const { sid, provider } = cs().sidOf[key];
   const transcript = await backend.historySid(sid, cs().outside[key], provider);
-  const added = toItems(transcript.items as AgentEvent[], imageUrl);
+  const added = toItems(transcript.items as AgentEvent[], imageUrl, t);
   set(draft => {
     draft.outside[key] = transcript.next;
     trackTimes(draft, key, transcript.items);

@@ -5,12 +5,14 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
 import { mailChat, mailMove, openAttachment, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { useBoardStore } from "../../../application/board/store";
 import { useSettingsStore } from "../../../application/settings/store";
 import { mailExperimental } from "../../../domain/settings/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
 import { MailLinkBar, MailText } from "./MailText";
+import { MailFrame } from "./MailFrame";
 
 const KILOBYTE = 1024;
 const MEGABYTE = 1024 * 1024;
@@ -62,6 +64,7 @@ export function MailDetail({
   const body = useNavigationStore(s => s.panel.detail[key]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const experimental = useSettingsStore(s => mailExperimental(s.settings));
+  const hasBoard = useBoardStore(s => s.ready.length > 0);
 
   const reply = async (how: "draft" | "draftAll") => {
     if (readOnReply && item && unread(item)) await mailSeen(key, true);
@@ -120,6 +123,15 @@ export function MailDetail({
             "btn btn-icon",
             `${t("mail.draftAll")}: ${t("mail.draftTitle")}`,
           )}
+          {hasBoard
+            ? iconButton(
+                "notes",
+                t("mail.ticket"),
+                () => mailChat(key, "ticket"),
+                "btn btn-icon",
+                `${t("mail.ticket")}: ${t("mail.ticketTitle")}`,
+              )
+            : null}
           {iconButton(
             "talk",
             t("mail.talk"),
@@ -179,15 +191,10 @@ export function MailDetail({
           </div>
         ) : null}
         {body.html && !textView ? (
-          // the empty sandbox comes before srcdoc, and the frame is not in the document yet when React sets them.
-          // White because mails are designed for white; a mail wider than the panel scrolls inside the frame
-          <iframe
-            sandbox=""
-            referrerPolicy="no-referrer"
-            title={item.subject || t("mail.noSubject")}
-            srcDoc={body.html}
-            className="block w-full h-[calc(100vh-15rem)] min-h-100 mt-3 border border-separator rounded-lg bg-white"
-          ></iframe>
+          // white because mails are designed for white; as tall as the mail, a wider one scrolls sideways inside it
+          <div className="mt-3">
+            <MailFrame html={body.html} title={item.subject || t("mail.noSubject")} className="rounded-lg" />
+          </div>
         ) : (
           <MailText text={body.text} />
         )}

@@ -12,6 +12,7 @@ import {
   mailReference,
   mailChatTitle,
   draftPrompt,
+  ticketPrompt,
   mailBox,
   toggleSelection,
   allSelected,
@@ -345,8 +346,8 @@ export async function openMailSetup() {
 }
 /** A conversation about the open mail, under its project. The agent reads the mail itself through the relay-mail
  *  tools, so the whole thread and its attachments are there. "talk" waits for the user's question, "draft" asks for a
- *  reply as a draft right away. Sending stays with the user (decided 29/9). */
-export async function mailChat(key: string, how: "talk" | "draft" | "draftAll") {
+ *  reply as a draft right away, "ticket" for a ticket on the project's board. Sending stays with the user (decided 29/9). */
+export async function mailChat(key: string, how: "talk" | "draft" | "draftAll" | "ticket") {
   const target = ms().list?.find(x => mailKey(x) === key);
   if (!target) return;
   const reference = mailReference(target);
@@ -358,7 +359,10 @@ export async function mailChat(key: string, how: "talk" | "draft" | "draftAll") 
     ...(how === "talk" ? { mail: reference } : {}),
   });
   await select(chatKey);
-  if (how !== "talk") sendMsg(draftPrompt(reference, how === "draftAll"));
+  if (how === "ticket") {
+    const project = mailProject(target);
+    sendMsg(ticketPrompt(reference, project ? settings().boards?.[project] : undefined));
+  } else if (how !== "talk") sendMsg(draftPrompt(reference, how === "draftAll"));
 }
 
 /** An attachment of a mail, on the user's click: saved in Downloads/Relay-mail (never over another file, with the

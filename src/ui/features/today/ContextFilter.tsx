@@ -1,32 +1,31 @@
 import type { TodayModel } from "../../../application/today/today";
 import { setContext } from "../../../application/today/store";
-import { contextTint } from "../../../application/navigation/sidebar";
 import { NO_PROJECT } from "../../../domain/today/plan";
 import { useT } from "../../hooks/useT";
-import { TINT_DOT } from "./parts";
+import { Icon } from "../../components/Icon";
 
 /** Today per context: all of it, one context of the vault (Antenna, Freelance, Personal), or what has no project.
- *  A context with nothing today stays out, unless it is the one picked. */
+ *  A quiet select in the header; a context with nothing today stays out, unless it is the one picked. */
 export function ContextFilter({ model }: { model: TodayModel }) {
   const { t } = useT();
-  const chips = model.contexts.filter(c => !c.id || c.n || c.id === model.context);
+  const options = model.contexts.filter(c => !c.id || c.n || c.id === model.context);
+  const name = (id: string) => (id === "" ? t("today.allProjects") : id === NO_PROJECT ? t("today.ctxNone") : id);
   return (
-    <div className="flex items-center gap-0.5 bg-fill-2 rounded-lg p-0.5">
-      {chips.map(chip => {
-        const on = chip.id === model.context;
-        const tint = chip.id && chip.id !== NO_PROJECT ? contextTint(chip.id) : "";
-        return (
-          <button
-            key={chip.id || "all"}
-            onClick={() => setContext(chip.id)}
-            className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-md text-xs font-medium whitespace-nowrap cursor-pointer ${on ? "bg-raised shadow-sm text-label" : "text-secondary hover:text-label"}`}
-          >
-            {tint ? <span className={`size-1.75 rounded-full ${TINT_DOT[tint]}`} /> : null}
-            {chip.id === "" ? t("today.ctxAll") : chip.id === NO_PROJECT ? t("today.ctxNone") : chip.id}
-            <span className="text-tertiary tabular-nums">{chip.n}</span>
-          </button>
-        );
-      })}
-    </div>
+    <label className="relative inline-flex items-center gap-1 h-7 pl-2 pr-1.5 rounded-md text-[13px] text-secondary cursor-pointer hover:bg-fill hover:text-label">
+      <span className="whitespace-nowrap">{name(model.context)}</span>
+      <Icon name="chevron" className="glyph size-3" />
+      <select
+        aria-label={t("today.allProjects")}
+        value={model.context}
+        onChange={e => setContext(e.target.value)}
+        className="absolute inset-0 opacity-0 cursor-pointer"
+      >
+        {options.map(option => (
+          <option key={option.id || "all"} value={option.id}>
+            {name(option.id)} ({option.n})
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

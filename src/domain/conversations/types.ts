@@ -36,7 +36,7 @@ export type AgentSession = {
 };
 /** One line of a conversation. A tool line keeps the call, so it is drawn (and translated) when shown. */
 export type Item = {
-  kind: "me" | "ai" | "tool" | "err" | "note" | "done" | "allowed" | "denied";
+  kind: "me" | "ai" | "thinking" | "tool" | "err" | "note" | "done" | "compact" | "allowed" | "denied";
   text: string;
   id?: string;
   state?: "run" | "ok" | "err";
@@ -65,6 +65,8 @@ export type Chat = {
   ask?: string[]; // the projects a Cmd-K question named: offered once, after it started
   orch?: true; // a worker the orchestrator started
 };
+/** How full a conversation's context is, in tokens. */
+export type ContextUse = { used: number; window: number };
 /** An image waiting to be sent: its media type, base64 data, and a blob url to show it. */
 export type Img = { mt: string; data: string; url: string };
 /** A subagent a session spawned (Agent tool, background agents). */
@@ -93,13 +95,21 @@ export type TerminalSession = {
   mtime: number;
 };
 /** A permission request or question waiting in pending/ (packages/agent-core PermissionRequest). */
-export type Pending = { id: string; project: string; kind?: string; tool_name: string; input: ToolInput };
+export type Pending = {
+  id: string;
+  project: string;
+  kind?: string;
+  tool_name: string;
+  input: ToolInput;
+  suggestions?: unknown[];
+};
 /** A transcript read from an offset: its events and where the next read starts. */
 export type Transcript<E> = { items: E[]; next: number };
 /** The app conversation key's provider and session id (app_sessions). */
 export type SessionOf = Record<string, { provider: string; sid: string }>;
-/** The answer a card gives: allow or deny a permission, or a question's picked labels and typed "other" per question. */
-export type CardChoice = "allow" | "deny" | { picked: string[][]; other: string[] };
+/** The answer a card gives: allow (once, or "always": the agent's own suggestions to remember it) or deny a permission, or a
+ *  question's picked labels and typed "other" per question. */
+export type CardChoice = "allow" | "always" | "deny" | { picked: string[][]; other: string[] };
 export type RouteChoice = { key: string; text: string; hits: string[] };
 
 /** A conversation refused for its provider's limit, waiting to be sent again: at the reset (`known`), or `at` is when

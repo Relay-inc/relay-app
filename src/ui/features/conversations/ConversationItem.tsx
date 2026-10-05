@@ -8,6 +8,7 @@ import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { UserMessage } from "./UserMessage";
 import { Answer } from "./Answer";
+import { Thinking } from "./Thinking";
 import { ToolStep } from "./ToolStep";
 import { NoteLine } from "./NoteLine";
 import { RelayTurn } from "./RelayTurn";
@@ -22,6 +23,8 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
       return <UserMessage text={item.text} imgs={item.imgs} files={item.files} />;
     case "ai":
       return <Answer text={item.text} />;
+    case "thinking":
+      return <Thinking text={item.text} />;
     case "tool":
       return <ToolStep item={item} />;
     case "allowed":
@@ -50,6 +53,15 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
         <div className="flex items-center gap-2.5 text-tertiary text-xs">
           <span className="flex-1 h-px bg-separator"></span>
           {item.text}
+          <span className="flex-1 h-px bg-separator"></span>
+        </div>
+      );
+    case "compact":
+      // like the end of a turn, a label between two lines; it pulses while the summary is written
+      return (
+        <div className="flex items-center gap-2.5 text-tertiary text-xs">
+          <span className="flex-1 h-px bg-separator"></span>
+          <span className={item.state === "run" ? "animate-pulse" : ""}>{item.text}</span>
           <span className="flex-1 h-px bg-separator"></span>
         </div>
       );

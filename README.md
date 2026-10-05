@@ -42,7 +42,7 @@ resolved. Only `workState` is required; a missing `reminders` file is created by
 | `src-tauri/src/lib.rs` | All Tauri commands. Starts one process per conversation through its agent provider, with the vault as cwd and the login-shell PATH, and passes the provider's normalised events to the webview. See [Agent providers](#agent-providers). |
 | `src-tauri/src/agents.rs`, `src/shared/plugins.ts` | The registry of the agent providers, `settings.agents` and sessions.json. |
 | `src-tauri/src/snapshot.rs` | One read-only JSON snapshot of the vault: work-state index, each project's `## Open`, reminders, `claude agents --json`. |
-| `packages/agent-claude/src/perm_server.rs` | Stdio MCP server (the Relay binary run as `relay --perm-server`) passed to Claude Code as `--permission-prompt-tool`. Writes each permission request or question to `pending/<id>.json`, waits for the app's `<id>.answer.json`. Files, not a socket, so a waiting question survives an app restart. |
+| `packages/agent-claude/src/permission.rs` | Claude Code's permission requests and questions over the pipe (`--permission-prompt-tool stdio`): a `can_use_tool` control request becomes a card in `pending/<id>.json`, the user's answer a control response on stdin. The card is a file, so a waiting question survives an app restart. |
 | `src/shared/` | What every layer uses: `i18n.ts` + `locales/` (UI strings in English, Dutch, French and German; `useT()` in a component, `t(key)` elsewhere, `tr()` in `lib.rs` for the menu bar and errors; the language follows macOS unless set in the settings), `plugins.ts` (the provider and agent registries), `icons.ts`, `markdown.ts`. |
 | `src/domain/<context>/` | Pure types and rules per bounded context (conversations, agents, workspace, navigation, mail, board, reminders, pull-requests, usage, settings), unit tested with `node --test`. The agent events go through one reducer, `applyAgentEvent`. |
 | `src/application/<context>/` | One Zustand + Immer store per context (`use<Context>Store`) and its use cases: loaders, actions, polls. `boot.ts` is the main window's start: settings, language and vault, the conversations from earlier versions, the listeners and polls. |
@@ -177,7 +177,7 @@ own transcripts and logs, and reports its limits and tokens.
 | | Claude Code | Codex | OpenCode | Pi |
 |---|---|---|---|---|
 | Package | [`agent-claude`](packages/agent-claude/README.md) | [`agent-codex`](packages/agent-codex/README.md) | [`agent-opencode`](packages/agent-opencode/README.md) | [`agent-pi`](packages/agent-pi/README.md) |
-| Permissions | cards, through `relay --perm-server` (MCP permission tool) | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
+| Permissions | cards, over the pipe (`--permission-prompt-tool stdio`), with "Always allow" | cards: command and patch approvals | cards: `permission.asked` (edits, commands, fetches ask by default) | none (pi runs every tool call) |
 | Runs as | `claude -p` stream-json, one process per conversation | `codex app-server` (JSON-RPC over stdio) behind its bridge (`relay --codex-bridge`) | a private `opencode serve` (HTTP + SSE) behind its bridge (`relay --opencode-bridge`) | `pi --mode rpc` (JSON lines over stdio), no bridge |
 | Questions | yes (AskUserQuestion) | no (declined) | yes (`question.asked`) | no |
 | Thinking, images | –, yes | yes, yes | yes, yes | yes, yes |
@@ -225,11 +225,12 @@ where they match (Read, Write, Edit, Bash, Grep, Glob, WebSearch, WebFetch, Agen
 file_path, command, pattern, query, url, description), so the webview words them well.
 
 **Permissions** go through one folder for every provider (`agent_core::pending`): a request is `pending/<id>.json`
-(`{id, project, provider, kind: "tool" | "question", tool_name, input, relay, at}`), the answer `<id>.answer.json`
-(`{behavior: "allow", updatedInput}` or `{behavior: "deny", message}`; a question has `input.questions` and is answered with
-`updatedInput.answers`). A provider either writes and polls the files itself (Claude's `relay --perm-server`, `relay: false`),
-or raises `Event::Permission`: the app writes the file with `relay: true` and passes the user's decision to `respond`,
-writing its line to the process's stdin. Files from before the providers read as Claude's.
+(`{id, project, provider, kind: "tool" | "question", tool_name, input, relay, at}`, plus `request_id` and `suggestions` for
+Claude), the answer `<id>.answer.json` (`{behavior: "allow", updatedInput, updatedPermissions?}` or `{behavior: "deny", message}`;
+a question has `input.questions` and is answered with `updatedInput.answers`). A provider raises `Event::Permission` (Claude's
+`can_use_tool` request is turned into a card by the app): the app writes the file with `relay: true` and passes the user's
+decision to `respond`, writing its line to the process's stdin. A card of Claude's is also in the broker's replay after an app
+restart, with the same id. Files from before the providers read as Claude's.
 
 **Usage**: `limits(env)` gives `Limits::On { plan, windows: [Window { id, label, name, pct, resets }] }` or
 `Limits::Off(reason)`; `label` and `off.<reason>` are keys in the provider's own strings. The app asks at most once a

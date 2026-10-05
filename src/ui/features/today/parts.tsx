@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import type { Kind, Status } from "../../../domain/today/plan";
 import { Icon } from "../../components/Icon";
-import type { Entry } from "../../../application/today/today";
 
 /** The glyph of each kind of item. */
 export const KIND_ICON: Record<Kind, string> = {
@@ -17,27 +16,6 @@ export const KIND_ICON: Record<Kind, string> = {
   time: "clock",
   finished: "chat",
 };
-/** Why an item is here, as a colour: late red, soon orange, else grey. */
-export const TONE_TEXT: Record<Entry["tone"], string> = { late: "text-late", soon: "text-soon", "": "text-secondary" };
-export const TONE_BG: Record<Entry["tone"], string> = { late: "bg-late", soon: "bg-soon", "": "bg-separator-strong" };
-/** A context's dot (literal classes, so Tailwind finds them); grey for a project without a context. */
-export const TINT_DOT: Record<string, string> = {
-  "ctx-a": "bg-ctx-a",
-  "ctx-m": "bg-ctx-m",
-  "ctx-p": "bg-ctx-p",
-  "": "bg-tertiary",
-};
-
-/** A key's name next to a button. */
-export function Kbd({ children, onAccent = false }: { children: ReactNode; onAccent?: boolean }) {
-  return (
-    <span
-      className={`font-mono text-[11px] leading-none px-1.25 py-0.75 rounded-sm ${onAccent ? "opacity-75" : "text-tertiary border border-separator-strong"}`}
-    >
-      {children}
-    </span>
-  );
-}
 /** A small section label in capitals. */
 export const Caps = ({ children }: { children: ReactNode }) => (
   <span className="text-[11px] font-semibold tracking-[0.06em] uppercase text-tertiary">{children}</span>
