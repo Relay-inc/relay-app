@@ -26,6 +26,8 @@ a PR. Versions follow
 - **Work in progress shows in the sidebar** under its project, like a conversation: a review you started, a reply you are drafting, a meeting that runs or is being recorded. A click brings Today back on it (the review screen, the mail with its draft, the meeting's prep or note); closing a review or a draft discards it. A started review and a draft are kept when Relay restarts. A meeting's prep, note and transcript conversations now start under the meeting's project instead of General
 - The review screen's diff scrolls: down with the rest of the review, and sideways for long lines
 - A pull request review is a view of its own: from Today or from its row in the sidebar it opens the review screen alone, with its name in the title bar and its sidebar row selected; Back or Esc returns to Today. When the PR no longer waits on you it says so, with Discard and Back
+- **@-mention people in a ticket's comments**: typing @ in the comment box (on Today and in the ticket window) offers the ticket's people; in Productive the pick becomes a real mention, so that person is notified, and mentions in Productive comments now read as @Name instead of their raw code
+- A ticket on Today can be reassigned from its panel (Productive, Linear), next to its statuses
 
 ### Added
 

@@ -33,8 +33,9 @@ export function CardSection({ id, item, tab }: { id: string; item: TodayCard; ta
           feed={view.feed}
           providerId={item.provider}
           providerName={provider(item.provider)?.name ?? ""}
-          onComment={text =>
-            cardAct(id, item, "comment", text).then(
+          people={view.people}
+          onComment={(text, mentions) =>
+            cardAct(id, item, "comment", text, mentions).then(
               () => (setActErr(""), true),
               error => (setActErr(String(error)), false),
             )

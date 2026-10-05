@@ -2,7 +2,7 @@ import { currentLocale, translator, type BoardProvider, type BoardRef, type Card
 import { toneOf } from "@relay/board-core/tone";
 import { safeUrl } from "@relay/board-core/detail";
 import strings, { type Key } from "./locales";
-import { toHtml, uploadFile } from "./write";
+import { showMentions, toHtml, uploadFile } from "./write";
 import { toFilters, toGroup, toLayout } from "./views";
 
 const t = translator<Key>("productive");
@@ -31,7 +31,7 @@ const boardNames = new Map<string, string>();
 // every attribute goes except a web or mail link. The CSP already blocks inline script, this is the second wall.
 const TAGS = new Set("P BR B STRONG I EM U S STRIKE UL OL LI A CODE PRE BLOCKQUOTE H1 H2 H3 H4 DIV SPAN HR TABLE THEAD TBODY TR TD TH".split(" "));
 function clean(html: string): string {
-  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  const doc = new DOMParser().parseFromString(showMentions(html || ""), "text/html");
   doc.body.querySelectorAll("script,style,iframe,object,embed,svg,math,template").forEach(n => n.remove());
   for (const n of [...doc.body.querySelectorAll("*")]) {
     if (!TAGS.has(n.tagName)) { n.replaceWith(...n.childNodes); continue; }
@@ -225,9 +225,9 @@ const productive: BoardProvider<Key> = {
         statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed };
     },
     /** comment, status, assignee, attach: done in Productive, then the task read again */
-    async act(c, ref, id, action, { value, files }) {
+    async act(c, ref, id, action, { value, files, mentions = [] }) {
       const patch = (rel: any) => c.call("PATCH", `/tasks/${id}`, { data: { type: "tasks", id, relationships: rel } });
-      if (action === "comment" && value.trim()) await c.call("POST", "/comments", { data: { type: "comments", attributes: { body: toHtml(value) }, relationships: { task: { data: { type: "tasks", id } } } } });
+      if (action === "comment" && value.trim()) await c.call("POST", "/comments", { data: { type: "comments", attributes: { body: toHtml(value, mentions) }, relationships: { task: { data: { type: "tasks", id } } } } });
       else if (action === "status" && value) await patch({ workflow_status: { data: { type: "workflow_statuses", id: value } } });
       else if (action === "assignee") await patch({ assignee: { data: value ? { type: "people", id: value } : null } });
       else if ((action === "label-add" || action === "label-remove") && value.trim()) {

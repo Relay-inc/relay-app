@@ -14,7 +14,7 @@ import {
   openTicketOf,
 } from "../../../application/today/today";
 import { setPop, setTab, useDetailsStore } from "../../../application/today/details";
-import { cardAct, loadCard, loadPr } from "../../../application/today/load";
+import { cardAct, loadCard, loadPr, toastAssigned } from "../../../application/today/load";
 import { ticketLinks, openLinked } from "../../../application/board/board";
 import { provider } from "../../../shared/plugins";
 import { t as translate } from "../../../shared/i18n";
@@ -450,7 +450,10 @@ function Aside({ model, entry, connected }: { model: TodayModel; entry: Entry; c
     <aside className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] gap-7 px-7 pt-3.5 pb-4 border-t border-separator bg-sidebar max-h-55 overflow-y-auto">
       <div className="flex flex-col gap-4 min-w-0">
         {entry.kind === "ask" ? null : cardView?.statuses?.length && entry.subject.type === "card" ? (
-          <TrackerStatus entry={entry} />
+          <>
+            <TrackerStatus entry={entry} />
+            <AssigneePicker entry={entry} />
+          </>
         ) : (
           <StatusPicker key={entry.id} entry={entry} />
         )}
@@ -625,6 +628,46 @@ function TrackerStatus({ entry }: { entry: Entry }) {
           </button>
         );
       })}
+      {err ? <div className="err-box">{err}</div> : null}
+    </section>
+  );
+}
+
+/** Who the card is assigned to, to change here (a tracker with one assignee: Productive, Linear). Assigning it to
+ *  someone else takes it off Today; the toast says to whom. */
+function AssigneePicker({ entry }: { entry: Entry }) {
+  const { t } = useT();
+  const s = entry.subject;
+  const view = useDetailsStore(st => (s.type === "card" ? st.card[entry.id] : undefined));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (s.type !== "card" || !view?.people?.length || view.assignees) return null;
+  const current = view.assignee?.id ?? "";
+  return (
+    <section className="flex flex-col gap-1.5">
+      <span className={SECTION}>{t("today.assignee")}</span>
+      <select
+        disabled={busy}
+        value={current}
+        onChange={async e => {
+          const id = e.target.value;
+          setBusy(true);
+          setErr("");
+          await cardAct(entry.id, s.card, "assignee", id).then(
+            () => toastAssigned(view.people!.find(p => p.id === id)?.name ?? ""),
+            error => setErr(String(error)),
+          );
+          setBusy(false);
+        }}
+        className="h-8 px-2 rounded-md border border-separator-strong bg-bg text-[13px]"
+      >
+        <option value="">{t("today.unassigned")}</option>
+        {view.people.map(person => (
+          <option key={person.id} value={person.id}>
+            {person.name}
+          </option>
+        ))}
+      </select>
       {err ? <div className="err-box">{err}</div> : null}
     </section>
   );
