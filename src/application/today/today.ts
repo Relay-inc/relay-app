@@ -32,10 +32,10 @@ import { ctxOf } from "../board/ctx";
 import { ticketChat } from "../board/board";
 import { openCard, openPr } from "../navigation/panel";
 import { select, toast } from "../navigation/navigation";
-import { contexts, project as projectOf, projectLabel, findProjects, loadSnapshot } from "../workspace/vault";
+import { contexts, project as projectOf, projectLabel, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
-import { joinMeeting, loadMeetings, meetingChat, timeOf } from "../calendar/calendar";
+import { joinMeeting, loadMeetings, meetingChat, meetingProjectOf, timeOf } from "../calendar/calendar";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { loadPrs, reviewPr } from "../pull-requests/prs";
 import { useConversationsStore } from "../conversations/store";
@@ -193,10 +193,6 @@ const ago = (since: number, now: number) => {
   return minutes < 60 ? t("wait.agoMin", { n: minutes }) : t("wait.agoHour", { n: Math.floor(minutes / 60) });
 };
 // a meeting's project: the one vault project its title names, if exactly one
-const meetingProject = (meeting: Meeting) => {
-  const hits = findProjects(meeting.title);
-  return hits.length === 1 ? hits[0] : null;
-};
 const daysLate = (date: string) => Math.round((Date.parse(todayIso()) - Date.parse(date)) / DAY);
 
 /** Everything that needs the user today, unordered. `now` in ms. */
@@ -250,7 +246,7 @@ export function entries(now = Date.now()): Entry[] {
     const start = Date.parse(meeting.start);
     const end = Date.parse(meeting.end);
     if (start < midnight || start >= midnight + DAY) continue;
-    const base = { project: meetingProject(meeting), subject: { type: "meeting", meeting } as Subject };
+    const base = { project: meetingProjectOf(meeting), subject: { type: "meeting", meeting } as Subject };
     const when = `${timeOf(meeting.start)}–${timeOf(meeting.end)}`;
     const where = [t("today.meeting"), when, meeting.location].filter(Boolean).join(" · ");
     if (start > now)
@@ -603,6 +599,12 @@ export function openMeeting(meetingId: string) {
   if (!inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
   selectEntry(item.id);
   return true;
+}
+/** Open an item under Today, also when the context filter hides it (it goes back to All). */
+export function focusEntry(id: string) {
+  const item = entries().find(entry => entry.id === id);
+  if (item && !inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
+  selectEntry(id);
 }
 export const selectEntry = (id: string) =>
   useTodayStore.setState(draft => {

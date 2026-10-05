@@ -13,7 +13,7 @@ import * as backend from "../../infrastructure/backend";
 import { settings, mailExperimental } from "../settings/settings";
 import { toast } from "../navigation/navigation";
 import { mailMove, mailSeen } from "../mail/mail";
-import { useDetailsStore, type Compose, type ThreadMail } from "./details";
+import { keepCompose, useDetailsStore, type Compose, type ThreadMail } from "./details";
 
 // A mail under Today, handled the way Keel does it (~/projects/mail-client): the thread with the earlier mails folded,
 // quick replies, and an inline composer for reply, reply all and forward that Claude drafts and the user edits. The
@@ -113,15 +113,18 @@ export async function loadQuickReplies(key: string) {
   }
 }
 
-const changeCompose = (recipe: (compose: Compose) => void) =>
+const changeCompose = (recipe: (compose: Compose) => void) => {
   set(draft => {
     if (draft.compose) recipe(draft.compose);
   });
+  keepCompose(ds().compose);
+};
 /** The composer under the mail: who it goes to at once, Claude's draft once it is written (`intent`: a quick reply). */
 export async function openCompose(key: string, how: How, intent = "") {
   set(draft => {
     draft.compose = { key, how, to: [], cc: [], text: "", archive: how !== "fwd", busy: "draft", tweak: "", err: "" };
   });
+  keepCompose(ds().compose);
   try {
     const mail = await original(key);
     const { to, cc } = recipients(mail, how, mine());
@@ -145,10 +148,12 @@ export async function openCompose(key: string, how: How, intent = "") {
     });
   }
 }
-export const closeCompose = () =>
+export const closeCompose = () => {
   set(draft => {
     draft.compose = null;
   });
+  keepCompose(null);
+};
 export const setComposeText = (text: string) => changeCompose(compose => void (compose.text = text));
 export const setComposeHow = async (how: How) => {
   const compose = ds().compose;

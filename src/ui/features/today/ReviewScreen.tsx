@@ -157,127 +157,137 @@ export function ReviewScreen({ model, entry }: { model: TodayModel; entry: Entry
               <>
                 <span className="text-xs text-tertiary">{t("review.clickLine")}</span>
                 {file.lines.length ? (
-                  <div className="flex flex-col border border-separator rounded-[10px] overflow-hidden font-mono text-xs leading-5.5">
-                    {file.lines.map((line, i) => {
-                      const anchor = anchorOf(line);
-                      const key = anchor ? lineKey(file.path, anchor.side, anchor.line) : "";
-                      const on = !!key && r.line === key;
-                      const mark = key ? marks.get(key) : undefined;
-                      const here = anchor ? threads.filter(th => th.line === anchor.line) : [];
-                      const mine = anchor ? comments.filter(c => c.side === anchor.side && c.line === anchor.line) : [];
-                      const bg = on
-                        ? "bg-accent-soft shadow-[inset_3px_0_0_var(--color-accent)]"
-                        : line.kind === "add"
-                          ? "bg-add-bg"
-                          : line.kind === "del"
-                            ? "bg-del-bg"
-                            : line.kind === "hunk"
-                              ? "bg-fill text-tertiary"
-                              : "";
-                      return (
-                        <div key={i}>
-                          <div
-                            onClick={() => key && pickLine(entry.id, key)}
-                            className={`grid grid-cols-[40px_40px_18px_minmax(0,1fr)_16px] ${key ? "cursor-pointer" : ""} ${bg}`}
-                          >
-                            <span className="text-right pr-2 text-tertiary">
-                              {line.kind === "hunk" ? "" : (line.old ?? "")}
-                            </span>
-                            <span className="text-right pr-2 text-tertiary">
-                              {line.kind === "hunk" ? "" : (line.new ?? "")}
-                            </span>
-                            <span className={line.kind === "add" ? "text-add-fg" : "text-del-fg"}>
-                              {line.kind === "add" ? "+" : line.kind === "del" ? "−" : ""}
-                            </span>
-                            <span className="whitespace-pre overflow-hidden text-ellipsis">{line.text}</span>
-                            <span className="grid place-items-center">
-                              {mark ? (
-                                <span
-                                  className={`size-1.75 rounded-full ${mark.severity === "bug" ? "bg-late" : mark.severity === "risk" ? "bg-soon" : "bg-secondary"}`}
-                                />
-                              ) : null}
-                            </span>
-                          </div>
-                          {here
-                            .flatMap(th => th.comments?.nodes ?? [])
-                            .map((c, j) => (
-                              <div
-                                key={`t${j}`}
-                                className="flex gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-fill border-y border-separator font-sans text-[13px] leading-normal"
-                              >
-                                <span className="grid place-items-center size-5.5 flex-none rounded-full bg-raised text-secondary text-[9px] font-semibold">
-                                  {initials(c.author?.login ?? "?")}
-                                </span>
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-xs">
-                                    <b className="font-semibold">{c.author?.login}</b>{" "}
-                                    <span className="text-tertiary">{new Date(c.createdAt).toLocaleDateString()}</span>
+                  // long lines scroll sideways inside the diff; every row is as wide as the widest, so the
+                  // colours run through, and a thread or the comment box stays at the left, readable
+                  <div className="shrink-0 border border-separator rounded-[10px] overflow-x-auto overflow-y-hidden font-mono text-xs leading-5.5">
+                    <div className="w-max min-w-full flex flex-col">
+                      {file.lines.map((line, i) => {
+                        const anchor = anchorOf(line);
+                        const key = anchor ? lineKey(file.path, anchor.side, anchor.line) : "";
+                        const on = !!key && r.line === key;
+                        const mark = key ? marks.get(key) : undefined;
+                        const here = anchor ? threads.filter(th => th.line === anchor.line) : [];
+                        const mine = anchor
+                          ? comments.filter(c => c.side === anchor.side && c.line === anchor.line)
+                          : [];
+                        const bg = on
+                          ? "bg-accent-soft shadow-[inset_3px_0_0_var(--color-accent)]"
+                          : line.kind === "add"
+                            ? "bg-add-bg"
+                            : line.kind === "del"
+                              ? "bg-del-bg"
+                              : line.kind === "hunk"
+                                ? "bg-fill text-tertiary"
+                                : "";
+                        return (
+                          <div key={i}>
+                            <div
+                              onClick={() => key && pickLine(entry.id, key)}
+                              className={`grid grid-cols-[40px_40px_18px_minmax(0,1fr)_16px] ${key ? "cursor-pointer" : ""} ${bg}`}
+                            >
+                              <span className="text-right pr-2 text-tertiary">
+                                {line.kind === "hunk" ? "" : (line.old ?? "")}
+                              </span>
+                              <span className="text-right pr-2 text-tertiary">
+                                {line.kind === "hunk" ? "" : (line.new ?? "")}
+                              </span>
+                              <span className={line.kind === "add" ? "text-add-fg" : "text-del-fg"}>
+                                {line.kind === "add" ? "+" : line.kind === "del" ? "−" : ""}
+                              </span>
+                              <span className="whitespace-pre pr-4">{line.text}</span>
+                              <span className="grid place-items-center">
+                                {mark ? (
+                                  <span
+                                    className={`size-1.75 rounded-full ${mark.severity === "bug" ? "bg-late" : mark.severity === "risk" ? "bg-soon" : "bg-secondary"}`}
+                                  />
+                                ) : null}
+                              </span>
+                            </div>
+                            {here
+                              .flatMap(th => th.comments?.nodes ?? [])
+                              .map((c, j) => (
+                                <div
+                                  key={`t${j}`}
+                                  className="sticky left-0 max-w-3xl flex gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-fill border-y border-separator font-sans text-[13px] leading-normal"
+                                >
+                                  <span className="grid place-items-center size-5.5 flex-none rounded-full bg-raised text-secondary text-[9px] font-semibold">
+                                    {initials(c.author?.login ?? "?")}
                                   </span>
-                                  <span className="whitespace-pre-wrap">{c.body}</span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-xs">
+                                      <b className="font-semibold">{c.author?.login}</b>{" "}
+                                      <span className="text-tertiary">
+                                        {new Date(c.createdAt).toLocaleDateString()}
+                                      </span>
+                                    </span>
+                                    <span className="whitespace-pre-wrap">{c.body}</span>
+                                  </div>
                                 </div>
+                              ))}
+                            {mine.map(c => (
+                              <div
+                                key={c.id}
+                                className="sticky left-0 max-w-3xl flex items-start gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-accent-soft border-y border-separator font-sans text-[13px] leading-normal"
+                              >
+                                <span className="flex-1 whitespace-pre-wrap">{c.body}</span>
+                                <span className="text-[11px] font-semibold text-accent-text">
+                                  {t("review.inReview")}
+                                </span>
+                                <button
+                                  className="text-xs text-secondary cursor-pointer hover:text-label"
+                                  onClick={() => removeComment(entry.id, c.id)}
+                                >
+                                  {t("today.remove")}
+                                </button>
                               </div>
                             ))}
-                          {mine.map(c => (
-                            <div
-                              key={c.id}
-                              className="flex items-start gap-2.5 py-2.5 pr-3.5 pl-24.5 bg-accent-soft border-y border-separator font-sans text-[13px] leading-normal"
-                            >
-                              <span className="flex-1 whitespace-pre-wrap">{c.body}</span>
-                              <span className="text-[11px] font-semibold text-accent-text">{t("review.inReview")}</span>
-                              <button
-                                className="text-xs text-secondary cursor-pointer hover:text-label"
-                                onClick={() => removeComment(entry.id, c.id)}
-                              >
-                                {t("today.remove")}
-                              </button>
-                            </div>
-                          ))}
-                          {on ? (
-                            <div className="flex flex-col gap-2 pt-2.5 pb-3 pr-3.5 pl-24.5 bg-accent-soft font-sans text-[13px]">
-                              <input
-                                autoFocus
-                                value={r.draft}
-                                onChange={e => setLineDraft(entry.id, e.target.value)}
-                                onKeyDown={e => {
-                                  if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    addLineComment(entry.id);
-                                  }
-                                  if (e.key === "Escape") {
-                                    e.stopPropagation();
-                                    pickLine(entry.id, key);
-                                  }
-                                }}
-                                placeholder={t("review.linePlaceholder", { n: anchor!.line })}
-                                className="h-8 px-2.5 rounded-lg border border-separator-strong bg-raised text-[13px] outline-0"
-                              />
-                              <div className="flex justify-end gap-2">
-                                <button
-                                  className="h-7 px-2.5 rounded-[7px] text-xs font-medium text-secondary cursor-pointer"
-                                  onClick={() => pickLine(entry.id, key)}
-                                >
-                                  {t("review.cancel")}
-                                </button>
-                                <button
-                                  className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[7px] border border-separator-strong bg-raised text-xs font-medium cursor-pointer"
-                                  onClick={() => askLine(entry.id)}
-                                >
-                                  {claude ? <Glyph svg={claude} className="glyph size-3" /> : null}
-                                  {t("review.askClaude")}
-                                </button>
-                                <button
-                                  disabled={!r.draft.trim()}
-                                  className="h-7 px-2.5 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer disabled:opacity-50"
-                                  onClick={() => addLineComment(entry.id)}
-                                >
-                                  {t("review.addToReview")}
-                                </button>
+                            {on ? (
+                              <div className="sticky left-0 max-w-3xl flex flex-col gap-2 pt-2.5 pb-3 pr-3.5 pl-24.5 bg-accent-soft font-sans text-[13px]">
+                                <input
+                                  autoFocus
+                                  value={r.draft}
+                                  onChange={e => setLineDraft(entry.id, e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      addLineComment(entry.id);
+                                    }
+                                    if (e.key === "Escape") {
+                                      e.stopPropagation();
+                                      pickLine(entry.id, key);
+                                    }
+                                  }}
+                                  placeholder={t("review.linePlaceholder", { n: anchor!.line })}
+                                  className="h-8 px-2.5 rounded-lg border border-separator-strong bg-raised text-[13px] outline-0"
+                                />
+                                <div className="flex justify-end gap-2">
+                                  <button
+                                    className="h-7 px-2.5 rounded-[7px] text-xs font-medium text-secondary cursor-pointer"
+                                    onClick={() => pickLine(entry.id, key)}
+                                  >
+                                    {t("review.cancel")}
+                                  </button>
+                                  <button
+                                    className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[7px] border border-separator-strong bg-raised text-xs font-medium cursor-pointer"
+                                    onClick={() => askLine(entry.id)}
+                                  >
+                                    {claude ? <Glyph svg={claude} className="glyph size-3" /> : null}
+                                    {t("review.askClaude")}
+                                  </button>
+                                  <button
+                                    disabled={!r.draft.trim()}
+                                    className="h-7 px-2.5 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer disabled:opacity-50"
+                                    onClick={() => addLineComment(entry.id)}
+                                  >
+                                    {t("review.addToReview")}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <div className="text-sm text-secondary">{t("review.noPatch")}</div>

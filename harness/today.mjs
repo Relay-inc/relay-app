@@ -34,7 +34,7 @@ try {
   await page.keyboard.press("r");
   await page.waitForTimeout(800);
   await shot("03-mail-compose");
-  await page.keyboard.press("Escape");
+  await page.locator("textarea").first().evaluate(el => el.blur());
   await rowOf("Fix the SSO redirect loop on the portal");
   await shot("04-pr");
   await page.waitForTimeout(500);
@@ -71,10 +71,27 @@ try {
   await shot("05-review");
   await byText(page, "const back = params.get('returnTo') ?? '/';", false).click();
   await shot("06-review-line");
+  // the long file: the diff scrolls down and sideways
+  await page.getByRole("button", { name: /src\/long\.ts/ }).first().click();
+  await settle(page, 300);
+  const box = await page.locator("div.overflow-x-auto.font-mono").first().boundingBox();
+  await page.mouse.move(box.x + 200, box.y + 150);
+  await page.mouse.wheel(0, 900);
+  await settle(page, 300);
+  await page.mouse.wheel(600, 0);
+  await settle(page, 300);
+  const scrolled = await page.evaluate(() => {
+    const diff = document.querySelector("div.overflow-x-auto.font-mono");
+    const column = diff?.closest(".overflow-y-auto");
+    return { down: column?.scrollTop ?? 0, sideways: diff?.scrollLeft ?? 0, wide: diff ? diff.scrollWidth > diff.clientWidth : false };
+  });
+  console.log("  diff scroll", JSON.stringify(scrolled));
+  await shot("06b-review-scrolled");
   await page.keyboard.press("Escape");
   await page.keyboard.press("Escape");
   await settle(page, 300);
   await shot("07-back");
+  await page.evaluate(() => document.querySelector("nav, aside")?.scrollTo?.(0, 0));
   await rowOf("Which sync strategy");
   await shot("08-question");
   await page.keyboard.press("2");
@@ -99,6 +116,14 @@ try {
   await shot("12-meeting-from-bar");
   await page.locator(".bg-sidebar button", { hasText: "Retro Atlas" }).first().click();
   await shot("13-past-meeting-from-bar");
+  // work in progress in the sidebar: a reply draft under its section, a click brings the mail and its draft back
+  await rowOf("Acceptance checklist portal v2");
+  await page.keyboard.press("r");
+  await page.waitForTimeout(800);
+  await page.locator("textarea").first().evaluate(el => el.blur());
+  await rowOf("Fix the SSO redirect loop on the portal");
+  await page.locator('[data-kind="work"]', { hasText: "Acceptance checklist" }).first().click();
+  await shot("14-draft-from-sidebar");
 } catch (e) {
   console.error(e);
   await page.screenshot({ path: `${dir}/error.png` });

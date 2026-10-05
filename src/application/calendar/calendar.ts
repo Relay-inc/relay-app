@@ -13,6 +13,7 @@ import { calendarOn as isCalendarOn } from "../../domain/settings/types";
 import { WAIT } from "../../domain/navigation/views";
 import * as backend from "../../infrastructure/backend";
 import { settings } from "../settings/settings";
+import { findProjects } from "../workspace/vault";
 import { select, toast } from "../navigation/navigation";
 import { useAgentsStore } from "../agents/store";
 import { agentOf } from "../agents/agents";
@@ -74,6 +75,11 @@ export function tick() {
   }
 }
 
+/** The vault project a meeting is about: the one project its title names, else none (General). */
+export function meetingProjectOf(meeting: Meeting) {
+  const hits = findProjects(meeting.title);
+  return hits.length === 1 ? hits[0] : null;
+}
 /** The meeting's link in the browser, only when it goes to a meeting service (checked again: the invite wrote it). */
 export const joinMeeting = (link: string) => joinable(link) && backend.openUrl(link);
 
@@ -88,7 +94,8 @@ export async function meetingChat(id: string, how: MeetingChat) {
 /** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
 export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: Recording) {
   if (useAgentsStore.getState().loaded && !agentOf("claude")?.on) return toast(t("cal.needClaude"));
-  const key = startChat(null, {
+  // under the meeting's project, so its prep and its note sit with the project's other work
+  const key = startChat(meetingProjectOf(meeting), {
     provider: "claude",
     title: `${how === "prep" ? t("cal.prepTitle") : ""}${meeting.title}`.slice(0, 48),
     note: t("note.meetingStarted", { title: meeting.title }),

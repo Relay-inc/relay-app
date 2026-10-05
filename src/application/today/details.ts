@@ -2,6 +2,11 @@ import type { PrDetail } from "../../domain/pull-requests/types";
 import type { CardView } from "../../domain/board/types";
 import type { Addr, How, Original } from "../../domain/mail/reply";
 import { makeStore } from "../make-store";
+import { storage } from "../../infrastructure/storage";
+
+/** Keep the reply being written (or forget it, null). */
+export const keepCompose = (compose: Compose | null) =>
+  storage.set(COMPOSE, compose && { ...compose, busy: "", err: "" });
 
 /** A mail of a thread as the backend's thread tool gives it. */
 export type ThreadMail = { id: string; from: Addr[]; date: string; subject: string; untrusted_mail: string };
@@ -30,6 +35,9 @@ type DetailsState = {
   linking: string; // the PR (url) whose repo or board is being linked on Today, "" for none
   err: Record<string, string>; // per item: why its detail did not load
 };
+// the reply being written is kept in Relay's store until it is saved or discarded (what runs is not)
+const COMPOSE = "todayCompose";
+const keptCompose = storage.get<Compose | null>(COMPOSE, null);
 export const useDetailsStore = makeStore<DetailsState>(() => ({
   tab: {},
   pop: "",
@@ -38,7 +46,7 @@ export const useDetailsStore = makeStore<DetailsState>(() => ({
   thread: {},
   original: {},
   quick: {},
-  compose: null,
+  compose: keptCompose ? { ...keptCompose, busy: "", err: "" } : null,
   picking: "",
   linking: "",
   err: {},

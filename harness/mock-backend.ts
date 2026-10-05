@@ -440,6 +440,14 @@ function handle(cmd: string, a: Args): unknown {
           patch: "@@ -1,6 +1,8 @@\n import { cookies } from './cookies';\n \n-export const clear = () => cookies.delete('sid');\n+export const reset = () => {\n+  cookies.delete('sid');\n+};\n export const get = () => cookies.get('sid');",
         },
         { path: "assets/logo.png", status: "modified", additions: 0, deletions: 0, patch: null },
+        // a long file with a very long line: the diff scrolls both ways
+        {
+          path: "src/long.ts",
+          status: "added",
+          additions: 120,
+          deletions: 0,
+          patch: `@@ -0,0 +1,120 @@\n${Array.from({ length: 120 }, (_, i) => (i === 3 ? `+export const query = "${"SELECT id, name, created_at FROM very_long_table_name ".repeat(6)}";` : `+export const line${i} = ${i};`)).join("\n")}`,
+        },
       ];
     case "github_pr_review":
       return null;

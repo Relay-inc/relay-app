@@ -3,6 +3,7 @@ import type { PR } from "../../domain/pull-requests/types";
 import { anchorOf, inPatch, parsePatch, type DiffLine, type Side } from "../../domain/pull-requests/diff";
 import * as backend from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
+import { storage } from "../../infrastructure/storage";
 import { toast } from "../navigation/navigation";
 import { loadPrs } from "../pull-requests/prs";
 
@@ -23,6 +24,8 @@ export type Finding = {
 export type LineComment = { id: string; path: string; line: number; side: Side; body: string };
 export type Verdict = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 type Review = {
+  title: string; // what the sidebar shows: "Review #412 · …"
+  project: string | null; // the PR's vault project, the sidebar section it sits in
   files: ReviewFile[] | null;
   file: number; // the file shown
   line: string; // the line a comment is being written on, "path|side|line", "" for none
@@ -38,27 +41,60 @@ type Review = {
   err: string;
 };
 type ReviewState = { work: string; reviews: Record<string, Review> }; // work: the item the review screen is open on
-export const useReviewStore = makeStore<ReviewState>(() => ({ work: "", reviews: {} }));
+// a started review is kept in Relay's store until it is posted or discarded: the comments, the summary, the verdict and
+// Claude's findings; the files are read again, what runs is not kept
+const KEY = "todayReviews";
+type Kept = Pick<Review, "title" | "project" | "findings" | "ran" | "comments" | "body" | "verdict" | "file">;
+const kept = storage.get<Record<string, Kept>>(KEY, {});
+export const useReviewStore = makeStore<ReviewState>(() => ({
+  work: "",
+  reviews: Object.fromEntries(Object.entries(kept).map(([id, k]) => [id, { ...fresh(), ...k }])),
+}));
 const set = useReviewStore.setState;
-const fresh = (): Review => ({
-  files: null,
-  file: 0,
-  line: "",
-  draft: "",
-  findings: [],
-  running: false,
-  ran: false,
-  comments: [],
-  body: "",
-  verdict: "COMMENT",
-  confirm: false,
-  busy: false,
-  err: "",
-});
-const change = (id: string, recipe: (review: Review) => void) =>
+const save = () =>
+  storage.set(
+    KEY,
+    Object.fromEntries(
+      Object.entries(useReviewStore.getState().reviews).map(([id, r]): [string, Kept] => [
+        id,
+        {
+          title: r.title,
+          project: r.project,
+          findings: r.findings,
+          ran: r.ran,
+          comments: r.comments,
+          body: r.body,
+          verdict: r.verdict,
+          file: r.file,
+        },
+      ]),
+    ),
+  );
+function fresh(): Review {
+  return {
+    title: "",
+    project: null,
+    files: null,
+    file: 0,
+    line: "",
+    draft: "",
+    findings: [],
+    running: false,
+    ran: false,
+    comments: [],
+    body: "",
+    verdict: "COMMENT",
+    confirm: false,
+    busy: false,
+    err: "",
+  };
+}
+const change = (id: string, recipe: (review: Review) => void) => {
   set(draft => {
     recipe((draft.reviews[id] ??= fresh()));
   });
+  save();
+};
 const review = (id: string) => useReviewStore.getState().reviews[id] ?? fresh();
 let seq = 0;
 const nextId = () => `r${++seq}`;
@@ -68,8 +104,11 @@ export const lineKey = (path: string, side: Side, line: number) => `${path}|${si
 export async function openReview(id: string, pr: PR) {
   set(draft => {
     draft.work = id;
-    draft.reviews[id] ??= fresh();
+    const review = (draft.reviews[id] ??= fresh());
+    review.title = `#${pr.number} ${pr.title}`;
+    review.project = pr.project;
   });
+  save();
   if (!review(id).files)
     try {
       const files = await backend.githubPrFiles(pr.repo, pr.number);
@@ -81,10 +120,19 @@ export async function openReview(id: string, pr: PR) {
     }
   if (!review(id).ran) findings(id, pr);
 }
+/** Back to Today: the review stays in progress (in the sidebar), to come back to. */
 export const closeReview = () =>
   set(draft => {
     draft.work = "";
   });
+/** Discard a review in progress: its comments, summary and verdict are gone. */
+export function discardReview(id: string) {
+  set(draft => {
+    delete draft.reviews[id];
+    if (draft.work === id) draft.work = "";
+  });
+  save();
+}
 export const showFile = (id: string, file: number) =>
   change(id, r => {
     r.file = file;
@@ -231,6 +279,7 @@ export async function submitReview(id: string, pr: PR) {
       delete draft.reviews[id];
       draft.work = "";
     });
+    save();
     toast(t("review.posted", { verdict: t(`review.verdict.${r.verdict}`) }));
     loadPrs();
   } catch (error) {

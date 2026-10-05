@@ -46,6 +46,8 @@ import { usePullRequestsStore } from "../pull-requests/store";
 import { runningWorkers } from "../orchestrator/orchestrator";
 import { useNavigationStore } from "./store";
 import { todayRest } from "../today/today";
+import { isOpenWork, workOf } from "../today/work";
+import type { Work } from "../../domain/today/work";
 
 // The sidebar: its own state (search, folds, dragged order) and the rows it shows, built from every context's state.
 const nav = () => useNavigationStore.getState();
@@ -131,6 +133,25 @@ const convRow = (conversation: Chat): ConvRow => ({
   closing: cs().closing.has(conversation.key),
   orch: !!conversation.orch,
 });
+const WORK_ICON = { review: "pr", mail: "mail", meeting: "cal" } as const;
+// a piece of Today's work in progress, as a row under its project
+const workRow = (work: Work): ConvRow => ({
+  key: work.key,
+  parent: work.project ?? "",
+  term: false,
+  glyph: "",
+  title: work.title,
+  selected: isOpenWork(work),
+  unseen: false,
+  trail: work.busy ? "spin" : "",
+  subs: 0,
+  subsTitle: "",
+  closable: work.closable,
+  closing: false,
+  orch: false,
+  work: true,
+  icon: WORK_ICON[work.kind],
+});
 const termRow = (session: TerminalSession): ConvRow => ({
   key: session.key,
   parent: session.project ?? "",
@@ -169,13 +190,17 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
     label: blockLabel(project.name),
     img: icon?.img,
     emoji: icon?.icon,
-    convs: ordered(
-      [...sessions.map(termRow), ...shownConversations.map(convRow)],
-      row => row.key,
-      sb().convOrder[project.name],
-      undefined,
-      true,
-    ),
+    // what is in progress on Today first, then the sessions and conversations in the user's order
+    convs: [
+      ...workOf(project.name).map(workRow),
+      ...ordered(
+        [...sessions.map(termRow), ...shownConversations.map(convRow)],
+        row => row.key,
+        sb().convOrder[project.name],
+        undefined,
+        true,
+      ),
+    ],
     fold: foldLabel(conversations.length, unfolded),
   };
 }
@@ -273,20 +298,25 @@ function generalSection(query: string, sessions: TerminalSession[]): Section {
     tint: "",
     count: conversations.length + generalSessions.length,
     add: "",
-    convs: ordered(
-      [...conversations.map(convRow), ...generalSessions.map(termRow)],
-      row => row.key,
-      sb().convOrder[""],
-      undefined,
-      true,
-    ),
+    convs: [
+      ...workOf(null).map(workRow),
+      ...ordered(
+        [...conversations.map(convRow), ...generalSessions.map(termRow)],
+        row => row.key,
+        sb().convOrder[""],
+        undefined,
+        true,
+      ),
+    ],
     projects: [],
   });
 }
 
 // an app conversation stays until the user closes it, a terminal session as long as it is open
 const hasOpenWork = (project: Project, sessions: TerminalSession[]) =>
-  sessions.some(session => session.project === project.name) || chatsOf(project.name).length > 0;
+  sessions.some(session => session.project === project.name) ||
+  chatsOf(project.name).length > 0 ||
+  workOf(project.name).length > 0;
 const lastActivity = (name: string, sessions: TerminalSession[]) =>
   Math.max(
     0,
