@@ -105,7 +105,7 @@ export function PrSection({ id, tab }: { id: string; tab: string }) {
                 ) : null}
                 <span className="ml-auto text-tertiary">{ago(line.at, locale)}</span>
               </div>
-              {line.text ? <Markdown text={line.text} className="text-sm leading-relaxed" /> : null}
+              {line.text ? <Markdown text={line.text} className="md-panel text-sm leading-relaxed" /> : null}
             </div>
           </div>
         ))}
@@ -140,7 +140,7 @@ export function PrSection({ id, tab }: { id: string; tab: string }) {
       <section className="flex flex-col gap-2">
         <Caps>{t("today.description")}</Caps>
         {pr.body?.trim() ? (
-          <Markdown text={pr.body} className="text-sm leading-relaxed" />
+          <Markdown text={pr.body} className="md-panel text-sm leading-relaxed" />
         ) : (
           <span className="text-sm text-tertiary">{t("kb.noDesc")}</span>
         )}

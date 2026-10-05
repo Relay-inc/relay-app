@@ -376,6 +376,71 @@ function handle(cmd: string, a: Args): unknown {
       return integ.mailBody(a.id);
     case "mail_seen":
       return null;
+    // Today's mail detail (src-tauri mail_tool): the thread, the reply headers, a draft saved
+    case "mail_tool": {
+      const m = [...integ.mails, ...integ.studioMails].find(x => x.id === a.args?.id) ?? integ.mails[0];
+      const text = integ.mailBody(m.id).text;
+      if (a.name === "thread")
+        return {
+          account: m.account,
+          messages: [
+            {
+              id: "4999",
+              from: m.to,
+              date: new Date(NOW - 30 * 3600_000).toISOString(),
+              subject: m.subject,
+              untrusted_mail: "Hi, here is the first version of the checklist. Let me know what is missing before Friday.",
+            },
+            { id: m.id, from: m.from, date: m.date, subject: m.subject, untrusted_mail: text },
+          ],
+        };
+      if (a.name === "read")
+        return {
+          account: m.account,
+          id: m.id,
+          from: m.from,
+          to: m.to,
+          cc: [{ name: "Tom Willems", email: "tom@acme.example" }],
+          subject: m.subject,
+          date: m.date,
+          message_id: `${m.id}@mail.example`,
+          untrusted_headers: { "Reply-To": null, References: null },
+          untrusted_mail: text,
+        };
+      return { account: m.account, folder: "[Gmail]/Drafts", saved: true, to: [], cc: [], bcc: [] };
+    }
+    // one Claude call without tools (src-tauri ai_write): findings, quick replies, an answer on a line, or a draft
+    case "ai_write":
+      if (/JSON-array/.test(a.system))
+        return JSON.stringify([
+          { path: "src/auth/callback.ts", line: 14, side: "RIGHT", severity: "bug", text: "The return URL is read from the query without checking its host: an open redirect." },
+          { path: "src/auth/callback.ts", line: 18, side: "RIGHT", severity: "risk", text: "The session is written before the token is verified." },
+          { path: "src/auth/session.ts", line: 5, side: "RIGHT", severity: "nit", text: "This helper name hides that it also clears the cookie." },
+        ]);
+      if (/twee of drie/.test(a.system)) return "Yes, the VAT column is in\nViewers can't see invoices yet\nCan we call Thursday?";
+      if (/gemarkeerde regel/.test(a.system)) return "It stores where to go after the login. Without a host check any URL is accepted.";
+      return "Hi Sofie,\n\nThe export has the VAT column since this morning, and viewers can't see invoices: that stays for admins.\n\nKind regards";
+    case "github_pr_files":
+      return [
+        {
+          path: "src/auth/callback.ts",
+          status: "modified",
+          additions: 6,
+          deletions: 3,
+          patch:
+            "@@ -10,12 +10,15 @@ export async function callback(req: Request) {\n   const session = await getSession(req);\n   const params = new URL(req.url).searchParams;\n-  const back = '/';\n+  const back = params.get('returnTo') ?? '/';\n   if (!params.get('code')) return redirect('/login');\n-  await verify(params.get('code'));\n-  session.set('returnTo', back);\n+  session.set('returnTo', back);\n+  session.set('user', params.get('user'));\n+  await verify(params.get('code'));\n   return redirect(back);\n }\n+\n+export const loginUrl = () => '/login';",
+        },
+        {
+          path: "src/auth/session.ts",
+          status: "modified",
+          additions: 3,
+          deletions: 1,
+          patch: "@@ -1,6 +1,8 @@\n import { cookies } from './cookies';\n \n-export const clear = () => cookies.delete('sid');\n+export const reset = () => {\n+  cookies.delete('sid');\n+};\n export const get = () => cookies.get('sid');",
+        },
+        { path: "assets/logo.png", status: "modified", additions: 0, deletions: 0, patch: null },
+      ];
+    case "github_pr_review":
+      return null;
     case "mail_move":
       // the backend refuses with the experimental flag off, and takes 1 to 500 mails at a time
       if (!settings.mail?.experimental)

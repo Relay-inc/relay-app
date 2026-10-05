@@ -32,6 +32,20 @@ const initials = (a?: Addr | { name: string | null; email: string }) =>
     .join("")
     .slice(0, 2)
     .toUpperCase();
+/** A mail's own text and the history it quotes, split where the quote starts (as Keel's quotes.ts does): an
+ *  "On … wrote:" line, an original/forwarded-message rule, or the trailing run of "> " lines. */
+export function splitQuoted(text: string) {
+  const lines = text.split("\n");
+  const at = lines.findIndex(
+    (line, i) =>
+      /^(On|Op|Le|Am) .{4,160}(wrote|schreef|a écrit|schrieb)\s*:\s*$/.test(line.trim()) ||
+      /^-{2,}\s*(Original Message|Oorspronkelijk bericht|Forwarded message)/i.test(line.trim()) ||
+      (line.startsWith(">") && lines.slice(i).every(rest => !rest.trim() || rest.startsWith(">"))),
+  );
+  return at < 0
+    ? { own: text, quote: "" }
+    : { own: lines.slice(0, at).join("\n").trimEnd(), quote: lines.slice(at).join("\n").trim() };
+}
 const size = (bytes: number) =>
   bytes < 1024
     ? `${bytes} B`
@@ -56,6 +70,7 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
   const err = useNavigationStore(s => s.panel.err);
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [html, setHtml] = useState(false);
+  const [showQuote, setShowQuote] = useState(false);
   useEffect(() => {
     loadThread(mailKey);
     loadQuickReplies(mailKey);
@@ -65,7 +80,9 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
   const at = mail
     ? new Date(mail.date).toLocaleString(locale, { weekday: "short", hour: "2-digit", minute: "2-digit" })
     : "";
-  const paragraphs = (body?.text ?? "")
+  // what was written, and the quoted history below it folded (Keel's splitQuoted)
+  const { own, quote } = splitQuoted(body?.text ?? "");
+  const paragraphs = own
     .split(/\n\s*\n/)
     .map(p => p.trim())
     .filter(Boolean);
@@ -88,7 +105,15 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
               <span className="flex-1 min-w-0 truncate text-[13px] text-secondary">
                 {on ? "" : m.untrusted_mail.replace(/\s+/g, " ").slice(0, 160)}
               </span>
-              <span className="text-xs text-tertiary whitespace-nowrap">{m.date}</span>
+              <span className="text-xs text-tertiary whitespace-nowrap">
+                {new Date(m.date).toLocaleString(locale, {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
             </div>
             {on ? (
               <div className="pl-8.5 text-sm leading-[1.55] whitespace-pre-wrap select-text">{m.untrusted_mail}</div>
@@ -132,6 +157,22 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
                   {p}
                 </p>
               ))}
+              {quote ? (
+                showQuote ? (
+                  <div className="pl-3 border-l-2 border-separator-strong text-[13px] text-secondary whitespace-pre-wrap">
+                    {quote}
+                  </div>
+                ) : (
+                  <button
+                    className="self-start h-5 px-1.5 rounded bg-fill-2 text-secondary text-xs cursor-pointer hover:text-label"
+                    title={t("today.showQuoted")}
+                    aria-label={t("today.showQuoted")}
+                    onClick={() => setShowQuote(true)}
+                  >
+                    •••
+                  </button>
+                )
+              ) : null}
             </div>
           )
         ) : null}

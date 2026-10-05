@@ -302,19 +302,21 @@ function ActionBar({
 
 /** An agent's permission or question: what it last said, then its card (Enter allows). */
 function AskBody({ entry }: { entry: Entry }) {
+  const { t } = useT();
   const s = entry.subject;
-  const said = useDerived(() => (s.type === "ask" ? lastAi(s.chat) : ""));
+  // what the agent last said; lastAi's own fallback ("Done") when it said nothing is no context
+  const said = useDerived(() => (s.type === "ask" && lastAi(s.chat) !== t("work.done") ? lastAi(s.chat) : ""));
   if (s.type !== "ask") return null;
   return (
     <div className="flex flex-col gap-3 max-w-170">
-      {said ? <Markdown text={said} className="text-sm leading-relaxed text-secondary line-clamp-6" /> : null}
+      {said ? <Markdown text={said} className="md-panel text-sm leading-relaxed text-secondary line-clamp-6" /> : null}
       <PendingRequest request={s.request} keys />
     </div>
   );
 }
 function ChatBody({ chat }: { chat: string }) {
   const text = useDerived(() => lastAi(chat));
-  return <Markdown text={text} className="text-sm leading-relaxed text-secondary max-w-170" />;
+  return <Markdown text={text} className="md-panel text-sm leading-relaxed text-secondary max-w-170" />;
 }
 
 // ---------- the bottom: status, when, facts, connected

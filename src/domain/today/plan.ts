@@ -80,7 +80,8 @@ export function slots(meetings: Busy[], now: number, dayEnd: number): Slot[] {
 /** Where an item lands: its slot's key and its planned start. */
 export type Placed = { slot: string; start: number };
 /** The queue planned into the slots, in order: each item in the first slot from its pinned one on that still has
- *  room for it and ends before its `by`. An item pinned to "tomorrow" or that fits nowhere today is in `tomorrow`. */
+ *  room for it and ends before its `by` (a prep without that room: the first slot, late). An item pinned to
+ *  "tomorrow" or that fits nowhere today is in `tomorrow`. */
 export function plan(queue: Item[], free: Slot[], pins: Record<string, string>) {
   const used = free.map(slot => slot.start);
   const placed: Record<string, Placed> = {};
@@ -99,12 +100,14 @@ export function plan(queue: Item[], free: Slot[], pins: Record<string, string>) 
     const j = free.findIndex(
       (slot, i) => i >= from && slot.end - used[i] >= est && (item.by === undefined || used[i] + est <= item.by),
     );
-    if (j < 0) {
+    // a prep with no room left before its meeting goes in the first slot anyway (late), never to tomorrow
+    const at = j < 0 && item.by !== undefined && from < free.length ? from : j;
+    if (at < 0) {
       tomorrow.push(item.id);
       continue;
     }
-    placed[item.id] = { slot: free[j].key, start: used[j] };
-    used[j] += est;
+    placed[item.id] = { slot: free[at].key, start: used[at] };
+    used[at] += est;
   }
   return { placed, tomorrow, used: Object.fromEntries(free.map((slot, i) => [slot.key, used[i] - slot.start])) };
 }

@@ -83,7 +83,8 @@ test("the plan fills slots in order, keeps a prep before its meeting, and follow
   assert.equal(used.now, 30 * M);
 
   const tooLate = plan([item("x", 25), item("prep", 10, { by: at(11.5) })], free, {});
-  assert.deepEqual(tooLate.tomorrow, ["prep"], "a prep that no longer fits before its meeting is not planned after it");
+  assert.deepEqual(tooLate.tomorrow, [], "a prep that no longer fits before its meeting is not put off to tomorrow");
+  assert.equal(tooLate.placed.prep.slot, "now", "it goes in the first slot, late");
 });
 
 test("an item's status: the tracker's when there is one, else started on Today or not; in progress goes first", () => {

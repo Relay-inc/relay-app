@@ -379,7 +379,7 @@ export function ReviewScreen({ model, entry }: { model: TodayModel; entry: Entry
                   onClick={() => askConfirm(entry.id, true)}
                   className="h-7.5 px-3 rounded-lg bg-accent text-on-accent text-[13px] font-medium whitespace-nowrap cursor-pointer hover:bg-accent-hover"
                 >
-                  {t("review.submit")}
+                  {t("review.submitShort")}
                 </button>
               </div>
             </div>
