@@ -23,6 +23,7 @@ import { ReviewView } from "../today/ReviewView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
+import { Todos } from "./Todos";
 import { MoveBar } from "./MoveBar";
 import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
@@ -168,6 +169,7 @@ export function ConversationsView({ className }: { className: string }) {
         </div>
       </div>
       {hasSubagents ? <Subagents className={`${column} mb-1.5`} /> : null}
+      {onView ? null : <Todos className={`${column} mb-1.5`} />}
       {toast && selected !== REM ? (
         <div className={`${column} mb-2`}>
           <Toast toast={toast} />
