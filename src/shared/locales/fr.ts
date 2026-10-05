@@ -303,10 +303,12 @@ export default {
   "today.alsoIn": "Aussi dans {project}",
   "today.progress": "{cleared} sur {total} traités · {planned} prévus aujourd'hui",
   "today.boardsDown": "{n} tableau(x) non chargé(s)",
+  "today.link.noBoard":
+    "{project} n'a pas de tableau lié : ouvrez son tableau et choisissez le projet sous « Projet du vault », puis réessayez",
+  "today.link.noProject": "{repo} n'est lié à aucun projet du vault : pas de tableau où chercher",
   "today.link.again": "Rechercher le ticket",
   "today.link.found": "Ticket : {ticket}",
   "today.link.none": "Aucun ticket trouvé pour cette pull request",
-  "today.link.noBoard": "Le projet de cette PR n'a pas de tableau lié",
   "today.link.number": "par son numéro",
   "today.link.title": "par son titre",
   "today.link.ai": "par Claude",

@@ -535,7 +535,10 @@ async function setCardState(item: TodayCard, state: Status) {
 }
 /** Find the PR's ticket again, Claude included, and say what came out. */
 async function findTicketAgain(pr: PR) {
-  if (!pr.project || !useTodayStore.getState().boards[pr.project]) return toast(t("today.link.noBoard"));
+  // say what is missing: the repo has no vault project, or the project no board to look in
+  if (!pr.project) return toast(t("today.link.noProject", { repo: pr.repo }));
+  if (!useTodayStore.getState().boards[pr.project])
+    return toast(t("today.link.noBoard", { project: projectLabel(pr.project) }));
   const link = await relinkPr(pr);
   toast(
     link

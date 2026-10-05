@@ -301,10 +301,12 @@ export default {
   "today.alsoIn": "Auch in {project}",
   "today.progress": "{cleared} von {total} erledigt · {planned} heute geplant",
   "today.boardsDown": "{n} Board(s) nicht geladen",
+  "today.link.noBoard":
+    "{project} hat kein verknüpftes Board: öffne sein Board und wähle das Projekt unter „Vault-Projekt“, dann versuch es erneut",
+  "today.link.noProject": "{repo} ist mit keinem Vault-Projekt verknüpft: kein Board zum Suchen",
   "today.link.again": "Ticket erneut suchen",
   "today.link.found": "Ticket: {ticket}",
   "today.link.none": "Kein Ticket für diesen Pull Request gefunden",
-  "today.link.noBoard": "Das Projekt dieses PR hat kein verknüpftes Board",
   "today.link.number": "über die Nummer",
   "today.link.title": "über den Titel",
   "today.link.ai": "von Claude",

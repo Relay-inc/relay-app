@@ -300,10 +300,12 @@ export default {
   "today.alsoIn": "Ook in {project}",
   "today.progress": "{cleared} van {total} afgewerkt · {planned} gepland vandaag",
   "today.boardsDown": "{n} bord(en) niet geladen",
+  "today.link.noBoard":
+    "{project} heeft geen gekoppeld bord: open het bord en kies het project bij “Vaultproject”, en probeer opnieuw",
+  "today.link.noProject": "{repo} is niet gekoppeld aan een vaultproject, dus er is geen bord om in te zoeken",
   "today.link.again": "Ticket opnieuw zoeken",
   "today.link.found": "Ticket: {ticket}",
   "today.link.none": "Geen ticket gevonden voor deze pull request",
-  "today.link.noBoard": "Het project van deze PR heeft geen gekoppeld bord om in te zoeken",
   "today.link.number": "op nummer",
   "today.link.title": "op titel",
   "today.link.ai": "door Claude",

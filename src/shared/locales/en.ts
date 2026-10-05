@@ -296,10 +296,12 @@ const en = {
   "today.alsoIn": "Also in {project}",
   "today.progress": "{cleared} of {total} cleared · {planned} planned today",
   "today.boardsDown": "{n} board(s) not loaded",
+  "today.link.noBoard":
+    "{project} has no board linked: open its board and pick the project under “Vault project”, then try again",
+  "today.link.noProject": "{repo} is not linked to a vault project, so there is no board to look in",
   "today.link.again": "Find the ticket again",
   "today.link.found": "Ticket: {ticket}",
   "today.link.none": "No ticket found for this pull request",
-  "today.link.noBoard": "This PR's project has no linked board to look in",
   "today.link.number": "by its number",
   "today.link.title": "by its title",
   "today.link.ai": "by Claude",
