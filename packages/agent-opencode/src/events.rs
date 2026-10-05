@@ -1,4 +1,4 @@
-//! The events of `opencode serve` (GET /event, as bridge.py passes them on: `{type, properties}` per line) as the
+//! The events of `opencode serve` (GET /event, as bridge.rs passes them on: `{type, properties}` per line) as the
 //! contract's events, the turns the app sends, and the answers to its permission requests and questions.
 //! Written against opencode 1.18.33; tests/fixtures/serve-live*.jsonl are three live runs.
 
@@ -6,7 +6,7 @@ use agent_core::{pending::Request, Event, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
-/// A turn as bridge.py's `prompt` line; it fills in the model and variant. Images go as data-URL file parts.
+/// A turn as bridge.rs's `prompt` line; it fills in the model and variant. Images go as data-URL file parts.
 pub fn prompt(turn: &Turn) -> Value {
     let mut parts: Vec<Value> = vec![];
     if !turn.text.is_empty() { parts.push(json!({"type": "text", "text": turn.text})); }
@@ -149,7 +149,7 @@ impl State {
                 // a prompt that could not be sent: no turn is coming to end on its own
                 if !self.busy { out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None }); }
             }
-            "session.status" => if p["status"]["type"] == "busy" { self.busy = true; },
+            "session.status" => if p["status"]["type"] == "busy" { self.busy = true; out.push(Event::Working); },
             "message.updated" => {
                 let info = &p["info"];
                 let id = info["id"].as_str().unwrap_or("").to_string();
@@ -159,6 +159,9 @@ impl State {
                     let (c, e) = (info["time"]["created"].as_i64().unwrap_or(0), info["time"]["completed"].as_i64().unwrap_or(0));
                     self.msgs.insert(id, (c, e, tokens(info)));
                     if let Some(e) = error_text(&info["error"]) { self.error.get_or_insert(e); }
+                    if let (Some(p), Some(m)) = (info["providerID"].as_str(), info["modelID"].as_str()) {
+                        out.push(Event::Resolved { model: format!("{p}/{m}"), effort: None });
+                    }
                 }
             }
             "message.part.updated" => {

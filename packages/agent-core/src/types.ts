@@ -5,7 +5,7 @@ import type { Locales } from "./i18n";
 /** What a provider can do; the app hides what is false. See `Caps` in src/lib.rs. */
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
-  fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean;
+  fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; accounts: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
@@ -13,6 +13,8 @@ export type Detect = { installed: boolean; bin: string; version?: string | null;
 export type AgentStatus = { id: string; name: string; on: boolean; caps: Caps; detect: Detect; models: Choice[]; efforts: Choice[]; bin: string; defaultBin: string };
 
 export type Image = { media_type: string; data: string };
+/** One hunk of a file change: its start in the old and new file, its lines prefixed " ", "-" or "+". */
+export type Hunk = { oldStart: number; newStart: number; lines: string[] };
 export type TurnUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost?: number | null };
 /** A permission request or question in the pending folder (pending/<id>.json). */
 export type PermissionRequest = { id: string; project: string; provider?: string; kind?: "tool" | "question" | ""; tool_name: string; input: any; tool_use_id?: string; relay?: boolean; at: number };
@@ -21,17 +23,20 @@ export type Decision = { behavior: "allow"; updatedInput: any } | { behavior: "d
 
 /** The normalised events, the Tauri event `agent` as `{project, provider, event}`, and history items. */
 export type AgentEvent =
+  | { type: "working" }
   | { type: "session"; id: string }
   | { type: "user"; text: string; images: (Image | null)[] }
   | { type: "text"; text: string; delta: boolean }
   | { type: "thinking"; text: string; delta: boolean }
   | { type: "tool_call"; id: string; name: string; input: any }
   | { type: "tool_result"; id: string; error: boolean }
+  | { type: "patch"; id: string; hunks: Hunk[] } // the change a file tool made, when the provider reports it
   | { type: "permission"; request: PermissionRequest }
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }
   | { type: "time"; at: string }       // history only: when the transcript line after it was written
   | { type: "error"; text: string }
   | { type: "reset" }                 // the conversation started over (/clear); a new session follows
+  | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)
   | { type: "commands"; commands: { name: string; description: string; argumentHint?: string }[] } // added by the app: Claude Code's slash commands and skills

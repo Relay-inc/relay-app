@@ -1,0 +1,600 @@
+// The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
+// Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
+// Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|orch, ?sel=<selection key> (what the window
+// opens on), ?link=<relay:// url> (the deep link the app was launched with).
+import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
+import { NOW, pngBase64 } from "./fixtures/util";
+import * as vault from "./fixtures/vault";
+import * as conv from "./fixtures/conversations";
+import * as integ from "./fixtures/integrations";
+import * as orch from "./fixtures/orchestrator";
+
+type Args = Record<string, any>;
+type Call = { cmd: string; args: Args; at: number };
+
+const query = new URLSearchParams(location.search);
+const fixture = query.get("fixture") || "default";
+const onboarding = fixture === "onboarding";
+const isSettingsWindow = location.pathname.endsWith("settings.html");
+
+// ---------- the persisted state a returning user has: the conversation list, the open view, the board picked
+// (localStorage is the app's own store; it is reset on every load so each run starts the same)
+function seedStorage() {
+  const prefsTab = localStorage.getItem("prefsTab");
+  localStorage.clear();
+  if (isSettingsWindow && prefsTab) localStorage.setItem("prefsTab", prefsTab);
+  if (onboarding) return;
+  const chats = Object.fromEntries(conv.conversations.map(c => [c.key, { ...c }]));
+  localStorage.setItem("chats", JSON.stringify(chats));
+  localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
+  localStorage.setItem("pvProject", "p1");
+  localStorage.setItem("pvBoard", "f1");
+}
+seedStorage();
+
+// the main window is transparent over the macOS sidebar material (tauri.conf.json windowEffects); a browser has no
+// material behind the page, so the page root gets the sidebar token as its stand-in
+const material = document.createElement("style");
+material.textContent = "html { background: var(--sidebar); }";
+document.head.append(material);
+
+// ---------- mutable backend state
+let settings = vault.settings(fixture);
+let vaultOk = !onboarding;
+let pending = [...conv.pending];
+let reminders = [...vault.reminders];
+let added = 0;
+let actionConfig = integ.actionConfig();
+const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
+// the orchestrator's workers (fixture "orch"), changed by orch_stop
+const orchOn = fixture === "orch";
+let workers = orchOn ? structuredClone(orch.workers) : [];
+
+// ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
+const listeners = new Map<string, Set<number>>();
+const internals = () => (window as any).__TAURI_INTERNALS__;
+function emit(event: string, payload: unknown) {
+  for (const id of [...(listeners.get(event) || [])]) internals().runCallback(id, { event, id, payload });
+}
+const emitAgent = (project: string, event: unknown, provider = "claude") => emit("agent", { project, provider, event });
+
+// ---------- the embedded terminals: output goes to the Channel the frontend passed, as the backend does (raw bytes)
+const PROMPT = "kristof@mac ~/vault % ";
+const ptys = new Map<number, { channel: number; index: number }>();
+let ptyId = 0;
+function ptyOut(id: number, text: string) {
+  const pty = ptys.get(id);
+  if (!pty) return;
+  const bytes = new TextEncoder().encode(text);
+  internals().runCallback(pty.channel, { index: pty.index++, message: bytes.buffer });
+}
+// ---------- voice (src-tauri/src/dictation.rs, meeting.rs, anywhere.rs): no microphone in a browser. A recording keeps
+// the channel it was given, so `__harness.recordingTick` / `dictationLevel` can play its levels
+const channelId = (c: unknown) => (typeof c === "object" && c ? (c as { id: number }).id : Number(String(c).split(":")[1]));
+const sendTo = (channel: number | null, index: number, message: unknown) =>
+  channel !== null && internals().runCallback(channel, { index, message });
+let meetingTicks: { channel: number; index: number } | null = null;
+let dictationLevels: { channel: number; index: number } | null = null;
+const voiceModels = [
+  { id: "parakeet-v3", mb: 456, langs: ["nl", "en", "de", "fr"], auto: true, installed: true, downloading: false },
+  { id: "parakeet-v2", mb: 451, langs: ["en"], auto: true, installed: false, downloading: false },
+  { id: "canary-1b-v2", mb: 691, langs: ["nl", "en", "de", "fr"], auto: false, installed: false, downloading: false },
+  { id: "cohere", mb: 1708, langs: ["nl", "en", "de", "fr"], auto: true, installed: false, downloading: false },
+  { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
+];
+const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
+let scratchId = 0;
+const NOW_S = Math.floor(NOW / 1000);
+
+// ---------- commands
+const thumb = `data:image/png;base64,${pngBase64(100, 100, "#dfe7f7", "#2f6fdb")}`;
+const calls: Call[] = [];
+const unmocked = new Set<string>();
+const sidKeys = () =>
+  Object.fromEntries(conv.conversations.map(c => [c.key, { provider: c.provider, sid: conv.sidOf(c.key) }]));
+const terminalAgents = () => [
+  ...vault.terminalSessions.map((s, i) => ({
+    id: `term-${i + 1}`,
+    sessionId: s.sessionId,
+    provider: "claude",
+    kind: "interactive",
+    status: i === 0 ? "busy" : "idle",
+    name: s.name,
+    startedAt: s.last_at,
+  })),
+  vault.backgroundBlocked,
+];
+
+function handle(cmd: string, a: Args): unknown {
+  switch (cmd) {
+    // event plugin
+    case "plugin:event|listen": {
+      (listeners.get(a.event) ?? listeners.set(a.event, new Set()).get(a.event)!).add(a.handler);
+      return a.handler;
+    }
+    case "plugin:event|unlisten":
+      listeners.get(a.event)?.delete(a.eventId);
+      return null;
+    case "plugin:event|emit":
+    case "plugin:event|emit_to":
+      emit(a.event, a.payload);
+      return null;
+    // window, opener
+    case "plugin:window|is_focused":
+      return true; // no notification banners
+    case "plugin:window|theme":
+      return settings.theme === "dark" ? "dark" : "light";
+    case "plugin:window|set_theme":
+    case "plugin:window|set_title":
+    case "plugin:opener|open_url":
+      return null;
+    // the deep-link plugin: the link the app was started with (later ones come as the deep-link://new-url event)
+    case "plugin:deep-link|get_current":
+      return query.get("link") ? [query.get("link")] : null;
+
+    // work machines (fixture "machines": one that speaks an older protocol)
+    case "machine_status":
+      return {
+        ok: false,
+        outdated: "server",
+        version: "0.1.0",
+        error: "relay-server 0.1.0 speaks protocol 1, this Relay 2",
+      };
+    case "server_setup":
+      return { version: "0.0.4", image: "ghcr.io/relay-inc/relay-server" };
+    case "mirror_status":
+    case "mirror_progress":
+      return null;
+    case "machines_list":
+      return [];
+    case "chat_machines":
+      return {};
+
+    // settings, language, vault
+    case "get_settings":
+      return structuredClone(settings);
+    case "set_settings":
+      settings = structuredClone(a.settings);
+      if (settings.vault) vaultOk = true;
+      return structuredClone(settings);
+    case "ui_lang":
+      return settings.language === "system" || !settings.language ? "en" : settings.language;
+    case "ui_locale":
+      return "en-GB";
+    case "vault_status":
+      return vault.vaultStatus(vaultOk);
+    case "detect_vault":
+    case "check_vault":
+      return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
+    case "pick_folder":
+      return harness.pickFolder;
+    case "pick_path":
+      return null;
+    // files attached by their path (src-tauri/src/files.rs)
+    case "pick_files":
+      return [...harness.pickFiles];
+    case "pasted_files":
+      return [...harness.pastedFiles];
+    case "read_image": {
+      const type = (
+        { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<
+          string,
+          string
+        >
+      )[String(a.path).split(".").pop()!.toLowerCase()];
+      if (!type) return Promise.reject("not a picture");
+      return [type, pngBase64(120, 80, "#e8efe3", "#3f8f4f")];
+    }
+    case "open_file":
+      return String(a.path).includes("missing") ? Promise.reject("not found") : null;
+    case "snapshot":
+      return vault.snapshot(reminders);
+    case "vault_notes":
+      return { root: vault.VAULT, notes: vault.notes };
+    case "read_note":
+      return vault.noteText(a.target);
+    case "project_icons":
+      return vault.projectIcons();
+    case "project_repos":
+      return vault.projectRepos;
+    case "favicons":
+    case "find_icon_sites":
+    case "integration_import":
+      return {};
+    case "set_project_icon":
+    case "set_project_repos":
+    case "ignore_repo":
+      return null;
+    case "reminder":
+      reminders = vault.remindersAfter(reminders, a.action, a, 0);
+      return reminders.find(r => r.id === a.id)?.date ?? "";
+    case "reminder_add":
+      reminders = vault.remindersAfter(reminders, "add", a, ++added);
+      return reminders.at(-1)!.id;
+
+    // agents and conversations
+    case "agents_status":
+      return integ.agentsStatus;
+    case "agent_commands":
+      return integ.agentCommands(a.provider);
+    case "action_config":
+      return { actions: integ.actions, config: structuredClone(actionConfig) };
+    case "set_action_config":
+      if (Object.keys(a.entry).length) actionConfig[a.ext] = a.entry;
+      else delete actionConfig[a.ext];
+      return structuredClone(actionConfig);
+    case "chats":
+      // the backend has a session for the coordinator and its workers too
+      return [...conv.conversations.map(c => c.key), ...(orchOn ? [orch.ORCH, ...workers.map(w => w.key)] : [])];
+    case "chat_providers":
+      return Object.fromEntries(conv.conversations.map(c => [c.key, c.provider]));
+    case "app_sids":
+      return conv.conversations.map(c => conv.sidOf(c.key));
+    case "app_sessions":
+      return sidKeys();
+    case "agents":
+      return terminalAgents();
+    case "running":
+      return {}; // conversation key -> turns running, for the processes the app started
+    case "drop_worktrees":
+      // the switch-to conversation made one git worktree, removed when it closes
+      return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
+    case "history":
+      return (orchOn && orch.history(a.project)) || conv.history(a.project);
+    // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
+    case "orch_workers":
+      return structuredClone(workers);
+    case "orch_stop": {
+      const worker = workers.find(w => w.key === a.key);
+      if (!worker || worker.state !== "running") return false;
+      Object.assign(worker, { state: "stopped", ended: Date.now() });
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return true;
+    }
+    case "history_sid": {
+      const items = conv.terminalHistory(a.sid);
+      return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
+    }
+    case "subagents":
+      return Object.fromEntries(
+        (a.keys as string[])
+          .filter(k => k in conv.subagents)
+          .map(k => [k, conv.subagents[k as keyof typeof conv.subagents]]),
+      );
+    case "agent_log":
+      return conv.agentLog(a.id);
+    case "pending":
+      return pending;
+    case "answer":
+      pending = pending.filter(x => x.id !== a.id);
+      return null;
+    case "send":
+      if (harness.autoReply)
+        setTimeout(() => harness.stream({ key: a.project, deltas: 40, tokensPerDelta: 3, ratePerSecond: 60 }), 30);
+      return null;
+    case "ai_title":
+      return String(a.text).split(/\s+/).slice(0, 5).join(" ");
+    // the embedded terminals: a shell that prints a prompt and echoes what is typed
+    // retries waiting for a usage limit to reset (src-tauri/src/retry.rs): none
+    case "retries":
+      return [];
+    // the UI state file (src/infrastructure/storage.ts): empty, so the app takes over the fixtures' localStorage
+    case "ui_state_get":
+      return {};
+    case "ui_state_init":
+      return a.state;
+    case "ui_state_set":
+      localStorage.setItem(a.key, a.value);
+      return null;
+    case "dictation_models":
+      return structuredClone(voiceModels);
+    case "dictation_model":
+    case "dictation_access":
+    case "dictation_ask_access":
+      return true;
+    case "dictation_download":
+    case "dictation_delete":
+    case "dictation_pause_shortcuts":
+      return null;
+    case "dictation_start":
+      dictationLevels = { channel: channelId(a.onLevel), index: 0 };
+      return null;
+    case "dictation_stop":
+      dictationLevels = null;
+      return "Dictated in the harness.";
+    case "dictation_cancel":
+      dictationLevels = null;
+      return null;
+    case "meeting_record_start":
+      meetingTicks = { channel: channelId(a.onTick), index: 0 };
+      return { system: true, why: null };
+    case "meeting_record_stop":
+      meetingTicks = null;
+      return { audio: "Attachments/2026-10-01 0930 Meeting.m4a", transcript: "Attachments/2026-10-01 0930 Meeting.md", seconds: 60 };
+    case "meeting_record_cancel":
+      meetingTicks = null;
+      return null;
+    case "pty_spawn": {
+      const id = ++ptyId;
+      const channel = typeof a.onData === "object" ? a.onData.id : Number(String(a.onData).split(":")[1]);
+      ptys.set(id, { channel, index: 0 });
+      setTimeout(() => ptyOut(id, `${PROMPT}`), 20);
+      return id;
+    }
+    case "pty_write":
+      ptyOut(a.id, String(a.data).replace(/\r/g, `\r\n${PROMPT}`));
+      return null;
+    case "pty_resize":
+      return null;
+    case "pty_kill":
+      ptys.delete(a.id);
+      return null;
+    // scratch notes per project, in memory
+    case "scratch_list":
+      return (scratch.get(a.project) ?? []).map(n => ({ ...n }));
+    case "scratch_save": {
+      const list = scratch.get(a.project) ?? [];
+      const id = a.id ?? `note-${++scratchId}`;
+      const note = list.find(n => n.id === id);
+      if (note) Object.assign(note, { text: a.text, modified: NOW_S });
+      else list.unshift({ id, text: a.text, modified: NOW_S });
+      scratch.set(a.project, list);
+      return id;
+    }
+    case "scratch_delete":
+      scratch.set(
+        a.project,
+        (scratch.get(a.project) ?? []).filter(n => n.id !== a.id),
+      );
+      return null;
+    case "stop":
+    case "bg":
+    case "open_terminal":
+    case "notify":
+    case "open_settings_window":
+    case "reset":
+    case "move_chat":
+      return null;
+    case "usage_limits":
+      return integ.usageLimits;
+    case "usage_tokens":
+      return integ.usageTokens();
+
+    // Commonwealth, the team brain: not installed
+    case "commonwealth_status":
+      return { plugin: false, cli: null, hint: "npm i -g @cmnwlth/cli", projects: [] };
+    case "commonwealth_notes":
+      return [];
+
+    // GitHub, mail, boards
+    case "github_status":
+      return "laurent";
+    case "github_prs":
+      return integ.prs;
+    case "github_pr":
+      return integ.prDetail(a.repo, a.number);
+    case "mail_list":
+      return integ.mailPage(a.account, a.page ?? 1, movedMails, !!settings.mail?.experimental);
+    case "mail_read":
+      return integ.mailBody(a.id);
+    case "mail_seen":
+      return null;
+    case "mail_move":
+      // the backend refuses with the experimental flag off, and takes 1 to 500 mails at a time
+      if (!settings.mail?.experimental)
+        throw new Error("Archive and delete are experimental, switch them on in Settings › Mail");
+      if (!a.ids?.length || a.ids.length > 500) throw new Error("1 to 500 mails at a time");
+      for (const id of a.ids) movedMails.add(`${a.account}:${id}`);
+      return null;
+    case "mail_test":
+      return "Connected: 1,204 mails in INBOX";
+    case "mail_connect":
+      return {
+        account: { email: a.email, keychain_service: "relay-mail", keychain_account: a.email },
+        result: "Connected",
+      };
+    // calendar: the secret address is checked like calendar.rs's url_ok, then "fetched" (3 meetings in the next 7 days)
+    case "calendar_connect":
+      if (!a.url) return 0;
+      if (!a.url.startsWith("https://calendar.google.com/calendar/ical/") || !a.url.endsWith(".ics"))
+        return Promise.reject(
+          "That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.",
+        );
+      return 3;
+    case "calendar_meetings": {
+      const feeds: string[] = settings.calendar?.on
+        ? settings.calendar.feeds.map((f: { email: string }) => f.email)
+        : [];
+      return { meetings: feeds.length ? structuredClone(integ.meetings) : [], errors: integ.calendarErrors(feeds) };
+    }
+    case "integration_status":
+    case "integration_has_token":
+      return a.provider === "productive";
+    case "integration_mcp":
+      return { supported: a.provider === "productive", found: false };
+    case "integration_token":
+      return null;
+    case "integration_call":
+      if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
+      return integ.productive(a.method, a.path, a.body);
+    case "integration_upload":
+      return "https://files.example/upload/1";
+    case "open_viewer":
+      return null;
+    case "integration_thumb":
+      return a.url === integ.THUMB_URL ? thumb : Promise.reject("not a picture");
+  }
+  unmocked.add(cmd);
+  console.warn(`[harness] unmocked command ${cmd}`, a);
+  return null;
+}
+
+// ---------- ready: the first quiet 250 ms after the window's start-up calls (the polls do not count)
+const POLLS = new Set([
+  "pending",
+  "subagents",
+  "history_sid",
+  "agents",
+  "app_sids",
+  "app_sessions",
+  "running",
+  "plugin:window|is_focused",
+]);
+let markReady: () => void;
+const ready = new Promise<void>(resolve => (markReady = resolve));
+let quietTimer = 0;
+const settle = () => {
+  clearTimeout(quietTimer);
+  quietTimer = window.setTimeout(() => markReady(), 250);
+};
+
+mockWindows(isSettingsWindow ? "settings" : "main");
+mockIPC((cmd, args) => {
+  const a = (args ?? {}) as Args;
+  calls.push({ cmd, args: a, at: performance.now() });
+  if (!POLLS.has(cmd) && !cmd.startsWith("plugin:event|")) settle();
+  return handle(cmd, a);
+});
+// a window that makes no call at all is ready too
+setTimeout(settle, 0);
+
+// ---------- streaming a turn: the agent events of the real sequence, one task per event like Tauri's
+type StreamOpts = { key: string; deltas: number; tokensPerDelta?: number; ratePerSecond?: number; tools?: boolean };
+type StreamStats = { perDelta: number[]; total: number; renderedAt: number };
+const nextTask = () =>
+  new Promise<void>(resolve => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(0);
+  });
+/** The next frame has been painted: a task right after the next animation frame. */
+const nextPaint = () =>
+  new Promise<number>(resolve => requestAnimationFrame(() => nextTask().then(() => resolve(performance.now()))));
+
+async function stream({
+  key,
+  deltas,
+  tokensPerDelta = 3,
+  ratePerSecond = 0,
+  tools = true,
+}: StreamOpts): Promise<StreamStats> {
+  const words = conv.replyText(deltas * tokensPerDelta);
+  const perDelta: number[] = [];
+  const start = performance.now();
+  if (tools) {
+    emitAgent(key, {
+      type: "tool_call",
+      id: `toolu_stream_${start | 0}`,
+      name: "Read",
+      input: { file_path: `${vault.VAULT}/Calendar/2026-10-01.md` },
+    });
+    await nextTask();
+    emitAgent(key, { type: "tool_result", id: `toolu_stream_${start | 0}`, error: false });
+    await nextTask();
+  }
+  for (let i = 0; i < deltas; i++) {
+    if (ratePerSecond > 0) {
+      const due = start + (i * 1000) / ratePerSecond;
+      const wait = due - performance.now();
+      if (wait > 1) await new Promise(resolve => setTimeout(resolve, wait));
+    }
+    const text = words.slice(i * tokensPerDelta, (i + 1) * tokensPerDelta).join("");
+    const before = performance.now();
+    emitAgent(key, { type: "text", text, delta: true });
+    await nextTask(); // the handler and the microtasks it queued (a store notify, a render) have run
+    perDelta.push(performance.now() - before);
+  }
+  emitAgent(key, {
+    type: "turn_end",
+    ok: true,
+    error: null,
+    usage: { input: 1200, output: deltas * tokensPerDelta, cacheRead: 0, cacheWrite: 0 },
+    duration_ms: Math.round(performance.now() - start),
+  });
+  await nextTask();
+  const renderedAt = await nextPaint();
+  return { perDelta, total: renderedAt - start, renderedAt };
+}
+
+const harness = {
+  ready,
+  calls,
+  unmocked,
+  autoReply: true,
+  /** What `pick_folder` answers: null is cancelled. */
+  pickFolder: null as string | null,
+  /** What `pick_files` answers (the + button's dialog): [] is cancelled. */
+  pickFiles: [] as string[],
+  /** What `pasted_files` answers: the paths of files copied in Finder. */
+  pastedFiles: [] as string[],
+  fixture,
+  now: NOW,
+  keys: {
+    long: conv.LONG_KEY,
+    switchTo: conv.SWITCH_KEY,
+    permission: conv.PERMISSION_KEY,
+    question: conv.QUESTION_KEY,
+    action: conv.ACTION_KEY,
+    orch: orch.ORCH,
+    orchWorker: orch.workers[1].key,
+    terminal: `t:${vault.terminalSessions[0].sessionId}`,
+  },
+  titles: {
+    long: conv.LONG_TITLE,
+    switchTo: conv.SWITCH_TITLE,
+    permission: conv.PERMISSION_TITLE,
+    question: conv.QUESTION_TITLE,
+    action: conv.ACTION_TITLE,
+  },
+  markers: {
+    longEnd: conv.LONG_END,
+    switchEnd: conv.endMarker(conv.SWITCH_KEY),
+    card: integ.CARD_TITLE,
+    plainMail: integ.PLAIN_MAIL.subject,
+    htmlMail: integ.HTML_MAIL.subject,
+    studioMail: integ.STUDIO_MAIL.subject,
+    otherMail: integ.OTHER_MAIL.subject,
+    orchReport: orch.REPORT_MARKER,
+  },
+  emit,
+  emitAgent,
+  stream,
+  nextTask,
+  nextPaint,
+  /** a meeting recording's quarter-second tick: the time and both levels (0..1) */
+  recordingTick: (secs: number, me = 0.3, others = 0.2) =>
+    meetingTicks && sendTo(meetingTicks.channel, meetingTicks.index++, { secs, me, others }),
+  /** the composer's dictation hearing something */
+  dictationLevel: (level: number) => dictationLevels && sendTo(dictationLevels.channel, dictationLevels.index++, level),
+  /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
+  deepLink: (url: string) => emit("deep-link://new-url", [url]),
+  /** a permission card that turns up in the next `pending` poll */
+  addPending: (request: (typeof pending)[number]) => void pending.push(request),
+  /** files dragged in from Finder: Tauri's drag-enter, then drag-drop with the paths (the webview's onDragDropEvent) */
+  dropPaths: async (paths: string[]) => {
+    const position = { x: 400, y: 300 };
+    emit("tauri://drag-enter", { paths, position });
+    await nextTask();
+    emit("tauri://drag-drop", { paths, position });
+    await nextTask();
+  },
+  /** what a fresh session ran on when the model and effort were left to the CLI (read_agent's `resolved`) */
+  resolved: (key: string, model = "opus", effort = "high") =>
+    emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
+  /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
+  liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
+  /** the orchestrator's live events (fixture "orch"): a worker starts, another reports into the coordinator, one task each */
+  orchLive: async () => {
+    for (const event of orch.live()) {
+      if (event.type === "worker") {
+        const worker = event.worker as orch.Worker;
+        workers = [...workers.filter(w => w.key !== worker.key), worker];
+      }
+      emit("orch", event);
+      await nextTask();
+    }
+  },
+};
+(window as any).__harness = harness;
+export type Harness = typeof harness;

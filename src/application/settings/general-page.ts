@@ -1,0 +1,76 @@
+import { t } from "../../shared/i18n";
+import { PROVIDERS } from "../../shared/plugins";
+import type { Accent, SidebarCfg, TerminalApp, Theme } from "../../domain/settings/types";
+import type { MapKey, VaultMap, VaultStatus } from "../../domain/workspace/types";
+import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
+import { brainOn } from "../brain/brain";
+import { viewItems } from "../../domain/navigation/sidebar-views";
+import { applyTheme } from "../../infrastructure/window";
+import { pickVault, pickMapped, checkMapping } from "../workspace/vault-setup";
+import { initLanguage } from "./settings";
+import { save, showTitle } from "./window";
+import { useSettingsStore } from "./store";
+
+// Settings › General: the vault folder with its mapping, and the interface (language, colour scheme, accent, favicons,
+// terminal), and the views on top of the sidebar.
+const st = () => useSettingsStore.getState();
+const set = useSettingsStore.setState;
+const current = () => st().settings;
+const setStatus = (vaultStatus: VaultStatus) =>
+  set(draft => {
+    draft.vaultStatus = vaultStatus;
+  });
+
+export async function pickVaultFolder() {
+  const status = st().vaultStatus!;
+  const picked = await pickVault();
+  set(draft => {
+    draft.vaultStatus = { ...(picked ?? status) };
+    draft.message = null;
+  });
+}
+export async function pickMappedFile(key: MapKey, map: VaultMap) {
+  setStatus(await pickMapped(st().vaultStatus!, key, map));
+}
+export async function checkMap(map: VaultMap) {
+  setStatus(await checkMapping(st().vaultStatus!.vault, map));
+}
+export function saveFolders(map: VaultMap) {
+  const vault = st().vaultStatus!.vault;
+  return save({ ...current(), vault, vaults: { ...current().vaults, [vault]: map } }, t("set.saved"));
+}
+export function saveFavicons(on: boolean) {
+  const favicons = { last: "", tried: {}, ...current().favicons, on };
+  return save({ ...current(), favicons });
+}
+export async function changeLanguage(language: string) {
+  await save({ ...current(), language });
+  await initLanguage();
+  showTitle();
+}
+export async function changeTheme(theme: Theme) {
+  applyTheme(theme, current().accent);
+  await save({ ...current(), theme });
+}
+export async function changeAccent(accent: Accent) {
+  applyTheme(current().theme, accent);
+  await save({ ...current(), accent });
+}
+export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), terminal });
+export const saveKeepAwake = (keepAwake: boolean) => save({ ...current(), keepAwake });
+export const saveAutoRetry = (autoRetry: boolean) => save({ ...current(), autoRetry });
+/** The sidebar's views: the layout, the order, the ones switched off (each patch keeps the rest). */
+export const saveSidebar = (patch: SidebarCfg) => save({ ...current(), sidebar: { ...current().sidebar, ...patch } });
+/** One view on top of the sidebar switched on or off. */
+export const showView = (key: string, on: boolean) => saveSidebar({ hidden: withHidden(key, !on, current().sidebar) });
+/** The sidebar's views in the order of the sidebar, each with whether it shows: the boards switched on, pull
+ *  requests and mail when they are on. */
+export function sidebarViews() {
+  const settings = current();
+  const cfg = settings.sidebar ?? {};
+  const boards = PROVIDERS.filter(board => settings.integrations[board.id]?.on);
+  return arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on, brainOn(), t), cfg).map(item => ({
+    ...item,
+    shown: !isHidden(item.key, cfg),
+  }));
+}

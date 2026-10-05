@@ -10,6 +10,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 /// Native strings in the app's language order (en, nl, fr, de): an integration's error messages.
 pub type Text = &'static [(&'static str, [&'static str; 4])];
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum UploadKind { Form, Trello, Put }
+
 pub struct Provider {
     /// "productive": the key in settings.integrations, in the keychain service and in the webview's registry
     pub id: &'static str,
@@ -31,18 +34,86 @@ pub struct Provider {
     pub url: fn(cfg: &Value, method: &str, path: &str, body: &Option<Value>) -> Option<String>,
     /// the headers that carry the secrets (in the order of `secrets`), and anything else the API wants
     pub headers: fn(cfg: &Value, secrets: &[String]) -> Vec<String>,
-    /// whether a file may be posted as a form to this URL (Productive: its S3 bucket), never with the secrets
+    /// whether a file may be uploaded to this URL; upload_kind selects the transport and authentication
     pub upload: fn(url: &str) -> bool,
+    pub upload_kind: UploadKind,
     /// whether a picture's preview may be fetched from this URL for the card panel (Productive: its public thumbs),
     /// never with the secrets
     pub thumb: fn(url: &str) -> bool,
+    /// whether a picture's original may open in Relay's viewer window (Productive: its attachments' originals), which
+    /// loads it as a browser would, with the tracker's own login and never with the secrets
+    pub original: fn(url: &str) -> bool,
     /// whether a 2xx answer is a success: a GraphQL API (Linear) answers its errors with 200 and `errors`
     pub ok: fn(body: &Value) -> bool,
     /// an error answer as one line: HTTP status and the API's own message
     pub error: fn(code: &str, body: &Value) -> String,
     /// where in Claude Code's MCP config the provider's credentials can come from, if anywhere
     pub mcp: Option<Mcp>,
+    /// what an agent may do with the provider through the `relay` CLI (README, "Agent actions")
+    pub actions: &'static [Action],
 }
+
+// ---------- agent actions: the `relay <provider>.<action>` commands. An action builds its own request, so it is
+// its own allowlist; the app checks the arguments against `args`, applies the user's policy and sends it.
+
+/// Whether an action runs without asking, asks on a card in the conversation, or never runs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Policy { Auto, Ask, Deny }
+impl Policy {
+    pub fn parse(s: &str) -> Option<Policy> { match s { "auto" => Some(Policy::Auto), "ask" => Some(Policy::Ask), "deny" => Some(Policy::Deny), _ => None } }
+    pub fn as_str(self) -> &'static str { match self { Policy::Auto => "auto", Policy::Ask => "ask", Policy::Deny => "deny" } }
+}
+
+/// One call an action makes: the full URL (built from checked arguments only) and the JSON body.
+#[derive(Debug)]
+pub struct Req { pub method: &'static str, pub url: String, pub body: Option<Value> }
+
+pub struct Action {
+    /// "create_task": the command is `relay <provider>.<id>`
+    pub id: &'static str,
+    /// one line for the agent, in English
+    pub about: &'static str,
+    /// (name, what it is); a name ending in `?` is optional. Any other argument is refused.
+    pub args: &'static [(&'static str, &'static str)],
+    /// changes something: a session holding mail text asks before a write the policy would run on its own
+    pub write: bool,
+    /// the policy when the user set none
+    pub default: Policy,
+    /// the request, from the provider's config and the arguments, or why the arguments do not do
+    pub build: fn(cfg: &Value, args: &Value) -> Result<Req, String>,
+    /// the answer as the agent gets it: only what it needs, the APIs answer with a lot
+    pub out: fn(&Value) -> Value,
+}
+pub const fn read(id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)],
+                  build: fn(&Value, &Value) -> Result<Req, String>, out: fn(&Value) -> Value) -> Action {
+    Action { id, about, args, write: false, default: Policy::Auto, build, out }
+}
+pub const fn write(id: &'static str, about: &'static str, args: &'static [(&'static str, &'static str)],
+                   build: fn(&Value, &Value) -> Result<Req, String>, out: fn(&Value) -> Value) -> Action {
+    Action { id, about, args, write: true, default: Policy::Ask, build, out }
+}
+
+/// The arguments against an action's `args`: an object, every required one there, nothing else.
+pub fn check_args(spec: &[(&str, &str)], args: &Value) -> Result<(), String> {
+    let o = args.as_object().ok_or("arguments: a JSON object or key=value pairs")?;
+    let names: Vec<&str> = spec.iter().map(|(n, _)| n.trim_end_matches('?')).collect();
+    if let Some(k) = o.keys().find(|k| !names.contains(&k.as_str())) { return Err(format!("unknown argument '{k}', this action takes: {}", names.join(", "))); }
+    if let Some((n, _)) = spec.iter().find(|(n, _)| !n.ends_with('?') && o.get(*n).is_none_or(|v| v.is_null() || v == "")) { return Err(format!("missing argument '{n}'")); }
+    Ok(())
+}
+/// A text argument (a number counts as its digits), trimmed; None when absent or empty.
+pub fn arg(args: &Value, k: &str) -> Option<String> {
+    let v = &args[k];
+    v.as_str().map(|s| s.trim().to_string()).or_else(|| v.as_i64().map(|n| n.to_string())).filter(|s| !s.is_empty())
+}
+/// A required argument that must pass `ok`: ids end up in URLs, so they are checked, never escaped.
+pub fn arg_ok(args: &Value, k: &str, ok: fn(&str) -> bool) -> Result<String, String> {
+    arg(args, k).filter(|s| ok(s)).ok_or_else(|| format!("'{k}' is not a valid id"))
+}
+pub fn digits(s: &str) -> bool { !s.is_empty() && s.len() <= 20 && s.chars().all(|c| c.is_ascii_digit()) }
+/// YYYY-MM-DD.
+pub fn iso_date(s: &str) -> bool { s.len() == 10 && chrono_like(s) }
+fn chrono_like(s: &str) -> bool { s.char_indices().all(|(i, c)| if i == 4 || i == 7 { c == '-' } else { c.is_ascii_digit() }) }
 
 /// A Claude Code MCP server that carries a provider's credentials in its env: a server whose name is `server` (or
 /// contains it), the env names per keychain account (the first one set wins), and env -> config field.
@@ -107,6 +178,22 @@ mod tests {
         assert!(path_ok("/tasks?filter[folder_id]=3&page[size]=200"));
         assert!(!path_ok("tasks") && !path_ok("/../x") && !path_ok("/a b") && !path_ok("/a\"b"));
         assert!(only_keys(&Some(json!({ "a": 1 })), &["a", "b"]) && !only_keys(&Some(json!({ "c": 1 })), &["a"]) && !only_keys(&None, &["a"]));
+    }
+    #[test]
+    fn action_arguments_are_checked() {
+        let spec = [("task", ""), ("note?", "")];
+        assert!(check_args(&spec, &json!({ "task": "1" })).is_ok());
+        assert!(check_args(&spec, &json!({ "task": 1, "note": "x" })).is_ok());
+        assert!(check_args(&spec, &json!({ "note": "x" })).unwrap_err().contains("missing argument 'task'"));
+        assert!(check_args(&spec, &json!({ "task": "" })).is_err());
+        assert!(check_args(&spec, &json!({ "task": "1", "tsak": "2" })).unwrap_err().contains("unknown argument 'tsak'"));
+        assert!(check_args(&spec, &json!("x")).is_err());
+        assert_eq!(arg(&json!({ "a": 12 }), "a").as_deref(), Some("12"));
+        assert_eq!(arg(&json!({ "a": "  " }), "a"), None);
+        assert!(arg_ok(&json!({ "a": "12" }), "a", digits).is_ok() && arg_ok(&json!({ "a": "1/../x" }), "a", digits).is_err());
+        assert!(iso_date("2026-10-01") && !iso_date("2026-10-1") && !iso_date("2026/10/01"));
+        assert_eq!(Policy::parse("ask"), Some(Policy::Ask));
+        assert_eq!(Policy::parse("yes"), None);
     }
     #[test]
     fn strings_follow_the_language() {

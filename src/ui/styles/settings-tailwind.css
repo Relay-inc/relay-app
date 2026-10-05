@@ -1,0 +1,21 @@
+/* the app's Tailwind plus the settings palette (settings-theme.css) as colours: bg-s-bg, text-s-fg, border-s-border … */
+@import "./tailwind.css";
+
+@theme inline {
+  --color-s-bg: var(--s-bg);
+  --color-s-fg: var(--s-fg);
+  --color-s-muted: var(--s-muted);
+  --color-s-subtle: var(--s-subtle);
+  --color-s-faint: var(--s-faint);
+  --color-s-border: var(--s-border);
+  --color-s-seam: var(--s-seam);
+  --color-s-input: var(--s-input);
+  --color-s-mutedbg: var(--s-mutedbg);
+  --color-s-side: var(--s-side);
+  --color-s-sel: var(--s-sel);
+  --color-s-hover: var(--s-hover);
+  --color-s-primary: var(--s-primary);
+  --color-s-ok: var(--s-ok);
+  --color-s-warn: var(--s-warn);
+  --color-s-err: var(--s-err);
+}

@@ -1,4 +1,5 @@
-import type { BoardOpt, BoardRef, Card, Column, Opt, State } from "@relay/board-core";
+import type { BoardOpt, BoardRef, Card, Column, Opt, State, Tone } from "@relay/board-core";
+import { toneOf } from "@relay/board-core/tone";
 
 // Linear's GraphQL answers turned into the board's shapes, and the queries that ask for them. No imports
 // with side effects, so the tests (tests/map.test.ts) run it in plain Node on fixture JSON.
@@ -9,6 +10,9 @@ export const VIEWER = "query Viewer { viewer { id name displayName } }";
 export const TEAMS = "query Teams { teams(first: 100) { nodes { id name key projects(first: 50) { nodes { id name } } } } }";
 export const STATES = "query States($id: String!) { team(id: $id) { states(first: 100) { nodes { id name type position } } } }";
 export const ISSUES = "query Issues($filter: IssueFilter, $after: String) { issues(first: 100, after: $after, filter: $filter) { nodes { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } pageInfo { hasNextPage endCursor } } }";
+/** A new issue in a team's workflow state, in a Linear project when the board is one (projectId null otherwise). It
+ *  answers with the issue as ISSUES does. The backend lets only this exact mutation through (src/lib.rs, CREATE). */
+export const CREATE = "mutation Create($teamId: String!, $stateId: String!, $title: String!, $description: String!, $projectId: String) { issueCreate(input: { teamId: $teamId, stateId: $stateId, title: $title, description: $description, projectId: $projectId }) { success issue { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } } }";
 export const ISSUE_URL = "query Url($id: String!) { issue(id: $id) { url } }";
 
 /** Workflow state types in board order: triage first when a team uses it, closed states last. */
@@ -19,6 +23,8 @@ export const MAX_PAGES = 10;
 
 /** A workflow state type as the board's three kinds. */
 const stateOf = (type: string): State => (CLOSED.includes(type) ? "done" : type === "started" ? "doing" : "todo");
+/** A state's ring colour: triage and backlog wait, unstarted is planned, started ones by their name. */
+export const toneFor = (type: string, name: string): Tone => toneOf(stateOf(type), name, type !== "unstarted");
 const byName = (a: Opt, b: Opt) => a.name.localeCompare(b.name);
 
 /** `teams` as projects, and per team the whole team (board id = team id) followed by its Linear projects. */
@@ -36,7 +42,7 @@ export function mapStates(data: any, done: boolean): Column[] {
   const rank = (s: any) => { const i = TYPES.indexOf(s.type); return i < 0 ? TYPES.length : i; };
   return (data?.team?.states?.nodes || []).filter((s: any) => done || !CLOSED.includes(s.type))
     .sort((a: any, b: any) => rank(a) - rank(b) || (Number(a.position) || 0) - (Number(b.position) || 0))
-    .map((s: any, i: number) => ({ id: s.id, name: s.name, placement: i, ...(s.type ? { state: stateOf(s.type) } : {}) }));
+    .map((s: any, i: number) => ({ id: s.id, name: s.name, placement: i, ...(s.type ? { state: stateOf(s.type), tone: toneFor(s.type, s.name) } : {}) }));
 }
 
 /** The issue filter for a board: the team, the Linear project unless the board is the whole team, open states unless `done`. */
@@ -55,7 +61,8 @@ export function mapIssues(data: any): { cards: Card[]; urls: [string, string][];
     cards: nodes.map((i: any) => ({ id: i.id, title: i.title, number: i.identifier || "", column: i.state?.id || "",
       placement: Number(i.sortOrder) || 0, due: typeof i.dueDate === "string" ? i.dueDate.slice(0, 10) : null,
       who: String(i.assignee?.displayName || i.assignee?.name || "").split(" ")[0], priority: Number(i.priority) || 0,
-      ...(i.state?.name ? { status: i.state.name } : {}), ...(i.state?.type ? { state: stateOf(i.state.type) } : {}),
+      ...(i.assignee ? { whoName: String(i.assignee.name || i.assignee.displayName || "") } : {}),
+      ...(i.state?.name ? { status: i.state.name } : {}), ...(i.state?.type ? { state: stateOf(i.state.type), tone: toneFor(i.state.type, i.state.name || "") } : {}),
       ...(i.labels?.nodes?.length ? { labels: i.labels.nodes.map((l: any) => l.name) } : {}), ...(i.updatedAt ? { updated: i.updatedAt } : {}) })),
     urls: nodes.filter((i: any) => i.url).map((i: any) => [i.id, i.url]),
     next: c?.pageInfo?.hasNextPage && c.pageInfo.endCursor ? c.pageInfo.endCursor : null,

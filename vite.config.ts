@@ -1,4 +1,6 @@
 import { defineConfig } from "vite";
+import react, { reactCompilerPreset } from "@vitejs/plugin-react";
+import babel from "@rolldown/plugin-babel";
 import tailwindcss from "@tailwindcss/vite";
 // @ts-expect-error type error without @types/node package
 import process from "node:process";
@@ -6,11 +8,10 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [tailwindcss()],
-  // the app and the integration packages share one Lit
-  resolve: { dedupe: ["lit"] },
-  // two pages: the main window and the settings window
-  build: { rollupOptions: { input: { main: "index.html", settings: "settings.html" } } },
+  // React with the React Compiler (it memoises the components), Tailwind for the styles
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
+  // three pages: the main window, the settings window and the dictation pill
+  build: { rollupOptions: { input: { main: "index.html", settings: "settings.html", overlay: "overlay.html" } } },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
