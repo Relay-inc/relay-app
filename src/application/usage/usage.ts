@@ -56,6 +56,11 @@ export function startUsage() {
 export function openUsage() {
   if (Date.now() - us().tokensAt > 60000) loadTokens();
 }
+/** The bar's refresh button: limits and tokens now. */
+export function refreshUsage() {
+  loadLimits();
+  loadTokens();
+}
 /** After the agents changed in the settings: limits and tokens for the new set. */
 export function reloadUsage() {
   loadLimits();

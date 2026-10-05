@@ -106,21 +106,21 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-75 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+77 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
 mail-second-account, mail-list, mail-plain, mail-html, mail-experimental (Inbox/Other tabs, archive and delete in the
 mail's bar), mail-other (the Other tab), mail-selection (three mails ticked, the bulk bar), prs-list, pr-detail (list and mail or PR side by side). Board:
 board, card-detail (the ticket window), board-list, board-filters, board-presets, board-group, ticket-activity.
-Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
+Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, usage-details (Details folded open), cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
 deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Orchestrator: orchestrator (the coordinator with the worker board in the drawer), orchestrator-open (the report and a worker's details unfolded), orchestrator-live (a worker starts, another reports), orchestrator-worker (a worker under its project). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
 settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding, dark-waiting,
-dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail. Recording: recording-meeting (the bar in Waiting
+dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail, dark-usage. Recording: recording-meeting (the bar in Waiting
 for you and the sidebar's row), recording-dictation (dictation in a conversation, the row seen from Reminders).
 
 1440x900 at device scale 2, page clock fixed to `NOW`, reduced motion, animations disabled, caret hidden. Navigation
