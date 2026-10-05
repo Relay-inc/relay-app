@@ -92,7 +92,7 @@ export function TodayView({ className = "" }: { className?: string }) {
       else if (key === "p" && entry.kind !== "ask")
         setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
       else if (mail && key === "r") actions.primary?.run();
-      else if (mail && ["a", "f", "u", "#"].includes(key) && byKey(key)) byKey(key)!.run();
+      else if (mail && ["a", "f", "t", "u", "#"].includes(key) && byKey(key)) byKey(key)!.run();
       // an agent's question or permission takes Enter itself (its card)
       else if (key === "Enter" && entry.kind !== "ask" && !(e.target instanceof HTMLButtonElement))
         actions.primary?.run();

@@ -820,6 +820,9 @@ export function actionsOf(entry: Entry): Actions {
           { label: t("today.replyAll"), icon: "replyAll", key: "A", run: () => openCompose(s.key, "all") },
           { label: t("today.forward"), icon: "forward", key: "F", run: () => openCompose(s.key, "fwd") },
           { label: t("today.askClaude"), icon: "chat", run: () => mailChat(s.key, "talk") },
+          ...(useBoardStore.getState().ready.length
+            ? [{ label: t("mail.ticket"), icon: "notes", key: "T", run: () => mailChat(s.key, "ticket") }]
+            : []),
           { label: t("today.markRead"), icon: "read", key: "U", run: () => mailSeen(s.key, true) },
           ...(experimental ? [{ label: t("mail.trash"), icon: "trash", key: "#", run: () => trashMail(s.key) }] : []),
         ],
