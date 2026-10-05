@@ -208,6 +208,8 @@ export default {
   "tool.agent": "Agent: {d}",
   "tool.skill": "Skill: {s}",
   "tool.todo": "Takenlijst bijgewerkt",
+  "tool.todoCount": "Taken · {done}/{total} klaar",
+  "todos.title": "{done}/{total} klaar",
   "err.unknown": "Onbekende fout",
   "card.asks": "Claude vraagt",
   "card.answer": "Antwoorden",

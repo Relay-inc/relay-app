@@ -471,6 +471,26 @@ const VIEWS = {
     await waitText("Conversation compacted automatically");
     await scrollMain("bottom");
   },
+  // a turn with a to-do list (TodoWrite): the checklist above the composer, the timeline line counting the done ones
+  "conversation-todos": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      const todos = [
+        { content: "Read the invoice export", status: "completed", activeForm: "Reading the invoice export" },
+        { content: "Group the open invoices by client", status: "completed", activeForm: "Grouping the open invoices" },
+        { content: "Draft the reminder mails", status: "in_progress", activeForm: "Drafting the reminder mails" },
+        { content: "Check the VAT codes", status: "pending", activeForm: "Checking the VAT codes" },
+        { content: "Send the summary to Pieter", status: "pending", activeForm: "Sending the summary" },
+      ];
+      h.emitAgent(key, { type: "working" });
+      h.emitAgent(key, { type: "tool_call", id: "toolu_todo", name: "TodoWrite", input: { todos } });
+      h.emitAgent(key, { type: "tool_result", id: "toolu_todo", error: false });
+    }, keys.switchTo);
+    await waitText("Drafting the reminder mails");
+    await scrollMain("bottom");
+  },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
     await click("Mail");

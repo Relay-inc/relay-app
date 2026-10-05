@@ -205,6 +205,8 @@ const en = {
   "tool.agent": "Agent: {d}",
   "tool.skill": "Skill: {s}",
   "tool.todo": "Updated the to-do list",
+  "tool.todoCount": "Todos · {done}/{total} done",
+  "todos.title": "{done}/{total} done",
   "err.unknown": "Unknown error",
   "card.asks": "Claude asks",
   "card.answer": "Answer",

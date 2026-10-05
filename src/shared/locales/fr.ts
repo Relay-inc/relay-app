@@ -210,6 +210,8 @@ export default {
   "tool.agent": "Agent : {d}",
   "tool.skill": "Skill : {s}",
   "tool.todo": "Liste de tâches mise à jour",
+  "tool.todoCount": "Tâches · {done}/{total} faites",
+  "todos.title": "{done}/{total} faites",
   "err.unknown": "Erreur inconnue",
   "card.asks": "Claude demande",
   "card.answer": "Répondre",
