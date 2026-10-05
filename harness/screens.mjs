@@ -390,6 +390,23 @@ const VIEWS = {
     await click("Productive");
     await waitText(markers.card);
   },
+  // a meeting being recorded: the bar in Waiting for you, the row above the sidebar's footer (#103)
+  "recording-meeting": async () => {
+    await open(page, server.url, { fixture: "calendar" });
+    await waitText("Daily standup");
+    await page.locator("section", { hasText: "Daily standup" }).last().getByRole("button", { name: "Record" }).click();
+    await page.evaluate(() => window.__harness.recordingTick(754, 0.35, 0.25));
+    await waitText("12:34");
+  },
+  // dictation started in a conversation, then on to Reminders: the sidebar's row links back to it (#103)
+  "recording-dictation": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.getByRole("button", { name: /^Dictate/ }).click();
+    await page.evaluate(() => window.__harness.dictationLevel(0.4));
+    await click("Reminders");
+    await waitText("Dictating ·");
+  },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
     await click("Mail");
