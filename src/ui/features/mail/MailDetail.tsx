@@ -12,6 +12,7 @@ import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
 import { MailLinkBar, MailText } from "./MailText";
+import { MailFrame } from "./MailFrame";
 
 const KILOBYTE = 1024;
 const MEGABYTE = 1024 * 1024;
@@ -190,15 +191,10 @@ export function MailDetail({
           </div>
         ) : null}
         {body.html && !textView ? (
-          // the empty sandbox comes before srcdoc, and the frame is not in the document yet when React sets them.
-          // White because mails are designed for white; a mail wider than the panel scrolls inside the frame
-          <iframe
-            sandbox=""
-            referrerPolicy="no-referrer"
-            title={item.subject || t("mail.noSubject")}
-            srcDoc={body.html}
-            className="block w-full h-[calc(100vh-15rem)] min-h-100 mt-3 border border-separator rounded-lg bg-white"
-          ></iframe>
+          // white because mails are designed for white; as tall as the mail, a wider one scrolls sideways inside it
+          <div className="mt-3">
+            <MailFrame html={body.html} title={item.subject || t("mail.noSubject")} className="rounded-lg" />
+          </div>
         ) : (
           <MailText text={body.text} />
         )}

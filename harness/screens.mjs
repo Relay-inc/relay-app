@@ -250,7 +250,7 @@ const VIEWS = {
   }])),
   "ticket-activity": async () => {
     await VIEWS["card-detail"]();
-    await page.getByPlaceholder("Leave a comment…").scrollIntoViewIfNeeded();
+    await page.getByPlaceholder(/^(Leave a comment|Comment…)/).first().scrollIntoViewIfNeeded();
     await settle(page);
   },
   reminders: async () => {

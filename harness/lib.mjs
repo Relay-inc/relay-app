@@ -70,7 +70,13 @@ export async function settle(page, ms = 150) {
 }
 
 /** The first visible element with this exact text, through open shadow roots. */
-export const byText = (page, text, exact = true) => page.getByText(text, { exact }).locator("visible=true").first();
+// visible text, or a view in the sidebar's row of icons by its label ("Mail", "Reminders: 4 overdue")
+export const byText = (page, text, exact = true) =>
+  page
+    .getByText(text, { exact })
+    .or(page.locator(`[data-view][aria-label^="${String(text).replace(/"/g, '\\"')}"]`))
+    .locator("visible=true")
+    .first();
 
 // in-page helpers, installed with addInitScript: a text search through shadow roots, the main scroll container
 export const PAGE_HELPERS = () => {

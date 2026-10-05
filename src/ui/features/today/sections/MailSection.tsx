@@ -18,6 +18,7 @@ import {
 } from "../../../../application/today/mail";
 import { useMailStore } from "../../../../application/mail/store";
 import { Linked, MailLinkBar } from "../../mail/MailText";
+import { MailFrame } from "../../mail/MailFrame";
 import { openAttachment } from "../../../../application/mail/mail";
 import { useNavigationStore } from "../../../../application/navigation/store";
 import { mailExperimental } from "../../../../application/settings/settings";
@@ -71,7 +72,8 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
   const body = useNavigationStore(s => s.panel.detail[mailKey]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const [open, setOpen] = useState<Record<string, boolean>>({});
-  const [html, setHtml] = useState(false);
+  // the mail as it was written (HTML) unless the user asks for the plain text
+  const [plain, setPlain] = useState(false);
   const [showQuote, setShowQuote] = useState(false);
   useEffect(() => {
     loadThread(mailKey);
@@ -90,14 +92,14 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
     .filter(Boolean);
 
   return (
-    <div className="flex flex-col gap-3 max-w-170">
+    <div className="flex flex-col gap-5 max-w-170">
       {earlier.map(m => {
         const on = !!open[m.id];
         return (
           <div
             key={m.id}
             onClick={() => setOpen({ ...open, [m.id]: !on })}
-            className="flex flex-col gap-1.5 px-3.5 py-2.5 rounded-[10px] border border-separator cursor-pointer hover:bg-fill"
+            className="flex flex-col gap-1.5 -mx-2 -mt-3 px-2 py-2 rounded-lg border-b border-separator cursor-pointer hover:bg-fill"
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="grid place-items-center size-6 flex-none rounded-full bg-fill-2 text-secondary text-[9px] font-semibold">
@@ -126,19 +128,15 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
         );
       })}
 
-      <div className="flex flex-col gap-3.5 px-4.5 py-4 rounded-xl border border-separator-strong bg-raised">
+      {/* the mail itself, no card: who, when, the text */}
+      <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <span className="grid place-items-center size-8.5 flex-none rounded-full bg-accent-soft text-accent-text text-xs font-semibold">
+          <span className="grid place-items-center size-7.5 flex-none rounded-full bg-fill-2 text-secondary text-[11px] font-semibold">
             {initials(from)}
           </span>
           <div className="flex-1 min-w-0 flex flex-col leading-[1.35]">
-            <span className="text-sm truncate">
-              <b className="font-semibold">{from?.name || from?.email}</b>{" "}
-              {from?.name ? <span className="text-xs text-secondary">{from.email}</span> : null}
-            </span>
-            <span className="text-xs text-secondary truncate">
-              {t("today.toLine", { who: (mail?.to ?? []).map(a => a.name || a.email).join(", ") })}
-            </span>
+            <span className="text-sm font-semibold truncate">{from?.name || from?.email}</span>
+            {from?.name ? <span className="text-xs text-tertiary truncate">{from.email}</span> : null}
           </div>
           <span className="text-xs text-tertiary whitespace-nowrap">{at}</span>
         </div>
@@ -146,17 +144,10 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
         {err && !body ? <div className="err-box">{err}</div> : null}
         {!body && !err ? <div className="text-sm text-secondary">{t("mail.loadingBody")}</div> : null}
         {body ? (
-          html && body.html ? (
-            // the backend sanitized it and set a CSP; the frame allows nothing (MailDetail does the same)
-            <iframe
-              sandbox=""
-              referrerPolicy="no-referrer"
-              title={mail?.subject || t("mail.noSubject")}
-              srcDoc={body.html}
-              className="block w-full h-120 border border-separator rounded-lg bg-white"
-            />
+          !plain && body.html ? (
+            <MailFrame html={body.html} title={mail?.subject || t("mail.noSubject")} bleed />
           ) : (
-            <div className="flex flex-col gap-2.5 text-sm leading-relaxed select-text">
+            <div className="flex flex-col gap-2 text-[15px] leading-[1.65] select-text">
               {paragraphs.map((p, i) => (
                 <p key={i} className="m-0 whitespace-pre-wrap wrap-anywhere">
                   <Linked text={p} />
@@ -188,9 +179,9 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
                 key={a.index}
                 title={t("mail.openAttachment")}
                 onClick={() => openAttachment(mailKey, a.index)}
-                className="inline-flex items-center gap-2 h-9 pl-2.5 pr-3 rounded-[9px] border border-separator-strong text-xs cursor-pointer hover:bg-fill"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[7px] bg-fill-2 text-xs cursor-pointer hover:bg-fill"
               >
-                <Icon name="file" className="glyph size-3.75 text-late" />
+                <Icon name="file" className="glyph size-3.25 text-secondary" />
                 <span className="font-medium">{a.name}</span>
                 <span className="text-tertiary">{size(a.size)}</span>
               </button>
@@ -198,9 +189,9 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
             {body.html ? (
               <button
                 className="ml-auto text-xs text-secondary cursor-pointer hover:text-label"
-                onClick={() => setHtml(!html)}
+                onClick={() => setPlain(!plain)}
               >
-                {html ? t("mail.showText") : t("mail.showMail")}
+                {plain ? t("mail.showMail") : t("mail.showText")}
               </button>
             ) : null}
           </div>
@@ -217,7 +208,7 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
             <button
               key={intent}
               onClick={() => openCompose(mailKey, "reply", intent)}
-              className="h-7.5 px-3 rounded-full border border-separator-strong bg-raised text-xs font-medium cursor-pointer hover:border-accent hover:text-accent-text"
+              className="h-7 px-3 rounded-full bg-fill-2 text-xs cursor-pointer hover:bg-fill hover:text-accent-text"
             >
               {intent}
             </button>
