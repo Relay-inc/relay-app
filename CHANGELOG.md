@@ -28,7 +28,7 @@ a PR. Versions follow
 - A pull request review is a view of its own: from Today or from its row in the sidebar it opens the review screen alone, with its name in the title bar and its sidebar row selected; Back or Esc returns to Today. When the PR no longer waits on you it says so, with Discard and Back
 - **@-mention people in a ticket's comments**: typing @ in the comment box (on Today and in the ticket window) offers the ticket's people; in Productive the pick becomes a real mention, so that person is notified, and mentions in Productive comments now read as @Name instead of their raw code
 - A ticket on Today can be reassigned from its panel (Productive, Linear), next to its statuses
-- **Review the PRs of one ticket together**: when a PR waiting on your review shares its ticket with other PRs waiting on you (a frontend and a backend PR, say), they are one item in the queue ("#312 Two-factor setup · 2 PRs", planned for the time of all of them), and Review together opens one review over all of them: their files in a tree per PR, Claude reading them as one change, comments on any of them, and on Submit one review per PR with the same summary and verdict
+- **Review the PRs of one ticket together**: when a PR waiting on your review shares its ticket with other PRs waiting on you (a frontend and a backend PR, say), they are one item in the queue ("#312 Two-factor setup · 2 PRs", planned for the time of all of them), and Review together opens one review over all of them: their files in a tree per PR, Claude reading them as one change (every PR gets an equal share of what Claude reads, and the panel says when files didn't fit), comments on any of them, and on Submit one review per PR with the same summary and verdict
 
 ### Added
 

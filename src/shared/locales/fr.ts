@@ -373,6 +373,8 @@ export default {
   "review.post": "Publier la revue",
   "review.posted": "Revue publiée sur GitHub · {verdict}",
   "review.readFiles": "{n} fichiers lus",
+  "review.readSome": "{n} fichiers lus sur {total}",
+  "review.readSomeTip": "Le reste ne tenait pas dans ce que Claude lit en une fois ; chaque PR reçoit une part égale",
   "review.reading": "Claude lit le diff…",
   "review.sev.answer": "Réponse",
   "review.sev.bug": "Bug",

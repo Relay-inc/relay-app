@@ -413,12 +413,18 @@ function handle(cmd: string, a: Args): unknown {
     case "ai_write":
       // a PR to a ticket: the invoice PR is ticket 300, anything else none
       if (/koppelt een pull request/.test(a.system)) return /Invoice/.test(a.text) ? "300" : "geen";
-      if (/JSON-array/.test(a.system))
+      if (/JSON-array/.test(a.system)) {
+        // a path as the text names it ("acme/web#12/src/a.ts" when the review covers several PRs), the first PR's (the last one's for the third)
+        const named = (path: string, last = false) => {
+          const all = [...String(a.text).matchAll(new RegExp(`^--- (.*${path.replace(/[.]/g, "\\.")})$`, "gm"))];
+          return (last ? all.at(-1) : all[0])?.[1] ?? path;
+        };
         return JSON.stringify([
-          { path: "src/auth/callback.ts", line: 14, side: "RIGHT", severity: "bug", text: "The return URL is read from the query without checking its host: an open redirect." },
-          { path: "src/auth/callback.ts", line: 18, side: "RIGHT", severity: "risk", text: "The session is written before the token is verified." },
-          { path: "src/auth/session.ts", line: 5, side: "RIGHT", severity: "nit", text: "This helper name hides that it also clears the cookie." },
+          { path: named("src/auth/callback.ts"), line: 14, side: "RIGHT", severity: "bug", text: "The return URL is read from the query without checking its host: an open redirect." },
+          { path: named("src/auth/callback.ts"), line: 18, side: "RIGHT", severity: "risk", text: "The session is written before the token is verified." },
+          { path: named("src/auth/session.ts", true), line: 5, side: "RIGHT", severity: "nit", text: "This helper name hides that it also clears the cookie." },
         ]);
+      }
       if (/twee of drie/.test(a.system)) return "Yes, the VAT column is in\nViewers can't see invoices yet\nCan we call Thursday?";
       if (/gemarkeerde regel/.test(a.system)) return "It stores where to go after the login. Without a host check any URL is accepted.";
       return "Hi Sofie,\n\nThe export has the VAT column since this morning, and viewers can't see invoices: that stays for admins.\n\nKind regards";

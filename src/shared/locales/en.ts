@@ -366,6 +366,8 @@ const en = {
   "review.post": "Post review",
   "review.posted": "Review posted on GitHub · {verdict}",
   "review.readFiles": "read {n} files",
+  "review.readSome": "read {n} of {total} files",
+  "review.readSomeTip": "The rest did not fit in what Claude reads at once; every PR gets an equal share",
   "review.reading": "Claude is reading the diff…",
   "review.sev.answer": "Answer",
   "review.sev.bug": "Bug",

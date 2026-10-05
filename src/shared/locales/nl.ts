@@ -371,6 +371,8 @@ export default {
   "review.post": "Review plaatsen",
   "review.posted": "Review geplaatst op GitHub · {verdict}",
   "review.readFiles": "{n} bestanden gelezen",
+  "review.readSome": "{n} van {total} bestanden gelezen",
+  "review.readSomeTip": "De rest paste niet in wat Claude in één keer leest; elke PR krijgt een gelijk deel",
   "review.reading": "Claude leest de diff…",
   "review.sev.answer": "Antwoord",
   "review.sev.bug": "Bug",

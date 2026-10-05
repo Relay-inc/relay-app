@@ -362,7 +362,13 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
             <div className="flex items-center gap-2 text-xs text-secondary">
               {claude ? <Glyph svg={claude} className="glyph size-3.5 text-accent-text" /> : null}
               <b className="font-semibold text-label">{t("review.byClaude")}</b>
-              <span>· {t("review.readFiles", { n: files.length })}</span>
+              {r.ran && r.read < files.length ? (
+                <span className="text-soon" title={t("review.readSomeTip")}>
+                  · {t("review.readSome", { n: r.read, total: files.length })}
+                </span>
+              ) : (
+                <span>· {t("review.readFiles", { n: files.length })}</span>
+              )}
               <span className="flex-1" />
               <button
                 disabled={r.running || !r.files}
