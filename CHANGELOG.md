@@ -15,7 +15,7 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 
 ### Changed
 
-- **Waiting is now Today**: one page with everything that needs you today. On top, what needs you now (an agent asking, a meeting about to start, a blocked session), then today's meetings (Prepare, Meeting note, Join; earlier ones folded away), reminders due (done, tomorrow, +1 week, a date, chat), your cards on the boards linked to a project that are due or in progress (open the ticket, start a conversation, open in the tracker), the pull requests waiting on you (reviews asked of you, your own with changes requested or failing CI), and conversations that finished while you were elsewhere. The sidebar badge stays red for what needs you now and counts the rest of the day otherwise
+- **Waiting is now Today**: one page with everything that needs you today. On top, what needs you now (an agent asking, a meeting about to start, a blocked session), then today's meetings (Prepare, Meeting note, Join; earlier ones folded away), reminders due (done, tomorrow, +1 week, a date, chat), your cards on the boards linked to a project that are due or in progress (open the ticket, start a conversation, open in the tracker), the pull requests waiting on you (reviews asked of you, your own with changes requested or failing CI), and conversations that finished while you were elsewhere. The sidebar badge stays red for what needs you now and counts the rest of the day otherwise (#100)
 
 ## [0.0.5] - 2026-10-04
 
