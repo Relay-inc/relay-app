@@ -40,8 +40,6 @@ impl Shared {
     }
 }
 
-pub use agent_claude::ORCH_WORKER_TOOLS as WORKER_TOOLS;
-
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Report { pub status: String, pub summary: String, pub questions: Option<String>, pub diff: Option<String>, pub flags: Vec<String> }
 

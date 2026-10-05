@@ -60,8 +60,7 @@ const quoted = (text: string) => `«${text.replace(/[«»]/g, "")}»`;
 export const meetingDay = (iso: string, timeZone?: string) => new Date(iso).toLocaleDateString("sv-SE", { timeZone });
 
 /** The first message of a conversation about a meeting. The title, the place and the names come from the invite, so
- *  from whoever sent it: the prompt marks them as untrusted (and the conversation runs restricted, like one about a
- *  mail). `time` formats an instant as the clock time the user reads. */
+ *  from whoever sent it: the prompt marks them as untrusted (and the conversation is marked like one about a mail). `time` formats an instant as the clock time the user reads. */
 export function meetingPrompt(
   meeting: Meeting,
   how: MeetingChat,

@@ -78,9 +78,9 @@ export function tick() {
 export const joinMeeting = (link: string) => joinable(link) && backend.openUrl(link);
 
 /** A conversation about a meeting, in General: a meeting note in the vault, or a briefing before it. The invite's text
- *  is from whoever sent it, so the conversation runs restricted like one about a mail (fromMail, see taint in
- *  src-tauri/src/lib.rs). Only Claude Code runs restricted, so it always starts on Claude, whatever the default agent;
- *  with Claude switched off it does not start. */
+ *  is from whoever sent it, so the conversation is marked like one about a mail (fromMail, see mark_tainted in
+ *  src-tauri/src/lib.rs). It always starts on Claude, whatever the default agent; with Claude switched off it does not
+ *  start. */
 export async function meetingChat(id: string, how: MeetingChat) {
   const meeting = cal().list.find(x => x.id === id);
   if (meeting) await chatAbout(meeting, how);
