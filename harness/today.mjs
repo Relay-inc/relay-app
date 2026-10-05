@@ -15,19 +15,31 @@ const shot = async name => {
   await page.screenshot({ path: `${dir}/${name}.png` });
   console.log(`  ${name}`);
 };
+// a row, also when it sits in a closed bundle of mails or PRs (the bundles open one by one until it shows)
 const rowOf = async text => {
-  await byText(page, text, false).click();
+  const row = byText(page, text, false);
+  if (!(await row.isVisible().catch(() => false)))
+    for (const bundle of await page.locator("button", { hasText: /mails to answer|pull requests/ }).all()) {
+      await bundle.click();
+      await settle(page, 150);
+      if (await row.isVisible().catch(() => false)) break;
+    }
+  await row.click();
+  await settle(page, 300);
+};
+// the project filter in the header: "" all, a context, or "-" for no project
+const context = async value => {
+  await page.locator('select[aria-label="All projects"]').selectOption(value);
   await settle(page, 300);
 };
 try {
   await open(page, server.url, { fixture: "calendar", sel: "__wait" });
   await shot("01-overview");
-  await page.getByRole("button", { name: /^Agency/ }).locator("visible=true").first().click();
+  await context("Agency");
   await shot("01b-context");
-  await page.getByRole("button", { name: /^No project/ }).locator("visible=true").first().click();
+  await context("-");
   await shot("01c-no-project");
-  await page.getByRole("button", { name: /^All/ }).locator("visible=true").first().click();
-  await settle(page, 200);
+  await context("");
   await rowOf("Acceptance checklist portal v2");
   await shot("02-mail");
   await shot("02b-mail-bottom");
@@ -97,25 +109,26 @@ try {
   await page.keyboard.press("2");
   await shot("09-question-picked");
   // snooze an Agency item, then the Snoozed list under Agency and under No project
-  await page.getByRole("button", { name: /^Agency/ }).locator("visible=true").first().click();
+  await context("Agency");
   await rowOf("Chase the client");
   await page.keyboard.press("s");
   await settle(page, 200);
-  await byText(page, "Next week").click();
+  await byText(page, "Snooze: Next week").click();
   const bottom = async () => {
     await page.evaluate(() => document.querySelectorAll(".overflow-y-auto.border-r").forEach(el => (el.scrollTop = el.scrollHeight)));
     await settle(page, 200);
   };
   await bottom();
   await shot("10-snoozed-agency");
-  await page.getByRole("button", { name: /^No project/ }).locator("visible=true").first().click();
+  await context("-");
   await bottom();
   await shot("11-snoozed-no-project");
-  // a meeting in the day's track opens its prep (the filter goes back to All when it hides it)
-  await page.locator(".bg-sidebar button", { hasText: "Harbor CRM kick-off" }).first().click();
-  await shot("12-meeting-from-bar");
-  await page.locator(".bg-sidebar button", { hasText: "Retro Atlas" }).first().click();
-  await shot("13-past-meeting-from-bar");
+  // a meeting card in the queue opens its prep (the filter goes back to All when it hides it)
+  await byText(page, "Harbor CRM kick-off", true).click();
+  await shot("12-meeting-card");
+  // the next meeting, named in the header, opens too
+  await page.locator("button", { hasText: /· then / }).first().click();
+  await shot("13-next-meeting-in-header");
   // work in progress in the sidebar: a reply draft under its section, a click brings the mail and its draft back
   await rowOf("Acceptance checklist portal v2");
   await page.keyboard.press("r");

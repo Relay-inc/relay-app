@@ -11,6 +11,7 @@ import {
   actionsOf,
   loadTodayCards,
   noteSeen,
+  openMeeting,
   openTodayCard,
   putOff,
   selectEntry,
@@ -21,10 +22,10 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { BoardTicket } from "../board/BoardTicket";
 import { Toast } from "../conversations/Toast";
-import { TodayTimeline } from "./TodayTimeline";
 import { TodayQueue } from "./TodayQueue";
 import { TodayDetail } from "./TodayDetail";
-import { minutes } from "./parts";
+import { Icon } from "../../components/Icon";
+import { timeOf } from "../../../application/calendar/calendar";
 
 // keys that belong to a field, a button or a link, not to Today
 const inControl = (e: KeyboardEvent) =>
@@ -33,7 +34,8 @@ const inControl = (e: KeyboardEvent) =>
     .some(node => node instanceof HTMLElement && node.matches("input, textarea, select, [contenteditable]"));
 
 /** Today: one queue of everything that needs the user, planned into the free time between today's meetings. On top
- *  how far the day got and the day as a track; below, the queue per slot and the open item with its actions.
+ *  one quiet line: the day, the next meeting, how far the day got and the project filter; below, the queue per slot
+ *  (the meetings in it at their time) and the open item with its actions. Design "Today Calm", 6a / 6c.
  *  Enter and Backspace run the open item's actions, L puts it off, the arrows walk the queue. */
 export function TodayView({ className = "" }: { className?: string }) {
   const { t, locale } = useT();
@@ -132,31 +134,40 @@ export function TodayView({ className = "" }: { className?: string }) {
   };
 
   const date = new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short" }).format(clock);
+  // the next two meetings, named once here: the queue has them at their time
+  const ahead = model.meetings.filter(meeting => Date.parse(meeting.start) > clock);
+  const nextIn = ahead[0] ? Math.round((Date.parse(ahead[0].start) - clock) / 60_000) : 0;
   return (
     <div className={`${className} relative flex flex-col min-h-0`}>
-      <div className="flex-none h-10 flex items-center gap-3 px-5 border-b border-separator">
-        <span className="text-secondary capitalize whitespace-nowrap">{date}</span>
-        <div className="flex-1 flex gap-0.75 max-w-75">
-          {Array.from({ length: model.total }, (_, i) => (
-            <span
-              key={i}
-              className={`flex-1 h-1 rounded-sm ${i < model.cleared ? "bg-ok" : i === model.cleared ? "bg-accent" : "bg-fill-2"}`}
-            />
-          ))}
-        </div>
-        <span className="text-xs text-secondary tabular-nums whitespace-nowrap">
-          {t("today.progress", { cleared: model.cleared, total: model.total, planned: minutes(model.planned) })}
-        </span>
+      <div className="flex-none h-12 flex items-center gap-3 px-5 border-b border-separator min-w-0">
+        <span className="text-[15px] font-semibold capitalize whitespace-nowrap">{date}</span>
+        {ahead[0] ? (
+          <button
+            onClick={() => openMeeting(ahead[0].id)}
+            className="ml-2 inline-flex items-center gap-2 min-w-0 text-[13px] text-secondary cursor-pointer hover:text-label"
+          >
+            <Icon name="cal" className="glyph size-3.5 flex-none text-soon" />
+            <span className="truncate">
+              {ahead[0].title || t("wait.meetingUntitled")}{" "}
+              {nextIn < 60 ? t("today.inMin", { n: nextIn }) : timeOf(ahead[0].start)}
+              {ahead[1]
+                ? ` · ${t("today.thenAt", { title: ahead[1].title || t("wait.meetingUntitled"), time: timeOf(ahead[1].start) })}`
+                : ""}
+            </span>
+          </button>
+        ) : null}
         <span className="flex-1" />
-        <ContextFilter model={model} />
         {errors.length ? (
           <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
             {t("today.boardsDown", { n: errors.length })}
           </span>
         ) : null}
+        <span className="text-[13px] text-tertiary tabular-nums whitespace-nowrap">
+          {t("today.doneOf", { done: model.cleared, total: model.total })}
+        </span>
+        <ContextFilter model={model} />
       </div>
-      <TodayTimeline model={model} />
-      <div className="flex-1 min-h-0 grid grid-cols-[300px_minmax(0,1fr)]">
+      <div className="flex-1 min-h-0 grid grid-cols-[360px_minmax(0,1fr)]">
         <TodayQueue model={model} />
         <TodayDetail model={model} />
       </div>

@@ -19,6 +19,6 @@ export function dayMonth(iso: string, locale: string, now = new Date()) {
   const otherYear = date.getFullYear() !== now.getFullYear();
   return dateFormat(locale, { day: "numeric", month: "short", ...(otherYear ? { year: "numeric" } : {}) }).format(date);
 }
-/** A clock time in the locale: hours and minutes. */
+/** A clock time: hours and minutes, always on the 24-hour clock ("17:53", never "05:53 PM"). */
 export const clockTime = (iso: string, locale: string) =>
-  dateFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  dateFormat(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));
