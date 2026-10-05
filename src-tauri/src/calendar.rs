@@ -82,16 +82,32 @@ pub fn upcoming(s: &Value) -> Value {
     let midnight = Local::now().date_naive().and_hms_opt(0, 0, 0).and_then(|d| d.and_local_timezone(Local).earliest())
         .map(|d| d.with_timezone(&Utc)).unwrap_or(now - Duration::hours(1));
     let until = (midnight + Duration::days(1)).max(now + Duration::hours(12));
-    let (mut all, mut errors, mut seen) = (vec![], vec![], HashSet::new());
+    let (mut all, mut errors) = (vec![], vec![]);
     for email in feeds(s) {
         let got = secret(&email).ok_or_else(|| super::trc_v("err.cal_no_url", &email)).and_then(|u| fetch(&u));
         match got {
-            Ok(ics) => all.extend(meetings(&ics, &email, midnight, until).into_iter().filter(|m| seen.insert((m["title"].to_string(), m["start"].to_string())))),
+            Ok(ics) => all.extend(meetings(&ics, &email, midnight, until)),
             Err(e) => errors.push(format!("{email}: {e}")),
         }
     }
+    let mut all = once(all);
     all.sort_by(|a, b| a["start"].as_str().cmp(&b["start"].as_str()));
     json!({ "meetings": all, "errors": errors })
+}
+
+/// One copy of a meeting that is on more than one calendar (shared, or an invite to two of your addresses): the same
+/// event (UID and start, the meeting's id), or the same start with the same title give or take case and spaces (a
+/// copy another calendar made under its own UID). The first calendar's copy stays.
+fn once(list: Vec<Value>) -> Vec<Value> {
+    let (mut ids, mut titled) = (HashSet::new(), HashSet::new());
+    list.into_iter().filter(|m| {
+        let title = m["title"].as_str().unwrap_or("").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+        let (id, at) = (m["id"].to_string(), (title, m["start"].to_string()));
+        let fresh = !ids.contains(&id) && !titled.contains(&at);
+        ids.insert(id);
+        titled.insert(at);
+        fresh
+    }).collect()
 }
 
 // ---------- iCal
@@ -290,6 +306,18 @@ mod tests {
 
     fn titles(from: DateTime<Utc>, to: DateTime<Utc>) -> Vec<(String, String)> {
         meetings(ICS, ME, from, to).iter().map(|m| (m["title"].as_str().unwrap().to_string(), DateTime::parse_from_rfc3339(m["start"].as_str().unwrap()).unwrap().with_timezone(&chrono_tz::Europe::Brussels).format("%m-%d %H:%M").to_string())).collect()
+    }
+
+    #[test]
+    fn a_meeting_on_two_calendars_shows_once() {
+        let m = |id: &str, title: &str, start: &str| json!({"id": id, "title": title, "start": start});
+        let got = once(vec![
+            m("a@1", "Weekly", "2026-10-05T08:00:00+00:00"),
+            m("a@1", "Weekly (o2o)", "2026-10-05T08:00:00+00:00"), // the same event, another calendar's title
+            m("b@1", "  weekly ", "2026-10-05T08:00:00+00:00"),     // a copy under its own UID
+            m("a@2", "Weekly", "2026-10-12T08:00:00+00:00"),        // next week's is another meeting
+        ]);
+        assert_eq!(got.iter().map(|m| m["id"].as_str().unwrap()).collect::<Vec<_>>(), ["a@1", "a@2"]);
     }
 
     #[test]
