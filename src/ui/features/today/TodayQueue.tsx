@@ -5,6 +5,7 @@ import { joinable } from "../../../domain/calendar/rules";
 import {
   isAgentItem,
   openMeeting,
+  projectChip,
   reopen,
   selectEntry,
   setStatus,
@@ -17,7 +18,7 @@ import { useTodayStore } from "../../../application/today/store";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { RecordingBar } from "../conversations/RecordingBar";
-import { Caps, KIND_ICON, StatusDot, TONE_BG, minutes } from "./parts";
+import { Caps, KIND_ICON, StatusDot, TINT_DOT, TONE_BG, minutes } from "./parts";
 
 const iso = (at: number) => new Date(at).toISOString();
 
@@ -31,13 +32,14 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   const row = (entry: Entry) => {
     const on = entry.id === selected?.id;
     const at = placed[entry.id];
+    const chip = projectChip(entry.project);
     return (
       <div
         key={entry.id}
         role="button"
         tabIndex={-1}
         onClick={() => selectEntry(entry.id)}
-        className={`w-full flex items-center gap-2.5 h-10 px-2.5 rounded-[9px] text-left cursor-pointer ${on ? "bg-accent-soft" : "hover:bg-fill"}`}
+        className={`w-full flex items-center gap-2.5 py-1.5 px-2.5 rounded-[9px] text-left cursor-pointer ${on ? "bg-accent-soft" : "hover:bg-fill"}`}
       >
         <span className={`w-0.75 h-5 rounded-sm flex-none ${TONE_BG[entry.tone]}`} />
         {entry.kind === "ask" ? null : (
@@ -53,13 +55,25 @@ export function TodayQueue({ model }: { model: TodayModel }) {
           </button>
         )}
         <Icon name={KIND_ICON[entry.kind]} className="glyph size-3.75 flex-none text-secondary" />
-        <span className={`flex-1 min-w-0 truncate ${on ? "font-semibold" : ""}`}>{entry.title}</span>
-        {pins[entry.id] ? <Icon name="bookmark" className="glyph size-3 flex-none text-accent-text" /> : null}
-        <span className="text-[11px] text-tertiary tabular-nums whitespace-nowrap">
-          {entry.kind === "ask" || entry.kind === "blocked"
-            ? minutes(Math.max(0, Math.floor((now - entry.at) / 60_000)))
-            : `${at ? timeOf(iso(at.start)) : t("rem.tomorrow")} · ${minutes(entry.est)}`}
+        {/* the title, and under it the project (in its context's colour) and when */}
+        <span className="flex-1 min-w-0 flex flex-col leading-snug">
+          <span className={`truncate ${on ? "font-semibold" : ""}`}>{entry.title}</span>
+          <span className="flex items-center gap-1.5 min-w-0 text-[11px] text-tertiary">
+            {chip ? (
+              <>
+                <span className={`size-1.5 rounded-full flex-none ${TINT_DOT[chip.tint]}`} />
+                <span className="truncate">{chip.label}</span>
+                <span>·</span>
+              </>
+            ) : null}
+            <span className="tabular-nums whitespace-nowrap">
+              {entry.kind === "ask" || entry.kind === "blocked"
+                ? minutes(Math.max(0, Math.floor((now - entry.at) / 60_000)))
+                : `${at ? timeOf(iso(at.start)) : t("rem.tomorrow")} · ${minutes(entry.est)}`}
+            </span>
+          </span>
         </span>
+        {pins[entry.id] ? <Icon name="bookmark" className="glyph size-3 flex-none text-accent-text" /> : null}
       </div>
     );
   };

@@ -11,6 +11,7 @@ import {
   type Entry,
   type TodayModel,
   openTicketOf,
+  projectChip,
 } from "../../../application/today/today";
 import { setPop, setTab, useDetailsStore } from "../../../application/today/details";
 import { cardAct, loadCard, loadPr, toastAssigned } from "../../../application/today/load";
@@ -35,7 +36,7 @@ import { MailComposer, MailSection } from "./sections/MailSection";
 import { PrSection, prTabs } from "./sections/PrSection";
 import { CardSection, cardTabs } from "./sections/CardSection";
 import { MeetingSection } from "./sections/MeetingSection";
-import { Caps, KIND_ICON, Kbd, TONE_TEXT } from "./parts";
+import { Caps, KIND_ICON, Kbd, TINT_DOT, TONE_TEXT } from "./parts";
 
 const BUTTON =
   "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-[13px] font-medium whitespace-nowrap cursor-pointer";
@@ -93,6 +94,7 @@ export function TodayDetail({ model }: { model: TodayModel }) {
   const { acts, done } = actionsOf(entry);
   const s = entry.subject;
   const connected = connectedOf(model, entry);
+  const chip = projectChip(entry.project);
   const tabs = s.type === "pr" ? prTabs(prDetail) : s.type === "card" ? cardTabs(cardView, connected.length) : [];
   const tab = tabOf || tabs[0]?.id || "";
 
@@ -139,6 +141,12 @@ export function TodayDetail({ model }: { model: TodayModel }) {
             </span>
             {t(kindLabel(entry))}
           </span>
+          {chip ? (
+            <span className="inline-flex items-center gap-1.5 h-6 px-2 rounded-[7px] bg-fill-2 text-label font-medium whitespace-nowrap max-w-56">
+              <span className={`size-1.75 rounded-full flex-none ${TINT_DOT[chip.tint]}`} />
+              <span className="truncate">{chip.label}</span>
+            </span>
+          ) : null}
           <span className="flex-1 min-w-0 truncate">{entry.where}</span>
           <span className={`font-semibold whitespace-nowrap ${TONE_TEXT[entry.tone]}`}>{entry.why}</span>
         </div>

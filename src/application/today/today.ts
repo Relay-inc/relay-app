@@ -32,6 +32,7 @@ import { ctxOf } from "../board/ctx";
 import { ticketChat } from "../board/board";
 import { openCard, openPr } from "../navigation/panel";
 import { select, toast } from "../navigation/navigation";
+import { contextTint } from "../navigation/sidebar";
 import { contexts, project as projectOf, projectLabel, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
@@ -218,7 +219,7 @@ export function entries(now = Date.now()): Entry[] {
       id: `ask:${request.id}`,
       at: since,
       title: question || t("today.allow", { tool: request.tool_name }),
-      where: [projectLabel(chatProject(request.project)), label(request.project)].join(" / "),
+      where: label(request.project),
       why: t("today.waiting", { ago: ago(since, now) }),
       tone: "late",
       project: chatProject(request.project),
@@ -281,7 +282,7 @@ export function entries(now = Date.now()): Entry[] {
         id: `rem:${reminder.id}`,
         at: Date.parse(reminder.date),
         title: reminder.title,
-        where: [t("nav.reminders"), reminder.project && projectLabel(reminder.project)].filter(Boolean).join(" · "),
+        where: t("nav.reminders"),
         why: late ? t("today.daysLate", { n: -reminder.days }) : t("rem.today"),
         tone: late ? "late" : "soon",
         project: reminder.project,
@@ -299,7 +300,7 @@ export function entries(now = Date.now()): Entry[] {
         id: `card:${item.provider}:${item.card.id}`,
         at: item.card.due ? Date.parse(item.card.due) : now,
         title: `${number}${item.card.title}`,
-        where: [provider(item.provider)?.name, projectLabel(item.project)].join(" · "),
+        where: provider(item.provider)?.name ?? "",
         why: late
           ? t("today.daysLate", { n: daysLate(item.card.due!) })
           : item.card.due
@@ -389,6 +390,13 @@ export function entries(now = Date.now()): Entry[] {
   }
   const { dismissed } = useTodayStore.getState();
   return out.filter(entry => !dismissed.includes(entry.id) && !asleep(entry.id));
+}
+
+/** An item's project as Today shows it: its label (with its icon) and its context's tint; null without a project. */
+export function projectChip(project: string | null) {
+  if (!project) return null;
+  const context = projectOf(project)?.context;
+  return { label: projectLabel(project), tint: context ? contextTint(context) : "" };
 }
 
 /** Today's meetings, for the timeline and between the slots (the queue shows the ones not over). */

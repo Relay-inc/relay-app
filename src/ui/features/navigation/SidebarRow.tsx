@@ -151,7 +151,7 @@ export function SidebarRow({
       onKeyDown={clickOnKey}
       aria-busy={closing}
       {...rest}
-      className={`group flex ${indent ? "h-6.5 gap-2" : "h-7 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
+      className={`group flex ${indent ? "h-7.5 gap-2" : "h-8 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
     >
       {lead}
       <span

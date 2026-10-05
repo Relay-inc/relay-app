@@ -19,6 +19,13 @@ export const KIND_ICON: Record<Kind, string> = {
 /** Why an item is here, as a colour: late red, soon orange, else grey. */
 export const TONE_TEXT: Record<Entry["tone"], string> = { late: "text-late", soon: "text-soon", "": "text-secondary" };
 export const TONE_BG: Record<Entry["tone"], string> = { late: "bg-late", soon: "bg-soon", "": "bg-separator-strong" };
+/** A context's dot (literal classes, so Tailwind finds them); grey for a project without a context. */
+export const TINT_DOT: Record<string, string> = {
+  "ctx-a": "bg-ctx-a",
+  "ctx-m": "bg-ctx-m",
+  "ctx-p": "bg-ctx-p",
+  "": "bg-tertiary",
+};
 
 /** A key's name next to a button. */
 export function Kbd({ children, onAccent = false }: { children: ReactNode; onAccent?: boolean }) {
