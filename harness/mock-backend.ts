@@ -380,6 +380,7 @@ function handle(cmd: string, a: Args): unknown {
     case "mail_tool": {
       const m = [...integ.mails, ...integ.studioMails].find(x => x.id === a.args?.id) ?? integ.mails[0];
       const text = integ.mailBody(m.id).text;
+      if (a.name === "attachment") return { path: `/Users/harness/Downloads/Relay-mail/attachment-${a.args?.index}.pdf` };
       if (a.name === "thread")
         return {
           account: m.account,

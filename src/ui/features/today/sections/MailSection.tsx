@@ -18,6 +18,7 @@ import {
 } from "../../../../application/today/mail";
 import { useMailStore } from "../../../../application/mail/store";
 import { Linked, MailLinkBar } from "../../mail/MailText";
+import { openAttachment } from "../../../../application/mail/mail";
 import { useNavigationStore } from "../../../../application/navigation/store";
 import { mailExperimental } from "../../../../application/settings/settings";
 import { agent } from "../../../../shared/plugins";
@@ -183,14 +184,16 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
         {body?.attachments.length || body?.html ? (
           <div className="flex flex-wrap items-center gap-2">
             {body.attachments.map(a => (
-              <span
+              <button
                 key={a.index}
-                className="inline-flex items-center gap-2 h-9 pl-2.5 pr-3 rounded-[9px] border border-separator-strong text-xs"
+                title={t("mail.openAttachment")}
+                onClick={() => openAttachment(mailKey, a.index)}
+                className="inline-flex items-center gap-2 h-9 pl-2.5 pr-3 rounded-[9px] border border-separator-strong text-xs cursor-pointer hover:bg-fill"
               >
                 <Icon name="file" className="glyph size-3.75 text-late" />
                 <span className="font-medium">{a.name}</span>
                 <span className="text-tertiary">{size(a.size)}</span>
-              </span>
+              </button>
             ))}
             {body.html ? (
               <button

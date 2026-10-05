@@ -833,6 +833,7 @@ export default {
   "work.waitOutside": "Dieser Durchgang läuft noch außerhalb der App. Sende, wenn er fertig ist.",
   "mail.earlier": "Frühere Nachrichten",
   "mail.linkOpen": "Öffnen",
+  "mail.openAttachment": "In Downloads/Relay-mail sichern und öffnen",
   "mail.linkCancel": "Abbrechen",
   "mail.showMail": "Mail",
   "mail.showText": "Was Claude liest",

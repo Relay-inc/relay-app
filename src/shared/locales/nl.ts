@@ -831,6 +831,7 @@ export default {
   "work.waitOutside": "Deze beurt loopt nog buiten de app. Stuur je bericht als ze klaar is.",
   "mail.earlier": "Eerdere berichten",
   "mail.linkOpen": "Open",
+  "mail.openAttachment": "Bewaren in Downloads/Relay-mail en openen",
   "mail.linkCancel": "Annuleer",
   "mail.showMail": "Mail",
   "mail.showText": "Wat Claude leest",

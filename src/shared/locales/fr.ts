@@ -835,6 +835,7 @@ export default {
   "work.waitOutside": "Ce tour tourne encore hors de l'app. Envoyez quand il est terminé.",
   "mail.earlier": "Messages précédents",
   "mail.linkOpen": "Ouvrir",
+  "mail.openAttachment": "Enregistrer dans Téléchargements/Relay-mail et ouvrir",
   "mail.linkCancel": "Annuler",
   "mail.showMail": "Mail",
   "mail.showText": "Ce que Claude lit",

@@ -1722,7 +1722,7 @@ async fn mail_read(state: State<'_, App>, account: String, id: String) -> Result
 /// Nothing is ever sent. The same checks as the agent's relay-mail tools.
 #[tauri::command]
 async fn mail_tool(state: State<'_, App>, name: String, args: Value) -> Result<Value, String> {
-    if !["thread", "read", "save_draft"].contains(&name.as_str()) { return Err(format!("Unknown mail tool {name}")); }
+    if !["thread", "read", "save_draft", "attachment"].contains(&name.as_str()) { return Err(format!("Unknown mail tool {name}")); }
     let (on, accts, default) = { let s = state.settings.lock().unwrap(); (s["mail"]["on"] == true, mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
     if !on { return Err("Mail is switched off in the app.".into()); }
     let dl = PathBuf::from(home()).join("Downloads/Relay-mail");

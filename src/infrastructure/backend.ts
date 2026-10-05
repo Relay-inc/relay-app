@@ -212,7 +212,7 @@ export const mailRead = (account: string, id: string) => invoke<MailBody>("mail_
 export const mailSeen = (account: string, id: string, seen: boolean) => invoke("mail_seen", { account, id, seen });
 /** Archive (`trash` false) or move to Trash, the mails the user picked. The backend refuses with the experimental mail flag off. */
 /** Today's mail detail: a mail's thread, its reply headers (`read` with `headers`), or a draft saved in Drafts. */
-export const mailTool = <T = unknown>(name: "thread" | "read" | "save_draft", args: Record<string, unknown>) =>
+export const mailTool = <T = unknown>(name: "thread" | "read" | "save_draft" | "attachment", args: Record<string, unknown>) =>
   invoke<T>("mail_tool", { name, args });
 /** A text the agent writes from `text` following `system`, with no tools (a reply draft, a rewrite). */
 export const aiWrite = (system: string, text: string) => invoke<string>("ai_write", { system, text });

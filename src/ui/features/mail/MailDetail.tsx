@@ -4,7 +4,7 @@ import { useMailStore } from "../../../application/mail/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
-import { mailChat, mailMove, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { mailChat, mailMove, openAttachment, mailSeen, toggleMailText } from "../../../application/mail/mail";
 import { useSettingsStore } from "../../../application/settings/store";
 import { mailExperimental } from "../../../domain/settings/types";
 import { useT } from "../../hooks/useT";
@@ -167,9 +167,14 @@ export function MailDetail({
         {body.attachments.length ? (
           <div className="flex flex-wrap gap-x-3.5 gap-y-1 mt-2.5 text-xs">
             {body.attachments.map(attachment => (
-              <span key={attachment.index} className="text-secondary tabular-nums">
+              <button
+                key={attachment.index}
+                title={t("mail.openAttachment")}
+                onClick={() => openAttachment(key, attachment.index)}
+                className="text-accent tabular-nums cursor-pointer hover:underline"
+              >
                 {`${attachment.name} (${formatSize(attachment.size)})`}
-              </span>
+              </button>
             ))}
           </div>
         ) : null}

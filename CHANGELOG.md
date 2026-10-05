@@ -46,6 +46,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- A mail's attachments open with a click, in Mail and on Today: saved in Downloads/Relay-mail (never over another file, with the quarantine flag Mail sets; a file that runs on a double-click is refused) and opened in its app
 - Links in a mail open from Today too (after the same Open/Cancel check as in Mail), and a long link that the mail wrapped over several lines between < and > is one link again, in Mail as well
 
 ## [0.0.6] - 2026-10-04

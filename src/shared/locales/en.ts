@@ -826,6 +826,7 @@ const en = {
   "work.waitOutside": "This turn still runs outside the app. Send once it is done.",
   "mail.earlier": "Earlier messages",
   "mail.linkOpen": "Open",
+  "mail.openAttachment": "Save to Downloads/Relay-mail and open",
   "mail.linkCancel": "Cancel",
   "mail.showMail": "Mail",
   "mail.showText": "What Claude reads",
