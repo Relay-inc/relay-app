@@ -30,9 +30,9 @@ export function BoardColumn({
 }) {
   const { t } = useT();
   return (
-    <div data-list={column.id} className={folded ? "flex-[0_0_40px]" : "flex-[0_0_264px]"}>
+    <div data-list={column.id} className={`flex flex-col ${folded ? "flex-[0_0_40px]" : "flex-[0_0_264px]"}`}>
       <div
-        className={`flex flex-col gap-1.5 bg-lane rounded-xl p-1.5 transition-shadow duration-150 ease-out ${over ? "ring-2 ring-inset ring-accent" : ""}`}
+        className={`flex-1 flex flex-col gap-1.5 bg-lane rounded-xl p-1.5 transition-shadow duration-150 ease-out ${over ? "ring-2 ring-inset ring-accent" : ""}`}
       >
         <div className={`flex ${folded ? "flex-col items-center" : "items-center h-7.5 pl-1.5"} gap-2`}>
           <button

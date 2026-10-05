@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { agent } from "../../../shared/plugins";
 import { useConversationsStore } from "../../../application/conversations/store";
-import { blockedAgents, label, projectOf, waitCount } from "../../../application/conversations/selectors";
+import { blockedAgents, label, projectOf } from "../../../application/conversations/selectors";
 import { backgroundAction } from "../../../application/conversations/actions";
 import { chatAgent } from "../../../application/agents/agents";
 import { select } from "../../../application/navigation/navigation";
@@ -12,17 +12,17 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
-import { PendingRequest } from "./PendingRequest";
-import { RecordingBar } from "./RecordingBar";
+import { PendingRequest } from "../conversations/PendingRequest";
+import { RecordingBar } from "../conversations/RecordingBar";
 import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
 
 const ACTIONS = ["hide", "stop", "attach"] as const;
 type Action = (typeof ACTIONS)[number];
 const LABELS = { hide: "wait.hide", stop: "wait.stop", attach: "bar.openTerminal" } as const;
 
-/** The Waiting view: meetings about to start, what agents ask (grouped per conversation), and background sessions
- *  that are blocked. */
-export function WaitingView() {
+/** Today's Now: meetings about to start, what agents ask (grouped per conversation), and background sessions that are
+ *  blocked. Nothing when none of those is there. */
+export function NowSection() {
   const { t, tn, locale } = useT();
   const pendingList = useConversationsStore(s => s.pendingList);
   const pendingAt = useConversationsStore(s => s.pendingAt);
@@ -32,11 +32,9 @@ export function WaitingView() {
     const timer = setInterval(() => setClock(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
-  const count = useDerived(waitCount);
   const blocked = useDerived(blockedAgents);
   const meetings = useDerived(soonMeetings);
   const now = useCalendarStore(s => s.now);
-  const calendarErrors = useCalendarStore(s => s.errors);
   const recording = useRecordingStore(s => s.phase !== "idle");
   // the bar stays when the recorded meeting left the list and nothing else waits
   const recordingShown = useRecordingStore(s => s.phase !== "idle" || !!s.error);
@@ -97,29 +95,14 @@ export function WaitingView() {
     return minutes < 60 ? t("wait.agoMin", { n: minutes }) : t("wait.agoHour", { n: Math.floor(minutes / 60) });
   };
 
-  // a calendar that did not load, so a missing meeting is not a surprise
-  const calendarDown = calendarErrors.length ? (
-    <div className="text-xs text-secondary">{t("wait.calendarDown", { error: calendarErrors.join("; ") })}</div>
-  ) : null;
-
-  if (!count && !recordingShown)
-    return (
-      <div className="flex flex-col items-center gap-2.5 py-24 text-secondary">
-        <span className="grid place-items-center size-10 rounded-full bg-add-bg text-add-fg">
-          <Icon name="check" className="glyph size-5" />
-        </span>
-        <span className="text-[15px] font-semibold text-label">{t("wait.none")}</span>
-        <span className="text-[13px]">{t("wait.noneSub")}</span>
-        {calendarDown}
-      </div>
-    );
   const requestsByChat: Record<string, typeof pendingList> = {};
   for (const request of pendingList) {
     if (!requestsByChat[request.project]) requestsByChat[request.project] = [];
     requestsByChat[request.project].push(request);
   }
+  if (!meetings.length && !pendingList.length && !blocked.length && !recordingShown) return null;
   return (
-    <div className="mx-auto flex max-w-170 flex-col gap-7 px-8 pt-7 pb-8">
+    <>
       <RecordingBar />
       {meetings.map(meeting => {
         // a meeting from 30 minutes before its start: when, what, who, and a note or a briefing in a new conversation
@@ -171,7 +154,6 @@ export function WaitingView() {
           </section>
         );
       })}
-      {calendarDown}
       {Object.entries(requestsByChat).map(([chatKey, requests]) => {
         const { glyph, project, label: title } = chats[chatKey];
         return (
@@ -220,6 +202,6 @@ export function WaitingView() {
           </div>
         </section>
       ))}
-    </div>
+    </>
   );
 }

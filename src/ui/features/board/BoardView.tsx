@@ -75,7 +75,7 @@ export function BoardView({ provider }: { provider: BoardProvider }) {
           </div>
         ) : (
           <div className="flex-1 min-h-0 overflow-auto px-4 pt-3.5 pb-4">
-            <div className="flex gap-2.5 items-start min-w-max">
+            <div className="flex gap-2.5 items-stretch min-w-max min-h-full">
               {board.columns.map(column => (
                 <BoardColumn
                   key={column.id}

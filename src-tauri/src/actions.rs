@@ -11,8 +11,8 @@
 // each action a policy: auto (runs), ask (a card in the conversation, like a permission) or deny. The user sets them
 // in Settings, each extension's Agent access section, kept in the vault's .relay/config.json `actions` (read on every
 // call, so a hand edit applies at once): `{"productive": "auto"}` for a whole extension, or `{"productive": {"*": "ask",
-// "time_entries": "auto"}}` per action; without one, reads run and writes ask. Claude Code may not edit that file. A session that holds mail text asks
-// before every write, and mail only reaches Claude Code, the one provider whose session can be restricted.
+// "time_entries": "auto"}}` per action; without one, reads run and writes ask. Claude Code may not edit that file. Mail only reaches
+// Claude Code.
 
 use crate::{providers, reminders};
 use board_core::{check_args, Action, Policy, Provider};
@@ -66,13 +66,10 @@ fn chosen(acts: &Value, it: &Item) -> Policy {
     let pick = |v: &Value| v.as_str().and_then(Policy::parse);
     pick(&s[it.id]).or_else(|| pick(&s["*"])).or_else(|| pick(s)).unwrap_or(it.default)
 }
-/// What applies in this conversation: mail only for Claude Code, and a session holding mail text asks before a write.
-fn effective(acts: &Value, it: &Item, provider: &str, tainted: bool) -> Policy {
+/// What applies in this conversation: mail only for Claude Code.
+fn effective(acts: &Value, it: &Item, provider: &str) -> Policy {
     if it.ext == "mail" && provider != "claude" { return Policy::Deny; }
-    match chosen(acts, it) {
-        Policy::Auto if tainted && it.write && it.ext != "mail" => Policy::Ask,
-        p => p,
-    }
+    chosen(acts, it)
 }
 
 /// Whether an extension is set up: a board provider with its config and secrets, mail with an account, a calendar, a vault.
@@ -140,31 +137,31 @@ fn serve(app: &AppHandle, c: UnixStream) {
     (&c).write_all(format!("{out}\n").as_bytes()).ok();
 }
 
-/// The conversation's provider and whether it holds mail text; None when it is not one of the app's running ones.
-fn conversation(app: &AppHandle, key: &str) -> Option<(String, bool)> {
-    app.state::<crate::App>().procs.lock().unwrap().get(key).map(|p| (p.provider.to_string(), p.tainted))
+/// The conversation's provider; None when it is not one of the app's running ones.
+fn conversation(app: &AppHandle, key: &str) -> Option<String> {
+    app.state::<crate::App>().procs.lock().unwrap().get(key).map(|p| p.provider.to_string())
 }
 
 fn list(app: &AppHandle, key: &str) -> Result<Value, String> {
-    let (provider, tainted) = conversation(app, key).ok_or(NOT_IN_APP)?;
+    let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
     let s = acts(app);
     let mut ready_of = std::collections::HashMap::new();
     Ok(items().iter().filter(|it| access(&s, it.ext) && *ready_of.entry(it.ext).or_insert_with(|| ready(app, it.ext))).map(|it| json!({
         "action": format!("{}.{}", it.ext, it.id), "about": it.about, "args": it.args.iter().map(|(n, a)| json!([n, a])).collect::<Vec<_>>(),
-        "policy": effective(&s, it, &provider, tainted).as_str(),
+        "policy": effective(&s, it, &provider).as_str(),
     })).collect())
 }
 const NOT_IN_APP: &str = "relay only works inside a conversation of the Relay app";
 
 fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) -> Result<Value, String> {
-    let (provider, tainted) = conversation(app, key).ok_or(NOT_IN_APP)?;
+    let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
     let all = items();
     let it = all.iter().find(|it| format!("{}.{}", it.ext, it.id) == action).ok_or_else(|| format!("no action '{action}', `relay help` lists them"))?;
     check_args(it.args, args)?;
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
-    match effective(&s, it, &provider, tainted) {
+    match effective(&s, it, &provider) {
         Policy::Deny if it.ext == "mail" && provider != "claude" => return Err("mail is only available to Claude Code conversations".into()),
         Policy::Deny => return Err(format!("the user does not allow {action}")),
         Policy::Ask => ask(app, c, key, &provider, action, args)?,
@@ -214,10 +211,9 @@ fn gone(c: &UnixStream) -> bool {
 
 fn mail(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Value, String> {
     let st = app.state::<crate::App>();
-    // mail text is about to enter this session: restricted before the tool runs, as for relay-mail
+    // mail text is about to enter this session, as for relay-mail
     if name != "save_draft" {
-        let v = crate::vault(&st);
-        if let Some(p) = st.procs.lock().unwrap().get_mut(key).filter(|p| !p.tainted) { crate::write_taint(p, &v); }
+        if let Some(p) = st.procs.lock().unwrap().get_mut(key).filter(|p| !p.tainted) { crate::mark_tainted(p); }
     }
     let mut args = args.clone();
     for k in ["limit", "index"] { if let Some(n) = args[k].as_str().and_then(|s| s.parse::<u64>().ok()) { args[k] = json!(n); } }
@@ -296,7 +292,7 @@ mod tests {
     fn item(ext: &str) -> &'static Item { Box::leak(Box::new(items().into_iter().find(|i| i.ext == ext && i.write).unwrap())) }
 
     #[test]
-    fn policy_from_settings_then_default_and_mail_text_asks() {
+    fn policy_from_settings_then_default() {
         let w = item("productive");
         assert_eq!(chosen(&json!({}), w), Policy::Ask);
         assert_eq!(chosen(&json!({"productive": "auto"}), w), Policy::Auto);
@@ -304,11 +300,11 @@ mod tests {
         assert_eq!(chosen(&json!({"productive": {"*": "deny"}}), w), Policy::Deny);
         assert_eq!(chosen(&json!({"productive": "maybe"}), w), Policy::Ask);
         let auto = json!({"productive": "auto"});
-        assert_eq!(effective(&auto, w, "codex", false), Policy::Auto);
-        assert_eq!(effective(&auto, w, "claude", true), Policy::Ask);
+        assert_eq!(effective(&auto, w, "codex"), Policy::Auto);
+        assert_eq!(effective(&auto, w, "claude"), Policy::Auto);
         let draft = items().into_iter().find(|i| i.ext == "mail" && i.id == "save_draft").unwrap();
-        assert_eq!(effective(&json!({}), &draft, "claude", true), Policy::Auto);
-        assert_eq!(effective(&json!({"mail": "auto"}), &draft, "codex", false), Policy::Deny);
+        assert_eq!(effective(&json!({}), &draft, "claude"), Policy::Auto);
+        assert_eq!(effective(&json!({"mail": "auto"}), &draft, "codex"), Policy::Deny);
     }
     #[test]
     fn access_is_on_unless_switched_off() {

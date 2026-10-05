@@ -142,7 +142,7 @@ function handle(cmd: string, a: Args): unknown {
         error: "relay-server 0.1.0 speaks protocol 1, this Relay 2",
       };
     case "server_setup":
-      return { version: "0.0.4", image: "ghcr.io/laurentme/relay-server" };
+      return { version: "0.0.4", image: "ghcr.io/relay-inc/relay-server" };
     case "mirror_status":
     case "mirror_progress":
       return null;

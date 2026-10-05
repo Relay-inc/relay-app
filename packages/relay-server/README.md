@@ -45,7 +45,7 @@ the repos in another folder (for example `~/repos`), or give `relay-server` Full
 
 ## In Docker (a Linux server, Unraid, or a Mac with Docker Desktop)
 
-Every Relay release also gets `ghcr.io/laurentme/relay-server` for amd64 and arm64 (`scripts/push-server-image.sh`,
+Every Relay release also gets `ghcr.io/relay-inc/relay-server` for amd64 and arm64 (`scripts/push-server-image.sh`,
 run on a Mac after the release), tagged with the same version (`:latest` is the newest), so a server and an app of the same version speak the same protocol. Claude Code is not in the
 image: the first start installs it with Anthropic's installer into the `.local` volume, where its own updates stay.
 
@@ -64,7 +64,7 @@ image: the first start installs it with Anthropic's installer into the `.local` 
      -v /mnt/user/appdata/relay-server/claude:/home/relay/.claude \
      -v /mnt/user/appdata/relay-server/repos:/home/relay/repos \
      -v /mnt/user/appdata/relay-server/local:/home/relay/.local \
-     ghcr.io/laurentme/relay-server:latest
+     ghcr.io/relay-inc/relay-server:latest
    ```
    `docker logs relay-server` shows Claude Code being installed, then `listening on 0.0.0.0:47800`.
 4. Log in to Claude once: `docker exec -it relay-server claude`, then `/login` (it shows a URL to open on your laptop).
@@ -83,7 +83,7 @@ mirror locks until Relay's next sync round a few seconds later. Every start pref
 the image's, so recreating the container keeps the update and a newer image wins again. A relay-server from before
 0.0.5 cannot take this yet: update it once by hand.
 
-**Update by hand:** `docker pull ghcr.io/laurentme/relay-server:latest`, then `docker rm -f relay-server` and the same
+**Update by hand:** `docker pull ghcr.io/relay-inc/relay-server:latest`, then `docker rm -f relay-server` and the same
 `docker run`. The folders keep the pairing, the login, Claude Code and the repos; the mirror is locked until Relay
 connects again.
 

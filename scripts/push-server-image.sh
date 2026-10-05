@@ -1,5 +1,5 @@
 #!/bin/sh
-# relay-server's image for amd64 and arm64, built on this Mac and pushed to GHCR as ghcr.io/laurentme/relay-server
+# relay-server's image for amd64 and arm64, built on this Mac and pushed to GHCR as ghcr.io/relay-inc/relay-server
 # with the release's version and `latest`. CI no longer builds it: arm64 under QEMU took most of a release's minutes,
 # here arm64 is native and amd64 runs under Rosetta. scripts/release.sh runs it at the end, by hand run it from a
 # checkout of the release tag.
@@ -10,7 +10,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 version=$(node -p 'require("./package.json").version')
-image=ghcr.io/laurentme/relay-server
+image=ghcr.io/relay-inc/relay-server
 # the image must be the release's code, or app and server could speak different protocols under one version
 [ "$(git describe --exact-match --tags HEAD 2>/dev/null)" = "v$version" ] || { echo "check out v$version first (git checkout v$version)" >&2; exit 1; }
 [ -z "$(git status --porcelain)" ] || { echo "the checkout has changes, the image would not be v$version" >&2; exit 1; }
