@@ -109,7 +109,7 @@ function draftNote(saved: EventOf<"draft_saved">, t: Translate) {
 
 function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_call">, now: number): Effect[] {
   push(state, key, toolItem(call.id, call.name, call.input, "run", now));
-  // a chat that touched mail stays restricted: every later spawn of it starts with the mail limits
+  // a chat that touched mail stays marked: every later spawn of it stays on this Mac
   const conversation = state.chats[key];
   if (call.name.startsWith("mcp__relay-mail__") && conversation && !conversation.fromMail) {
     conversation.fromMail = true;

@@ -586,7 +586,7 @@ impl Mail {
                 }).collect();
                 Ok(json!({ "account": email, "id": u.to_string(), "from": addrs(m.from()), "to": addrs(m.to()), "cc": addrs(m.cc()),
                     "date": date(&m), "subject": subject(&m), "message_id": m.message_id(), "attachments": attachments(&m),
-                    "untrusted_headers": headers, "untrusted_mail": render::text(&m) }))
+                    "untrusted_headers": headers, "untrusted_mail": render::text(&m), "notice": rpc::INSTRUCTIONS }))
             }
             "thread" => {
                 let u = uid(&args["id"])?;
@@ -599,7 +599,7 @@ impl Mail {
                     budget -= text.chars().count().min(budget);
                     Some(json!({ "id": id.to_string(), "from": addrs(m.from()), "date": date(&m), "subject": subject(&m), "untrusted_mail": text }))
                 }).collect();
-                Ok(json!({ "account": email, "messages": messages }))
+                Ok(json!({ "account": email, "messages": messages, "notice": rpc::INSTRUCTIONS }))
             }
             "attachment" => {
                 let u = uid(&args["id"])?;

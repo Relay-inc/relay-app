@@ -302,9 +302,8 @@ the socket the app listens on and the CLI side.
   ```
 
   The agent works in the vault, so Claude Code is denied `Edit(./.relay/**)`: it cannot hand itself permissions.
-- A session that holds mail text asks before every write, and mail actions only run for Claude Code (the one
-  provider whose session can be restricted, see `taint` in lib.rs); a mail read through `relay` restricts the session
-  like relay-mail does.
+- Mail actions only run for Claude Code. A session that holds mail text keeps its own permission mode, it only stays
+  on this Mac (see `mark_tainted` in lib.rs).
 - Claude Code runs `relay` without a Bash card (`Bash(relay *)` in its allowed tools, so the action's own policy
   decides) and learns about it from one `--append-system-prompt` line. The other providers have `relay` on their
   PATH but are not told about it, and their own approval asks for each command.
