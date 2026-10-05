@@ -136,6 +136,24 @@ window.addEventListener(
   true,
 );
 
+/** How full the context window is, quietly: only a conversation whose agent reports it (Claude Code) has one. */
+function ContextUse() {
+  const { t } = useT();
+  const selected = useNavigationStore(s => s.selected);
+  const context = useConversationsStore(s => s.context[selected]);
+  if (!context?.used) return null;
+  const pct = Math.min(100, Math.round((context.used / context.window) * 100));
+  const tokens = (n: number) => n.toLocaleString();
+  return (
+    <span
+      className={`px-1.5 text-xs whitespace-nowrap ${pct >= 90 ? "text-late" : "text-tertiary"}`}
+      title={t("composer.contextHelp", { used: tokens(context.used), window: tokens(context.window) })}
+    >
+      {t("composer.context", { pct })}
+    </span>
+  );
+}
+
 /** The message field with the images and files waiting, the agent, model and effort picks and the send button. */
 export function Composer({ className }: { className: string }) {
   const { t } = useT();
@@ -443,6 +461,7 @@ export function Composer({ className }: { className: string }) {
           ) : null}
           {pick("model", true)}
           {pick("effort", showEffort)}
+          <ContextUse />
           <span className="flex-1"></span>
           {/* dictates, or stops dictating; the ring grows with the voice */}
           {voiceOn ? (

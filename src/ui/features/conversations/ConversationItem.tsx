@@ -56,6 +56,15 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
           <span className="flex-1 h-px bg-separator"></span>
         </div>
       );
+    case "compact":
+      // like the end of a turn, a label between two lines; it pulses while the summary is written
+      return (
+        <div className="flex items-center gap-2.5 text-tertiary text-xs">
+          <span className="flex-1 h-px bg-separator"></span>
+          <span className={item.state === "run" ? "animate-pulse" : ""}>{item.text}</span>
+          <span className="flex-1 h-px bg-separator"></span>
+        </div>
+      );
     default:
       return <NoteLine text={item.text} />;
   }

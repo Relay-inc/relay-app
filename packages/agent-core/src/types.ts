@@ -36,6 +36,9 @@ export type AgentEvent =
   | { type: "time"; at: string }       // history only: when the transcript line after it was written
   | { type: "error"; text: string }
   | { type: "reset" }                 // the conversation started over (/clear); a new session follows
+  | { type: "compacting" }           // Claude Code is summarising the conversation to free context; `compacted` ends it
+  | { type: "compacted"; trigger?: string | null; pre_tokens?: number | null; post_tokens?: number | null } // trigger: "manual" | "auto"
+  | { type: "context"; used?: number | null; window?: number | null } // how full the context is: tokens in use and/or the model's window (Claude Code)
   | { type: "resolved"; model: string; effort?: string | null; default_model: boolean; default_effort: boolean } // what the CLI runs on; default_* when the conversation left it to the CLI
   | { type: "stderr"; text: string }   // added by the app: the process's stderr
   | { type: "draft_saved"; folder: string; to: string[]; cc?: string[]; bcc?: string[] } // added by the app: a relay-mail draft (Claude Code only)

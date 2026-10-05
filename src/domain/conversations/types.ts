@@ -36,7 +36,7 @@ export type AgentSession = {
 };
 /** One line of a conversation. A tool line keeps the call, so it is drawn (and translated) when shown. */
 export type Item = {
-  kind: "me" | "ai" | "thinking" | "tool" | "err" | "note" | "done" | "allowed" | "denied";
+  kind: "me" | "ai" | "thinking" | "tool" | "err" | "note" | "done" | "compact" | "allowed" | "denied";
   text: string;
   id?: string;
   state?: "run" | "ok" | "err";
@@ -65,6 +65,8 @@ export type Chat = {
   ask?: string[]; // the projects a Cmd-K question named: offered once, after it started
   orch?: true; // a worker the orchestrator started
 };
+/** How full a conversation's context is, in tokens. */
+export type ContextUse = { used: number; window: number };
 /** An image waiting to be sent: its media type, base64 data, and a blob url to show it. */
 export type Img = { mt: string; data: string; url: string };
 /** A subagent a session spawned (Agent tool, background agents). */

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { produce, enableMapSet } from "immer";
-import { applyAgentEvent, type EventEnv } from "./events.ts";
+import { applyAgentEvent, contextOf, toItems, type EventEnv } from "./events.ts";
 import { initialConversations, type ConversationsState } from "./state.ts";
 
 enableMapSet();
@@ -156,4 +156,49 @@ test("an event the app does not show changes nothing", () => {
   const { next, effects } = run(state, { type: "session", id: "s" });
   assert.equal(next, state);
   assert.deepEqual(effects, []);
+});
+
+test("compacting shows a line that the boundary resolves, and keeps the history", () => {
+  const { next } = run(
+    fresh(),
+    { type: "text", text: "earlier", delta: false },
+    { type: "context", used: 150_000 },
+    { type: "compacting" },
+  );
+  assert.deepEqual(next.messages["c:1"][1], { kind: "compact", text: "compact.running", state: "run" });
+  const done = run(next, { type: "compacted", trigger: "auto", pre_tokens: 170_000, post_tokens: 9_000 }).next;
+  assert.deepEqual(done.messages["c:1"], [
+    { kind: "ai", text: "earlier" },
+    { kind: "compact", text: "compact.auto · 170k → 9k", state: "ok" },
+  ]);
+  assert.deepEqual(done.context["c:1"], { used: 9_000, window: 200_000 });
+});
+
+test("a compaction without a boundary fails with the turn, and one without sizes shows no numbers", () => {
+  const failed = run(fresh(), { type: "compacting" }, { type: "turn_end", ok: true }).next;
+  assert.equal(failed.messages["c:1"][0].state, "err");
+  const bare = run(fresh(), { type: "context", used: 5 }, { type: "compacted" }).next;
+  assert.deepEqual(bare.messages["c:1"], [{ kind: "compact", text: "compact.done", state: "ok" }]);
+  assert.equal(bare.context["c:1"], undefined); // the size after is unknown: no number rather than a stale one
+});
+
+test("context follows the latest message, takes the window a result names, and goes with /clear", () => {
+  let { next } = run(fresh(), { type: "context", used: 40_000 });
+  assert.deepEqual(next.context["c:1"], { used: 40_000, window: 200_000 });
+  next = run(next, { type: "context", window: 1_000_000 }, { type: "context", used: 100_000 }).next;
+  assert.deepEqual(next.context["c:1"], { used: 100_000, window: 1_000_000 });
+  assert.equal(run(next, { type: "reset" }).next.context["c:1"], undefined);
+});
+
+test("a transcript shows its compaction boundary and ends with the context it left", () => {
+  const history: Parameters<typeof toItems>[0] = [
+    { type: "context", used: 170_000 },
+    { type: "compacted", trigger: "manual", pre_tokens: 170_000, post_tokens: 9_000 },
+    { type: "context", used: 9_500 },
+  ];
+  assert.deepEqual(
+    toItems(history, () => "", t),
+    [{ kind: "compact", text: "compact.done · 170k → 9k", state: "ok" }],
+  );
+  assert.deepEqual(contextOf(history), { used: 9_500, window: 200_000 });
 });
