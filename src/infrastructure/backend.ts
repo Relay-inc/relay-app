@@ -197,6 +197,11 @@ export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_
 export const mailRead = (account: string, id: string) => invoke<MailBody>("mail_read", { account, id });
 export const mailSeen = (account: string, id: string, seen: boolean) => invoke("mail_seen", { account, id, seen });
 /** Archive (`trash` false) or move to Trash, the mails the user picked. The backend refuses with the experimental mail flag off. */
+/** Today's mail detail: a mail's thread, its reply headers (`read` with `headers`), or a draft saved in Drafts. */
+export const mailTool = <T = unknown>(name: "thread" | "read" | "save_draft", args: Record<string, unknown>) =>
+  invoke<T>("mail_tool", { name, args });
+/** A text the agent writes from `text` following `system`, with no tools (a reply draft, a rewrite). */
+export const aiWrite = (system: string, text: string) => invoke<string>("ai_write", { system, text });
 export const mailMove = (account: string, ids: string[], trash: boolean) =>
   invoke<void>("mail_move", { account, ids, trash });
 /** Gmail without a server; a generic IMAP account with its host and port. */

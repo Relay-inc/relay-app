@@ -563,6 +563,11 @@ impl Mail {
         }
     }
 
+    /// The same tools for the app itself (Today's mail detail), the answer as data instead of an MCP result.
+    pub async fn run(&self, accts: &[Account], default: &str, name: &str, args: &Value, downloads: &Path) -> Result<Value, String> {
+        self.call(accts, default, name, args, downloads).await
+    }
+
     // every argument is checked before anything goes over the network
     async fn call(&self, accts: &[Account], default: &str, name: &str, args: &Value, downloads: &Path) -> Result<Value, String> {
         if !["search", "read", "thread", "attachment", "save_draft"].contains(&name) { return Err(format!("Unknown tool {name}")); }

@@ -43,6 +43,9 @@ import { markSeen, newChat } from "../conversations/chats";
 import { useMailStore } from "../mail/store";
 import { loadMails, mailChat, mailMove, mailProject, mailSeen } from "../mail/mail";
 import { mailExperimental, mailOn } from "../settings/settings";
+import { startRecording } from "../calendar/recording";
+import { openCompose } from "./mail";
+import { forgetDetails } from "./load";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setSnooze, useTodayStore } from "./store";
 
@@ -88,6 +91,7 @@ export async function refreshToday() {
   useTodayStore.setState(draft => {
     draft.reloading = true;
   });
+  forgetDetails();
   await Promise.allSettled([
     loadTodayCards(),
     loadMeetings(),
@@ -118,6 +122,15 @@ export async function snooze(entry: Entry, days = 7) {
   useTodayStore.setState(draft => {
     draft.selected = "";
   });
+}
+/** The snooze menu: tomorrow, next Monday, a week from now, as days from today. */
+export function snoozeOptions(now = Date.now()) {
+  const day = new Date(now).getDay(); // 0 Sunday
+  return [
+    { id: "tomorrow", days: 1 },
+    { id: "monday", days: (8 - day) % 7 || 7 },
+    { id: "week", days: 7 },
+  ] as const;
 }
 /** Back on Today now. */
 export const wake = (id: string) => setSnooze(id, null);
@@ -491,110 +504,172 @@ export async function moveTo(entry: Entry, slot: string) {
   });
 }
 
-// ---------- what an item does: a primary action (Enter), a secondary one (Backspace), and maybe extras
-export type Action = { label: string; run: () => unknown };
+// ---------- what an item does: its actions in the order Today shows them (the first two as buttons, the rest under
+// "…"), which of them Enter and Backspace run, and what Done does for it (E), when it has one
+export type Action = { label: string; run: () => unknown; icon?: string; key?: string; tip?: string };
+export type Actions = { acts: Action[]; primary?: Action; secondary?: Action; done?: Action };
 const after = (run: () => unknown, then: () => void) => async () => {
   await run();
   then();
 };
 
-/** The item's actions. An agent's question or permission answers in its own card (Enter allows), so it has none. */
-export function actionsOf(entry: Entry): { primary?: Action; secondary?: Action; extra: Action[] } {
+/** The item's actions. An agent's permission or question answers in its own card (Enter allows), so it has none of
+ *  Enter or Backspace. */
+export function actionsOf(entry: Entry): Actions {
   const s = entry.subject;
+  const done = (label = t("today.status.done"), icon = "check"): Action => ({
+    label,
+    icon,
+    key: "E",
+    run: () => setStatus(entry, "done"),
+  });
+  const of = (acts: Action[], primary: number | null, secondary: number | null, finish?: Action): Actions => ({
+    acts,
+    primary: primary === null ? undefined : acts[primary],
+    secondary: secondary === null ? undefined : acts[secondary],
+    done: finish,
+  });
   switch (s.type) {
     case "ask":
-      return { secondary: { label: t("wait.open"), run: () => select(s.chat) }, extra: [] };
+      return of([{ label: t("wait.open"), icon: "chat", run: () => select(s.chat) }], null, null);
     case "blocked":
-      return {
-        primary: { label: t("bar.openTerminal"), run: () => backgroundAction("attach", s.session.id) },
-        secondary: { label: t("wait.stop"), run: () => backgroundAction("stop", s.session.id) },
-        extra: [{ label: t("wait.hide"), run: () => backgroundAction("hide", s.session.id) }],
-      };
+      return of(
+        [
+          { label: t("bar.openTerminal"), icon: "term", key: "↵", run: () => backgroundAction("attach", s.session.id) },
+          { label: t("wait.stop"), key: "⌫", run: () => backgroundAction("stop", s.session.id) },
+          { label: t("wait.hide"), run: () => backgroundAction("hide", s.session.id) },
+        ],
+        0,
+        1,
+      );
     case "meeting": {
-      const join = joinable(s.meeting.join)
-        ? { label: t("wait.meetingJoin"), run: () => joinMeeting(s.meeting.join) }
-        : null;
+      const join = joinable(s.meeting.join);
       if (entry.kind === "note")
-        return {
-          primary: {
-            label: t("today.makeNote"),
-            run: after(
-              () => meetingChat(s.meeting.id, "note"),
-              () => dismiss(entry.id),
-            ),
-          },
-          secondary: { label: t("today.noNote"), run: () => dismiss(entry.id) },
-          extra: [],
-        };
-      return {
-        primary: {
-          label: t("wait.meetingPrep"),
-          run: after(
-            () => meetingChat(s.meeting.id, "prep"),
-            () => dismiss(entry.id),
-          ),
-        },
-        secondary: join ?? { label: t("today.skipPrep"), run: () => dismiss(entry.id) },
-        extra: join ? [{ label: t("today.skipPrep"), run: () => dismiss(entry.id) }] : [],
-      };
+        return of(
+          [
+            {
+              label: t("today.makeNote"),
+              icon: "notes",
+              key: "↵",
+              run: after(
+                () => meetingChat(s.meeting.id, "note"),
+                () => dismiss(entry.id),
+              ),
+            },
+            { label: t("today.noNote"), key: "⌫", run: () => dismiss(entry.id) },
+          ],
+          0,
+          1,
+        );
+      return of(
+        [
+          { label: t("wait.meetingPrep"), icon: "chat", key: "↵", run: () => meetingChat(s.meeting.id, "prep") },
+          ...(join ? [{ label: t("wait.meetingJoin"), key: "⌫", run: () => joinMeeting(s.meeting.join) }] : []),
+          { label: t("rec.record"), tip: t("rec.recordHelp"), run: () => startRecording(s.meeting.id) },
+        ],
+        0,
+        join ? 1 : null,
+        done(t("today.prepared")),
+      );
     }
     case "reminder":
-      return {
-        primary: { label: t("rem.done"), run: () => reminderAction(s.reminder, "done") },
-        secondary: { label: t("rem.tomorrow"), run: () => reminderAction(s.reminder, "push", "morgen") },
-        extra: [
+      return of(
+        [
+          { label: t("rem.done"), icon: "check", key: "↵", run: () => reminderAction(s.reminder, "done") },
+          { label: t("rem.tomorrow"), key: "⌫", run: () => reminderAction(s.reminder, "push", "morgen") },
           { label: t("rem.plusWeek"), run: () => reminderAction(s.reminder, "push", "+1w") },
-          { label: t("rem.chat"), run: () => chatAboutReminder(s.reminder.id) },
+          { label: t("today.askClaude"), icon: "chat", run: () => chatAboutReminder(s.reminder.id) },
         ],
-      };
+        0,
+        1,
+      );
     case "card": {
       const tracker = provider(s.card.provider);
-      return {
-        primary: { label: t("today.open"), run: () => openTodayCard(s.card) },
-        secondary: { label: t("kb.openIn", { name: tracker?.name ?? "" }), run: () => openTodayCardIn(s.card) },
-        extra: [{ label: t("rem.chat"), run: () => todayCardChat(s.card) }],
-      };
-    }
-    case "pr":
-      return entry.kind === "review"
-        ? {
-            primary: { label: t("today.reviewWithClaude"), run: () => reviewWithClaude(s.pr) },
-            secondary: { label: t("today.open"), run: () => openTodayPr(s.pr.repo, s.pr.number) },
-            extra: [{ label: t("today.onGithub"), run: () => backend.openUrl(s.pr.url) }],
-          }
-        : {
-            primary: { label: t("today.fixWithClaude"), run: () => fixWithClaude(s.pr) },
-            secondary: { label: t("today.open"), run: () => openTodayPr(s.pr.repo, s.pr.number) },
-            extra: [{ label: t("today.onGithub"), run: () => backend.openUrl(s.pr.url) }],
-          };
-    case "mail":
-      // a reply is a draft Claude writes (nothing is sent from the app); replying, archiving or trashing takes the
-      // mail off Today: a reply marks it read first
-      return {
-        primary: { label: t("today.reply"), run: () => replyToMail(s.key, "draft") },
-        secondary: mailExperimental()
-          ? { label: t("mail.archive"), run: () => mailMove([s.key], false) }
-          : { label: t("today.markRead"), run: () => mailSeen(s.key, true) },
-        extra: [
-          { label: t("today.replyAll"), run: () => replyToMail(s.key, "draftAll") },
-          ...(mailExperimental() ? [{ label: t("mail.trash"), run: () => trashMail(s.key) }] : []),
-          { label: t("today.talkMail"), run: () => mailChat(s.key, "talk") },
+      return of(
+        [
+          {
+            label: t("today.startWorking"),
+            icon: "right",
+            key: "↵",
+            tip: t("today.startWorkingTip"),
+            run: () => startWorking(entry, s.card),
+          },
+          {
+            label: t("kb.openIn", { name: tracker?.name ?? "" }),
+            icon: "out",
+            key: "⌫",
+            run: () => openTodayCardIn(s.card),
+          },
+          { label: t("today.askClaude"), icon: "chat", run: () => todayCardChat(s.card) },
+          { label: t("today.openTicket"), icon: "board", run: () => openTodayCard(s.card) },
         ],
-      };
+        0,
+        1,
+        done(),
+      );
+    }
+    case "pr": {
+      const github = { label: t("today.onGithub"), icon: "out", key: "⌫", run: () => backend.openUrl(s.pr.url) };
+      const inRelay = { label: t("today.openInPrs"), icon: "pr", run: () => openTodayPr(s.pr.repo, s.pr.number) };
+      return entry.kind === "review"
+        ? of(
+            [
+              {
+                label: t("today.reviewWithClaude"),
+                key: "↵",
+                tip: t("today.reviewTip"),
+                run: () => reviewWithClaude(s.pr),
+              },
+              github,
+              inRelay,
+            ],
+            0,
+            1,
+            done(t("today.markReviewed")),
+          )
+        : of(
+            [{ label: t("today.fixWithClaude"), key: "↵", run: () => fixWithClaude(s.pr) }, github, inRelay],
+            0,
+            1,
+            done(),
+          );
+    }
+    case "mail": {
+      const experimental = mailExperimental();
+      return of(
+        [
+          { label: t("today.reply"), icon: "reply", key: "↵", run: () => openCompose(s.key, "reply") },
+          { label: t("today.replyAll"), icon: "replyAll", key: "A", run: () => openCompose(s.key, "all") },
+          { label: t("today.forward"), icon: "forward", key: "F", run: () => openCompose(s.key, "fwd") },
+          { label: t("today.askClaude"), icon: "chat", run: () => mailChat(s.key, "talk") },
+          { label: t("today.markRead"), icon: "read", key: "U", run: () => mailSeen(s.key, true) },
+          ...(experimental ? [{ label: t("mail.trash"), icon: "trash", key: "#", run: () => trashMail(s.key) }] : []),
+        ],
+        0,
+        null,
+        experimental
+          ? { label: t("mail.archive"), icon: "archive", key: "E", run: () => mailMove([s.key], false) }
+          : { label: t("today.markRead"), icon: "read", key: "E", run: () => mailSeen(s.key, true) },
+      );
+    }
     case "chat":
-      return {
-        primary: { label: t("today.read"), run: () => select(s.key) },
-        secondary: { label: t("today.markRead"), run: () => markSeen(s.key) },
-        extra: [],
-      };
+      return of(
+        [
+          { label: t("today.read"), key: "↵", run: () => select(s.key) },
+          { label: t("today.markRead"), key: "⌫", run: () => markSeen(s.key) },
+        ],
+        0,
+        1,
+      );
   }
 }
 
-/** A reply to a mail under Today: marked read (it leaves the queue), then Claude drafts it; nothing is sent. */
-export async function replyToMail(key: string, how: "draft" | "draftAll") {
-  await mailSeen(key, true);
-  await mailChat(key, how);
+// Start working on a card: in progress in its tracker, and a conversation under its project with the ticket typed in
+async function startWorking(entry: Entry, card: TodayCard) {
+  if (entry.status !== "doing") await setStatus(entry, "doing").catch(console.error);
+  await todayCardChat(card);
 }
+
 /** Trash a mail under Today (with the experimental mail flag, as in Mail). */
 export const trashMail = (key: string) => mailMove([key], true);
 

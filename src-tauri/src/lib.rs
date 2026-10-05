@@ -1063,6 +1063,18 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
     tauri::async_runtime::spawn_blocking(move || p.title(&eb.env(), &text)).await.map_err(|e| e.to_string())?
 }
 
+/// A text written by the agent from `text` and an instruction (`system`): one call on the subscription, without tools,
+/// settings, MCP or a transcript, so third-party text in it (a mail) can make it do nothing but write. Today's mail
+/// composer drafts and rewrites replies with it; the user edits the result before it is saved anywhere.
+#[tauri::command]
+async fn ai_write(app: AppHandle, state: State<'_, App>, system: String, text: String) -> Result<String, String> {
+    let p = { let on = agents::enabled(&state.settings.lock().unwrap()); on.iter().copied().find(|p| p.caps().title) };
+    let p = p.ok_or_else(|| trc("err.no_agent"))?;
+    let mut eb = env_of(&app, &state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "sonnet")); }
+    tauri::async_runtime::spawn_blocking(move || p.write(&eb.env(), &system, &text)).await.map_err(|e| e.to_string())?
+}
+
 /// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
 #[tauri::command]
 async fn history(app: AppHandle, state: State<'_, App>, project: String) -> Result<Value, String> {
@@ -1665,6 +1677,17 @@ async fn mail_read(state: State<'_, App>, account: String, id: String) -> Result
     state.mail.open(&a, &id).await
 }
 
+/// Today's mail detail: a mail's whole thread, its reply headers (`read` with `headers`), or a draft saved in Drafts.
+/// Nothing is ever sent. The same checks as the agent's relay-mail tools.
+#[tauri::command]
+async fn mail_tool(state: State<'_, App>, name: String, args: Value) -> Result<Value, String> {
+    if !["thread", "read", "save_draft"].contains(&name.as_str()) { return Err(format!("Unknown mail tool {name}")); }
+    let (on, accts, default) = { let s = state.settings.lock().unwrap(); (s["mail"]["on"] == true, mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
+    if !on { return Err("Mail is switched off in the app.".into()); }
+    let dl = PathBuf::from(home()).join("Downloads/Relay-mail");
+    state.mail.run(&accts, &default, &name, &args, &dl).await
+}
+
 /// Mark one mail read or unread, on the user's click.
 #[tauri::command]
 async fn mail_seen(state: State<'_, App>, account: String, id: String, seen: bool) -> Result<(), String> {
@@ -2012,7 +2035,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

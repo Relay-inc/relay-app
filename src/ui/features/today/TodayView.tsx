@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Board } from "../../../domain/board/rules";
 import { newBoard } from "../../../domain/board/rules";
 import { useTodayStore } from "../../../application/today/store";
+import { setPop, useDetailsStore } from "../../../application/today/details";
+import { closeCompose } from "../../../application/today/mail";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { cardOf } from "../../../application/navigation/panel";
 import {
@@ -10,11 +12,8 @@ import {
   noteSeen,
   openTodayCard,
   putOff,
-  replyToMail,
   selectEntry,
   setStatus,
-  snooze,
-  trashMail,
   todayModel,
 } from "../../../application/today/today";
 import { useDerived } from "../../hooks/useDerived";
@@ -61,10 +60,17 @@ export function TodayView({ className = "" }: { className?: string }) {
   }, [modal]);
 
   useEffect(() => {
+    // the keys of Keel and the design: J K walk, Enter and Backspace the two actions, E done, S snooze, L later,
+    // P in progress; for a mail R A F reply, reply all, forward, U read, # trash. Esc closes a menu or the composer.
     const onKey = (e: KeyboardEvent) => {
       const { panel, zoom, quickAsk, selected } = useNavigationStore.getState();
       if (selected !== "__wait" || panel.modal || zoom || quickAsk || e.defaultPrevented || e.isComposing) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || inControl(e)) return;
+      const details = useDetailsStore.getState();
+      if (e.key === "Escape" && (details.pop || details.compose)) {
+        e.preventDefault();
+        return details.pop ? setPop("") : closeCompose();
+      }
       const now = todayModel();
       const entry = now.selected;
       const step = (by: number) => {
@@ -72,24 +78,24 @@ export function TodayView({ className = "" }: { className?: string }) {
         const next = now.queue[Math.min(now.queue.length - 1, Math.max(0, at + by))];
         if (next) selectEntry(next.id);
       };
-      if (e.key === "ArrowDown" || e.key === "j") step(1);
-      else if (e.key === "ArrowUp" || e.key === "k") step(-1);
-      else if (!entry) return;
-      else if (e.key === "l" || e.key === "L") putOff(entry.id);
-      else if (e.key === "w" || e.key === "W") snooze(entry);
-      // a mail: R replies, A replies to all (both a draft by Claude), # trashes; Backspace archives
-      else if (entry.subject.type === "mail" && (e.key === "r" || e.key === "R"))
-        replyToMail(entry.subject.key, "draft");
-      else if (entry.subject.type === "mail" && (e.key === "a" || e.key === "A"))
-        replyToMail(entry.subject.key, "draftAll");
-      else if (entry.subject.type === "mail" && e.key === "#") trashMail(entry.subject.key);
-      else if ((e.key === "d" || e.key === "D") && entry.kind !== "ask") setStatus(entry, "done").catch(console.error);
-      else if ((e.key === "p" || e.key === "P") && entry.kind !== "ask")
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const actions = entry ? actionsOf(entry) : null;
+      const byKey = (k: string) => actions?.acts.find(action => action.key?.toLowerCase() === k);
+      const mail = entry?.subject.type === "mail";
+      if (key === "ArrowDown" || key === "j") step(1);
+      else if (key === "ArrowUp" || key === "k") step(-1);
+      else if (!entry || !actions) return;
+      else if (key === "l") putOff(entry.id);
+      else if (key === "s") setPop("snooze");
+      else if (key === "e" && actions.done) actions.done.run();
+      else if (key === "p" && entry.kind !== "ask")
         setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
+      else if (mail && key === "r") actions.primary?.run();
+      else if (mail && ["a", "f", "u", "#"].includes(key) && byKey(key)) byKey(key)!.run();
       // an agent's question or permission takes Enter itself (its card)
-      else if (e.key === "Enter" && entry.kind !== "ask" && !(e.target instanceof HTMLButtonElement))
-        actionsOf(entry).primary?.run();
-      else if (e.key === "Backspace") actionsOf(entry).secondary?.run();
+      else if (key === "Enter" && entry.kind !== "ask" && !(e.target instanceof HTMLButtonElement))
+        actions.primary?.run();
+      else if (key === "Backspace" && actions.secondary) actions.secondary.run();
       else return;
       e.preventDefault();
     };

@@ -49,10 +49,12 @@ export function MailDetail({
   mailKey: key,
   className,
   readOnReply = false,
+  bare = false,
 }: {
   mailKey: string;
   className?: string;
-  readOnReply?: boolean; // Today: a reply marks the mail read, so it leaves the day's queue
+  readOnReply?: boolean; // a reply marks the mail read
+  bare?: boolean; // Today: its own actions and title above, here only who, when and the mail
 }) {
   const { t, locale } = useT();
   const item = useMailStore(s => s.list?.find(candidate => mailKey(candidate) === key));
@@ -189,7 +191,7 @@ export function MailDetail({
     );
   return (
     <div className={className}>
-      {bar}
+      {bare ? null : bar}
       {link ? (
         // confirm before a link in a mail opens
         <div className="my-2 px-2.5 py-2 border border-separator rounded-lg bg-fill">
@@ -204,9 +206,11 @@ export function MailDetail({
           </div>
         </div>
       ) : null}
-      <h2 className="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
-        {item.subject || t("mail.noSubject")}
-      </h2>
+      {bare ? null : (
+        <h2 className="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
+          {item.subject || t("mail.noSubject")}
+        </h2>
+      )}
       <div className="text-[13px] leading-normal pb-3 border-b border-separator">
         <div>{formatAddresses(item.from)}</div>
         <div className="text-secondary tabular-nums">
