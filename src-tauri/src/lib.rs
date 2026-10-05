@@ -1196,8 +1196,9 @@ fn history_sid(app: AppHandle, state: State<App>, sid: String, from: Option<u64>
 async fn activity(app: AppHandle, state: State<'_, App>, date: String, sessions: Vec<String>) -> Result<HashMap<String, Vec<i64>>, String> {
     use chrono::{Local, NaiveDate, TimeZone};
     let day = NaiveDate::parse_from_str(&date, "%Y-%m-%d").map_err(|e| e.to_string())?;
-    let from = Local.from_local_datetime(&day.and_hms_opt(0, 0, 0).unwrap()).earliest().ok_or("bad date")?.timestamp_millis();
-    let to = from + 86_400_000; // ponytail: a 23 or 25 hour day (DST) is off by an hour at its end
+    let midnight = |d: NaiveDate| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()).earliest().map(|t| t.timestamp_millis());
+    let from = midnight(day).ok_or("bad date")?;
+    let to = day.succ_opt().and_then(midnight).ok_or("bad date")?; // the next local midnight, so a DST day is 23 or 25 hours
     let p = agents::get_or_first(Some("claude"));
     let env = env_of(&app, &state, p);
     let files: Vec<(String, PathBuf)> = sessions.into_iter().filter(|s| agent_core::safe_id(s))
