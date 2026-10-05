@@ -550,6 +550,7 @@ export default {
   "pop.save": "Sichern",
   "work.working": "{agent} arbeitet",
   "work.thinking": "Claude denkt nach",
+  "work.thought": "Überlegung",
   "due.overdue": "{n} T überfällig",
   "due.today": "heute",
   "note.forked": "Weiter in der App. Das Terminal bleibt, wie es ist.",

@@ -21,11 +21,11 @@ export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; bod
 export function push(state: Pick<ConversationsState, "messages">, key: string, item: Item) {
   (state.messages[key] ||= []).push(item);
 }
-// assistant text: a whole block, or a delta appended to the block before it
-function pushText(items: Item[], text: string, delta: boolean) {
+// assistant text or thinking: a whole block, or a delta appended to the block before it
+function pushText(items: Item[], text: string, delta: boolean, kind: "ai" | "thinking" = "ai") {
   const last = items[items.length - 1];
-  if (delta && last?.kind === "ai") last.text += text;
-  else items.push({ kind: "ai", text });
+  if (delta && last?.kind === kind) last.text += text;
+  else items.push({ kind, text });
 }
 const toolItem = (id: string, name: string, input: ToolInput, state: Item["state"], at: number): Item => ({
   kind: "tool",
@@ -68,6 +68,9 @@ export function applyAgentEvent(
       return [];
     case "text":
       pushText((state.messages[key] ||= []), event.text, event.delta);
+      return [];
+    case "thinking":
+      pushText((state.messages[key] ||= []), event.text, event.delta, "thinking");
       return [];
     case "tool_call":
       return onToolCall(state, key, event, env.now);

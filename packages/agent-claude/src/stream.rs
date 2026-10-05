@@ -3,6 +3,7 @@
 use agent_core::envelope::strip;
 use agent_core::{Event, Hunk, Image, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::path::Path;
 
 /// A turn as stream-json takes it: pasted images as base64 image blocks before the text.
@@ -13,10 +14,10 @@ pub fn user_message(turn: &Turn) -> Value {
     json!({"type": "user", "message": {"role": "user", "content": content}})
 }
 
-/// The blocks of an assistant message: text (not blank) and tool calls.
-fn assistant(content: &Value, out: &mut Vec<Event>) {
+/// The blocks of an assistant message: text (not blank, unless it streamed already) and tool calls.
+fn assistant(content: &Value, streamed: bool, out: &mut Vec<Event>) {
     for c in content.as_array().into_iter().flatten() {
-        if c["type"] == "text" { if let Some(t) = c["text"].as_str().filter(|t| !t.trim().is_empty()) { out.push(Event::Text { text: t.into(), delta: false }); } }
+        if c["type"] == "text" && !streamed { if let Some(t) = c["text"].as_str().filter(|t| !t.trim().is_empty()) { out.push(Event::Text { text: t.into(), delta: false }); } }
         if c["type"] == "tool_use" { out.push(Event::ToolCall { id: c["id"].as_str().unwrap_or("").into(), name: c["name"].as_str().unwrap_or("").into(), input: c["input"].clone() }); }
     }
 }
@@ -30,9 +31,59 @@ fn patch(content: &Value, result: &Value, out: &mut Vec<Event>) {
     if !hunks.is_empty() { out.push(Event::Patch { id: r["tool_use_id"].as_str().unwrap_or("").into(), hunks }); }
 }
 
-/// One stdout line of `claude -p --output-format stream-json`.
-pub fn parse(line: &str) -> Vec<Event> {
-    let Ok(ev) = serde_json::from_str::<Value>(line) else { return vec![] };
+/// The parser of one process. With `--include-partial-messages` text and thinking arrive as `stream_event` deltas
+/// first (the first piece of a block starts it, the next ones append), then the whole `assistant` message: its text
+/// is skipped for a message that streamed, or it would show twice.
+#[derive(Default)]
+pub struct State {
+    /// the message the deltas belong to, and the messages whose text streamed
+    message: String,
+    streamed: HashSet<String>,
+    /// a text or thinking block began and has no piece yet
+    fresh: bool,
+}
+
+impl State {
+    /// A `stream_event` of the top-level conversation (a subagent's has a `parent_tool_use_id`, its message comes whole).
+    fn delta(&mut self, ev: &Value, out: &mut Vec<Event>) {
+        if !ev["parent_tool_use_id"].is_null() { return; }
+        let e = &ev["event"];
+        match e["type"].as_str().unwrap_or("") {
+            "message_start" => self.message = e["message"]["id"].as_str().unwrap_or("").into(),
+            "content_block_start" => self.fresh = true,
+            "content_block_delta" => {
+                let d = &e["delta"];
+                let piece = |text: &str, this: &mut Self| { let delta = !this.fresh; this.fresh = false; (text.to_string(), delta) };
+                if let Some(t) = d["text"].as_str().filter(|_| d["type"] == "text_delta") {
+                    let (text, delta) = piece(t, self);
+                    self.streamed.insert(self.message.clone());
+                    out.push(Event::Text { text, delta });
+                } else if let Some(t) = d["thinking"].as_str().filter(|_| d["type"] == "thinking_delta") {
+                    let (text, delta) = piece(t, self);
+                    out.push(Event::Thinking { text, delta });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// One stdout line of `claude -p --output-format stream-json --include-partial-messages`.
+    pub fn parse(&mut self, line: &str) -> Vec<Event> {
+        let Ok(ev) = serde_json::from_str::<Value>(line) else { return vec![] };
+        let mut out = vec![];
+        match ev["type"].as_str().unwrap_or("") {
+            "stream_event" => self.delta(&ev, &mut out),
+            "assistant" => {
+                let streamed = ev["message"]["id"].as_str().is_some_and(|id| self.streamed.contains(id));
+                assistant(&ev["message"]["content"], streamed, &mut out);
+            }
+            _ => out = parse(&ev),
+        }
+        out
+    }
+}
+
+fn parse(ev: &Value) -> Vec<Event> {
     let mut out = vec![];
     match ev["type"].as_str().unwrap_or("") {
         "system" if ev["subtype"] == "init" => {
@@ -40,7 +91,6 @@ pub fn parse(line: &str) -> Vec<Event> {
             if let Some(m) = ev["model"].as_str() { out.push(Event::Resolved { model: m.into(), effort: None }); }
         }
         "conversation_reset" => out.push(Event::Reset),
-        "assistant" => assistant(&ev["message"]["content"], &mut out),
         "user" => {
             for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
                 out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
@@ -69,7 +119,7 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true || e["isMeta"] == true { return; }
     if let Some(at) = e["timestamp"].as_str() { out.push(Event::Time { at: at.into() }); }
     let c = &e["message"]["content"];
-    if e["type"] == "assistant" { return assistant(c, out); }
+    if e["type"] == "assistant" { return assistant(c, false, out); }
     patch(c, &e["toolUseResult"], out);
     if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
@@ -104,7 +154,8 @@ mod tests {
 
     #[test]
     fn stream_json_to_events() {
-        let mut ev: Vec<Event> = STREAM.lines().flat_map(parse).collect();
+        let mut st = State::default();
+        let mut ev: Vec<Event> = STREAM.lines().flat_map(|l| st.parse(l)).collect();
         assert_eq!(ev[0], Event::Session { id: "36099ce4-d17c-482a-8907-23790cc0e8db".into() });
         assert_eq!(ev.remove(1), Event::Resolved { model: "claude-opus-5-5".into(), effort: None });
         assert_eq!(ev[1], Event::Text { text: "Ik kijk even.".into(), delta: false });
@@ -118,6 +169,29 @@ mod tests {
         let lines = [" line one", " line two", "-line three", "+line 3", " line four", " line five"].map(String::from).to_vec();
         assert_eq!(ev[9], Event::Patch { id: "toolu_3".into(), hunks: vec![Hunk { old_start: 1, new_start: 1, lines }] });
         assert_eq!(ev.len(), 10); // blank text, rate-limit and unknown lines give nothing, a Read's result no patch
+    }
+
+    #[test]
+    fn partial_messages_stream_and_the_whole_message_does_not_repeat_them() {
+        let delta = |t: &str, d: Value, parent: Value| json!({"type": "stream_event", "parent_tool_use_id": parent, "event": {"type": t, "delta": d}}).to_string();
+        let text = |s: &str| delta("content_block_delta", json!({"type": "text_delta", "text": s}), Value::Null);
+        let start = json!({"type": "stream_event", "parent_tool_use_id": null, "event": {"type": "message_start", "message": {"id": "m1"}}}).to_string();
+        let block = delta("content_block_start", json!({}), Value::Null);
+        let whole = json!({"type": "assistant", "message": {"id": "m1", "content": [{"type": "text", "text": "Hallo daar"}, {"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}}).to_string();
+        let mut st = State::default();
+        let mut go = |l: &str| st.parse(l);
+        assert_eq!(go(&start), vec![]);
+        assert_eq!(go(&block), vec![]);
+        assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": "hm"}), Value::Null)), vec![Event::Thinking { text: "hm".into(), delta: false }]);
+        assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": "m"}), Value::Null)), vec![Event::Thinking { text: "m".into(), delta: true }]);
+        assert_eq!(go(&block), vec![]);
+        assert_eq!(go(&text("Hallo")), vec![Event::Text { text: "Hallo".into(), delta: false }]);
+        assert_eq!(go(&text(" daar")), vec![Event::Text { text: " daar".into(), delta: true }]);
+        assert_eq!(go(&delta("content_block_delta", json!({"type": "text_delta", "text": "sub"}), json!("toolu_9"))), vec![]); // a subagent's
+        let after = go(&whole);
+        assert!(matches!(&after[..], [Event::ToolCall { name, .. }] if name == "Read")); // the text is not shown twice
+        // a message that did not stream still shows its text
+        assert!(matches!(&go(&whole.replace("m1", "m2"))[..], [Event::Text { delta: false, .. }, Event::ToolCall { .. }]));
     }
 
     #[test]

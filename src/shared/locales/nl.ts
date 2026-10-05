@@ -548,6 +548,7 @@ export default {
   "pop.save": "Bewaren",
   "work.working": "{agent} werkt",
   "work.thinking": "Claude denkt na",
+  "work.thought": "Redenering",
   "due.overdue": "{n} d vervallen",
   "due.today": "vandaag",
   "note.forked": "Verder in de app. De terminal blijft zoals hij is.",

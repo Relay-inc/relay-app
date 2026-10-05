@@ -85,6 +85,25 @@ const VIEWS = {
     await scrollMain("top");
     await intoView("public function sync(Dossier $dossier): void");
   },
+  // a reply streaming in (PR: Claude streams replies and thinking): the thinking folded above the text so far, then opened
+  "conversation-thinking-live": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      h.emitAgent(key, { type: "thinking", text: "The user asks for the open invoices. ", delta: false });
+      h.emitAgent(key, { type: "thinking", text: "I should read the ledger first, then group by client.", delta: true });
+      h.emitAgent(key, { type: "text", text: "Three invoices are still open", delta: false });
+      h.emitAgent(key, { type: "text", text: ": Northwind (", delta: true });
+    }, keys.switchTo);
+    await waitText("Three invoices are still open");
+    await settle(page);
+  },
+  "conversation-thinking-open": async () => {
+    await VIEWS["conversation-thinking-live"]();
+    await page.getByRole("button", { name: "Thinking", exact: true }).locator("visible=true").last().click();
+    await settle(page);
+  },
   "conversation-steps": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
