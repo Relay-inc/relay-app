@@ -361,12 +361,11 @@ export function entries(now = Date.now()): Entry[] {
     const key = mailKey(mail);
     const waits = mail.unread || (mail.other === false && !mail.answered);
     if (!waits || mail.other || mail.answered || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
-    const sender = mail.from[0]?.name || mail.from[0]?.email || "";
     add("mail", {
       id: `mail:${key}`,
       at,
       title: mail.subject || t("mail.noSubject"),
-      where: [sender, timeOf(mail.date)].filter(Boolean).join(" · "),
+      where: "", // who and when are on the mail itself, right under it
       why: t("today.waiting", { ago: ago(at, now) }),
       tone: now - at > 4 * 60 * MIN ? "soon" : "",
       project: mailProject(mail),

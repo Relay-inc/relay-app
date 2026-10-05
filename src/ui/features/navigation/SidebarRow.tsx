@@ -53,12 +53,9 @@ function dropLineClass(drop: Drop, tile: boolean) {
   return "";
 }
 // the count on a tile: the badge in its corner, small enough not to cover the icon
-const TILE_META: Record<Meta["kind"], string> = {
-  badge: "bg-accent text-on-accent",
-  late: "bg-late text-white",
-  soon: "bg-soon text-white",
-  count: "bg-fill-2 text-secondary",
-};
+// a view icon carries no number, only a dot: something new (blue), or something late (red); a plain count none.
+// The number is in the tooltip
+const TILE_DOT: Record<Meta["kind"], string> = { badge: "bg-accent", late: "bg-late", soon: "bg-accent", count: "" };
 
 /** One row of the sidebar: a view, a project, a conversation or terminal session, or the "n more" fold; or a view as a
  *  square icon (`tile`) when the views are shown as a row of icons. The click, press and context menu are the
@@ -101,7 +98,9 @@ export function SidebarRow({
       ? "text-accent-text"
       : kind === "proj"
         ? tintText(tint, "text-secondary")
-        : "text-secondary";
+        : kind === "conv" && !unseen
+          ? "text-tertiary opacity-60" // a conversation's glyph stays faint, its title carries it
+          : "text-secondary";
   const glyph = (className: string) =>
     svg ? <Glyph svg={svg} viewBox={box} className={className} /> : <Icon name={icon} className={className} />;
 
@@ -116,15 +115,13 @@ export function SidebarRow({
         aria-label={tip}
         aria-pressed={selected}
         {...rest}
-        className={`relative size-8 grid place-items-center rounded-md cursor-default transition-colors duration-150 ease-out ${selected ? "bg-accent-soft" : "hover:bg-fill"} ${dropLineClass(drop, true)} ${dragging ? "opacity-40" : ""}`}
+        className={`relative w-8.5 h-7.5 grid place-items-center rounded-lg cursor-default transition-colors duration-150 ease-out ${selected ? "bg-accent-soft" : "hover:bg-fill"} ${dropLineClass(drop, true)} ${dragging ? "opacity-40" : ""}`}
       >
-        {glyph(`glyph size-4.5 ${glyphColor}`)}
-        {meta ? (
+        {glyph(`glyph size-4 ${selected ? "text-accent-text" : "text-tertiary"}`)}
+        {meta && TILE_DOT[meta.kind] ? (
           <span
-            className={`absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-1 rounded-full text-[10px] leading-none font-semibold grid place-items-center tabular-nums ${TILE_META[meta.kind]}`}
-          >
-            {meta.n}
-          </span>
+            className={`absolute top-1.5 right-1.75 size-1.5 rounded-full shadow-[0_0_0_1.5px_var(--color-sidebar)] ${TILE_DOT[meta.kind]}`}
+          />
         ) : null}
       </div>
     );
@@ -136,7 +133,15 @@ export function SidebarRow({
   else if (kind === "proj") {
     if (isImg(img)) lead = <ProjectImg url={img} className="size-4 flex-none object-contain rounded-xs" />;
     else if (emoji) lead = <span className="w-4 flex-none text-center text-sm leading-none">{emoji}</span>;
-    else lead = <Icon name="folder" className={glyphClass} />;
+    // no icon of its own: its initial (or a short all-caps first word, "BE") on a small tile in its context's colour
+    else
+      lead = (
+        <span
+          className={`grid place-items-center size-4 flex-none rounded-[4px] bg-fill-2 text-[9px] font-bold leading-none ${tintText(tint, "text-secondary")}`}
+        >
+          {/^[A-Z0-9]{2,3}\b/.exec(name)?.[0] ?? name.trim().charAt(0)}
+        </span>
+      );
   }
 
   const rowClass = closing

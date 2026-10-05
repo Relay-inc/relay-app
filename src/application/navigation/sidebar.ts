@@ -241,7 +241,7 @@ const META: Record<string, () => Meta | undefined> = {
 };
 
 export const sidebarCfg = (): SidebarCfg => settings().sidebar ?? {};
-export const viewsLayout = () => sidebarCfg().layout ?? "list";
+export const viewsLayout = () => sidebarCfg().layout ?? "icons";
 export const moreOn = () => sidebarCfg().more !== false;
 /** Every view there is now, in the user's order, the switched-off ones included. */
 const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), t), sidebarCfg());
