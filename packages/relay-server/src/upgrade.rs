@@ -31,7 +31,7 @@ pub fn newer(a: &str, b: &str) -> bool {
     parse(a) > parse(b)
 }
 
-/// Run this process's arguments on `bin`; only returns when that fails.
+/// Run this process's arguments on `bin`. Only returns when that fails.
 fn exec(bin: &Path) -> std::io::Error { Command::new(bin).args(std::env::args().skip(1)).exec() }
 
 /// At the start of `serve`: go on in the kept binary instead, when it is newer than this one.

@@ -5,13 +5,31 @@ that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, ref
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
 the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
-`package.json`). Once that is on main, the release workflow
-builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes. Then
-push relay-server's image from a checkout of the tag with `scripts/push-server-image.sh`. Run the workflow by hand
-(Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+`package.json`). Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
+GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
+its Linux binaries (`scripts/push-server-image.sh`). Nothing of a release runs in GitHub Actions, only the checks of
+a PR. Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
+
+### Added
+
+- **Record a meeting** from its card in Waiting for you: your microphone and what the Mac plays (so people on a call are in it, also on headphones), transcribed on this Mac with "Me" and "Others" as speakers; on speakers instead of headphones, what the microphone hears of the others is left out so their words don't show twice. Stop puts the audio (.m4a) and the transcript in Obsidian's attachment folder, and a conversation makes the meeting note and summarises it. Settings › Voice › Meetings picks the model for meetings and whether the audio is kept and the note written. macOS asks once for Screen & System Audio Recording (#95)
+- **Dictate in any app** (Settings › Voice, off by default): the voice shortcut works everywhere, also with Relay in the background, and pastes the text where the cursor is, putting your clipboard back afterwards. A small pill at the bottom of the screen shows it listening and transcribing. Pasting needs Accessibility; without it the text is left on the clipboard (#95)
+- **Dictation in the composer**: the microphone button or a shortcut (⌥Space by default) turns what you say into text at the cursor, on this Mac without sending audio anywhere. **Settings › Voice** switches it on or off, picks the speech model (Parakeet V3 by default for 25 European languages including Dutch; Parakeet V2, Canary, Cohere and Moonshine to download or remove there), the spoken language, the shortcut and whether you hold it, tap it or either. Escape throws a recording away (#95)
+
+## [0.0.6] - 2026-10-04
+
+### Changed
+
+- Releases are built on a Mac with `scripts/release.sh` instead of in GitHub Actions, which only run the checks of a PR (#97)
+
+### Fixed
+
+- Which project a conversation belongs to, the sidebar's order and folds and the other UI state live in a file in Relay's data folder instead of the window's storage, so the installed Relay and a development build show the same, also after a reinstall. The first start takes over what the window had (#98)
+
+## [0.0.5] - 2026-10-04
 
 ### Added
 
@@ -19,9 +37,6 @@ push relay-server's image from a checkout of the tag with `scripts/push-server-i
 - A machine seals the transcripts of conversations in the vault like the vault itself: on disk only ciphertext, in plain text only in RAM while your laptop has unlocked it, back after a restart once it connects again (#94)
 - **This Mac as a machine** (Settings › Machines): Relay on a spare Mac runs other Macs' conversations, also while it is closed. A switch installs a LaunchAgent with Relay's own relay-server (`relay --relay-server serve`), so app and server always have the same version, and makes the pairing line. The working copy of the mirrored vault sits on a RAM disk that is ejected when the server stops (#94)
 - Set up a machine has steps per kind of machine: Mac (with the Relay app, or Docker), Linux and Unraid, each with its own folder and preparation. The pairing command fills in the machine's LAN address itself (#94)
-- **Record a meeting** from its card in Waiting for you: your microphone and what the Mac plays (so people on a call are in it, also on headphones), transcribed on this Mac with "Me" and "Others" as speakers; on speakers instead of headphones, what the microphone hears of the others is left out so their words don't show twice. Stop puts the audio (.m4a) and the transcript in Obsidian's attachment folder, and a conversation makes the meeting note and summarises it. Settings › Voice › Meetings picks the model for meetings and whether the audio is kept and the note written. macOS asks once for Screen & System Audio Recording (#95)
-- **Dictate in any app** (Settings › Voice, off by default): the voice shortcut works everywhere, also with Relay in the background, and pastes the text where the cursor is, putting your clipboard back afterwards. A small pill at the bottom of the screen shows it listening and transcribing. Pasting needs Accessibility; without it the text is left on the clipboard (#95)
-- **Dictation in the composer**: the microphone button or a shortcut (⌥Space by default) turns what you say into text at the cursor, on this Mac without sending audio anywhere. **Settings › Voice** switches it on or off, picks the speech model (Parakeet V3 by default for 25 European languages including Dutch; Parakeet V2, Canary, Cohere and Moonshine to download or remove there), the spoken language, the shortcut and whether you hold it, tap it or either. Escape throws a recording away (#95)
 - **Retry when a usage limit resets** (Settings › General, off by default): a conversation refused because the provider's usage limit is reached, with no other account to switch to, shows "Retrying at …" with a Cancel button and goes on by itself once the limit resets, also after an app restart. A refused message that never started is sent again, otherwise the agent is asked to continue. It retries once; the Mac stays awake for it while Keep Mac awake is on (#92)
 - Views you switch off in the sidebar stay reachable under "…" after the views, a dropdown with their icons; turn the "…" off in Settings › General or from the views' right-click menu (#93)
 - The Mac stays awake while a conversation has a turn running, so you can leave it working; closing the lid still sleeps it. Switch it off in Settings › General (#91)
@@ -194,7 +209,9 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/vault-app/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/LaurentMe/relay-app/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/LaurentMe/relay-app/compare/v0.0.5...v0.0.6
+[0.0.5]: https://github.com/LaurentMe/relay-app/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/LaurentMe/vault-app/compare/v0.0.1...v0.0.2
