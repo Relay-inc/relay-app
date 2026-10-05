@@ -4,13 +4,13 @@ import { useMailStore } from "../../../application/mail/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
-import { mailChat, mailLinkGo, mailMove, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { mailChat, mailMove, mailSeen, toggleMailText } from "../../../application/mail/mail";
 import { useSettingsStore } from "../../../application/settings/store";
 import { mailExperimental } from "../../../domain/settings/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
-import { MailText } from "./MailText";
+import { MailLinkBar, MailText } from "./MailText";
 
 const KILOBYTE = 1024;
 const MEGABYTE = 1024 * 1024;
@@ -59,7 +59,6 @@ export function MailDetail({
   const { t, locale } = useT();
   const item = useMailStore(s => s.list?.find(candidate => mailKey(candidate) === key));
   const textView = useMailStore(s => s.textView.has(key));
-  const link = useMailStore(s => s.link);
   const body = useNavigationStore(s => s.panel.detail[key]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const experimental = useSettingsStore(s => mailExperimental(s.settings));
@@ -192,20 +191,7 @@ export function MailDetail({
   return (
     <div className={className}>
       {bare ? null : bar}
-      {link ? (
-        // confirm before a link in a mail opens
-        <div className="my-2 px-2.5 py-2 border border-separator rounded-lg bg-fill">
-          <div className="text-xs break-all select-text">{link}</div>
-          <div className="flex gap-2 mt-2">
-            <button className="btn btn-primary" onClick={() => mailLinkGo(true)}>
-              {t("mail.linkOpen")}
-            </button>
-            <button className="btn" onClick={() => mailLinkGo(false)}>
-              {t("mail.linkCancel")}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <MailLinkBar />
       {bare ? null : (
         <h2 className="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
           {item.subject || t("mail.noSubject")}

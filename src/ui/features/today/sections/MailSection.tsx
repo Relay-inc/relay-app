@@ -17,6 +17,7 @@ import {
   tweakCompose,
 } from "../../../../application/today/mail";
 import { useMailStore } from "../../../../application/mail/store";
+import { Linked, MailLinkBar } from "../../mail/MailText";
 import { useNavigationStore } from "../../../../application/navigation/store";
 import { mailExperimental } from "../../../../application/settings/settings";
 import { agent } from "../../../../shared/plugins";
@@ -116,7 +117,9 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
               </span>
             </div>
             {on ? (
-              <div className="pl-8.5 text-sm leading-[1.55] whitespace-pre-wrap select-text">{m.untrusted_mail}</div>
+              <div className="pl-8.5 text-sm leading-[1.55] whitespace-pre-wrap wrap-anywhere select-text">
+                <Linked text={m.untrusted_mail} />
+              </div>
             ) : null}
           </div>
         );
@@ -138,6 +141,7 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
           </div>
           <span className="text-xs text-tertiary whitespace-nowrap">{at}</span>
         </div>
+        <MailLinkBar />
         {err && !body ? <div className="err-box">{err}</div> : null}
         {!body && !err ? <div className="text-sm text-secondary">{t("mail.loadingBody")}</div> : null}
         {body ? (
@@ -153,14 +157,14 @@ export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
           ) : (
             <div className="flex flex-col gap-2.5 text-sm leading-relaxed select-text">
               {paragraphs.map((p, i) => (
-                <p key={i} className="m-0 whitespace-pre-wrap">
-                  {p}
+                <p key={i} className="m-0 whitespace-pre-wrap wrap-anywhere">
+                  <Linked text={p} />
                 </p>
               ))}
               {quote ? (
                 showQuote ? (
-                  <div className="pl-3 border-l-2 border-separator-strong text-[13px] text-secondary whitespace-pre-wrap">
-                    {quote}
+                  <div className="pl-3 border-l-2 border-separator-strong text-[13px] text-secondary whitespace-pre-wrap wrap-anywhere">
+                    <Linked text={quote} />
                   </div>
                 ) : (
                   <button

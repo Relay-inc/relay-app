@@ -33,3 +33,9 @@ test("links lose their brackets, images become placeholders", () =>
     { kind: "image", text: "logo" },
     { kind: "text", text: "" },
   ]));
+
+test("a link between brackets runs over the line breaks mail wraps it at", () =>
+  assert.deepEqual(
+    prose("link\n  <https://app.example/p/Prijzen-\n391f?\nv=39&source=copy_link>\n - next").filter(p => p.kind === "link"),
+    [{ kind: "link", text: "https://app.example/p/Prijzen-391f?v=39&source=copy_link" }],
+  ));
