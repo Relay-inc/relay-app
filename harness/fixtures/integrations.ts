@@ -70,6 +70,9 @@ const pr = (number: number, title: string, repo: string, extra: Record<string, u
 export const prs = {
   review: [
     pr(412, "Fix the SSO redirect loop on the portal", "acme/northwind-portal", { author: "sofie-dev", review: "REVIEW_REQUIRED", ci: "FAILURE", project: "Northwind Portal" }),
+    // two PRs on ticket #312: reviewed together
+    pr(418, "312 Two-factor: QR enrolment screen", "acme/northwind-portal", { author: "sofie-dev", review: "REVIEW_REQUIRED", project: "Northwind Portal" }),
+    pr(419, "312 Two-factor: enforce on login", "acme/northwind-portal", { author: "sofie-dev", review: "REVIEW_REQUIRED", project: "Northwind Portal" }),
     pr(88, "Replace balance instead of adding it", "acme/beacon-billing", { author: "tom-w", review: "REVIEW_REQUIRED", ci: "PENDING", project: "Beacon Billing" }),
     pr(57, "Contact sync: incremental cursor", "acme/harbor-crm", { author: "jonas-p", review: "CHANGES_REQUESTED", ci: "SUCCESS", project: "Harbor CRM" }),
   ],
