@@ -15,14 +15,14 @@ a PR. Versions follow
 
 ### Added
 
-- **"Always allow" on a permission card**: when Claude offers to remember a choice (this command, the folder, edits for the session), the card has a third button next to Deny and Allow that allows it and keeps it, so the same ask doesn't come back. Enter still allows once.
+- **"Always allow" on a permission card**: when Claude offers to remember a choice (this command, the folder, edits for the session), the card has a third button next to Deny and Allow that allows it and keeps it, so the same ask doesn't come back. Enter still allows once. (#118)
 - **Make ticket from a mail**: a button next to the draft-reply ones (and in a mail's … menu in Today, shortcut T) starts a conversation that reads the mail and its thread, finds the board (the one linked to the mail's project, else it picks one), and creates one task in the intake list with a short title and a summary, with the full mail as a comment on it. You approve the create before anything is made, and Relay never sends mail (#111)
 - **Claude shows when it compacts a conversation and how full its context is**: a "Compacting conversation…" line turns into "Conversation compacted" with the size before and after, your history stays, and a small "42% context" next to the model pick shows how much of the window is used. (#115)
 - **Claude replies and thinking stream in live**: the answer appears word by word instead of all at once, and what Claude reasons shows above it as a dim, folded "Thinking" line you can open. (#113)
 
 ### Changed
 
-- **Claude asks permission over the same connection as everything else**: permission cards and questions no longer go through a separate helper process polling a folder, so they appear without delay, and one that came up while Relay was closed or on a work machine is still there to answer when you are back.
+- **Claude asks permission over the same connection as everything else**: permission cards and questions no longer go through a separate helper process polling a folder, so they appear without delay, and one that came up while Relay was closed or on a work machine is still there to answer when you are back. (#118)
 
 ### Fixed
 
