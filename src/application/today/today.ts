@@ -3,7 +3,9 @@ import { provider } from "../../shared/plugins";
 import { byDue, myCardToday, prsForMe, type TodayCard } from "../../domain/today/rules";
 import {
   EST,
+  NO_PROJECT,
   doingFirst,
+  inContext,
   ordered,
   plan,
   rankOf,
@@ -30,7 +32,7 @@ import { ctxOf } from "../board/ctx";
 import { ticketChat } from "../board/board";
 import { openCard, openPr } from "../navigation/panel";
 import { select } from "../navigation/navigation";
-import { projectLabel, findProjects, loadSnapshot } from "../workspace/vault";
+import { contexts, project as projectOf, projectLabel, findProjects, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
 import { joinMeeting, loadMeetings, meetingChat, timeOf } from "../calendar/calendar";
@@ -362,7 +364,15 @@ export function meetingsOfToday(now = Date.now()) {
 /** Today as a whole: the queue in order, the slots, where each item is planned, and how far the day got. */
 export function todayModel(now = Date.now()) {
   const state = useTodayStore.getState();
-  const all = entries(now);
+  // the context filter decides what is planned too: Antenna's queue fills the day on its own
+  const every = entries(now);
+  const contextOf = (entry: Entry) => projectOf(entry.project)?.context;
+  const all = every.filter(entry => inContext(state.context, contextOf(entry)));
+  const counts = new Map<string, number>();
+  for (const entry of every) {
+    const id = contextOf(entry) ?? NO_PROJECT;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
   const queue = doingFirst(ordered(all, state.later) as Entry[], entry => entry.status);
   const meetings = meetingsOfToday(now);
   const dayEnd = new Date(now).setHours(18, 0, 0, 0);
@@ -373,8 +383,15 @@ export function todayModel(now = Date.now()) {
   );
   const { placed, tomorrow, used } = plan(queue, free, state.pins);
   const current = new Set(queue.map(entry => entry.id));
-  // snoozed is not cleared: it comes back
-  const gone = state.seen.filter(id => !current.has(id) && !asleep(id));
+  // cleared: in the queue earlier today and gone since, not snoozed (it comes back), not hidden by the context filter
+  const everyId = new Set(every.map(entry => entry.id));
+  const gone = state.seen.filter(
+    id =>
+      !current.has(id) &&
+      !everyId.has(id) &&
+      !asleep(id) &&
+      inContext(state.context, projectOf(state.log[id]?.project ?? null)?.context),
+  );
   const cleared = gone.length;
   // what left the queue today, newest first: by hand (it can come back) or because it was done where it lives
   const done = gone.reverse().map(id => ({
@@ -394,6 +411,13 @@ export function todayModel(now = Date.now()) {
     selected,
     cleared,
     done,
+    // the filter's chips: every context of the vault and the items without a project, with how many each has
+    contexts: [
+      { id: "", n: every.length },
+      ...contexts().map(id => ({ id, n: counts.get(id) ?? 0 })),
+      { id: NO_PROJECT, n: counts.get(NO_PROJECT) ?? 0 },
+    ],
+    context: state.context,
     // snoozed and not back yet, soonest first
     snoozed: Object.entries(state.snoozed)
       .filter(([, item]) => item.until > todayIso())
@@ -408,14 +432,14 @@ export type TodayModel = ReturnType<typeof todayModel>;
 
 /** Remember what is in the queue now, and what it is called, so what leaves it today counts as cleared and Done
  *  today can still name it. */
-export function noteSeen(items: { id: string; title: string; kind: Kind }[]) {
+export function noteSeen(items: { id: string; title: string; kind: Kind; project: string | null }[]) {
   const { seen, log } = useTodayStore.getState();
   const fresh = items.filter(item => !seen.includes(item.id) || log[item.id]?.title !== item.title);
   if (fresh.length)
     changeDay(day => {
       for (const item of fresh) {
         if (!day.seen.includes(item.id)) day.seen.push(item.id);
-        day.log[item.id] = { title: item.title, kind: item.kind };
+        day.log[item.id] = { title: item.title, kind: item.kind, project: item.project };
       }
     });
 }

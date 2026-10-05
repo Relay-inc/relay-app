@@ -303,6 +303,8 @@ export default {
   "today.alsoIn": "Aussi dans {project}",
   "today.progress": "{cleared} sur {total} traités · {planned} prévus aujourd'hui",
   "today.boardsDown": "{n} tableau(x) non chargé(s)",
+  "today.ctxAll": "Tout",
+  "today.ctxNone": "Sans projet",
   "today.showQuoted": "Afficher l'historique cité",
   "today.toLine": "à {who}",
   "today.pinned": "épinglé",

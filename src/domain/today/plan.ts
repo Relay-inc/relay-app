@@ -122,3 +122,9 @@ export const doingFirst = <T extends { id: string }>(queue: T[], status: (item: 
   ...queue.filter(item => status(item) === "doing"),
   ...queue.filter(item => status(item) !== "doing"),
 ];
+
+/** The context filter: "" every item, NO_PROJECT the ones without a vault project, else the ones whose project is
+ *  in that context. */
+export const NO_PROJECT = "-";
+export const inContext = (filter: string, context: string | undefined) =>
+  !filter || (filter === NO_PROJECT ? !context : context === filter);

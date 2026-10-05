@@ -22,6 +22,12 @@ const rowOf = async text => {
 try {
   await open(page, server.url, { fixture: "calendar", sel: "__wait" });
   await shot("01-overview");
+  await page.getByRole("button", { name: /^Agency/ }).locator("visible=true").first().click();
+  await shot("01b-context");
+  await page.getByRole("button", { name: /^No project/ }).locator("visible=true").first().click();
+  await shot("01c-no-project");
+  await page.getByRole("button", { name: /^All/ }).locator("visible=true").first().click();
+  await settle(page, 200);
   await rowOf("Acceptance checklist portal v2");
   await shot("02-mail");
   await shot("02b-mail-bottom");

@@ -300,6 +300,8 @@ export default {
   "today.alsoIn": "Ook in {project}",
   "today.progress": "{cleared} van {total} afgewerkt · {planned} gepland vandaag",
   "today.boardsDown": "{n} bord(en) niet geladen",
+  "today.ctxAll": "Alles",
+  "today.ctxNone": "Geen project",
   "today.showQuoted": "Toon de geciteerde geschiedenis",
   "today.toLine": "aan {who}",
   "today.pinned": "vastgezet",

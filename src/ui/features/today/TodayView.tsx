@@ -6,6 +6,7 @@ import { setPop, useDetailsStore } from "../../../application/today/details";
 import { closeCompose } from "../../../application/today/mail";
 import { closeReview, useReviewStore } from "../../../application/today/review";
 import { ReviewScreen } from "./ReviewScreen";
+import { ContextFilter } from "./ContextFilter";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { cardOf } from "../../../application/navigation/panel";
 import {
@@ -51,7 +52,7 @@ export function TodayView({ className = "" }: { className?: string }) {
   const work = useReviewStore(s => s.work);
 
   // what is in the queue now counts as cleared once it leaves it
-  const seen = model.queue.map(({ id, title, kind }) => ({ id, title, kind }));
+  const seen = model.queue.map(({ id, title, kind, project }) => ({ id, title, kind, project }));
   useEffect(() => noteSeen(seen), [seen]);
 
   // the ticket window over Today; a status or assignee changed there shows once it closes
@@ -154,6 +155,7 @@ export function TodayView({ className = "" }: { className?: string }) {
               {t("today.progress", { cleared: model.cleared, total: model.total, planned: minutes(model.planned) })}
             </span>
             <span className="flex-1" />
+            <ContextFilter model={model} />
             {errors.length ? (
               <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
                 {t("today.boardsDown", { n: errors.length })}
