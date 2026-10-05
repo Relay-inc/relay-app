@@ -794,6 +794,10 @@ export default {
     "Enkel je microfoon wordt opgenomen, het geluid van de Mac niet: {why}. Sta Relay toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
   "rec.silentMac":
     "Nog geen geluid van de Mac. Speelt de call al, sta Relay dan toe in Systeeminstellingen › Privacy en beveiliging › Scherm- en systeemaudio-opname.",
+  "rec.dictatingIn": "Dicteren · {name}",
+  "rec.dictatingElsewhere": "Dicteren in een andere app",
+  "rec.transcribingPct": "uitschrijven {pct}%",
+  "rec.goTo": "Naar de opname",
   "rec.saving": "{title} uitschrijven…",
   "rec.saved": "Transcriptie bewaard: {path}",
   "rec.failed": "De opname kon niet weggeschreven worden: {error}",

@@ -800,6 +800,10 @@ export default {
     "Nur dein Mikrofon wird aufgenommen, der Ton des Mac nicht: {why}. Erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
   "rec.silentMac":
     "Noch kein Ton vom Mac. Läuft der Call schon, erlaube Relay in Systemeinstellungen › Datenschutz & Sicherheit › Bildschirm- & Systemaudioaufnahme.",
+  "rec.dictatingIn": "Diktieren · {name}",
+  "rec.dictatingElsewhere": "Diktieren in einer anderen App",
+  "rec.transcribingPct": "transkribiert {pct} %",
+  "rec.goTo": "Zur Aufnahme",
   "rec.saving": "{title} wird transkribiert…",
   "rec.saved": "Transkript gespeichert: {path}",
   "rec.failed": "Die Aufnahme konnte nicht geschrieben werden: {error}",

@@ -804,6 +804,10 @@ export default {
     "Seul votre micro est enregistré, pas le son du Mac : {why}. Autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
   "rec.silentMac":
     "Pas encore de son du Mac. Si l'appel joue déjà, autorisez Relay dans Réglages Système › Confidentialité et sécurité › Enregistrement de l'écran et de l'audio système.",
+  "rec.dictatingIn": "Dictée · {name}",
+  "rec.dictatingElsewhere": "Dictée dans une autre app",
+  "rec.transcribingPct": "transcription {pct} %",
+  "rec.goTo": "Aller à l'enregistrement",
   "rec.saving": "Transcription de {title}…",
   "rec.saved": "Transcription enregistrée : {path}",
   "rec.failed": "L'enregistrement n'a pas pu être écrit : {error}",

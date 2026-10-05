@@ -18,6 +18,7 @@ import { onboard } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
 import { saveChats, newChat } from "./conversations/chats";
 import { chatFromDictation } from "./conversations/dictation";
+import { listenToPill } from "./conversations/pill";
 import { terminalOf } from "./conversations/selectors";
 import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
@@ -106,6 +107,7 @@ function listenToBackend() {
   backend.onOrch(onOrchEvent);
   backend.onRetry(onRetryEvent);
   backend.onDictatedChat(chatFromDictation);
+  listenToPill(); // the sidebar shows dictation from any app too
   listenToFileDrops();
 }
 

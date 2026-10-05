@@ -27,6 +27,7 @@ import {
   moveConversation,
   setMachine,
   setTyped,
+  typeInto,
   unattach,
   unattachFile,
 } from "../../../application/conversations/actions";
@@ -70,10 +71,17 @@ const fieldMounted = (el: HTMLTextAreaElement | null) => {
 
 // dictation (src-tauri/src/dictation.rs): what was said lands at the cursor, or at the end when the field has no focus
 async function dictateIntoField() {
+  const { key } = useDictationStore.getState();
   const text = await stopDictation();
+  if (!text) return;
+  // switched to another conversation meanwhile: the text goes at the end of the one it started in
+  if (key && key !== useNavigationStore.getState().selected) {
+    const draft = typedOf(key);
+    return typeInto(key, insertDictated(draft, draft.length, draft.length, text).value);
+  }
   const el = mounted;
-  if (!text || !el) return;
-  const value = typedOf(useNavigationStore.getState().selected);
+  if (!el) return;
+  const value = typedOf(key);
   const focused = document.activeElement === el;
   const next = insertDictated(
     value,
