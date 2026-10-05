@@ -160,9 +160,7 @@ export function TodayView({ className = "" }: { className?: string }) {
               <span className="text-xs text-late truncate max-w-80" title={errors.join("\n")}>
                 {t("today.boardsDown", { n: errors.length })}
               </span>
-            ) : (
-              <span className="text-[11px] text-tertiary whitespace-nowrap">{t("today.keysHint")}</span>
-            )}
+            ) : null}
           </div>
           <TodayTimeline model={model} />
           <div className="flex-1 min-h-0 grid grid-cols-[300px_minmax(0,1fr)]">

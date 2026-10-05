@@ -15,7 +15,8 @@ export type DayState = {
   log: Record<string, { title: string; kind: Kind; project?: string | null }>; // what each item was, so Done today names it and the context filter places it once it is gone
 };
 /** Snoozed items: until which day (yyyy-mm-dd) they stay off Today, and what they were, to list them. Kept across days. */
-export type Snooze = { until: string; title: string; kind: Kind };
+// `reminder`: a reminder's full text; it was pushed in the vault, so waking it pushes it back to today
+export type Snooze = { until: string; title: string; kind: Kind; project?: string | null; reminder?: string };
 type TodayState = DayState & {
   snoozed: Record<string, Snooze>;
   cards: TodayCard[]; // the user's cards for today, from every board linked to a vault project

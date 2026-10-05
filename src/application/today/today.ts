@@ -119,9 +119,16 @@ const woke = (id: string) => {
 };
 /** Snooze for `days` (a week by default): a reminder is pushed in the vault, anything else stays off Today until then. */
 export async function snooze(entry: Entry, days = 7) {
-  if (entry.subject.type === "reminder")
-    return reminderAction(entry.subject.reminder, "push", days === 7 ? "+1w" : todayIso(days));
-  setSnooze(entry.id, { until: todayIso(days), title: entry.title, kind: entry.kind });
+  // a reminder moves in the vault; it is kept as snoozed too, so Today lists it and does not count it as cleared
+  const reminder = entry.subject.type === "reminder" ? entry.subject.reminder : null;
+  setSnooze(entry.id, {
+    until: todayIso(days),
+    title: entry.title,
+    kind: entry.kind,
+    project: entry.project,
+    ...(reminder ? { reminder: reminder.text } : {}),
+  });
+  if (reminder) await reminderAction(reminder, "push", days === 7 ? "+1w" : todayIso(days));
   useTodayStore.setState(draft => {
     draft.selected = "";
   });
@@ -136,7 +143,15 @@ export function snoozeOptions(now = Date.now()) {
   ] as const;
 }
 /** Back on Today now. */
-export const wake = (id: string) => setSnooze(id, null);
+export async function wake(id: string) {
+  const text = useTodayStore.getState().snoozed[id]?.reminder;
+  setSnooze(id, null);
+  // a snoozed reminder is back today in the vault too
+  const reminder = text
+    ? (useWorkspaceStore.getState().snap.reminders as Reminder[]).find(r => r.text === text)
+    : undefined;
+  if (reminder) await reminderAction(reminder, "push", todayIso());
+}
 
 // ---------- the items
 /** What an item is about, for its detail and its actions. */
@@ -420,7 +435,9 @@ export function todayModel(now = Date.now()) {
     context: state.context,
     // snoozed and not back yet, soonest first
     snoozed: Object.entries(state.snoozed)
-      .filter(([, item]) => item.until > todayIso())
+      .filter(
+        ([, item]) => item.until > todayIso() && inContext(state.context, projectOf(item.project ?? null)?.context),
+      )
       .sort((a, b) => a[1].until.localeCompare(b[1].until))
       .map(([id, item]) => ({ id, ...item })),
     total: cleared + queue.length,

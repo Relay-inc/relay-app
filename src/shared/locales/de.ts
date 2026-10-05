@@ -342,7 +342,6 @@ export default {
   "review.verdict.COMMENT": "Kommentar",
   "review.verdict.REQUEST_CHANGES": "Änderungen anfordern",
   "review.yours": "Dein Review · {n} Kommentare",
-  "today.keysHint": "J K bewegen · ↵ tun · E erledigt · S zurückstellen · L später",
   "today.reviewInChat": "Review in einem Gespräch",
   "today.addRecipient": "Empfänger hinzufügen",
   "today.agenda": "Agenda, aus der Einladung",

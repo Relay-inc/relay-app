@@ -344,7 +344,6 @@ export default {
   "review.verdict.COMMENT": "Commentaire",
   "review.verdict.REQUEST_CHANGES": "Demander des modifications",
   "review.yours": "Votre revue · {n} commentaires",
-  "today.keysHint": "J K naviguer · ↵ faire · E fait · S reporter · L plus tard",
   "today.reviewInChat": "Revue dans une conversation",
   "today.addRecipient": "Ajouter un destinataire",
   "today.agenda": "Ordre du jour, de l'invitation",

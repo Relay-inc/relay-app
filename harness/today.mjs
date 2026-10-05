@@ -50,6 +50,21 @@ try {
   await shot("08-question");
   await page.keyboard.press("2");
   await shot("09-question-picked");
+  // snooze an Agency item, then the Snoozed list under Agency and under No project
+  await page.getByRole("button", { name: /^Agency/ }).locator("visible=true").first().click();
+  await rowOf("Chase the client");
+  await page.keyboard.press("s");
+  await settle(page, 200);
+  await byText(page, "Next week").click();
+  const bottom = async () => {
+    await page.evaluate(() => document.querySelectorAll(".overflow-y-auto.border-r").forEach(el => (el.scrollTop = el.scrollHeight)));
+    await settle(page, 200);
+  };
+  await bottom();
+  await shot("10-snoozed-agency");
+  await page.getByRole("button", { name: /^No project/ }).locator("visible=true").first().click();
+  await bottom();
+  await shot("11-snoozed-no-project");
 } catch (e) {
   console.error(e);
   await page.screenshot({ path: `${dir}/error.png` });

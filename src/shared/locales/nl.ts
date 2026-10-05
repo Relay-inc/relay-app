@@ -341,7 +341,6 @@ export default {
   "review.verdict.COMMENT": "Opmerking",
   "review.verdict.REQUEST_CHANGES": "Wijzigingen vragen",
   "review.yours": "Je review · {n} opmerkingen",
-  "today.keysHint": "J K bewegen · ↵ doen · E klaar · S snooze · L later",
   "today.reviewInChat": "Review in een gesprek",
   "today.addRecipient": "Ontvanger toevoegen",
   "today.agenda": "Agenda, uit de uitnodiging",

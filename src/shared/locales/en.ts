@@ -337,7 +337,6 @@ const en = {
   "review.verdict.COMMENT": "Comment",
   "review.verdict.REQUEST_CHANGES": "Request changes",
   "review.yours": "Your review · {n} comments",
-  "today.keysHint": "J K move · ↵ do · E done · S snooze · L later",
   "today.reviewInChat": "Review in a conversation",
   "today.addRecipient": "Add a recipient",
   "today.agenda": "Agenda, from the invite",
