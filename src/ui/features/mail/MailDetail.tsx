@@ -5,6 +5,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
 import { mailChat, mailMove, openAttachment, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { useBoardStore } from "../../../application/board/store";
 import { useSettingsStore } from "../../../application/settings/store";
 import { mailExperimental } from "../../../domain/settings/types";
 import { useT } from "../../hooks/useT";
@@ -62,6 +63,7 @@ export function MailDetail({
   const body = useNavigationStore(s => s.panel.detail[key]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const experimental = useSettingsStore(s => mailExperimental(s.settings));
+  const hasBoard = useBoardStore(s => s.ready.length > 0);
 
   const reply = async (how: "draft" | "draftAll") => {
     if (readOnReply && item && unread(item)) await mailSeen(key, true);
@@ -120,6 +122,15 @@ export function MailDetail({
             "btn btn-icon",
             `${t("mail.draftAll")}: ${t("mail.draftTitle")}`,
           )}
+          {hasBoard
+            ? iconButton(
+                "notes",
+                t("mail.ticket"),
+                () => mailChat(key, "ticket"),
+                "btn btn-icon",
+                `${t("mail.ticket")}: ${t("mail.ticketTitle")}`,
+              )
+            : null}
           {iconButton(
             "talk",
             t("mail.talk"),

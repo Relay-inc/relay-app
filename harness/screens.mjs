@@ -184,6 +184,12 @@ const VIEWS = {
     await click(markers.plainMail);
     await waitText("The export should include the VAT column.");
   },
+  // the open mail's bar with "Make ticket" next to the draft buttons (a board integration is set up in the fixture)
+  "mail-ticket": async () => {
+    await VIEWS["mail-plain"]();
+    await page.getByRole("button", { name: "Make ticket" }).hover();
+    await settle(page, 400);
+  },
   "mail-html": async () => {
     await VIEWS["mail-list"]();
     await click(markers.htmlMail);

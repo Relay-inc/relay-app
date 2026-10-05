@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { filtered, nextOpen, toggleSelection, withFirstPage } from "./rules.ts";
+import { filtered, nextOpen, ticketPrompt, toggleSelection, withFirstPage } from "./rules.ts";
 import type { Mail, MailFilter } from "./types";
 
 const mail = (account: string, id: string, date: string): Mail => ({
@@ -56,4 +56,15 @@ test("the mail after the ones that leave opens next, else the one above", () => 
   assert.equal(nextOpen(shown, "k2", new Set(["k2", "k3"])), "k4");
   assert.equal(nextOpen(shown, "k4", new Set(["k4"])), "k3");
   assert.equal(nextOpen(shown, "k1", new Set(shown)), "");
+});
+
+test("a ticket prompt uses the linked board, else asks the agent to pick one", () => {
+  const linked = ticketPrompt("REF", { provider: "productive", project: "12", board: "34" });
+  assert.match(linked, /productive, project 12, bord 34/);
+  assert.match(linked, /productive\.create_task/);
+  assert.match(linked, /productive\.comment/);
+  const free = ticketPrompt("REF");
+  assert.match(free, /relay productive\.projects/);
+  assert.match(free, /trello\.boards/);
+  assert.match(ticketPrompt("REF", { provider: "linear", project: "t", board: "t" }), /geen comment-actie/);
 });

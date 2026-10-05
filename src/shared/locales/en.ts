@@ -791,6 +791,9 @@ const en = {
   "mail.draft": "Draft a reply",
   "mail.draftAll": "Draft a reply to all",
   "mail.draftTitle": "A new conversation that writes a reply as a draft, nothing is sent",
+  "mail.ticket": "Make ticket",
+  "mail.ticketTitle":
+    "A new conversation that makes a ticket of this mail on the project's board, you approve before it is created",
   "note.mailStarted": "About the mail from {from}: {subject}",
   "note.draftSaved": "Draft saved in {folder}: to {to}",
   "note.draftCc": ", cc {cc}",
