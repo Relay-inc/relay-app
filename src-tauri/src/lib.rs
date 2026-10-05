@@ -288,7 +288,7 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 }
 
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
-// with. tainted: it holds mail text and runs restricted (see taint), kept in its broker file for after a restart.
+// with. tainted: it holds mail text (see mark_tainted), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
 // account: the config folder it runs on ("" the CLI's own), see agents::accounts
 // remote: on a work machine (machines.rs), stopped and taken back through its relay-server
@@ -639,48 +639,9 @@ fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
     }
 }
 
-/// DENIED and MAIL_TOOLS are agent_claude's: the flags it starts every Claude session with.
-use agent_claude::{DENIED, MAIL_TOOLS};
-
-/// What a session loses once it holds mail text, a stranger's words that may try to steer it: pushing, PRs, gh
-/// api and comments, Slack posts, calendar invites, agents, work handed to the cloud or to later, messages to other
-/// sessions, the skills whose own allowed-tools would skip the cards, and every rule the user's settings allow
-/// without asking (deny beats allow). It also goes to default mode, so everything else asks first on a card. Sent
-/// over the pipe: at spawn for a chat about a mail, else right before the first mail tool answers
-/// (scripts/pipe-check.py proves both). A settings file that does not parse costs Bash as a whole.
-/// ponytail: skills with a broad allowed-tools are named here, a new one needs adding.
-fn taint(settings: &[Value], all_read: bool) -> [Value; 2] {
-    // the `* ` forms: `git -C <dir> push` and `gh -R <repo> pr create` do not start with `git push` or `gh pr`
-    let mut deny: Vec<String> = ["Bash(git push*)", "Bash(git * push*)", "Bash(gh pr create*)", "Bash(gh * pr create*)", "Bash(gh pr comment*)", "Bash(gh * pr comment*)",
-        "Bash(gh api*)", "Bash(gh * api*)", "Bash(gh gist*)", "Bash(launchctl*)",
-        "mcp__claude_ai_Slack__slack_send_message", "mcp__claude_ai_Slack__slack_schedule_message",
-        "mcp__claude_ai_Google_Calendar__create_event", "mcp__claude_ai_Google_Calendar__update_event",
-        "RemoteTrigger", "CronCreate", "ScheduleWakeup", "SendMessage", "ShareOnboardingGuide", "DesignSync", "Workflow",
-        "Skill(skill:initcraftcms)", "Skill(skill:code-review:code-review)"].map(String::from).to_vec();
-    deny.extend(DENIED.map(String::from)); // the flag layer may not keep the CLI's own denies, so they go along
-    if !all_read { deny.push("Bash".into()); }
-    deny.extend(settings.iter().flat_map(|s| s["permissions"]["allow"].as_array().into_iter().flatten())
-        .filter_map(|r| r.as_str()).filter(|r| !r.starts_with("mcp__relay-mail")).map(String::from));
-    deny.sort(); deny.dedup();
-    [json!({"type": "control_request", "request_id": "taint-rules", "request": {"subtype": "apply_flag_settings", "settings": {"permissions": {"allow": MAIL_TOOLS.iter().chain(orch::WORKER_TOOLS.iter()).collect::<Vec<_>>(), "deny": deny}}}}),
-     json!({"type": "control_request", "request_id": "taint-mode", "request": {"subtype": "set_permission_mode", "mode": "default"}})]
-}
-/// The settings a session in the vault loads that can allow tools, the user's and the vault's, shared and local,
-/// and whether every one that exists parsed (Claude Code rewrites them, a half-written file gets one more try).
-fn allow_sources(vault: &str) -> (Vec<Value>, bool) {
-    let files = [format!("{}/.claude/settings.json", home()), format!("{}/.claude/settings.local.json", home()),
-                 format!("{vault}/.claude/settings.json"), format!("{vault}/.claude/settings.local.json")];
-    let (mut out, mut all) = (vec![], true);
-    for f in files.iter().filter(|f| PathBuf::from(f).is_file()) {
-        let read = || fs::read_to_string(f).ok().and_then(|t| serde_json::from_str::<Value>(&t).ok());
-        match read().or_else(|| { std::thread::sleep(std::time::Duration::from_millis(100)); read() }) { Some(v) => out.push(v), None => all = false }
-    }
-    (out, all)
-}
-fn write_taint(p: &mut Proc, vault: &str) {
-    let (settings, all_read) = allow_sources(vault);
-    for m in taint(&settings, all_read) { writeln!(p.stdin, "{m}").ok(); }
-    p.stdin.flush().ok();
+/// Marks a session that holds mail text: it stays on this Mac (see send) and a worker's report says so. Its
+/// permissions do not change, it runs in the user's own mode.
+fn mark_tainted(p: &mut Proc) {
     p.tainted = true;
     if let Some(m) = broker::load_meta(&broker::meta_path(&p.key)) { broker::save_meta(&broker::Meta { tainted: true, ..m }); }
 }
@@ -740,7 +701,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), account: account.into(), remote };
     read_agent(app, project, p, pid, frames, backlog, inherit, account);
     // a chat about a mail, or one that read mail before a restart, starts restricted
-    if claude && from_mail { write_taint(&mut proc, &dir); }
+    if from_mail { mark_tainted(&mut proc); }
     Ok(proc)
 }
 
@@ -782,10 +743,6 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                     if ev["type"] == "control_response" {
                         if ev["response"]["subtype"] == "error" {
                             let rid = ev["response"]["request_id"].as_str().unwrap_or("");
-                            // a session that holds mail text and could not be restricted does not go on
-                            if rid.starts_with("taint") {
-                                if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.child.kill().ok(); }
-                            }
                             emit(json!({"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}));
                         }
                         // the slash commands and skills this vault has, for the composer's completion
@@ -951,13 +908,11 @@ fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
     match mail::rpc(&req["message"]) {
         mail::Rpc::Reply(r) => pipe_reply(app, key, pid, pipe_ok(rid, r)),
         mail::Rpc::Call { id, name, args } => {
-            // mail text is about to enter this session: restrict it before the answer goes out, and before the
-            // tool runs, so a stranger's text never reaches a session that still has its allow rules
+            // mail text is about to enter this session: marked before the tool runs
             if ["search", "read", "thread", "attachment"].contains(&name.as_str()) {
                 let st = app.state::<App>();
-                let v = vault(&st);
                 let mut procs = st.procs.lock().unwrap();
-                if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid && !p.tainted) { write_taint(p, &v); }
+                if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid && !p.tainted) { mark_tainted(p); }
             }
             let (app, key) = (app.clone(), key.to_string());
             tauri::async_runtime::spawn(async move {
@@ -1064,7 +1019,7 @@ fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool
         procs.insert(key.to_string(), x);
     }
     let x = procs.get_mut(key).unwrap();
-    if taint && !x.tainted { let v = vault(&state); write_taint(x, &v); }
+    if taint && !x.tainted { mark_tainted(x); }
     let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or("claude: no input")?;
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.set_turns(x.turns + 1);
@@ -1830,7 +1785,7 @@ async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, Stri
         let dir = std::env::temp_dir().join(format!("relay-update-{}", std::process::id()));
         let asset = format!("relay-server-linux-{}", info.arch);
         let out = std::process::Command::new(&gh).env("PATH", &path)
-            .args(["release", "download", &format!("v{version}"), "-R", "LaurentMe/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
+            .args(["release", "download", &format!("v{version}"), "-R", "Relay-inc/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
             .output().map_err(|e| e.to_string())?;
         let bin = fs::read(dir.join(&asset));
         fs::remove_dir_all(&dir).ok();
@@ -1851,7 +1806,7 @@ async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, Stri
 fn server_setup() -> Value {
     // a development build sits between two releases: no image has its version, the newest one is the closest
     let dev = cfg!(debug_assertions);
-    json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/laurentme/relay-server", "dev": dev})
+    json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/relay-inc/relay-server", "dev": dev})
 }
 /// This Mac as a work machine (host.rs): whether it runs, its RAM disk, the devices paired with it.
 #[tauri::command]
@@ -2129,22 +2084,7 @@ mod github_tests {
 #[cfg(test)]
 mod mail_tests {
     #[test]
-    fn sessions_can_never_send_mail() {
-        // a session with mail text loses the user's allow rules (deny beats allow) and goes to default mode
-        let user = serde_json::json!({"permissions": {"allow": ["Bash(git push *)", "Bash(pandoc *)", "mcp__relay-mail__read", "mcp__pencil"]}});
-        let [rules, mode] = super::taint(&[user.clone(), serde_json::json!({"hooks": {}})], true);
-        let deny: Vec<&str> = rules["request"]["settings"]["permissions"]["deny"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-        for t in ["Bash(git push *)", "Bash(pandoc *)", "mcp__pencil", "Bash(git push*)", "Bash(gh api*)", "mcp__claude_ai_Google_Calendar__create_event",
-                  "mcp__claude_ai_Gmail__*", "Bash(himalaya*)", "RemoteTrigger", "SendMessage", "Skill(skill:initcraftcms)"] { assert!(deny.contains(&t), "{t}"); }
-        assert!(!deny.contains(&"Bash"), "Bash stays when every settings file parsed");
-        let [unread, _] = super::taint(&[user], false);
-        assert!(unread["request"]["settings"]["permissions"]["deny"].as_array().unwrap().contains(&serde_json::json!("Bash")), "an unreadable settings file costs Bash");
-        assert!(!deny.iter().any(|d| d.starts_with("mcp__relay-mail")), "the mail tools themselves stay");
-        let mut allow: Vec<&str> = super::MAIL_TOOLS.to_vec();
-        allow.push("mcp__relay-orch__report");
-        assert_eq!(rules["request"]["settings"]["permissions"]["allow"], serde_json::json!(allow), "the mail tools and a worker's report need no card");
-        assert_eq!((rules["request"]["subtype"].as_str(), mode["request"]["subtype"].as_str(), mode["request"]["mode"].as_str()),
-                   (Some("apply_flag_settings"), Some("set_permission_mode"), Some("default")));
+    fn pipe_init_names_the_apps_servers() {
         assert_eq!(super::pipe_init(true, false)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
         assert_eq!(super::pipe_init(false, false)["request"]["sdkMcpServers"], serde_json::json!([]));
         assert_eq!(super::pipe_init(true, true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail", "relay-orch"]));
