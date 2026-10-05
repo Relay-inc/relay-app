@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Claude shows when it compacts a conversation and how full its context is**: a "Compacting conversation…" line turns into "Conversation compacted" with the size before and after, your history stays, and a small "42% context" next to the model pick shows how much of the window is used. (#115)
 - **Claude replies and thinking stream in live**: the answer appears word by word instead of all at once, and what Claude reasons shows above it as a dim, folded "Thinking" line you can open. (#113)
 
 ## [0.0.7] - 2026-10-05

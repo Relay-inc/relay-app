@@ -440,6 +440,31 @@ const VIEWS = {
     await click("Reminders");
     await waitText("Dictating ·");
   },
+  // Claude compacting the conversation (the quiet "42% context" under the field, a pulsing line in the conversation),
+  // then the line once it is done: the history stays, the context shrinks (#115)
+  "conversation-compacting": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "context", used: 168_000 });
+      window.__harness.emitAgent(key, { type: "working" });
+      window.__harness.emitAgent(key, { type: "compacting" });
+    }, keys.switchTo);
+    await waitText("Compacting conversation");
+    await scrollMain("bottom");
+  },
+  "conversation-compacted": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "context", used: 168_000 });
+      window.__harness.emitAgent(key, { type: "working" });
+      window.__harness.emitAgent(key, { type: "compacting" });
+      window.__harness.emitAgent(key, { type: "compacted", trigger: "auto", pre_tokens: 168_000, post_tokens: 9_000 });
+    }, keys.switchTo);
+    await waitText("Conversation compacted automatically");
+    await scrollMain("bottom");
+  },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
     await click("Mail");
