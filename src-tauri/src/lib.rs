@@ -1652,6 +1652,47 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     Ok(pr.clone())
 }
 
+/// `owner/repo` split and checked: letters, digits, - _ . only.
+fn repo_parts(repo: &str) -> Result<(String, String), String> {
+    let ok = |s: &str| !s.is_empty() && s.len() <= 100 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    repo.split_once('/').filter(|(o, n)| ok(o) && ok(n)).map(|(o, n)| (o.to_string(), n.to_string())).ok_or_else(|| trc("err.bad_repo"))
+}
+
+/// The files a PR changes with their patch (unified diff hunks), for the review screen.
+// ponytail: one page of 100 files, a PR bigger than that shows its first 100
+#[tauri::command]
+async fn github_pr_files(state: State<'_, App>, repo: String, number: u32) -> Result<Value, String> {
+    let (owner, name) = repo_parts(&repo)?;
+    let out = gh(&state, &["api", &format!("repos/{owner}/{name}/pulls/{number}/files?per_page=100")])?;
+    let v: Value = serde_json::from_str(&out).map_err(|e| format!("gh: {e}"))?;
+    Ok(json!(v.as_array().into_iter().flatten().map(|f| json!({
+        "path": f["filename"], "status": f["status"], "additions": f["additions"], "deletions": f["deletions"], "patch": f["patch"],
+    })).collect::<Vec<_>>()))
+}
+
+/// Post a review on a PR: the verdict, the summary and the line comments. The one write to GitHub Relay makes, and
+/// only after the user confirmed it in the app (the review screen's dialog says who will see it).
+#[tauri::command]
+async fn github_pr_review(state: State<'_, App>, repo: String, number: u32, event: String, body: String, comments: Vec<Value>) -> Result<(), String> {
+    let (owner, name) = repo_parts(&repo)?;
+    if !["APPROVE", "REQUEST_CHANGES", "COMMENT"].contains(&event.as_str()) { return Err(format!("unknown review event {event}")); }
+    if body.len() > 65_000 || comments.len() > 100 { return Err("review too large".into()); }
+    let comments = comments.iter().map(|c| {
+        let path = c["path"].as_str().filter(|p| !p.is_empty() && p.len() <= 1000).ok_or("comment path")?;
+        let line = c["line"].as_u64().filter(|l| *l > 0).ok_or("comment line")?;
+        let side = c["side"].as_str().filter(|s| ["LEFT", "RIGHT"].contains(s)).unwrap_or("RIGHT");
+        let text = c["body"].as_str().filter(|b| !b.trim().is_empty() && b.len() <= 65_000).ok_or("comment text")?;
+        Ok(json!({ "path": path, "line": line, "side": side, "body": text }))
+    }).collect::<Result<Vec<_>, &str>>()?;
+    let input = json!({ "event": event, "body": body, "comments": comments }).to_string();
+    let bin = in_path(&state, "gh").ok_or_else(|| trc("err.no_gh"))?;
+    let mut child = Command::new(bin).args(["api", "-X", "POST", &format!("repos/{owner}/{name}/pulls/{number}/reviews"), "--input", "-"])
+        .env("PATH", &state.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    child.stdin.take().ok_or("gh stdin")?.write_all(input.as_bytes()).map_err(|e| e.to_string())?;
+    let o = child.wait_with_output().map_err(|e| e.to_string())?;
+    if o.status.success() { Ok(()) } else { Err(format!("gh: {}", String::from_utf8_lossy(&o.stderr).trim())) }
+}
+
 // ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
 // Listing and reading never change a flag (EXAMINE and BODY.PEEK). The writes are read/unread and, with the
 // experimental flag on, archive/trash, all on the user's click. Nothing here sends: a reply only becomes a draft.
@@ -2035,7 +2076,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

@@ -190,6 +190,20 @@ export const usageTokens = (period: { today: number; week: number }) => invoke<A
 // ---------- GitHub
 export const githubPrs = () => invoke<PRs>("github_prs");
 export const githubPr = (repo: string, number: number) => invoke<PrDetail>("github_pr", { repo, number });
+/** A PR's files with their patch, for the review screen. */
+export const githubPrFiles = (repo: string, number: number) =>
+  invoke<{ path: string; status: string; additions: number; deletions: number; patch?: string | null }[]>(
+    "github_pr_files",
+    { repo, number },
+  );
+/** Post a review on GitHub: only after the user confirmed it. */
+export const githubPrReview = (
+  repo: string,
+  number: number,
+  event: "APPROVE" | "REQUEST_CHANGES" | "COMMENT",
+  body: string,
+  comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[],
+) => invoke<void>("github_pr_review", { repo, number, event, body, comments });
 export const githubStatus = () => invoke<string>("github_status");
 
 // ---------- mail

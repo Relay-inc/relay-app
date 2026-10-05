@@ -29,11 +29,11 @@ import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { PendingRequest } from "../conversations/PendingRequest";
-import { MailSection } from "./sections/MailSection";
+import { MailComposer, MailSection } from "./sections/MailSection";
 import { PrSection, prTabs } from "./sections/PrSection";
 import { CardSection, cardTabs } from "./sections/CardSection";
 import { MeetingSection } from "./sections/MeetingSection";
-import { Caps, KIND_ICON, Kbd, StatusDot, TONE_TEXT, minutes } from "./parts";
+import { Caps, KIND_ICON, Kbd, TONE_TEXT, minutes } from "./parts";
 
 const iso = (at: number) => new Date(at).toISOString();
 const BUTTON =
@@ -166,6 +166,7 @@ export function TodayDetail({ model }: { model: TodayModel }) {
           ) : null}
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto px-7 pt-4.5 pb-7 select-text cursor-auto">{body()}</div>
+        {s.type === "mail" ? <MailComposer /> : null}
       </div>
       <Aside model={model} entry={entry} connected={connected} />
     </div>
@@ -286,7 +287,7 @@ function ActionBar({
         aria-label={t("today.laterKey")}
         onClick={() => putOff(entry.id)}
       >
-        <Icon name="down" className="glyph size-4" />
+        <Icon name="later" className="glyph size-4" />
       </button>
       {done ? (
         <button className={`${BUTTON} border border-separator-strong hover:bg-fill`} onClick={() => run(done)}>
@@ -307,7 +308,7 @@ function AskBody({ entry }: { entry: Entry }) {
   return (
     <div className="flex flex-col gap-3 max-w-170">
       {said ? <Markdown text={said} className="text-sm leading-relaxed text-secondary line-clamp-6" /> : null}
-      <PendingRequest request={s.request} />
+      <PendingRequest request={s.request} keys />
     </div>
   );
 }
@@ -355,24 +356,29 @@ function connectedOf(model: TodayModel, entry: Entry): Connected[] {
 }
 function ConnectedList({ items }: { items: Connected[] }) {
   const { t } = useT();
-  if (!items.length) return <div className="text-sm text-secondary">{t("today.nothingConnected")}</div>;
+  if (!items.length) return <div className="text-[13px] text-secondary">{t("today.nothingConnected")}</div>;
   return (
-    <div className="flex flex-col">
-      {items.map((item, i) => (
+    <div className="flex flex-col gap-0.5">
+      {items.map(item => (
         <button
           key={item.id}
           onClick={item.go}
-          className={`flex items-center gap-2.5 h-9 px-2 -mx-2 rounded-lg text-left cursor-pointer hover:bg-fill ${i ? "" : ""}`}
+          className="flex items-start gap-2 px-2 py-1.5 -mx-2 rounded-lg text-left cursor-pointer hover:bg-fill-2"
         >
-          <Icon name={item.icon} className="glyph size-3.5 text-secondary flex-none" />
-          <span className="flex-1 min-w-0 truncate text-[13px]">{item.title}</span>
-          <span className="text-xs text-tertiary truncate max-w-40">{item.meta}</span>
+          <Icon name={item.icon} className="glyph size-3.5 mt-0.5 flex-none text-secondary" />
+          <span className="flex-1 min-w-0 flex flex-col leading-[1.35]">
+            <span className="text-[13px] truncate">{item.title}</span>
+            <span className="text-[11px] text-tertiary truncate">{item.meta}</span>
+          </span>
         </button>
       ))}
     </div>
   );
 }
 
+const SECTION = "text-[11px] font-semibold tracking-[0.06em] uppercase text-tertiary";
+/** The bottom of the detail, as the design has it inside the app: status (the tracker's own for a card), When, the
+ *  facts, and what it connects to in the queue, side by side on the sidebar's colour. */
 function Aside({ model, entry, connected }: { model: TodayModel; entry: Entry; connected: Connected[] }) {
   const { t, locale } = useT();
   const pinned = useTodayStore(s => s.pins[entry.id]);
@@ -399,61 +405,66 @@ function Aside({ model, entry, connected }: { model: TodayModel; entry: Entry; c
       fits,
     };
   });
+  const chip = (on: boolean, fits = true) =>
+    `flex flex-col items-start px-2.25 py-1.5 rounded-lg border text-xs font-medium leading-[1.3] text-left min-w-0 cursor-pointer ${on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong text-label"} ${fits ? "" : "opacity-45 cursor-default"}`;
   return (
-    <aside className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] gap-7 px-7 pt-3.5 pb-4 border-t border-separator max-h-55 overflow-y-auto">
-      <div className="flex flex-col gap-3 min-w-0">
+    <aside className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] gap-7 px-7 pt-3.5 pb-4 border-t border-separator bg-sidebar max-h-55 overflow-y-auto">
+      <div className="flex flex-col gap-4 min-w-0">
         {entry.kind === "ask" ? null : cardView?.statuses?.length && entry.subject.type === "card" ? (
           <TrackerStatus entry={entry} />
         ) : (
           <StatusPicker key={entry.id} entry={entry} />
         )}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-baseline gap-2">
-            <Caps>{t("today.when")}</Caps>
+        <section className="flex flex-col gap-2">
+          <div className="flex items-baseline gap-1.5 min-w-0">
+            <span className={SECTION}>{t("today.when")}</span>
             <span className="text-xs text-secondary truncate">
               {at
-                ? t(pinned ? "today.plannedPinned" : "today.planned", {
-                    time: timeOf(iso(at.start)),
-                    est: minutes(entry.est),
-                  })
-                : t("today.movedTomorrow")}
+                ? `${timeOf(iso(at.start))} · ${minutes(entry.est)}${pinned ? ` · ${t("today.pinned")}` : ""}`
+                : t("rem.tomorrow")}
             </span>
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="grid grid-cols-2 gap-1.5">
             {when.map(slot => (
               <button
                 key={slot.key}
                 disabled={!slot.fits}
                 onClick={() => moveTo(entry, slot.key)}
-                title={slot.sub}
-                className={`h-6.5 px-2 rounded-md border text-xs truncate max-w-40 cursor-pointer disabled:opacity-45 disabled:cursor-default ${slot.on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong hover:bg-fill"}`}
+                className={chip(slot.on, slot.fits)}
               >
-                {slot.label}
+                <span className="max-w-full truncate">{slot.label}</span>
+                <span className="text-[11px] font-normal text-secondary">{slot.sub}</span>
               </button>
             ))}
-            <button
-              onClick={() => moveTo(entry, "tomorrow")}
-              className={`h-6.5 px-2 rounded-md border text-xs cursor-pointer ${!at ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong hover:bg-fill"}`}
-            >
-              {t("rem.tomorrow")}
+            <button onClick={() => moveTo(entry, "tomorrow")} className={chip(!at)}>
+              <span>{t("rem.tomorrow")}</span>
+              <span className="text-[11px] font-normal text-secondary">
+                {!at
+                  ? t("today.plannedWord")
+                  : new Date(model.now + 864e5).toLocaleDateString(locale, {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}
+              </span>
             </button>
           </div>
-        </div>
+        </section>
       </div>
-      <div className="flex flex-col gap-1.5 min-w-0">
+      <section className="flex flex-col gap-2 min-w-0">
         {facts.map(([label, value]) => (
-          <div key={label} className="flex gap-2 text-xs min-w-0">
-            <span className="w-18 flex-none text-tertiary">{label}</span>
-            <span className="flex-1 min-w-0 truncate select-text" title={value}>
+          <div key={label} className="flex flex-col gap-px min-w-0">
+            <span className="text-[11px] text-tertiary">{label}</span>
+            <span className="text-[13px] truncate select-text" title={value}>
               {value}
             </span>
           </div>
         ))}
-      </div>
-      <div className="flex flex-col gap-1 min-w-0">
-        <Caps>{t("today.connected")}</Caps>
+      </section>
+      <section className="flex flex-col gap-0.5 min-w-0">
+        <span className={`${SECTION} mb-1.5`}>{t("today.connected")}</span>
         <ConnectedList items={connected.slice(0, 4)} />
-      </div>
+      </section>
     </aside>
   );
 }
@@ -517,6 +528,21 @@ function factsOf(entry: Entry, locale: string, t: T): [string, string][] {
   }
 }
 
+// a status' dot, as the design colours a workflow: backlog grey, planned blue, active orange, blocked red, review
+// accent, done green
+const DOT: Record<string, string> = {
+  idle: "bg-tertiary",
+  planned: "bg-ctx-a",
+  active: "bg-soon",
+  blocked: "bg-late",
+  review: "bg-accent",
+  done: "bg-ok",
+  todo: "bg-tertiary",
+  doing: "bg-soon",
+};
+const statusRow = (on: boolean) =>
+  `flex items-center gap-2 h-7 px-2 rounded-[7px] text-[13px] text-left cursor-pointer hover:bg-fill-2 ${on ? "bg-raised text-label font-semibold" : "text-secondary"}`;
+
 /** A card's status as its tracker has them, every status of its workflow; a click moves it there. */
 function TrackerStatus({ entry }: { entry: Entry }) {
   const { t } = useT();
@@ -527,37 +553,35 @@ function TrackerStatus({ entry }: { entry: Entry }) {
   if (s.type !== "card" || !view?.statuses) return null;
   const tracker = provider(s.card.provider);
   return (
-    <div className="flex flex-col gap-1.5">
-      <Caps>{t("today.statusIn", { name: tracker?.name ?? "" })}</Caps>
-      <div className="flex flex-wrap gap-1">
-        {view.statuses.map(status => {
-          const on = view.status?.id === status.id;
-          return (
-            <button
-              key={status.id}
-              disabled={!!busy}
-              onClick={async () => {
-                if (on) return;
-                setBusy(status.id);
-                setErr("");
-                await cardAct(entry.id, s.card, "status", status.id).catch(error => setErr(String(error)));
-                setBusy("");
-              }}
-              className={`inline-flex items-center gap-1.5 h-6.5 px-2 rounded-md border text-xs cursor-pointer ${on ? "border-accent font-semibold" : "border-separator-strong text-secondary hover:bg-fill"} ${busy === status.id ? "opacity-60" : ""}`}
-            >
-              <StatusDot status={status.state ?? "todo"} />
-              {status.name}
-            </button>
-          );
-        })}
-      </div>
+    <section className="flex flex-col gap-0.5">
+      <span className={`${SECTION} mb-1.5`}>{t("today.statusIn", { name: tracker?.name ?? "" })}</span>
+      {view.statuses.map(status => {
+        const on = view.status?.id === status.id;
+        return (
+          <button
+            key={status.id}
+            disabled={!!busy}
+            onClick={async () => {
+              if (on) return;
+              setBusy(status.id);
+              setErr("");
+              await cardAct(entry.id, s.card, "status", status.id).catch(error => setErr(String(error)));
+              setBusy("");
+            }}
+            className={`${statusRow(on)} ${busy === status.id ? "opacity-60" : ""}`}
+          >
+            <span className={`size-2 rounded-full ${DOT[status.tone ?? status.state ?? "idle"]}`} />
+            {status.name}
+          </button>
+        );
+      })}
       {err ? <div className="err-box">{err}</div> : null}
-    </div>
+    </section>
   );
 }
 
 const STATUSES: Status[] = ["todo", "doing", "done"];
-/** To do, in progress, done for an item without a tracker of its own (see setStatus); a failure shows under it. */
+/** To do, in progress, done for an item without a tracker of its own, as the tracker's list looks (see setStatus). */
 function StatusPicker({ entry }: { entry: Entry }) {
   const { t } = useT();
   const [busy, setBusy] = useState(false);
@@ -574,25 +598,20 @@ function StatusPicker({ entry }: { entry: Entry }) {
     setBusy(false);
   };
   return (
-    <div className="flex flex-col gap-1.5">
-      <div className="flex items-baseline gap-2">
-        <Caps>{t("today.status")}</Caps>
-        <span className="text-xs text-tertiary truncate">{t(`today.doneIn.${entry.kind}`)}</span>
-      </div>
-      <div className={`inline-flex self-start bg-fill-2 rounded-lg p-0.5 ${busy ? "opacity-60" : ""}`}>
-        {STATUSES.map(status => (
-          <button
-            key={status}
-            disabled={busy}
-            onClick={() => pick(status)}
-            className={`inline-flex items-center gap-1.5 h-6.5 px-2 rounded-md text-xs font-medium cursor-pointer ${entry.status === status ? "bg-raised shadow-sm text-label" : "text-secondary hover:text-label"}`}
-          >
-            <StatusDot status={status} />
-            {t(`today.status.${status}`)}
-          </button>
-        ))}
-      </div>
+    <section className="flex flex-col gap-0.5" title={t(`today.doneIn.${entry.kind}`)}>
+      <span className={`${SECTION} mb-1.5`}>{t("today.status")}</span>
+      {STATUSES.map(status => (
+        <button
+          key={status}
+          disabled={busy}
+          onClick={() => pick(status)}
+          className={`${statusRow(entry.status === status)} ${busy ? "opacity-60" : ""}`}
+        >
+          <span className={`size-2 rounded-full ${DOT[status]}`} />
+          {t(`today.status.${status}`)}
+        </button>
+      ))}
       {err ? <div className="err-box">{err}</div> : null}
-    </div>
+    </section>
   );
 }
