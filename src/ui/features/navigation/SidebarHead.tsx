@@ -35,7 +35,7 @@ export function SidebarHead({ label, tint, count, collapsed, dropBefore, onAdd, 
       aria-expanded={!collapsed}
       onKeyDown={clickOnKey}
       {...rest}
-      className={`group flex items-center gap-2 h-6 px-2 rounded-md text-[11px] font-semibold uppercase tracking-wider text-tertiary hover:text-secondary cursor-default ${dropBefore ? DROP_LINE_BEFORE : ""}`}
+      className={`group flex items-center gap-2 h-7 px-2 rounded-md text-[11px] font-semibold uppercase tracking-wider text-tertiary hover:text-secondary cursor-default ${dropBefore ? DROP_LINE_BEFORE : ""}`}
     >
       <span className={`size-1.5 flex-none rounded-xs ${TINT[tint]}`} />
       <span>{label}</span>
