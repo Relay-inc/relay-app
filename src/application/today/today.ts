@@ -46,6 +46,7 @@ import { markSeen, newChat } from "../conversations/chats";
 import { useMailStore } from "../mail/store";
 import { loadMails, mailChat, mailMove, mailProject, mailSeen } from "../mail/mail";
 import { mailExperimental, mailOn } from "../settings/settings";
+import { proposeTime, loadTodayTime } from "../time/time";
 import { startRecording } from "../calendar/recording";
 import { openCompose } from "./mail";
 import { forgetDetails } from "./load";
@@ -110,6 +111,7 @@ export async function refreshToday() {
     loadMeetings(),
     loadPrs(),
     loadSnapshot(),
+    loadTodayTime(),
     mailOn() ? loadMails() : null,
   ]);
   useTodayStore.setState(draft => {
@@ -174,7 +176,8 @@ export type Subject =
   | { type: "card"; card: TodayCard }
   | { type: "pr"; pr: PR; prs?: PR[] }
   | { type: "mail"; key: string; mail: Mail }
-  | { type: "chat"; key: string };
+  | { type: "chat"; key: string }
+  | { type: "time"; date: string; minutes: number };
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
 export type Entry = Item & {
   status: Status;
@@ -388,6 +391,20 @@ export function entries(now = Date.now()): Entry[] {
       subject: { type: "chat", key },
     });
   }
+  // from 16:00, when the conversations of the day show 15 minutes or more: Productive is not asked, the agent finds
+  // out what is booked already
+  const { timeMin } = useTodayStore.getState();
+  if (timeMin >= 15 && new Date(now).getHours() >= 16)
+    add("time", {
+      id: `time:${todayIso()}`,
+      at: now,
+      title: t("today.timeTitle"),
+      where: t("today.timeWhere"),
+      why: t("today.timeWhy", { n: timeMin }),
+      tone: "",
+      project: null,
+      subject: { type: "time", date: todayIso(), minutes: timeMin },
+    });
   const { dismissed } = useTodayStore.getState();
   return out.filter(entry => !dismissed.includes(entry.id) && !asleep(entry.id));
 }
@@ -830,6 +847,13 @@ export function actionsOf(entry: Entry): Actions {
           : { label: t("today.markRead"), icon: "read", key: "E", run: () => mailSeen(s.key, true) },
       );
     }
+    case "time":
+      return of(
+        [{ label: t("today.timeBook"), icon: "clock", key: "↵", run: () => proposeTime(s.date) }],
+        0,
+        null,
+        done(),
+      );
     case "chat":
       return of(
         [

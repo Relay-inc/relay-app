@@ -126,6 +126,8 @@ export function TodayDetail({ model }: { model: TodayModel }) {
         return <MailSection mailKey={s.key} id={s.mail.id} />;
       case "chat":
         return <ChatBody chat={s.key} />;
+      case "time":
+        return <p className="m-0 text-sm text-secondary">{t("today.timeBody", { n: s.minutes })}</p>;
     }
   };
 

@@ -250,6 +250,18 @@ export default {
   "today.inProgress": "Bezig",
   "today.open": "Openen",
   "today.finished": "Klaar, nog niet gelezen",
+  "today.kind.time": "Tijd",
+  "today.doneIn.time": "Klaar enkel op Vandaag",
+  "today.timeTitle": "Boek de tijd van vandaag",
+  "today.timeWhere": "Uit je gesprekken",
+  "today.timeWhy": "{n} min activiteit",
+  "today.timeBook": "Tijd boeken",
+  "today.timeBody":
+    "Relay telde ongeveer {n} minuten eigen activiteit in de gesprekken van vandaag, per project. Tijd boeken vraagt de agent af te trekken wat in Productive al staat en per project één tijdsregistratie voor te stellen, die je een voor een goedkeurt.",
+  "time.title": "Tijd {date}",
+  "time.note": "De tijd van {date} boeken vanuit je gesprekken",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "{tool} toestaan?",
   "today.waiting": "Wacht · {ago}",
   "today.blockedSession": "Achtergrondsessie",

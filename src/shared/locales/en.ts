@@ -246,6 +246,18 @@ const en = {
   "today.inProgress": "In progress",
   "today.open": "Open",
   "today.finished": "Finished, not read yet",
+  "today.kind.time": "Time",
+  "today.doneIn.time": "Done on Today only",
+  "today.timeTitle": "Book today's time",
+  "today.timeWhere": "From your conversations",
+  "today.timeWhy": "{n} min of activity",
+  "today.timeBook": "Book time",
+  "today.timeBody":
+    "Relay counted about {n} minutes of your own activity in today's conversations, per project. Book time asks the agent to subtract what Productive already has and to propose one time entry per project, which you approve one by one.",
+  "time.title": "Time {date}",
+  "time.note": "Booking the time of {date} from your conversations",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "Allow {tool}?",
   "today.waiting": "Waiting · {ago}",
   "today.blockedSession": "Background session",

@@ -252,6 +252,18 @@ export default {
   "today.inProgress": "En cours",
   "today.open": "Ouvrir",
   "today.finished": "Terminé, pas encore lu",
+  "today.kind.time": "Temps",
+  "today.doneIn.time": "Terminé uniquement dans Aujourd'hui",
+  "today.timeTitle": "Saisir le temps d'aujourd'hui",
+  "today.timeWhere": "Depuis tes conversations",
+  "today.timeWhy": "{n} min d'activité",
+  "today.timeBook": "Saisir le temps",
+  "today.timeBody":
+    "Relay a compté environ {n} minutes de ton activité dans les conversations d'aujourd'hui, par projet. Saisir le temps demande à l'agent de déduire ce que Productive contient déjà et de proposer une entrée par projet, que tu approuves une par une.",
+  "time.title": "Temps {date}",
+  "time.note": "Saisie du temps du {date} depuis tes conversations",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "Autoriser {tool} ?",
   "today.waiting": "En attente · {ago}",
   "today.blockedSession": "Session en arrière-plan",

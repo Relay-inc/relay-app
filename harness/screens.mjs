@@ -421,6 +421,13 @@ const VIEWS = {
     await click("Reminders");
     await waitText("Dictating ·");
   },
+  // Today after 16:00 with activity in the day's conversations: the "Book today's time" item (Time from sessions)
+  "today-time": async () => {
+    await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));
+    await open(page, server.url);
+    await waitText("Book today's time");
+    await click("Book today's time");
+  },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
     await click("Mail");

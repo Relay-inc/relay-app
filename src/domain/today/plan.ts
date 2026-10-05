@@ -12,6 +12,7 @@ export type Kind =
   | "note" // a meeting that ended: its note
   | "review" // a pull request asks the user's review
   | "fix" // the user's own pull request: changes requested or checks red
+  | "time" // the day's time to book, from the user's own activity in conversations
   | "finished"; // a conversation finished while the user was elsewhere
 
 /** Minutes an item takes, per kind.
@@ -26,6 +27,7 @@ export const EST: Record<Kind, number> = {
   note: 10,
   review: 15,
   fix: 20,
+  time: 5,
   finished: 5,
 };
 
@@ -43,6 +45,7 @@ const RANK: Record<Kind, number> = {
   note: 5,
   review: 6,
   fix: 7,
+  time: 7,
   finished: 8,
 };
 /** An item's rank: its kind's, and for a reminder or card that is overdue one step earlier than the rest. */

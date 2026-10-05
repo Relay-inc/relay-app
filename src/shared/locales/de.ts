@@ -250,6 +250,18 @@ export default {
   "today.inProgress": "In Arbeit",
   "today.open": "Öffnen",
   "today.finished": "Fertig, noch nicht gelesen",
+  "today.kind.time": "Zeit",
+  "today.doneIn.time": "Erledigt nur unter Heute",
+  "today.timeTitle": "Zeit von heute buchen",
+  "today.timeWhere": "Aus deinen Gesprächen",
+  "today.timeWhy": "{n} Min. Aktivität",
+  "today.timeBook": "Zeit buchen",
+  "today.timeBody":
+    "Relay hat in den Gesprächen von heute etwa {n} Minuten eigene Aktivität gezählt, pro Projekt. Zeit buchen bittet den Agenten, abzuziehen, was in Productive schon steht, und pro Projekt einen Zeiteintrag vorzuschlagen, den du einzeln freigibst.",
+  "time.title": "Zeit {date}",
+  "time.note": "Die Zeit vom {date} aus deinen Gesprächen buchen",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "{tool} erlauben?",
   "today.waiting": "Wartet · {ago}",
   "today.blockedSession": "Hintergrundsitzung",

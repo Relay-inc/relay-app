@@ -14,6 +14,7 @@ export const KIND_ICON: Record<Kind, string> = {
   card: "board",
   review: "pr",
   fix: "pr",
+  time: "clock",
   finished: "chat",
 };
 /** Why an item is here, as a colour: late red, soon orange, else grey. */

@@ -24,6 +24,7 @@ export type TodayState = DayState & {
   boards: Record<string, { provider: string; ref: BoardRef; cards: Card[] }>; // per vault project: its board's open cards, to find a PR's ticket
   errors: string[]; // per board that did not load
   at: number; // when the cards last arrived, ms; 0 before that
+  timeMin: number; // minutes of the user's own activity in today's conversations (Time from sessions), 0 until read
   reloading: boolean; // Refresh is reading every source again
   selected: string; // the item open in the detail, "" for the first in the queue
   context: string; // the context filter: "" all, "-" no project, else a context; kept across days
@@ -48,6 +49,7 @@ export const useTodayStore = makeStore<TodayState>(() => ({
   boards: {},
   errors: [],
   at: 0,
+  timeMin: 0,
   reloading: false,
   selected: "",
   context: storage.getRaw("todayContext"),
