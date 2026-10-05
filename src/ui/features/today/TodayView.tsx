@@ -11,6 +11,7 @@ import {
   openTodayCard,
   putOff,
   selectEntry,
+  setStatus,
   todayModel,
 } from "../../../application/today/today";
 import { useDerived } from "../../hooks/useDerived";
@@ -45,8 +46,8 @@ export function TodayView({ className = "" }: { className?: string }) {
   const toast = useNavigationStore(s => s.toast);
 
   // what is in the queue now counts as cleared once it leaves it
-  const ids = model.queue.map(entry => entry.id).join("\n");
-  useEffect(() => noteSeen(ids ? ids.split("\n") : []), [ids]);
+  const seen = model.queue.map(({ id, title, kind }) => ({ id, title, kind }));
+  useEffect(() => noteSeen(seen), [seen]);
 
   // the ticket window over Today; a status or assignee changed there shows once it closes
   const modal = useNavigationStore(s => s.panel.modal);
@@ -72,6 +73,9 @@ export function TodayView({ className = "" }: { className?: string }) {
       else if (e.key === "ArrowUp" || e.key === "k") step(-1);
       else if (!entry) return;
       else if (e.key === "l" || e.key === "L") putOff(entry.id);
+      else if ((e.key === "d" || e.key === "D") && entry.kind !== "ask") setStatus(entry, "done").catch(console.error);
+      else if ((e.key === "p" || e.key === "P") && entry.kind !== "ask")
+        setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
       // an agent's question or permission takes Enter itself (its card)
       else if (e.key === "Enter" && entry.kind !== "ask" && !(e.target instanceof HTMLButtonElement))
         actionsOf(entry).primary?.run();

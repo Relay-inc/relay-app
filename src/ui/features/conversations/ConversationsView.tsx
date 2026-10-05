@@ -28,6 +28,7 @@ import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { UsageReload } from "../usage/UsageReload";
+import { TodayReload } from "../today/TodayReload";
 import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
@@ -108,6 +109,8 @@ export function ConversationsView({ className }: { className: string }) {
           <PrsReload />
         ) : selected === USAGE ? (
           <UsageReload />
+        ) : selected === WAIT ? (
+          <TodayReload />
         ) : selected === MAIL ? (
           <MailReload />
         ) : bar.coordinator ? (

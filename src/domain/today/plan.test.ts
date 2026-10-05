@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ordered, plan, rankOf, slots, type Item } from "./plan.ts";
+import { doingFirst, ordered, plan, rankOf, slots, statusOf, type Item } from "./plan.ts";
 
 const H = 3_600_000;
 const M = 60_000;
@@ -84,4 +84,16 @@ test("the plan fills slots in order, keeps a prep before its meeting, and follow
 
   const tooLate = plan([item("x", 25), item("prep", 10, { by: at(11.5) })], free, {});
   assert.deepEqual(tooLate.tomorrow, ["prep"], "a prep that no longer fits before its meeting is not planned after it");
+});
+
+test("an item's status: the tracker's when there is one, else started on Today or not; in progress goes first", () => {
+  assert.equal(statusOf("a", "doing", []), "doing");
+  assert.equal(statusOf("a", "todo", ["a"]), "todo", "the tracker wins");
+  assert.equal(statusOf("a", undefined, ["a"]), "doing");
+  assert.equal(statusOf("b", undefined, ["a"]), "todo");
+  const queue = [{ id: "x" }, { id: "y" }, { id: "z" }];
+  assert.deepEqual(
+    doingFirst(queue, item => (item.id === "z" ? "doing" : "todo")).map(item => item.id),
+    ["z", "x", "y"],
+  );
 });

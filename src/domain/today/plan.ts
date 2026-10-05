@@ -108,3 +108,14 @@ export function plan(queue: Item[], free: Slot[], pins: Record<string, string>) 
   }
   return { placed, tomorrow, used: Object.fromEntries(free.map((slot, i) => [slot.key, used[i] - slot.start])) };
 }
+
+/** Where an item stands. A card's comes from its tracker's workflow; the rest the user sets on Today. */
+export type Status = "todo" | "doing" | "done";
+/** An item's status: its tracker's state when it has one, else whether the user started it on Today. */
+export const statusOf = (id: string, tracker: Status | undefined, doing: readonly string[]): Status =>
+  tracker ?? (doing.includes(id) ? "doing" : "todo");
+/** The queue with what is in progress first: that is what the user is on. */
+export const doingFirst = <T extends { id: string }>(queue: T[], status: (item: T) => Status) => [
+  ...queue.filter(item => status(item) === "doing"),
+  ...queue.filter(item => status(item) !== "doing"),
+];

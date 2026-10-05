@@ -1,7 +1,18 @@
 import { t } from "../../shared/i18n";
 import { provider } from "../../shared/plugins";
 import { byDue, myCardToday, prsForMe, type TodayCard } from "../../domain/today/rules";
-import { EST, ordered, plan, rankOf, slots, type Item, type Kind } from "../../domain/today/plan";
+import {
+  EST,
+  doingFirst,
+  ordered,
+  plan,
+  rankOf,
+  slots,
+  statusOf,
+  type Item,
+  type Kind,
+  type Status,
+} from "../../domain/today/plan";
 import { todayIso } from "../../domain/reminders/rules";
 import { isQuestion } from "../../domain/conversations/rules";
 import { joinable } from "../../domain/calendar/rules";
@@ -19,18 +30,19 @@ import { ctxOf } from "../board/ctx";
 import { ticketChat } from "../board/board";
 import { openCard, openPr } from "../navigation/panel";
 import { select } from "../navigation/navigation";
-import { projectLabel, findProjects } from "../workspace/vault";
+import { projectLabel, findProjects, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
-import { joinMeeting, meetingChat, timeOf } from "../calendar/calendar";
+import { joinMeeting, loadMeetings, meetingChat, timeOf } from "../calendar/calendar";
 import { usePullRequestsStore } from "../pull-requests/store";
-import { reviewPr } from "../pull-requests/prs";
+import { loadPrs, reviewPr } from "../pull-requests/prs";
 import { useConversationsStore } from "../conversations/store";
 import { label } from "../conversations/selectors";
 import { backgroundAction, typeInto } from "../conversations/actions";
 import { markSeen, newChat } from "../conversations/chats";
 import { useMailStore } from "../mail/store";
-import { mailChat, mailProject, mailSeen } from "../mail/mail";
+import { loadMails, mailChat, mailMove, mailProject, mailSeen } from "../mail/mail";
+import { mailExperimental, mailOn } from "../settings/settings";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, useTodayStore } from "./store";
 
@@ -70,6 +82,24 @@ export async function loadTodayCards() {
   });
 }
 
+/** Refresh: every source Today reads, at once (they also refresh by themselves every few minutes). */
+export async function refreshToday() {
+  if (useTodayStore.getState().reloading) return;
+  useTodayStore.setState(draft => {
+    draft.reloading = true;
+  });
+  await Promise.allSettled([
+    loadTodayCards(),
+    loadMeetings(),
+    loadPrs(),
+    loadSnapshot(),
+    mailOn() ? loadMails() : null,
+  ]);
+  useTodayStore.setState(draft => {
+    draft.reloading = false;
+  });
+}
+
 // ---------- the items
 /** What an item is about, for its detail and its actions. */
 export type Subject =
@@ -83,6 +113,7 @@ export type Subject =
   | { type: "chat"; key: string };
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
 export type Entry = Item & {
+  status: Status;
   title: string;
   where: string;
   why: string;
@@ -108,8 +139,16 @@ const daysLate = (date: string) => Math.round((Date.parse(todayIso()) - Date.par
 /** Everything that needs the user today, unordered. `now` in ms. */
 export function entries(now = Date.now()): Entry[] {
   const out: Entry[] = [];
-  const add = (kind: Kind, entry: Omit<Entry, "kind" | "rank" | "est">, late = false) =>
-    out.push({ kind, rank: rankOf(kind, late), est: EST[kind], ...entry });
+  const { doing } = useTodayStore.getState();
+  const add = (kind: Kind, entry: Omit<Entry, "kind" | "rank" | "est" | "status">, late = false) =>
+    out.push({
+      kind,
+      rank: rankOf(kind, late),
+      est: EST[kind],
+      // a card's status is its tracker's; anything else is in progress once the user said so
+      status: statusOf(entry.id, entry.subject.type === "card" ? entry.subject.card.card.state : undefined, doing),
+      ...entry,
+    });
   const conversations = useConversationsStore.getState();
   const chatProject = (key: string) => conversations.chats[key]?.project ?? null;
 
@@ -288,7 +327,7 @@ export function meetingsOfToday(now = Date.now()) {
 export function todayModel(now = Date.now()) {
   const state = useTodayStore.getState();
   const all = entries(now);
-  const queue = ordered(all, state.later) as Entry[];
+  const queue = doingFirst(ordered(all, state.later) as Entry[], entry => entry.status);
   const meetings = meetingsOfToday(now);
   const dayEnd = new Date(now).setHours(18, 0, 0, 0);
   const free = slots(
@@ -298,7 +337,15 @@ export function todayModel(now = Date.now()) {
   );
   const { placed, tomorrow, used } = plan(queue, free, state.pins);
   const current = new Set(queue.map(entry => entry.id));
-  const cleared = state.seen.filter(id => !current.has(id)).length;
+  const gone = state.seen.filter(id => !current.has(id));
+  const cleared = gone.length;
+  // what left the queue today, newest first: by hand (it can come back) or because it was done where it lives
+  const done = gone.reverse().map(id => ({
+    id,
+    title: state.log[id]?.title ?? id,
+    kind: state.log[id]?.kind,
+    reopen: state.dismissed.includes(id),
+  }));
   const selected = queue.find(entry => entry.id === state.selected) ?? queue[0];
   return {
     queue,
@@ -309,6 +356,7 @@ export function todayModel(now = Date.now()) {
     used,
     selected,
     cleared,
+    done,
     total: cleared + queue.length,
     planned: queue.reduce((sum, entry) => sum + (placed[entry.id] ? entry.est : 0), 0),
     now,
@@ -316,11 +364,79 @@ export function todayModel(now = Date.now()) {
 }
 export type TodayModel = ReturnType<typeof todayModel>;
 
-/** Remember what is in the queue now, so what leaves it today counts as cleared. */
-export function noteSeen(ids: string[]) {
-  const { seen } = useTodayStore.getState();
-  const fresh = ids.filter(id => !seen.includes(id));
-  if (fresh.length) changeDay(day => void day.seen.push(...fresh));
+/** Remember what is in the queue now, and what it is called, so what leaves it today counts as cleared and Done
+ *  today can still name it. */
+export function noteSeen(items: { id: string; title: string; kind: Kind }[]) {
+  const { seen, log } = useTodayStore.getState();
+  const fresh = items.filter(item => !seen.includes(item.id) || log[item.id]?.title !== item.title);
+  if (fresh.length)
+    changeDay(day => {
+      for (const item of fresh) {
+        if (!day.seen.includes(item.id)) day.seen.push(item.id);
+        day.log[item.id] = { title: item.title, kind: item.kind };
+      }
+    });
+}
+/** Back in the queue: something taken off by hand on Today. */
+export const reopen = (id: string) =>
+  changeDay(day => {
+    day.dismissed = day.dismissed.filter(x => x !== id);
+  });
+
+// ---------- status: to do, in progress, done, in the system the item lives in where it has one
+/** Set an item's status. In progress and back to do: a card moves to its tracker's status of that kind, anything else
+ *  is marked on Today. Done is done where the item lives: the reminder in the vault, the card in its tracker, the mail
+ *  archived (read without the experimental mail flag), the conversation read, the session hidden. A PR, a meeting's
+ *  prep or note are only done on Today: nothing on GitHub happens from the app without approval (decided 29/9). An
+ *  agent's question is done by answering it. Throws what the tracker said. */
+export async function setStatus(entry: Entry, status: Status) {
+  const local = (doing: boolean) =>
+    changeDay(day => {
+      day.doing = doing
+        ? [...day.doing.filter(id => id !== entry.id), entry.id]
+        : day.doing.filter(id => id !== entry.id);
+    });
+  const s = entry.subject;
+  if (s.type === "card" && (await setCardState(s.card, status))) return local(false);
+  if (status !== "done") return local(status === "doing");
+  local(false);
+  switch (s.type) {
+    case "reminder":
+      return reminderAction(s.reminder, "done");
+    case "mail":
+      return mailExperimental() ? mailMove([s.key], false) : mailSeen(s.key, true);
+    case "chat":
+      return markSeen(s.key);
+    case "blocked":
+      return backgroundAction("hide", s.session.id);
+    case "ask":
+      return;
+    default:
+      return dismiss(entry.id);
+  }
+}
+// The card to its tracker's first status of that kind ("doing": an active one before one in review or blocked), at
+// once on Today, then read again. False when the tracker has no statuses (Trello's lists): the status stays on Today.
+async function setCardState(item: TodayCard, state: Status) {
+  const tracker = trackerOf(item);
+  const ctx = ctxOf(tracker);
+  for (const group of tracker.groupings?.map(grouping => grouping.id) ?? [undefined]) {
+    // Linear lists its finished states only with `done` on: Done needs them
+    const columns = await tracker.columns({ ...ctx, config: { ...ctx.config, done: true } }, item.ref, group);
+    if (!columns.some(column => column.state)) continue;
+    const to =
+      columns.find(column => column.state === state && (state !== "doing" || column.tone === "active")) ??
+      columns.find(column => column.state === state);
+    if (!to) throw new Error(t("today.noStatus", { state: t(`today.status.${state}`) }));
+    useTodayStore.setState(draft => {
+      const card = draft.cards.find(x => x.provider === item.provider && x.card.id === item.card.id);
+      if (card) Object.assign(card.card, { state, status: to.name });
+    });
+    await tracker.move(ctx, item.ref, item.card, to.id, group);
+    loadTodayCards();
+    return true;
+  }
+  return false;
 }
 export const selectEntry = (id: string) =>
   useTodayStore.setState(draft => {

@@ -1,5 +1,14 @@
-import type { ReactNode } from "react";
-import { actionsOf, moveTo, putOff, selectEntry, type Entry, type TodayModel } from "../../../application/today/today";
+import { useState, type ReactNode } from "react";
+import type { Status } from "../../../domain/today/plan";
+import {
+  actionsOf,
+  moveTo,
+  putOff,
+  selectEntry,
+  setStatus,
+  type Entry,
+  type TodayModel,
+} from "../../../application/today/today";
 import { timeOf } from "../../../application/calendar/calendar";
 import { startRecording, useRecordingStore } from "../../../application/calendar/recording";
 import { lastAi } from "../../../application/conversations/selectors";
@@ -11,7 +20,7 @@ import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
 import { PendingRequest } from "../conversations/PendingRequest";
 import { CI } from "../pull-requests/prState";
-import { Caps, KIND_ICON, Kbd, TONE_TEXT, minutes } from "./parts";
+import { Caps, KIND_ICON, Kbd, StatusDot, TONE_TEXT, minutes } from "./parts";
 
 const iso = (at: number) => new Date(at).toISOString();
 const CHIP = {
@@ -101,6 +110,7 @@ export function TodayDetail({ model }: { model: TodayModel }) {
         <div className="text-[22px] leading-tight font-semibold tracking-tight text-pretty select-text">
           {entry.title}
         </div>
+        {entry.kind === "ask" ? null : <StatusPicker key={entry.id} entry={entry} />}
         <ItemBody entry={entry} chatText={chatText} recording={recording} />
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -281,4 +291,49 @@ function ItemBody({ entry, chatText, recording }: { entry: Entry; chatText: stri
     case "chat":
       return <Markdown text={chatText} className="text-sm leading-relaxed text-secondary line-clamp-6" />;
   }
+}
+
+const STATUSES: [Status, string][] = [
+  ["todo", ""],
+  ["doing", "P"],
+  ["done", "D"],
+];
+/** To do, in progress, done: set where the item lives when it can be (see setStatus); a failure shows under it. */
+function StatusPicker({ entry }: { entry: Entry }) {
+  const { t } = useT();
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const pick = async (status: Status) => {
+    if (status === entry.status || busy) return;
+    setBusy(true);
+    setErr("");
+    try {
+      await setStatus(entry, status);
+    } catch (error) {
+      setErr(String(error));
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-2">
+        <div className={`inline-flex bg-fill-2 rounded-lg p-0.5 ${busy ? "opacity-60" : ""}`}>
+          {STATUSES.map(([status, key]) => (
+            <button
+              key={status}
+              disabled={busy}
+              onClick={() => pick(status)}
+              title={key ? t("today.statusKey", { key }) : undefined}
+              className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium cursor-pointer ${entry.status === status ? "bg-raised shadow-sm text-label" : "text-secondary hover:text-label"}`}
+            >
+              <StatusDot status={status} />
+              {t(`today.status.${status}`)}
+            </button>
+          ))}
+        </div>
+        <span className="text-xs text-tertiary">{t(`today.doneIn.${entry.kind}`)}</span>
+      </div>
+      {err ? <div className="err-box">{err}</div> : null}
+    </div>
+  );
 }

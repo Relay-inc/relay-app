@@ -1,4 +1,5 @@
 import type { TodayCard } from "../../domain/today/rules";
+import type { Kind } from "../../domain/today/plan";
 import { todayIso } from "../../domain/reminders/rules";
 import { storage } from "../../infrastructure/storage";
 import { makeStore } from "../make-store";
@@ -10,21 +11,32 @@ export type DayState = {
   dismissed: string[]; // taken off by hand: a meeting without a note, a prep skipped
   later: string[]; // put off with Later: at the end of the queue, in that order
   pins: Record<string, string>; // item → the slot it was moved to, or "tomorrow"
+  doing: string[]; // set in progress on Today (a card's status lives in its tracker)
+  log: Record<string, { title: string; kind: Kind }>; // what each item was, so Done today can still name it once it is gone
 };
 type TodayState = DayState & {
   cards: TodayCard[]; // the user's cards for today, from every board linked to a vault project
   errors: string[]; // per board that did not load
   at: number; // when the cards last arrived, ms; 0 before that
+  reloading: boolean; // Refresh is reading every source again
   selected: string; // the item open in the detail, "" for the first in the queue
 };
 
-const fresh = (day: string): DayState => ({ day, seen: [], dismissed: [], later: [], pins: {} });
+const fresh = (day: string): DayState => ({ day, seen: [], dismissed: [], later: [], pins: {}, doing: [], log: {} });
 const stored = () => {
   const day = storage.get<DayState | null>("today", null);
-  return day && day.day === todayIso() ? day : fresh(todayIso());
+  // a day kept by an older version lacks the newer fields
+  return day && day.day === todayIso() ? { ...fresh(day.day), ...day } : fresh(todayIso());
 };
 
-export const useTodayStore = makeStore<TodayState>(() => ({ ...stored(), cards: [], errors: [], at: 0, selected: "" }));
+export const useTodayStore = makeStore<TodayState>(() => ({
+  ...stored(),
+  cards: [],
+  errors: [],
+  at: 0,
+  reloading: false,
+  selected: "",
+}));
 
 /** Change the day's state and keep it; past midnight it starts from an empty day first. */
 export function changeDay(recipe: (day: DayState) => void) {
@@ -32,6 +44,6 @@ export function changeDay(recipe: (day: DayState) => void) {
     if (draft.day !== todayIso()) Object.assign(draft, fresh(todayIso()));
     recipe(draft);
   });
-  const { day, seen, dismissed, later, pins } = useTodayStore.getState();
-  storage.set("today", { day, seen, dismissed, later, pins });
+  const { day, seen, dismissed, later, pins, doing, log } = useTodayStore.getState();
+  storage.set("today", { day, seen, dismissed, later, pins, doing, log });
 }

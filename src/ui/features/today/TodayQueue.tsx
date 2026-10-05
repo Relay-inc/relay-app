@@ -2,13 +2,13 @@ import type { ReactNode } from "react";
 import type { Meeting } from "../../../domain/calendar/types";
 import type { Slot } from "../../../domain/today/plan";
 import { joinable } from "../../../domain/calendar/rules";
-import { selectEntry, type Entry, type TodayModel } from "../../../application/today/today";
+import { reopen, selectEntry, setStatus, type Entry, type TodayModel } from "../../../application/today/today";
 import { joinMeeting, timeOf } from "../../../application/calendar/calendar";
 import { useTodayStore } from "../../../application/today/store";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { RecordingBar } from "../conversations/RecordingBar";
-import { Caps, KIND_ICON, TONE_BG, minutes } from "./parts";
+import { Caps, KIND_ICON, StatusDot, TONE_BG, minutes } from "./parts";
 
 const iso = (at: number) => new Date(at).toISOString();
 
@@ -17,25 +17,39 @@ const iso = (at: number) => new Date(at).toISOString();
 export function TodayQueue({ model }: { model: TodayModel }) {
   const { t } = useT();
   const pins = useTodayStore(s => s.pins);
-  const { queue, slots, placed, tomorrow, used, selected, meetings, now } = model;
+  const { queue, slots, placed, tomorrow, used, selected, meetings, now, done } = model;
 
   const row = (entry: Entry) => {
     const on = entry.id === selected?.id;
     const at = placed[entry.id];
     return (
-      <button
+      <div
         key={entry.id}
+        role="button"
+        tabIndex={-1}
         onClick={() => selectEntry(entry.id)}
         className={`w-full flex items-center gap-2.5 h-10 px-2.5 rounded-[9px] text-left cursor-pointer ${on ? "bg-accent-soft" : "hover:bg-fill"}`}
       >
         <span className={`w-0.75 h-5 rounded-sm flex-none ${TONE_BG[entry.tone]}`} />
+        {entry.kind === "ask" ? null : (
+          <button
+            className="flex-none cursor-pointer"
+            title={t(entry.status === "doing" ? "today.status.todo" : "today.status.doing")}
+            onClick={e => {
+              e.stopPropagation();
+              setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
+            }}
+          >
+            <StatusDot status={entry.status} />
+          </button>
+        )}
         <Icon name={KIND_ICON[entry.kind]} className="glyph size-3.75 flex-none text-secondary" />
         <span className={`flex-1 min-w-0 truncate ${on ? "font-semibold" : ""}`}>{entry.title}</span>
         {pins[entry.id] ? <Icon name="bookmark" className="glyph size-3 flex-none text-accent-text" /> : null}
         <span className="text-[11px] text-tertiary tabular-nums whitespace-nowrap">
           {at ? timeOf(iso(at.start)) : t("rem.tomorrow")} · {minutes(entry.est)}
         </span>
-      </button>
+      </div>
     );
   };
 
@@ -137,6 +151,27 @@ export function TodayQueue({ model }: { model: TodayModel }) {
             <Caps>{t("rem.tomorrow")}</Caps>
           </div>
           {later.map(row)}
+        </div>
+      ) : null}
+      {done.length ? (
+        <div>
+          <div className="px-2.5 pt-2.5 pb-1">
+            <Caps>
+              {t("today.doneToday")} {done.length}
+            </Caps>
+          </div>
+          {done.map(item => (
+            <div key={item.id} className="flex items-center gap-2.5 h-9 px-2.5 text-secondary">
+              <StatusDot status="done" />
+              {item.kind ? <Icon name={KIND_ICON[item.kind]} className="glyph size-3.5 flex-none" /> : null}
+              <span className="flex-1 min-w-0 truncate line-through decoration-tertiary">{item.title}</span>
+              {item.reopen ? (
+                <button className="text-xs hover:text-label cursor-pointer" onClick={() => reopen(item.id)}>
+                  {t("today.reopen")}
+                </button>
+              ) : null}
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
