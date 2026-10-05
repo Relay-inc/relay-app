@@ -331,6 +331,8 @@ function handle(cmd: string, a: Args): unknown {
       ptys.delete(a.id);
       return null;
     // scratch notes per project, in memory
+    case "related_notes":
+      return [];
     case "scratch_list":
       return (scratch.get(a.project) ?? []).map(n => ({ ...n }));
     case "scratch_save": {

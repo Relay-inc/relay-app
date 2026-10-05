@@ -4,6 +4,7 @@ import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
+import type { Related } from "../domain/related/rules";
 import type {
   AgentSession,
   Pending,
@@ -354,3 +355,6 @@ export const onRemindersChanged = (handler: () => void) => listen("reminders-cha
 export const launchLinks = async () => (await getCurrent()) ?? [];
 /** Every relay:// link opened while the app runs. */
 export const onDeepLink = (handler: (url: string) => void) => onOpenUrl(urls => urls.forEach(handler));
+
+// ---------- related notes: the vault's full-text index (src-tauri/src/related.rs)
+export const relatedNotes = (text: string) => invoke<Related[]>("related_notes", { text });
