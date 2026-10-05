@@ -117,9 +117,18 @@ export function TodayView({ className = "" }: { className?: string }) {
 
   const ticket = () => {
     const open = modal ? cardOf(modal) : undefined;
-    const item = open && cards.find(x => x.provider === open.provider.id && x.card.id === open.id);
+    // a card under Today, or another card of a linked board (a PR's ticket)
+    const boards = useTodayStore.getState().boards;
+    const item =
+      open &&
+      (cards.find(x => x.provider === open.provider.id && x.card.id === open.id) ??
+        Object.entries(boards).flatMap(([project, b]) =>
+          b.provider === open.provider.id
+            ? b.cards.filter(c => c.id === open.id).map(card => ({ provider: b.provider, ref: b.ref, project, card }))
+            : [],
+        )[0]);
     if (!open || !item) return null;
-    const own = cards.filter(x => x.provider === item.provider);
+    const own = cards.some(x => x === item) ? cards.filter(x => x.provider === item.provider) : [item];
     // the provider's cards under Today as one column, so previous and next step through them
     const board: Board = {
       ...newBoard(open.provider, { project: "", board: "", group: "", view: "" }),

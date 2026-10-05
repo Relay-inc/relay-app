@@ -1,4 +1,6 @@
-import type { GhActor, PrDetail } from "../../../../domain/pull-requests/types";
+import type { GhActor, PR, PrDetail } from "../../../../domain/pull-requests/types";
+import { trackerOfLink, unlinkPr, useLinksStore } from "../../../../application/today/links";
+import { openTicketOf } from "../../../../application/today/today";
 import { useDetailsStore } from "../../../../application/today/details";
 import { useT } from "../../../hooks/useT";
 import { Icon } from "../../../components/Icon";
@@ -36,7 +38,7 @@ export const prTabs = (pr: PrDetail | undefined) =>
 
 /** A pull request under Today, per tab: its branch, size, description and reviewers; the files it changes; its
  *  checks; and the conversation on it. Read from GitHub when it opens. */
-export function PrSection({ id, tab }: { id: string; tab: string }) {
+export function PrSection({ id, tab, pr: row }: { id: string; tab: string; pr: PR }) {
   const { t, locale } = useT();
   const pr = useDetailsStore(s => s.pr[id]);
   const err = useDetailsStore(s => s.err[id]);
@@ -122,6 +124,7 @@ export function PrSection({ id, tab }: { id: string; tab: string }) {
       latest.set(name(ask.requestedReviewer), "REQUESTED");
   return (
     <div className="flex flex-col gap-5 max-w-170">
+      <TicketRow pr={row} />
       <div className="flex flex-wrap items-center gap-2.5 text-[13px] text-secondary">
         <span className="inline-flex items-center gap-1">
           <code className="font-mono text-xs bg-fill-2 text-label px-1.5 py-px rounded">{pr.headRefName}</code>→
@@ -161,6 +164,38 @@ export function PrSection({ id, tab }: { id: string; tab: string }) {
           ))}
         </section>
       ) : null}
+    </div>
+  );
+}
+
+const HOW: Record<string, string> = { number: "today.link.number", title: "today.link.title", ai: "today.link.ai" };
+/** The ticket the PR is about, as Relay worked it out (its number, its title, or Claude): a click opens it, the cross
+ *  says it is not this one. */
+function TicketRow({ pr }: { pr: PR }) {
+  const { t } = useT();
+  const link = useLinksStore(s => s.links[pr.url]);
+  if (!link?.card) return null;
+  const tracker = trackerOfLink(link);
+  const number = link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number}` : "";
+  return (
+    <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] bg-fill">
+      <Icon name="board" className="glyph size-3.5 text-secondary flex-none" />
+      <button
+        className="flex-1 min-w-0 text-left text-[13px] truncate cursor-pointer hover:underline"
+        onClick={() => openTicketOf(pr)}
+      >
+        <span className="text-secondary">{tracker?.name} </span>
+        <span className="font-mono text-xs">{number}</span> {link.title}
+      </button>
+      <span className="text-xs text-tertiary whitespace-nowrap">{t(HOW[link.how] as "today.link.number")}</span>
+      <button
+        className="grid place-items-center size-6 rounded-md text-tertiary cursor-pointer hover:bg-fill-2 hover:text-label"
+        title={t("today.link.notThis")}
+        aria-label={t("today.link.notThis")}
+        onClick={() => unlinkPr(pr.url)}
+      >
+        <Icon name="close" className="glyph size-3" />
+      </button>
     </div>
   );
 }

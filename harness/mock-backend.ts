@@ -411,6 +411,8 @@ function handle(cmd: string, a: Args): unknown {
     }
     // one Claude call without tools (src-tauri ai_write): findings, quick replies, an answer on a line, or a draft
     case "ai_write":
+      // a PR to a ticket: the invoice PR is ticket 300, anything else none
+      if (/koppelt een pull request/.test(a.system)) return /Invoice/.test(a.text) ? "300" : "geen";
       if (/JSON-array/.test(a.system))
         return JSON.stringify([
           { path: "src/auth/callback.ts", line: 14, side: "RIGHT", severity: "bug", text: "The return URL is read from the query without checking its host: an open redirect." },

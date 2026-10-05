@@ -9,6 +9,7 @@ export type PR = {
   draft: boolean;
   created: string;
   updated: string;
+  branch?: string; // the head branch, often with the ticket in it
   author: string | null;
   review: string | null;
   ci: string | null;

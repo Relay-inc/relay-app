@@ -11,17 +11,21 @@ import {
   type Action,
   type Entry,
   type TodayModel,
+  openTicketOf,
 } from "../../../application/today/today";
 import { setPop, setTab, useDetailsStore } from "../../../application/today/details";
 import { cardAct, loadCard, loadPr } from "../../../application/today/load";
 import { ticketLinks, openLinked } from "../../../application/board/board";
 import { provider } from "../../../shared/plugins";
+import { t as translate } from "../../../shared/i18n";
 import { isQuestion } from "../../../domain/conversations/rules";
 import { timeOf } from "../../../application/calendar/calendar";
 import { lastAi } from "../../../application/conversations/selectors";
 import { openMail } from "../../../application/navigation/panel";
 import { projectLabel } from "../../../application/workspace/vault";
 import { useTodayStore } from "../../../application/today/store";
+import { prsOfCard, ticketOf } from "../../../application/today/links";
+import { usePullRequestsStore } from "../../../application/pull-requests/store";
 import { cardKey } from "../../../domain/navigation/keys";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useDerived } from "../../hooks/useDerived";
@@ -118,7 +122,7 @@ export function TodayDetail({ model }: { model: TodayModel }) {
           <CardSection id={entry.id} item={s.card} tab={tab} />
         );
       case "pr":
-        return <PrSection id={entry.id} tab={tab} />;
+        return <PrSection id={entry.id} tab={tab} pr={s.pr} />;
       case "mail":
         return <MailSection mailKey={s.key} id={s.mail.id} />;
       case "chat":
@@ -334,11 +338,44 @@ function connectedOf(model: TodayModel, entry: Entry): Connected[] {
       go: () => selectEntry(other.id),
     }));
   const s = entry.subject;
+  // a PR: the ticket it is about first
+  if (s.type === "pr") {
+    const link = ticketOf(s.pr.url);
+    const pr = s.pr;
+    return link?.card
+      ? [
+          {
+            id: `ticket:${link.card}`,
+            icon: "board",
+            title: `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
+            meta: translate("today.link.ticket"),
+            go: () => openTicketOf(pr),
+          },
+          ...same,
+        ]
+      : same;
+  }
   if (s.type !== "card") return same;
   const tracker = provider(s.card.provider);
   if (!tracker) return same;
   const links = ticketLinks(tracker, cardKey(tracker.id, s.card.card.id), s.card.card.number);
+  // the PRs Relay linked to this card, as their item under Today when they are there
+  const all = usePullRequestsStore.getState().list;
+  const linked = prsOfCard(tracker.id, s.card.card.id)
+    .map(url => [...(all?.review ?? []), ...(all?.mine ?? [])].find(pr => pr.url === url))
+    .filter((pr): pr is NonNullable<typeof pr> => !!pr && !links.prs.some(x => x.url === pr.url))
+    .map(pr => {
+      const item = model.queue.find(other => other.subject.type === "pr" && other.subject.pr.url === pr.url);
+      return {
+        id: pr.url,
+        icon: "pr",
+        title: pr.title,
+        meta: `${pr.repo} #${pr.number}`,
+        go: () => (item ? selectEntry(item.id) : openLinked({ repo: pr.repo, number: pr.number })),
+      };
+    });
   return [
+    ...linked,
     ...links.conversations.map(c => ({
       id: c.key,
       icon: "chat",
@@ -495,6 +532,17 @@ function factsOf(entry: Entry, locale: string, t: T): [string, string][] {
     case "pr":
       return [
         [t("today.fact.repo"), s.pr.repo],
+        ...((): [string, string][] => {
+          const link = ticketOf(s.pr.url);
+          return link
+            ? [
+                [
+                  t("today.fact.ticket"),
+                  `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
+                ],
+              ]
+            : [];
+        })(),
         [t("today.fact.author"), s.pr.author ?? ""],
         [t("today.fact.updated"), date(s.pr.updated)],
         [t("today.fact.project"), projectLabel(s.pr.project)],

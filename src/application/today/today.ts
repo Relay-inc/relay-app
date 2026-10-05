@@ -50,7 +50,8 @@ import { openCompose } from "./mail";
 import { forgetDetails } from "./load";
 import { openReview } from "./review";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
-import { changeDay, setContext, setSnooze, useTodayStore } from "./store";
+import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
+import { linkPrs, ticketOf } from "./links";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -65,12 +66,14 @@ export async function loadTodayCards() {
   const ready = useBoardStore.getState().ready;
   const today = todayIso();
   const errors: string[] = [];
+  const open: TodayState["boards"] = {};
   const lists = await Promise.all(
     Object.entries(settings().boards || {}).map(async ([project, ref]): Promise<TodayCard[]> => {
       const tracker = provider(ref.provider);
       if (!tracker || !ready.includes(tracker.id)) return [];
       try {
         const cards = await tracker.cards(ctxOf(tracker), ref);
+        open[project] = { provider: tracker.id, ref, cards };
         return cards
           .filter(card => myCardToday(card, today))
           .map(card => ({ provider: tracker.id, ref, project, card }));
@@ -83,9 +86,11 @@ export async function loadTodayCards() {
   if (mine !== gen) return; // a later load is on its way
   useTodayStore.setState(draft => {
     draft.cards = lists.flat().sort(byDue);
+    draft.boards = open;
     draft.errors = errors;
     draft.at = Date.now();
   });
+  linkPrs(); // the boards' cards are in: which ticket each PR is about
 }
 
 /** Refresh: every source Today reads, at once (they also refresh by themselves every few minutes). */
@@ -105,6 +110,7 @@ export async function refreshToday() {
   useTodayStore.setState(draft => {
     draft.reloading = false;
   });
+  linkPrs();
 }
 
 // ---------- snooze: an item off Today until a later day, kept across days
@@ -526,6 +532,21 @@ async function setCardState(item: TodayCard, state: Status) {
     return true;
   }
   return false;
+}
+/** The ticket a PR is about: its item when it is under Today (switching the filter back to All when it hides it),
+ *  else the ticket window on it. */
+export function openTicketOf(pr: PR) {
+  const link = ticketOf(pr.url);
+  if (!link?.card || !link.provider) return;
+  const id = `card:${link.provider}:${link.card}`;
+  const item = entries().find(entry => entry.id === id);
+  if (item) {
+    if (!inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
+    return selectEntry(id);
+  }
+  const board = pr.project ? useTodayStore.getState().boards[pr.project] : undefined;
+  const tracker = provider(link.provider);
+  if (board && tracker) openCard(tracker, board.ref, link.card);
 }
 /** A meeting clicked in the day's track or the queue: its prep before it, its note after it. When the context filter
  *  hides that item, Today shows all again. False when the meeting has neither (running, or its note was skipped). */

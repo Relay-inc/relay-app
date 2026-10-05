@@ -1,4 +1,5 @@
 import type { TodayCard } from "../../domain/today/rules";
+import type { BoardRef, Card } from "../../domain/board/types";
 import type { Kind } from "../../domain/today/plan";
 import { todayIso } from "../../domain/reminders/rules";
 import { storage } from "../../infrastructure/storage";
@@ -17,9 +18,10 @@ export type DayState = {
 /** Snoozed items: until which day (yyyy-mm-dd) they stay off Today, and what they were, to list them. Kept across days. */
 // `reminder`: a reminder's full text; it was pushed in the vault, so waking it pushes it back to today
 export type Snooze = { until: string; title: string; kind: Kind; project?: string | null; reminder?: string };
-type TodayState = DayState & {
+export type TodayState = DayState & {
   snoozed: Record<string, Snooze>;
   cards: TodayCard[]; // the user's cards for today, from every board linked to a vault project
+  boards: Record<string, { provider: string; ref: BoardRef; cards: Card[] }>; // per vault project: its board's open cards, to find a PR's ticket
   errors: string[]; // per board that did not load
   at: number; // when the cards last arrived, ms; 0 before that
   reloading: boolean; // Refresh is reading every source again
@@ -43,6 +45,7 @@ export const useTodayStore = makeStore<TodayState>(() => ({
     ),
   ),
   cards: [],
+  boards: {},
   errors: [],
   at: 0,
   reloading: false,

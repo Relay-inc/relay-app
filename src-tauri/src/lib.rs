@@ -1612,7 +1612,7 @@ async fn github_status(state: State<'_, App>) -> Result<String, String> {
     Ok(gh(&state, &["api", "user", "--jq", ".login"])?.trim().to_string())
 }
 
-const PR_FIELDS: &str = "... on PullRequest{number title url isDraft createdAt updatedAt repository{nameWithOwner} author{login} reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state}}}}}";
+const PR_FIELDS: &str = "... on PullRequest{number title url isDraft createdAt updatedAt headRefName repository{nameWithOwner} author{login} reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state}}}}}";
 
 /// Open pull requests: the ones the user wrote and the ones waiting on their review, within the owners
 /// from the settings (empty: everywhere), each with the vault project of its repo.
@@ -1630,7 +1630,7 @@ async fn github_prs(state: State<'_, App>) -> Result<Value, String> {
         data["data"][k]["nodes"].as_array().into_iter().flatten().filter(|n| n["number"].is_number()).map(|n| {
             let repo = n["repository"]["nameWithOwner"].as_str().unwrap_or("");
             json!({"number": n["number"], "title": n["title"], "url": n["url"], "repo": repo, "draft": n["isDraft"], "created": n["createdAt"],
-                "updated": n["updatedAt"], "author": n["author"]["login"], "review": n["reviewDecision"],
+                "updated": n["updatedAt"], "branch": n["headRefName"], "author": n["author"]["login"], "review": n["reviewDecision"],
                 "ci": n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"], "project": map.get(&repo.to_lowercase())})
         }).collect()
     };

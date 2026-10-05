@@ -37,6 +37,12 @@ try {
   await page.keyboard.press("Escape");
   await rowOf("Fix the SSO redirect loop on the portal");
   await shot("04-pr");
+  await page.waitForTimeout(500);
+  await shot("04b-pr-ticket");
+  await page.getByRole("button", { name: /#301 SSO redirect loop/ }).locator("visible=true").first().click();
+  await shot("04c-ticket-window");
+  await page.keyboard.press("Escape");
+  await settle(page, 300);
   await page.getByRole("button", { name: /^Review with Claude/ }).locator("visible=true").first().click();
   await page.waitForTimeout(1200);
   await shot("05-review");
