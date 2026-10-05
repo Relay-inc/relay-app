@@ -804,6 +804,10 @@ const en = {
     "Only your microphone is recorded, the Mac's audio is not: {why}. Allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
   "rec.silentMac":
     "No sound from the Mac yet. If the call is already playing, allow Relay in System Settings › Privacy & Security › Screen & System Audio Recording.",
+  "rec.dictatingIn": "Dictating · {name}",
+  "rec.dictatingElsewhere": "Dictating in another app",
+  "rec.transcribingPct": "transcribing {pct}%",
+  "rec.goTo": "Go to the recording",
   "rec.saving": "Transcribing {title}…",
   "rec.saved": "Transcript saved: {path}",
   "rec.failed": "The recording could not be written: {error}",
