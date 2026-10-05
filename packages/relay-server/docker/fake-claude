@@ -3,7 +3,7 @@
 
 It answers the initialize request, gives each user turn a session id, an echo and a result, and writes a transcript
 in ~/.claude/projects/<cwd slug>/<session>.jsonl so history works. A turn with "perm" in it calls the real permission
-tool (the one from --mcp-config, over MCP stdio) for a Write, and writes the file when the card is allowed.
+request on the pipe (`can_use_tool`, as `--permission-prompt-tool stdio` does) for a Write, and writes the file when it is allowed.
 "slow" waits 6 s before answering, to test a connection that drops mid-turn.
 """
 import json, os, re, subprocess, sys, time, uuid
@@ -12,7 +12,6 @@ args = sys.argv[1:]
 def arg(name):
     return args[args.index(name) + 1] if name in args else None
 
-mcp = json.loads(arg("--mcp-config") or "{}").get("mcpServers", {})
 sid = arg("--resume") or str(uuid.uuid4())
 cwd = os.getcwd()
 tdir = os.path.expanduser("~/.claude/projects/" + re.sub(r"[^A-Za-z0-9]", "-", cwd))
@@ -28,17 +27,13 @@ def log(o):
         f.write(json.dumps({**o, "cwd": cwd, "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime())}) + "\n")
 
 def approve(tool, inp):
-    """The permission tool, as Claude Code calls it: initialize, then tools/call approve."""
-    p = mcp["vaultperm"]
-    perm = subprocess.Popen([p["command"], *p["args"]], env={**os.environ, **p["env"]}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
-    def rpc(i, method, params):
-        perm.stdin.write(json.dumps({"jsonrpc": "2.0", "id": i, "method": method, "params": params}) + "\n")
-        perm.stdin.flush()
-        return json.loads(perm.stdout.readline())
-    rpc(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "fake-claude"}})
-    r = rpc(2, "tools/call", {"name": "approve", "arguments": {"tool_name": tool, "input": inp, "tool_use_id": "toolu_fake"}})
-    perm.terminate()
-    return json.loads(r["result"]["content"][0]["text"])
+    """The permission request, as Claude Code sends it: a control request on stdout, the answer on stdin."""
+    rid = str(uuid.uuid4())
+    out({"type": "control_request", "request_id": rid, "request": {"subtype": "can_use_tool", "tool_name": tool, "input": inp, "tool_use_id": "toolu_fake"}})
+    for line in sys.stdin:
+        m = json.loads(line)
+        if m.get("type") == "control_response" and m["response"].get("request_id") == rid:
+            return m["response"]["response"]
 
 started = False
 for line in sys.stdin:

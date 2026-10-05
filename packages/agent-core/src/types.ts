@@ -17,9 +17,9 @@ export type Image = { media_type: string; data: string };
 export type Hunk = { oldStart: number; newStart: number; lines: string[] };
 export type TurnUsage = { input: number; output: number; cacheRead: number; cacheWrite: number; cost?: number | null };
 /** A permission request or question in the pending folder (pending/<id>.json). */
-export type PermissionRequest = { id: string; project: string; provider?: string; kind?: "tool" | "question" | ""; tool_name: string; input: any; tool_use_id?: string; relay?: boolean; at: number };
+export type PermissionRequest = { id: string; project: string; provider?: string; kind?: "tool" | "question" | ""; tool_name: string; input: any; tool_use_id?: string; request_id?: string; suggestions?: any[]; relay?: boolean; at: number };
 /** The answer the app writes (pending/<id>.answer.json). A question: allow with `updatedInput.answers`. */
-export type Decision = { behavior: "allow"; updatedInput: any } | { behavior: "deny"; message: string };
+export type Decision = { behavior: "allow"; updatedInput: any; updatedPermissions?: any[] } | { behavior: "deny"; message: string };
 
 /** The normalised events, the Tauri event `agent` as `{project, provider, event}`, and history items. */
 export type AgentEvent =

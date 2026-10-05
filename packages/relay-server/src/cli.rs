@@ -21,7 +21,7 @@ fn flag(args: &[String], name: &str) -> Option<String> { args.iter().position(|a
 fn fail(e: impl std::fmt::Display) -> ! { eprintln!("relay-server: {e}"); exit(1) }
 
 /// The commands after the program's name, `a[0]`: `relay-server <command>`, or `relay --relay-server <command>` when
-/// the Relay app runs as the server (its LaunchAgent). Whoever calls this answers `--broker` and `--perm-server`.
+/// the Relay app runs as the server (its LaunchAgent). Whoever calls this answers `--broker`.
 pub fn run(a: &[String]) {
     let data = data_dir();
     match a.get(1).map(String::as_str) {

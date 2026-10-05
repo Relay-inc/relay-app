@@ -366,10 +366,10 @@ export async function answer(request: Pending, choice: CardChoice) {
   if (!decision) return false;
   await backend.answer(request.id, decision);
   set(draft => {
-    if (choice === "allow" || choice === "deny") {
+    if (typeof choice === "string") {
       const { command, file_path } = request.input;
       push(draft, request.project, {
-        kind: choice === "allow" ? "allowed" : "denied",
+        kind: choice === "deny" ? "denied" : "allowed",
         text: String(command ?? file_path ?? request.tool_name),
       });
     }
