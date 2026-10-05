@@ -1785,7 +1785,7 @@ async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, Stri
         let dir = std::env::temp_dir().join(format!("relay-update-{}", std::process::id()));
         let asset = format!("relay-server-linux-{}", info.arch);
         let out = std::process::Command::new(&gh).env("PATH", &path)
-            .args(["release", "download", &format!("v{version}"), "-R", "LaurentMe/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
+            .args(["release", "download", &format!("v{version}"), "-R", "Relay-inc/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
             .output().map_err(|e| e.to_string())?;
         let bin = fs::read(dir.join(&asset));
         fs::remove_dir_all(&dir).ok();
@@ -1806,7 +1806,7 @@ async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, Stri
 fn server_setup() -> Value {
     // a development build sits between two releases: no image has its version, the newest one is the closest
     let dev = cfg!(debug_assertions);
-    json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/laurentme/relay-server", "dev": dev})
+    json!({"version": if dev { "latest" } else { env!("CARGO_PKG_VERSION") }, "image": "ghcr.io/relay-inc/relay-server", "dev": dev})
 }
 /// This Mac as a work machine (host.rs): whether it runs, its RAM disk, the devices paired with it.
 #[tauri::command]
