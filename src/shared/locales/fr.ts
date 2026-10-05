@@ -551,6 +551,7 @@ export default {
   "pop.save": "Enregistrer",
   "work.working": "{agent} travaille",
   "work.thinking": "Claude réfléchit",
+  "work.thought": "Réflexion",
   "due.overdue": "{n} j de retard",
   "due.today": "aujourd'hui",
   "note.forked": "Suite dans l'app. Le terminal reste tel quel.",

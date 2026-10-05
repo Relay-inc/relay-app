@@ -543,6 +543,7 @@ const en = {
   "pop.save": "Save",
   "work.working": "{agent} is working",
   "work.thinking": "Claude is thinking",
+  "work.thought": "Thinking",
   "due.overdue": "{n} d overdue",
   "due.today": "today",
   "note.forked": "Carried on in the app. The terminal stays as it is.",

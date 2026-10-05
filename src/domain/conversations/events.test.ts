@@ -34,6 +34,21 @@ test("text deltas append to the answer, a whole block starts a new one", () => {
   ]);
 });
 
+test("thinking streams into its own item, apart from the answer", () => {
+  const { next } = run(
+    fresh(),
+    { type: "thinking", text: "Hm", delta: false },
+    { type: "thinking", text: "m", delta: true },
+    { type: "text", text: "Ok", delta: false },
+    { type: "text", text: "!", delta: true },
+  );
+  assert.deepEqual(next.messages["c:1"], [
+    { kind: "thinking", text: "Hmm" },
+    { kind: "ai", text: "Ok!" },
+  ]);
+  assert.equal(next.status["c:1"], "busy");
+});
+
 test("a delta only replaces the streaming item: the items before it keep their identity", () => {
   const { next: before } = run(
     fresh(),

@@ -80,7 +80,7 @@ impl AgentProvider for Claude {
     fn id(&self) -> &'static str { "claude" }
     fn name(&self) -> &'static str { "Claude Code" }
     fn caps(&self) -> Caps {
-        Caps { persistent: true, images: true, thinking: false, permissions: true, questions: true, subagents: true, fork: true,
+        Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: true, title: true, accounts: true }
     }
     fn default_bin(&self, home: &str) -> String { format!("{home}/.local/bin/claude") }
@@ -130,7 +130,7 @@ impl AgentProvider for Claude {
         let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(strs("deny")).collect();
         let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
         let mut cmd = Command::new(env.bin);
-        cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+        cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                   "--permission-prompt-tool", "mcp__vaultperm__approve", "--mcp-config"])
             .arg(mcp.to_string()).arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
             .arg("--append-system-prompt").arg(&system).args(["-n", l.name]);
@@ -146,7 +146,10 @@ impl AgentProvider for Claude {
         Ok(cmd)
     }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }
-    fn parser(&self) -> Parser { Box::new(stream::parse) }
+    fn parser(&self) -> Parser {
+        let mut st = stream::State::default();
+        Box::new(move |l| st.parse(l))
+    }
 
     fn history(&self, env: &Env, sid: &str, from: u64) -> (Vec<Event>, u64) {
         if !agent_core::safe_id(sid) { return (vec![], 0); }
@@ -233,23 +236,23 @@ mod tests {
         let l = Launch { key: "c:1", name: "Algemeen: x", model: "opus", effort: "high", resume: Some("abc-1"), fork: Some("def"), turn: None };
         let cmd = PROVIDER.command(&env(&p), &l).unwrap();
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[..8], ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--permission-prompt-tool", "mcp__vaultperm__approve"]);
-        assert!(args[9].contains("\"args\":[\"--perm-server\"]") && args[9].contains("\"PROJECT\":\"c:1\""));
-        assert!(!args[9].contains("relay-mail"));
-        assert_eq!(args[10], "--allowedTools");
-        assert_eq!((args[16].as_str(), args[17].as_str(), args[21].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
-        assert_eq!(&args[23..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        assert_eq!(&args[..9], ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-prompt-tool", "mcp__vaultperm__approve"]);
+        assert!(args[10].contains("\"args\":[\"--perm-server\"]") && args[10].contains("\"PROJECT\":\"c:1\""));
+        assert!(!args[10].contains("relay-mail"));
+        assert_eq!(args[11], "--allowedTools");
+        assert_eq!((args[17].as_str(), args[18].as_str(), args[22].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[23..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args[9].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
+        assert!(args[10].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
         let opts = json!({"orch": "worker", "system": "be a worker", "deny": ["Edit(//v/x)"], "ask": ["Bash(git push*)"]});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert!(args[9].contains("\"relay-orch\":{\"name\":\"relay-orch\",\"type\":\"sdk\"}"));
+        assert!(args[10].contains("\"relay-orch\":{\"name\":\"relay-orch\",\"type\":\"sdk\"}"));
         let at = |f: &str| args.iter().position(|a| a == f).unwrap();
         assert_eq!(args[at("--allowedTools") + 1..at("--disallowedTools")].last().unwrap(), "mcp__relay-orch__report");
         assert_eq!(args[at("--disallowedTools") + 1..at("--append-system-prompt")].last().unwrap(), "Edit(//v/x)");

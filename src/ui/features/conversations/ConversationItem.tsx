@@ -8,6 +8,7 @@ import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
 import { UserMessage } from "./UserMessage";
 import { Answer } from "./Answer";
+import { Thinking } from "./Thinking";
 import { ToolStep } from "./ToolStep";
 import { NoteLine } from "./NoteLine";
 import { RelayTurn } from "./RelayTurn";
@@ -22,6 +23,8 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
       return <UserMessage text={item.text} imgs={item.imgs} files={item.files} />;
     case "ai":
       return <Answer text={item.text} />;
+    case "thinking":
+      return <Thinking text={item.text} />;
     case "tool":
       return <ToolStep item={item} />;
     case "allowed":
