@@ -296,6 +296,7 @@ const en = {
   "today.alsoIn": "Also in {project}",
   "today.progress": "{cleared} of {total} cleared · {planned} planned today",
   "today.boardsDown": "{n} board(s) not loaded",
+  "today.fact.labels": "Labels",
   "today.reviewTogether": "Review together ({n} PRs)",
   "today.reviewTogetherTip":
     "The pull requests of {ticket}, in one review: one diff, one summary and verdict, posted on each",

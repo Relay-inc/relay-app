@@ -303,6 +303,7 @@ export default {
   "today.alsoIn": "Aussi dans {project}",
   "today.progress": "{cleared} sur {total} traités · {planned} prévus aujourd'hui",
   "today.boardsDown": "{n} tableau(x) non chargé(s)",
+  "today.fact.labels": "Étiquettes",
   "today.reviewTogether": "Relire ensemble ({n} PR)",
   "today.reviewTogetherTip":
     "Les pull requests de {ticket} en une revue : un diff, un résumé et un verdict, publiés sur chacune",

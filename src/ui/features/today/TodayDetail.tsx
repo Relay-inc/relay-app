@@ -2,7 +2,6 @@ import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "rea
 import type { Status } from "../../../domain/today/plan";
 import {
   actionsOf,
-  moveTo,
   putOff,
   selectEntry,
   setStatus,
@@ -23,7 +22,6 @@ import { timeOf } from "../../../application/calendar/calendar";
 import { lastAi } from "../../../application/conversations/selectors";
 import { openMail } from "../../../application/navigation/panel";
 import { projectLabel } from "../../../application/workspace/vault";
-import { useTodayStore } from "../../../application/today/store";
 import { prsOfCard, ticketOf } from "../../../application/today/links";
 import { usePullRequestsStore } from "../../../application/pull-requests/store";
 import { cardKey } from "../../../domain/navigation/keys";
@@ -37,9 +35,8 @@ import { MailComposer, MailSection } from "./sections/MailSection";
 import { PrSection, prTabs } from "./sections/PrSection";
 import { CardSection, cardTabs } from "./sections/CardSection";
 import { MeetingSection } from "./sections/MeetingSection";
-import { Caps, KIND_ICON, Kbd, TONE_TEXT, minutes } from "./parts";
+import { Caps, KIND_ICON, Kbd, TONE_TEXT } from "./parts";
 
-const iso = (at: number) => new Date(at).toISOString();
 const BUTTON =
   "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-[13px] font-medium whitespace-nowrap cursor-pointer";
 const ICON_BUTTON =
@@ -131,48 +128,56 @@ export function TodayDetail({ model }: { model: TodayModel }) {
   };
 
   return (
-    <div className="min-w-0 min-h-0 grid grid-rows-[minmax(0,1fr)_auto]">
-      <div className="min-w-0 min-h-0 flex flex-col">
-        <div className="flex-none flex flex-col gap-2 px-7 pt-4.5">
-          <div className="flex items-center gap-2 text-xs text-secondary">
-            <span className="inline-flex items-center gap-1.5 h-6 pl-1 pr-2 rounded-[7px] bg-fill-2 text-label font-medium whitespace-nowrap">
-              <span
-                className={`grid place-items-center size-4.5 rounded-[5px] bg-raised ${entry.tone ? TONE_TEXT[entry.tone] : "text-accent-text"}`}
-              >
-                <Icon name={KIND_ICON[entry.kind]} className="glyph size-3" />
-              </span>
-              {t(kindLabel(entry))}
+    <div className="min-w-0 min-h-0 flex flex-col">
+      <div className="flex-none flex flex-col gap-2 px-7 pt-4.5">
+        <div className="flex items-center gap-2 text-xs text-secondary">
+          <span className="inline-flex items-center gap-1.5 h-6 pl-1 pr-2 rounded-[7px] bg-fill-2 text-label font-medium whitespace-nowrap">
+            <span
+              className={`grid place-items-center size-4.5 rounded-[5px] bg-raised ${entry.tone ? TONE_TEXT[entry.tone] : "text-accent-text"}`}
+            >
+              <Icon name={KIND_ICON[entry.kind]} className="glyph size-3" />
             </span>
-            <span className="flex-1 min-w-0 truncate">{entry.where}</span>
-            <span className={`font-semibold whitespace-nowrap ${TONE_TEXT[entry.tone]}`}>{entry.why}</span>
-          </div>
-          <h1 className="m-0 mt-0.5 text-xl leading-snug font-semibold tracking-tight text-pretty select-text">
-            {entry.title}
-          </h1>
-          <ActionBar entry={entry} acts={acts} done={done} pop={pop} now={model.now} />
-          {tabs.length ? (
-            <div className="flex gap-4.5 mt-2 border-b border-separator">
-              {tabs.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setTab(entry.id, item.id)}
-                  className={`inline-flex items-center gap-1.5 h-8.5 text-[13px] font-medium cursor-pointer ${tab === item.id ? "text-label shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-secondary hover:text-label"}`}
-                >
-                  {t(item.label)}
-                  {item.n ? (
-                    <span className="min-w-4.5 h-4.5 px-1.25 rounded-full bg-fill-2 text-secondary text-[11px] grid place-items-center">
-                      {item.n}
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
+            {t(kindLabel(entry))}
+          </span>
+          <span className="flex-1 min-w-0 truncate">{entry.where}</span>
+          <span className={`font-semibold whitespace-nowrap ${TONE_TEXT[entry.tone]}`}>{entry.why}</span>
         </div>
-        <div className="flex-1 min-h-0 overflow-y-auto px-7 pt-4.5 pb-7 select-text cursor-auto">{body()}</div>
-        {s.type === "mail" ? <MailComposer /> : null}
+        <h1 className="m-0 mt-0.5 text-xl leading-snug font-semibold tracking-tight text-pretty select-text">
+          {entry.title}
+        </h1>
+        <Meta entry={entry} />
+        <ActionBar entry={entry} acts={acts} done={done} pop={pop} now={model.now} />
+        {tabs.length ? (
+          <div className="flex gap-4.5 mt-2 border-b border-separator">
+            {tabs.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setTab(entry.id, item.id)}
+                className={`inline-flex items-center gap-1.5 h-8.5 text-[13px] font-medium cursor-pointer ${tab === item.id ? "text-label shadow-[inset_0_-2px_0_var(--color-accent)]" : "text-secondary hover:text-label"}`}
+              >
+                {t(item.label)}
+                {item.n ? (
+                  <span className="min-w-4.5 h-4.5 px-1.25 rounded-full bg-fill-2 text-secondary text-[11px] grid place-items-center">
+                    {item.n}
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
-      <Aside model={model} entry={entry} connected={connected} />
+      <div className="flex-1 min-h-0 overflow-y-auto px-7 pt-4.5 pb-7 select-text cursor-auto">
+        {body()}
+        {connected.length && s.type !== "card" ? (
+          <div className="flex flex-col gap-1.5 mt-6 max-w-170">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-tertiary">
+              {t("today.connected")}
+            </span>
+            <ConnectedList items={connected} />
+          </div>
+        ) : null}
+      </div>
+      {s.type === "mail" ? <MailComposer /> : null}
     </div>
   );
 }
@@ -415,174 +420,10 @@ function ConnectedList({ items }: { items: Connected[] }) {
   );
 }
 
-const SECTION = "text-[11px] font-semibold tracking-[0.06em] uppercase text-tertiary";
-/** The bottom of the detail, as the design has it inside the app: status (the tracker's own for a card), When, the
- *  facts, and what it connects to in the queue, side by side on the sidebar's colour. */
-function Aside({ model, entry, connected }: { model: TodayModel; entry: Entry; connected: Connected[] }) {
-  const { t, locale } = useT();
-  const pinned = useTodayStore(s => s.pins[entry.id]);
-  const cardView = useDetailsStore(s => (entry.subject.type === "card" ? s.card[entry.id] : undefined));
-  const facts = factsOf(entry, locale, t);
-  const at = model.placed[entry.id];
-  const when = model.slots.map(slot => {
-    const on = at?.slot === slot.key;
-    const room = Math.round((slot.end - slot.start - model.used[slot.key]) / 60_000);
-    const late = entry.by !== undefined && slot.start + model.used[slot.key] + entry.est * 60_000 > entry.by;
-    const fits = on || (room >= entry.est && !late);
-    const after = model.meetings.find(meeting => meeting.id === slot.after);
-    return {
-      key: slot.key,
-      label: after ? t("today.slotAfter", { title: after.title }) : t("today.slotNow"),
-      sub: on
-        ? `${timeOf(iso(at.start))}–${timeOf(iso(at.start + entry.est * 60_000))}`
-        : fits
-          ? t("today.minFree", { n: room })
-          : late
-            ? t("today.tooLate")
-            : t("today.full"),
-      on,
-      fits,
-    };
-  });
-  const chip = (on: boolean, fits = true) =>
-    `flex flex-col items-start px-2.25 py-1.5 rounded-lg border text-xs font-medium leading-[1.3] text-left min-w-0 cursor-pointer ${on ? "border-accent bg-accent-soft text-accent-text" : "border-separator-strong text-label"} ${fits ? "" : "opacity-45 cursor-default"}`;
-  return (
-    <aside className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_minmax(0,1fr)] gap-7 px-7 pt-3.5 pb-4 border-t border-separator bg-sidebar max-h-55 overflow-y-auto">
-      <div className="flex flex-col gap-4 min-w-0">
-        {entry.kind === "ask" ? null : cardView?.statuses?.length && entry.subject.type === "card" ? (
-          <>
-            <TrackerStatus entry={entry} />
-            <AssigneePicker entry={entry} />
-          </>
-        ) : (
-          <StatusPicker key={entry.id} entry={entry} />
-        )}
-        <section className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-1.5 min-w-0">
-            <span className={SECTION}>{t("today.when")}</span>
-            <span className="text-xs text-secondary truncate">
-              {at
-                ? `${timeOf(iso(at.start))} · ${minutes(entry.est)}${pinned ? ` · ${t("today.pinned")}` : ""}`
-                : t("rem.tomorrow")}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {when.map(slot => (
-              <button
-                key={slot.key}
-                disabled={!slot.fits}
-                onClick={() => moveTo(entry, slot.key)}
-                className={chip(slot.on, slot.fits)}
-              >
-                <span className="max-w-full truncate">{slot.label}</span>
-                <span className="text-[11px] font-normal text-secondary">{slot.sub}</span>
-              </button>
-            ))}
-            <button onClick={() => moveTo(entry, "tomorrow")} className={chip(!at)}>
-              <span>{t("rem.tomorrow")}</span>
-              <span className="text-[11px] font-normal text-secondary">
-                {!at
-                  ? t("today.plannedWord")
-                  : new Date(model.now + 864e5).toLocaleDateString(locale, {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
-              </span>
-            </button>
-          </div>
-        </section>
-      </div>
-      <section className="flex flex-col gap-2 min-w-0">
-        {facts.map(([label, value]) => (
-          <div key={label} className="flex flex-col gap-px min-w-0">
-            <span className="text-[11px] text-tertiary">{label}</span>
-            <span className="text-[13px] truncate select-text" title={value}>
-              {value}
-            </span>
-          </div>
-        ))}
-      </section>
-      <section className="flex flex-col gap-0.5 min-w-0">
-        <span className={`${SECTION} mb-1.5`}>{t("today.connected")}</span>
-        <ConnectedList items={connected.slice(0, 4)} />
-      </section>
-    </aside>
-  );
-}
-
-type T = ReturnType<typeof useT>["t"];
-// what is known about the item, as label and value
-function factsOf(entry: Entry, locale: string, t: T): [string, string][] {
-  const s = entry.subject;
-  const date = (iso: string) =>
-    new Date(iso).toLocaleString(locale, {
-      weekday: "short",
-      day: "numeric",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  const who = (list: { name: string | null; email: string }[]) => list.map(a => a.name || a.email).join(", ");
-  switch (s.type) {
-    case "mail":
-      return [
-        [t("today.fact.from"), who(s.mail.from)],
-        [t("today.fact.to"), who(s.mail.to)],
-        [t("today.fact.date"), date(s.mail.date)],
-        [t("today.fact.account"), s.mail.account],
-      ];
-    case "pr":
-      return [
-        [t("today.fact.repo"), s.pr.repo],
-        ...((): [string, string][] => {
-          const link = ticketOf(s.pr.url);
-          return link
-            ? [
-                [
-                  t("today.fact.ticket"),
-                  `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
-                ],
-              ]
-            : [];
-        })(),
-        [t("today.fact.author"), s.pr.author ?? ""],
-        [t("today.fact.updated"), date(s.pr.updated)],
-        [t("today.fact.project"), projectLabel(s.pr.project)],
-      ];
-    case "card":
-      return [
-        [t("today.fact.tracker"), provider(s.card.provider)?.name ?? ""],
-        [t("today.fact.project"), projectLabel(s.card.project)],
-        [t("today.fact.status"), s.card.card.status ?? ""],
-        [t("today.fact.due"), s.card.card.due ?? "–"],
-        [t("today.fact.assignee"), s.card.card.whoName || s.card.card.who],
-      ];
-    case "meeting":
-      return [
-        [t("today.fact.time"), `${timeOf(s.meeting.start)}–${timeOf(s.meeting.end)}`],
-        [t("today.fact.where"), s.meeting.location || "–"],
-        [t("today.fact.organizer"), s.meeting.organizer || "–"],
-        [t("today.fact.people"), String(s.meeting.people.length)],
-      ];
-    case "reminder":
-      return [
-        [t("today.fact.date"), s.reminder.date],
-        [t("today.fact.repeat"), s.reminder.repeat ?? "–"],
-        [t("today.fact.project"), projectLabel(s.reminder.project)],
-      ];
-    case "ask":
-      return [
-        [t("today.fact.tool"), s.request.tool_name],
-        [t("today.fact.project"), projectLabel(entry.project)],
-      ];
-    default:
-      return [[t("today.fact.project"), projectLabel(entry.project)]];
-  }
-}
-
-// a status' dot, as the design colours a workflow: backlog grey, planned blue, active orange, blocked red, review
-// accent, done green
+const PILL =
+  "inline-flex items-center gap-1.5 h-7 pl-2 pr-1 rounded-md border border-separator-strong bg-raised text-xs";
+const PICK = "bg-transparent outline-0 text-xs font-medium cursor-pointer max-w-44";
+// a status' dot: backlog grey, planned blue, active orange, blocked red, review accent, done green
 const DOT: Record<string, string> = {
   idle: "bg-tertiary",
   planned: "bg-ctx-a",
@@ -593,73 +434,137 @@ const DOT: Record<string, string> = {
   todo: "bg-tertiary",
   doing: "bg-soon",
 };
-const statusRow = (on: boolean) =>
-  `flex items-center gap-2 h-7 px-2 rounded-[7px] text-[13px] text-left cursor-pointer hover:bg-fill-2 ${on ? "bg-raised text-label font-semibold" : "text-secondary"}`;
 
-/** A card's status as its tracker has them, every status of its workflow; a click moves it there. */
-function TrackerStatus({ entry }: { entry: Entry }) {
-  const { t } = useT();
-  const s = entry.subject;
-  const view = useDetailsStore(st => (s.type === "card" ? st.card[entry.id] : undefined));
-  const [busy, setBusy] = useState("");
-  const [err, setErr] = useState("");
-  if (s.type !== "card" || !view?.statuses) return null;
-  const tracker = provider(s.card.provider);
+/** Under the title: the status (the tracker's own for a card) and the assignee as small pickers,
+ *  then what is known that the header does not say already. */
+function Meta({ entry }: { entry: Entry }) {
+  const { locale, t } = useT();
+  const facts = factsOf(entry, locale, t).filter(([, value]) => value && value !== "–");
   return (
-    <section className="flex flex-col gap-0.5">
-      <span className={`${SECTION} mb-1.5`}>{t("today.statusIn", { name: tracker?.name ?? "" })}</span>
-      {view.statuses.map(status => {
-        const on = view.status?.id === status.id;
-        return (
-          <button
-            key={status.id}
-            disabled={!!busy}
-            onClick={async () => {
-              if (on) return;
-              setBusy(status.id);
-              setErr("");
-              await cardAct(entry.id, s.card, "status", status.id).catch(error => setErr(String(error)));
-              setBusy("");
-            }}
-            className={`${statusRow(on)} ${busy === status.id ? "opacity-60" : ""}`}
-          >
-            <span className={`size-2 rounded-full ${DOT[status.tone ?? status.state ?? "idle"]}`} />
-            {status.name}
-          </button>
-        );
-      })}
-      {err ? <div className="err-box">{err}</div> : null}
-    </section>
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {entry.kind === "ask" ? null : <StatusPick entry={entry} />}
+      <AssigneePick entry={entry} />
+      {facts.map(([label, value]) => (
+        <span key={label} className="text-xs whitespace-nowrap max-w-72 truncate" title={value}>
+          <span className="text-tertiary">{label}</span> {value}
+        </span>
+      ))}
+    </div>
   );
 }
 
-/** Who the card is assigned to, to change here (a tracker with one assignee: Productive, Linear). Assigning it to
- *  someone else takes it off Today; the toast says to whom. */
-function AssigneePicker({ entry }: { entry: Entry }) {
+type T = ReturnType<typeof useT>["t"];
+// what is known about the item that its header (kind, where, why, title) does not show, as label and value
+function factsOf(entry: Entry, locale: string, t: T): [string, string][] {
+  const s = entry.subject;
+  const day = (iso: string) =>
+    new Date(iso).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+  switch (s.type) {
+    case "mail":
+      return [[t("today.fact.to"), s.mail.to.map(a => a.name || a.email).join(", ")]];
+    case "pr": {
+      const link = ticketOf(s.pr.url);
+      return [
+        [
+          t("today.fact.ticket"),
+          link
+            ? `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`
+            : "",
+        ],
+        [t("today.fact.updated"), day(s.pr.updated)],
+      ];
+    }
+    case "card":
+      return [
+        [t("today.fact.due"), s.card.card.due ? day(s.card.card.due) : ""],
+        [t("today.fact.labels"), (s.card.card.labels ?? []).join(", ")],
+      ];
+    case "meeting":
+      return [
+        [t("today.fact.organizer"), s.meeting.organizer],
+        [t("today.fact.people"), String(s.meeting.people.length || "")],
+      ];
+    case "reminder":
+      return [[t("today.fact.repeat"), s.reminder.repeat ?? ""]];
+    default:
+      return [];
+  }
+}
+
+/** The status as a small picker: a card's own workflow in its tracker, else to do / in progress / done (setStatus). */
+function StatusPick({ entry }: { entry: Entry }) {
   const { t } = useT();
   const s = entry.subject;
   const view = useDetailsStore(st => (s.type === "card" ? st.card[entry.id] : undefined));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  if (s.type !== "card" || !view?.people?.length || view.assignees) return null;
-  const current = view.assignee?.id ?? "";
+  const run = async (job: () => Promise<unknown>) => {
+    setBusy(true);
+    setErr("");
+    await job().catch(error => setErr(String(error)));
+    setBusy(false);
+  };
+  const tracker = s.type === "card" && view?.statuses?.length ? view : null;
+  const current = tracker ? (tracker.statuses!.find(x => x.id === tracker.status?.id) ?? null) : null;
+  const dot = tracker ? DOT[current?.tone ?? current?.state ?? "idle"] : DOT[entry.status];
   return (
-    <section className="flex flex-col gap-1.5">
-      <span className={SECTION}>{t("today.assignee")}</span>
+    <span className={`${PILL} ${busy ? "opacity-60" : ""}`} title={err || t(`today.doneIn.${entry.kind}`)}>
+      <span className={`size-2 rounded-full flex-none ${err ? "bg-late" : dot}`} />
+      {tracker && s.type === "card" ? (
+        <select
+          className={PICK}
+          disabled={busy}
+          value={current?.id ?? ""}
+          onChange={e => run(() => cardAct(entry.id, s.card, "status", e.target.value))}
+        >
+          {tracker.statuses!.map(x => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <select
+          className={PICK}
+          disabled={busy}
+          value={entry.status}
+          onChange={e => run(() => setStatus(entry, e.target.value as Status))}
+        >
+          {(["todo", "doing", "done"] as Status[]).map(x => (
+            <option key={x} value={x}>
+              {t(`today.status.${x}`)}
+            </option>
+          ))}
+        </select>
+      )}
+    </span>
+  );
+}
+
+/** Who has the card, as a small picker (a tracker with one assignee: Productive, Linear); assigning it to someone
+ *  else takes it off Today, the toast says to whom. */
+function AssigneePick({ entry }: { entry: Entry }) {
+  const { t } = useT();
+  const s = entry.subject;
+  const view = useDetailsStore(st => (s.type === "card" ? st.card[entry.id] : undefined));
+  const [busy, setBusy] = useState(false);
+  if (s.type !== "card" || !view?.people?.length || view.assignees) return null;
+  return (
+    <span className={`${PILL} ${busy ? "opacity-60" : ""}`}>
+      <span className="text-tertiary">{t("today.assignee")}</span>
       <select
+        className={PICK}
         disabled={busy}
-        value={current}
+        value={view.assignee?.id ?? ""}
         onChange={async e => {
           const id = e.target.value;
           setBusy(true);
-          setErr("");
           await cardAct(entry.id, s.card, "assignee", id).then(
             () => toastAssigned(view.people!.find(p => p.id === id)?.name ?? ""),
-            error => setErr(String(error)),
+            error => toastAssigned(String(error)),
           );
           setBusy(false);
         }}
-        className="h-8 px-2 rounded-md border border-separator-strong bg-bg text-[13px]"
       >
         <option value="">{t("today.unassigned")}</option>
         {view.people.map(person => (
@@ -668,43 +573,6 @@ function AssigneePicker({ entry }: { entry: Entry }) {
           </option>
         ))}
       </select>
-      {err ? <div className="err-box">{err}</div> : null}
-    </section>
-  );
-}
-
-const STATUSES: Status[] = ["todo", "doing", "done"];
-/** To do, in progress, done for an item without a tracker of its own, as the tracker's list looks (see setStatus). */
-function StatusPicker({ entry }: { entry: Entry }) {
-  const { t } = useT();
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-  const pick = async (status: Status) => {
-    if (status === entry.status || busy) return;
-    setBusy(true);
-    setErr("");
-    try {
-      await setStatus(entry, status);
-    } catch (error) {
-      setErr(String(error));
-    }
-    setBusy(false);
-  };
-  return (
-    <section className="flex flex-col gap-0.5" title={t(`today.doneIn.${entry.kind}`)}>
-      <span className={`${SECTION} mb-1.5`}>{t("today.status")}</span>
-      {STATUSES.map(status => (
-        <button
-          key={status}
-          disabled={busy}
-          onClick={() => pick(status)}
-          className={`${statusRow(entry.status === status)} ${busy ? "opacity-60" : ""}`}
-        >
-          <span className={`size-2 rounded-full ${DOT[status]}`} />
-          {t(`today.status.${status}`)}
-        </button>
-      ))}
-      {err ? <div className="err-box">{err}</div> : null}
-    </section>
+    </span>
   );
 }

@@ -301,6 +301,7 @@ export default {
   "today.alsoIn": "Auch in {project}",
   "today.progress": "{cleared} von {total} erledigt · {planned} heute geplant",
   "today.boardsDown": "{n} Board(s) nicht geladen",
+  "today.fact.labels": "Labels",
   "today.reviewTogether": "Zusammen prüfen ({n} PRs)",
   "today.reviewTogetherTip":
     "Die Pull Requests von {ticket} in einem Review: ein Diff, eine Zusammenfassung und ein Urteil, auf jeden gepostet",

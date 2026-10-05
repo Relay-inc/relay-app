@@ -300,6 +300,7 @@ export default {
   "today.alsoIn": "Ook in {project}",
   "today.progress": "{cleared} van {total} afgewerkt · {planned} gepland vandaag",
   "today.boardsDown": "{n} bord(en) niet geladen",
+  "today.fact.labels": "Labels",
   "today.reviewTogether": "Samen reviewen ({n} PR's)",
   "today.reviewTogetherTip":
     "De pull requests van {ticket} in één review: één diff, één samenvatting en oordeel, op elke PR geplaatst",
