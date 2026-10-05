@@ -1,7 +1,7 @@
 //! This Mac as a work machine: Relay's own relay-server (`relay --relay-server serve --ram-disk`, main.rs) under a
 //! LaunchAgent, so Relay on another Mac runs conversations here, also while this Relay is closed. Only the Relay
 //! installed as an app: launchd may not run a development build out of ~/Documents (TCC). The server is the same code
-//! as the one in Docker, so the two stay on one protocol; a new Relay restarts it on its new binary (`refresh`).
+//! as the one in Docker, so the two stay on one protocol, and a new Relay restarts it on its new binary (`refresh`).
 
 use relay_server::{clients, data_dir, identity, launch_agent, pair_line, ramdisk, LAUNCH_LABEL};
 use serde_json::{json, Value};

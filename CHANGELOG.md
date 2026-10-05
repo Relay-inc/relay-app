@@ -5,17 +5,33 @@ that doesn't touch this file; the `skip-changelog` label opts out (docs, CI, ref
 
 To release: move Unreleased under a new version heading with the date, then set that version in `package.json` and
 the root `Cargo.toml` (`[workspace.package]`, the app and relay-server read it there, `tauri.conf.json` reads it from
-`package.json`). Once that is on main, the release workflow
-builds Relay for macOS and publishes it as GitHub release `v<version>`, with this version's section as its notes. Then
-push relay-server's image from a checkout of the tag with `scripts/push-server-image.sh`. Run the workflow by hand
-(Actions › release › Run workflow) to publish a version that has no release yet. Versions follow
+`package.json`). Once that is on main, run `scripts/release.sh` on a Mac, on main: it builds Relay and publishes it as
+GitHub release `v<version>` with this version's section as its notes, then pushes relay-server's image and attaches
+its Linux binaries (`scripts/push-server-image.sh`). Nothing of a release runs in GitHub Actions, only the checks of
+a PR. Versions follow
 [semver](https://semver.org); the format follows [Keep a Changelog](https://keepachangelog.com).
 
 ## [Unreleased]
 
+### Added
+
+- **Record a meeting** from its card in Today: your microphone and what the Mac plays (so people on a call are in it, also on headphones), transcribed on this Mac with "Me" and "Others" as speakers; on speakers instead of headphones, what the microphone hears of the others is left out so their words don't show twice. Stop puts the audio (.m4a) and the transcript in Obsidian's attachment folder, and a conversation makes the meeting note and summarises it. Settings › Voice › Meetings picks the model for meetings and whether the audio is kept and the note written. macOS asks once for Screen & System Audio Recording (#95)
+- **Dictate from any app** (Settings › Voice): next to dictating in the composer, two ways that work in every app, also with Relay in the background, each switched on with its own shortcut. **New conversation** brings Relay forward and starts a conversation with what you said; **Paste** puts the text where the cursor is and gives your clipboard back afterwards (needs Accessibility, without it the text is left on the clipboard). Set a shortcut by clicking it and pressing the keys. A small pill at the bottom of the screen shows it listening and transcribing (#95)
+- **Dictation in the composer**: the microphone button or a shortcut (⌥Space by default) turns what you say into text at the cursor, on this Mac without sending audio anywhere. **Settings › Voice** switches it on or off, picks the speech model (Parakeet V3 by default for 25 European languages including Dutch; Parakeet V2, Canary, Cohere and Moonshine to download or remove there), the spoken language, the shortcut and whether you hold it, tap it or either. Escape throws a recording away (#95)
+
 ### Changed
 
 - **Waiting is now Today**: one page with everything that needs you today. On top, what needs you now (an agent asking, a meeting about to start, a blocked session), then today's meetings (Prepare, Meeting note, Join; earlier ones folded away), reminders due (done, tomorrow, +1 week, a date, chat), your cards on the boards linked to a project that are due or in progress (open the ticket, start a conversation, open in the tracker), the pull requests waiting on you (reviews asked of you, your own with changes requested or failing CI), and conversations that finished while you were elsewhere. The sidebar badge stays red for what needs you now and counts the rest of the day otherwise (#100)
+
+## [0.0.6] - 2026-10-04
+
+### Changed
+
+- Releases are built on a Mac with `scripts/release.sh` instead of in GitHub Actions, which only run the checks of a PR (#97)
+
+### Fixed
+
+- Which project a conversation belongs to, the sidebar's order and folds and the other UI state live in a file in Relay's data folder instead of the window's storage, so the installed Relay and a development build show the same, also after a reinstall. The first start takes over what the window had (#98)
 
 ## [0.0.5] - 2026-10-04
 
@@ -197,7 +213,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/LaurentMe/relay-app/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/LaurentMe/relay-app/compare/v0.0.6...HEAD
+[0.0.6]: https://github.com/LaurentMe/relay-app/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/LaurentMe/relay-app/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/LaurentMe/vault-app/compare/v0.0.2...v0.0.3
