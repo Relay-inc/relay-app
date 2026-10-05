@@ -352,11 +352,14 @@ export function entries(now = Date.now()): Entry[] {
       subject: { type: "pr", pr },
     });
 
-  // unread mail from a person in the last two days: older unread mail is triage for the Mail view, not today's work
+  // mail of the last two days that waits on you: unread, or (when the Inbox/Other split knows a person from a machine)
+  // read but not answered yet, until it is archived. Older mail is triage for the Mail view, not today's work
+  // ponytail: "answered" is IMAP's \Answered, which Gmail's web app doesn't set; archive (Done) clears those
   for (const mail of useMailStore.getState().list ?? []) {
     const at = Date.parse(mail.date);
     const key = mailKey(mail);
-    if (!mail.unread || mail.other || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
+    const waits = mail.unread || (mail.other === false && !mail.answered);
+    if (!waits || mail.other || mail.answered || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
     const sender = mail.from[0]?.name || mail.from[0]?.email || "";
     add("mail", {
       id: `mail:${key}`,
