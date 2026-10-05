@@ -69,6 +69,20 @@ function ptyOut(id: number, text: string) {
   const bytes = new TextEncoder().encode(text);
   internals().runCallback(pty.channel, { index: pty.index++, message: bytes.buffer });
 }
+// ---------- voice (src-tauri/src/dictation.rs, meeting.rs, anywhere.rs): no microphone in a browser. A recording keeps
+// the channel it was given, so `__harness.recordingTick` / `dictationLevel` can play its levels
+const channelId = (c: unknown) => (typeof c === "object" && c ? (c as { id: number }).id : Number(String(c).split(":")[1]));
+const sendTo = (channel: number | null, index: number, message: unknown) =>
+  channel !== null && internals().runCallback(channel, { index, message });
+let meetingTicks: { channel: number; index: number } | null = null;
+let dictationLevels: { channel: number; index: number } | null = null;
+const voiceModels = [
+  { id: "parakeet-v3", mb: 456, langs: ["nl", "en", "de", "fr"], auto: true, installed: true, downloading: false },
+  { id: "parakeet-v2", mb: 451, langs: ["en"], auto: true, installed: false, downloading: false },
+  { id: "canary-1b-v2", mb: 691, langs: ["nl", "en", "de", "fr"], auto: false, installed: false, downloading: false },
+  { id: "cohere", mb: 1708, langs: ["nl", "en", "de", "fr"], auto: true, installed: false, downloading: false },
+  { id: "moonshine-base", mb: 55, langs: ["en"], auto: true, installed: false, downloading: false },
+];
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
@@ -262,6 +276,45 @@ function handle(cmd: string, a: Args): unknown {
     case "ai_title":
       return String(a.text).split(/\s+/).slice(0, 5).join(" ");
     // the embedded terminals: a shell that prints a prompt and echoes what is typed
+    // retries waiting for a usage limit to reset (src-tauri/src/retry.rs): none
+    case "retries":
+      return [];
+    // the UI state file (src/infrastructure/storage.ts): empty, so the app takes over the fixtures' localStorage
+    case "ui_state_get":
+      return {};
+    case "ui_state_init":
+      return a.state;
+    case "ui_state_set":
+      localStorage.setItem(a.key, a.value);
+      return null;
+    case "dictation_models":
+      return structuredClone(voiceModels);
+    case "dictation_model":
+    case "dictation_access":
+    case "dictation_ask_access":
+      return true;
+    case "dictation_download":
+    case "dictation_delete":
+    case "dictation_pause_shortcuts":
+      return null;
+    case "dictation_start":
+      dictationLevels = { channel: channelId(a.onLevel), index: 0 };
+      return null;
+    case "dictation_stop":
+      dictationLevels = null;
+      return "Dictated in the harness.";
+    case "dictation_cancel":
+      dictationLevels = null;
+      return null;
+    case "meeting_record_start":
+      meetingTicks = { channel: channelId(a.onTick), index: 0 };
+      return { system: true, why: null };
+    case "meeting_record_stop":
+      meetingTicks = null;
+      return { audio: "Attachments/2026-10-01 0930 Meeting.m4a", transcript: "Attachments/2026-10-01 0930 Meeting.md", seconds: 60 };
+    case "meeting_record_cancel":
+      meetingTicks = null;
+      return null;
     case "pty_spawn": {
       const id = ++ptyId;
       const channel = typeof a.onData === "object" ? a.onData.id : Number(String(a.onData).split(":")[1]);
@@ -503,6 +556,11 @@ const harness = {
   stream,
   nextTask,
   nextPaint,
+  /** a meeting recording's quarter-second tick: the time and both levels (0..1) */
+  recordingTick: (secs: number, me = 0.3, others = 0.2) =>
+    meetingTicks && sendTo(meetingTicks.channel, meetingTicks.index++, { secs, me, others }),
+  /** the composer's dictation hearing something */
+  dictationLevel: (level: number) => dictationLevels && sendTo(dictationLevels.channel, dictationLevels.index++, level),
   /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
   deepLink: (url: string) => emit("deep-link://new-url", [url]),
   /** a permission card that turns up in the next `pending` poll */
