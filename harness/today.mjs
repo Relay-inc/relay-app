@@ -43,6 +43,12 @@ try {
   await shot("04c-ticket-window");
   await page.keyboard.press("Escape");
   await settle(page, 300);
+  // the … menu: find the ticket again (a toast says what came out)
+  await page.getByRole("button", { name: "More actions" }).locator("visible=true").first().click();
+  await shot("04d-more-menu");
+  await page.getByRole("button", { name: /Find the ticket again/ }).locator("visible=true").first().click();
+  await page.waitForTimeout(400);
+  await shot("04e-found-again");
   await page.getByRole("button", { name: /^Review with Claude/ }).locator("visible=true").first().click();
   await page.waitForTimeout(1200);
   await shot("05-review");

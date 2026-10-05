@@ -31,7 +31,7 @@ import { useBoardStore } from "../board/store";
 import { ctxOf } from "../board/ctx";
 import { ticketChat } from "../board/board";
 import { openCard, openPr } from "../navigation/panel";
-import { select } from "../navigation/navigation";
+import { select, toast } from "../navigation/navigation";
 import { contexts, project as projectOf, projectLabel, findProjects, loadSnapshot } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
@@ -51,7 +51,7 @@ import { forgetDetails } from "./load";
 import { openReview } from "./review";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
-import { linkPrs, ticketOf } from "./links";
+import { linkPrs, relinkPr, ticketOf } from "./links";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -533,6 +533,18 @@ async function setCardState(item: TodayCard, state: Status) {
   }
   return false;
 }
+/** Find the PR's ticket again, Claude included, and say what came out. */
+async function findTicketAgain(pr: PR) {
+  if (!pr.project || !useTodayStore.getState().boards[pr.project]) return toast(t("today.link.noBoard"));
+  const link = await relinkPr(pr);
+  toast(
+    link
+      ? t("today.link.found", {
+          ticket: `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`,
+        })
+      : t("today.link.none"),
+  );
+}
 /** The ticket a PR is about: its item when it is under Today (switching the filter back to All when it hides it),
  *  else the ticket window on it. */
 export function openTicketOf(pr: PR) {
@@ -689,6 +701,7 @@ export function actionsOf(entry: Entry): Actions {
     case "pr": {
       const github = { label: t("today.onGithub"), icon: "out", key: "⌫", run: () => backend.openUrl(s.pr.url) };
       const inRelay = { label: t("today.openInPrs"), icon: "pr", run: () => openTodayPr(s.pr.repo, s.pr.number) };
+      const findTicket = { label: t("today.link.again"), icon: "refresh", run: () => findTicketAgain(s.pr) };
       return entry.kind === "review"
         ? of(
             [
@@ -701,13 +714,19 @@ export function actionsOf(entry: Entry): Actions {
               github,
               inRelay,
               { label: t("today.reviewInChat"), icon: "chat", run: () => reviewWithClaude(s.pr) },
+              findTicket,
             ],
             0,
             1,
             done(t("today.markReviewed")),
           )
         : of(
-            [{ label: t("today.fixWithClaude"), key: "↵", run: () => fixWithClaude(s.pr) }, github, inRelay],
+            [
+              { label: t("today.fixWithClaude"), key: "↵", run: () => fixWithClaude(s.pr) },
+              github,
+              inRelay,
+              findTicket,
+            ],
             0,
             1,
             done(),

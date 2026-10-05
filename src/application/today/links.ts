@@ -35,39 +35,47 @@ let running = false;
 /** Work out the ticket of every open PR that does not have one yet. Runs after the boards' cards come in. */
 export async function linkPrs() {
   const list = usePullRequestsStore.getState().list;
-  const boards = useTodayStore.getState().boards;
   if (running || !list) return;
   running = true;
   let ai = AI_PER_ROUND;
   try {
-    const prs = [...new Map([...list.review, ...list.mine].map(pr => [pr.url, pr])).values()];
-    for (const pr of prs) {
-      const board = pr.project ? boards[pr.project] : undefined;
-      if (!board) continue;
+    for (const pr of [...new Map([...list.review, ...list.mine].map(pr => [pr.url, pr])).values()]) {
       const known = useLinksStore.getState().links[pr.url];
       if (known && (known.how !== "none" || Date.now() - known.at < RETRY)) continue;
-      const cards: Candidate[] = board.cards.map(card => ({ id: card.id, number: card.number, title: card.title }));
-      const number = byNumber(pr, cards);
-      const title = number ? null : byTitle(pr.title, cards);
-      const found = number ?? title ?? (ai-- > 0 ? await askClaude(pr, cards) : undefined);
-      if (found === undefined) continue; // no call left this round: next round
-      keep(
-        pr.url,
-        found
-          ? {
-              at: Date.now(),
-              how: number ? "number" : title ? "title" : "ai",
-              provider: board.provider,
-              card: found.id,
-              number: found.number,
-              title: found.title,
-            }
-          : { at: Date.now(), how: "none" },
-      );
+      const result = await linkOne(pr, ai > 0);
+      if (result === "ai") ai--;
     }
   } finally {
     running = false;
   }
+}
+/** Find a PR's ticket again (the "…" menu): what was found before, or unlinked by hand, is forgotten first, and Claude
+ *  may be asked. Resolves with the link it found, null for none or for a project without a board. */
+export async function relinkPr(pr: PR) {
+  useLinksStore.setState(draft => {
+    delete draft.links[pr.url];
+  });
+  storage.set(KEY, useLinksStore.getState().links);
+  await linkOne(pr, true);
+  return ticketOf(pr.url);
+}
+// one PR: by number, by title, else (when allowed) Claude; kept unless no board or no call was allowed
+async function linkOne(pr: PR, allowAi: boolean): Promise<"number" | "title" | "ai" | "skipped"> {
+  const board = pr.project ? useTodayStore.getState().boards[pr.project] : undefined;
+  if (!board) return "skipped";
+  const cards: Candidate[] = board.cards.map(card => ({ id: card.id, number: card.number, title: card.title }));
+  const number = byNumber(pr, cards);
+  const title = number ? null : byTitle(pr.title, cards);
+  if (!number && !title && !allowAi) return "skipped";
+  const found = number ?? title ?? (await askClaude(pr, cards));
+  const how = number ? "number" : title ? "title" : "ai";
+  keep(
+    pr.url,
+    found
+      ? { at: Date.now(), how, provider: board.provider, card: found.id, number: found.number, title: found.title }
+      : { at: Date.now(), how: "none" },
+  );
+  return how;
 }
 
 // Claude picks the card from the list, or none; what it answers counts only when it is a number on the list
