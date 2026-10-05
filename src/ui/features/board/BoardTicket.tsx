@@ -22,7 +22,17 @@ const viewOf = (detail: CardDetail, data: unknown, _lang: string) => (data ? det
 /** The card open in the ticket window over the board: the main column (title, description, files, activity with the
  *  comment box) and the sidebar with its fields. Previous and next step through the cards the board shows, in
  *  column order, round from the last to the first. The window is inert while an action runs. */
-export function BoardTicket({ provider, board }: { provider: BoardProvider; board: Board }) {
+export function BoardTicket({
+  provider,
+  board,
+  step,
+  project,
+}: {
+  provider: BoardProvider;
+  board: Board;
+  step?: (id: string) => void; // opens another card (Today: with the board that card came from)
+  project?: string; // the vault project a conversation goes under, when it is not the board's (Today)
+}) {
   const { t, lang } = useT();
   const modal = useNavigationStore(s => s.panel.modal);
   const data = useNavigationStore(s => s.panel.detail[s.panel.modal]);
@@ -41,7 +51,7 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
   const where = [projectName, view?.board].filter(Boolean).join(" · ");
   const act = (action: string, value: string, files: File[] = []) => cardAct(modal, action, { value, files });
   const startChat = () =>
-    ticketChat(provider, [`${number} ${view?.title ?? ""}`.trim(), view?.url].filter(Boolean).join("\n"));
+    ticketChat(provider, [`${number} ${view?.title ?? ""}`.trim(), view?.url].filter(Boolean).join("\n"), project);
 
   const body = () => {
     if (err)
@@ -131,7 +141,8 @@ export function BoardTicket({ provider, board }: { provider: BoardProvider; boar
         first={order.length < 2}
         last={order.length < 2}
         onStep={by =>
-          order.length && openBoardCard(provider, order[(Math.max(at, 0) + by + order.length) % order.length].id)
+          order.length &&
+          (step ?? (id => openBoardCard(provider, id)))(order[(Math.max(at, 0) + by + order.length) % order.length].id)
         }
         onClose={closeTicket}
         link={view?.url ? <ModalLink href={view.url}>{t("kb.openIn", { name: provider.name })}</ModalLink> : undefined}

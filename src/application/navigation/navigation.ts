@@ -17,6 +17,7 @@ import { useWorkspaceStore } from "../workspace/store";
 import { projectLabel } from "../workspace/vault";
 import { settings } from "../settings/settings";
 import { useNavigationStore } from "./store";
+import { loadTodayCards } from "../today/today";
 import { request } from "./requests";
 
 // Moving around the main window: which conversation or view is open, the toast, the right drawer and the overlays.
@@ -54,6 +55,7 @@ export async function select(key: string, tool: Tool | null = null) {
     if (!useConversationsStore.getState().chats[key]?.draft) await ensureHistory(key, isTerminal(key));
   }
   if (key === PRS) loadPrs();
+  if (key === WAIT) loadTodayCards();
   if (key === MAIL) loadMails();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");

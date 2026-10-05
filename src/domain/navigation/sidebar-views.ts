@@ -16,7 +16,7 @@ export const viewItems = (
   t: Translate,
 ): ViewItem[] => [
   { key: ORCH, icon: "agent", name: t("nav.orch") },
-  { key: VIEW.wait, icon: "bell", name: t("nav.waiting") },
+  { key: VIEW.wait, icon: "sun", name: t("nav.today") },
   { key: VIEW.reminders, icon: "list", name: t("nav.reminders") },
   ...boards.map(board => ({ key: boardKey(board.id), mark: board.mark, name: board.name })),
   ...(github ? [{ key: VIEW.prs, icon: "pr", name: t("nav.prs") }] : []),

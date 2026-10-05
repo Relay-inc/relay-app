@@ -45,6 +45,7 @@ import { useMailStore } from "../mail/store";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { runningWorkers } from "../orchestrator/orchestrator";
 import { useNavigationStore } from "./store";
+import { todayRest } from "../today/today";
 
 // The sidebar: its own state (search, folds, dragged order) and the rows it shows, built from every context's state.
 const nav = () => useNavigationStore.getState();
@@ -180,9 +181,12 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
 }
 
 // ---------- the view rows: the orchestrator, waiting, reminders, the boards, pull requests and mail, in the user's order
+// Today: a badge for what needs the user now, else a count of the rest of the day
 const waitingMeta = (): Meta | undefined => {
   const waiting = waitCount();
-  return waiting ? { kind: "badge", n: waiting } : undefined;
+  if (waiting) return { kind: "badge", n: waiting };
+  const rest = todayRest();
+  return rest ? { kind: "count", n: rest } : undefined;
 };
 const remindersMeta = (): Meta | undefined => {
   const reminders = useWorkspaceStore.getState().snap.reminders;
