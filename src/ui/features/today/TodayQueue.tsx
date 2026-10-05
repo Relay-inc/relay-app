@@ -56,7 +56,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
         {pins[entry.id] ? <Icon name="bookmark" className="glyph size-3 flex-none text-accent-text" /> : null}
         <span className="text-[11px] text-tertiary tabular-nums whitespace-nowrap">
           {entry.kind === "ask"
-            ? entry.why
+            ? minutes(Math.max(0, Math.floor((now - entry.at) / 60_000)))
             : `${at ? timeOf(iso(at.start)) : t("rem.tomorrow")} · ${minutes(entry.est)}`}
         </span>
       </div>
