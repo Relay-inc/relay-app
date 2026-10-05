@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.7] - 2026-10-05
+
 ### Added
 
 - **Today: a detail per kind of item** (design "Relay Overview", Today turn 6). Every item opens with a chip saying what it is, its two main actions as buttons and the rest under "…", Snooze (tomorrow, Monday, next week), Later and Done (Archive for a mail, Prepared for a meeting, Mark reviewed for a review), under the title its status and assignee as small pickers and what the header doesn't say yet (a mail's recipients, a ticket's due date and labels, a meeting's organizer), and at the end what it connects to in your queue. There is no When: Snooze moves an item. A **mail** shows its thread with the earlier mails folded, the mail itself and Claude's quick replies; Reply, Reply all and Forward open a composer under it with Claude's draft, to edit or make shorter, more formal, Dutch or English, then Save to Drafts (⌘↵) and archive the mail: Relay still never sends mail. Recipients, subject and threading follow Keel. A **pull request** has Overview, Files, Checks and Conversation tabs, a **ticket** Details, Activity (comment from Today) and Connected, with every status of its workflow to move it to, and Start working sets it in progress and opens a conversation. A **meeting** shows who is in it and the agenda from the invite. Keys: J K, Enter, Backspace, E done, S snooze, L later, P in progress, and for a mail R A F U #
@@ -239,7 +241,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...HEAD
+[0.0.7]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/Relay-inc/relay-app/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/Relay-inc/relay-app/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/LaurentMe/vault-app/compare/v0.0.3...v0.0.4
