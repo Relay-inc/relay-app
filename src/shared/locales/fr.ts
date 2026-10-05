@@ -307,7 +307,6 @@ export default {
   "today.reviewTogether": "Relire ensemble ({n} PR)",
   "today.reviewTogetherTip":
     "Les pull requests de {ticket} en une revue : un diff, un résumé et un verdict, publiés sur chacune",
-  "today.reviewAlone": "Relire cette PR seule",
   "today.prsCount": "{n} PR",
   "review.titleOf": "Revue {title}",
   "review.group": "{n} PR d'un même ticket",

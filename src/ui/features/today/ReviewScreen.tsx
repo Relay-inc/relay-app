@@ -127,21 +127,28 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
 
       <div className="flex-1 min-h-0 grid grid-cols-[minmax(0,1fr)_400px]">
         <div className="min-w-0 min-h-0 overflow-y-auto px-5 pt-4 pb-6 flex flex-col gap-2.5 select-text">
-          <div className="flex flex-wrap gap-1.5">
-            {files.map((f, i) => (
-              <button
-                key={`${f.pr}|${f.path}`}
-                onClick={() => showFile(id, i)}
-                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-[7px] border font-mono text-xs cursor-pointer ${f === file ? "border-accent bg-accent-soft" : "border-separator-strong hover:bg-fill"}`}
-              >
-                <Icon name="file" className="glyph size-3 text-tertiary" />
-                {several ? <span className="text-tertiary">{prLabel(f.pr)} ·</span> : null}
-                {f.path}
-                <span className="text-add-fg">+{f.additions}</span>
-                <span className="text-del-fg">−{f.deletions}</span>
-              </button>
-            ))}
-          </div>
+          {/* the files per PR, one row each, the PR named once in front when there are several */}
+          {(several ? prs.map(pr => pr.url) : [""]).map(url => (
+            <div key={url} className="flex flex-wrap items-center gap-1.5">
+              {several ? (
+                <span className="text-xs font-semibold text-secondary whitespace-nowrap mr-1">{prLabel(url)}</span>
+              ) : null}
+              {files.map((f, i) =>
+                several && f.pr !== url ? null : (
+                  <button
+                    key={`${f.pr}|${f.path}`}
+                    onClick={() => showFile(id, i)}
+                    className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-[7px] border font-mono text-xs cursor-pointer ${f === file ? "border-accent bg-accent-soft" : "border-separator-strong hover:bg-fill"}`}
+                  >
+                    <Icon name="file" className="glyph size-3 text-tertiary" />
+                    {f.path}
+                    <span className="text-add-fg">+{f.additions}</span>
+                    <span className="text-del-fg">−{f.deletions}</span>
+                  </button>
+                ),
+              )}
+            </div>
+          ))}
           {r.err ? <div className="err-box">{r.err}</div> : null}
           {!r.files ? <div className="text-sm text-secondary">{t("kb.loading")}</div> : null}
           {file ? (

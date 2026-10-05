@@ -304,7 +304,6 @@ export default {
   "today.reviewTogether": "Samen reviewen ({n} PR's)",
   "today.reviewTogetherTip":
     "De pull requests van {ticket} in één review: één diff, één samenvatting en oordeel, op elke PR geplaatst",
-  "today.reviewAlone": "Enkel deze PR reviewen",
   "today.prsCount": "{n} PR's",
   "review.titleOf": "Review {title}",
   "review.group": "{n} PR's van één ticket",

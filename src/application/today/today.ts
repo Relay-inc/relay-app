@@ -171,7 +171,7 @@ export type Subject =
   | { type: "meeting"; meeting: Meeting }
   | { type: "reminder"; reminder: Reminder }
   | { type: "card"; card: TodayCard }
-  | { type: "pr"; pr: PR }
+  | { type: "pr"; pr: PR; prs?: PR[] }
   | { type: "mail"; key: string; mail: Mail }
   | { type: "chat"; key: string };
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
@@ -315,17 +315,31 @@ export function entries(now = Date.now()): Entry[] {
 
   const prs = prsForMe(usePullRequestsStore.getState().list);
   const prWhere = (pr: PR, mine: boolean) => `${pr.repo} #${pr.number} · ${mine ? t("today.yours") : pr.author}`;
-  for (const pr of prs.review)
+  // the review PRs of one ticket are one item: reviewed together, planned for the time of all of them
+  const byTicket = new Map<string, PR[]>();
+  for (const pr of prs.review) {
+    const link = ticketOf(pr.url);
+    const key = link?.card && link.provider ? groupId(link.provider, link.card) : `review:${pr.url}`;
+    byTicket.set(key, [...(byTicket.get(key) ?? []), pr]);
+  }
+  for (const [id, group] of byTicket) {
+    const [pr] = group;
+    const link = group.length > 1 ? ticketOf(pr.url) : null;
+    const number = link?.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : "";
     add("review", {
-      id: `review:${pr.url}`,
-      at: Date.parse(pr.created),
-      title: pr.title,
-      where: prWhere(pr, false),
+      id: link ? id : `review:${pr.url}`,
+      at: Math.min(...group.map(x => Date.parse(x.created))),
+      title: link ? `${number}${link.title ?? pr.title} · ${t("today.prsCount", { n: group.length })}` : pr.title,
+      where: link
+        ? `${pr.repo} ${group.map(x => `#${x.number}`).join(", ")} · ${[...new Set(group.map(x => x.author))].join(", ")}`
+        : prWhere(pr, false),
       why: t("today.reviewAsked"),
       tone: "soon",
       project: pr.project,
-      subject: { type: "pr", pr },
+      subject: link ? { type: "pr", pr, prs: group } : { type: "pr", pr },
     });
+    out[out.length - 1].est *= group.length;
+  }
   for (const pr of prs.mine)
     add("fix", {
       id: `fix:${pr.url}`,
@@ -600,33 +614,14 @@ export function openMeeting(meetingId: string) {
   selectEntry(item.id);
   return true;
 }
-/** The review PRs of one ticket, when the PR's ticket has more than one waiting on you: reviewed together. */
-export function reviewGroupOf(pr: PR) {
-  const link = ticketOf(pr.url);
-  if (!link?.card || !link.provider) return null;
-  const items = groupItems(link.provider, link.card);
-  if (items.length < 2) return null;
-  const number = link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : "";
-  return {
-    id: groupId(link.provider, link.card),
-    items,
-    prs: items.flatMap(item => (item.subject.type === "pr" ? [item.subject.pr] : [])),
-    title: `${number}${link.title ?? ""} · ${t("today.prsCount", { n: items.length })}`,
-  };
+/** A review item that holds the PRs of one ticket: reviewed together. */
+export function reviewGroupOf(entry: Entry) {
+  const s = entry.subject;
+  if (s.type !== "pr" || !s.prs || s.prs.length < 2) return null;
+  return { id: entry.id, prs: s.prs, title: entry.title };
 }
-// the review items whose PR is linked to that card
-const groupItems = (providerId: string, card: string) =>
-  entries().filter(entry => {
-    if (entry.kind !== "review" || entry.subject.type !== "pr") return false;
-    const link = ticketOf(entry.subject.pr.url);
-    return link?.provider === providerId && link.card === card;
-  });
-/** The Today items a review covers: one PR's, or (a group id) every review PR of its ticket. */
-export function reviewItemsOf(id: string): Entry[] {
-  const group = /^group:([^:]+):(.+)$/.exec(id);
-  if (group) return groupItems(group[1], group[2]);
-  return entries().filter(entry => entry.id === id);
-}
+/** The Today item a review covers (a group's id is its item's id). */
+export const reviewItemsOf = (id: string): Entry[] => entries().filter(entry => entry.id === id);
 /** Open an item under Today, also when the context filter hides it (it goes back to All). */
 export function focusEntry(id: string) {
   const item = entries().find(entry => entry.id === id);
@@ -767,7 +762,7 @@ export function actionsOf(entry: Entry): Actions {
       const inRelay = { label: t("today.openInPrs"), icon: "pr", run: () => openTodayPr(s.pr.repo, s.pr.number) };
       const findTicket = { label: t("today.link.again"), icon: "refresh", run: () => findTicketAgain(s.pr) };
       // the PRs of the same ticket waiting on your review go together; this one alone stays under "…"
-      const group = entry.kind === "review" ? reviewGroupOf(s.pr) : null;
+      const group = entry.kind === "review" ? reviewGroupOf(entry) : null;
       const alone = {
         label: t("today.reviewWithClaude"),
         key: "↵",
@@ -779,14 +774,13 @@ export function actionsOf(entry: Entry): Actions {
             [
               group
                 ? {
-                    label: t("today.reviewTogether", { n: group.items.length }),
+                    label: t("today.reviewTogether", { n: group.prs.length }),
                     key: "↵",
                     tip: t("today.reviewTogetherTip", { ticket: group.title }),
                     run: () => startReview(group.id, group.prs, group.title),
                   }
                 : alone,
               github,
-              ...(group ? [{ ...alone, label: t("today.reviewAlone"), key: undefined }] : []),
               inRelay,
               { label: t("today.reviewInChat"), icon: "chat", run: () => reviewWithClaude(s.pr) },
               findTicket,

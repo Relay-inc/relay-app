@@ -300,7 +300,6 @@ const en = {
   "today.reviewTogether": "Review together ({n} PRs)",
   "today.reviewTogetherTip":
     "The pull requests of {ticket}, in one review: one diff, one summary and verdict, posted on each",
-  "today.reviewAlone": "Review this PR alone",
   "today.prsCount": "{n} PRs",
   "review.titleOf": "Review {title}",
   "review.group": "{n} PRs of one ticket",

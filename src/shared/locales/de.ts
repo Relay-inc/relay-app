@@ -305,7 +305,6 @@ export default {
   "today.reviewTogether": "Zusammen prüfen ({n} PRs)",
   "today.reviewTogetherTip":
     "Die Pull Requests von {ticket} in einem Review: ein Diff, eine Zusammenfassung und ein Urteil, auf jeden gepostet",
-  "today.reviewAlone": "Nur diesen PR prüfen",
   "today.prsCount": "{n} PRs",
   "review.titleOf": "Review {title}",
   "review.group": "{n} PRs eines Tickets",

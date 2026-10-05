@@ -1,6 +1,6 @@
 import { useEffect, useEffectEvent } from "react";
 import { reviewOf } from "../../../domain/navigation/views";
-import { reviewGroupOf, reviewItemsOf } from "../../../application/today/today";
+import { reviewItemsOf } from "../../../application/today/today";
 import { loadPr } from "../../../application/today/load";
 import { closeReview, discardReview, openReview, useReviewStore } from "../../../application/today/review";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -20,13 +20,13 @@ export function ReviewView({ className = "" }: { className?: string }) {
   const items = useDerived(() => reviewItemsOf(id));
   const loaded = usePullRequestsStore(s => !!s.list);
   const confirm = useReviewStore(s => !!s.reviews[id]?.confirm);
-  const prs = items.flatMap(item => (item.subject.type === "pr" ? [item.subject.pr] : []));
+  const prs = items.flatMap(item => (item.subject.type === "pr" ? (item.subject.prs ?? [item.subject.pr]) : []));
   const urls = prs.map(pr => pr.url).join(" ");
   const load = useEffectEvent(() => {
     if (!prs.length) return;
-    const group = id.startsWith("group:") ? reviewGroupOf(prs[0]) : null;
-    openReview(id, prs, group?.title);
-    items.forEach(item => item.subject.type === "pr" && loadPr(item.id, item.subject.pr));
+    openReview(id, prs, prs.length > 1 ? items[0].title : undefined);
+    // each PR's detail under its own review id, where the review screen reads its threads and description
+    prs.forEach(pr => loadPr(`review:${pr.url}`, pr));
   });
   useEffect(() => load(), [id, urls]);
   const onKey = useEffectEvent((e: KeyboardEvent) => {
