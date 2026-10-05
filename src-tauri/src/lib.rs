@@ -950,6 +950,19 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
     }
 }
 
+/// What a changed model or effort asks of a running process: a restart, and/or a set_model over its pipe.
+#[derive(Debug, PartialEq)]
+struct SwitchPlan { restart: bool, model: bool }
+fn switch_plan(cur: &(String, String), want: &(String, String), live_model: bool, busy: bool) -> SwitchPlan {
+    if !live_model { return SwitchPlan { restart: cur != want, model: false }; }
+    // ponytail: effort is not changed live (apply_flag_settings accepts it but its effect is unverified), so it waits for an idle moment
+    SwitchPlan { restart: cur.1 != want.1 && !busy, model: cur.0 != want.0 }
+}
+/// Claude's control_request that changes the model for the turns after it ("default": the CLI's own).
+fn set_model_request(model: &str) -> Value {
+    json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}})
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
@@ -984,10 +997,20 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
         procs.insert(project, x);
         return Ok(());
     }
-    // model, effort and account are start flags: a switch restarts the process on the same session
+    // account is a start flag, so is effort: a switch restarts the process on the same session. Claude takes a new model
+    // over the pipe (set_model), so a model switch never kills a turn; an effort switch waits until the turn is over
     let mut was_tainted = false;
     // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
-    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || (x.account != account && !x.remote)) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
+    if let Some(x) = procs.get_mut(&project) {
+        let moved = x.provider != p.id() || (x.account != account && !x.remote);
+        let plan = switch_plan(&x.opts, &opts, p.id() == "claude", x.turns > 0);
+        if moved || plan.restart {
+            if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; }
+        } else if plan.model {
+            writeln!(x.stdin, "{}", set_model_request(&opts.0)).and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+            x.opts.0 = opts.0.clone();
+        }
+    }
     if !procs.contains_key(&project) {
         let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted || orch_taint, &account, machine.as_deref())?;
         procs.insert(project.clone(), x);
@@ -2197,5 +2220,31 @@ mod terminal_tests {
         assert_eq!(terminal_of("auto", |_| false), "terminal");
         assert_eq!(terminal_of("iterm", |_| false), "iterm");
         assert_eq!(terminal_of("bogus", |_| true), "terminal");
+    }
+}
+
+#[cfg(test)]
+mod switch_tests {
+    use super::{set_model_request, switch_plan, SwitchPlan};
+    fn o(m: &str, e: &str) -> (String, String) { (m.into(), e.into()) }
+    #[test]
+    fn model_goes_over_the_pipe_effort_waits_for_idle() {
+        let (idle, busy) = (false, true);
+        assert_eq!(switch_plan(&o("opus", "high"), &o("opus", "high"), true, busy), SwitchPlan { restart: false, model: false });
+        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "high"), true, busy), SwitchPlan { restart: false, model: true });
+        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "high"), true, idle), SwitchPlan { restart: false, model: true });
+        // a running turn is never killed for an effort switch, the model part still applies
+        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "low"), true, busy), SwitchPlan { restart: false, model: true });
+        assert_eq!(switch_plan(&o("opus", "high"), &o("opus", "low"), true, idle), SwitchPlan { restart: true, model: false });
+        // other providers: any change restarts, as before
+        assert_eq!(switch_plan(&o("a", ""), &o("b", ""), false, idle), SwitchPlan { restart: true, model: false });
+    }
+    #[test]
+    fn set_model_json() {
+        let v = set_model_request("sonnet");
+        assert_eq!(v["type"], "control_request");
+        assert_eq!(v["request"]["subtype"], "set_model");
+        assert_eq!(v["request"]["model"], "sonnet");
+        assert_eq!(set_model_request("")["request"]["model"], "default");
     }
 }

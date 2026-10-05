@@ -66,7 +66,7 @@ export function flush() {
 }
 /** The backend's `agent` event for one conversation. */
 export function onAgentEvent(key: string, event: AgentEvent, provider = "claude") {
-  if (event.type === "text" && event.delta) {
+  if ((event.type === "text" || event.type === "thinking") && event.delta) {
     buffered.push([key, event, provider]);
     frame ||= requestAnimationFrame(flush);
     return;
