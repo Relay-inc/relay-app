@@ -794,6 +794,9 @@ export default {
   "mail.draft": "Préparer une réponse",
   "mail.draftAll": "Préparer une réponse à tous",
   "mail.draftTitle": "Une nouvelle conversation qui prépare une réponse en brouillon, rien n'est envoyé",
+  "mail.ticket": "Créer un ticket",
+  "mail.ticketTitle":
+    "Une nouvelle conversation qui crée un ticket à partir de ce mail sur le tableau du projet, tu valides avant la création",
   "note.mailStarted": "À propos du mail de {from} : {subject}",
   "note.draftSaved": "Brouillon enregistré dans {folder} : à {to}",
   "note.draftCc": ", cc {cc}",

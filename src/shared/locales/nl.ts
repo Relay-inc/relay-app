@@ -790,6 +790,9 @@ export default {
   "mail.draft": "Draft antwoord",
   "mail.draftAll": "Draft antwoord aan iedereen",
   "mail.draftTitle": "Een nieuw gesprek dat een antwoord als draft klaarzet, er wordt niets verstuurd",
+  "mail.ticket": "Maak ticket",
+  "mail.ticketTitle":
+    "Een nieuw gesprek dat van deze mail een ticket maakt op het bord van het project, jij keurt goed voor het aangemaakt wordt",
   "note.mailStarted": "Over de mail van {from}: {subject}",
   "note.draftSaved": "Draft bewaard in {folder}: aan {to}",
   "note.draftCc": ", cc {cc}",

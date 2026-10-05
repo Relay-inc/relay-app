@@ -793,6 +793,9 @@ export default {
   "mail.draft": "Antwort entwerfen",
   "mail.draftAll": "Antwort an alle entwerfen",
   "mail.draftTitle": "Ein neues Gespräch, das eine Antwort als Entwurf ablegt, nichts wird gesendet",
+  "mail.ticket": "Ticket erstellen",
+  "mail.ticketTitle":
+    "Eine neue Unterhaltung, die aus dieser Mail ein Ticket auf dem Board des Projekts erstellt, du bestätigst vor dem Anlegen",
   "note.mailStarted": "Zur Mail von {from}: {subject}",
   "note.draftSaved": "Entwurf gespeichert in {folder}: an {to}",
   "note.draftCc": ", cc {cc}",
