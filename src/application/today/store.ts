@@ -14,7 +14,10 @@ export type DayState = {
   doing: string[]; // set in progress on Today (a card's status lives in its tracker)
   log: Record<string, { title: string; kind: Kind }>; // what each item was, so Done today can still name it once it is gone
 };
+/** Snoozed items: until which day (yyyy-mm-dd) they stay off Today, and what they were, to list them. Kept across days. */
+export type Snooze = { until: string; title: string; kind: Kind };
 type TodayState = DayState & {
+  snoozed: Record<string, Snooze>;
   cards: TodayCard[]; // the user's cards for today, from every board linked to a vault project
   errors: string[]; // per board that did not load
   at: number; // when the cards last arrived, ms; 0 before that
@@ -31,6 +34,12 @@ const stored = () => {
 
 export const useTodayStore = makeStore<TodayState>(() => ({
   ...stored(),
+  // a snooze a month past its day is forgotten: the item came back long ago, or is gone
+  snoozed: Object.fromEntries(
+    Object.entries(storage.get<Record<string, Snooze>>("todaySnooze", {})).filter(
+      ([, snooze]) => snooze.until > todayIso(-30),
+    ),
+  ),
   cards: [],
   errors: [],
   at: 0,
@@ -46,4 +55,13 @@ export function changeDay(recipe: (day: DayState) => void) {
   });
   const { day, seen, dismissed, later, pins, doing, log } = useTodayStore.getState();
   storage.set("today", { day, seen, dismissed, later, pins, doing, log });
+}
+
+/** Snooze an item until a day, or wake it (null). */
+export function setSnooze(id: string, snooze: Snooze | null) {
+  useTodayStore.setState(draft => {
+    if (snooze) draft.snoozed[id] = snooze;
+    else delete draft.snoozed[id];
+  });
+  storage.set("todaySnooze", useTodayStore.getState().snoozed);
 }

@@ -13,6 +13,7 @@ import {
   replyToMail,
   selectEntry,
   setStatus,
+  snooze,
   trashMail,
   todayModel,
 } from "../../../application/today/today";
@@ -75,6 +76,7 @@ export function TodayView({ className = "" }: { className?: string }) {
       else if (e.key === "ArrowUp" || e.key === "k") step(-1);
       else if (!entry) return;
       else if (e.key === "l" || e.key === "L") putOff(entry.id);
+      else if (e.key === "w" || e.key === "W") snooze(entry);
       // a mail: R replies, A replies to all (both a draft by Claude), # trashes; Backspace archives
       else if (entry.subject.type === "mail" && (e.key === "r" || e.key === "R"))
         replyToMail(entry.subject.key, "draft");

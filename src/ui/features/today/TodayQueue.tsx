@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import type { Meeting } from "../../../domain/calendar/types";
 import type { Slot } from "../../../domain/today/plan";
 import { joinable } from "../../../domain/calendar/rules";
-import { reopen, selectEntry, setStatus, type Entry, type TodayModel } from "../../../application/today/today";
+import { reopen, selectEntry, setStatus, wake, type Entry, type TodayModel } from "../../../application/today/today";
 import { joinMeeting, timeOf } from "../../../application/calendar/calendar";
 import { useTodayStore } from "../../../application/today/store";
 import { Icon } from "../../components/Icon";
@@ -15,9 +15,9 @@ const iso = (at: number) => new Date(at).toISOString();
 /** The queue as the day runs: per free slot what is planned in it and how full it is, the meetings in between, and
  *  what did not fit today at the end. A click opens an item in the detail. */
 export function TodayQueue({ model }: { model: TodayModel }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const pins = useTodayStore(s => s.pins);
-  const { queue, slots, placed, tomorrow, used, selected, meetings, now, done } = model;
+  const { queue, slots, placed, tomorrow, used, selected, meetings, now, done, snoozed } = model;
 
   const row = (entry: Entry) => {
     const on = entry.id === selected?.id;
@@ -151,6 +151,31 @@ export function TodayQueue({ model }: { model: TodayModel }) {
             <Caps>{t("rem.tomorrow")}</Caps>
           </div>
           {later.map(row)}
+        </div>
+      ) : null}
+      {snoozed.length ? (
+        <div>
+          <div className="px-2.5 pt-2.5 pb-1">
+            <Caps>
+              {t("today.snoozed")} {snoozed.length}
+            </Caps>
+          </div>
+          {snoozed.map(item => (
+            <div key={item.id} className="flex items-center gap-2.5 h-9 px-2.5 text-secondary">
+              <Icon name={KIND_ICON[item.kind]} className="glyph size-3.5 flex-none" />
+              <span className="flex-1 min-w-0 truncate">{item.title}</span>
+              <span className="text-[11px] text-tertiary tabular-nums whitespace-nowrap">
+                {new Date(`${item.until}T00:00`).toLocaleDateString(locale, {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                })}
+              </span>
+              <button className="text-xs hover:text-label cursor-pointer" onClick={() => wake(item.id)}>
+                {t("today.wake")}
+              </button>
+            </div>
+          ))}
         </div>
       ) : null}
       {done.length ? (

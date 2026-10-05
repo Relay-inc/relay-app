@@ -6,6 +6,7 @@ import {
   putOff,
   selectEntry,
   setStatus,
+  snooze,
   type Entry,
   type TodayModel,
 } from "../../../application/today/today";
@@ -49,7 +50,7 @@ const initials = (name: string) =>
  *  Backspace, L for later), when it is planned (a click moves it to another slot or to tomorrow), and what else the
  *  same project has today. */
 export function TodayDetail({ model }: { model: TodayModel }) {
-  const { t } = useT();
+  const { t, locale } = useT();
   const entry = model.selected;
   const pinned = useTodayStore(s => (entry ? s.pins[entry.id] : undefined));
   const recording = useRecordingStore(s => s.phase !== "idle");
@@ -189,6 +190,20 @@ export function TodayDetail({ model }: { model: TodayModel }) {
               <span>{t("rem.tomorrow")}</span>
               <span className="text-[11px] font-normal text-secondary">
                 {entry.kind === "reminder" ? t("today.pushes") : t("today.notToday")}
+              </span>
+            </button>
+            <button
+              onClick={() => snooze(entry)}
+              title={t("today.statusKey", { key: "W" })}
+              className="flex flex-col items-start px-2.5 py-1.5 rounded-lg border border-separator-strong text-xs font-medium leading-tight cursor-pointer"
+            >
+              <span>{t("today.inAWeek")}</span>
+              <span className="text-[11px] font-normal text-secondary">
+                {new Date(model.now + 7 * 864e5).toLocaleDateString(locale, {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                })}
               </span>
             </button>
           </div>

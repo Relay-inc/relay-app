@@ -44,7 +44,7 @@ import { useMailStore } from "../mail/store";
 import { loadMails, mailChat, mailMove, mailProject, mailSeen } from "../mail/mail";
 import { mailExperimental, mailOn } from "../settings/settings";
 import { reminderAction, chatAboutReminder } from "../reminders/reminders";
-import { changeDay, useTodayStore } from "./store";
+import { changeDay, setSnooze, useTodayStore } from "./store";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -99,6 +99,28 @@ export async function refreshToday() {
     draft.reloading = false;
   });
 }
+
+// ---------- snooze: an item off Today until a later day, kept across days
+const asleep = (id: string) => {
+  const snooze = useTodayStore.getState().snoozed[id];
+  return !!snooze && snooze.until > todayIso();
+};
+// snoozed and its day has come: an item that only shows while recent (mail) comes back anyway
+const woke = (id: string) => {
+  const snooze = useTodayStore.getState().snoozed[id];
+  return !!snooze && snooze.until <= todayIso();
+};
+/** Snooze for `days` (a week by default): a reminder is pushed in the vault, anything else stays off Today until then. */
+export async function snooze(entry: Entry, days = 7) {
+  if (entry.subject.type === "reminder")
+    return reminderAction(entry.subject.reminder, "push", days === 7 ? "+1w" : todayIso(days));
+  setSnooze(entry.id, { until: todayIso(days), title: entry.title, kind: entry.kind });
+  useTodayStore.setState(draft => {
+    draft.selected = "";
+  });
+}
+/** Back on Today now. */
+export const wake = (id: string) => setSnooze(id, null);
 
 // ---------- the items
 /** What an item is about, for its detail and its actions. */
@@ -282,8 +304,8 @@ export function entries(now = Date.now()): Entry[] {
   // unread mail from a person in the last two days: older unread mail is triage for the Mail view, not today's work
   for (const mail of useMailStore.getState().list ?? []) {
     const at = Date.parse(mail.date);
-    if (!mail.unread || mail.other || now - at > 2 * DAY) continue;
     const key = mailKey(mail);
+    if (!mail.unread || mail.other || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
     const sender = mail.from[0]?.name || mail.from[0]?.email || "";
     add("mail", {
       id: `mail:${key}`,
@@ -312,7 +334,7 @@ export function entries(now = Date.now()): Entry[] {
     });
   }
   const { dismissed } = useTodayStore.getState();
-  return out.filter(entry => !dismissed.includes(entry.id));
+  return out.filter(entry => !dismissed.includes(entry.id) && !asleep(entry.id));
 }
 
 /** Today's meetings, for the timeline and between the slots (the queue shows the ones not over). */
@@ -337,7 +359,8 @@ export function todayModel(now = Date.now()) {
   );
   const { placed, tomorrow, used } = plan(queue, free, state.pins);
   const current = new Set(queue.map(entry => entry.id));
-  const gone = state.seen.filter(id => !current.has(id));
+  // snoozed is not cleared: it comes back
+  const gone = state.seen.filter(id => !current.has(id) && !asleep(id));
   const cleared = gone.length;
   // what left the queue today, newest first: by hand (it can come back) or because it was done where it lives
   const done = gone.reverse().map(id => ({
@@ -357,6 +380,11 @@ export function todayModel(now = Date.now()) {
     selected,
     cleared,
     done,
+    // snoozed and not back yet, soonest first
+    snoozed: Object.entries(state.snoozed)
+      .filter(([, item]) => item.until > todayIso())
+      .sort((a, b) => a[1].until.localeCompare(b[1].until))
+      .map(([id, item]) => ({ id, ...item })),
     total: cleared + queue.length,
     planned: queue.reduce((sum, entry) => sum + (placed[entry.id] ? entry.est : 0), 0),
     now,
