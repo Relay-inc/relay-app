@@ -732,6 +732,20 @@ export default {
   "voice.sec.dictation": "Diktieren",
   "voice.on": "Im Eingabefeld diktieren",
   "voice.onHelp": "Macht aus dem Gesagten Text, auf diesem Mac. Kein Audio verlässt ihn.",
+  "voice.anywhere": "In jeder App diktieren",
+  "voice.anywhereHelp":
+    "Das Tastenkürzel wirkt überall, auch wenn Relay im Hintergrund ist, und fügt den Text beim Cursor ein. Eine kleine Pille unten am Bildschirm zeigt, dass es zuhört.",
+  "voice.access": "In andere Apps einfügen",
+  "voice.accessHelp":
+    "Einfügen braucht Bedienungshilfen. Ohne kommt der Text in die Zwischenablage und du fügst ihn mit ⌘V ein.",
+  "voice.accessOk": "Relay fügt mit ⌘V ein und stellt deine Zwischenablage danach wieder her.",
+  "voice.accessAllowed": "Erlaubt",
+  "voice.accessAsk": "Erlauben…",
+  "pill.transcribing": "Transkribiert…",
+  "pill.copied": "Kopiert, mit ⌘V einfügen",
+  "pill.noModel": "Kein Sprachmodell: siehe Einstellungen › Sprache",
+  "pill.silent": "Kein Ton vom Mikrofon",
+  "pill.failed": "Diktieren fehlgeschlagen",
   "voice.sec.model": "Sprachmodell",
   "voice.modelHelp":
     "Jedes Modell wird einmal geladen; das verwendete bleibt im Speicher. Ein Modell zu wählen, das noch fehlt, lädt es herunter.",

@@ -2,6 +2,7 @@
 export type VoiceMode = "both" | "hold" | "tap"; // both: held records until release, tapped until the next tap
 export type VoiceCfg = {
   on?: boolean;
+  anywhere?: boolean; // the shortcut works in every app and pastes there (src-tauri/src/anywhere.rs), off unless true
   model?: string;
   language?: string;
   mode?: VoiceMode;
@@ -33,6 +34,7 @@ export const DEFAULT_SHORTCUT = VOICE_SHORTCUTS[0][0];
 /** The voice settings with their defaults filled in. */
 export const voiceOf = (cfg: VoiceCfg | undefined) => ({
   on: cfg?.on !== false,
+  anywhere: cfg?.anywhere === true,
   model: cfg?.model || DEFAULT_MODEL,
   language: cfg?.language || "auto",
   mode: cfg?.mode || "both",

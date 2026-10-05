@@ -1,7 +1,9 @@
 import { useEffect } from "react";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
+  askAccess,
   downloadModel,
+  loadAccess,
   loadModels,
   pickModel,
   removeModel,
@@ -27,9 +29,17 @@ export function VoicePage({ active }: { active: boolean }) {
   const models = useVoicePageStore(s => s.models);
   const progress = useVoicePageStore(s => s.progress);
   const errors = useVoicePageStore(s => s.errors);
+  const access = useVoicePageStore(s => s.access);
   useEffect(() => {
     if (active) loadModels();
   }, [active]);
+  // Accessibility is switched in System Settings: asked again every 2 s while the page shows and it is not allowed
+  useEffect(() => {
+    if (!active || access) return;
+    loadAccess();
+    const timer = setInterval(loadAccess, 2000);
+    return () => clearInterval(timer);
+  }, [active, access]);
 
   const picked = models.find(model => model.id === voice.model);
   const names = new Intl.DisplayNames([locale], { type: "language" });
@@ -46,6 +56,20 @@ export function VoicePage({ active }: { active: boolean }) {
         <Field label={t("voice.on")} id="voiceon" hint={t("voice.onHelp")}>
           <Switch id="voiceon" on={voice.on} onToggle={on => saveVoice({ on })} />
         </Field>
+        <Field label={t("voice.anywhere")} id="voiceany" hint={t("voice.anywhereHelp")}>
+          <Switch id="voiceany" on={voice.anywhere} onToggle={anywhere => saveVoice({ anywhere })} />
+        </Field>
+        {voice.anywhere ? (
+          <Field label={t("voice.access")} hint={t(access ? "voice.accessOk" : "voice.accessHelp")}>
+            {access ? (
+              <span className={OK_MESSAGE}>{t("voice.accessAllowed")}</span>
+            ) : (
+              <button className={buttonClass()} onClick={askAccess}>
+                {t("voice.accessAsk")}
+              </button>
+            )}
+          </Field>
+        ) : null}
       </Section>
       <Section title={t("voice.sec.model")} desc={t("voice.modelHelp")} list>
         {models.map(model => {

@@ -21,6 +21,7 @@ test("a shortcut matches its key with exactly its modifiers", () => {
 test("voice settings fall back to their defaults", () => {
   assert.deepEqual(voiceOf(undefined), {
     on: true,
+    anywhere: false,
     model: "parakeet-v3",
     language: "auto",
     mode: "both",

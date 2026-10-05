@@ -281,6 +281,17 @@ export const dictationDownload = (id: string | null, onProgress: (done: number) 
   return invoke("dictation_download", { id, onProgress: channel });
 };
 export const dictationDelete = (id: string) => invoke("dictation_delete", { id });
+/** Whether Relay may send ⌘V to other apps (Accessibility), for dictating into any app (src-tauri/src/anywhere.rs). */
+export const dictationAccess = () => invoke<boolean>("dictation_access");
+/** Shows macOS's Accessibility dialog; resolves with whether it is already allowed. */
+export const dictationAskAccess = () => invoke<boolean>("dictation_ask_access");
+/** What the dictation pill shows, sent by the backend to its window. */
+export type PillState = {
+  phase: "hidden" | "recording" | "transcribing" | "copied" | "error";
+  level?: number;
+  error?: string;
+};
+export const onPill = (handler: (state: PillState) => void) => listen<PillState>("pill", e => handler(e.payload));
 /** Starts recording the microphone, its level (0..1) on `onLevel`. Rejects with "model" while the model is missing. */
 export const dictationStart = (onLevel: (level: number) => void) => {
   const channel = new Channel<number>();

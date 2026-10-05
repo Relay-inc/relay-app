@@ -1,14 +1,30 @@
 import type { Settings } from "../../domain/settings/types";
 import type { SpeechModelInfo, VoiceCfg } from "../../domain/settings/voice";
-import { dictationDelete, dictationDownload, dictationModels } from "../../infrastructure/backend";
+import {
+  dictationAccess,
+  dictationAskAccess,
+  dictationDelete,
+  dictationDownload,
+  dictationModels,
+} from "../../infrastructure/backend";
 import { makeStore } from "../make-store";
 import { useSettingsStore } from "./store";
 import { save } from "./window";
 
 // Settings › Voice: dictation on or off, the speech model (downloaded here, or removed), its language, and the
 // shortcut with how it records. The models and their downloads are this page's own store; the choices are settings.
-type VoicePageState = { models: SpeechModelInfo[]; progress: Record<string, number>; errors: Record<string, string> };
-export const useVoicePageStore = makeStore<VoicePageState>(() => ({ models: [], progress: {}, errors: {} }));
+type VoicePageState = {
+  models: SpeechModelInfo[];
+  progress: Record<string, number>;
+  errors: Record<string, string>;
+  access: boolean | null; // Accessibility for pasting into other apps, null until asked
+};
+export const useVoicePageStore = makeStore<VoicePageState>(() => ({
+  models: [],
+  progress: {},
+  errors: {},
+  access: null,
+}));
 const set = useVoicePageStore.setState;
 const current = (): Settings => useSettingsStore.getState().settings;
 
@@ -57,4 +73,16 @@ export async function removeModel(id: string) {
     });
   }
   await loadModels();
+}
+
+/** Whether Relay may paste into other apps; asked again while the page shows, since it is switched in System Settings. */
+export async function loadAccess() {
+  const access = await dictationAccess().catch(() => false);
+  set(draft => {
+    draft.access = access;
+  });
+}
+export async function askAccess() {
+  await dictationAskAccess().catch(() => false);
+  await loadAccess();
 }

@@ -727,6 +727,20 @@ export default {
   "voice.sec.dictation": "Dicteren",
   "voice.on": "Dicteren in het invoerveld",
   "voice.onHelp": "Maakt tekst van wat je zegt, op deze Mac. Er gaat geen audio naar buiten.",
+  "voice.anywhere": "Dicteren in elke app",
+  "voice.anywhereHelp":
+    "De sneltoets werkt overal, ook als Relay op de achtergrond staat, en plakt de tekst waar de cursor staat. Een klein pilletje onderaan het scherm toont dat het luistert.",
+  "voice.access": "Plakken in andere apps",
+  "voice.accessHelp":
+    "Plakken heeft Toegankelijkheid nodig. Zonder komt de tekst op het klembord en plak je zelf met ⌘V.",
+  "voice.accessOk": "Relay plakt met ⌘V en zet je klembord daarna terug.",
+  "voice.accessAllowed": "Toegestaan",
+  "voice.accessAsk": "Toestaan…",
+  "pill.transcribing": "Uitschrijven…",
+  "pill.copied": "Gekopieerd, plak met ⌘V",
+  "pill.noModel": "Geen spraakmodel: zie Instellingen › Spraak",
+  "pill.silent": "Geen geluid van de microfoon",
+  "pill.failed": "Dicteren mislukt",
   "voice.sec.model": "Spraakmodel",
   "voice.modelHelp":
     "Elk model wordt één keer gedownload; het model in gebruik blijft geladen. Een model kiezen dat nog niet op deze Mac staat, downloadt het.",

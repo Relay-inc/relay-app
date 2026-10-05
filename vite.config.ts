@@ -10,8 +10,8 @@ const host = process.env.TAURI_DEV_HOST;
 export default defineConfig(() => ({
   // React with the React Compiler (it memoises the components), Tailwind for the styles
   plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
-  // two pages: the main window and the settings window
-  build: { rollupOptions: { input: { main: "index.html", settings: "settings.html" } } },
+  // three pages: the main window, the settings window and the dictation pill
+  build: { rollupOptions: { input: { main: "index.html", settings: "settings.html", overlay: "overlay.html" } } },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

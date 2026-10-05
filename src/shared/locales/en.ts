@@ -725,6 +725,20 @@ const en = {
   "voice.sec.dictation": "Dictation",
   "voice.on": "Dictate in the composer",
   "voice.onHelp": "Turns what you say into text on this Mac. No audio leaves it.",
+  "voice.anywhere": "Dictate in any app",
+  "voice.anywhereHelp":
+    "The shortcut works everywhere, also when Relay is in the background, and pastes the text where the cursor is. A small pill at the bottom of the screen shows it listening.",
+  "voice.access": "Paste into other apps",
+  "voice.accessHelp":
+    "Pasting needs Accessibility. Without it the text is put on the clipboard and you paste it yourself with ⌘V.",
+  "voice.accessOk": "Relay pastes with ⌘V and puts your clipboard back afterwards.",
+  "voice.accessAllowed": "Allowed",
+  "voice.accessAsk": "Allow…",
+  "pill.transcribing": "Transcribing…",
+  "pill.copied": "Copied, paste with ⌘V",
+  "pill.noModel": "No speech model: see Settings › Voice",
+  "pill.silent": "No sound from the microphone",
+  "pill.failed": "Dictation failed",
   "voice.sec.model": "Speech model",
   "voice.modelHelp":
     "Each model is downloaded once; the one in use stays loaded. Picking one that isn't on this Mac downloads it.",

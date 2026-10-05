@@ -734,6 +734,20 @@ export default {
   "voice.sec.dictation": "Dictée",
   "voice.on": "Dicter dans le champ de saisie",
   "voice.onHelp": "Transforme ce que vous dites en texte, sur ce Mac. Aucun son n'en sort.",
+  "voice.anywhere": "Dicter dans toutes les apps",
+  "voice.anywhereHelp":
+    "Le raccourci marche partout, aussi quand Relay est en arrière-plan, et colle le texte là où est le curseur. Une petite pastille en bas de l'écran montre qu'il écoute.",
+  "voice.access": "Coller dans les autres apps",
+  "voice.accessHelp":
+    "Coller demande l'Accessibilité. Sans elle, le texte va dans le presse-papiers et vous collez vous-même avec ⌘V.",
+  "voice.accessOk": "Relay colle avec ⌘V et remet votre presse-papiers ensuite.",
+  "voice.accessAllowed": "Autorisé",
+  "voice.accessAsk": "Autoriser…",
+  "pill.transcribing": "Transcription…",
+  "pill.copied": "Copié, collez avec ⌘V",
+  "pill.noModel": "Pas de modèle vocal : voir Réglages › Voix",
+  "pill.silent": "Aucun son du micro",
+  "pill.failed": "La dictée a échoué",
   "voice.sec.model": "Modèle vocal",
   "voice.modelHelp":
     "Chaque modèle est téléchargé une fois ; celui utilisé reste chargé. Choisir un modèle absent le télécharge.",

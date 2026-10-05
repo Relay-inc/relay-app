@@ -178,9 +178,16 @@ pub fn dictation_delete(app: AppHandle, state: State<Dictation>, id: String) -> 
 /// Starts recording the default microphone; the input level (0..1) arrives on `on_level` about 15 times a second.
 /// Loads the model meanwhile, so it is ready when the recording stops. Err("model") when it is not downloaded yet.
 #[tauri::command]
-pub fn dictation_start(app: AppHandle, state: State<Dictation>, on_level: Channel<f32>) -> Result<(), String> {
-    let (m, _) = picked(&app, false)?;
-    let dir = models_dir(&app)?.join(m.id);
+pub fn dictation_start(app: AppHandle, on_level: Channel<f32>) -> Result<(), String> {
+    start(&app, Box::new(move |level| { on_level.send(level).ok(); }))
+}
+
+/// Starts recording, the level going to `level` (the composer's channel, or the pill of anywhere.rs). Nothing when it
+/// already records.
+pub(crate) fn start(app: &AppHandle, level: Box<dyn Fn(f32) + Send>) -> Result<(), String> {
+    let state = app.state::<Dictation>();
+    let (m, _) = picked(app, false)?;
+    let dir = models_dir(app)?.join(m.id);
     if !installed(&dir) { return Err("model".into()); }
     let mut rec = state.rec.lock().unwrap();
     if rec.is_some() { return Ok(()); }
@@ -188,14 +195,14 @@ pub fn dictation_start(app: AppHandle, state: State<Dictation>, on_level: Channe
     std::thread::spawn(move || { with_model(&loaded, m, &dir, |_| Ok(())).ok(); });
     let (stop, stopped) = mpsc::channel();
     let (ready, started) = mpsc::channel();
-    let done = std::thread::spawn(move || record(stopped, ready, on_level));
+    let done = std::thread::spawn(move || record(stopped, ready, level));
     // the stream opens on its own thread (it may not move between threads), its error comes back here
     started.recv().map_err(|e| e.to_string())??;
     *rec = Some(Recording { stop, done });
     Ok(())
 }
 
-fn record(stopped: mpsc::Receiver<()>, ready: mpsc::Sender<Result<(), String>>, level: Channel<f32>) -> Result<Vec<f32>, String> {
+fn record(stopped: mpsc::Receiver<()>, ready: mpsc::Sender<Result<(), String>>, level: Box<dyn Fn(f32) + Send>) -> Result<Vec<f32>, String> {
     let samples = Arc::new(Mutex::new(Vec::<f32>::new()));
     let peak = Arc::new(Mutex::new(0f32));
     let opened = (|| {
@@ -226,7 +233,7 @@ fn record(stopped: mpsc::Receiver<()>, ready: mpsc::Sender<Result<(), String>>, 
         Err(e) => { ready.send(Err(e.clone())).ok(); return Err(e); }
     };
     while let Err(RecvTimeoutError::Timeout) = stopped.recv_timeout(Duration::from_millis(66)) {
-        level.send(std::mem::take(&mut *peak.lock().unwrap()).min(1.0)).ok();
+        level(std::mem::take(&mut *peak.lock().unwrap()).min(1.0));
     }
     drop(stream);
     let recorded = std::mem::take(&mut *samples.lock().unwrap());
@@ -250,13 +257,22 @@ fn resample(input: &[f32], from: u32, to: u32) -> Vec<f32> {
 
 /// Stops the recording and returns its text, "" when nothing was said.
 #[tauri::command]
-pub async fn dictation_stop(app: AppHandle, state: State<'_, Dictation>) -> Result<String, String> {
+pub async fn dictation_stop(app: AppHandle) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || stop(&app)).await.map_err(|e| e.to_string())?
+}
+
+/// Whether a recording runs.
+pub(crate) fn recording(app: &AppHandle) -> bool { app.state::<Dictation>().rec.lock().unwrap().is_some() }
+
+/// Stops the recording and returns its text (blocking while it transcribes), "" when nothing was said.
+pub(crate) fn stop(app: &AppHandle) -> Result<String, String> {
+    let state = app.state::<Dictation>();
     let Some(rec) = state.rec.lock().unwrap().take() else { return Ok(String::new()) };
     rec.stop.send(()).ok();
-    let (m, language) = picked(&app, false)?;
-    let dir = models_dir(&app)?.join(m.id);
+    let (m, language) = picked(app, false)?;
+    let dir = models_dir(app)?.join(m.id);
     let loaded = state.loaded.clone();
-    tauri::async_runtime::spawn_blocking(move || {
+    {
         let samples = rec.done.join().map_err(|_| "the recording thread panicked".to_string())??;
         // under a third of a second is a click on the button, not speech
         if samples.len() < RATE as usize / 3 { return Ok(String::new()); }
@@ -266,7 +282,7 @@ pub async fn dictation_stop(app: AppHandle, state: State<'_, Dictation>) -> Resu
         with_model(&loaded, m, &dir, |model| {
             model.transcribe(&samples, &options).map(|r| r.text.trim().to_string()).map_err(|e| e.to_string())
         })
-    }).await.map_err(|e| e.to_string())?
+    }
 }
 
 /// Stops the recording and throws it away.
