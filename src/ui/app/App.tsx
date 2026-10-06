@@ -26,6 +26,7 @@ import { ConversationsView } from "../features/conversations/ConversationsView";
 import { DrawerView } from "../features/drawer/DrawerView";
 import { QuickAskView } from "../features/navigation/QuickAskView";
 import { WorkspaceView } from "../features/workspace/WorkspaceView";
+import { ColumnResize } from "../features/navigation/ColumnResize";
 
 const isQuickAskKey = (e: KeyboardEvent) => e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK";
 const isCtrlCKey = (e: KeyboardEvent) => e.ctrlKey && !e.metaKey && !e.altKey && e.code === "KeyC";
@@ -176,8 +177,10 @@ export function App() {
         />
       ) : null}
       <NavigationView className="min-h-0 min-w-0 border-r border-separator" />
+      <ColumnResize column="sidebar" />
       <ConversationsView className="min-h-0 min-w-0" />
       {drawer ? <DrawerView className="min-h-0 min-w-0 overflow-hidden" drawer={drawer} /> : null}
+      {drawer ? <ColumnResize column="drawer" /> : null}
       {quickAsk ? <QuickAskView key={quickText} /> : null}
       {zoomed ? (
         <div

@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Drag column edges to make them wider or smaller**: the sidebar, the right drawer, the lists in Today, Mail and Pull requests, the file tree and Claude panel of a PR review, and the side panel of a ticket. Each keeps its width across restarts; double-click an edge to reset it. (#121)
 - **"Always allow" on a permission card**: when Claude offers to remember a choice (this command, the folder, edits for the session), the card has a third button next to Deny and Allow that allows it and keeps it, so the same ask doesn't come back. Enter still allows once. (#118)
 - **Make ticket from a mail**: a button next to the draft-reply ones (and in a mail's … menu in Today, shortcut T) starts a conversation that reads the mail and its thread, finds the board (the one linked to the mail's project, else it picks one), and creates one task in the intake list with a short title and a summary, with the full mail as a comment on it. You approve the create before anything is made, and Relay never sends mail (#111)
 - **Claude shows when it compacts a conversation and how full its context is**: a "Compacting conversation…" line turns into "Conversation compacted" with the size before and after, your history stays, and a small "42% context" next to the model pick shows how much of the window is used. (#115)

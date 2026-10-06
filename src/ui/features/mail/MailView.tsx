@@ -22,6 +22,7 @@ import { MailBulkBar } from "./MailBulkBar";
 import { MailDetail } from "./MailDetail";
 import { MailRow } from "./MailRow";
 import { MailSetup } from "./MailSetup";
+import { ColumnResize } from "../navigation/ColumnResize";
 
 /** The inbox, as Mail does it: on the left search, read state and project on top and the mails that pass the filters
  *  under one heading with the unread count; on the right the mail you picked. */
@@ -36,7 +37,7 @@ export function MailView({ className = "" }: { className?: string }) {
   const open = useNavigationStore(s => s.panel.mailOpen);
   const selected = useMailStore(s => s.selected);
   const { shown, split, boxUnread, total, unread: unreadCount, ended, projects } = useDerived(inbox);
-  const root = `${className} grid grid-cols-[380px_minmax(0,1fr)] min-h-0`;
+  const root = `${className} relative grid grid-cols-[var(--mail-w)_minmax(0,1fr)] min-h-0`;
 
   if (!hasAccount)
     return (
@@ -108,6 +109,7 @@ export function MailView({ className = "" }: { className?: string }) {
           </div>
         ) : null}
       </div>
+      <ColumnResize column="mail" />
       <div className="min-h-0 overflow-y-auto" onPointerDown={() => setMailPane(false)}>
         {open ? (
           <MailDetail className="max-w-200 px-8 pt-5.5 pb-10 select-text cursor-auto" mailKey={open} />

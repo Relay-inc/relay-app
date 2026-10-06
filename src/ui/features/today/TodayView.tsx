@@ -26,6 +26,7 @@ import { TodayQueue } from "./TodayQueue";
 import { TodayDetail } from "./TodayDetail";
 import { Icon } from "../../components/Icon";
 import { timeOf } from "../../../application/calendar/calendar";
+import { ColumnResize } from "../navigation/ColumnResize";
 
 // keys that belong to a field, a button or a link, not to Today
 const inControl = (e: KeyboardEvent) =>
@@ -167,8 +168,9 @@ export function TodayView({ className = "" }: { className?: string }) {
         </span>
         <ContextFilter model={model} />
       </div>
-      <div className="flex-1 min-h-0 grid grid-cols-[360px_minmax(0,1fr)]">
+      <div className="relative flex-1 min-h-0 grid grid-cols-[var(--today-w)_minmax(0,1fr)]">
         <TodayQueue model={model} />
+        <ColumnResize column="today" />
         <TodayDetail model={model} />
       </div>
 

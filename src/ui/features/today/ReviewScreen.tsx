@@ -30,6 +30,7 @@ import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
 import { minutes } from "./parts";
 import { useState, type ReactNode } from "react";
+import { ColumnResize } from "../navigation/ColumnResize";
 
 const SEVERITY: Record<string, string> = {
   bug: "text-late",
@@ -150,7 +151,9 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
         </button>
       </div>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[260px_minmax(0,1fr)_400px]">
+      <div className="relative flex-1 min-h-0 grid grid-cols-[var(--reviewFiles-w)_minmax(0,1fr)_var(--reviewSide-w)]">
+        <ColumnResize column="reviewFiles" />
+        <ColumnResize column="reviewSide" />
         <FileTree
           groups={(several ? prs.map(pr => pr.url) : [""]).map(url => ({
             label: several ? prLabel(url) : "",
