@@ -128,7 +128,9 @@ impl AgentProvider for Claude {
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                   "--permission-prompt-tool", "stdio", "--thinking-display", "summarized"])
             .arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
-            .arg("--append-system-prompt").arg(&system).args(["-n", l.name]);
+            .arg("--append-system-prompt").arg(&system).args(["-n", l.name])
+            // each message echoed when Claude takes it up: one sent during a turn often joins that turn
+            .arg("--replay-user-messages");
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         let ask = strs("ask");
         if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
@@ -238,13 +240,13 @@ mod tests {
         assert!(!args.contains(&"--mcp-config".to_string()) && !args.iter().any(|a| a.contains("vaultperm")));
         assert_eq!(args[11], "--allowedTools");
         assert_eq!((args[17].as_str(), args[18].as_str(), args[22].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
-        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         assert!(!cmd.get_envs().any(|(k, _)| k == "MCP_TOOL_TIMEOUT"));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--resume", "def", "--fork-session"]);
         let at = |args: &[String], f: &str| args.iter().position(|a| a == f).unwrap();
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();

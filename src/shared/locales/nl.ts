@@ -858,6 +858,7 @@ export default {
   "notify.isWaiting": "Wacht op jou: toestemming voor {tool}.",
   "work.interrupted": "Onderbroken: het proces stopte midden in de beurt.",
   "work.outside": "Loopt nog buiten de app, de app leest mee",
+  "work.waiting": "Wacht tot {agent} het leest",
   "work.waitOutside": "Deze beurt loopt nog buiten de app. Stuur je bericht als ze klaar is.",
   "mail.earlier": "Eerdere berichten",
   "mail.linkOpen": "Open",

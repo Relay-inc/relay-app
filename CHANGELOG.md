@@ -17,6 +17,10 @@ a PR. Versions follow
 
 - **Whisper as a speech model**: Settings › Voice offers OpenAI's Whisper Large v3 Turbo (574 MB, about 100 languages including Dutch) next to Parakeet, Canary, Cohere and Moonshine, for dictation and meetings. It runs on this Mac's GPU via whisper.cpp. Building Relay now needs `cmake` (`brew install cmake`)
 
+### Fixed
+
+- **The spinner stops when Claude is done, and a message sent mid-turn shows where Claude read it**: a message you send while Claude works waits, dimmed, below the conversation until Claude takes it up, then moves into the conversation at that point. Claude often answers it in the turn already running; Relay used to wait for a second turn that never came, so the spinner kept spinning.
+
 ## [0.0.8] - 2026-10-06
 
 ### Added

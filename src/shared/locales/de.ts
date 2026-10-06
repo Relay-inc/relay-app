@@ -861,6 +861,7 @@ export default {
   "notify.isWaiting": "Wartet auf dich: Erlaubnis für {tool}.",
   "work.interrupted": "Unterbrochen: Der Prozess hat mitten im Durchgang aufgehört.",
   "work.outside": "Läuft noch außerhalb der App, die App liest mit",
+  "work.waiting": "Wartet, bis {agent} es liest",
   "work.waitOutside": "Dieser Durchgang läuft noch außerhalb der App. Sende, wenn er fertig ist.",
   "mail.earlier": "Frühere Nachrichten",
   "mail.linkOpen": "Öffnen",
