@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Whisper as a speech model**: Settings › Voice offers OpenAI's Whisper Large v3 Turbo (574 MB, about 100 languages including Dutch) next to Parakeet, Canary, Cohere and Moonshine, for dictation and meetings. It runs on this Mac's GPU via whisper.cpp. Building Relay now needs `cmake` (`brew install cmake`)
+
 ## [0.0.8] - 2026-10-06
 
 ### Added

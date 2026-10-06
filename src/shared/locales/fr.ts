@@ -1068,6 +1068,8 @@ export default {
   "voice.desc.canary-1b-v2":
     "Plus précis et plus lent, 25 langues européennes. On lui donne la langue au lieu qu'il l'entende.",
   "voice.desc.cohere": "Le plus précis et le plus lent, 14 langues dont le néerlandais.",
+  "voice.desc.whisper-turbo":
+    "Whisper d'OpenAI, une centaine de langues dont le néerlandais. Tourne sur le GPU du Mac.",
   "voice.desc.moonshine-base": "Petit et très rapide, anglais seulement.",
   "voice.size": "{mb} Mo",
   "voice.langs_one": "{n} langue",

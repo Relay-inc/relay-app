@@ -1058,6 +1058,7 @@ export default {
   "voice.desc.parakeet-v2": "Enkel Engels, en daarin het beste.",
   "voice.desc.canary-1b-v2": "Nauwkeuriger en trager, 25 Europese talen. Krijgt de taal mee in plaats van ze te horen.",
   "voice.desc.cohere": "Het nauwkeurigst en het traagst, 14 talen waaronder Nederlands.",
+  "voice.desc.whisper-turbo": "Whisper van OpenAI, zo'n 100 talen waaronder Nederlands. Draait op de GPU van de Mac.",
   "voice.desc.moonshine-base": "Klein en heel snel, enkel Engels.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} taal",
