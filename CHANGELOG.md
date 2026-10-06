@@ -27,6 +27,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Claude's thinking shows again**: the "Thinking" fold was always empty because the `claude` CLI now leaves thinking out unless asked; Relay asks for the summarized thinking.
 - **Switching model or effort no longer kills a running reply**: a new model applies at once to what you send next without restarting Claude, and a new effort waits until the reply is done. (#114)
 
 ## [0.0.7] - 2026-10-05
