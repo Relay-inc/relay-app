@@ -149,6 +149,22 @@ fn pair_launch_reattach_and_walls() {
 }
 
 #[test]
+fn the_server_keeps_its_own_claude_config_dir() {
+    let s = start("cfg");
+    let c = paired(&s, "laptop");
+    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
+    // what the laptop sends: removed for its default account, or a folder of its own
+    for (i, env) in [vec![("CLAUDE_CONFIG_DIR".to_string(), None)], vec![("CLAUDE_CONFIG_DIR".to_string(), Some("/Users/me/.claude-work".to_string()))]].into_iter().enumerate() {
+        let sp = Spec { program: "/bin/sh".into(), args: vec!["-c".into(), "read -r l; echo \"dir $CLAUDE_CONFIG_DIR\"".into()], env, cwd: Some(tmp.clone()) };
+        let mut conn = c.launch(&meta(&format!("cfg:{i}")), &sp).unwrap();
+        writeln!(conn.stdin, "x").unwrap();
+        conn.stdin.flush().unwrap();
+        assert_eq!(next(&mut conn.frames), format!("dir {}", s.data.join("claude").display()));
+        assert_eq!(next(&mut conn.frames), "exit");
+    }
+}
+
+#[test]
 fn update_goes_on_in_the_binary_sent() {
     // a fixed port, as on a real machine: the server goes on with the arguments it started with
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
