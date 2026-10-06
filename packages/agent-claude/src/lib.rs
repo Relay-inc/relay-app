@@ -126,7 +126,7 @@ impl AgentProvider for Claude {
         let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-                  "--permission-prompt-tool", "stdio"])
+                  "--permission-prompt-tool", "stdio", "--thinking-display", "summarized"])
             .arg("--allowedTools").args(&allowed).arg("--disallowedTools").args(&denied)
             .arg("--append-system-prompt").arg(&system).args(["-n", l.name]);
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
@@ -233,18 +233,18 @@ mod tests {
         let l = Launch { key: "c:1", name: "Algemeen: x", model: "opus", effort: "high", resume: Some("abc-1"), fork: Some("def"), turn: None };
         let cmd = PROVIDER.command(&env(&p), &l).unwrap();
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[..9], ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-prompt-tool", "stdio"]);
+        assert_eq!(&args[..11], ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--permission-prompt-tool", "stdio", "--thinking-display", "summarized"]);
         // no MCP config until the app has servers to answer for; the permission tool is no server any more
         assert!(!args.contains(&"--mcp-config".to_string()) && !args.iter().any(|a| a.contains("vaultperm")));
-        assert_eq!(args[9], "--allowedTools");
-        assert_eq!((args[15].as_str(), args[16].as_str(), args[20].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
-        assert_eq!(&args[22..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        assert_eq!(args[11], "--allowedTools");
+        assert_eq!((args[17].as_str(), args[18].as_str(), args[22].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         assert!(!cmd.get_envs().any(|(k, _)| k == "MCP_TOOL_TIMEOUT"));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[22..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--resume", "def", "--fork-session"]);
         let at = |args: &[String], f: &str| args.iter().position(|a| a == f).unwrap();
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
