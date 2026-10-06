@@ -13,10 +13,6 @@ a PR. Versions follow
 
 ## [Unreleased]
 
-### Fixed
-
-- **Claude starts when your login shell isn't zsh**: Relay read the PATH from zsh, so with fish or bash a `claude` installed through npm or Homebrew wasn't found and starting a conversation failed with "claude start: No such file or directory". It now asks your own login shell.
-
 ## [0.0.8] - 2026-10-06
 
 ### Added
@@ -36,6 +32,7 @@ a PR. Versions follow
 
 - **Claude's thinking shows again**: the "Thinking" fold was always empty because the `claude` CLI now leaves thinking out unless asked; Relay asks for the summarized thinking. (#120)
 - **Switching model or effort no longer kills a running reply**: a new model applies at once to what you send next without restarting Claude, and a new effort waits until the reply is done. (#114)
+- **Claude starts when your login shell isn't zsh**: Relay read the PATH from zsh, so with fish or bash a `claude` installed through npm or Homebrew wasn't found and starting a conversation failed with "claude start: No such file or directory". It now asks your own login shell. (#123)
 
 ## [0.0.7] - 2026-10-05
 
