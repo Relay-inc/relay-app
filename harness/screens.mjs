@@ -378,7 +378,12 @@ const VIEWS = {
     await open(page, server.url, { fixture: "orch", sel: keys.orchWorker });
     await waitText("From Relay");
   },
-  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  // the speech models, Whisper among them
+  "settings-voice-models": async () => {
+    await settingsPage("Voice");
+    await intoView("Whisper Large v3 Turbo");
+  },
   "settings-interface": async () => {
     await settingsPage("General");
     await intoView("Accent");
