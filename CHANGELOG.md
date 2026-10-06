@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **No more empty Thinking blocks**: when Claude keeps its reasoning to itself, Relay no longer shows a Thinking line that opens to nothing. (#126)
+
 ## [0.0.8] - 2026-10-06
 
 ### Added
