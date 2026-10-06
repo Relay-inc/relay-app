@@ -15,6 +15,7 @@ import { TicketSidebar } from "./TicketSidebar";
 import { TicketLinked } from "./TicketLinked";
 import { numbered } from "./format";
 import "../../styles/board.css";
+import { ColumnResize } from "../navigation/ColumnResize";
 
 // the provider writes its strings in the language of the moment: `_lang` draws them again on a switch
 const viewOf = (detail: CardDetail, data: unknown, _lang: string) => (data ? detail.view(data) : null);
@@ -62,7 +63,8 @@ export function BoardTicket({
       );
     if (!view) return <div className="p-8 text-secondary">{t("kb.loading")}</div>;
     return (
-      <div className="ticket min-h-0 grid grid-cols-[minmax(0,1fr)_272px] flex-1">
+      <div className="ticket relative min-h-0 grid grid-cols-[minmax(0,1fr)_var(--ticketSide-w)] flex-1">
+        <ColumnResize column="ticketSide" />
         <div className="overflow-y-auto px-10 pt-7 pb-8 flex flex-col gap-7 select-text cursor-auto">
           {actErr && <div className="err-box">{actErr}</div>}
           <h2 className="m-0 text-xl leading-snug font-semibold tracking-tight text-pretty">
