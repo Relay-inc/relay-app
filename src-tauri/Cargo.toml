@@ -54,7 +54,7 @@ chrono-tz = "0.10"
 portable-pty = "0.9"
 # dictation in the composer (src/dictation.rs): the microphone, and Parakeet speech to text on ONNX Runtime
 cpal = "0.18"
-transcribe-rs = { version = "0.3.12", features = ["onnx"] }
+transcribe-rs = { version = "0.3.12", features = ["onnx", "whisper-metal"] }
 # the meeting recordings (src/meeting.rs): their tracks on disk
 hound = "3"
 
