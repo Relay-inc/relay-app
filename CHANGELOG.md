@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.8] - 2026-10-06
+
 ### Added
 
 - **Drag column edges to make them wider or smaller**: the sidebar, the right drawer, the lists in Today, Mail and Pull requests, the file tree and Claude panel of a PR review, and the side panel of a ticket. Each keeps its width across restarts; double-click an edge to reset it. (#121)
@@ -265,7 +267,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.8...HEAD
+[0.0.8]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/Relay-inc/relay-app/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/Relay-inc/relay-app/compare/v0.0.4...v0.0.5
