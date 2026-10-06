@@ -58,7 +58,8 @@ impl State {
                     let (text, delta) = piece(t, self);
                     self.streamed.insert(self.message.clone());
                     out.push(Event::Text { text, delta });
-                } else if let Some(t) = d["thinking"].as_str().filter(|_| d["type"] == "thinking_delta") {
+                // a model that keeps its thinking to itself still streams empty thinking deltas
+                } else if let Some(t) = d["thinking"].as_str().filter(|t| d["type"] == "thinking_delta" && !t.is_empty()) {
                     let (text, delta) = piece(t, self);
                     out.push(Event::Thinking { text, delta });
                 }
@@ -202,6 +203,7 @@ mod tests {
         let mut go = |l: &str| st.parse(l);
         assert_eq!(go(&start), vec![]);
         assert_eq!(go(&block), vec![]);
+        assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": ""}), Value::Null)), vec![]);
         assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": "hm"}), Value::Null)), vec![Event::Thinking { text: "hm".into(), delta: false }]);
         assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": "m"}), Value::Null)), vec![Event::Thinking { text: "m".into(), delta: true }]);
         assert_eq!(go(&block), vec![]);
