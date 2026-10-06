@@ -331,9 +331,12 @@ fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
     fs::write(data_dir(app).join("worktrees.json"), json!(w).to_string()).ok();
 }
 
+/// The user's own login shell, not zsh: a fish or bash user's PATH (npm, Homebrew) lives in that shell's config.
+/// The last line, in case the rc files print something first.
 fn login_path() -> String {
-    Command::new("/bin/zsh").args(["-lic", "printf %s \"$PATH\""]).stdin(Stdio::null()).output()
-        .ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    let sh = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
+    Command::new(sh).args(["-lic", "printf '\\n%s' \"$PATH\""]).stdin(Stdio::null()).output()
+        .ok().map(|o| String::from_utf8_lossy(&o.stdout).lines().last().unwrap_or("").trim().to_string())
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
