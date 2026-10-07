@@ -218,7 +218,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let state = app.state::<App>();
     // the orchestrator's tools are answered over a provider's control pipe: Claude Code's, unless the conversation has another
     let p = provider_of(&state, key, Some("claude"));
-    if !p.caps().control { return Err(format!("the orchestrator needs a control pipe, {} has none", p.name())); }
+    if !p.caps().control { return Err("the orchestrator runs on Claude Code".into()); }
     let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
     let account = account_of(&state, p, key, &model);
     let taint = taint || orch::tainted(app, key);

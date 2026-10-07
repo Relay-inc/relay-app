@@ -165,7 +165,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
     match effective(&s, it, &provider) {
-        Policy::Deny if it.ext == "mail" && !mail_allowed(&provider) => return Err("mail is only available to conversations with a control pipe (Claude Code)".into()),
+        Policy::Deny if it.ext == "mail" && !mail_allowed(&provider) => return Err("mail is only available to Claude Code conversations".into()),
         Policy::Deny => return Err(format!("the user does not allow {action}")),
         Policy::Ask => ask(app, c, key, &provider, action, args)?,
         Policy::Auto => {}

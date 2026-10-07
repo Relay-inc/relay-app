@@ -74,8 +74,9 @@ impl State {
         let error = self.error.take();
         let span = self.span.take();
         let used = u.input + u.output + u.cache_read + u.cache_write > 0;
-        agent_core::limited(error.as_deref(), out);
         for i in 0..self.sent.max(1) {
+            // every queued message's end is limited, as each one is spent and retried
+            agent_core::limited(error.as_deref(), out);
             out.push(Event::TurnEnd { ok: error.is_none(), error: error.clone(), usage: (i == 0 && used).then(|| u.clone()),
                 duration_ms: span.filter(|(a, b)| i == 0 && b > a).map(|(a, b)| (b - a) as u64) });
         }
@@ -189,6 +190,14 @@ mod tests {
     fn a_refused_prompt_with_a_limit_text_is_a_limited_event() {
         let ev = State::default().parse(r#"{"type":"response","command":"prompt","success":false,"error":"You've hit your usage limit"}"#);
         assert!(matches!(&ev[..], [Event::Error { .. }, Event::TurnLimited, Event::TurnEnd { ok: false, .. }]), "{ev:?}");
+    }
+
+    #[test]
+    fn every_queued_message_ends_limited() {
+        let mut st = State { sent: 2, error: Some("You've hit your usage limit".into()), ..State::default() };
+        let mut ev = vec![];
+        st.end(&mut ev);
+        assert!(matches!(&ev[..], [Event::TurnLimited, Event::TurnEnd { .. }, Event::TurnLimited, Event::TurnEnd { .. }]), "{ev:?}");
     }
 
     #[test]
