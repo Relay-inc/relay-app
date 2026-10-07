@@ -8,6 +8,8 @@ mod frames;
 mod pipe;
 mod plan;
 mod tauri_sink;
+#[cfg(test)]
+mod tests;
 
 pub(crate) use account::{account_of, limit_key};
 pub(crate) use pipe::{pipe_ok, pipe_reply};
