@@ -9,6 +9,7 @@ import { PanelDetail } from "../navigation/PanelDetail";
 import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { ScratchPanel } from "../scratch/ScratchPanel";
 import { WorkerBoard } from "../orchestrator/WorkerBoard";
+import { ChangesPanel } from "../changes/ChangesPanel";
 import "../../styles/navigation.css";
 
 const TITLES = {
@@ -16,10 +17,11 @@ const TITLES = {
   terminal: "drawer.terminal",
   notes: "drawer.notes",
   workers: "orch.workers",
+  changes: "drawer.changes",
 } as const;
 
-/** The right drawer, open on demand: a note's detail, one of the project's tools (terminals, notes), or the
- *  orchestrator's workers next to its coordinator. */
+/** The right drawer, open on demand: a note's detail, one of the project's tools (terminals, notes), the
+ *  open conversation's changes, or the orchestrator's workers next to its coordinator. */
 export function DrawerView({ className, drawer }: { className: string; drawer: Exclude<Drawer, ""> }) {
   const { t } = useT();
   const project = useDerived(() => selectedProject()) ?? "";
@@ -46,6 +48,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}
           {drawer === "detail" ? <PanelDetail /> : null}
           {drawer === "workers" ? <WorkerBoard /> : null}
+          {drawer === "changes" ? <ChangesPanel /> : null}
         </div>
       </div>
     </aside>

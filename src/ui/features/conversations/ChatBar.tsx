@@ -64,7 +64,7 @@ export function ChatBar({
   onOpenTerminal: () => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "notes") => void;
+  onToggleDrawer: (tool: "terminal" | "notes" | "changes") => void;
 }) {
   const { t } = useT();
   // a board: its crumb (switch board or project) and its buttons (BoardCrumb, BoardActions)
@@ -196,13 +196,14 @@ export function ChatBar({
               icon={<Icon name="github" className="glyph size-4" />}
             />
           ) : null}
-          {(["terminal", "notes"] as const).map(tool => (
+          {/* a conversation's changes, from git: only a conversation has them */}
+          {(renamable ? (["changes", "terminal", "notes"] as const) : (["terminal", "notes"] as const)).map(tool => (
             <ToolButton
               key={tool}
               on={drawer === tool}
               label={t(`drawer.${tool}`)}
               onClick={() => onToggleDrawer(tool)}
-              icon={<Icon name={tool === "terminal" ? "drawerTerm" : "notes"} className="glyph size-4" />}
+              icon={<Icon name={DRAWER_ICONS[tool]} className="glyph size-4" />}
             />
           ))}
         </>
@@ -210,6 +211,8 @@ export function ChatBar({
     </div>
   );
 }
+
+const DRAWER_ICONS = { changes: "changes", terminal: "drawerTerm", notes: "notes" } as const;
 
 // one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer
 function ToolButton({

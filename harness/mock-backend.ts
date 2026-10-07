@@ -9,6 +9,7 @@ import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
 import * as orch from "./fixtures/orchestrator";
+import { changes } from "./fixtures/changes";
 
 type Args = Record<string, any>;
 type Call = { cmd: string; args: Args; at: number };
@@ -253,6 +254,8 @@ function handle(cmd: string, a: Args): unknown {
       return terminalAgents();
     case "running":
       return {}; // conversation key -> turns running, for the processes the app started
+    case "conversation_changes":
+      return a.key === conv.LONG_KEY ? changes : [];
     case "drop_worktrees":
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
