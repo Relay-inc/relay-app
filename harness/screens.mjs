@@ -71,6 +71,7 @@ const VIEWS = {
     await settle(page);
     await scrollMain("bottom");
   },
+  // a card whose request carries Claude's permission_suggestions: Deny, Always allow, Allow
   "conversation-permission": async () => {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");
@@ -84,6 +85,25 @@ const VIEWS = {
     await waitText(markers.longEnd);
     await scrollMain("top");
     await intoView("public function sync(Dossier $dossier): void");
+  },
+  // a reply streaming in (PR: Claude streams replies and thinking): the thinking folded above the text so far, then opened
+  "conversation-thinking-live": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      h.emitAgent(key, { type: "thinking", text: "The user asks for the open invoices. ", delta: false });
+      h.emitAgent(key, { type: "thinking", text: "I should read the ledger first, then group by client.", delta: true });
+      h.emitAgent(key, { type: "text", text: "Three invoices are still open", delta: false });
+      h.emitAgent(key, { type: "text", text: ": Northwind (", delta: true });
+    }, keys.switchTo);
+    await waitText("Three invoices are still open");
+    await settle(page);
+  },
+  "conversation-thinking-open": async () => {
+    await VIEWS["conversation-thinking-live"]();
+    await page.getByRole("button", { name: "Thinking", exact: true }).locator("visible=true").last().click();
+    await settle(page);
   },
   "conversation-steps": async () => {
     await open(page, server.url, { sel: keys.long });
@@ -130,6 +150,22 @@ const VIEWS = {
     await waitText("Compare these with the plan");
     await settle(page, 300);
   },
+  // a message sent while Claude works waits under the conversation until Claude reads it (PR: waiting messages)
+  "conversation-unread": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      h.autoReply = false;
+      h.echo = false;
+      h.emitAgent(key, { type: "tool_call", id: "u1", name: "Bash", input: { command: "git log --oneline -20" } });
+    }, keys.switchTo);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Also check the release branch");
+    await page.keyboard.press("Enter");
+    await waitText("Waiting until Claude Code reads it");
+    await settle(page, 300);
+  },
   "composer-resolved": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
@@ -164,6 +200,12 @@ const VIEWS = {
     await VIEWS["mail-list"]();
     await click(markers.plainMail);
     await waitText("The export should include the VAT column.");
+  },
+  // the open mail's bar with "Make ticket" next to the draft buttons (a board integration is set up in the fixture)
+  "mail-ticket": async () => {
+    await VIEWS["mail-plain"]();
+    await page.getByRole("button", { name: "Make ticket" }).hover();
+    await settle(page, 400);
   },
   "mail-html": async () => {
     await VIEWS["mail-list"]();
@@ -224,7 +266,7 @@ const VIEWS = {
   }])),
   "ticket-activity": async () => {
     await VIEWS["card-detail"]();
-    await page.getByPlaceholder("Leave a comment…").scrollIntoViewIfNeeded();
+    await page.getByPlaceholder(/^(Leave a comment|Comment…)/).first().scrollIntoViewIfNeeded();
     await settle(page);
   },
   reminders: async () => {
@@ -352,7 +394,12 @@ const VIEWS = {
     await open(page, server.url, { fixture: "orch", sel: keys.orchWorker });
     await waitText("From Relay");
   },
-  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  // the speech models, Whisper among them
+  "settings-voice-models": async () => {
+    await settingsPage("Voice");
+    await intoView("Whisper Large v3 Turbo");
+  },
   "settings-interface": async () => {
     await settingsPage("General");
     await intoView("Accent");
@@ -420,6 +467,51 @@ const VIEWS = {
     await page.evaluate(() => window.__harness.dictationLevel(0.4));
     await click("Reminders");
     await waitText("Dictating ·");
+  },
+  // Claude compacting the conversation (the quiet "42% context" under the field, a pulsing line in the conversation),
+  // then the line once it is done: the history stays, the context shrinks (#115)
+  "conversation-compacting": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "context", used: 168_000 });
+      window.__harness.emitAgent(key, { type: "working" });
+      window.__harness.emitAgent(key, { type: "compacting" });
+    }, keys.switchTo);
+    await waitText("Compacting conversation");
+    await scrollMain("bottom");
+  },
+  "conversation-compacted": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "context", used: 168_000 });
+      window.__harness.emitAgent(key, { type: "working" });
+      window.__harness.emitAgent(key, { type: "compacting" });
+      window.__harness.emitAgent(key, { type: "compacted", trigger: "auto", pre_tokens: 168_000, post_tokens: 9_000 });
+    }, keys.switchTo);
+    await waitText("Conversation compacted automatically");
+    await scrollMain("bottom");
+  },
+  // a turn with a to-do list (TodoWrite): the checklist above the composer, the timeline line counting the done ones
+  "conversation-todos": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      const todos = [
+        { content: "Read the invoice export", status: "completed", activeForm: "Reading the invoice export" },
+        { content: "Group the open invoices by client", status: "completed", activeForm: "Grouping the open invoices" },
+        { content: "Draft the reminder mails", status: "in_progress", activeForm: "Drafting the reminder mails" },
+        { content: "Check the VAT codes", status: "pending", activeForm: "Checking the VAT codes" },
+        { content: "Send the summary to Pieter", status: "pending", activeForm: "Sending the summary" },
+      ];
+      h.emitAgent(key, { type: "working" });
+      h.emitAgent(key, { type: "tool_call", id: "toolu_todo", name: "TodoWrite", input: { todos } });
+      h.emitAgent(key, { type: "tool_result", id: "toolu_todo", error: false });
+    }, keys.switchTo);
+    await waitText("Drafting the reminder mails");
+    await scrollMain("bottom");
   },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });

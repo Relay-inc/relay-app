@@ -1,9 +1,10 @@
 import type { AgentEvent } from "../agents/types";
 import type { ConversationsState, Translate } from "./state";
-import type { Item, ToolInput } from "./types";
+import type { ContextUse, Item, ToolInput } from "./types";
 import { formatDuration, lastAi } from "./rules.ts";
 import { cleanCommands } from "./commands.ts";
 import { splitFiles } from "./files.ts";
+import { isRelayTurn } from "../orchestrator/rules.ts";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) as a reducer over the conversations
 // state, and the transcripts behind a conversation as items. Pure: what needs the outside (a banner, saving, a vault
@@ -21,11 +22,11 @@ export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; bod
 export function push(state: Pick<ConversationsState, "messages">, key: string, item: Item) {
   (state.messages[key] ||= []).push(item);
 }
-// assistant text: a whole block, or a delta appended to the block before it
-function pushText(items: Item[], text: string, delta: boolean) {
+// assistant text or thinking: a whole block, or a delta appended to the block before it
+function pushText(items: Item[], text: string, delta: boolean, kind: "ai" | "thinking" = "ai") {
   const last = items[items.length - 1];
-  if (delta && last?.kind === "ai") last.text += text;
-  else items.push({ kind: "ai", text });
+  if (delta && last?.kind === kind) last.text += text;
+  else items.push({ kind, text });
 }
 const toolItem = (id: string, name: string, input: ToolInput, state: Item["state"], at: number): Item => ({
   kind: "tool",
@@ -39,6 +40,26 @@ const toolItem = (id: string, name: string, input: ToolInput, state: Item["state
 // "Klaar" with the turn's duration when it is known
 export const doneText = (seconds: number, t: Translate) =>
   seconds ? t("work.doneIn", { d: formatDuration(seconds) }) : t("work.done");
+
+/** Claude Code's window until a turn's result names the model's (the 1M models say so there). */
+export const DEFAULT_WINDOW = 200_000;
+/** The context after an event: tokens in use and window as they come, a compaction leaves what it kept, a reset none. */
+export function applyContext(context: ContextUse | undefined, event: AgentEvent): ContextUse | undefined {
+  const window = context?.window ?? DEFAULT_WINDOW;
+  if (event.type === "context") return { used: event.used ?? context?.used ?? 0, window: event.window ?? window };
+  if (event.type === "compacted") return event.post_tokens == null ? undefined : { used: event.post_tokens, window };
+  return event.type === "reset" ? undefined : context;
+}
+const ktokens = (n: number) => `${Math.round(n / 1000)}k`;
+const compactedText = (e: EventOf<"compacted">, t: Translate) =>
+  t(e.trigger === "auto" ? "compact.auto" : "compact.done") +
+  (e.pre_tokens != null && e.post_tokens != null ? ` · ${ktokens(e.pre_tokens)} → ${ktokens(e.post_tokens)}` : "");
+// the "compacting" line ends with the boundary; a turn that ends without one (it failed) leaves it as failed
+function endCompaction(items: Item[] | undefined, state: "ok" | "err", text?: string) {
+  const item = [...(items || [])].reverse().find(x => x.kind === "compact" && x.state === "run");
+  if (item) Object.assign(item, { state, ...(text ? { text } : {}) });
+  return !!item;
+}
 
 const ACTIVITY: AgentEvent["type"][] = ["working", "text", "thinking", "tool_call"];
 
@@ -55,8 +76,20 @@ export function applyAgentEvent(
   if (ACTIVITY.includes(event.type)) {
     state.status[key] = "busy";
     state.queued[key] = Math.max(1, state.queued[key] || 0);
+    // a turn at work that echoed nothing yet answers the oldest waiting message (a slash command never echoes), or
+    // something Claude started itself (a background task done): a message sent from now on waits for its echo
+    // ponytail: a turn Claude starts itself while a message waits takes that message too early
+    if (!state.taken[key]) {
+      takeWaiting(state, key);
+      state.taken[key] ||= 1;
+    }
   }
   switch (event.type) {
+    case "picked":
+      // a turn Relay wrote itself (orchestrator) is in the conversation already
+      if (!isRelayTurn(event.text)) takeWaiting(state, key);
+      else state.taken[key] = (state.taken[key] || 0) + 1;
+      return [];
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
       return [];
@@ -65,9 +98,23 @@ export function applyAgentEvent(
       return [];
     case "reset":
       state.messages[key] = [];
+      delete state.context[key];
       return [];
+    case "compacting":
+      push(state, key, { kind: "compact", text: env.t("compact.running"), state: "run" });
+      return [];
+    case "compacted": {
+      const text = compactedText(event, env.t);
+      if (!endCompaction(state.messages[key], "ok", text)) push(state, key, { kind: "compact", text, state: "ok" });
+      return setContext(state, key, event);
+    }
+    case "context":
+      return setContext(state, key, event);
     case "text":
       pushText((state.messages[key] ||= []), event.text, event.delta);
+      return [];
+    case "thinking":
+      pushText((state.messages[key] ||= []), event.text, event.delta, "thinking");
       return [];
     case "tool_call":
       return onToolCall(state, key, event, env.now);
@@ -97,6 +144,13 @@ export function applyAgentEvent(
   }
 }
 
+function setContext(state: ConversationsState, key: string, event: AgentEvent): Effect[] {
+  const next = applyContext(state.context[key], event);
+  if (next) state.context[key] = next;
+  else delete state.context[key];
+  return [];
+}
+
 // the real recipients, independent of what the agent writes about it
 function draftNote(saved: EventOf<"draft_saved">, t: Translate) {
   const cc = saved.cc || [];
@@ -118,14 +172,32 @@ function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_
   return [];
 }
 
+/** The oldest message waiting for Claude moves into the conversation, where Claude took it up. */
+export function takeWaiting(state: Pick<ConversationsState, "messages" | "waiting" | "taken">, key: string) {
+  const item = state.waiting[key]?.shift();
+  if (!item) return;
+  push(state, key, item);
+  state.taken[key] = (state.taken[key] || 0) + 1;
+}
+/** Every waiting message into the conversation: the process that would take them up is gone. */
+export function releaseWaiting(state: Pick<ConversationsState, "messages" | "waiting" | "taken">, key: string) {
+  for (const item of state.waiting[key] || []) push(state, key, item);
+  delete state.waiting[key];
+  delete state.taken[key];
+}
+
+// a turn end answers every message its turn took up, at least the one that started it
 function finishTurnInQueue(state: ConversationsState, key: string) {
-  state.queued[key] = Math.max(0, (state.queued[key] || 1) - 1);
+  if (!state.taken[key]) takeWaiting(state, key);
+  state.queued[key] = Math.max(0, (state.queued[key] || 1) - Math.max(1, state.taken[key] || 0));
+  delete state.taken[key];
   state.status[key] = state.queued[key] ? "busy" : "idle";
 }
 
 function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_end">, env: EventEnv): Effect[] {
   const { t } = env;
   const effects: Effect[] = [];
+  endCompaction(state.messages[key], "err");
   finishTurnInQueue(state, key);
   if (!end.ok) push(state, key, { kind: "err", text: end.error || t("err.unknown") });
   else if (!state.queued[key])
@@ -147,6 +219,8 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
 
 function onProcessExit(state: ConversationsState, key: string, env: EventEnv): Effect[] {
   const effects: Effect[] = [];
+  endCompaction(state.messages[key], "err");
+  releaseWaiting(state, key);
   // the process stopped while a turn ran: say so, the dots alone would just disappear
   if (state.status[key] === "busy") {
     push(state, key, { kind: "err", text: env.t("work.interrupted") });
@@ -159,7 +233,11 @@ function onProcessExit(state: ConversationsState, key: string, env: EventEnv): E
 
 // ---------- history from the transcript, when a conversation opens for the first time
 /** A transcript's events as items. `imageUrl` turns an inline image into something to show (a blob url). */
-export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, data: string) => string): Item[] {
+export function toItems(
+  history: AgentEvent[],
+  imageUrl: (mediaType: string, data: string) => string,
+  t: Translate,
+): Item[] {
   const items: Item[] = [];
   // the transcript's line times: a tool call starts at its line, and its result line (which gives no event of its
   // own) is the time before the next one. A user's message is a new prompt, not a result
@@ -181,7 +259,8 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
       );
       const { text, files } = splitFiles(entry.text);
       items.push({ kind: "me", text, ...(imgs.length ? { imgs } : {}), ...(files.length ? { files } : {}) });
-    } else if (entry.type === "text") pushText(items, entry.text, entry.delta);
+    } else if (entry.type === "compacted") items.push({ kind: "compact", text: compactedText(entry, t), state: "ok" });
+    else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok", at));
     else if (entry.type === "patch") {
       // ponytail: a followed transcript read in pieces loses the patch whose call was in an earlier piece (it shows without line numbers)
@@ -191,6 +270,13 @@ export function toItems(history: AgentEvent[], imageUrl: (mediaType: string, dat
   }
   settle();
   return items;
+}
+
+/** How full the context was at the end of a transcript. */
+export function contextOf(history: AgentEvent[]) {
+  let context: ContextUse | undefined;
+  for (const event of history) context = applyContext(context, event);
+  return context;
 }
 
 /** history gives a "time" event before each transcript line's events: a user message is a new prompt, any later line

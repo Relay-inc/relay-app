@@ -149,6 +149,22 @@ fn pair_launch_reattach_and_walls() {
 }
 
 #[test]
+fn the_server_keeps_its_own_claude_config_dir() {
+    let s = start("cfg");
+    let c = paired(&s, "laptop");
+    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
+    // what the laptop sends: removed for its default account, or a folder of its own
+    for (i, env) in [vec![("CLAUDE_CONFIG_DIR".to_string(), None)], vec![("CLAUDE_CONFIG_DIR".to_string(), Some("/Users/me/.claude-work".to_string()))]].into_iter().enumerate() {
+        let sp = Spec { program: "/bin/sh".into(), args: vec!["-c".into(), "read -r l; echo \"dir $CLAUDE_CONFIG_DIR\"".into()], env, cwd: Some(tmp.clone()) };
+        let mut conn = c.launch(&meta(&format!("cfg:{i}")), &sp).unwrap();
+        writeln!(conn.stdin, "x").unwrap();
+        conn.stdin.flush().unwrap();
+        assert_eq!(next(&mut conn.frames), format!("dir {}", s.data.join("claude").display()));
+        assert_eq!(next(&mut conn.frames), "exit");
+    }
+}
+
+#[test]
 fn update_goes_on_in_the_binary_sent() {
     // a fixed port, as on a real machine: the server goes on with the arguments it started with
     let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
@@ -203,7 +219,7 @@ fn real_claude_through_the_server() {
     std::fs::create_dir_all(&cwd).unwrap();
     let cwd = std::fs::canonicalize(&cwd).unwrap().to_string_lossy().into_owned();
     let pending = PathBuf::from(&info.pending);
-    let opts = json!({"perm_server": info.perm});
+    let opts = json!({});
     let env = Env { home: &info.home, vault: &cwd, path: &info.path, bin: &info.claude, pending: &pending, opts: &opts };
     let l = Launch { key: "c:claude", name: "relay e2e", model: "haiku", effort: "", resume: None, fork: None, turn: None };
     let mut cmd = agent_claude::PROVIDER.command(&env, &l).unwrap();
@@ -216,20 +232,8 @@ fn real_claude_through_the_server() {
     let text = "Use the Write tool to create the file note.txt in the current directory, containing the single word relay. Then answer with only: done";
     send(&mut conn.stdin, agent_claude::stream::user_message(&Turn { text: text.into(), images: vec![] }));
 
-    // the card: the permission tool's file there, seen and answered over the network
-    let c2 = c.clone();
-    let answered = std::thread::spawn(move || {
-        let t = Instant::now();
-        while t.elapsed() < Duration::from_secs(120) {
-            if let Some(r) = c2.pending().unwrap_or_default().into_iter().next() {
-                c2.answer(r["id"].as_str().unwrap(), &json!({"behavior": "allow", "updatedInput": r["input"]})).unwrap();
-                return Some(r["tool_name"].as_str().unwrap_or("").to_string());
-            }
-            std::thread::sleep(Duration::from_millis(300));
-        }
-        None
-    });
-    let (mut result, mut sid) = (Value::Null, String::new());
+    // the card: the request comes over the pipe, answered through the provider as the app does
+    let (mut result, mut sid, mut tool) = (Value::Null, String::new(), None::<String>);
     let t = Instant::now();
     while t.elapsed() < Duration::from_secs(150) {
         let mut line = String::new();
@@ -237,9 +241,14 @@ fn real_claude_through_the_server() {
         let Frame::Out(o) = frame(line.trim_end()) else { continue };
         let v: Value = serde_json::from_str(&o).unwrap_or_default();
         if v["type"] == "system" && v["session_id"].is_string() { sid = v["session_id"].as_str().unwrap().into(); }
+        if let Some(r) = agent_claude::permission::card("c:claude", &v) {
+            tool = Some(r.tool_name.clone());
+            let line = agent_claude::PROVIDER.respond(&r, &json!({"behavior": "allow", "updatedInput": r.input})).unwrap();
+            writeln!(conn.stdin, "{line}").unwrap();
+            conn.stdin.flush().unwrap();
+        }
         if v["type"] == "result" { result = v; break; }
     }
-    let tool = answered.join().unwrap();
     assert_eq!(result["subtype"], "success", "{result}");
     assert_eq!(tool.as_deref(), Some("Write"), "the Write call went through a card");
     assert_eq!(std::fs::read_to_string(PathBuf::from(&cwd).join("note.txt")).unwrap().trim(), "relay");

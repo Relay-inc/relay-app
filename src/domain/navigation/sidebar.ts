@@ -23,6 +23,8 @@ export type ConvRow = {
   closable: boolean;
   closing: boolean; // being closed: greyed out and pulsing until it is gone
   orch: boolean; // a worker of the orchestrator: a small marker
+  work?: boolean; // Today's work in progress (domain/today/work.ts): opens Today on it, not draggable, no menu
+  icon?: string; // a work row's icon: a review, a mail, a meeting
 };
 export type ProjectBlock = {
   name: string;

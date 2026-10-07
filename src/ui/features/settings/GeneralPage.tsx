@@ -47,7 +47,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
   const theme = useSettingsStore(s => s.settings.theme || "system");
   const accent = useSettingsStore(s => s.settings.accent || "relay");
   const terminal = useSettingsStore(s => s.settings.terminal || "auto");
-  const sidebarLayout = useSettingsStore(s => s.settings.sidebar?.layout ?? "list");
+  const sidebarLayout = useSettingsStore(s => s.settings.sidebar?.layout ?? "icons");
   const reordered = useSettingsStore(s => !!s.settings.sidebar?.order?.length);
   const views = useDerived(sidebarViews);
   const more = useSettingsStore(s => s.settings.sidebar?.more !== false);

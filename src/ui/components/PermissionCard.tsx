@@ -61,11 +61,13 @@ export function PermissionCard({
   request,
   where = "",
   busy = false,
+  keys = false,
   onAnswer,
 }: {
   request: Pending;
   where?: string;
   busy?: boolean;
+  keys?: boolean; // Today: 1 to 9 pick an option of the question still open, Enter sends the answer
   onAnswer: (choice: CardChoice) => void;
 }) {
   const { t, th } = useT();
@@ -105,19 +107,53 @@ export function PermissionCard({
       other: questions.map((_, qi) => other[qi] ?? ""),
     });
 
+  // the question the number keys answer: the first one nothing is picked for yet, else the last
+  const open = questions.findIndex((_, qi) => !picked[qi]?.size);
+  const current = open < 0 ? questions.length - 1 : open;
+  const onKey = useEffectEvent((e: KeyboardEvent) => {
+    if (busy || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.defaultPrevented) return;
+    const inField = e
+      .composedPath()
+      .some(node => node instanceof HTMLElement && node.matches("input, textarea, select, [contenteditable]"));
+    if (inField) return;
+    const options = questions[current]?.options ?? [];
+    const n = Number(e.key);
+    if (Number.isInteger(n) && n >= 1 && n <= Math.min(9, options.length)) {
+      e.preventDefault();
+      pick(current, options[n - 1].label, !!questions[current].multiSelect);
+    } else if (e.key === "Enter" && hasAnswer && !(e.target instanceof HTMLButtonElement)) {
+      e.preventDefault();
+      answerQuestions();
+    }
+  });
+  useEffect(() => {
+    if (!keys || !question) return;
+    const listener = (e: KeyboardEvent) => onKey(e);
+    window.addEventListener("keydown", listener);
+    return () => window.removeEventListener("keydown", listener);
+  }, [keys, question]);
+
   const renderQuestion = (question: Question, qi: number) => (
     <Fragment key={qi}>
       <div className="text-[15px] leading-[1.4] font-semibold text-label">{question.question}</div>
       <div className="flex flex-wrap gap-2">
-        {(question.options || []).map(option => (
+        {(question.options || []).map((option, oi) => (
           <button
             key={option.label}
-            className={picked[qi]?.has(option.label) ? "btn btn-primary cursor-pointer" : "btn cursor-pointer"}
+            className={`${picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"} cursor-pointer inline-flex items-center gap-2`}
             title={option.description || ""}
             disabled={busy}
             onClick={() => pick(qi, option.label, !!question.multiSelect)}
           >
             {option.label}
+            {keys && qi === current && oi < 9 ? (
+              <span
+                className="font-mono text-[11px] opacity-60 px-1 rounded border border-current leading-4"
+                aria-hidden="true"
+              >
+                {oi + 1}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>
@@ -148,6 +184,7 @@ export function PermissionCard({
             onClick={answerQuestions}
           >
             {t("card.answer")}
+            {keys && hasAnswer && !busy ? <span className="text-[11px] opacity-70 ml-1.5">↵</span> : null}
           </button>
         </div>
       </div>
@@ -165,6 +202,11 @@ export function PermissionCard({
         <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
           {t("card.deny")}
         </button>
+        {request.suggestions?.length ? (
+          <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("always")}>
+            {t("card.always")}
+          </button>
+        ) : null}
         <button
           className="btn btn-primary cursor-pointer inline-flex items-center gap-2"
           disabled={busy}

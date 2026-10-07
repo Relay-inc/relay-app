@@ -1,6 +1,6 @@
 import { t } from "../../shared/i18n";
 import { urlOk } from "../../shared/markdown";
-import { mailKey, isMailKey } from "../../domain/navigation/keys";
+import { mailKey, isMailKey, panelItem } from "../../domain/navigation/keys";
 import type { Mail, MailBox, MailFilter } from "../../domain/mail/types";
 import {
   PAGE_SIZE,
@@ -12,6 +12,7 @@ import {
   mailReference,
   mailChatTitle,
   draftPrompt,
+  ticketPrompt,
   mailBox,
   toggleSelection,
   allSelected,
@@ -24,7 +25,7 @@ import { mailExperimental, mailOn, settings } from "../settings/settings";
 import { findProjects, projectLabel } from "../workspace/vault";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
-import { select } from "../navigation/navigation";
+import { select, toast } from "../navigation/navigation";
 import { closeMail, forgetDetails, openMail } from "../navigation/panel";
 import { startChat } from "../conversations/chats";
 import { sendMsg } from "../conversations/actions";
@@ -133,7 +134,7 @@ export const setMailFilter = (patch: Partial<MailFilter>) => {
 let guessedFor: unknown = null;
 let guesses = new WeakMap<Mail, string | null>();
 /** The project a mail is about: one project named in the subject, the sender or the sender's domain, else none. */
-const mailProject = (message: Mail) => {
+export const mailProject = (message: Mail) => {
   const projects = useWorkspaceStore.getState().snap.projects;
   if (projects !== guessedFor) {
     guessedFor = projects;
@@ -345,8 +346,8 @@ export async function openMailSetup() {
 }
 /** A conversation about the open mail, under its project. The agent reads the mail itself through the relay-mail
  *  tools, so the whole thread and its attachments are there. "talk" waits for the user's question, "draft" asks for a
- *  reply as a draft right away. Sending stays with the user (decided 29/9). */
-export async function mailChat(key: string, how: "talk" | "draft") {
+ *  reply as a draft right away, "ticket" for a ticket on the project's board. Sending stays with the user (decided 29/9). */
+export async function mailChat(key: string, how: "talk" | "draft" | "draftAll" | "ticket") {
   const target = ms().list?.find(x => mailKey(x) === key);
   if (!target) return;
   const reference = mailReference(target);
@@ -358,5 +359,25 @@ export async function mailChat(key: string, how: "talk" | "draft") {
     ...(how === "talk" ? { mail: reference } : {}),
   });
   await select(chatKey);
-  if (how === "draft") sendMsg(draftPrompt(reference));
+  if (how === "ticket") {
+    const project = mailProject(target);
+    sendMsg(ticketPrompt(reference, project ? settings().boards?.[project] : undefined));
+  } else if (how !== "talk") sendMsg(draftPrompt(reference, how === "draftAll"));
+}
+
+/** An attachment of a mail, on the user's click: saved in Downloads/Relay-mail (never over another file, with the
+ *  quarantine flag Mail sets, a file that runs on a double-click is refused) and opened in its app. */
+export async function openAttachment(key: string, index: number) {
+  const item = panelItem(key);
+  if (item?.kind !== "mail") return;
+  try {
+    const { path } = await backend.mailTool<{ path: string }>("attachment", {
+      account: item.account,
+      id: item.id,
+      index,
+    });
+    await backend.openFile(path, false);
+  } catch (error) {
+    toast(String(error));
+  }
 }

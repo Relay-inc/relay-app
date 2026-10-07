@@ -1,12 +1,14 @@
 import { brainKey } from "../../domain/brain/rules";
 import type { BrainNote } from "../../domain/brain/types";
 import * as backend from "../../infrastructure/backend";
+import { cwOn } from "../../domain/settings/types";
+import { settings } from "../settings/settings";
 import { useBrainStore } from "./store";
 
 const set = useBrainStore.setState;
 
-/** Once its Claude Code plugin is installed. */
-export const brainOn = () => !!useBrainStore.getState().status?.plugin;
+/** Once its Claude Code plugin is installed, unless switched off in Settings. */
+export const brainOn = () => !!useBrainStore.getState().status?.plugin && cwOn(settings());
 /** The plugin's state and the CLI, for Settings. */
 export async function loadBrainStatus() {
   try {

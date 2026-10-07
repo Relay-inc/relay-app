@@ -5,8 +5,8 @@
 //!
 //! The server stays dumb: the app builds each agent's command with this machine's paths (Info) and sends it; the
 //! server starts a broker for it, the same one the app uses locally, and passes the broker's frames through. The
-//! agents' permission cards are files in this machine's pending folder, written by `relay-server --perm-server` (the
-//! permission tool the agents here run), listed and answered on request.
+//! agents' permission requests travel over their own pipe to the app (agent-claude's permission.rs); the cards in this
+//! machine's pending folder, from before that, are listed and answered on request.
 //!
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
 //! port the running server listens on), pending/.
@@ -122,7 +122,7 @@ pub fn info(data: &Path, path: &str) -> Info {
         if Path::new(&def).is_file() { def } else { agent_core::which("claude", path).unwrap_or(def) }
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
-        pending: data.join("pending").to_string_lossy().into(), perm: std::env::current_exe().map(|p| p.to_string_lossy().into_owned()).unwrap_or_default(),
+        pending: data.join("pending").to_string_lossy().into(),
         arch: std::env::consts::ARCH.into(), update: upgrade::CAN, ..Default::default() }
 }
 
@@ -296,8 +296,11 @@ impl Server {
 
     fn launch(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
-        let (mut meta, spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
+        let (mut meta, mut spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
         meta.key = format!("{ns}:{}", meta.key);
+        // the server's own Claude config folder wins: the laptop's (a path there, or removed for ~/.claude) would send
+        // Claude here to ~/.claude.json, outside the volume, gone with every new container
+        spec.env.retain(|(k, _)| k != "CLAUDE_CONFIG_DIR");
         if spec.cwd.as_deref().is_some_and(|d| Path::new(d).starts_with(self.mirror.work_of(ns))) && !self.mirror.is_open(ns) {
             return bang(&mut w, &format!("the vault on {} is locked: it opens when Relay on your laptop connects", self.info.host));
         }

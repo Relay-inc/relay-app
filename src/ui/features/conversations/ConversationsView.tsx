@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isView, BRAIN, MAIL, PRS, REM, USAGE } from "../../../domain/navigation/views";
+import { isView, BRAIN, MAIL, PRS, REM, USAGE, WAIT, reviewOf } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -19,15 +19,19 @@ import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
 import { BrainView } from "../brain/BrainView";
 import { MailView } from "../mail/MailView";
+import { TodayView } from "../today/TodayView";
+import { ReviewView } from "../today/ReviewView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
+import { Todos } from "./Todos";
 import { MoveBar } from "./MoveBar";
 import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { UsageReload } from "../usage/UsageReload";
+import { TodayReload } from "../today/TodayReload";
 import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
@@ -54,7 +58,8 @@ export function ConversationsView({ className }: { className: string }) {
   const msgs = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   // the Pull requests and Mail views scroll their list and the open item apart, so they fill the pane instead of the log
-  const ownScroll = selected === PRS || selected === MAIL || selected === BRAIN;
+  const review = reviewOf(selected);
+  const ownScroll = selected === PRS || selected === MAIL || selected === BRAIN || selected === WAIT || !!review;
   useEffect(() => {
     if (ownScroll) return;
     const logEl = log.current!;
@@ -108,6 +113,8 @@ export function ConversationsView({ className }: { className: string }) {
           <PrsReload />
         ) : selected === USAGE ? (
           <UsageReload />
+        ) : selected === WAIT ? (
+          <TodayReload />
         ) : selected === MAIL ? (
           <MailReload />
         ) : bar.coordinator ? (
@@ -131,6 +138,10 @@ export function ConversationsView({ className }: { className: string }) {
           <PullRequestsView className="flex-1" />
         ) : selected === BRAIN ? (
           <BrainView className="flex-1" />
+        ) : selected === WAIT ? (
+          <TodayView className="flex-1" />
+        ) : review ? (
+          <ReviewView className="flex-1" />
         ) : (
           <MailView className="flex-1" />
         )}
@@ -161,6 +172,7 @@ export function ConversationsView({ className }: { className: string }) {
         </div>
       </div>
       {hasSubagents ? <Subagents className={`${column} mb-1.5`} /> : null}
+      {onView ? null : <Todos className={`${column} mb-1.5`} />}
       {toast && selected !== REM ? (
         <div className={`${column} mb-2`}>
           <Toast toast={toast} />

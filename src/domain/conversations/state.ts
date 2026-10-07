@@ -1,7 +1,7 @@
 import type { Key } from "../../shared/i18n";
 import type { MachineChoice } from "../settings/types";
 import type { SlashCommand } from "./commands";
-import type { AgentSession, Chat, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
+import type { AgentSession, Chat, ContextUse, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
 
 /** A translation, handed to the rules that write text into the state (notes, titles). */
 export type Translate = (key: Key, params?: Record<string, string | number>) => string;
@@ -10,8 +10,12 @@ export type Translate = (key: Key, params?: Record<string, string | number>) => 
 export type ConversationsState = {
   chats: Record<string, Chat>;
   messages: Record<string, Item[]>; // per conversation, from the transcript and the live events
+  context: Record<string, ContextUse>; // Claude Code's: what the latest message filled of the model's window
   status: Record<string, "idle" | "busy">;
-  queued: Record<string, number>; // messages sent but not answered yet: one turn end each
+  queued: Record<string, number>; // messages sent but not answered yet: one turn end each, or one for all a turn took up
+  // Claude Code's: messages sent that it has not taken up yet, shown below the conversation until it does
+  waiting: Record<string, Item[]>;
+  taken: Record<string, number>; // the messages the running turn took up, its turn end answers them all
   unseen: Set<string>;
   dismissed: Set<string>; // "is this about project X?" answered no
   closing: Set<string>; // conversations being closed: the process stops and its worktrees go, which can take a while
@@ -48,8 +52,11 @@ export const initialConversations = (stored: {
 }): ConversationsState => ({
   ...stored,
   messages: {},
+  context: {},
   status: {},
   queued: {},
+  waiting: {},
+  taken: {},
   unseen: new Set(),
   dismissed: new Set(),
   closing: new Set(),

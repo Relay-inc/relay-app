@@ -24,8 +24,7 @@ pub const PROTO: u32 = 2;
 pub const MAX_LINE: u64 = 1 << 20;
 
 /// What a server tells the app about itself, so the app can build commands for that machine: its paths, its login
-/// PATH, where its `claude` is, its pending folder and its permission tool (`perm`: the relay-server binary, run with
-/// `--perm-server`).
+/// PATH, where its `claude` is and its pending folder.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 pub struct Info {
     pub host: String,
@@ -36,7 +35,6 @@ pub struct Info {
     pub path: String,
     pub claude: String,
     pub pending: String,
-    pub perm: String,
     /// The device's mirror working copy (`<work>/<root>`), whether its key is there, and whether it is on a RAM disk.
     #[serde(default)]
     pub work: String,

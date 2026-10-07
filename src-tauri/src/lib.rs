@@ -35,6 +35,7 @@ pub mod notify;
 mod orch;
 mod providers;
 mod pty;
+mod related;
 mod relay_config;
 mod reminders;
 mod retry;
@@ -42,6 +43,7 @@ mod scratch;
 #[cfg(feature = "selftest")]
 mod selftest;
 mod snapshot;
+mod updater;
 mod tray;
 mod vault;
 mod worktrees;
@@ -138,6 +140,12 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("settings", ["Settings…", "Instellingen…", "Réglages…", "Einstellungen…"]),
     ("settings.title", ["Settings", "Instellingen", "Réglages", "Einstellungen"]),
     ("about", ["About Relay", "Over Relay", "À propos de Relay", "Über Relay"]),
+    ("check_updates", ["Check for Updates…", "Zoek naar updates…", "Rechercher des mises à jour…", "Nach Updates suchen…"]),
+    ("update.available", ["Relay {v} is available.", "Relay {v} is beschikbaar.", "Relay {v} est disponible.", "Relay {v} ist verfügbar."]),
+    ("update.install", ["Install and Restart", "Installeren en herstarten", "Installer et redémarrer", "Installieren und neu starten"]),
+    ("update.later", ["Later", "Later", "Plus tard", "Später"]),
+    ("update.none", ["Relay {v} is the latest version.", "Relay {v} is de nieuwste versie.", "Relay {v} est la dernière version.", "Relay {v} ist die neueste Version."]),
+    ("update.failed", ["Could not update: {v}", "Kon niet updaten: {v}", "Mise à jour impossible : {v}", "Update nicht möglich: {v}"]),
     ("hide", ["Hide Relay", "Verberg Relay", "Masquer Relay", "Relay ausblenden"]),
     ("hide_others", ["Hide Others", "Verberg andere", "Masquer les autres", "Andere ausblenden"]),
     ("show_all", ["Show All", "Toon alles", "Tout afficher", "Alle einblenden"]),
@@ -271,7 +279,8 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
     let t = |k: &str| tr(lang, k);
     let settings = MenuItem::with_id(h, "settings", t("settings"), true, Some("CmdOrCtrl+,"))?;
     let app = Submenu::with_items(h, "Relay", true, &[
-        &P::about(h, Some(&t("about")), None)?, &P::separator(h)?, &settings, &P::separator(h)?,
+        &P::about(h, Some(&t("about")), None)?, &MenuItem::with_id(h, "check-updates", t("check_updates"), true, None::<&str>)?,
+        &P::separator(h)?, &settings, &P::separator(h)?,
         &P::hide(h, Some(&t("hide")))?, &P::hide_others(h, Some(&t("hide_others")))?, &P::show_all(h, Some(&t("show_all")))?,
         &P::separator(h)?, &P::quit(h, Some(&t("quit")))?])?;
     let edit = Submenu::with_items(h, t("edit"), true, &[
@@ -291,9 +300,10 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
 // with. tainted: it holds mail text (see mark_tainted), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
+// picked: the messages Claude took up in the turn running (Event::Picked), the ones its turn end answers
 // account: the config folder it runs on ("" the CLI's own), see agents::accounts
 // remote: on a work machine (machines.rs), stopped and taken back through its relay-server
-struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, account: String, remote: bool }
+struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, picked: u32, account: String, remote: bool }
 impl Proc {
     /// The turns running, also in the broker's file: a restart takes them from there.
     fn set_turns(&mut self, turns: u32) {
@@ -331,9 +341,12 @@ fn save_worktrees(app: &AppHandle, w: &HashMap<String, Vec<String>>) {
     fs::write(data_dir(app).join("worktrees.json"), json!(w).to_string()).ok();
 }
 
+/// The user's own login shell, not zsh: a fish or bash user's PATH (npm, Homebrew) lives in that shell's config.
+/// The last line, in case the rc files print something first.
 fn login_path() -> String {
-    Command::new("/bin/zsh").args(["-lic", "printf %s \"$PATH\""]).stdin(Stdio::null()).output()
-        .ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+    let sh = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
+    Command::new(sh).args(["-lic", "printf '\\n%s' \"$PATH\""]).stdin(Stdio::null()).output()
+        .ok().map(|o| String::from_utf8_lossy(&o.stdout).lines().last().unwrap_or("").trim().to_string())
         .filter(|p| !p.is_empty())
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
@@ -539,6 +552,14 @@ fn vault_notes(state: State<App>) -> Result<Value, String> {
     Ok(json!({"root": root, "notes": notes}))
 }
 
+/// The vault notes closest to what a conversation is about, [{path, title, snippet}], from the full-text index.
+#[tauri::command]
+async fn related_notes(app: AppHandle, state: State<'_, App>, text: String) -> Result<Value, String> {
+    let v = need_vault(&state)?;
+    let db = data_dir(&app).join("related.db");
+    tauri::async_runtime::spawn_blocking(move || related::related(&db, &v, &text, 12)).await.map_err(|e| e.to_string())?.map(Value::from)
+}
+
 /// The configured vault: path, mapping, found per path, ok.
 #[tauri::command]
 fn vault_status(state: State<App>) -> Value { vault_of(&state.settings.lock().unwrap()) }
@@ -670,9 +691,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
         bind.cwd = machines::cwd_or_vault(bind.cwd, &info);
         let mut eb = env_of(app, state, p);
-        // that machine's paths, its claude and its permission tool (relay-server --perm-server); no mail tools there
+        // that machine's paths and its claude; no mail tools there
         eb.opts["mail"] = json!(false);
-        eb.opts["perm_server"] = json!(info.perm);
         let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
         let mut cmd = p.command(&eb.env(), &l)?;
         cmd.current_dir(&bind.cwd).env("PATH", &info.path);
@@ -688,7 +708,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
         if claude && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
         // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
-        if claude && !from_mail {
+        if claude && !from_mail && cw_on(state) {
             if let Some(b) = about.and_then(|a| commonwealth::brains(&home(), &repo_projects(&dir)).get(a).cloned().flatten()) { eb.opts["commonwealth_brain"] = json!(b); }
         }
         let mut cmd = p.command(&eb.env(), &l)?;
@@ -704,7 +724,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
     let pid = agent.id();
-    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), account: account.into(), remote };
+    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), picked: 0, account: account.into(), remote };
     read_agent(app, project, p, pid, frames, backlog, inherit, account);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if from_mail { mark_tainted(&mut proc); }
@@ -803,11 +823,13 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                         continue;
                     }
                     Event::Text { text, delta } => { if !delta { last.clear(); } last.push_str(text); }
+                    // a turn end answers every message taken up in its turn, at least the one that started it
+                    Event::Picked { .. } => { if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.picked += 1; } }
                     Event::TurnEnd { error, .. } => {
                         let e = error.as_deref().unwrap_or("").to_lowercase();
                         // "usage limit" (Codex), "You've hit your limit" and "You've hit your weekly limit · resets 9pm" (Claude)
                         if e.contains("usage limit") || (e.contains("hit your") && e.contains("limit")) { spend(&a); limited = true; }
-                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(1)); x.opts.0.clone() });
+                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(x.picked.max(1))); x.picked = 0; x.opts.0.clone() });
                         retry::turn_end(&a, &k, p, &account, &model.unwrap_or_default(), limited, hint, !worked);
                         (limited, hint, worked) = (false, None, false);
                         // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
@@ -880,7 +902,7 @@ fn reattach_remote(app: &AppHandle) {
             if st.procs.lock().unwrap().contains_key(&meta.key) { continue; }
             let broker::Conn { agent, stdin, frames, backlog } = conn;
             let pid = agent.id();
-            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, account: String::new(), remote: true };
+            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, picked: 0, account: String::new(), remote: true };
             st.procs.lock().unwrap().insert(meta.key.clone(), x);
             read_agent(app, &meta.key, p, pid, frames, backlog, (false, false), "");
         }
@@ -897,7 +919,7 @@ fn reattach(app: &AppHandle) {
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let broker::Conn { agent, stdin, frames, backlog } = c;
         let pid = agent.id();
-        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, account: m.account.clone(), remote: false };
+        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, picked: 0, account: m.account.clone(), remote: false };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
         read_agent(app, &m.key, p, pid, frames, backlog, (false, false), &m.account);
     }
@@ -947,6 +969,19 @@ fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
     }
 }
 
+/// What a changed model or effort asks of a running process: a restart, and/or a set_model over its pipe.
+#[derive(Debug, PartialEq)]
+struct SwitchPlan { restart: bool, model: bool }
+fn switch_plan(cur: &(String, String), want: &(String, String), live_model: bool, busy: bool) -> SwitchPlan {
+    if !live_model { return SwitchPlan { restart: cur != want, model: false }; }
+    // ponytail: effort is not changed live (apply_flag_settings accepts it but its effect is unverified), so it waits for an idle moment
+    SwitchPlan { restart: cur.1 != want.1 && !busy, model: cur.0 != want.0 }
+}
+/// Claude's control_request that changes the model for the turns after it ("default": the CLI's own).
+fn set_model_request(model: &str) -> Value {
+    json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}})
+}
+
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
@@ -981,10 +1016,20 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
         procs.insert(project, x);
         return Ok(());
     }
-    // model, effort and account are start flags: a switch restarts the process on the same session
+    // account is a start flag, so is effort: a switch restarts the process on the same session. Claude takes a new model
+    // over the pipe (set_model), so a model switch never kills a turn; an effort switch waits until the turn is over
     let mut was_tainted = false;
     // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
-    if procs.get(&project).is_some_and(|x| x.opts != opts || x.provider != p.id() || (x.account != account && !x.remote)) { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
+    if let Some(x) = procs.get_mut(&project) {
+        let moved = x.provider != p.id() || (x.account != account && !x.remote);
+        let plan = switch_plan(&x.opts, &opts, p.id() == "claude", x.turns > 0);
+        if moved || plan.restart {
+            if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; }
+        } else if plan.model {
+            writeln!(x.stdin, "{}", set_model_request(&opts.0)).and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+            x.opts.0 = opts.0.clone();
+        }
+    }
     if !procs.contains_key(&project) {
         let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted || orch_taint, &account, machine.as_deref(), about.as_deref())?;
         procs.insert(project.clone(), x);
@@ -1058,6 +1103,18 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
     let mut eb = env_of(&app, &state, p);
     if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "haiku")); }
     tauri::async_runtime::spawn_blocking(move || p.title(&eb.env(), &text)).await.map_err(|e| e.to_string())?
+}
+
+/// A text written by the agent from `text` and an instruction (`system`): one call on the subscription, without tools,
+/// settings, MCP or a transcript, so third-party text in it (a mail) can make it do nothing but write. Today's mail
+/// composer drafts and rewrites replies with it; the user edits the result before it is saved anywhere.
+#[tauri::command]
+async fn ai_write(app: AppHandle, state: State<'_, App>, system: String, text: String) -> Result<String, String> {
+    let p = { let on = agents::enabled(&state.settings.lock().unwrap()); on.iter().copied().find(|p| p.caps().title) };
+    let p = p.ok_or_else(|| trc("err.no_agent"))?;
+    let mut eb = env_of(&app, &state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "sonnet")); }
+    tauri::async_runtime::spawn_blocking(move || p.write(&eb.env(), &system, &text)).await.map_err(|e| e.to_string())?
 }
 
 /// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
@@ -1594,8 +1651,11 @@ fn repo_index(vault: &str) -> HashMap<String, String> {
 // ---------- Commonwealth (commonwealth.rs): detected, never configured; on when the Claude Code plugin is installed
 
 fn claude_bin(app: &AppHandle, state: &App) -> String { env_of(app, state, agents::get_or_first(Some("claude"))).bin }
-/// The brains the vault's projects resolve to, by project; the only ones the review queue touches.
+/// Switched off in Settings › Integrations: no brain for a session, no review queue. On unless set to false.
+fn cw_on(state: &App) -> bool { state.settings.lock().unwrap()["integrations"]["commonwealth"]["on"] != false }
+/// The brains the vault's projects resolve to, by project; the only ones the review queue touches. None when off.
 fn cw_brains(state: &App) -> std::collections::BTreeMap<String, Option<String>> {
+    if !cw_on(state) { return Default::default(); }
     commonwealth::brains(&home(), &repo_projects(&vault(state)))
 }
 /// Plugin installed and on, the CLI if found, the install hint, and the brain per project.
@@ -1636,7 +1696,7 @@ async fn github_status(state: State<'_, App>) -> Result<String, String> {
     Ok(gh(&state, &["api", "user", "--jq", ".login"])?.trim().to_string())
 }
 
-const PR_FIELDS: &str = "... on PullRequest{number title url isDraft createdAt updatedAt repository{nameWithOwner} author{login} reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state}}}}}";
+const PR_FIELDS: &str = "... on PullRequest{number title url isDraft createdAt updatedAt headRefName repository{nameWithOwner} author{login} reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state}}}}}";
 
 /// Open pull requests: the ones the user wrote and the ones waiting on their review, within the owners
 /// from the settings (empty: everywhere), each with the vault project of its repo.
@@ -1654,7 +1714,7 @@ async fn github_prs(state: State<'_, App>) -> Result<Value, String> {
         data["data"][k]["nodes"].as_array().into_iter().flatten().filter(|n| n["number"].is_number()).map(|n| {
             let repo = n["repository"]["nameWithOwner"].as_str().unwrap_or("");
             json!({"number": n["number"], "title": n["title"], "url": n["url"], "repo": repo, "draft": n["isDraft"], "created": n["createdAt"],
-                "updated": n["updatedAt"], "author": n["author"]["login"], "review": n["reviewDecision"],
+                "updated": n["updatedAt"], "branch": n["headRefName"], "author": n["author"]["login"], "review": n["reviewDecision"],
                 "ci": n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"], "project": map.get(&repo.to_lowercase())})
         }).collect()
     };
@@ -1674,6 +1734,47 @@ async fn github_pr(state: State<'_, App>, repo: String, number: u32) -> Result<V
     let pr = &v["data"]["repository"]["pullRequest"];
     if pr.is_null() { return Err(trc("err.no_pr")); }
     Ok(pr.clone())
+}
+
+/// `owner/repo` split and checked: letters, digits, - _ . only.
+fn repo_parts(repo: &str) -> Result<(String, String), String> {
+    let ok = |s: &str| !s.is_empty() && s.len() <= 100 && s.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c));
+    repo.split_once('/').filter(|(o, n)| ok(o) && ok(n)).map(|(o, n)| (o.to_string(), n.to_string())).ok_or_else(|| trc("err.bad_repo"))
+}
+
+/// The files a PR changes with their patch (unified diff hunks), for the review screen.
+// ponytail: one page of 100 files, a PR bigger than that shows its first 100
+#[tauri::command]
+async fn github_pr_files(state: State<'_, App>, repo: String, number: u32) -> Result<Value, String> {
+    let (owner, name) = repo_parts(&repo)?;
+    let out = gh(&state, &["api", &format!("repos/{owner}/{name}/pulls/{number}/files?per_page=100")])?;
+    let v: Value = serde_json::from_str(&out).map_err(|e| format!("gh: {e}"))?;
+    Ok(json!(v.as_array().into_iter().flatten().map(|f| json!({
+        "path": f["filename"], "status": f["status"], "additions": f["additions"], "deletions": f["deletions"], "patch": f["patch"],
+    })).collect::<Vec<_>>()))
+}
+
+/// Post a review on a PR: the verdict, the summary and the line comments. The one write to GitHub Relay makes, and
+/// only after the user confirmed it in the app (the review screen's dialog says who will see it).
+#[tauri::command]
+async fn github_pr_review(state: State<'_, App>, repo: String, number: u32, event: String, body: String, comments: Vec<Value>) -> Result<(), String> {
+    let (owner, name) = repo_parts(&repo)?;
+    if !["APPROVE", "REQUEST_CHANGES", "COMMENT"].contains(&event.as_str()) { return Err(format!("unknown review event {event}")); }
+    if body.len() > 65_000 || comments.len() > 100 { return Err("review too large".into()); }
+    let comments = comments.iter().map(|c| {
+        let path = c["path"].as_str().filter(|p| !p.is_empty() && p.len() <= 1000).ok_or("comment path")?;
+        let line = c["line"].as_u64().filter(|l| *l > 0).ok_or("comment line")?;
+        let side = c["side"].as_str().filter(|s| ["LEFT", "RIGHT"].contains(s)).unwrap_or("RIGHT");
+        let text = c["body"].as_str().filter(|b| !b.trim().is_empty() && b.len() <= 65_000).ok_or("comment text")?;
+        Ok(json!({ "path": path, "line": line, "side": side, "body": text }))
+    }).collect::<Result<Vec<_>, &str>>()?;
+    let input = json!({ "event": event, "body": body, "comments": comments }).to_string();
+    let bin = in_path(&state, "gh").ok_or_else(|| trc("err.no_gh"))?;
+    let mut child = Command::new(bin).args(["api", "-X", "POST", &format!("repos/{owner}/{name}/pulls/{number}/reviews"), "--input", "-"])
+        .env("PATH", &state.path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+    child.stdin.take().ok_or("gh stdin")?.write_all(input.as_bytes()).map_err(|e| e.to_string())?;
+    let o = child.wait_with_output().map_err(|e| e.to_string())?;
+    if o.status.success() { Ok(()) } else { Err(format!("gh: {}", String::from_utf8_lossy(&o.stderr).trim())) }
 }
 
 // ---------- Mail: IMAP (Gmail or any server) in mail/, the app password stays in the macOS keychain.
@@ -1699,6 +1800,17 @@ async fn mail_list(state: State<'_, App>, account: String, page: u32) -> Result<
 async fn mail_read(state: State<'_, App>, account: String, id: String) -> Result<Value, String> {
     let a = mail_acct(&state, &account)?;
     state.mail.open(&a, &id).await
+}
+
+/// Today's mail detail: a mail's whole thread, its reply headers (`read` with `headers`), or a draft saved in Drafts.
+/// Nothing is ever sent. The same checks as the agent's relay-mail tools.
+#[tauri::command]
+async fn mail_tool(state: State<'_, App>, name: String, args: Value) -> Result<Value, String> {
+    if !["thread", "read", "save_draft", "attachment"].contains(&name.as_str()) { return Err(format!("Unknown mail tool {name}")); }
+    let (on, accts, default) = { let s = state.settings.lock().unwrap(); (s["mail"]["on"] == true, mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
+    if !on { return Err("Mail is switched off in the app.".into()); }
+    let dl = PathBuf::from(home()).join("Downloads/Relay-mail");
+    state.mail.run(&accts, &default, &name, &args, &dl).await
 }
 
 /// Mark one mail read or unread, on the user's click.
@@ -1976,6 +2088,7 @@ pub fn run() {
                 settings.unwrap().close().ok(); return;
             }
             if tray::owns(event.id().as_ref()) { return; } // handled by the tray's own listener
+            if event.id() == "check-updates" { updater::check_now(app); return; }
             if event.id() != "settings" { app.emit("menu", event.id().as_ref()).ok(); return; }
             open_settings(app);
         })
@@ -1987,6 +2100,7 @@ pub fn run() {
             false
         }).build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // relay:// links from Raycast or a browser: the UI handles them (src/app/deep-links.ts), the window comes forward here
         .plugin(tauri_plugin_deep_link::init())
@@ -2017,6 +2131,7 @@ pub fn run() {
             actions::start(app.handle());
             awake::start(app.handle());
             retry::start(app.handle());
+            updater::start(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines)
@@ -2048,7 +2163,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, reset, move_chat, chats, bg, app_sids, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -2169,5 +2284,31 @@ mod terminal_tests {
         assert_eq!(terminal_of("auto", |_| false), "terminal");
         assert_eq!(terminal_of("iterm", |_| false), "iterm");
         assert_eq!(terminal_of("bogus", |_| true), "terminal");
+    }
+}
+
+#[cfg(test)]
+mod switch_tests {
+    use super::{set_model_request, switch_plan, SwitchPlan};
+    fn o(m: &str, e: &str) -> (String, String) { (m.into(), e.into()) }
+    #[test]
+    fn model_goes_over_the_pipe_effort_waits_for_idle() {
+        let (idle, busy) = (false, true);
+        assert_eq!(switch_plan(&o("opus", "high"), &o("opus", "high"), true, busy), SwitchPlan { restart: false, model: false });
+        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "high"), true, busy), SwitchPlan { restart: false, model: true });
+        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "high"), true, idle), SwitchPlan { restart: false, model: true });
+        // a running turn is never killed for an effort switch, the model part still applies
+        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "low"), true, busy), SwitchPlan { restart: false, model: true });
+        assert_eq!(switch_plan(&o("opus", "high"), &o("opus", "low"), true, idle), SwitchPlan { restart: true, model: false });
+        // other providers: any change restarts, as before
+        assert_eq!(switch_plan(&o("a", ""), &o("b", ""), false, idle), SwitchPlan { restart: true, model: false });
+    }
+    #[test]
+    fn set_model_json() {
+        let v = set_model_request("sonnet");
+        assert_eq!(v["type"], "control_request");
+        assert_eq!(v["request"]["subtype"], "set_model");
+        assert_eq!(v["request"]["model"], "sonnet");
+        assert_eq!(set_model_request("")["request"]["model"], "default");
     }
 }

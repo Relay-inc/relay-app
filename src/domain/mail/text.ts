@@ -17,15 +17,20 @@ const tidy = (lines: string[]) =>
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-// links in the text and the "[image: …]" placeholders. A link ends before a ">" or at the end of a word, so "<https://x>" and "(see https://x)." lose their brackets
-const PROSE = /(https?:\/\/[^\s<>"']+?)(?=>|[\s),.]*(?:\s|$))|\[image: ([^\]]*)\]/g;
+// links in the text and the "[image: …]" placeholders. A link ends before a ">" or at the end of a word, so "<https://x>" and "(see https://x)." lose their brackets.
+// Between "<" and ">" a link may run over line breaks (mail wraps long links there), the breaks are no part of it
+const PROSE = /(?<=<)(https?:\/\/[^<>"']+)(?=>)|(https?:\/\/[^\s<>"']+?)(?=>|[\s),.]*(?:\s|$))|\[image: ([^\]]*)\]/g;
 export function prose(text: string): ProsePiece[] {
   const pieces: ProsePiece[] = [];
   let position = 0;
   for (const match of text.matchAll(PROSE)) {
-    const [whole, link, imageLabel] = match;
+    const [whole, wrapped, link, imageLabel] = match;
     pieces.push({ kind: "text", text: text.slice(position, match.index) });
-    pieces.push(link ? { kind: "link", text: link } : { kind: "image", text: imageLabel });
+    pieces.push(
+      wrapped || link
+        ? { kind: "link", text: wrapped ? wrapped.replace(/\s+/g, "") : link }
+        : { kind: "image", text: imageLabel },
+    );
     position = match.index + whole.length;
   }
   pieces.push({ kind: "text", text: text.slice(position) });

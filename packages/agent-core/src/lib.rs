@@ -126,6 +126,9 @@ pub enum Event {
     Session { id: String },
     /// A user message (history only). An image that is not inline is None, shown as a placeholder.
     User { text: String, images: Vec<Option<Image>> },
+    /// Live: the agent took up a user message sent to it, at this point of its work (Claude Code only, the echo of
+    /// `--replay-user-messages`). A message sent while a turn runs can join that turn instead of starting its own.
+    Picked { text: String },
     /// Assistant text: a whole block, or with `delta` a piece appended to the last one.
     Text { text: String, delta: bool },
     Thinking { text: String, delta: bool },
@@ -144,6 +147,12 @@ pub enum Event {
     Error { text: String },
     /// The conversation started over (`/clear`): what came before is gone; a new Session follows.
     Reset,
+    /// The provider began compacting the conversation (summarising it to free context); `Compacted` ends it.
+    Compacting,
+    /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
+    Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
+    /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
+    Context { used: Option<u64>, window: Option<u64> },
     /// The model (and effort, when the CLI says) it runs on, its own defaults resolved. The app passes it on as
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },
@@ -204,6 +213,8 @@ pub trait AgentProvider: Sync {
     fn stop_background(&self, _env: &Env, _id: &str) -> Result<(), String> { Err("unsupported".into()) }
     /// A 2 to 5 word title for a conversation that starts with `text`.
     fn title(&self, _env: &Env, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
+    /// A text written from `text` following `system`, with no tools: a reply draft, a rewrite.
+    fn write(&self, _env: &Env, _system: &str, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
 
     /// Plan or rate limits. The app calls it at most once a minute.
     fn limits(&self, _env: &Env) -> usage::Limits { usage::Limits::Off("unsupported".into()) }

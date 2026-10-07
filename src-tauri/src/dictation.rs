@@ -1,6 +1,6 @@
 // Dictation in the composer (src/ui/features/conversations/Composer.tsx): speech to text on this Mac, no audio leaves it.
 // The microphone is recorded here (cpal) on a thread of its own, which also sends the input level to the composer's
-// meter; a local model (transcribe-rs on ONNX Runtime) turns the recording into text. Settings › Voice picks the model
+// meter; a local model (transcribe-rs on ONNX Runtime, Whisper on whisper.cpp) turns the recording into text. Settings › Voice picks the model
 // from MODELS and the language; each is downloaded once into the app data dir, checked against its SHA-256, and the
 // one in use stays loaded after its first use.
 use std::collections::HashSet;
@@ -20,6 +20,7 @@ use transcribe_rs::onnx::cohere::CohereModel;
 use transcribe_rs::onnx::moonshine::{MoonshineModel, MoonshineVariant};
 use transcribe_rs::onnx::parakeet::ParakeetModel;
 use transcribe_rs::onnx::Quantization;
+use transcribe_rs::whisper_cpp::WhisperEngine;
 use transcribe_rs::{SpeechModel, TranscribeOptions};
 
 const RATE: u32 = 16_000; // what every model takes
@@ -28,11 +29,14 @@ const HOST: &str = "https://blob.handy.computer"; // Handy's model mirror (MIT, 
 /// A model Settings › Voice offers. `auto`: it hears the language itself; without it the language is passed.
 struct Model { id: &'static str, file: &'static str, sha256: &'static str, mb: u32, langs: &'static [&'static str], auto: bool }
 const EU: &[&str] = &["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"];
+// Whisper knows ~99; these are the ones the language picker can name
+const WHISPER: &[&str] = &["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk", "zh", "ja", "ko", "vi", "ar"];
 const MODELS: &[Model] = &[
     Model { id: "parakeet-v3", file: "parakeet-v3-int8.tar.gz", sha256: "43d37191602727524a7d8c6da0eef11c4ba24320f5b4730f1a2497befc2efa77", mb: 456, langs: EU, auto: true },
     Model { id: "parakeet-v2", file: "parakeet-v2-int8.tar.gz", sha256: "ac9b9429984dd565b25097337a887bb7f0f8ac393573661c651f0e7d31563991", mb: 451, langs: &["en"], auto: true },
     Model { id: "canary-1b-v2", file: "canary-1b-v2.tar.gz", sha256: "02305b2a25f9cf3e7deaffa7f94df00efa44f442cd55c101c2cb9c000f904666", mb: 691, langs: EU, auto: false },
     Model { id: "cohere", file: "cohere-int8.tar.gz", sha256: "ea2257d52434f3644574f187dcdcf666e302cd11b92866116ab8e14cd9c887f0", mb: 1708, langs: &["en", "fr", "de", "it", "es", "pt", "el", "nl", "pl", "zh", "ja", "ko", "vi", "ar"], auto: true },
+    Model { id: "whisper-turbo", file: "ggml-large-v3-turbo-q5_0.bin", sha256: "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2", mb: 574, langs: WHISPER, auto: true },
     Model { id: "moonshine-base", file: "moonshine-base.tar.gz", sha256: "04bf6ab012cfceebd4ac7cf88c1b31d027bbdd3cd704649b692e2e935236b7e8", mb: 55, langs: &["en"], auto: true },
 ];
 const DEFAULT: &str = "parakeet-v3";
@@ -46,6 +50,7 @@ fn load(m: &Model, dir: &Path) -> Result<Box<dyn SpeechModel>, String> {
         "parakeet-v3" | "parakeet-v2" => Box::new(ParakeetModel::load(dir, int8).map_err(e)?),
         "canary-1b-v2" => Box::new(CanaryModel::load(dir, int8).map_err(e)?),
         "cohere" => Box::new(CohereModel::load(dir, int8).map_err(e)?),
+        "whisper-turbo" => Box::new(WhisperEngine::load(&dir.join(m.file)).map_err(e)?), // whisper.cpp on Metal
         _ => Box::new(MoonshineModel::load(dir, MoonshineVariant::Base, &Quantization::default()).map_err(e)?),
     })
 }
@@ -153,8 +158,14 @@ fn download(m: &Model, models: &Path, progress: &Channel<f64>) -> Result<(), Str
         // the archive holds one folder, named as Handy names it: unpacked aside, then moved under the model's id
         std::fs::remove_dir_all(&unpack).ok();
         std::fs::create_dir_all(&unpack).map_err(|e| e.to_string())?;
-        if !run(Command::new("tar").arg("xzf").arg(&part).arg("-C").arg(&unpack))?.status.success() { return Err("the model could not be unpacked".into()); }
-        let inner = std::fs::read_dir(&unpack).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).find(|p| p.is_dir()).ok_or("the archive holds no model")?;
+        let inner = if m.file.ends_with(".bin") {
+            // a whisper.cpp model is one file, not an archive: it gets a folder like the others
+            std::fs::rename(&part, unpack.join(m.file)).map_err(|e| e.to_string())?;
+            unpack.clone()
+        } else {
+            if !run(Command::new("tar").arg("xzf").arg(&part).arg("-C").arg(&unpack))?.status.success() { return Err("the model could not be unpacked".into()); }
+            std::fs::read_dir(&unpack).map_err(|e| e.to_string())?.flatten().map(|e| e.path()).find(|p| p.is_dir()).ok_or("the archive holds no model")?
+        };
         let dir = models.join(m.id);
         std::fs::remove_dir_all(&dir).ok();
         std::fs::rename(inner, &dir).map_err(|e| e.to_string())?;

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { PROVIDERS } from "../../../shared/plugins";
 import type { BoardProvider } from "../../../domain/board/types";
+import { cwOn } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
   askMcp,
@@ -62,6 +63,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const calendarCount = useSettingsStore(s => s.settings.calendar?.feeds.length ?? 0);
   const calendarOn = useSettingsStore(s => !!s.settings.calendar?.on);
   const cwPlugin = useBrainStore(s => s.status?.plugin);
+  const cwSwitched = useSettingsStore(s => cwOn(s.settings));
   // per provider: set up, and in the list
   const boardsState = useDerived(() =>
     Object.fromEntries(
@@ -83,7 +85,6 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   // an integration in or out of the list: on for the sidebar, a board provider's token stays in the keychain
   const switchTo = (id: string, on: boolean) => {
     setDetail(on ? id : null);
-    if (id === "commonwealth") return; // not a setting: it is in the list when the plugin is installed
     switchIntegration(id, on);
   };
   const boardStatus = (provider: BoardProvider) => {
@@ -154,7 +155,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
       icon: <Icon name="brain" className={TILE} />,
       name: "Commonwealth",
       status: <StatusLine level={cwPlugin ? "ok" : "off"}>{t(cwPlugin ? "cw.installed" : "cw.missing")}</StatusLine>,
-      on: !!cwPlugin || detail === "commonwealth",
+      // on when switched on (the default) and its plugin is installed; switching on without it opens the page to install
+      on: (!!cwPlugin && cwSwitched) || detail === "commonwealth",
       page: () => (
         <Section title={t("int.connection")}>
           <CommonwealthSettings />

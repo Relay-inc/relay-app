@@ -9,6 +9,7 @@ export type Mail = {
   subject: string;
   date: string;
   unread: boolean;
+  answered?: boolean; // replied to from a mail app that sets IMAP's \Answered (Apple Mail, Thunderbird; Gmail's web app doesn't)
   from: { name: string | null; email: string }[];
   to: { name: string | null; email: string }[];
   attachments: boolean;

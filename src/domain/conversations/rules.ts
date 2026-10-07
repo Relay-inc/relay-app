@@ -154,6 +154,8 @@ function questionAnswers(request: Pending, choice: { picked: string[][]; other: 
 /** What a card's answer tells the agent; null for a question with nothing answered. */
 export function decisionOf(request: Pending, choice: CardChoice): Decision | null {
   if (choice === "allow") return { behavior: "allow", updatedInput: request.input };
+  if (choice === "always")
+    return { behavior: "allow", updatedInput: request.input, updatedPermissions: request.suggestions };
   if (choice === "deny") return denial(request);
   return questionAnswers(request, choice);
 }

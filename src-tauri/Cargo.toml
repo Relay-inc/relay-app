@@ -54,7 +54,7 @@ chrono-tz = "0.10"
 portable-pty = "0.9"
 # dictation in the composer (src/dictation.rs): the microphone, and Parakeet speech to text on ONNX Runtime
 cpal = "0.18"
-transcribe-rs = { version = "0.3.12", features = ["onnx"] }
+transcribe-rs = { version = "0.3.12", features = ["onnx", "whisper-metal"] }
 # the meeting recordings (src/meeting.rs): their tracks on disk
 hound = "3"
 
@@ -71,6 +71,8 @@ agent-opencode = { path = "../packages/agent-opencode" }
 tauri-plugin-deep-link = "2"
 # dictation in any app: the shortcut registered with macOS (src/anywhere.rs)
 tauri-plugin-global-shortcut = "2"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+tauri-plugin-updater = "2"
 
 # the red menu bar title when a reminder is overdue (src/tray.rs), same versions as tauri's tray-icon
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -4,13 +4,15 @@ import { useMailStore } from "../../../application/mail/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { mailKey } from "../../../domain/navigation/keys";
 import { unread } from "../../../domain/mail/rules";
-import { mailChat, mailLinkGo, mailMove, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { mailChat, mailMove, openAttachment, mailSeen, toggleMailText } from "../../../application/mail/mail";
+import { useBoardStore } from "../../../application/board/store";
 import { useSettingsStore } from "../../../application/settings/store";
 import { mailExperimental } from "../../../domain/settings/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
-import { MailText } from "./MailText";
+import { MailLinkBar, MailText } from "./MailText";
+import { MailFrame } from "./MailFrame";
 
 const KILOBYTE = 1024;
 const MEGABYTE = 1024 * 1024;
@@ -45,15 +47,29 @@ const formatAddresses = (addresses: Mail["from"]) =>
 /** One mail next to the Mail list: who, when, the mail, and the ways into a conversation. Headers show at once, the body
  *  loads. Opening never marks it read, only the read button does. HTML goes in a frame sandboxed without any allowance
  *  (no scripts, no same origin; the backend sanitized it and set a CSP), "textView" shows what Claude reads instead. */
-export function MailDetail({ mailKey: key, className }: { mailKey: string; className?: string }) {
+export function MailDetail({
+  mailKey: key,
+  className,
+  readOnReply = false,
+  bare = false,
+}: {
+  mailKey: string;
+  className?: string;
+  readOnReply?: boolean; // a reply marks the mail read
+  bare?: boolean; // Today: its own actions and title above, here only who, when and the mail
+}) {
   const { t, locale } = useT();
   const item = useMailStore(s => s.list?.find(candidate => mailKey(candidate) === key));
   const textView = useMailStore(s => s.textView.has(key));
-  const link = useMailStore(s => s.link);
   const body = useNavigationStore(s => s.panel.detail[key]) as MailBody | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const experimental = useSettingsStore(s => mailExperimental(s.settings));
+  const hasBoard = useBoardStore(s => s.ready.length > 0);
 
+  const reply = async (how: "draft" | "draftAll") => {
+    if (readOnReply && item && unread(item)) await mailSeen(key, true);
+    await mailChat(key, how);
+  };
   // two groups: reading this mail on the left, the ways into a conversation on the right
   const isUnread = item ? unread(item) : false;
   const bar = (
@@ -96,10 +112,26 @@ export function MailDetail({ mailKey: key, className }: { mailKey: string; class
           {iconButton(
             "reply",
             t("mail.draft"),
-            () => mailChat(key, "draft"),
+            () => reply("draft"),
             "btn btn-icon",
             `${t("mail.draft")}: ${t("mail.draftTitle")}`,
           )}
+          {iconButton(
+            "replyAll",
+            t("mail.draftAll"),
+            () => reply("draftAll"),
+            "btn btn-icon",
+            `${t("mail.draftAll")}: ${t("mail.draftTitle")}`,
+          )}
+          {hasBoard
+            ? iconButton(
+                "notes",
+                t("mail.ticket"),
+                () => mailChat(key, "ticket"),
+                "btn btn-icon",
+                `${t("mail.ticket")}: ${t("mail.ticketTitle")}`,
+              )
+            : null}
           {iconButton(
             "talk",
             t("mail.talk"),
@@ -147,22 +179,22 @@ export function MailDetail({ mailKey: key, className }: { mailKey: string; class
         {body.attachments.length ? (
           <div className="flex flex-wrap gap-x-3.5 gap-y-1 mt-2.5 text-xs">
             {body.attachments.map(attachment => (
-              <span key={attachment.index} className="text-secondary tabular-nums">
+              <button
+                key={attachment.index}
+                title={t("mail.openAttachment")}
+                onClick={() => openAttachment(key, attachment.index)}
+                className="text-accent tabular-nums cursor-pointer hover:underline"
+              >
                 {`${attachment.name} (${formatSize(attachment.size)})`}
-              </span>
+              </button>
             ))}
           </div>
         ) : null}
         {body.html && !textView ? (
-          // the empty sandbox comes before srcdoc, and the frame is not in the document yet when React sets them.
-          // White because mails are designed for white; a mail wider than the panel scrolls inside the frame
-          <iframe
-            sandbox=""
-            referrerPolicy="no-referrer"
-            title={item.subject || t("mail.noSubject")}
-            srcDoc={body.html}
-            className="block w-full h-[calc(100vh-15rem)] min-h-100 mt-3 border border-separator rounded-lg bg-white"
-          ></iframe>
+          // white because mails are designed for white; as tall as the mail, a wider one scrolls sideways inside it
+          <div className="mt-3">
+            <MailFrame html={body.html} title={item.subject || t("mail.noSubject")} className="rounded-lg" />
+          </div>
         ) : (
           <MailText text={body.text} />
         )}
@@ -170,24 +202,13 @@ export function MailDetail({ mailKey: key, className }: { mailKey: string; class
     );
   return (
     <div className={className}>
-      {bar}
-      {link ? (
-        // confirm before a link in a mail opens
-        <div className="my-2 px-2.5 py-2 border border-separator rounded-lg bg-fill">
-          <div className="text-xs break-all select-text">{link}</div>
-          <div className="flex gap-2 mt-2">
-            <button className="btn btn-primary" onClick={() => mailLinkGo(true)}>
-              {t("mail.linkOpen")}
-            </button>
-            <button className="btn" onClick={() => mailLinkGo(false)}>
-              {t("mail.linkCancel")}
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <h2 className="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
-        {item.subject || t("mail.noSubject")}
-      </h2>
+      {bare ? null : bar}
+      <MailLinkBar />
+      {bare ? null : (
+        <h2 className="text-xl font-semibold tracking-tight mb-2.5 leading-snug text-pretty">
+          {item.subject || t("mail.noSubject")}
+        </h2>
+      )}
       <div className="text-[13px] leading-normal pb-3 border-b border-separator">
         <div>{formatAddresses(item.from)}</div>
         <div className="text-secondary tabular-nums">
