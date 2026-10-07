@@ -14,6 +14,7 @@ export const KIND_ICON: Record<Kind, string> = {
   review: "pr",
   fix: "pr",
   finished: "chat",
+  capture: "notes",
 };
 /** A small section label in capitals. */
 export const Caps = ({ children }: { children: ReactNode }) => (

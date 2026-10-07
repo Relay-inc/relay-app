@@ -21,6 +21,8 @@ import { t as translate } from "../../../shared/i18n";
 import { isQuestion } from "../../../domain/conversations/rules";
 import { timeOf } from "../../../application/calendar/calendar";
 import { lastAi } from "../../../application/conversations/selectors";
+import { dropProposal } from "../../../application/today/capture";
+import type { Capture } from "../../../domain/today/capture";
 import { openMail } from "../../../application/navigation/panel";
 import { projectLabel } from "../../../application/workspace/vault";
 import { prsOfCard, ticketOf } from "../../../application/today/links";
@@ -126,6 +128,8 @@ export function TodayDetail({ model }: { model: TodayModel }) {
         return <MailSection mailKey={s.key} id={s.mail.id} />;
       case "chat":
         return <ChatBody chat={s.key} />;
+      case "capture":
+        return <CaptureBody capture={s.capture} />;
     }
   };
 
@@ -297,6 +301,34 @@ function AskBody({ entry }: { entry: Entry }) {
 function ChatBody({ chat }: { chat: string }) {
   const text = useDerived(() => lastAi(chat));
   return <Markdown text={text} className="md-panel text-sm leading-relaxed text-secondary max-w-170" />;
+}
+
+/** What a closed conversation proposes for the vault: per note what changes, each one can be left out. Apply
+ *  makes the rest in a conversation (application/today/capture). */
+function CaptureBody({ capture }: { capture: Capture }) {
+  const { t } = useT();
+  return (
+    <ol className="m-0 p-0 list-none flex flex-col gap-4 max-w-170">
+      {capture.proposals.map((proposal, i) => (
+        <li key={`${proposal.file}:${i}`} className="flex gap-3">
+          <div className="min-w-0 flex-1 flex flex-col gap-1">
+            <span className="text-sm font-semibold">{proposal.title}</span>
+            <span className="text-xs text-tertiary truncate select-text">{proposal.file}</span>
+            <Markdown text={proposal.change} className="md-panel text-sm leading-relaxed text-secondary select-text" />
+          </div>
+          <button
+            type="button"
+            className={ICON_BUTTON}
+            title={t("capture.leaveOut")}
+            aria-label={t("capture.leaveOut")}
+            onClick={() => dropProposal(capture.key, i)}
+          >
+            <Icon name="close" className="glyph size-4" />
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
 }
 
 // ---------- the bottom: status, when, facts, connected

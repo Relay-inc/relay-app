@@ -5,6 +5,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { Proposal } from "../domain/today/capture";
 import type {
   AgentSession,
   Pending,
@@ -90,6 +91,8 @@ export const favicons = (projects: { name: string; aliases: string[] }[]) =>
   invoke<Record<string, { site: string; data: string | null }>>("favicons", { projects });
 export const findIconSites = (projects: { name: string; context: string; summary: string }[]) =>
   invoke<Record<string, string>>("find_icon_sites", { projects });
+/** What a closed conversation leaves for the vault, as proposals: nothing is written (lib.rs capture_proposals). */
+export const captureProposals = (key: string) => invoke<Proposal[]>("capture_proposals", { key });
 export const projectRepos = () => invoke<Record<string, string[]>>("project_repos");
 export const setProjectRepos = (project: string, repos: string[]) => invoke("set_project_repos", { project, repos });
 /** A GitHub repo no project has, an answered "not now": no conversation asks about it again. */

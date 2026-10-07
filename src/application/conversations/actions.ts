@@ -35,6 +35,7 @@ import { prepImages, releaseImages } from "./images";
 import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
 import { pollAgents } from "./polls";
+import { captureOnClose } from "../today/capture";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
 // to a project, closing and reopening, and Cmd-K. Most act on the open conversation.
@@ -450,6 +451,8 @@ async function hide(key: string) {
     delete draft.taken[key];
   });
   saveChats();
+  // what it leaves for the vault, proposed on Today (application/today/capture)
+  captureOnClose(key);
   return worktrees;
 }
 const worktreeNote = (removed: number, kept: number) =>

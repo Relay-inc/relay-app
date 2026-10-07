@@ -15,8 +15,14 @@ a PR. Versions follow
 
 ### Added
 
-- **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)
 - Commonwealth, the team brain, works without setup. When its Claude Code plugin is installed (Settings › Integrations › Commonwealth installs it, no fields to fill in, and its switch turns it off again), a conversation about a project whose GitHub repositories your own Commonwealth rules route to a brain reads that brain and stages what it learns; personal projects and projects no rule matches never touch one. The new Brain view lists the notes waiting for review, per brain, with Promote and Reject. Reading the brain runs without a permission card, staging a note with `remember` still asks (#47)
+
+## [0.0.10] - 2026-10-07
+
+### Added
+
+- **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)
+- **Closing a conversation proposes what it leaves for the vault**: Claude reads it once more for decisions, project state and follow-ups, and puts what is missing on Today as one item, with a toast to review it. Nothing is written until you press Apply, which makes the changes in a new conversation where you allow each edit; leave out what you don't want, or Skip all of it. Quick questions (fewer than 3 messages) and conversations about mail are skipped. Off in Settings › General. (#130)
 
 ## [0.0.9] - 2026-10-06
 
@@ -286,7 +292,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/Relay-inc/relay-app/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...v0.0.7
