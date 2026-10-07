@@ -50,7 +50,7 @@ const htmlParams = (params: HParams = {}): Params =>
     Object.entries(params).map(([name, value]) => [name, value instanceof Raw ? value.html : esc(String(value))]),
   );
 // plural: `${base}_one` or `${base}_other`, picked by the locale's rules, with {n} filled in
-type PluralBase = { [K in Key]: K extends `${infer B}_one` ? B : never }[Key];
+export type PluralBase = { [K in Key]: K extends `${infer B}_one` ? B : never }[Key];
 
 /** Everything that translates, bound to one language. A new language is a new bundle: new function identities, so a
  *  memoised component that uses one redraws. */
