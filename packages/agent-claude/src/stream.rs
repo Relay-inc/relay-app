@@ -77,6 +77,8 @@ impl State {
     pub fn parse(&mut self, line: &str) -> Vec<Event> {
         let Ok(ev) = serde_json::from_str::<Value>(line) else { return vec![] };
         let mut out = vec![];
+        // the refusal of a used-up limit comes as an assistant message of the model "<synthetic>": not work the turn did
+        if line.contains("\"<synthetic>\"") { out.push(Event::Synthetic); }
         match ev["type"].as_str().unwrap_or("") {
             "stream_event" => self.delta(&ev, &mut out),
             "user" if ev["isReplay"] == true => {
@@ -87,7 +89,7 @@ impl State {
                 assistant(&ev["message"]["content"], streamed, &mut out);
                 if ev["parent_tool_use_id"].is_null() { out.extend(context(&ev["message"]["usage"])); }
             }
-            _ => out = parse(&ev),
+            _ => out.extend(parse(&ev)),
         }
         out
     }
@@ -101,6 +103,23 @@ fn parse(ev: &Value) -> Vec<Event> {
             if let Some(m) = ev["model"].as_str() { out.push(Event::Resolved { model: m.into(), effort: None }); }
         }
         "conversation_reset" => out.push(Event::Reset),
+        "rate_limit_event" if ev["rate_limit_info"]["status"] == "rejected" => {
+            // seconds or milliseconds since the epoch
+            let resets_at = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
+            out.push(Event::Limited { resets_at });
+        }
+        // the pipe: the app's in-process MCP servers (relay-mail, relay-orch), and what its own requests got back
+        "control_request" => {
+            let req = &ev["request"];
+            let mcp = req["subtype"] == "mcp_message";
+            out.push(Event::Control { id: ev["request_id"].clone(), server: mcp.then(|| req["server_name"].as_str().unwrap_or("").to_string()), message: req["message"].clone() });
+        }
+        "control_response" => {
+            let r = &ev["response"];
+            if r["subtype"] == "error" { out.push(Event::Stderr { text: format!("relay-mail ({}): {}", r["request_id"].as_str().unwrap_or(""), r["error"]) }); }
+            // the slash commands and skills this vault has, for the composer's completion
+            if r["request_id"] == "init" && r["response"]["commands"].is_array() { out.push(Event::Commands { commands: r["response"]["commands"].clone() }); }
+        }
         "system" if ev["subtype"] == "status" && ev["status"] == "compacting" => out.push(Event::Compacting),
         "system" if ev["subtype"] == "compact_boundary" => out.push(compacted(&ev["compact_metadata"], "pre_tokens", "post_tokens")),
         "user" => {
@@ -119,6 +138,7 @@ fn parse(ev: &Value) -> Vec<Event> {
             // ponytail: the largest window of the models that ran (a subagent may use another), the main model's in practice
             let window = ev["modelUsage"].as_object().and_then(|m| m.values().filter_map(|u| u["contextWindow"].as_u64()).max());
             if window.is_some() { out.push(Event::Context { used: None, window }); }
+            agent_core::limited(error.as_deref(), &mut out);
             out.push(Event::TurnEnd { ok, error, usage, duration_ms: ev["duration_ms"].as_u64() });
         }
         _ => {}
@@ -190,6 +210,55 @@ mod tests {
     use super::*;
     const STREAM: &str = include_str!("../tests/fixtures/stream.jsonl");
     const TRANSCRIPT: &str = include_str!("../tests/fixtures/transcript.jsonl");
+
+    fn parse_all(lines: &[Value]) -> Vec<Event> { let mut st = State::default(); lines.iter().flat_map(|l| st.parse(&l.to_string())).collect() }
+
+    #[test]
+    fn a_rejected_rate_limit_is_a_limited_event_with_its_reset_in_ms() {
+        let rejected = |at: i64| json!({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "resetsAt": at}});
+        assert_eq!(parse_all(&[rejected(1_760_000_000)]), [Event::Limited { resets_at: Some(1_760_000_000_000) }]);
+        assert_eq!(parse_all(&[rejected(1_760_000_000_000)]), [Event::Limited { resets_at: Some(1_760_000_000_000) }]);
+        assert_eq!(parse_all(&[json!({"type": "rate_limit_event", "rate_limit_info": {"status": "rejected"}})]), [Event::Limited { resets_at: None }]);
+        assert!(parse_all(&[json!({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}})]).is_empty());
+    }
+
+    #[test]
+    fn the_limit_text_of_a_turn_end_comes_before_it() {
+        let end = |msg: &str| json!({"type": "result", "subtype": "success", "is_error": true, "result": msg});
+        for msg in ["You've hit your limit \u{b7} resets 9pm", "You've hit your weekly limit", "Claude AI usage limit reached|1760000000"] {
+            let ev = parse_all(&[end(msg)]);
+            assert!(matches!(&ev[..], [Event::TurnLimited, Event::TurnEnd { ok: false, .. }]), "{msg}: {ev:?}");
+        }
+        // a plain failure, and a limit text in a turn that went fine, are no limit
+        assert!(!parse_all(&[end("error_max_turns")]).iter().any(|e| matches!(e, Event::TurnLimited)));
+        assert!(!parse_all(&[json!({"type": "result", "subtype": "success", "is_error": false, "result": "You've hit your limit"})]).iter().any(|e| matches!(e, Event::TurnLimited)));
+    }
+
+    #[test]
+    fn a_synthetic_message_is_marked_before_its_text() {
+        let msg = |model: &str| json!({"type": "assistant", "message": {"id": "m0", "role": "assistant", "model": model, "content": [{"type": "text", "text": "refused"}]}});
+        assert_eq!(parse_all(&[msg("<synthetic>")]), [Event::Synthetic, Event::Text { text: "refused".into(), delta: false }]);
+        assert_eq!(parse_all(&[msg("claude-opus-5-5")]), [Event::Text { text: "refused".into(), delta: false }]);
+    }
+
+    #[test]
+    fn any_line_naming_the_synthetic_model_is_marked() {
+        let line = json!({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "from <synthetic> model", "model": "<synthetic>"}]}});
+        assert!(matches!(&parse_all(&[line])[..], [Event::Synthetic, Event::ToolResult { .. }]));
+    }
+
+    #[test]
+    fn control_traffic_is_typed() {
+        let mcp = json!({"type": "control_request", "request_id": "r1", "request": {"subtype": "mcp_message", "server_name": "relay-mail", "message": {"method": "tools/list"}}});
+        assert_eq!(parse_all(&[mcp]), [Event::Control { id: json!("r1"), server: Some("relay-mail".into()), message: json!({"method": "tools/list"}) }]);
+        // any other request is still the app's to answer, as unsupported
+        let other = json!({"type": "control_request", "request_id": "r2", "request": {"subtype": "can_use_tool", "tool_name": "Bash"}});
+        assert!(matches!(&parse_all(&[other])[..], [Event::Control { server: None, .. }]));
+        let init = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "init", "response": {"commands": [{"name": "/compact"}]}}});
+        assert_eq!(parse_all(&[init]), [Event::Commands { commands: json!([{"name": "/compact"}]) }]);
+        let err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});
+        assert_eq!(parse_all(&[err]), [Event::Stderr { text: "relay-mail (model): \"nope\"".into() }]);
+    }
 
     #[test]
     fn user_times_skip_tool_results_and_harness_text() {

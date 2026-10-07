@@ -14,7 +14,7 @@ use std::path::PathBuf;
 pub(crate) struct TurnEnd<'a> {
     /// the model the process runs on, "" when its slot is gone
     pub model: String,
-    /// the turn was refused for the account's limit, and the reset Claude named (epoch ms)
+    /// the turn was refused for the account's limit, and the reset the provider named (epoch ms)
     pub limited: bool,
     pub hint: Option<i64>,
     /// the turn did nothing yet
@@ -32,8 +32,8 @@ pub(crate) trait Sink {
     fn emit(&self, ev: Value);
     /// The account's limits are used up: the next message moves to another one (with auto-switch on).
     fn spend(&self);
-    /// A control_request of the CLI: the pipe's mail and orchestrator tools, answered by the app.
-    fn pipe(&self, req: &Value);
+    /// A request of the CLI on its control pipe (Event::Control): the mail and orchestrator tools, answered by the app.
+    fn control(&self, id: &Value, server: Option<&str>, message: &Value);
     /// Turn accounting, see Turns. `turn_ended` gives the model the process runs on.
     fn working(&self);
     fn picked(&self);
@@ -54,8 +54,6 @@ pub(crate) trait Sink {
 enum Flow { Next, Exit }
 
 pub(crate) struct Reader {
-    /// Claude's pipe and rate limit lines are read here, the other providers have none
-    claude: bool,
     parse: Parser,
     /// the first `backlog` frames came in while the app was closed: their effects still happen, but the webview
     /// only hears the turn end, it reads the rest from the transcript
@@ -64,7 +62,7 @@ pub(crate) struct Reader {
     inherit: (bool, bool),
     /// the checkouts the git snapshots look at
     root: PathBuf,
-    // this turn: refused for the account's limit (and the reset Claude named, epoch ms), and whether it did anything
+    // this turn: refused for the account's limit (and the reset the provider named, epoch ms), and whether it did anything
     limited: bool,
     hint: Option<i64>,
     worked: bool,
@@ -77,9 +75,9 @@ pub(crate) struct Reader {
 }
 
 impl Reader {
-    pub fn new(p: &dyn AgentProvider, backlog: usize, inherit: (bool, bool), root: PathBuf) -> Self { Self::with_parser(p.id() == "claude", p.parser(), backlog, inherit, root) }
-    pub fn with_parser(claude: bool, parse: Parser, backlog: usize, inherit: (bool, bool), root: PathBuf) -> Self {
-        Reader { claude, parse, backlog, inherit, root, limited: false, hint: None, worked: false, last: String::new(), wt_before: HashMap::new(), commit_before: HashMap::new(), err: vec![] }
+    pub fn new(p: &dyn AgentProvider, backlog: usize, inherit: (bool, bool), root: PathBuf) -> Self { Self::with_parser(p.parser(), backlog, inherit, root) }
+    pub fn with_parser(parse: Parser, backlog: usize, inherit: (bool, bool), root: PathBuf) -> Self {
+        Reader { parse, backlog, inherit, root, limited: false, hint: None, worked: false, last: String::new(), wt_before: HashMap::new(), commit_before: HashMap::new(), err: vec![] }
     }
 
     /// Reads until the broker says the agent exited or the connection ends, then reports it to the sink.
@@ -96,35 +94,12 @@ impl Reader {
     fn frame(&mut self, sink: &dyn Sink, n: usize, f: &str) -> Flow {
         let line = match broker::frame(f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { self.err.push(l); return Flow::Next; } broker::Frame::Exit => return Flow::Exit };
         let replay = n < self.backlog;
-        // the refusal itself comes as an assistant message of model "<synthetic>": not work the turn did
-        let synthetic = self.claude && line.contains("\"<synthetic>\"");
-        // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
-        if self.claude && self.pipe(sink, &line) { return Flow::Next; }
-        for ev in (self.parse)(&line) { self.event(sink, ev, replay, synthetic); }
+        // the events of a provider's own message (a refusal) are not work the turn did
+        let mut synthetic = false;
+        for ev in (self.parse)(&line) {
+            if ev == Event::Synthetic { synthetic = true; } else { self.event(sink, ev, replay, synthetic); }
+        }
         Flow::Next
-    }
-
-    /// Claude's rate limit event and pipe lines. True when the line was pipe traffic, which no provider parser sees.
-    fn pipe(&mut self, sink: &dyn Sink, line: &str) -> bool {
-        let Ok(ev) = serde_json::from_str::<Value>(line) else { return false };
-        if ev["type"] == "rate_limit_event" && ev["rate_limit_info"]["status"] == "rejected" {
-            sink.spend();
-            self.limited = true;
-            self.hint = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
-        }
-        if ev["type"] == "control_request" { sink.pipe(&ev); return true; }
-        if ev["type"] == "control_response" {
-            if ev["response"]["subtype"] == "error" {
-                let rid = ev["response"]["request_id"].as_str().unwrap_or("");
-                sink.emit(json!({"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}));
-            }
-            // the slash commands and skills this vault has, for the composer's completion
-            if ev["response"]["request_id"] == "init" && ev["response"]["response"]["commands"].is_array() {
-                sink.emit(json!({"type": "commands", "commands": ev["response"]["response"]["commands"]}));
-            }
-            return true;
-        }
-        false
     }
 
     fn event(&mut self, sink: &dyn Sink, ev: Event, replay: bool, synthetic: bool) {
@@ -135,6 +110,18 @@ impl Reader {
         self.git(sink, &ev, replay);
         match &ev {
             Event::Session { id } => sink.session(id),
+            // the provider says the account's limit is used up; replayed or not, the account is spent
+            Event::Limited { resets_at } => {
+                sink.spend();
+                self.limited = true;
+                self.hint = *resets_at;
+                return;
+            }
+            // the turn's error text says the same, with no reset to name
+            Event::TurnLimited => { sink.spend(); self.limited = true; return; }
+            // the control pipe's traffic stays between the CLI and the app, the webview only hears the commands and the failures
+            Event::Control { id, server, message } => { sink.control(id, server.as_deref(), message); return; }
+            Event::Stderr { .. } | Event::Commands { .. } => { sink.emit(serde_json::to_value(&ev).unwrap_or_default()); return; }
             // raised in the provider's own protocol: a card like any other, answered through respond()
             Event::Permission { request } => sink.permission(request),
             Event::Resolved { model, effort } => {
@@ -144,7 +131,7 @@ impl Reader {
             Event::Text { text, delta } => { if !delta { self.last.clear(); } self.last.push_str(text); }
             // a turn end answers every message taken up in its turn, at least the one that started it
             Event::Picked { .. } => sink.picked(),
-            Event::TurnEnd { error, .. } => self.turn_end(sink, error.as_deref(), replay),
+            Event::TurnEnd { .. } => self.turn_end(sink, replay),
             _ => {}
         }
         if !replay || matches!(ev, Event::TurnEnd { .. }) { sink.emit(serde_json::to_value(&ev).unwrap_or_default()); }
@@ -171,10 +158,7 @@ impl Reader {
         }
     }
 
-    fn turn_end(&mut self, sink: &dyn Sink, error: Option<&str>, replay: bool) {
-        let e = error.unwrap_or("").to_lowercase();
-        // "usage limit" (Codex), "You've hit your limit" and "You've hit your weekly limit · resets 9pm" (Claude)
-        if e.contains("usage limit") || (e.contains("hit your") && e.contains("limit")) { sink.spend(); self.limited = true; }
+    fn turn_end(&mut self, sink: &dyn Sink, replay: bool) {
         let model = sink.turn_ended();
         sink.after_turn(&TurnEnd { model, limited: self.limited, hint: self.hint, fresh: !self.worked, replay, last: &self.last });
         (self.limited, self.hint, self.worked) = (false, None, false);

@@ -46,6 +46,18 @@ pub struct Caps {
     /// Runs on more than one login: `opts.accounts` lists the extra config folders, the app sets `opts.account`
     /// to the one a process or a limits call is for ("" for the CLI's own folder).
     pub accounts: bool,
+    /// Switches a running process to another model ([`AgentProvider::set_model`]); false: a new model restarts the process.
+    pub live_model: bool,
+    /// Has a control pipe on stdin/stdout where the app answers the in-process MCP servers it offers (mail, the
+    /// orchestrator): [`AgentProvider::control_init`], [`Event::Control`], [`AgentProvider::control_reply`].
+    pub control: bool,
+    /// Echoes a message when it takes it up ([`Event::Picked`]): one sent during a turn waits below the conversation
+    /// until then, and often joins that turn.
+    pub picked: bool,
+    /// Can run on a work machine (Settings › Machines) and be moved there.
+    pub remote: bool,
+    /// Takes the Commonwealth brain of a project (`opts.commonwealth_brain`, `opts.commonwealth_source`).
+    pub brain: bool,
 }
 
 /// Where the provider runs. `bin` is the settings' override or [`AgentProvider::default_bin`].
@@ -149,6 +161,23 @@ pub enum Event {
     Reset,
     /// The provider began compacting the conversation (summarising it to free context); `Compacted` ends it.
     Compacting,
+    /// The account's limit is used up: the turn is refused, and the app moves the next message to another account or
+    /// retries once it resets. `resets_at` (epoch ms) when the provider says. Not shown in the webview.
+    Limited { resets_at: Option<i64> },
+    /// The turn that ends next was refused for the limit, going by its error text ([`limited`]). Unlike
+    /// [`Event::Limited`] it names no reset: one that came before stays. Not shown in the webview.
+    TurnLimited,
+    /// The events of this stdout line are the provider's own message (a refusal, a notice), not work the turn did.
+    /// Not shown in the webview.
+    Synthetic,
+    /// A request on the control pipe ([`Caps::control`]): `server` the in-process MCP server it is for with the JSON-RPC
+    /// `message` for it, None for any other request, which the app answers as unsupported. `id` goes back to
+    /// [`AgentProvider::control_reply`]. Not shown in the webview.
+    Control { id: Value, server: Option<String>, message: Value },
+    /// A control request the app sent failed: what the provider said, for the log. Shown as stderr.
+    Stderr { text: String },
+    /// The slash commands and skills the vault has, as the provider's control pipe lists them on opening.
+    Commands { commands: Value },
     /// The conversation was compacted: what triggered it ("manual" or "auto") and the context's size in tokens before and after.
     Compacted { trigger: Option<String>, pre_tokens: Option<u64>, post_tokens: Option<u64> },
     /// How full the context is: tokens in use now and/or the model's window, each when the provider says. Claude Code only.
@@ -194,6 +223,14 @@ pub trait AgentProvider: Sync {
     /// Persistent providers: the stdin line (without newline) that sends a turn.
     fn input(&self, _turn: &Turn) -> Option<String> { None }
     fn parser(&self) -> Parser;
+    /// `caps.control`: the stdin line that opens the control pipe, naming the in-process MCP servers the app answers for.
+    fn control_init(&self, _servers: &[&str]) -> Option<String> { None }
+    /// `caps.control`: the stdin line answering an [`Event::Control`] with the MCP server's JSON-RPC reply, or an error.
+    fn control_reply(&self, _id: &Value, _reply: Result<Value, String>) -> Option<String> { None }
+    /// `caps.live_model`: the stdin line that changes the model for the turns after it ("": the CLI's own).
+    fn set_model(&self, _model: &str) -> Option<String> { None }
+    /// Slash commands (without the slash) that take no attachments: refused in the webview before they are sent.
+    fn text_only_commands(&self) -> Vec<&'static str> { vec![] }
     /// The stdin line answering a request this provider raised as [`Event::Permission`] (relay = true).
     /// `decision` is `{behavior:"allow", updatedInput}` or `{behavior:"deny", message}`.
     fn respond(&self, _req: &pending::Request, _decision: &Value) -> Option<String> { None }
@@ -220,6 +257,17 @@ pub trait AgentProvider: Sync {
     fn limits(&self, _env: &Env) -> usage::Limits { usage::Limits::Off("unsupported".into()) }
     /// Token usage since `since` (epoch ms), read incrementally from the provider's logs ([`usage::Tail`]).
     fn usage(&self, _env: &Env, _since: i64) -> Vec<usage::Record> { vec![] }
+}
+
+/// A turn's error that says the account's limit is used up: "You've hit your limit", "You've hit your weekly limit ·
+/// resets 9pm", "usage limit reached". Every parser pushes [`Event::TurnLimited`] before the [`Event::TurnEnd`] it applies to.
+pub fn limit_text(error: &str) -> bool {
+    let e = error.to_lowercase();
+    e.contains("usage limit") || (e.contains("hit your") && e.contains("limit"))
+}
+/// `Event::TurnLimited` when `error` says the limit is used up.
+pub fn limited(error: Option<&str>, out: &mut Vec<Event>) {
+    if error.is_some_and(limit_text) { out.push(Event::TurnLimited); }
 }
 
 /// A session or request id: hex digits and dashes only.
@@ -253,6 +301,17 @@ mod tests {
         let e = serde_json::to_value(Event::Patch { id: "t1".into(), hunks: vec![Hunk { old_start: 4, new_start: 5, lines: vec!["+a".into()] }] }).unwrap();
         assert_eq!(e, serde_json::json!({"type": "patch", "id": "t1", "hunks": [{"oldStart": 4, "newStart": 5, "lines": ["+a"]}]}));
         assert_eq!(serde_json::to_value(Caps { persistent: true, ..Default::default() }).unwrap()["persistent"], true);
+    }
+    #[test]
+    fn limit_texts() {
+        for t in ["You've hit your limit \u{b7} resets 9pm", "You've hit your weekly limit", "Claude AI usage limit reached|1760000000", "You've hit your usage limit"] { assert!(limit_text(t), "{t}"); }
+        assert!(!limit_text("error_max_turns") && !limit_text("hit your head"));
+        let mut out = vec![];
+        limited(None, &mut out);
+        limited(Some("boom"), &mut out);
+        assert!(out.is_empty());
+        limited(Some("Usage limit reached"), &mut out);
+        assert_eq!(out, [Event::TurnLimited]);
     }
     #[test]
     fn ids_and_models() {

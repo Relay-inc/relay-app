@@ -17,12 +17,12 @@ pub(crate) fn switch_plan(cur: &(String, String), want: &(String, String), live_
 }
 
 /// The step for a message to a conversation whose process runs: account is a start flag, so is effort (a switch
-/// restarts the process on the same session). Claude takes a new model over the pipe (set_model), so a model switch
-/// never kills a turn; an effort switch waits until the turn is over. A work machine's conversation runs on that
+/// restarts the process on the same session). A provider with `caps.live_model` takes a new model over its pipe, so a
+/// model switch never kills a turn; an effort switch waits until the turn is over. A work machine's conversation runs on that
 /// machine's login, so this Mac's account never restarts it.
-pub(crate) fn step(cur: &Running, provider: &str, account: &str, opts: &(String, String)) -> Step {
+pub(crate) fn step(cur: &Running, provider: &str, live_model: bool, account: &str, opts: &(String, String)) -> Step {
     let moved = cur.provider != provider || (cur.account != account && !cur.remote);
-    let plan = switch_plan(cur.opts, opts, provider == "claude", cur.busy);
+    let plan = switch_plan(cur.opts, opts, live_model, cur.busy);
     if moved || plan.restart { Step::Restart } else if plan.model { Step::SetModel } else { Step::Keep }
 }
 
@@ -54,22 +54,22 @@ mod tests {
     #[test]
     fn a_model_switch_never_kills_a_running_turn() {
         let cur = o("opus", "high");
-        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", "", &o("sonnet", "high")), Step::SetModel);
-        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", "", &o("sonnet", "low")), Step::SetModel);
-        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", "", &o("opus", "low")), Step::Keep);
-        assert_eq!(step(&run("claude", "", false, &cur, false), "claude", "", &o("opus", "low")), Step::Restart);
-        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", "", &cur), Step::Keep);
+        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", true, "", &o("sonnet", "high")), Step::SetModel);
+        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", true, "", &o("sonnet", "low")), Step::SetModel);
+        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", true, "", &o("opus", "low")), Step::Keep);
+        assert_eq!(step(&run("claude", "", false, &cur, false), "claude", true, "", &o("opus", "low")), Step::Restart);
+        assert_eq!(step(&run("claude", "", false, &cur, true), "claude", true, "", &cur), Step::Keep);
     }
 
     #[test]
     fn another_provider_or_account_restarts_but_not_on_a_work_machine() {
         let cur = o("opus", "");
-        assert_eq!(step(&run("claude", "", false, &cur, false), "codex", "", &cur), Step::Restart);
-        assert_eq!(step(&run("claude", "/a", false, &cur, true), "claude", "/b", &cur), Step::Restart);
+        assert_eq!(step(&run("claude", "", false, &cur, false), "codex", false, "", &cur), Step::Restart);
+        assert_eq!(step(&run("claude", "/a", false, &cur, true), "claude", true, "/b", &cur), Step::Restart);
         // a work machine runs on its own login: this Mac's account never restarts it
-        assert_eq!(step(&run("claude", "", true, &cur, false), "claude", "/b", &cur), Step::Keep);
+        assert_eq!(step(&run("claude", "", true, &cur, false), "claude", true, "/b", &cur), Step::Keep);
         // other providers restart for any change of model
-        assert_eq!(step(&run("codex", "", false, &o("a", ""), true), "codex", "", &o("b", "")), Step::Restart);
+        assert_eq!(step(&run("codex", "", false, &o("a", ""), true), "codex", false, "", &o("b", "")), Step::Restart);
     }
 
     #[test]

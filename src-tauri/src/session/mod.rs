@@ -12,7 +12,7 @@ mod tauri_sink;
 mod tests;
 
 pub(crate) use account::{account_of, limit_key};
-pub(crate) use pipe::{pipe_ok, pipe_reply};
+pub(crate) use pipe::pipe_reply;
 
 use crate::{actions, agents, broker, commonwealth, cw_on, env_of, home, machines, mirror, need_vault, orch, provider_of, repo_projects, tr, trc, trc_v, ui_lang_of, App, EnvBuf};
 use agent_core::{AgentProvider, Image, Launch, Turn, IMAGE_TYPES};
@@ -85,10 +85,10 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
-    let claude = p.id() == "claude";
+    let caps = p.caps();
     let settings = state.settings.lock().unwrap().clone();
     // where the composer or Settings › Machines says (machines.rs); a fork copies a session of this Mac, so stays
-    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
+    let remote = if caps.remote && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
     // a work machine has its own login: no account of this Mac goes along
     let account = if remote.is_some() { "" } else { account };
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: start_turns(turn) };
@@ -111,10 +111,10 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     } else {
         let mut eb = env_of(app, state, p);
         if p.caps().accounts { eb.opts["account"] = json!(account); }
-        if claude && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
+        if caps.control && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
         // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
-        if claude && !from_mail && cw_on(state) {
+        if caps.brain && !from_mail && cw_on(state) {
             if let Some((b, repo)) = about.and_then(|a| commonwealth::session(&home(), &repo_projects(&dir), a)) {
                 eb.opts["commonwealth_brain"] = json!(b);
                 eb.opts["commonwealth_source"] = json!(repo);
@@ -128,7 +128,10 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     };
     let broker::Conn { agent, mut stdin, frames, backlog } = c;
     // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)
-    if claude { writeln!(stdin, "{}", pipe::pipe_init(mail_on, !remote && orch::is_orch(project))).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
+    if caps.control {
+        let servers: Vec<&str> = [(mail_on, "relay-mail"), (!remote && orch::is_orch(project), "relay-orch")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
+        if let Some(line) = p.control_init(&servers) { writeln!(stdin, "{line}").and_then(|_| stdin.flush()).map_err(|e| format!("{} start: {e}", p.id()))?; }
+    }
     // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
@@ -182,11 +185,11 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     }
     let mut was_tainted = false;
     if let Some(x) = procs.get_mut(&project) {
-        let step = plan::step(&x.running(), p.id(), &account, &opts);
+        let step = plan::step(&x.running(), p.id(), p.caps().live_model, &account, &opts);
         match step {
             Step::Restart => { if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; } }
             Step::SetModel => {
-                writeln!(x.stdin, "{}", pipe::set_model_request(&opts.0)).and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
+                if let Some(line) = p.set_model(&opts.0) { writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?; }
                 x.opts.0 = opts.0.clone();
             }
             Step::Keep => {}
@@ -213,8 +216,9 @@ pub(crate) fn stop(app: &AppHandle, state: &App, project: &str) {
 /// carry a stranger's words, so the conversation is restricted first. False, and nothing written, while a turn runs.
 pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool, text: &str) -> Result<bool, String> {
     let state = app.state::<App>();
+    // the orchestrator's tools are answered over a provider's control pipe: Claude Code's, unless the conversation has another
     let p = provider_of(&state, key, Some("claude"));
-    if p.id() != "claude" { return Err("the orchestrator runs on Claude Code".into()); }
+    if !p.caps().control { return Err(format!("the orchestrator needs a control pipe, {} has none", p.name())); }
     let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
     let account = account_of(&state, p, key, &model);
     let taint = taint || orch::tainted(app, key);
@@ -226,7 +230,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     }
     let x = procs.get_mut(key).unwrap();
     if taint && !x.tainted { x.mark_tainted(); }
-    let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or("claude: no input")?;
+    let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or_else(|| format!("{}: no input", p.id()))?;
     writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
     x.sent();
     Ok(true)

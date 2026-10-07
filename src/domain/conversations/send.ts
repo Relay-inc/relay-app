@@ -45,7 +45,8 @@ export function outgoing(
   const mail = conversation?.mail;
   return { sent: mail ? `${mail}\n\n${text}` : text, told, context, tookMail: !!mail };
 }
-/** Commands that take no attachments, refused before they reach the agent. */
-export const refusesImages = (provider: string, text: string) =>
-  (provider === "codex" && /^\/(compact|review)(?:\s|$)/.test(text)) ||
-  (provider === "pi" && /^\/compact(?:\s|$)/.test(text));
+/** Commands that take no attachments (the agent's `textOnly`), refused before they reach the agent. */
+export const refusesImages = (textOnly: string[], text: string) => {
+  const command = /^\/(\S+)/.exec(text)?.[1];
+  return !!command && textOnly.includes(command);
+};

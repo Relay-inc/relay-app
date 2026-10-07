@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { inheritedOf, picksOf, seeDefaults } from "./rules.ts";
+import { inheritedOf, knownCaps, knownTextOnly, picksOf, seeDefaults } from "./rules.ts";
 import type { AgentsStatus } from "./types";
 
 // Cmd-K sends with its destination's picks (Lit's quick-send.test.ts): picks are per provider, a stale one is the default
@@ -39,4 +39,14 @@ test("the CLI's defaults are named once a conversation showed them", () => {
     model: "gpt-test",
     effort: { "gpt-test": "low", other: "low" },
   });
+});
+
+// before agents_status answers, a Claude chat queues mid-turn and may go to a work machine, as before caps existed
+test("what is known of the built-in providers before the status arrives", () => {
+  assert.deepEqual(knownCaps("claude"), { picked: true, remote: true });
+  assert.deepEqual(knownCaps("codex"), { picked: false, remote: false });
+  assert.equal(knownCaps("unknown"), undefined);
+  assert.deepEqual(knownTextOnly("codex"), ["compact", "review"]);
+  assert.deepEqual(knownTextOnly("pi"), ["compact"]);
+  assert.deepEqual(knownTextOnly("claude"), []);
 });

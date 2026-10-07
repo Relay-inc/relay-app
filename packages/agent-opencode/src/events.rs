@@ -128,6 +128,7 @@ impl State {
         }
         usage.cost = cost;
         let error = self.error.take();
+        agent_core::limited(error.as_deref(), out);
         out.push(Event::TurnEnd { ok: error.is_none(), error, usage: (!self.msgs.is_empty()).then_some(usage),
             duration_ms: (to > from).then(|| (to - from) as u64) });
         self.msgs.clear();
@@ -147,7 +148,7 @@ impl State {
                 let text = m["message"].as_str().unwrap_or("opencode error").to_string();
                 out.push(Event::Error { text: text.clone() });
                 // a prompt that could not be sent: no turn is coming to end on its own
-                if !self.busy { out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None }); }
+                if !self.busy { agent_core::limited(Some(&text), &mut out); out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None }); }
             }
             "session.status" => if p["status"]["type"] == "busy" { self.busy = true; out.push(Event::Working); },
             "message.updated" => {
@@ -211,6 +212,11 @@ mod tests {
     fn run(fixture: &str) -> Vec<Event> {
         let mut st = State::default();
         fixture.lines().flat_map(|l| st.parse(l)).collect()
+    }
+    #[test]
+    fn a_limit_error_is_a_limited_event() {
+        let ev = State::default().parse(r#"{"type":"bridge.error","message":"You've hit your usage limit"}"#);
+        assert!(matches!(&ev[..], [Event::Error { .. }, Event::TurnLimited, Event::TurnEnd { ok: false, .. }]), "{ev:?}");
     }
     fn text(ev: &[Event]) -> String {
         ev.iter().filter_map(|e| if let Event::Text { text, .. } = e { Some(text.as_str()) } else { None }).collect()

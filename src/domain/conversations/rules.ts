@@ -1,5 +1,5 @@
 import type { Key } from "../../shared/i18n";
-import type { Decision } from "../agents/types";
+import type { Caps, Decision } from "../agents/types";
 import type { Settings } from "../settings/types";
 import type { Project, SessionItem } from "../workspace/types";
 import { findProjects } from "../workspace/rules.ts";
@@ -159,3 +159,10 @@ export function decisionOf(request: Pending, choice: CardChoice): Decision | nul
   if (choice === "deny") return denial(request);
   return questionAnswers(request, choice);
 }
+
+/** Whether a message sent during a turn waits below the conversation: only when the agent says it took the message up
+ *  (`picked`), else it goes into the conversation at once. */
+export const waitsForPickup = (caps: Pick<Caps, "picked"> | undefined) => !!caps?.picked;
+/** Why a conversation cannot run on a work machine: its agent cannot, or it started with a mail. */
+export const machineBlock = (caps: Pick<Caps, "remote"> | undefined, fromMail: boolean): Key | null =>
+  !caps?.remote ? "composer.machineOnlyClaude" : fromMail ? "composer.machineNoMail" : null;

@@ -50,7 +50,7 @@ mod tray;
 mod vault;
 mod worktrees;
 
-use session::{account_of, limit_key, pipe_ok, pipe_reply, quit, reattach, reattach_remote, spawn_or_get, Proc};
+use session::{account_of, limit_key, pipe_reply, quit, reattach, reattach_remote, spawn_or_get, Proc};
 
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 /// The vault folder from the settings, "" before one is chosen.
@@ -625,8 +625,8 @@ fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     let recorded: Vec<String> = st.sids.lock().unwrap().values().filter(|x| x.provider == p.id() && !x.account.is_empty()).map(|x| x.account.clone()).collect();
     let s = st.settings.lock().unwrap();
     let mut opts = s["agents"]["providers"][p.id()].clone();
-    // Claude Code gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
-    if p.id() == "claude" && opts.is_object() { opts["mail"] = json!(mail_on(&s)); }
+    // a provider with a control pipe gets the relay-mail tools only when mail is on and an account is set up; set by the app, never the user
+    if p.caps().control && opts.is_object() { opts["mail"] = json!(mail_on(&s)); }
     // the account calls run on unless they say otherwise (spawn, limits): the active one
     if p.caps().accounts && opts.is_object() {
         opts["account"] = opts["active"].clone();
@@ -791,7 +791,7 @@ async fn move_conversation(app: AppHandle, key: String, to: String, mail: bool) 
 fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), String> {
     let state = app.state::<App>();
     let sess = state.sids.lock().unwrap().get(key).cloned().ok_or_else(|| trc("err.move_no_session"))?;
-    if sess.provider != "claude" { return Err(trc("err.move_only_claude")); }
+    if !agents::get(&sess.provider).is_ok_and(|p| p.caps().remote) { return Err(trc("err.move_only_claude")); }
     let from = state.machines.bind_of(key);
     if from.as_ref().map_or("", |b| b.machine.as_str()) == to { return Ok(()); }
     {
@@ -805,7 +805,7 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), Strin
     let vault = need_vault(&state)?;
     let find = |id: &str| machines::Machines::find(&settings, id).ok_or_else(|| trc("err.no_machine"));
     let up = |m: &Value| state.machines.info(m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))));
-    let p = agents::get_or_first(Some("claude"));
+    let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
     // this Mac's transcript folder for the session, on the account it was recorded on
     let here = || { let mut eb = env_of(app, &state, p); eb.opts["account"] = json!(sess.account); eb };
     let mac = [vault.clone(), format!("{}/.claude/projects/{}/memory", home(), agent_claude::slug(&vault))];
@@ -866,7 +866,7 @@ async fn activity(app: AppHandle, state: State<'_, App>, date: String, sessions:
     let midnight = |d: NaiveDate| Local.from_local_datetime(&d.and_hms_opt(0, 0, 0).unwrap()).earliest().map(|t| t.timestamp_millis());
     let from = midnight(day).ok_or("bad date")?;
     let to = day.succ_opt().and_then(midnight).ok_or("bad date")?; // the next local midnight, so a DST day is 23 or 25 hours
-    let p = agents::get_or_first(Some("claude"));
+    let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
     let env = env_of(&app, &state, p);
     let files: Vec<(String, PathBuf)> = sessions.into_iter().filter(|s| agent_core::safe_id(s))
         .map(|s| { let f = PathBuf::from(agent_claude::transcripts_of(&env.env(), &s)).join(format!("{s}.jsonl")); (s, f) }).collect();
@@ -994,7 +994,7 @@ async fn agents_status(app: AppHandle, state: State<'_, App>) -> Result<Value, S
     let bufs: Vec<_> = agents::PROVIDERS.iter().map(|p| (*p, env_of(&app, &state, *p))).collect();
     tauri::async_runtime::spawn_blocking(move || {
         let list: Vec<Value> = bufs.iter().map(|(p, eb)| json!({"id": p.id(), "name": p.name(), "on": s["agents"]["providers"][p.id()]["on"] == true,
-            "caps": p.caps(), "detect": p.detect(&eb.env()), "models": p.models(), "efforts": p.efforts(), "bin": eb.bin, "defaultBin": p.default_bin(&eb.home)})).collect();
+            "caps": p.caps(), "textOnly": p.text_only_commands(), "detect": p.detect(&eb.env()), "models": p.models(), "efforts": p.efforts(), "bin": eb.bin, "defaultBin": p.default_bin(&eb.home)})).collect();
         json!({"default": agents::default_id(&s), "providers": list})
     }).await.map_err(|e| e.to_string())
 }
@@ -1297,7 +1297,7 @@ fn repo_index(vault: &str) -> HashMap<String, String> {
 
 // ---------- Commonwealth (commonwealth.rs): detected, never configured; on when the Claude Code plugin is installed
 
-fn claude_bin(app: &AppHandle, state: &App) -> String { env_of(app, state, agents::get_or_first(Some("claude"))).bin }
+fn claude_bin(app: &AppHandle, state: &App) -> String { env_of(app, state, &agent_claude::PROVIDER).bin }
 /// Switched off in Settings › Integrations: no brain for a session, no review queue. On unless set to false.
 fn cw_on(state: &App) -> bool { state.settings.lock().unwrap()["integrations"]["commonwealth"]["on"] != false }
 /// The brains the vault's projects resolve to, by project; the only ones the review queue touches. None when off.

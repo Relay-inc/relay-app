@@ -19,7 +19,7 @@ impl TauriSink {
 impl Sink for TauriSink {
     fn emit(&self, ev: Value) { self.app.emit("agent", json!({"project": self.key, "provider": self.p.id(), "event": ev})).ok(); }
     fn spend(&self) { self.app.state::<App>().spent.lock().unwrap().insert(limit_key(self.p, &self.account)); }
-    fn pipe(&self, req: &Value) { pipe::control(&self.app, &self.key, self.pid, req); }
+    fn control(&self, id: &Value, server: Option<&str>, message: &Value) { pipe::control(&self.app, self.p, &self.key, self.pid, id, server, message); }
     fn working(&self) { self.with_proc(|x| x.working()); }
     fn picked(&self) { self.with_proc(|x| x.turns.picked()); }
     fn turn_ended(&self) -> String { self.with_proc(|x| { x.turn_ended(); x.opts.0.clone() }).unwrap_or_default() }

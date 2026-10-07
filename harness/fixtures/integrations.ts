@@ -248,19 +248,19 @@ export function usageTokens() {
 }
 
 // ---------- agents
-const caps = (all: boolean) => ({ persistent: true, images: all, thinking: !all, permissions: all, questions: all, subagents: all, fork: all, terminal: all, background: all, effort: true, limits: all, title: true, accounts: all });
+const caps = (all: boolean) => ({ persistent: true, images: all, thinking: !all, permissions: all, questions: all, subagents: all, fork: all, terminal: all, background: all, effort: true, limits: all, title: true, accounts: all, liveModel: all, control: all, picked: all, remote: all, brain: all });
 const choices = (pairs: [string, string][]) => pairs.map(([id, label]) => ({ id, label }));
 export const agentsStatus = {
   default: "claude",
   providers: [
-    { id: "claude", name: "Claude Code", on: true, caps: caps(true), detect: { installed: true, bin: "/Users/demo/.local/bin/claude", version: "2.4.1", loggedIn: true, note: null },
+    { id: "claude", name: "Claude Code", on: true, caps: caps(true), textOnly: [], detect: { installed: true, bin: "/Users/demo/.local/bin/claude", version: "2.4.1", loggedIn: true, note: null },
       models: choices([["fable", "Fable"], ["opus", "Opus"], ["sonnet", "Sonnet"], ["haiku", "Haiku"]]), efforts: choices([["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"], ["max", "Max"]]),
       bin: "/Users/demo/.local/bin/claude", defaultBin: "/Users/demo/.local/bin/claude" },
-    { id: "codex", name: "Codex", on: true, caps: caps(false), detect: { installed: true, bin: "/opt/homebrew/bin/codex", version: "0.61.0", loggedIn: true, note: null },
+    { id: "codex", name: "Codex", on: true, caps: caps(false), textOnly: ["compact", "review"], detect: { installed: true, bin: "/opt/homebrew/bin/codex", version: "0.61.0", loggedIn: true, note: null },
       models: choices([["gpt-5.3-codex", "GPT-5.3 Codex"]]), efforts: choices([["low", "Low"], ["medium", "Medium"], ["high", "High"]]), bin: "/opt/homebrew/bin/codex", defaultBin: "/opt/homebrew/bin/codex" },
-    { id: "opencode", name: "OpenCode", on: false, caps: caps(false), detect: { installed: false, bin: "/opt/homebrew/bin/opencode", version: null, loggedIn: null, note: null },
+    { id: "opencode", name: "OpenCode", on: false, caps: caps(false), textOnly: [], detect: { installed: false, bin: "/opt/homebrew/bin/opencode", version: null, loggedIn: null, note: null },
       models: [], efforts: [], bin: "", defaultBin: "/opt/homebrew/bin/opencode" },
-    { id: "pi", name: "Pi", on: false, caps: caps(false), detect: { installed: false, bin: "/opt/homebrew/bin/pi", version: null, loggedIn: null, note: null },
+    { id: "pi", name: "Pi", on: false, caps: caps(false), textOnly: ["compact"], detect: { installed: false, bin: "/opt/homebrew/bin/pi", version: null, loggedIn: null, note: null },
       models: [], efforts: [], bin: "", defaultBin: "/opt/homebrew/bin/pi" },
   ],
 };

@@ -86,7 +86,8 @@ impl AgentProvider for Claude {
     fn name(&self) -> &'static str { "Claude Code" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
-            terminal: true, background: true, effort: true, limits: true, title: true, accounts: true }
+            terminal: true, background: true, effort: true, limits: true, title: true, accounts: true,
+            live_model: true, control: true, picked: true, remote: true, brain: true }
     }
     fn default_bin(&self, home: &str) -> String { format!("{home}/.local/bin/claude") }
     fn detect(&self, env: &Env) -> Detect {
@@ -155,6 +156,19 @@ impl AgentProvider for Claude {
         on_account(&mut cmd, account(env));
         cmd.env_remove("ANTHROPIC_API_KEY");
         Ok(cmd)
+    }
+    fn control_init(&self, servers: &[&str]) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": servers}}).to_string())
+    }
+    fn control_reply(&self, id: &Value, reply: Result<Value, String>) -> Option<String> {
+        let response = match reply {
+            Ok(r) => json!({"subtype": "success", "request_id": id, "response": {"mcp_response": r}}),
+            Err(e) => json!({"subtype": "error", "request_id": id, "error": e}),
+        };
+        Some(json!({"type": "control_response", "response": response}).to_string())
+    }
+    fn set_model(&self, model: &str) -> Option<String> {
+        Some(json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}}).to_string())
     }
     fn respond(&self, req: &agent_core::pending::Request, decision: &Value) -> Option<String> { permission::respond(req, decision) }
     fn input(&self, turn: &Turn) -> Option<String> { Some(stream::user_message(turn).to_string()) }
@@ -290,6 +304,21 @@ mod tests {
         assert!(args[allowed..denied].contains(&"mcp__plugin_commonwealth_commonwealth__search".to_string()));
         // staging into a shared brain keeps its card
         assert!(!args.iter().any(|a| a.contains("commonwealth__remember")));
+    }
+    #[test]
+    fn the_control_pipe_lines() {
+        let line = |s: Option<String>| serde_json::from_str::<Value>(&s.unwrap()).unwrap();
+        let init = line(PROVIDER.control_init(&["relay-mail", "relay-orch"]));
+        assert_eq!((init["type"].as_str(), init["request_id"].as_str(), init["request"]["subtype"].as_str()), (Some("control_request"), Some("init"), Some("initialize")));
+        assert_eq!(init["request"]["sdkMcpServers"], json!(["relay-mail", "relay-orch"]));
+        assert_eq!(line(PROVIDER.control_init(&[]))["request"]["sdkMcpServers"], json!([]));
+        let ok = line(PROVIDER.control_reply(&json!("r1"), Ok(json!({"jsonrpc": "2.0", "id": 1, "result": {}}))));
+        assert_eq!(ok, json!({"type": "control_response", "response": {"subtype": "success", "request_id": "r1", "response": {"mcp_response": {"jsonrpc": "2.0", "id": 1, "result": {}}}}}));
+        let err = line(PROVIDER.control_reply(&json!("r2"), Err("unsupported".into())));
+        assert_eq!(err, json!({"type": "control_response", "response": {"subtype": "error", "request_id": "r2", "error": "unsupported"}}));
+        let model = line(PROVIDER.set_model("sonnet"));
+        assert_eq!((model["type"].as_str(), model["request"]["subtype"].as_str(), model["request"]["model"].as_str()), (Some("control_request"), Some("set_model"), Some("sonnet")));
+        assert_eq!(line(PROVIDER.set_model(""))["request"]["model"], "default");
     }
     #[test]
     fn terminal_commands() {

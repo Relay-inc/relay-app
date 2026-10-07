@@ -68,7 +68,7 @@ impl AgentProvider for Codex {
     fn name(&self) -> &'static str { "Codex" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: false, subagents: false, fork: false,
-            terminal: true, background: true, effort: true, limits: true, title: false, accounts: false }
+            terminal: true, background: true, effort: true, limits: true, title: false, accounts: false, ..Caps::default() }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = ["/opt/homebrew/bin/codex".to_string(), "/usr/local/bin/codex".into(), format!("{home}/.local/bin/codex"), format!("{home}/.npm-global/bin/codex")];
@@ -104,6 +104,7 @@ impl AgentProvider for Codex {
         if pick(env, "auth", &AUTH) == "chatgpt" { cmd.env_remove("OPENAI_API_KEY").env_remove("CODEX_API_KEY"); }
         Ok(cmd)
     }
+    fn text_only_commands(&self) -> Vec<&'static str> { vec!["compact", "review"] }
     fn input(&self, turn: &Turn) -> Option<String> { Some(app_server::turn_start(turn).to_string()) }
     fn parser(&self) -> Parser {
         let mut st = app_server::State::default();

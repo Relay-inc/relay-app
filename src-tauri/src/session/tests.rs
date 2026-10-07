@@ -48,7 +48,7 @@ impl Sink for Fake {
         self.events.lock().unwrap().push(ev);
     }
     fn spend(&self) { *self.spent.lock().unwrap() += 1; }
-    fn pipe(&self, req: &Value) { self.pipes.lock().unwrap().push(req.clone()); }
+    fn control(&self, id: &Value, server: Option<&str>, message: &Value) { self.pipes.lock().unwrap().push(json!({"id": id, "server": server, "message": message})); }
     fn working(&self) { let n = self.turns.lock().unwrap().working(); self.save(n); }
     fn picked(&self) { self.turns.lock().unwrap().picked(); }
     fn turn_ended(&self) -> String { let n = self.turns.lock().unwrap().ended(); self.save(n); "opus".into() }
@@ -163,7 +163,7 @@ fn a_replay_only_shows_the_turn_end_but_keeps_its_effects() {
     // a permission card raised in the provider's own protocol while the app was away is still written
     let g = Fake::running(1);
     let card: agent_core::Parser = Box::new(|_| vec![Event::Permission { request: pending::Request::new("tool", "Bash", json!({"command": "ls"})) }]);
-    Reader::with_parser(false, card, 1, (false, false), dir).run(&g, Cursor::new("o {}\no {}\n"));
+    Reader::with_parser(card, 1, (false, false), dir).run(&g, Cursor::new("o {}\no {}\n"));
     assert_eq!(g.cards.lock().unwrap().len(), 2);
     assert_eq!(g.types(), ["permission"], "the card is shown for the live one only");
 }
@@ -203,9 +203,39 @@ fn pipe_traffic_stays_off_the_webview() {
     let init_ok = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "init", "response": {"commands": [{"name": "/compact"}]}}});
     let model_err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});
     run(&f, &[o(request.clone()), o(init_ok), o(model_err)], 0);
-    assert_eq!(*f.pipes.lock().unwrap(), [request]);
+    assert_eq!(*f.pipes.lock().unwrap(), [json!({"id": "r1", "server": "relay-mail", "message": {"method": "tools/list"}})]);
     assert_eq!(f.types(), ["commands", "stderr"]);
     assert_eq!(f.count(), 0, "pipe traffic is no work");
+}
+
+// the loop knows no provider: a limit, a synthetic message and a control request are events of the contract
+#[test]
+fn the_loop_handles_provider_neutral_events() {
+    let script = vec![
+        vec![Event::Limited { resets_at: Some(1_760_000_000_000) }],
+        vec![Event::Synthetic, Event::Text { text: "refused".into(), delta: false }],
+        vec![Event::Control { id: json!("r1"), server: Some("relay-mail".into()), message: json!({"method": "ping"}) }, Event::Stderr { text: "x failed".into() }],
+        vec![Event::TurnEnd { ok: false, error: Some("refused".into()), usage: None, duration_ms: None }],
+    ];
+    let mut it = script.into_iter();
+    let parse: agent_core::Parser = Box::new(move |_| it.next().unwrap_or_default());
+    let f = Fake::running(1);
+    Reader::with_parser(parse, 0, (false, false), PathBuf::from("/nonexistent")).run(&f, Cursor::new("o 1\no 2\no 3\no 4\n"));
+    assert_eq!(f.spent(), 1);
+    assert_eq!(*f.ends.lock().unwrap(), [("opus".to_string(), true, Some(1_760_000_000_000), true, false, "refused".to_string())], "the refusal is no work: retry sends the message again");
+    assert_eq!(f.types(), ["text", "stderr", "turn_end"], "limits and control requests stay off the webview");
+    assert_eq!(*f.pipes.lock().unwrap(), [json!({"id": "r1", "server": "relay-mail", "message": {"method": "ping"}})]);
+}
+
+// a limit event without a reset clears the one an earlier event named
+#[test]
+fn a_limited_event_without_a_reset_clears_the_hint() {
+    let script = vec![vec![Event::Limited { resets_at: Some(5) }], vec![Event::Limited { resets_at: None }], vec![Event::TurnEnd { ok: false, error: None, usage: None, duration_ms: None }]];
+    let mut it = script.into_iter();
+    let parse: agent_core::Parser = Box::new(move |_| it.next().unwrap_or_default());
+    let f = Fake::running(1);
+    Reader::with_parser(parse, 0, (false, false), PathBuf::from("/nonexistent")).run(&f, Cursor::new("o 1\no 2\no 3\n"));
+    assert_eq!(f.ends.lock().unwrap()[0].2, None);
 }
 
 #[test]

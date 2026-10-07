@@ -56,7 +56,7 @@ impl AgentProvider for Pi {
     fn name(&self) -> &'static str { "Pi" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: false, questions: false, subagents: false, fork: true,
-            terminal: true, background: true, effort: true, limits: false, title: false, accounts: false }
+            terminal: true, background: true, effort: true, limits: false, title: false, accounts: false, ..Caps::default() }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = [format!("{home}/.npm-global/bin/pi"), "/opt/homebrew/bin/pi".into(), "/usr/local/bin/pi".into(), format!("{home}/.local/bin/pi"), format!("{home}/.bun/bin/pi")];
@@ -94,6 +94,7 @@ impl AgentProvider for Pi {
         if let Some((e, _)) = EFFORTS.iter().find(|(e, _)| *e == l.effort) { cmd.args(["--thinking", e]); }
         Ok(cmd)
     }
+    fn text_only_commands(&self) -> Vec<&'static str> { vec!["compact"] }
     fn input(&self, turn: &Turn) -> Option<String> { Some(events::input(turn)) }
     fn parser(&self) -> Parser {
         let mut st = events::State::default();

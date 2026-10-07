@@ -13,7 +13,7 @@ import { unread } from "../../domain/mail/rules";
 import { boardOf } from "../navigation/navigation";
 import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
-import { agentOf, chatAgent } from "../agents/agents";
+import { agentOf, chatAgent, chatCaps } from "../agents/agents";
 import { projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
@@ -170,12 +170,7 @@ export function machineChoice(key: string) {
   const started = !!cs().sidOf[key];
   // the orchestrator's conversations run on this Mac in this version: nothing to pick
   if (isOrchKey(key)) return { list, value: null, why: null, started };
-  const why: Key | null =
-    chatAgent(key) !== "claude"
-      ? "composer.machineOnlyClaude"
-      : conversation?.fromMail
-        ? "composer.machineNoMail"
-        : null;
+  const why = rules.machineBlock(chatCaps(key), !!conversation?.fromMail);
   if (started) return { list, value: list.length ? (cs().machines[key]?.id ?? "") : null, why, started };
   return { list, value: machinePick(list, useDraftsStore.getState().machine[key], !why), why, started };
 }

@@ -1,5 +1,5 @@
 import type { AgentEvent, PickKind } from "../../domain/agents/types";
-import { inheritedOf, picksOf, pickKey, seeDefaults } from "../../domain/agents/rules";
+import { inheritedOf, knownCaps, knownTextOnly, picksOf, pickKey, seeDefaults } from "../../domain/agents/rules";
 import { isTerminal } from "../../domain/navigation/keys";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
@@ -30,6 +30,11 @@ export const chatAgent = (chatKey: string) =>
   isTerminal(chatKey)
     ? "claude"
     : useConversationsStore.getState().chats[chatKey]?.provider || as().status.default || "claude";
+/** What a conversation's agent can do; before the providers are known, what the built-in ones are known for. */
+export const chatCaps = (chatKey: string) => agentOf(chatAgent(chatKey))?.caps ?? knownCaps(chatAgent(chatKey));
+/** The slash commands of a conversation's agent that take no attachments. */
+export const chatTextOnly = (chatKey: string) =>
+  agentOf(chatAgent(chatKey))?.textOnly ?? knownTextOnly(chatAgent(chatKey));
 /** The providers whose limits and tokens the usage view lists; Claude's alone until they are known. */
 export const usageAgents = () =>
   as().loaded ? onAgents().map(x => ({ id: x.id, limits: x.caps.limits })) : [{ id: "claude", limits: true }];
