@@ -82,9 +82,18 @@ fn gql(query: &str, variables: Value) -> Result<Req, String> {
     Ok(Req { method: "POST", url: "https://api.linear.app/graphql".into(), body: Some(json!({ "query": query, "variables": variables })) })
 }
 fn uuid(s: &str) -> bool { linear_id(&json!(s)) }
+/// An issue's id or its identifier (ENG-123); it only goes in as a variable.
+fn issue_ref(s: &str) -> bool { (1..=64).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') }
 
 const ACTIONS: &[Action] = &[
     read("teams", "Your teams; a new issue goes to one.", &[], |_, _| gql("{ teams { nodes { id key name } } }", json!({})), |v| v["data"]["teams"]["nodes"].clone()),
+    read("search", "Search issues by identifier, title or description, up to 20.", &[("query", "search text")],
+        |_, a| gql("query Search($term: String!) { searchIssues(term: $term, first: 20) { nodes { id identifier title url state { name } team { name } } } }", json!({ "term": arg(a, "query") })),
+        |v| v["data"]["searchIssues"]["nodes"].clone()),
+    read("issue", "Read one issue: title, description, state, assignee, labels and its comments.", &[("issue", "issue id or identifier, e.g. ENG-123")],
+        |_, a| gql("query Issue($id: String!) { issue(id: $id) { id identifier title description url priorityLabel dueDate state { name } assignee { name } team { name } project { name } labels { nodes { name } } comments(first: 100) { nodes { body createdAt user { name } } } } }",
+            json!({ "id": arg_ok(a, "issue", issue_ref)? })),
+        |v| v["data"]["issue"].clone()),
     write("create_issue", "Create an issue in a team.", &[("team", "team id"), ("title", "issue title"), ("description?", "body, Markdown")],
         |_, a| gql("mutation Create($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id identifier url } } }",
             json!({ "input": { "teamId": arg_ok(a, "team", uuid)?, "title": arg(a, "title"), "description": arg(a, "description").unwrap_or_default() } })),
@@ -101,6 +110,9 @@ mod tests {
         assert!(!b["query"].as_str().unwrap().contains("mutation {"));
         assert_eq!(b["variables"]["input"]["teamId"], "9b1c-22");
         assert!((act("create_issue").build)(&json!({}), &json!({ "team": "x y", "title": "t" })).is_err());
+        assert_eq!((act("search").build)(&json!({}), &json!({ "query": "\" } {" })).unwrap().body.unwrap()["variables"]["term"], "\" } {");
+        assert_eq!((act("issue").build)(&json!({}), &json!({ "issue": "ENG-123" })).unwrap().body.unwrap()["variables"]["id"], "ENG-123");
+        assert!((act("issue").build)(&json!({}), &json!({ "issue": "ENG 1" })).is_err());
     }
     #[test]
     fn allows_queries_and_only_the_move_mutation() {

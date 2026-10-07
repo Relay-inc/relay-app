@@ -110,6 +110,10 @@ pub fn arg(args: &Value, k: &str) -> Option<String> {
 pub fn arg_ok(args: &Value, k: &str, ok: fn(&str) -> bool) -> Result<String, String> {
     arg(args, k).filter(|s| ok(s)).ok_or_else(|| format!("'{k}' is not a valid id"))
 }
+/// Free text for a URL query value, as board-core's TS `queryText`: everything but A-Z a-z 0-9 - _ . percent-encoded.
+pub fn query_text(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
 pub fn digits(s: &str) -> bool { !s.is_empty() && s.len() <= 20 && s.chars().all(|c| c.is_ascii_digit()) }
 /// YYYY-MM-DD.
 pub fn iso_date(s: &str) -> bool { s.len() == 10 && chrono_like(s) }

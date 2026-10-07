@@ -289,8 +289,9 @@ the socket the app listens on and the CLI side.
 - `relay` is a script the app writes to its data folder (`bin/relay`, `exec <this binary> --cli "$@"`) and puts first
   on every agent's PATH, with `RELAY_CONVERSATION` set to the conversation's key. The CLI asks the app over
   `$TMPDIR/relay-agents/relay.sock` (mode 0600); a call from anything that is not a running conversation is refused.
-- Extensions: the board providers' `actions` (Productive projects, task lists, tasks, comments, services, time
-  entries; Trello boards, lists, cards, comments; Linear teams and issues), mail (`search`, `read`, `thread`,
+- Extensions: the board providers' `actions` (Productive projects, task lists, task search and read, comments,
+  services, time entries; Trello boards, lists, card search and read, cards, comments; Linear teams, issue search
+  and read, issues), mail (`search`, `read`, `thread`,
   `attachment`, `save_draft`, the relay-mail tools) and the vault's reminders (`list`, `add`, `done`, `push`). Only
   set-up extensions are listed.
 - Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
