@@ -13,10 +13,12 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.14] - 2026-10-07
+
 ### Added
 
-- **A conversation's changes, from git**: the new Changes button in a conversation's title bar opens its changed files in the drawer, per repo it wrote in (the repos of the files it edited and the worktrees it made), against where its branch left the default branch, so committed and uncommitted work both show. A file opens its diff in a window over the app (‹ › step through the files, Esc closes it); click a line to comment on it, and the comments go to the composer together as one message for the agent. Files outside a git repo don't show, and in a shared checkout the diff holds every change in it, not only the agent's
-- **Pick the agent for a PR review, and add a second one**: the PR detail has an agent picker next to Review, remembered for the next review and used by Today's review too. On the review screen, "Also review with …" lets another agent read the same diff: its findings join the list with its icon, and a line both agents flagged says so. Codex can now do these one-call reviews (`codex exec` with your config, rules and every tool off). The PR detail lists the conversations that reviewed it, and once one is done, "Second opinion with …" starts the picked agent on its own conversation: it gets the first review, reads the PR itself and says where it agrees, where not and what was missed
+- **A conversation's changes, from git**: the new Changes button in a conversation's title bar opens its changed files in the drawer, per repo it wrote in (the repos of the files it edited and the worktrees it made), against where its branch left the default branch, so committed and uncommitted work both show. A file opens its diff in a window over the app (‹ › step through the files, Esc closes it); click a line to comment on it, and the comments go to the composer together as one message for the agent. Files outside a git repo don't show, and in a shared checkout the diff holds every change in it, not only the agent's (#142)
+- **Pick the agent for a PR review, and add a second one**: the PR detail has an agent picker next to Review, remembered for the next review and used by Today's review too. On the review screen, "Also review with …" lets another agent read the same diff: its findings join the list with its icon, and a line both agents flagged says so. Codex can now do these one-call reviews (`codex exec` with your config, rules and every tool off). The PR detail lists the conversations that reviewed it, and once one is done, "Second opinion with …" starts the picked agent on its own conversation: it gets the first review, reads the PR itself and says where it agrees, where not and what was missed (#146)
 
 ### Changed
 
@@ -24,9 +26,9 @@ a PR. Versions follow
 
 ### Fixed
 
-- **The composer shows line breaks**: text with newlines (Shift-Enter, or text put in from elsewhere) showed as one run-on paragraph
-- **A running meeting opens under Today**: clicking a meeting while it runs opens it with its briefing; before, nothing opened between its start and its end
-- **Commonwealth notes file under their project**: a conversation about a project whose repos route to a brain now tells Commonwealth that repo (`COMMONWEALTH_SOURCE`), so its captured notes no longer all land in the brain's `vault/` folder. Needs Commonwealth with kristoffeys/commonwealth#323
+- **The composer shows line breaks**: text with newlines (Shift-Enter, or text put in from elsewhere) showed as one run-on paragraph (#142)
+- **A running meeting opens under Today**: clicking a meeting while it runs opens it with its briefing; before, nothing opened between its start and its end (#140)
+- **Commonwealth notes file under their project**: a conversation about a project whose repos route to a brain now tells Commonwealth that repo (`COMMONWEALTH_SOURCE`), so its captured notes no longer all land in the brain's `vault/` folder. Needs Commonwealth with kristoffeys/commonwealth#323 (#139)
 
 ## [0.0.13] - 2026-10-07
 
@@ -327,7 +329,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.13...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.14...HEAD
+[0.0.14]: https://github.com/Relay-inc/relay-app/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/Relay-inc/relay-app/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/Relay-inc/relay-app/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...v0.0.11
