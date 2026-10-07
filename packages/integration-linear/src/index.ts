@@ -1,5 +1,5 @@
 import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
-import { CREATE, ISSUES, ISSUE_URL, MOVE, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapIssues, mapStates, mapTeams } from "./map";
+import { CREATE, ISSUES, ISSUE_URL, MOVE, SEARCH, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapIssues, mapStates, mapTeams } from "./map";
 import { linearTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
@@ -47,6 +47,13 @@ const linear: BoardProvider<Key> = {
     for (const [id, url] of made.urls) links.set(id, url);
     return made.cards[0];
   },
+  // Linear's search over the identifier, title and description; the board is the issue's Linear project, else its team
+  search: async (c, q) =>
+    ((await gql(c, SEARCH, { term: q }))?.searchIssues?.nodes || []).map((x: any) => {
+      links.set(x.id, x.url);
+      return { id: x.id, title: x.title, number: x.identifier, where: x.team?.name || "",
+        ref: { provider: "linear", project: x.team?.id ?? "", board: x.project?.id ?? x.team?.id ?? "" } };
+    }),
   url: async (c, _ref, id) => links.get(id) || (await gql(c, ISSUE_URL, { id }))?.issue?.url || "https://linear.app",
   detail: linearTicket.detail,
   reset: () => { teams = null; links.clear(); linearTicket.reset(); },

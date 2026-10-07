@@ -3,17 +3,25 @@ import type { Img } from "../../../domain/conversations/types";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { openProject, quickProjects, toggleQuickAsk } from "../../../application/navigation/navigation";
 import { quickSend } from "../../../application/conversations/actions";
+import { openFoundCard, searchTickets } from "../../../application/board/board";
 import { prepImages, releaseImages } from "../../../application/conversations/images";
 import { dropTarget, fromPaths } from "../../../application/conversations/attachments";
 import { onPasteFiles } from "../../components/image-files";
 import { ImageThumbs } from "../../components/ImageThumbs";
 import { FileChips } from "../../components/FileChips";
+import { Glyph } from "../../components/Glyph";
+import { numbered } from "../board/format";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 
 const close = () => toggleQuickAsk(false);
+type Ticket = Awaited<ReturnType<typeof searchTickets>>[number];
+type Option = ({ kind: "project" } & ReturnType<typeof quickProjects>[number]) | ({ kind: "ticket" } & Ticket);
+/** Tickets are searched from this many characters, once typing pauses this long (ms). */
+const MIN_QUERY = 3;
+const PAUSE = 250;
 
-/** Cmd-K: open a matching project, or send a quick question in the background. Mounted while `quickAsk`. */
+/** Cmd-K: open a matching project or ticket, or send a quick question in the background. Mounted while `quickAsk`. */
 export function QuickAskView() {
   const { t } = useT();
   const zoomed = useNavigationStore(s => !!s.zoom);
@@ -28,9 +36,34 @@ export function QuickAskView() {
   // a relay://ask link opens Cmd-K with its question typed (the shell keys this view by it)
   const initial = useNavigationStore(s => s.quickText);
   const [typed, setTyped] = useState(initial);
-  const [picked, setPicked] = useState(-1); // no project selected: Enter keeps asking a quick question
+  const [picked, setPicked] = useState(-1); // nothing selected: Enter keeps asking a quick question
   const found = useDerived(() => quickProjects(typed));
-  const projects = images.length || files.length || typed.includes("\n") ? [] : found;
+  const asking = !!(images.length || files.length || typed.includes("\n"));
+  const projects = asking ? [] : found;
+  // the trackers' tickets, searched once typing pauses; the last answer stays until the next one is in
+  const query = asking ? "" : typed.trim();
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  useEffect(() => {
+    if (query.length < MIN_QUERY) return;
+    let live = true;
+    const timer = setTimeout(
+      () =>
+        searchTickets(query).then(next => {
+          if (!live) return;
+          setTickets(next);
+          setPicked(-1);
+        }),
+      PAUSE,
+    );
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+  const options: Option[] = [
+    ...projects.map(project => ({ kind: "project" as const, ...project })),
+    ...(query.length < MIN_QUERY ? [] : tickets).map(ticket => ({ kind: "ticket" as const, ...ticket })),
+  ];
   const update = (next: Img[]) => {
     waiting.current = next;
     setImages(next);
@@ -70,9 +103,10 @@ export function QuickAskView() {
     el.style.height = "auto";
     el.style.height = el.scrollHeight + "px";
   };
-  const chooseProject = (name: string) => {
+  const choose = (option: Option) => {
     close();
-    openProject(name);
+    if (option.kind === "project") openProject(option.name);
+    else openFoundCard(option.provider, option.hit);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.nativeEvent.isComposing) return;
@@ -83,17 +117,17 @@ export function QuickAskView() {
       close();
       return;
     }
-    if (projects.length && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+    if (options.length && !e.shiftKey && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
-      const count = projects.length + 1; // include the quick-question choice at -1
+      const count = options.length + 1; // include the quick-question choice at -1
       setPicked(((picked + 1 + (e.key === "ArrowDown" ? 1 : -1) + count) % count) - 1);
       return;
     }
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
-    const project = projects[picked];
-    if (project) {
-      chooseProject(project.name);
+    const option = options[picked];
+    if (option) {
+      choose(option);
       return;
     }
     const text = e.currentTarget.value.trim();
@@ -152,32 +186,46 @@ export function QuickAskView() {
           aria-label={t("qk.label")}
           role="combobox"
           aria-autocomplete="list"
-          aria-expanded={projects.length > 0}
-          aria-controls="quick-projects"
-          aria-activedescendant={projects[picked] ? `quick-project-${picked}` : undefined}
+          aria-expanded={options.length > 0}
+          aria-controls="quick-options"
+          aria-activedescendant={options[picked] ? `quick-option-${picked}` : undefined}
           onInput={grow}
           onKeyDown={onKey}
           onPaste={onPaste}
         />
-        <div id="quick-projects" role="listbox" aria-label={t("qk.projects")}>
-          {projects.map((project, i) => (
+        <div id="quick-options" role="listbox" aria-label={t("qk.options")}>
+          {options.map((option, i) => (
             <button
-              key={project.name}
-              id={`quick-project-${i}`}
+              key={option.kind === "project" ? option.name : `${option.provider.id}:${option.hit.id}`}
+              id={`quick-option-${i}`}
               type="button"
               role="option"
               aria-selected={picked === i}
               tabIndex={-1}
               className={`flex items-center gap-3 w-full text-left border-0 rounded-lg px-2.5 py-2 mt-1 cursor-pointer text-label ${picked === i ? "bg-fill-2" : "bg-transparent hover:bg-fill"}`}
               onMouseDown={e => e.preventDefault()}
-              onClick={() => chooseProject(project.name)}
+              onClick={() => choose(option)}
             >
-              <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{project.label}</span>
-              <span className="text-xs text-secondary truncate max-w-40">{project.context}</span>
+              {option.kind === "project" ? (
+                <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{option.label}</span>
+              ) : (
+                <>
+                  <Glyph svg={option.provider.glyph} className="size-4 flex-none" />
+                  <span className="flex-1 min-w-0 truncate text-[13px] font-medium">
+                    <span className="text-secondary font-normal tabular-nums">{numbered(option.hit.number)}</span>{" "}
+                    {option.hit.title}
+                  </span>
+                </>
+              )}
+              <span className="text-xs text-secondary truncate max-w-40">
+                {option.kind === "project" ? option.context : option.hit.where}
+              </span>
             </button>
           ))}
         </div>
-        <div className="text-xs text-secondary mt-1.5">{t(projects[picked] ? "qk.openHint" : "qk.hint")}</div>
+        <div className="text-xs text-secondary mt-1.5">
+          {t(!options[picked] ? "qk.hint" : options[picked].kind === "project" ? "qk.openHint" : "qk.ticketHint")}
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { t, currentLocale } from "../../shared/i18n";
 import { PROVIDERS } from "../../shared/plugins";
-import type { BoardProvider, Card, Column, View } from "../../domain/board/types";
+import type { BoardProvider, Card, Column, Hit, View } from "../../domain/board/types";
 import {
   refOf,
   colOf,
@@ -17,7 +17,7 @@ import { moveCard } from "../../domain/board/moves";
 import { storage } from "../../infrastructure/storage";
 import { saveMainSettings, settings } from "../settings/settings";
 import { PRS } from "../../domain/navigation/views";
-import { prKey } from "../../domain/navigation/keys";
+import { boardKey, prKey } from "../../domain/navigation/keys";
 import { useNavigationStore } from "../navigation/store";
 import { closeTicket, openCard, openPr } from "../navigation/panel";
 import { select, toast } from "../navigation/navigation";
@@ -41,6 +41,20 @@ export const checkBoards = async () => {
   });
 };
 export const readyBoards = () => PROVIDERS.filter(x => bs().ready.includes(x.id));
+
+/** Cmd-K: the cards matching `q` in every connected tracker that searches, in the order of the sidebar; a tracker
+ *  that fails is left out, the others still show. */
+export async function searchTickets(q: string) {
+  const found = await Promise.all(
+    readyBoards().map(provider =>
+      (provider.search?.(ctxOf(provider), q) ?? Promise.resolve([])).then(
+        hits => hits.map(hit => ({ provider, hit })),
+        e => (console.error(e), []),
+      ),
+    ),
+  );
+  return found.flat();
+}
 
 /** The provider's board as it is shown (every provider has one from the start, application/board/store.ts). */
 const boardState = (provider: BoardProvider): Board => bs().states[provider.id];
@@ -323,6 +337,11 @@ export async function createCard(provider: BoardProvider, column: string, title:
 
 export const openBoardCard = (provider: BoardProvider, id: string) =>
   openCard(provider, refOf(provider, boardState(provider)), id);
+/** A card Cmd-K found: the ticket window opens over its tracker's board (whichever board that shows), it has no other place. */
+export async function openFoundCard(provider: BoardProvider, hit: Hit) {
+  await select(boardKey(provider.id));
+  return openCard(provider, hit.ref, hit.id);
+}
 /** "Start conversation" in the ticket window: a new conversation under the board's vault project (or `project`, a card
  *  under Today comes from a board that need not be on screen), with the card's number, title and link typed in its
  *  composer; the draft keeps its title. */
