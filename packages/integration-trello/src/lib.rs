@@ -3,7 +3,7 @@
 //! single card for list changes, a new card in a list, comments and individual member changes. File uploads use a
 //! separate allowlist.
 
-use board_core::{arg, arg_ok, only_keys, path_ok, read, t, write, Action, Provider, Req, Text};
+use board_core::{query_text, arg, arg_ok, only_keys, path_ok, read, t, write, Action, Provider, Req, Text};
 use serde_json::{json, Value};
 
 const TEXT: Text = &[
@@ -70,6 +70,16 @@ const ACTIONS: &[Action] = &[
     read("boards", "Your open boards.", &[], |_, _| api("GET", "/members/me/boards?filter=open&fields=name".into(), None), named),
     read("lists", "The open lists of a board, where a new card goes.", &[("board", "board id")],
         |_, a| api("GET", format!("/boards/{}/lists?filter=open&fields=name", arg_ok(a, "board", id_ok)?), None), named),
+    read("search", "Search cards on your boards by text, up to 20.", &[("query", "search text")],
+        |_, a| api("GET", format!("/search?query={}&modelTypes=cards&partial=true&cards_limit=20&card_fields=name,shortUrl,closed&card_board=true&board_fields=name",
+            query_text(&arg(a, "query").unwrap_or_default())), None),
+        |v| v["cards"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "name": r["name"], "board": r["board"]["name"], "closed": r["closed"], "url": r["shortUrl"] })).collect()).unwrap_or_default()),
+    read("card", "Read one card: title, description, list, board, members, due date and its comments, newest first.", &[("card", "card id")],
+        |_, a| api("GET", format!("/cards/{}?fields=name,desc,due,closed,shortUrl&list=true&list_fields=name&board=true&board_fields=name&members=true&member_fields=fullName&actions=commentCard&actions_limit=100",
+            arg_ok(a, "card", id_ok)?), None),
+        |v| json!({ "id": v["id"], "name": v["name"], "desc": v["desc"], "due": v["due"], "closed": v["closed"], "url": v["shortUrl"], "list": v["list"]["name"], "board": v["board"]["name"],
+            "members": v["members"].as_array().map(|m| m.iter().map(|x| x["fullName"].clone()).collect::<Vec<_>>()),
+            "comments": v["actions"].as_array().map(|c| c.iter().map(|x| json!({ "by": x["memberCreator"]["fullName"], "date": x["date"], "text": x["data"]["text"] })).collect::<Vec<_>>()) })),
     write("create_card", "Create a card at the bottom of a list.", &[("list", "list id"), ("name", "card title"), ("desc?", "description, Markdown")],
         |_, a| api("POST", "/cards".into(), Some(json!({ "idList": arg_ok(a, "list", id_ok)?, "name": arg(a, "name"), "desc": arg(a, "desc").unwrap_or_default(), "pos": "bottom" }))),
         |v| json!({ "id": v["id"], "url": v["shortUrl"] })),
@@ -89,6 +99,10 @@ mod tests {
         let r = (act("create_card").build)(&json!({}), &json!({ "list": list, "name": "N" })).unwrap();
         assert_eq!((r.method, r.url.as_str(), r.body.unwrap()["idList"].as_str()), ("POST", "https://api.trello.com/1/cards", Some(list)));
         assert!((act("lists").build)(&json!({}), &json!({ "board": "x/../members" })).is_err());
+        assert!((act("search").build)(&json!({}), &json!({ "query": "a&b=c" })).unwrap().url.contains("query=a%26b%3Dc&"));
+        assert!((act("card").build)(&json!({}), &json!({ "card": "x/../members" })).is_err());
+        let c = (act("card").out)(&json!({ "id": list, "name": "N", "list": { "name": "Doing" }, "actions": [{ "date": "d", "data": { "text": "hi" }, "memberCreator": { "fullName": "Ann" } }] }));
+        assert_eq!((c["list"].clone(), c["comments"].clone()), (json!("Doing"), json!([{ "by": "Ann", "date": "d", "text": "hi" }])));
         assert_eq!((act("boards").out)(&json!([{ "id": "1", "name": "B", "x": 2 }])), json!([{ "id": "1", "name": "B" }]));
     }
     #[test]

@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Agents can search and read tickets: `relay productive.search`, `productive.task` and `productive.comments`; `relay trello.search` and `trello.card` (with its comments); `relay linear.search` and `linear.issue` (with its comments). Reads, so they run without a card unless Settings says otherwise
+
 ## [0.0.11] - 2026-10-07
 
 ### Added

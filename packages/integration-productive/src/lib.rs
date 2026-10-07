@@ -2,7 +2,7 @@
 //! (vault-app.productive/token). GET on any path, PATCH on a single task, comment or attachment, POST a task, a
 //! comment or an attachment record. The file itself goes to Productive's S3 bucket as a form, without the token.
 
-use board_core::{arg, arg_ok, digits, iso_date, path_ok, read, t, t_v, write, Action, Provider, Req, Text};
+use board_core::{arg, arg_ok, digits, query_text, iso_date, path_ok, read, t, t_v, write, Action, Provider, Req, Text};
 use serde_json::{json, Value};
 
 const TEXT: Text = &[
@@ -78,6 +78,12 @@ fn rows(v: &Value, attrs: &[&str]) -> Value {
         o
     }).collect()).unwrap_or_default()
 }
+/// The `included` record a relationship of the main record points at.
+fn inc<'a>(v: &'a Value, rel: &str) -> &'a Value {
+    let d = &v["data"]["relationships"][rel]["data"];
+    v["included"].as_array().and_then(|i| i.iter().find(|x| x["type"] == d["type"] && x["id"] == d["id"])).map_or(&Value::Null, |x| &x["attributes"])
+}
+fn person(a: &Value) -> Value { if a.is_null() { Value::Null } else { json!(format!("{} {}", a["first_name"].as_str().unwrap_or(""), a["last_name"].as_str().unwrap_or("")).trim()) } }
 fn created(v: &Value) -> Value { json!({ "id": v["data"]["id"], "type": v["data"]["type"] }) }
 
 const ACTIONS: &[Action] = &[
@@ -85,6 +91,23 @@ const ACTIONS: &[Action] = &[
         |_, _| get("/projects?filter[status]=1&page[size]=200".into()), |v| rows(v, &["name", "project_number"])),
     read("task_lists", "Open task lists of a project, where a new task goes.", &[("project", "project id")],
         |_, a| get(format!("/task_lists?filter[project_id]={}&filter[status]=1&page[size]=200", arg_ok(a, "project", digits)?)), |v| rows(v, &["name"])),
+    read("search", "Search tasks by text (title or number), up to 20.", &[("query", "search text"), ("project?", "project id")],
+        |_, a| {
+            let p = match arg(a, "project") { Some(_) => format!("&filter[project_id]={}", arg_ok(a, "project", digits)?), None => String::new() };
+            get(format!("/tasks?filter[query]={}{p}&page[size]=20", query_text(&arg(a, "query").unwrap_or_default())))
+        }, |v| v["data"].as_array().map(|d| d.iter().map(|r| json!({ "id": r["id"], "number": r["attributes"]["task_number"], "title": r["attributes"]["title"],
+            "closed": r["attributes"]["closed"], "project": r["relationships"]["project"]["data"]["id"] })).collect()).unwrap_or_default()),
+    read("task", "Read one task: title, description (HTML), status, assignee, project, due date.", &[("task", "task id")],
+        |_, a| get(format!("/tasks/{}?include=project,workflow_status,assignee", arg_ok(a, "task", digits)?)),
+        |v| { let t = &v["data"]["attributes"]; json!({ "id": v["data"]["id"], "number": t["task_number"], "title": t["title"], "description": t["description"],
+            "due_date": t["due_date"], "closed": t["closed"], "status": inc(v, "workflow_status")["name"], "assignee": person(inc(v, "assignee")), "project": inc(v, "project")["name"] }) }),
+    read("comments", "The comments on a task; bodies are HTML.", &[("task", "task id")],
+        |_, a| get(format!("/comments?filter[task_id]={}&include=creator&page[size]=200", arg_ok(a, "task", digits)?)),
+        |v| v["data"].as_array().map(|d| d.iter().map(|r| {
+            let by = r["relationships"]["creator"]["data"].clone();
+            let who = v["included"].as_array().and_then(|i| i.iter().find(|x| x["type"] == by["type"] && x["id"] == by["id"])).map_or(&Value::Null, |x| &x["attributes"]);
+            json!({ "id": r["id"], "by": person(who), "date": r["attributes"]["created_at"], "body": r["attributes"]["body"] })
+        }).collect()).unwrap_or_default()),
     write("create_task", "Create a task in a project's task list.",
         &[("project", "project id"), ("task_list", "task list id"), ("title", "task title"), ("description?", "body, HTML"), ("assignee?", "person id, or 'me'")],
         |cfg, a| {
@@ -170,6 +193,13 @@ mod tests {
         assert!((act("add_time").build)(&json!({ "org": "1", "user": "" }), &json!({ "service": "9", "date": "2026-10-01", "minutes": "90" })).unwrap_err().contains("user ID"));
         assert!((act("task_lists").build)(&cfg, &json!({ "project": "3" })).unwrap().url.ends_with("filter[project_id]=3&filter[status]=1&page[size]=200"));
         assert_eq!((act("projects").out)(&json!({ "data": [{ "id": "3", "attributes": { "name": "P", "project_number": "12", "x": 1 } }] })), json!([{ "id": "3", "name": "P", "project_number": "12" }]));
+        let s = (act("search").build)(&cfg, &json!({ "query": "fix & ship", "project": "3" })).unwrap();
+        assert!(s.url.ends_with("/tasks?filter[query]=fix%20%26%20ship&filter[project_id]=3&page[size]=20"), "{}", s.url);
+        assert!((act("search").build)(&cfg, &json!({ "query": "x", "project": "3&a" })).is_err() && (act("task").build)(&cfg, &json!({ "task": "1/x" })).is_err());
+        let task = json!({ "data": { "id": "5", "attributes": { "title": "T", "task_number": 12 }, "relationships": { "assignee": { "data": { "type": "people", "id": "7" } }, "workflow_status": { "data": null } } },
+            "included": [{ "type": "people", "id": "7", "attributes": { "first_name": "Ann", "last_name": "Lee" } }, { "type": "projects", "id": "7", "attributes": { "name": "wrong" } }] });
+        let out = (act("task").out)(&task);
+        assert_eq!((out["assignee"].clone(), out["status"].clone(), out["number"].clone()), (json!("Ann Lee"), Value::Null, json!(12)));
         // writes ask unless the user says otherwise
         for a in PROVIDER.actions { assert!(a.write == (a.default == board_core::Policy::Ask), "{}", a.id); }
     }
