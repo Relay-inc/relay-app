@@ -42,6 +42,7 @@ mod scratch;
 #[cfg(feature = "selftest")]
 mod selftest;
 mod snapshot;
+mod updater;
 mod tray;
 mod vault;
 mod worktrees;
@@ -138,6 +139,12 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("settings", ["Settings…", "Instellingen…", "Réglages…", "Einstellungen…"]),
     ("settings.title", ["Settings", "Instellingen", "Réglages", "Einstellungen"]),
     ("about", ["About Relay", "Over Relay", "À propos de Relay", "Über Relay"]),
+    ("check_updates", ["Check for Updates…", "Zoek naar updates…", "Rechercher des mises à jour…", "Nach Updates suchen…"]),
+    ("update.available", ["Relay {v} is available.", "Relay {v} is beschikbaar.", "Relay {v} est disponible.", "Relay {v} ist verfügbar."]),
+    ("update.install", ["Install and Restart", "Installeren en herstarten", "Installer et redémarrer", "Installieren und neu starten"]),
+    ("update.later", ["Later", "Later", "Plus tard", "Später"]),
+    ("update.none", ["Relay {v} is the latest version.", "Relay {v} is de nieuwste versie.", "Relay {v} est la dernière version.", "Relay {v} ist die neueste Version."]),
+    ("update.failed", ["Could not update: {v}", "Kon niet updaten: {v}", "Mise à jour impossible : {v}", "Update nicht möglich: {v}"]),
     ("hide", ["Hide Relay", "Verberg Relay", "Masquer Relay", "Relay ausblenden"]),
     ("hide_others", ["Hide Others", "Verberg andere", "Masquer les autres", "Andere ausblenden"]),
     ("show_all", ["Show All", "Toon alles", "Tout afficher", "Alle einblenden"]),
@@ -271,7 +278,8 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
     let t = |k: &str| tr(lang, k);
     let settings = MenuItem::with_id(h, "settings", t("settings"), true, Some("CmdOrCtrl+,"))?;
     let app = Submenu::with_items(h, "Relay", true, &[
-        &P::about(h, Some(&t("about")), None)?, &P::separator(h)?, &settings, &P::separator(h)?,
+        &P::about(h, Some(&t("about")), None)?, &MenuItem::with_id(h, "check-updates", t("check_updates"), true, None::<&str>)?,
+        &P::separator(h)?, &settings, &P::separator(h)?,
         &P::hide(h, Some(&t("hide")))?, &P::hide_others(h, Some(&t("hide_others")))?, &P::show_all(h, Some(&t("show_all")))?,
         &P::separator(h)?, &P::quit(h, Some(&t("quit")))?])?;
     let edit = Submenu::with_items(h, t("edit"), true, &[
@@ -2032,6 +2040,7 @@ pub fn run() {
                 settings.unwrap().close().ok(); return;
             }
             if tray::owns(event.id().as_ref()) { return; } // handled by the tray's own listener
+            if event.id() == "check-updates" { updater::check_now(app); return; }
             if event.id() != "settings" { app.emit("menu", event.id().as_ref()).ok(); return; }
             open_settings(app);
         })
@@ -2043,6 +2052,7 @@ pub fn run() {
             false
         }).build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         // relay:// links from Raycast or a browser: the UI handles them (src/app/deep-links.ts), the window comes forward here
         .plugin(tauri_plugin_deep_link::init())
@@ -2073,6 +2083,7 @@ pub fn run() {
             actions::start(app.handle());
             awake::start(app.handle());
             retry::start(app.handle());
+            updater::start(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines)
