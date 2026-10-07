@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n";
+import { t, tn } from "../../shared/i18n";
 import { provider } from "../../shared/plugins";
 import { byDue, myCardToday, prsForMe, type TodayCard } from "../../domain/today/rules";
 import {
@@ -25,6 +25,7 @@ import type { Meeting } from "../../domain/calendar/types";
 import type { Reminder } from "../../domain/reminders/types";
 import type { PR } from "../../domain/pull-requests/types";
 import type { Mail } from "../../domain/mail/types";
+import type { Capture } from "../../domain/today/capture";
 import * as backend from "../../infrastructure/backend";
 import { settings } from "../settings/settings";
 import { useBoardStore } from "../board/store";
@@ -54,6 +55,7 @@ import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
 import { linkPrs, relinkPr, ticketOf, ticketState } from "./links";
 import { useDetailsStore } from "./details";
+import { applyCapture, skipCapture } from "./capture";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -169,7 +171,8 @@ export type Subject =
   | { type: "card"; card: TodayCard }
   | { type: "pr"; pr: PR; prs?: PR[] }
   | { type: "mail"; key: string; mail: Mail }
-  | { type: "chat"; key: string };
+  | { type: "chat"; key: string }
+  | { type: "capture"; capture: Capture };
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
 export type Entry = Item & {
   status: Status;
@@ -382,6 +385,18 @@ export function entries(now = Date.now()): Entry[] {
       subject: { type: "chat", key },
     });
   }
+  // what a closed conversation proposes for the vault, until applied or skipped (application/today/capture)
+  for (const capture of Object.values(useTodayStore.getState().captures))
+    add("capture", {
+      id: `capture:${capture.key}`,
+      at: capture.at,
+      title: capture.title,
+      where: "", // the project chip says it already
+      why: tn("capture.why", capture.proposals.length),
+      tone: "",
+      project: capture.project,
+      subject: { type: "capture", capture },
+    });
   const { dismissed } = useTodayStore.getState();
   return out.filter(entry => !dismissed.includes(entry.id) && !asleep(entry.id));
 }
@@ -528,6 +543,8 @@ export async function setStatus(entry: Entry, status: Status) {
       return mailExperimental() ? mailMove([s.key], false) : mailSeen(s.key, true);
     case "chat":
       return markSeen(s.key);
+    case "capture":
+      return skipCapture(s.capture.key);
     case "blocked":
       return backgroundAction("hide", s.session.id);
     case "ask":
@@ -832,6 +849,15 @@ export function actionsOf(entry: Entry): Actions {
         [
           { label: t("today.read"), key: "↵", run: () => select(s.key) },
           { label: t("today.markRead"), key: "⌫", run: () => markSeen(s.key) },
+        ],
+        0,
+        1,
+      );
+    case "capture":
+      return of(
+        [
+          { label: t("capture.apply"), icon: "check", key: "↵", run: () => applyCapture(s.capture.key) },
+          { label: t("capture.skip"), key: "⌫", run: () => skipCapture(s.capture.key) },
         ],
         0,
         1,

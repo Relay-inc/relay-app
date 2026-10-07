@@ -12,7 +12,8 @@ export type Kind =
   | "note" // a meeting that ended: its note
   | "review" // a pull request asks the user's review
   | "fix" // the user's own pull request: changes requested or checks red
-  | "finished"; // a conversation finished while the user was elsewhere
+  | "finished" // a conversation finished while the user was elsewhere
+  | "capture"; // a closed conversation proposes updates to the vault
 
 /** Minutes an item takes, per kind.
  *  ponytail: one guess per kind; a tracker's own estimate on the card would beat it once a provider gives one. */
@@ -27,6 +28,7 @@ export const EST: Record<Kind, number> = {
   review: 15,
   fix: 20,
   finished: 5,
+  capture: 3,
 };
 
 /** An item in the queue. `rank` orders it (lower first), `by` is when it must be done (a meeting's prep: its start). */
@@ -44,6 +46,7 @@ const RANK: Record<Kind, number> = {
   review: 6,
   fix: 7,
   finished: 8,
+  capture: 5,
 };
 /** An item's rank: its kind's, and for a reminder or card that is overdue one step earlier than the rest. */
 export const rankOf = (kind: Kind, late = false) => RANK[kind] - (late ? 2.5 : 0);

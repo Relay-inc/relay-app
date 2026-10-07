@@ -199,6 +199,14 @@ function handle(cmd: string, a: Args): unknown {
       return vault.projectIcons();
     case "project_repos":
       return vault.projectRepos;
+    case "capture_proposals":
+      // fixture capture: a closed conversation leaves two changes for the vault (Today's capture item)
+      return fixture === "capture"
+        ? [
+            { title: "Launch date decided", file: "Contexts/Agency/Portfolio/Portal/Portal.md", change: "Add to **Status**: launch on 1 November (decided today), the launch mail is Jan's." },
+            { title: "Follow-up with Jan", file: "Resources/Meta/Claude/reminders.md", change: "- 2026-10-28: check that Jan has the launch mail ready" },
+          ]
+        : [];
     case "favicons":
     case "find_icon_sites":
     case "integration_import":
