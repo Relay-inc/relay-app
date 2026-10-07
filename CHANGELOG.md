@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **A running meeting opens under Today**: clicking a meeting while it runs opens it with its briefing; before, nothing opened between its start and its end
+
 ## [0.0.13] - 2026-10-07
 
 ### Added
