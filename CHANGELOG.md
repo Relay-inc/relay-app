@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.11] - 2026-10-07
+
 ### Added
 
 - **Time from sessions**: from 16:00 Today offers "Book today's time", built from when you wrote in your Claude Code conversations that day (10 minutes around each message, rounded to 15 per project). Relay opens a conversation that subtracts what Productive already has and proposes one time entry per project, each one approved on its card. Settings › General switches it off: then the item goes and the transcripts are not read for it (#112)
@@ -294,7 +296,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.11...HEAD
+[0.0.11]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/Relay-inc/relay-app/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...v0.0.8
