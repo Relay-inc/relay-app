@@ -1,11 +1,11 @@
 {
-  "version": "0.0.11",
-  "notes": "### Added\n\n- **Time from sessions**: from 16:00 Today offers \"Book today's time\", built from when you wrote in your Claude Code conversations that day (10 minutes around each message, rounded to 15 per project). Relay opens a conversation that subtracts what Productive already has and proposes one time entry per project, each one approved on its card. Settings › General switches it off: then the item goes and the transcripts are not read for it (#112)\n- Commonwealth, the team brain, works without setup. When its Claude Code plugin is installed (Settings › Integrations › Commonwealth installs it, no fields to fill in, and its switch turns it off again), a conversation about a project whose GitHub repositories your own Commonwealth rules route to a brain reads that brain and stages what it learns; personal projects and projects no rule matches never touch one. The new Brain view lists the notes waiting for review, per brain, with Promote and Reject. Reading the brain runs without a permission card, staging a note with `remember` still asks (#47)\n- **Cmd-K finds tickets**: type three letters and Cmd-K also lists the matching tickets from Productive, Trello and Linear (the ones set up in Settings › Integrations), under the projects. ↑↓ and Enter open the ticket over its tracker's board. A tracker that doesn't answer is left out, the others still show (#132)",
-  "pub_date": "2026-10-07T08:52:30.656Z",
+  "version": "0.0.12",
+  "notes": "### Added\n\n- Agents can search and read tickets: `relay productive.search`, `productive.task` and `productive.comments`; `relay trello.search` and `trello.card` (with its comments); `relay linear.search` and `linear.issue` (with its comments). Reads, so they run without a card unless Settings says otherwise (#134)\n\n### Changed\n\n- **Cmd-K finds open tickets only**: closed Productive tasks, archived Trello cards and completed or canceled Linear issues no longer show, and a spinner next to the hint says the trackers are still being searched (#135)",
+  "pub_date": "2026-10-07T09:54:22.371Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnAwMWNBZXFDbUVVZzdjNkIzU0dtK3VKZjJ5c3htakVQN3FmTVJtSHdOWitNWmo5cVlKMGRxSFJaaWRiT082U0xtemNkWkFZNDdNZjhDWFYvTWsxWUFzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzYzMTMzCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xMQprbnJ3cXUvNzFUdm5IdTBacTV6RHg4ZFdUbTEydlJjN3lCV2dFQUJqYkFqS1M0a2FMZ1FWWGliUEhxZXZzZG1pbkY1Wm5TZk9JTzBUNXJIcC9EaUZCdz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/618127509"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnBQcmZzMnVHUlZ2YWxMUUNmdjZaMi9WU3B3cG9QakZxNFVEWXNGcWVXMUQ4TmRvcWJ3Y0w0alZJeGE1NmsvcmEyNXZvQkJCSWtNY3dyVnBhdFJGS2dVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzY2ODQzCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xMgpZT2NXWk92eTNJakZnSWtZZStocVVFSG02Y3hudFFWTkptU1U0eE1YR1o3bEUzMEpvNlFrb0tBTTFuSkxvdGFzeHZzSUVqSXZSZUVjZGh2RXdnSndEUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/618268929"
     }
   }
 }
