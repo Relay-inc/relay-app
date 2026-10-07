@@ -1,7 +1,11 @@
 import { t } from "../../shared/i18n";
 import { panelItem } from "../../domain/navigation/keys";
 import type { PrDetail } from "../../domain/pull-requests/types";
-import { reviewPrompt, rowProject } from "../../domain/pull-requests/rules";
+import { reviewPrompt, reviewsOf, rowProject, secondOpinionPrompt } from "../../domain/pull-requests/rules";
+import { briefingText } from "../../domain/calendar/rules";
+import { ensureHistory } from "../conversations/history";
+import { useConversationsStore } from "../conversations/store";
+import { agent } from "../../shared/plugins";
 import * as backend from "../../infrastructure/backend";
 import { ghOn } from "../settings/settings";
 import { project, projectLabel } from "../workspace/vault";
@@ -65,9 +69,54 @@ export async function reviewPr(key: string) {
     provider: reviewAgent(),
     title: `Review ${repo.split("/")[1]} #${pr.number}`,
     note: t("note.reviewStarted", { repo, n: pr.number }),
+    pr: pr.url,
   });
   await select(chatKey);
   sendMsg(reviewPrompt(pr, repo));
+}
+/** The last finished review of the PR in the detail: its conversation and its answer, "" while none is done. */
+export function finishedReview(key: string) {
+  const pr = useNavigationStore.getState().panel.detail[key] as PrDetail | undefined;
+  if (!pr) return null;
+  const { chats, messages, status } = useConversationsStore.getState();
+  const done = reviewsOf(chats, pr.url).filter(chat => status[chat.key] !== "busy");
+  const last = done[done.length - 1];
+  return last ? { key: last.key, provider: last.provider || "claude", text: briefingText(messages[last.key]) } : null;
+}
+/** The PR detail's reviews: each conversation with its agent and whether it still runs, and the agent of the last
+ *  finished one (what a second opinion answers), "" while none is done. Read it with `useDerived`. */
+export function prReviews(key: string) {
+  const pr = useNavigationStore.getState().panel.detail[key] as PrDetail | undefined;
+  const { chats, status } = useConversationsStore.getState();
+  const list = pr
+    ? reviewsOf(chats, pr.url).map(chat => ({
+        key: chat.key,
+        title: chat.title,
+        provider: chat.provider || "claude",
+        busy: status[chat.key] === "busy",
+      }))
+    : [];
+  return { list, answers: finishedReview(key)?.provider ?? "" };
+}
+/** A second agent answers the last finished review: a conversation of its own, listed with the PR's reviews. */
+export async function secondOpinion(key: string) {
+  const pr = useNavigationStore.getState().panel.detail[key] as PrDetail | undefined;
+  const item = panelItem(key);
+  const first = finishedReview(key);
+  if (!pr || item?.kind !== "pr" || !first) return;
+  await ensureHistory(first.key); // after a restart its messages are not read yet
+  const review = briefingText(useConversationsStore.getState().messages[first.key]);
+  if (!review) return;
+  const repo = item.repo;
+  const firstName = agent(first.provider)?.name ?? first.provider;
+  const chatKey = startChat(useConversationsStore.getState().chats[first.key]?.project ?? null, {
+    provider: reviewAgent(),
+    title: `Second opinion ${repo.split("/")[1]} #${pr.number}`,
+    note: t("note.secondOpinion", { repo, n: pr.number, agent: firstName }),
+    pr: pr.url,
+  });
+  await select(chatKey);
+  sendMsg(secondOpinionPrompt(pr, repo, firstName, review));
 }
 /** The label of the project a PR row belongs to, or "" when the vault does not know it. */
 export function prProjectLabel(name: string): string {

@@ -285,6 +285,27 @@ const VIEWS = {
     await click("Fix the SSO redirect loop on the portal");
     await waitText("src/auth/callback.ts");
   },
+  // a review, then a second opinion on it by Codex: both listed in the PR detail, the second answering the first
+  "pr-second-opinion": async () => {
+    await VIEWS["pr-detail"]();
+    await button("Review").click();
+    await page.waitForTimeout(2500);
+    await click("Pull requests");
+    await click("Fix the SSO redirect loop on the portal");
+    await waitText("src/auth/callback.ts");
+    await button("Agent").click();
+    await page.getByRole("menuitemradio", { name: "Codex" }).click();
+    await settle(page);
+    await page.screenshot({ path: `${dir}/pr-second-opinion-detail.png` });
+    // the clock is fixed and a conversation's key is its start time: a minute later, so the two don't share one
+    await page.clock.setFixedTime(await page.evaluate(() => Date.now() + 60_000));
+    await button("Second opinion with Codex").click();
+    await page.waitForTimeout(1500);
+    await page.screenshot({ path: `${dir}/pr-second-opinion-chat.png` });
+    await click("Pull requests");
+    await click("Fix the SSO redirect loop on the portal");
+    await waitText("src/auth/callback.ts");
+  },
   "pr-review-agent": async () => {
     await VIEWS["pr-detail"]();
     await button("Agent").click();

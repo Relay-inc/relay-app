@@ -11,7 +11,8 @@ import {
   type Check,
 } from "../../../domain/pull-requests/rules";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { prHeading, reviewPr } from "../../../application/pull-requests/prs";
+import { prHeading, prReviews, reviewPr, secondOpinion } from "../../../application/pull-requests/prs";
+import { select } from "../../../application/navigation/navigation";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
@@ -89,6 +90,8 @@ export function PrPane({ prKey }: { prKey: string }) {
   const heading = useDerived(() => prHeading(prKey));
   const review = useDerived(() => ({ id: reviewAgent(), agents: onAgents() }));
   const reviewer = agent(review.id);
+  const reviews = useDerived(() => prReviews(prKey));
+  const nameOf = (id: string) => agent(id)?.name ?? id;
   const formatDate = (iso: string) => dayMonth(iso, locale);
 
   const entry = (key: number, who: string, at: string, body: string | undefined, extra?: ReactNode) => (
@@ -223,6 +226,34 @@ export function PrPane({ prKey }: { prKey: string }) {
             {pr.mergeable === "CONFLICTING" ? chip("bad", t("pr.conflict")) : null}
             {asked.length ? chip("", t("pr.asked", { who: asked.join(", ") })) : null}
           </div>
+          {/* the conversations that reviewed this PR; once one is done, the picked agent can answer it */}
+          {reviews.list.length ? (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-secondary">{t("pr.reviews")}</span>
+              {reviews.list.map(r => (
+                <button
+                  key={r.key}
+                  title={r.title}
+                  onClick={() => select(r.key)}
+                  className="inline-flex items-center gap-1.5 h-6.5 px-2 rounded-[7px] bg-fill-2 text-label cursor-pointer hover:bg-separator-strong"
+                >
+                  {agent(r.provider) ? <Glyph svg={agent(r.provider)!.glyph} className="glyph size-3" /> : null}
+                  {nameOf(r.provider)}
+                  {r.busy ? <span className="text-secondary">· {t("pr.reviewRunning")}</span> : null}
+                </button>
+              ))}
+              {reviews.answers ? (
+                <button
+                  title={t("pr.secondOpinionTitle", { agent: nameOf(review.id), first: nameOf(reviews.answers) })}
+                  onClick={() => secondOpinion(prKey)}
+                  className="inline-flex items-center gap-1.5 h-6.5 px-2 rounded-[7px] border border-separator-strong bg-raised font-medium cursor-pointer whitespace-nowrap"
+                >
+                  {reviewer ? <Glyph svg={reviewer.glyph} className="glyph size-3" /> : null}
+                  {t("pr.secondOpinion", { agent: nameOf(review.id) })}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         {section(
           t("pr.desc"),

@@ -65,6 +65,7 @@ export type Chat = {
   ask?: string[]; // the projects a Cmd-K question named: offered once, after it started
   orch?: true; // a worker the orchestrator started
   meeting?: string; // the meeting (Meeting.id) whose briefing this is, shown under Today
+  pr?: string; // the PR (its url) this conversation reviews, listed in that PR's detail
   briefing?: string; // that briefing as rewritten under Today, shown instead of the agent's answer
 };
 /** How full a conversation's context is, in tokens. */
