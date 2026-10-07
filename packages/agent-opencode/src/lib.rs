@@ -54,7 +54,7 @@ impl AgentProvider for OpenCode {
     fn name(&self) -> &'static str { "OpenCode" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: false, fork: true,
-            terminal: true, background: true, effort: true, limits: false, title: false, accounts: false }
+            terminal: true, background: true, effort: true, limits: false, title: false, accounts: false, ..Caps::default() }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = [format!("{home}/.opencode/bin/opencode"), "/opt/homebrew/bin/opencode".into(), "/usr/local/bin/opencode".into(),

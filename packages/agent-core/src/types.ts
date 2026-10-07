@@ -6,11 +6,13 @@ import type { Locales } from "./i18n";
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
   fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; accounts: boolean;
+  liveModel: boolean; control: boolean; picked: boolean; remote: boolean; brain: boolean;
 };
 export type Choice = { id: string; label: string };
 export type Detect = { installed: boolean; bin: string; version?: string | null; loggedIn?: boolean | null; note?: string | null };
 /** One provider as `agents_status` reports it: switched on in the settings, detected, its picks. */
-export type AgentStatus = { id: string; name: string; on: boolean; caps: Caps; detect: Detect; models: Choice[]; efforts: Choice[]; bin: string; defaultBin: string };
+export type AgentStatus = { id: string; name: string; on: boolean; caps: Caps; detect: Detect; models: Choice[]; efforts: Choice[]; bin: string; defaultBin: string;
+  /** Slash commands (without the slash) that take no attachments. */ textOnly: string[] };
 
 export type Image = { media_type: string; data: string };
 /** One hunk of a file change: its start in the old and new file, its lines prefixed " ", "-" or "+". */

@@ -167,7 +167,7 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
                 crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
             }
         }
-        let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns > 0);
+        let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns.busy());
         let idle = ws.len() >= 3 && !ws.iter().any(|w| w.state == "running") && !busy;
         if !idle { quiet_since = None } else if quiet_since.get_or_insert_with(Instant::now).elapsed() > Duration::from_secs(20) { break; }
         std::thread::sleep(Duration::from_secs(2));

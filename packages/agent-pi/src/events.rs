@@ -75,6 +75,8 @@ impl State {
         let span = self.span.take();
         let used = u.input + u.output + u.cache_read + u.cache_write > 0;
         for i in 0..self.sent.max(1) {
+            // every queued message's end is limited, as each one is spent and retried
+            agent_core::limited(error.as_deref(), out);
             out.push(Event::TurnEnd { ok: error.is_none(), error: error.clone(), usage: (i == 0 && used).then(|| u.clone()),
                 duration_ms: span.filter(|(a, b)| i == 0 && b > a).map(|(a, b)| (b - a) as u64) });
         }
@@ -103,6 +105,7 @@ impl State {
                 },
                 ("compact", ok) => {
                     if let Some(summary) = m["data"]["summary"].as_str() { out.push(Event::Text { text: summary.into(), delta: false }); }
+                    agent_core::limited(m["error"].as_str(), &mut out);
                     out.push(Event::TurnEnd { ok, error: m["error"].as_str().map(String::from), usage: None, duration_ms: None });
                 },
                 ("prompt", true) => {
@@ -115,6 +118,7 @@ impl State {
                 ("prompt", false) => {
                     let text = m["error"].as_str().unwrap_or("pi refused the message").to_string();
                     out.push(Event::Error { text: text.clone() });
+                    agent_core::limited(Some(&text), &mut out);
                     out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None });
                 }
                 _ => {}
@@ -180,6 +184,20 @@ mod tests {
     }
     fn calls(ev: &[Event]) -> Vec<(&str, &Value, &str)> {
         ev.iter().filter_map(|e| if let Event::ToolCall { name, input, id } = e { Some((name.as_str(), input, id.as_str())) } else { None }).collect()
+    }
+
+    #[test]
+    fn a_refused_prompt_with_a_limit_text_is_a_limited_event() {
+        let ev = State::default().parse(r#"{"type":"response","command":"prompt","success":false,"error":"You've hit your usage limit"}"#);
+        assert!(matches!(&ev[..], [Event::Error { .. }, Event::TurnLimited, Event::TurnEnd { ok: false, .. }]), "{ev:?}");
+    }
+
+    #[test]
+    fn every_queued_message_ends_limited() {
+        let mut st = State { sent: 2, error: Some("You've hit your usage limit".into()), ..State::default() };
+        let mut ev = vec![];
+        st.end(&mut ev);
+        assert!(matches!(&ev[..], [Event::TurnLimited, Event::TurnEnd { .. }, Event::TurnLimited, Event::TurnEnd { .. }]), "{ev:?}");
     }
 
     #[test]

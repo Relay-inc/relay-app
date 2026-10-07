@@ -105,6 +105,7 @@ impl State {
             if let Some(e) = m.get("error") {
                 let text = e["message"].as_str().unwrap_or("codex error").to_string();
                 out.push(Event::Error { text: text.clone() });
+                agent_core::limited(Some(&text), &mut out);
                 out.push(Event::TurnEnd { ok: false, error: Some(text), usage: None, duration_ms: None });
             }
             self.session(m["result"]["thread"]["id"].as_str(), &mut out);
@@ -179,6 +180,7 @@ impl State {
                 let error = (!ok).then(|| t["error"]["message"].as_str().or(t["status"].as_str()).unwrap_or("").to_string());
                 let usage = self.total.as_ref().map(|tot| self.base.as_ref().map_or(tot.clone(), |b| minus(tot, b)));
                 self.streamed.clear();
+                agent_core::limited(error.as_deref(), &mut out);
                 out.push(Event::TurnEnd { ok, error, usage, duration_ms: t["durationMs"].as_u64() });
             }
             _ => {}
@@ -192,6 +194,17 @@ mod tests {
     use super::*;
     use agent_core::Image;
     const LIVE: &str = include_str!("../tests/fixtures/app-server.jsonl");
+
+    #[test]
+    fn a_usage_limit_error_is_a_limited_event_before_the_turn_end() {
+        let ended = |msg: &str| json!({"method": "turn/completed", "params": {"turn": {"status": "failed", "error": {"message": msg}}}}).to_string();
+        let ev = State::default().parse(&ended("You've hit your usage limit. Try again at 9pm."));
+        assert!(matches!(&ev[..], [Event::TurnLimited, Event::TurnEnd { ok: false, .. }]), "{ev:?}");
+        assert!(!State::default().parse(&ended("boom")).iter().any(|e| matches!(e, Event::TurnLimited)));
+        // a turn that could not start
+        let refused = json!({"id": 3, "error": {"message": "usage limit reached"}}).to_string();
+        assert!(State::default().parse(&refused).iter().any(|e| matches!(e, Event::TurnLimited)));
+    }
 
     #[test]
     fn app_server_to_events() {

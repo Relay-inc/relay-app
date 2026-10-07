@@ -47,7 +47,7 @@ pub fn start(app: &AppHandle) {
             loop {
                 let st = h.state::<App>();
                 let on = st.settings.lock().unwrap()["keepAwake"] != false;
-                let running = on && (st.procs.lock().unwrap().values().any(|p| p.turns > 0) || super::retry::pending());
+                let running = on && (st.procs.lock().unwrap().values().any(|p| p.turns.busy()) || super::retry::pending());
                 match (running, held) {
                     (true, None) => held = iokit::take(),
                     (false, Some(id)) => { iokit::release(id); held = None; }

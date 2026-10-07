@@ -69,8 +69,10 @@ test("slash commands keep their prefix and defer project and mail context", () =
     tookMail: false,
   }));
 test("commands without attachments", () => {
-  assert.ok(refusesImages("codex", "/review now"));
-  assert.ok(refusesImages("pi", "/compact"));
-  assert.ok(!refusesImages("claude", "/compact"));
-  assert.ok(!refusesImages("codex", "/compacted"));
+  const codex = ["compact", "review"];
+  assert.ok(refusesImages(codex, "/review now"));
+  assert.ok(refusesImages(["compact"], "/compact"));
+  assert.ok(!refusesImages([], "/compact"));
+  assert.ok(!refusesImages(codex, "/compacted"));
+  assert.ok(!refusesImages(codex, "review this"));
 });

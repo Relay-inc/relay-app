@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import type { Meeting } from "../../../../domain/calendar/types";
 import { briefingOf, briefingText } from "../../../../domain/calendar/rules";
 import { editBriefing, meetingChat, timeOf } from "../../../../application/calendar/calendar";
 import { useConversationsStore } from "../../../../application/conversations/store";
@@ -9,6 +8,7 @@ import { useT } from "../../../hooks/useT";
 import { Glyph } from "../../../components/Glyph";
 import { agent } from "../../../../shared/plugins";
 import { Caps } from "../parts";
+import type { SectionDef, SectionProps } from "./types";
 
 const initials = (name: string) =>
   name
@@ -31,8 +31,10 @@ const agendaOf = (text = "") =>
 
 /** A meeting under Today: who is in it, the agenda from the invite, and (before it) the briefing Claude writes in a
  *  conversation from the vault, or (after it) the note. The invite is the sender's text: shown, never followed. */
-export function MeetingSection({ meeting, after }: { meeting: Meeting; after: boolean }) {
+export function MeetingSection({ entry }: SectionProps<"meeting">) {
   const { t } = useT();
+  const { meeting } = entry.subject;
+  const after = entry.kind === "note";
   const agenda = agendaOf(meeting.description);
   const claude = agent("claude")?.glyph ?? "";
   const briefing = useConversationsStore(s => (after ? null : briefingOf(s.chats, meeting.id)));
@@ -154,3 +156,7 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
     </div>
   );
 }
+export const meetingFacts: SectionDef<"meeting">["facts"] = (entry, _day, t) => [
+  [t("today.fact.organizer"), entry.subject.meeting.organizer],
+  [t("today.fact.people"), String(entry.subject.meeting.people.length || "")],
+];

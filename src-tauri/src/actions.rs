@@ -66,9 +66,12 @@ fn chosen(acts: &Value, it: &Item) -> Policy {
     let pick = |v: &Value| v.as_str().and_then(Policy::parse);
     pick(&s[it.id]).or_else(|| pick(&s["*"])).or_else(|| pick(s)).unwrap_or(it.default)
 }
-/// What applies in this conversation: mail only for Claude Code.
+/// Whether mail reaches a conversation of this provider: only through a control pipe, where the app can restrict a
+/// session that read mail.
+fn mail_allowed(provider: &str) -> bool { crate::agents::get(provider).is_ok_and(|p| p.caps().control) }
+/// What applies in this conversation: mail only where `mail_allowed`.
 fn effective(acts: &Value, it: &Item, provider: &str) -> Policy {
-    if it.ext == "mail" && provider != "claude" { return Policy::Deny; }
+    if it.ext == "mail" && !mail_allowed(provider) { return Policy::Deny; }
     chosen(acts, it)
 }
 
@@ -162,7 +165,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }
     match effective(&s, it, &provider) {
-        Policy::Deny if it.ext == "mail" && provider != "claude" => return Err("mail is only available to Claude Code conversations".into()),
+        Policy::Deny if it.ext == "mail" && !mail_allowed(&provider) => return Err("mail is only available to Claude Code conversations".into()),
         Policy::Deny => return Err(format!("the user does not allow {action}")),
         Policy::Ask => ask(app, c, key, &provider, action, args)?,
         Policy::Auto => {}
@@ -173,7 +176,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
             let r = (a.build)(&cfg, args)?;
             providers::send(p, &cfg, r.method, &r.url, r.body).map(|v| (a.out)(&v))
         }
-        Run::Mail => mail(app, key, it.id, args),
+        Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
         Run::Calendar => Ok(crate::calendar::upcoming(&app.state::<crate::App>().settings.lock().unwrap().clone())),
     }
@@ -209,11 +212,11 @@ fn gone(c: &UnixStream) -> bool {
     closed
 }
 
-fn mail(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Value, String> {
+fn mail(app: &AppHandle, key: &str, provider: &str, name: &str, args: &Value) -> Result<Value, String> {
     let st = app.state::<crate::App>();
     // mail text is about to enter this session, as for relay-mail
     if name != "save_draft" {
-        if let Some(p) = st.procs.lock().unwrap().get_mut(key).filter(|p| !p.tainted) { crate::mark_tainted(p); }
+        if let Some(p) = st.procs.lock().unwrap().get_mut(key).filter(|p| !p.tainted) { p.mark_tainted(); }
     }
     let mut args = args.clone();
     for k in ["limit", "index"] { if let Some(n) = args[k].as_str().and_then(|s| s.parse::<u64>().ok()) { args[k] = json!(n); } }
@@ -225,7 +228,7 @@ fn mail(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Value, S
     let v: Value = serde_json::from_str(&text).unwrap_or(Value::String(text));
     if name == "save_draft" {
         // the chat shows who the draft is really for, whatever the agent writes about it
-        app.emit("agent", json!({"project": key, "provider": "claude", "event": {"type": "draft_saved", "folder": v["folder"], "to": v["to"], "cc": v["cc"], "bcc": v["bcc"]}})).ok();
+        app.emit("agent", json!({"project": key, "provider": provider, "event": {"type": "draft_saved", "folder": v["folder"], "to": v["to"], "cc": v["cc"], "bcc": v["bcc"]}})).ok();
     }
     Ok(v)
 }

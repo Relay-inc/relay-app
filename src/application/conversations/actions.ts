@@ -1,6 +1,6 @@
 import { t, tn } from "../../shared/i18n";
 import type { Img, Item, Pending, CardChoice } from "../../domain/conversations/types";
-import { NEW, decisionOf } from "../../domain/conversations/rules";
+import { NEW, decisionOf, waitsForPickup } from "../../domain/conversations/rules";
 import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
 import { fileName, withFiles } from "../../domain/conversations/files";
@@ -13,7 +13,7 @@ import { storage } from "../../infrastructure/storage";
 import { useNavigationStore } from "../navigation/store";
 import { select, toast, hideToast, closeProjectPanel } from "../navigation/navigation";
 import { request } from "../navigation/requests";
-import { chatAgent, picks } from "../agents/agents";
+import { chatAgent, chatCaps, chatTextOnly, picks } from "../agents/agents";
 import { saveMainSettings, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
 import { findProjects, project as vaultProject } from "../workspace/vault";
@@ -188,7 +188,7 @@ function queueMessage(key: string, text: string, images: Img[], files: string[])
       ...(images.length ? { imgs: images.map(image => image.url) } : {}),
       ...(files.length ? { files } : {}),
     };
-    if (chatAgent(key) === "claude") (draft.waiting[key] ||= []).push(item);
+    if (waitsForPickup(chatCaps(key))) (draft.waiting[key] ||= []).push(item);
     else push(draft, key, item);
     draft.status[key] = "busy";
     draft.queued[key] = (draft.queued[key] || 0) + 1;
@@ -209,7 +209,7 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
     saveChats();
   }
   try {
-    if ((images.length || files.length) && refusesImages(chatAgent(key), text))
+    if ((images.length || files.length) && refusesImages(chatTextOnly(key), text))
       throw new Error("This command does not accept attachments.");
     // ponytail: a machine cannot read this Mac's paths; upload the files over the connection when that is needed
     if (files.length && machineChoice(key).value) throw new Error(t("file.remote"));

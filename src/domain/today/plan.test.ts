@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NO_PROJECT, doingFirst, inContext, ordered, plan, rankOf, slots, statusOf, type Item } from "./plan.ts";
+import { NO_PROJECT, doingFirst, inContext, ordered, plan, slots, statusOf, type Item } from "./plan.ts";
+import { rankOf } from "./kinds/index.ts";
 
 const H = 3_600_000;
 const M = 60_000;

@@ -2,8 +2,8 @@ import { useState, type ReactNode } from "react";
 import type { Meeting } from "../../../domain/calendar/types";
 import type { Slot } from "../../../domain/today/plan";
 import { joinable } from "../../../domain/calendar/rules";
+import { KINDS, isAgentItem } from "../../../domain/today/kinds";
 import {
-  isAgentItem,
   openMeeting,
   projectChip,
   reopen,
@@ -17,12 +17,10 @@ import { useTodayStore } from "../../../application/today/store";
 import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
 import { RecordingBar } from "../conversations/RecordingBar";
-import { KIND_ICON, StatusDot, minutes } from "./parts";
+import { StatusDot, minutes } from "./parts";
 
 const iso = (at: number) => new Date(at).toISOString();
 const MIN = 60_000;
-// what bundles: three or more mails, or PRs, in one group are one row that opens
-const BUNDLE: Record<string, "mail" | "pr"> = { mail: "mail", review: "pr", fix: "pr" };
 
 /** The queue as the day runs (design "Today Calm" 6a / 6c): a quiet heading per free slot, the meetings in between as
  *  cards at their time, what did not fit under Tomorrow. A row says what it is once: one icon, the title, and the
@@ -36,9 +34,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   const meta = (entry: Entry) =>
     [
       projectChip(entry.project)?.label,
-      entry.kind === "ask" || entry.kind === "blocked"
-        ? minutes(Math.max(0, Math.floor((now - entry.at) / MIN)))
-        : minutes(entry.est),
+      KINDS[entry.kind].waits ? minutes(Math.max(0, Math.floor((now - entry.at) / MIN))) : minutes(entry.est),
     ]
       .filter(Boolean)
       .join(" · ");
@@ -55,7 +51,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
       >
         {child ? null : (
           <span className="relative flex-none text-tertiary">
-            <Icon name={KIND_ICON[entry.kind]} className="glyph size-4" />
+            <Icon name={KINDS[entry.kind].icon} className="glyph size-4" />
             {/* in progress: a small dot on the icon, the only mark a row carries */}
             {entry.status === "doing" ? (
               <span className="absolute -right-0.5 -bottom-0.5 size-1.75 rounded-full bg-accent shadow-[0_0_0_1.5px_var(--color-bg)]" />
@@ -78,11 +74,11 @@ export function TodayQueue({ model }: { model: TodayModel }) {
   // open item); "more" when that kind came as single rows earlier in the day
   const shown = new Set<string>();
   const rows = (group: string, items: Entry[]) => {
-    const count = (kind: string) => items.filter(entry => BUNDLE[entry.kind] === kind).length;
+    const count = (kind: string) => items.filter(entry => KINDS[entry.kind].bundle === kind).length;
     const out: ReactNode[] = [];
     const bundled = new Set<string>();
     for (const entry of items) {
-      const kind = BUNDLE[entry.kind];
+      const kind = KINDS[entry.kind].bundle;
       if (!kind || count(kind) < 3) {
         if (kind) shown.add(kind);
         out.push(row(entry));
@@ -90,7 +86,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
       }
       if (bundled.has(kind)) continue;
       bundled.add(kind);
-      const members = items.filter(x => BUNDLE[x.kind] === kind);
+      const members = items.filter(x => KINDS[x.kind].bundle === kind);
       const key = `${group}:${kind}`;
       const open = opened.includes(key) || members.some(x => x.id === selected?.id);
       const label = t(`today.bundle.${kind}${shown.has(kind) ? "More" : ""}`, { n: members.length });
@@ -246,7 +242,7 @@ export function TodayQueue({ model }: { model: TodayModel }) {
           {heading(t("today.snoozed"), String(snoozed.length))}
           {snoozed.map(item => (
             <div key={item.id} className={quiet}>
-              <Icon name={KIND_ICON[item.kind]} className="glyph size-4 flex-none text-tertiary" />
+              <Icon name={KINDS[item.kind]?.icon ?? ""} className="glyph size-4 flex-none text-tertiary" />
               <span className="flex-1 min-w-0 truncate">{item.title}</span>
               <span className="text-xs text-tertiary tabular-nums whitespace-nowrap">
                 {new Date(`${item.until}T00:00`).toLocaleDateString(locale, {

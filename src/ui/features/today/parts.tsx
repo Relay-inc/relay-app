@@ -1,22 +1,10 @@
 import type { ReactNode } from "react";
-import type { Kind, Status } from "../../../domain/today/plan";
+import type { Status } from "../../../domain/today/plan";
 import { Icon } from "../../components/Icon";
 
-/** The glyph of each kind of item. */
-export const KIND_ICON: Record<Kind, string> = {
-  ask: "agent",
-  blocked: "term",
-  prep: "cal",
-  note: "cal",
-  mail: "mail",
-  reminder: "list",
-  card: "board",
-  review: "pr",
-  fix: "pr",
-  time: "clock",
-  finished: "chat",
-  capture: "notes",
-};
+/** A square icon-only button. */
+export const ICON_BUTTON =
+  "grid place-items-center size-7.5 rounded-lg text-secondary cursor-pointer hover:bg-fill-2 hover:text-label";
 /** A small section label in capitals. */
 export const Caps = ({ children }: { children: ReactNode }) => (
   <span className="text-[11px] font-semibold tracking-[0.06em] uppercase text-tertiary">{children}</span>

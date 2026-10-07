@@ -16,45 +16,11 @@ export type Kind =
   | "finished" // a conversation finished while the user was elsewhere
   | "capture"; // a closed conversation proposes updates to the vault
 
-/** Minutes an item takes, per kind.
- *  ponytail: one guess per kind; a tracker's own estimate on the card would beat it once a provider gives one. */
-export const EST: Record<Kind, number> = {
-  ask: 2,
-  blocked: 2,
-  prep: 10,
-  mail: 5,
-  reminder: 15,
-  card: 30,
-  note: 10,
-  review: 15,
-  fix: 20,
-  time: 5,
-  finished: 5,
-  capture: 3,
-};
-
 /** An item in the queue. `rank` orders it (lower first), `by` is when it must be done (a meeting's prep: its start). */
 export type Item = { id: string; kind: Kind; rank: number; at: number; est: number; by?: number };
 
-// within a rank, the oldest or most overdue first (`at`), then by id so the order holds between reads
-const RANK: Record<Kind, number> = {
-  ask: 0,
-  prep: 1,
-  mail: 2,
-  blocked: 3,
-  reminder: 4,
-  card: 4,
-  note: 5,
-  review: 6,
-  fix: 7,
-  time: 7,
-  finished: 8,
-  capture: 5,
-};
-/** An item's rank: its kind's, and for a reminder or card that is overdue one step earlier than the rest. */
-export const rankOf = (kind: Kind, late = false) => RANK[kind] - (late ? 2.5 : 0);
-
-/** The queue: by rank, then oldest first; what the user put off (`later`) at the end, in the order they did it. */
+/** The queue: by rank (see `KINDS`), within a rank the oldest or most overdue first (`at`), then by id so the order
+ *  holds between reads; what the user put off (`later`) at the end, in the order they did it. */
 export function ordered(items: Item[], later: string[]) {
   const sorted = [...items].sort((a, b) => a.rank - b.rank || a.at - b.at || a.id.localeCompare(b.id));
   const put = later.filter(id => sorted.some(item => item.id === id));

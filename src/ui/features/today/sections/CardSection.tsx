@@ -1,11 +1,12 @@
 import { useState } from "react";
 import type { CardView } from "../../../../domain/board/types";
-import type { TodayCard } from "../../../../domain/today/rules";
 import { useDetailsStore } from "../../../../application/today/details";
-import { cardAct } from "../../../../application/today/load";
+import { cardAct, loadCard } from "../../../../application/today/load";
 import { provider } from "../../../../shared/plugins";
 import { useT } from "../../../hooks/useT";
 import { TicketActivity } from "../../board/TicketActivity";
+import { ConnectedList } from "./ConnectedList";
+import type { SectionDef, SectionProps } from "./types";
 
 /** The tabs a card has under Today. */
 export const cardTabs = (view: CardView | undefined, connected: number) =>
@@ -17,11 +18,14 @@ export const cardTabs = (view: CardView | undefined, connected: number) =>
 
 /** A card under Today: its description and fields, its activity with the comment box (the ticket window's own), as
  *  the tracker has them. Read when it opens. The Connected tab is drawn by the detail (it knows the queue). */
-export function CardSection({ id, item, tab }: { id: string; item: TodayCard; tab: string }) {
+export function CardSection({ entry, tab, connected }: SectionProps<"card">) {
   const { t } = useT();
+  const id = entry.id;
+  const item = entry.subject.card;
   const view = useDetailsStore(s => s.card[id]);
   const err = useDetailsStore(s => s.err[id]);
   const [actErr, setActErr] = useState("");
+  if (tab === "linked") return <ConnectedList items={connected} />;
   if (err && !view) return <div className="err-box">{err}</div>;
   if (!view) return <div className="text-secondary text-sm">{t("kb.loading")}</div>;
   if (tab === "activity")
@@ -63,3 +67,8 @@ export function CardSection({ id, item, tab }: { id: string; item: TodayCard; ta
     </div>
   );
 }
+export const cardFacts: SectionDef<"card">["facts"] = (entry, day, t) => [
+  [t("today.fact.due"), entry.subject.card.card.due ? day(entry.subject.card.card.due) : ""],
+  [t("today.fact.labels"), (entry.subject.card.card.labels ?? []).join(", ")],
+];
+export const cardLoad: SectionDef<"card">["load"] = entry => void loadCard(entry.id, entry.subject.card);

@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
 
-use super::{data_dir, need_vault, pipe_ok, pipe_reply, spawn_or_get, App};
+use super::{data_dir, need_vault, pipe_reply, spawn_or_get, App};
 
 pub const COORD: &str = "c:orch";
 const WORKER_PREFIX: &str = "c:orch-w-";
@@ -170,13 +170,13 @@ pub fn control(app: &AppHandle, key: &str, pid: u32, rid: Value, m: &Value) {
             tauri::async_runtime::spawn(async move {
                 let (a, k) = (app.clone(), key.clone());
                 let res = tauri::async_runtime::spawn_blocking(move || call(&a, &k, &name, &args)).await.unwrap_or_else(|e| fail(e.to_string()));
-                pipe_reply(&app, &key, pid, pipe_ok(rid, json!({"jsonrpc": "2.0", "id": id, "result": res})));
+                pipe_reply(&app, &key, pid, &rid, Ok(json!({"jsonrpc": "2.0", "id": id, "result": res})));
             });
             return;
         }
         _ => json!({"jsonrpc": "2.0", "id": id, "error": {"code": -32601, "message": "Method not found"}}),
     };
-    pipe_reply(app, key, pid, pipe_ok(rid, reply));
+    pipe_reply(app, key, pid, &rid, Ok(reply));
 }
 
 fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
