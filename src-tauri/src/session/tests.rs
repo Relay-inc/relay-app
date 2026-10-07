@@ -286,3 +286,45 @@ fn turns_count_up_and_down_and_report_changes() {
     assert_eq!(t.working(), Some(1), "work with nothing counted starts a turn (a replay)");
     assert!(t.busy());
 }
+
+fn meta(key: &str, pid: u32, turns: u32) -> broker::Meta {
+    broker::Meta { key: key.into(), provider: "claude".into(), model: "opus".into(), effort: "".into(), tainted: false, pid, account: "/a".into(), turns }
+}
+
+// eb47d73: after a restart a conversation runs the turns its broker file says, not one; every change goes to that file
+#[test]
+fn a_reattached_process_takes_its_turns_from_the_file_and_writes_changes_back() {
+    let dir = tmp("meta");
+    std::env::set_var("RELAY_AGENTS_DIR", &dir);
+    let mut idle = Proc::of_meta(broker::Agent::from(7), Box::new(std::io::sink()), meta("k-idle", 7, 0), "claude");
+    assert!(!idle.turns.busy(), "an agent left idle by an app that did not quit stays idle");
+    let mut busy = Proc::of_meta(broker::Agent::from(8), Box::new(std::io::sink()), meta("k-busy", 8, 2), "claude");
+    assert_eq!(busy.turns.count(), 2);
+
+    // the file the broker keeps; the process writes its turns into it
+    let read = |k: &str| broker::load_meta(&broker::meta_path(k)).unwrap().turns;
+    broker::save_meta(&meta("k-busy", 8, 2));
+    busy.turn_ended();
+    assert_eq!(read("k-busy"), 1);
+    busy.sent();
+    assert_eq!(read("k-busy"), 2);
+    // a file of another pid (a successor process) is left alone
+    broker::save_meta(&meta("k-idle", 99, 0));
+    idle.sent();
+    assert_eq!(read("k-idle"), 0);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_process_starts_with_its_first_turn_only_when_it_has_one() {
+    assert_eq!(super::start_turns(Some(&agent_core::Turn { text: "hi".into(), images: vec![] })), 1);
+    assert_eq!(super::start_turns(None), 0);
+}
+
+#[test]
+fn only_an_idle_local_agent_stops_at_quit() {
+    let mk = |turns: u32, remote: bool| { let mut p = Proc::of_meta(broker::Agent::from(1), Box::new(std::io::sink()), meta("q", 1, turns), "claude"); p.remote = remote; p };
+    assert!(super::dies_at_quit(&mk(0, false)));
+    assert!(!super::dies_at_quit(&mk(1, false)), "a running turn keeps its agent");
+    assert!(!super::dies_at_quit(&mk(0, true)), "a work machine's agents stay");
+}

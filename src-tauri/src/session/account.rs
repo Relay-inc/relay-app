@@ -26,3 +26,13 @@ pub(crate) fn account_of(st: &App, p: &dyn AgentProvider, key: &str, model: &str
     };
     agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a, model), |a| is_ready(st, p, a))
 }
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_spent_key_is_provider_and_account() {
+        let p = crate::agents::get("claude").unwrap();
+        assert_eq!(super::limit_key(p, "/a"), "claude:/a");
+        assert_ne!(super::limit_key(p, "/a"), super::limit_key(p, "/b"));
+    }
+}

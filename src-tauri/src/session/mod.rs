@@ -54,6 +54,10 @@ impl Proc {
     pub fn turn_ended(&mut self) { let n = self.turns.ended(); self.save(n); }
     fn sent(&mut self) { let n = self.turns.sent(); self.save(n); }
     fn running(&self) -> Running<'_> { Running { provider: self.provider, account: &self.account, remote: self.remote, opts: &self.opts, busy: self.turns.busy() } }
+    /// A process the app takes back after a restart: the turns its broker file says are running, not one assumed.
+    fn of_meta(agent: broker::Agent, stdin: Box<dyn Write + Send>, m: broker::Meta, provider: &'static str) -> Proc {
+        Proc { child: agent, stdin, opts: (m.model, m.effort), provider, tainted: m.tainted, key: m.key, turns: Turns::new(m.turns), account: m.account, remote: false }
+    }
     /// Marks a session that holds mail text: it stays on this Mac (see send) and a worker's report says so. Its
     /// permissions do not change, it runs in the user's own mode.
     pub fn mark_tainted(&mut self) {
@@ -72,6 +76,9 @@ struct Start<'a> {
     from_mail: bool, account: &'a str, machine: Option<&'a str>, about: Option<&'a str>,
 }
 
+/// A process started with a turn has it running, one started for later has none.
+fn start_turns(turn: Option<&Turn>) -> u32 { u32::from(turn.is_some()) }
+
 fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) -> Result<Proc, String> {
     let Start { project, name, fork, opts, turn, from_mail, account, machine, about } = s;
     let dir = need_vault(state)?;
@@ -84,7 +91,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
     // a work machine has its own login: no account of this Mac goes along
     let account = if remote.is_some() { "" } else { account };
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: u32::from(turn.is_some()) };
+    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: start_turns(turn) };
     let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
         if from_mail { return Err(trc("err.machine_mail")); }
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
@@ -126,7 +133,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
     let pid = agent.id();
-    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: Turns::new(u32::from(turn.is_some())), account: account.into(), remote };
+    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: Turns::new(start_turns(turn)), account: account.into(), remote };
     tauri_sink::read_agent(app, project, p, pid, Feed { frames, backlog, inherit }, account);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if from_mail { proc.mark_tainted(); }
@@ -233,11 +240,14 @@ fn release(procs: &mut HashMap<String, Proc>, key: &str, pid: u32) -> bool {
     true
 }
 
+/// Only a running turn keeps a local agent alive past the app; a work machine's agents stay.
+fn dies_at_quit(x: &Proc) -> bool { !x.turns.busy() && !x.remote }
+
 /// The app quits: an agent with no turn running stops (the next message resumes its session, nothing is lost), so
 /// only a running turn keeps an agent and its broker alive while the app is closed.
 pub(crate) fn quit(app: &AppHandle) {
     // a work machine's agents stay: that is what the machine is for, and its server winds an idle one down itself
-    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| !x.turns.busy() && !x.remote) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
+    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| dies_at_quit(x)) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
 }
 
 /// Take a work machine's conversation back after its connection dropped: every few seconds while its slot still holds
@@ -293,8 +303,9 @@ pub(crate) fn reattach(app: &AppHandle) {
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let broker::Conn { agent, stdin, frames, backlog } = c;
         let pid = agent.id();
-        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: Turns::new(m.turns), account: m.account.clone(), remote: false };
-        app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        tauri_sink::read_agent(app, &m.key, p, pid, Feed { frames, backlog, inherit: (false, false) }, &m.account);
+        let (key, account) = (m.key.clone(), m.account.clone());
+        let x = Proc::of_meta(agent, stdin, m, p.id());
+        app.state::<App>().procs.lock().unwrap().insert(key.clone(), x);
+        tauri_sink::read_agent(app, &key, p, pid, Feed { frames, backlog, inherit: (false, false) }, &account);
     }
 }

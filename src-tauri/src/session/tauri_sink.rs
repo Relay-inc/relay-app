@@ -44,7 +44,8 @@ impl Sink for TauriSink {
         save_worktrees(&self.app, &w);
     }
     fn after_turn(&self, end: &TurnEnd) {
-        retry::turn_end(&self.app, &self.key, self.p, &self.account, &end.model, end.limited, end.hint, end.fresh);
+        let (model, limited, hint, fresh) = retry_args(end);
+        retry::turn_end(&self.app, &self.key, self.p, &self.account, model, limited, hint, fresh);
         if orch::is_worker(&self.key) { orch::turn_end(&self.app, &self.key, end.last); }
         if !end.replay && orch::is_orch(&self.key) { orch::flush(&self.app, &self.key); } // what Relay queued while the turn ran
     }
@@ -59,9 +60,24 @@ impl Sink for TauriSink {
     }
 }
 
+/// What retry hears of a turn end: the model, whether the limit refused it, the reset named, whether it did nothing.
+fn retry_args<'a>(end: &'a TurnEnd) -> (&'a str, bool, Option<i64>, bool) { (&end.model, end.limited, end.hint, end.fresh) }
+
 /// The agent's output, from its broker: each stdout line through the provider's parser to the webview as `agent`
 /// events, stderr collected for when it ends (frames.rs). `account`: the one the process runs on.
 pub(super) fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32, feed: Feed, account: &str) {
     let sink = TauriSink { app: app.clone(), key: key.into(), p, pid, account: account.into(), pending: pending_dir(app) };
     std::thread::spawn(move || Reader::new(p, feed.backlog, feed.inherit, PathBuf::from(home()).join("projects")).run(&sink, feed.frames));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn retry_hears_the_limit_the_reset_and_whether_the_turn_was_fresh() {
+        let end = TurnEnd { model: "opus".into(), limited: true, hint: Some(5), fresh: false, replay: true, last: "x" };
+        assert_eq!(retry_args(&end), ("opus", true, Some(5), false));
+        let end = TurnEnd { model: "".into(), limited: false, hint: None, fresh: true, replay: false, last: "" };
+        assert_eq!(retry_args(&end), ("", false, None, true));
+    }
 }
