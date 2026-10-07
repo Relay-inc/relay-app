@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once.
+- **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)
 
 ## [0.0.9] - 2026-10-06
 
