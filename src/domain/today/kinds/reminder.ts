@@ -1,7 +1,7 @@
 import { actionSet } from "./common.ts";
 import type { SubjectDef } from "./types.ts";
 
-export type ReminderAct = "done" | "tomorrow" | "week" | "chat";
+export type ReminderAct = "complete" | "tomorrow" | "week" | "chat";
 
 /** A reminder of the vault that is due. */
 export const reminder: SubjectDef<"reminder", ReminderAct> = {
@@ -27,7 +27,7 @@ export const reminder: SubjectDef<"reminder", ReminderAct> = {
   actions: (_entry, _flags, w) =>
     actionSet(
       [
-        { id: "done", label: w.t("rem.done"), icon: "check", key: "↵" },
+        { id: "complete", label: w.t("rem.done"), icon: "check", key: "↵" },
         { id: "tomorrow", label: w.t("rem.tomorrow"), key: "⌫" },
         { id: "week", label: w.t("rem.plusWeek") },
         { id: "chat", label: w.t("today.askClaude"), icon: "chat" },

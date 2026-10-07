@@ -28,7 +28,18 @@ test("done, tomorrow, a week, or ask Claude", () => {
   const set = kind.actions(draft as EntryOf<"reminder">, flags, words);
   assert.deepEqual(
     set.acts.map(a => a.id),
-    ["done", "tomorrow", "week", "chat"],
+    ["complete", "tomorrow", "week", "chat"],
   );
   assert.deepEqual([set.primary, set.secondary], [0, 1]);
+});
+
+test("a reminder due tomorrow or later is not an item", () => {
+  const entries = kind.entries(snap({ reminders: [reminder({ days: 1 })] }), words, NOW);
+  assert.deepEqual(entries, []);
+});
+
+test("its done action must not be the generic done id, which sets the status", () => {
+  const [draft] = kind.entries(snap({ reminders: [reminder()] }), words, NOW);
+  const set = kind.actions(draft as EntryOf<"reminder">, flags, words);
+  assert.notEqual(set.acts[0].id, "done");
 });

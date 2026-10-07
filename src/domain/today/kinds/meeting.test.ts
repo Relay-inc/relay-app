@@ -55,3 +55,18 @@ test("a prep joins when the link is a meeting service, and can be done; a note m
   );
   assert.equal(noteActions.done, undefined);
 });
+
+test("the prep ends exactly when the meeting does", () => {
+  assert.equal(run(meeting(), at(11, 30) - 1)[0].kind, "prep");
+  assert.equal(run(meeting(), at(11, 30))[0].kind, "note");
+});
+
+test("a meeting is today's from midnight up to, not including, the next midnight", () => {
+  const midnight = new Date(2026, 9, 5).getTime();
+  const next = midnight + 86_400_000;
+  const at0 = meeting({ start: iso(midnight), end: iso(midnight + 1800_000) });
+  const atNext = meeting({ start: iso(next), end: iso(next + 1800_000) });
+  assert.equal(run(at0).length, 1, "starting at midnight is today");
+  assert.equal(run(atNext).length, 0, "starting at the next midnight is tomorrow");
+  assert.equal(run(meeting({ start: iso(midnight - 60_000), end: iso(midnight + 60_000) })).length, 0);
+});

@@ -45,3 +45,9 @@ test("reply, reply all, forward; a ticket only with a board; trash and archive o
   );
   assert.equal(full.done?.id, "archive");
 });
+
+test("a mail is soon only after more than four hours", () => {
+  const tone = (ms: number) => kind.entries(snap({ mails: [mail({ date: iso(NOW - ms) })] }), words, NOW)[0].tone;
+  assert.equal(tone(4 * 60 * 60_000), "");
+  assert.equal(tone(4 * 60 * 60_000 + 1), "soon");
+});

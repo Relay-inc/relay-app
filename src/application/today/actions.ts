@@ -175,7 +175,7 @@ const RUN: {
     noNote: entry => dismiss(entry.id),
   },
   reminder: {
-    done: ({ subject }) => reminderAction(subject.reminder, "done"),
+    complete: ({ subject }) => reminderAction(subject.reminder, "done"),
     tomorrow: ({ subject }) => reminderAction(subject.reminder, "push", "morgen"),
     week: ({ subject }) => reminderAction(subject.reminder, "push", "+1w"),
     chat: ({ subject }) => chatAboutReminder(subject.reminder.id),

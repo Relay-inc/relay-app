@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { KINDS, SUBJECTS, actionsFor, entries, isAgentItem, kindLabelKey, queueOf, rankOf } from "./index.ts";
+import {
+  AGENT_KINDS,
+  KINDS,
+  SUBJECTS,
+  actionsFor,
+  entries,
+  isAgentItem,
+  kindLabelKey,
+  queueOf,
+  rankOf,
+} from "./index.ts";
 import { NOW, TODAY, at, flags, iso, mail, meeting, pr, reminder, snap, words } from "./fixtures.ts";
 import type { Kind } from "../plan.ts";
 import type { Pending } from "../../conversations/types";
@@ -119,7 +129,11 @@ test("the kind chip, and the actions of whichever kind an entry is", () => {
   assert.equal(kindLabelKey(get("prep:m1@9")), "today.kind.prep");
   assert.deepEqual(
     actionsFor(get("rem:today"), flags, words).acts.map(a => a.id),
-    ["done", "tomorrow", "week", "chat"],
+    ["complete", "tomorrow", "week", "chat"],
   );
   void [at, iso];
+});
+
+test("agents come in this order: asks, blocked sessions, finished conversations", () => {
+  assert.deepEqual(AGENT_KINDS, ["ask", "blocked", "finished"]);
 });
