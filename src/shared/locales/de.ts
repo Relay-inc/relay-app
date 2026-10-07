@@ -861,6 +861,7 @@ export default {
   "notify.isWaiting": "Wartet auf dich: Erlaubnis für {tool}.",
   "work.interrupted": "Unterbrochen: Der Prozess hat mitten im Durchgang aufgehört.",
   "work.outside": "Läuft noch außerhalb der App, die App liest mit",
+  "work.waiting": "Wartet, bis {agent} es liest",
   "work.waitOutside": "Dieser Durchgang läuft noch außerhalb der App. Sende, wenn er fertig ist.",
   "mail.earlier": "Frühere Nachrichten",
   "mail.linkOpen": "Öffnen",
@@ -1066,6 +1067,8 @@ export default {
   "voice.desc.canary-1b-v2":
     "Genauer und langsamer, 25 europäische Sprachen. Bekommt die Sprache vorgegeben, statt sie zu hören.",
   "voice.desc.cohere": "Das genaueste und langsamste, 14 Sprachen inklusive Niederländisch.",
+  "voice.desc.whisper-turbo":
+    "Whisper von OpenAI, etwa 100 Sprachen inklusive Niederländisch. Läuft auf der GPU des Mac.",
   "voice.desc.moonshine-base": "Klein und sehr schnell, nur Englisch.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} Sprache",

@@ -4,6 +4,7 @@ import type { ContextUse, Item, ToolInput } from "./types";
 import { formatDuration, lastAi } from "./rules.ts";
 import { cleanCommands } from "./commands.ts";
 import { splitFiles } from "./files.ts";
+import { isRelayTurn } from "../orchestrator/rules.ts";
 
 // The agent processes' events (normalised by their provider, packages/agent-core) as a reducer over the conversations
 // state, and the transcripts behind a conversation as items. Pure: what needs the outside (a banner, saving, a vault
@@ -75,8 +76,20 @@ export function applyAgentEvent(
   if (ACTIVITY.includes(event.type)) {
     state.status[key] = "busy";
     state.queued[key] = Math.max(1, state.queued[key] || 0);
+    // a turn at work that echoed nothing yet answers the oldest waiting message (a slash command never echoes), or
+    // something Claude started itself (a background task done): a message sent from now on waits for its echo
+    // ponytail: a turn Claude starts itself while a message waits takes that message too early
+    if (!state.taken[key]) {
+      takeWaiting(state, key);
+      state.taken[key] ||= 1;
+    }
   }
   switch (event.type) {
+    case "picked":
+      // a turn Relay wrote itself (orchestrator) is in the conversation already
+      if (!isRelayTurn(event.text)) takeWaiting(state, key);
+      else state.taken[key] = (state.taken[key] || 0) + 1;
+      return [];
     case "commands":
       state.commands[provider] = cleanCommands(event.commands);
       return [];
@@ -159,8 +172,25 @@ function onToolCall(state: ConversationsState, key: string, call: EventOf<"tool_
   return [];
 }
 
+/** The oldest message waiting for Claude moves into the conversation, where Claude took it up. */
+export function takeWaiting(state: Pick<ConversationsState, "messages" | "waiting" | "taken">, key: string) {
+  const item = state.waiting[key]?.shift();
+  if (!item) return;
+  push(state, key, item);
+  state.taken[key] = (state.taken[key] || 0) + 1;
+}
+/** Every waiting message into the conversation: the process that would take them up is gone. */
+export function releaseWaiting(state: Pick<ConversationsState, "messages" | "waiting" | "taken">, key: string) {
+  for (const item of state.waiting[key] || []) push(state, key, item);
+  delete state.waiting[key];
+  delete state.taken[key];
+}
+
+// a turn end answers every message its turn took up, at least the one that started it
 function finishTurnInQueue(state: ConversationsState, key: string) {
-  state.queued[key] = Math.max(0, (state.queued[key] || 1) - 1);
+  if (!state.taken[key]) takeWaiting(state, key);
+  state.queued[key] = Math.max(0, (state.queued[key] || 1) - Math.max(1, state.taken[key] || 0));
+  delete state.taken[key];
   state.status[key] = state.queued[key] ? "busy" : "idle";
 }
 
@@ -190,6 +220,7 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
 function onProcessExit(state: ConversationsState, key: string, env: EventEnv): Effect[] {
   const effects: Effect[] = [];
   endCompaction(state.messages[key], "err");
+  releaseWaiting(state, key);
   // the process stopped while a turn ran: say so, the dots alone would just disappear
   if (state.status[key] === "busy") {
     push(state, key, { kind: "err", text: env.t("work.interrupted") });

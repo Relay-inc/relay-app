@@ -95,5 +95,6 @@ export const MODEL_NAMES: Record<string, string> = {
   "parakeet-v2": "Parakeet V2",
   "canary-1b-v2": "Canary 1B v2",
   cohere: "Cohere Transcribe",
+  "whisper-turbo": "Whisper Large v3 Turbo",
   "moonshine-base": "Moonshine Base",
 };

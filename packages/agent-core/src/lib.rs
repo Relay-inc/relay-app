@@ -126,6 +126,9 @@ pub enum Event {
     Session { id: String },
     /// A user message (history only). An image that is not inline is None, shown as a placeholder.
     User { text: String, images: Vec<Option<Image>> },
+    /// Live: the agent took up a user message sent to it, at this point of its work (Claude Code only, the echo of
+    /// `--replay-user-messages`). A message sent while a turn runs can join that turn instead of starting its own.
+    Picked { text: String },
     /// Assistant text: a whole block, or with `delta` a piece appended to the last one.
     Text { text: String, delta: bool },
     Thinking { text: String, delta: bool },

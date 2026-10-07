@@ -853,6 +853,7 @@ const en = {
   "notify.isWaiting": "Waiting for you: permission for {tool}.",
   "work.interrupted": "Interrupted: the process stopped in the middle of the turn.",
   "work.outside": "Still running outside the app, following along",
+  "work.waiting": "Waiting until {agent} reads it",
   "work.waitOutside": "This turn still runs outside the app. Send once it is done.",
   "mail.earlier": "Earlier messages",
   "mail.linkOpen": "Open",
@@ -1056,6 +1057,7 @@ const en = {
   "voice.desc.canary-1b-v2":
     "More accurate and slower, 25 European languages. It is told the language instead of hearing it.",
   "voice.desc.cohere": "The most accurate and the slowest, 14 languages including Dutch.",
+  "voice.desc.whisper-turbo": "OpenAI's Whisper, about 100 languages including Dutch. Runs on the Mac's GPU.",
   "voice.desc.moonshine-base": "Tiny and very fast, English only.",
   "voice.size": "{mb} MB",
   "voice.langs_one": "{n} language",

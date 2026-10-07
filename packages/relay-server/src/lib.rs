@@ -296,8 +296,11 @@ impl Server {
 
     fn launch(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
-        let (mut meta, spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
+        let (mut meta, mut spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
         meta.key = format!("{ns}:{}", meta.key);
+        // the server's own Claude config folder wins: the laptop's (a path there, or removed for ~/.claude) would send
+        // Claude here to ~/.claude.json, outside the volume, gone with every new container
+        spec.env.retain(|(k, _)| k != "CLAUDE_CONFIG_DIR");
         if spec.cwd.as_deref().is_some_and(|d| Path::new(d).starts_with(self.mirror.work_of(ns))) && !self.mirror.is_open(ns) {
             return bang(&mut w, &format!("the vault on {} is locked: it opens when Relay on your laptop connects", self.info.host));
         }

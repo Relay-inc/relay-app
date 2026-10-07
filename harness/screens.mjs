@@ -150,6 +150,22 @@ const VIEWS = {
     await waitText("Compare these with the plan");
     await settle(page, 300);
   },
+  // a message sent while Claude works waits under the conversation until Claude reads it (PR: waiting messages)
+  "conversation-unread": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      h.autoReply = false;
+      h.echo = false;
+      h.emitAgent(key, { type: "tool_call", id: "u1", name: "Bash", input: { command: "git log --oneline -20" } });
+    }, keys.switchTo);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Also check the release branch");
+    await page.keyboard.press("Enter");
+    await waitText("Waiting until Claude Code reads it");
+    await settle(page, 300);
+  },
   "composer-resolved": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
@@ -378,7 +394,12 @@ const VIEWS = {
     await open(page, server.url, { fixture: "orch", sel: keys.orchWorker });
     await waitText("From Relay");
   },
-  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  // the speech models, Whisper among them
+  "settings-voice-models": async () => {
+    await settingsPage("Voice");
+    await intoView("Whisper Large v3 Turbo");
+  },
   "settings-interface": async () => {
     await settingsPage("General");
     await intoView("Accent");

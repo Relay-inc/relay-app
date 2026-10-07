@@ -123,11 +123,6 @@ const asleep = (id: string) => {
   const snooze = useTodayStore.getState().snoozed[id];
   return !!snooze && snooze.until > todayIso();
 };
-// snoozed and its day has come: an item that only shows while recent (mail) comes back anyway
-const woke = (id: string) => {
-  const snooze = useTodayStore.getState().snoozed[id];
-  return !!snooze && snooze.until <= todayIso();
-};
 /** Snooze for `days` (a week by default): a reminder is pushed in the vault, anything else stays off Today until then. */
 export async function snooze(entry: Entry, days = 7) {
   // a reminder moves in the vault; it is kept as snoozed too, so Today lists it and does not count it as cleared
@@ -353,14 +348,14 @@ export function entries(now = Date.now()): Entry[] {
       subject: { type: "pr", pr },
     });
 
-  // mail of the last two days that waits on you: unread, or (when the Inbox/Other split knows a person from a machine)
-  // read but not answered yet, until it is archived. Older mail is triage for the Mail view, not today's work
+  // mail that waits on you, however old: unread, or (when the Inbox/Other split knows a person from a machine)
+  // read but not answered yet, until it is archived. The first page per account (PAGE_SIZE) bounds how many
   // ponytail: "answered" is IMAP's \Answered, which Gmail's web app doesn't set; archive (Done) clears those
   for (const mail of useMailStore.getState().list ?? []) {
     const at = Date.parse(mail.date);
     const key = mailKey(mail);
     const waits = mail.unread || (mail.other === false && !mail.answered);
-    if (!waits || mail.other || mail.answered || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
+    if (!waits || mail.other || mail.answered) continue;
     add("mail", {
       id: `mail:${key}`,
       at,
