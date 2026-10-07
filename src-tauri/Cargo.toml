@@ -72,6 +72,7 @@ tauri-plugin-deep-link = "2"
 # dictation in any app: the shortcut registered with macOS (src/anywhere.rs)
 tauri-plugin-global-shortcut = "2"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
+tauri-plugin-updater = "2"
 
 # the red menu bar title when a reminder is overdue (src/tray.rs), same versions as tauri's tray-icon
 [target.'cfg(target_os = "macos")'.dependencies]
