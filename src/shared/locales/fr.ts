@@ -438,8 +438,8 @@ export default {
   "today.editBriefing": "Modifier",
   "today.saveBriefing": "Enregistrer",
   "today.cancelEdit": "Annuler",
-  "today.briefingEdited": "modifié",
-  "today.briefingEmpty": "Enregistrer vide rétablit la réponse de Claude",
+  "today.briefingGone": "La note de réunion ou son briefing n'existe plus.",
+  "today.openNote": "Ouvrir la note",
   "today.briefingHint":
     "Claude lit la note du projet, les dernières notes de réunion et ce qui est ouvert dans votre file, et écrit ce qu'il faut savoir avant de commencer.",
   "today.noteHint": "Claude fait de la réunion une note dans le vault, avec les décisions et les tâches.",

@@ -46,6 +46,7 @@ let pending = [...conv.pending];
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
+const written: Record<string, { path: string; text: string }> = {}; // notes saved with write_note, by target and path
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
 const orchOn = fixture === "orch";
@@ -194,7 +195,12 @@ function handle(cmd: string, a: Args): unknown {
     case "vault_notes":
       return { root: vault.VAULT, notes: vault.notes };
     case "read_note":
-      return vault.noteText(a.target);
+      return written[a.target] ?? vault.noteText(a.target);
+    case "write_note": {
+      const note = written[a.target] ?? vault.noteText(a.target);
+      written[a.target] = written[note.path] = { path: note.path, text: a.text };
+      return note.path;
+    }
     case "project_icons":
       return vault.projectIcons();
     case "project_repos":

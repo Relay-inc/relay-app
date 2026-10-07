@@ -80,6 +80,7 @@ export const vaultStatus = () => invoke<VaultStatus>("vault_status");
 export const snapshot = () => invoke<Snapshot>("snapshot");
 export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });
+export const writeNote = (target: string, text: string) => invoke<string>("write_note", { target, text });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });

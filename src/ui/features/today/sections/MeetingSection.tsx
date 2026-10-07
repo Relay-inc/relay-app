@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import type { Meeting } from "../../../../domain/calendar/types";
-import { briefingOf, briefingText } from "../../../../domain/calendar/rules";
-import { editBriefing, meetingChat, timeOf } from "../../../../application/calendar/calendar";
+import { briefingIn, prepChatOf } from "../../../../domain/calendar/rules";
+import { meetingChat, meetingNote, saveBriefing, timeOf } from "../../../../application/calendar/calendar";
 import { useConversationsStore } from "../../../../application/conversations/store";
-import { ensureHistory } from "../../../../application/conversations/history";
+import { openDetail } from "../../../../application/navigation/panel";
+import { noteKey } from "../../../../domain/navigation/keys";
 import { Markdown } from "../../../components/Markdown";
 import { useT } from "../../../hooks/useT";
 import { Glyph } from "../../../components/Glyph";
@@ -35,21 +36,32 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
   const { t } = useT();
   const agenda = agendaOf(meeting.description);
   const claude = agent("claude")?.glyph ?? "";
-  const briefing = useConversationsStore(s => (after ? null : briefingOf(s.chats, meeting.id)));
-  const answer = useConversationsStore(s => (briefing ? briefingText(s.messages[briefing]) : ""));
-  const edited = useConversationsStore(s => (briefing ? s.chats[briefing]?.briefing : undefined));
-  const text = edited ?? answer;
-  // the text being edited, for the briefing it belongs to (another meeting opened meanwhile shows its own)
-  const [editing, setEditing] = useState<{ key: string; text: string } | null>(null);
-  const draft = editing && editing.key === briefing ? editing.text : null;
-  const save = () => {
-    if (briefing && draft !== null) editBriefing(briefing, draft);
+  // the briefing lives in the meeting's note; the conversation that asked for it, while it writes, reads it again
+  const prep = useConversationsStore(s => (after ? null : prepChatOf(s.chats, meeting.id)));
+  const progress = useConversationsStore(s => (prep ? s.messages[prep]?.length : 0));
+  const [note, setNote] = useState<{ id: string; path: string; text: string } | null>(null);
+  useEffect(() => {
+    if (after) return;
+    let live = true;
+    meetingNote(meeting).then(found => live && setNote(found ? { id: meeting.id, ...found } : null));
+    return () => {
+      live = false;
+    };
+  }, [after, meeting, progress]);
+  const text = note && note.id === meeting.id ? briefingIn(note.text) : null;
+  // the text being edited, for the meeting it belongs to (another meeting opened meanwhile shows its own)
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const draft = editing && editing.id === meeting.id ? editing.text : null;
+  const [err, setErr] = useState("");
+  const save = async () => {
+    if (draft === null) return;
+    setErr("");
+    const saved = await saveBriefing(meeting, draft).catch(error => (setErr(String(error)), undefined));
+    if (saved === undefined) return;
+    if (saved) setNote({ id: meeting.id, ...saved });
+    else setErr(t("today.briefingGone"));
     setEditing(null);
   };
-  // its transcript, when the conversation was not opened since the app started
-  useEffect(() => {
-    if (briefing) ensureHistory(briefing).catch(() => {});
-  }, [briefing]);
   return (
     <div className="flex flex-col gap-4 max-w-170">
       <div className="text-[13px] text-secondary">
@@ -84,11 +96,10 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
           ))}
         </section>
       ) : null}
-      {briefing ? (
+      {text !== null && note ? (
         <section className="flex flex-col gap-1.5">
           <div className="flex items-center gap-3">
             <Caps>{t("today.briefing")}</Caps>
-            {edited !== undefined ? <span className="text-xs text-tertiary">{t("today.briefingEdited")}</span> : null}
             <span className="flex-1" />
             {draft !== null ? (
               <>
@@ -105,14 +116,17 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
               </>
             ) : (
               <>
-                {text ? (
-                  <button className="btn cursor-pointer" onClick={() => setEditing({ key: briefing, text })}>
-                    {t("today.editBriefing")}
+                <button className="btn cursor-pointer" onClick={() => setEditing({ id: meeting.id, text })}>
+                  {t("today.editBriefing")}
+                </button>
+                <button className="btn cursor-pointer" onClick={() => openDetail(noteKey(note.path))}>
+                  {t("today.openNote")}
+                </button>
+                {prep ? (
+                  <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "prep")}>
+                    {t("today.openBriefing")}
                   </button>
                 ) : null}
-                <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "prep")}>
-                  {t("today.openBriefing")}
-                </button>
               </>
             )}
           </div>
@@ -122,7 +136,7 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
               // the caret at the end, where an addition goes
               onFocus={e => e.currentTarget.setSelectionRange(draft.length, draft.length)}
               value={draft}
-              onChange={e => setEditing({ key: briefing, text: e.target.value })}
+              onChange={e => setEditing({ id: meeting.id, text: e.target.value })}
               onKeyDown={e => {
                 if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                   e.preventDefault();
@@ -131,14 +145,19 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
                 if (e.key === "Escape") setEditing(null);
               }}
               rows={14}
-              placeholder={t("today.briefingEmpty")}
               className="block w-full px-4 py-3 rounded-[10px] border border-separator-strong bg-raised outline-0 resize-y text-sm leading-[1.55] font-mono select-text"
             />
-          ) : text ? (
-            <Markdown text={text} className="md-panel text-sm leading-relaxed select-text" />
           ) : (
-            <div className="text-sm text-tertiary">{t("today.briefingBusy")}</div>
+            <Markdown text={text} className="md-panel text-sm leading-relaxed select-text" />
           )}
+          {err ? <div className="err-box">{err}</div> : null}
+        </section>
+      ) : prep ? (
+        <section className="flex items-center gap-3">
+          <span className="flex-1 text-sm text-tertiary">{t("today.briefingBusy")}</span>
+          <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "prep")}>
+            {t("today.openBriefing")}
+          </button>
         </section>
       ) : (
         <div className="flex items-center gap-3 p-3.5 rounded-[10px] border border-dashed border-separator-strong">

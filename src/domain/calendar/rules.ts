@@ -1,4 +1,4 @@
-import type { Chat, Item } from "../conversations/types";
+import type { Chat } from "../conversations/types";
 import type { Meeting } from "./types";
 
 // The timing of the meetings under Waiting and their banner, and the prompts of a conversation about one. The clock
@@ -49,10 +49,13 @@ export type MeetingChat = "note" | "prep" | "transcript";
 export type Recording = { audio: string | null; transcript: string; seconds: number };
 const PROMPTS: Record<Exclude<MeetingChat, "transcript">, string> = {
   note:
-    "Maak een meeting note in de vault voor deze meeting, volgens de conventies van de vault (de meeting-notes skill of command als die er is, anders het Meeting-template). " +
-    "Bestaat er voor die dag al een note voor deze meeting, gebruik die dan. Koppel deelnemers enkel aan een Person-note als het e-mailadres of de naam eenduidig overeenkomt, anders gewone tekst. " +
+    "Maak de meeting note {note} in de vault voor deze meeting, volgens de conventies van de vault (de meeting-notes skill of command als die er is, anders het Meeting-template). " +
+    "Bestaat ze al (bv. met de briefing van voor de meeting), gebruik die dan en laat `## Briefing` staan. Koppel deelnemers enkel aan een Person-note als het e-mailadres of de naam eenduidig overeenkomt, anders gewone tekst. " +
     "Schrijf nog geen inhoud, enkel de note klaar om notities in te zetten. Zeg hier welke note het werd.",
-  prep: "Bereid me voor op deze meeting: zoek in de vault wat er over de deelnemers en het onderwerp staat (vorige meetings, open punten, threads, beslissingen) en geef een korte briefing. Schrijf niets in de vault.",
+  prep:
+    "Bereid me voor op deze meeting: zoek in de vault wat er over de deelnemers en het onderwerp staat (vorige meetings, open punten, threads, beslissingen) en schrijf een korte briefing. " +
+    "Zet die in de meeting note {note}, onder `## Briefing` als eerste sectie: bestaat de note nog niet, maak ze dan volgens de conventies van de vault (het Meeting-template) met enkel de briefing en een lege `## Notes`; bestaat ze al, vervang dan alleen die sectie. " +
+    "Schrijf verder niets in de vault. Geef de briefing ook hier.",
 };
 // the quotes around invite text stay closed: a « or » inside it is dropped
 const quoted = (text: string) => `«${text.replace(/[«»]/g, "")}»`;
@@ -80,7 +83,10 @@ export function meetingPrompt(
   ]
     .filter(Boolean)
     .join("\n");
-  const ask = how === "transcript" && recording ? transcriptPrompt(recording) : PROMPTS[how as keyof typeof PROMPTS];
+  const ask =
+    how === "transcript" && recording
+      ? transcriptPrompt(recording)
+      : PROMPTS[how as keyof typeof PROMPTS].replace("{note}", quoted(meetingNoteName(meeting, timeZone)));
   return `${ask}\n\n${details}`;
 }
 
@@ -100,16 +106,38 @@ const transcriptPrompt = (recording: Recording) =>
     .filter(Boolean)
     .join("\n");
 
-// ---------- the briefing before a meeting
-/** The conversation that holds a meeting's briefing, the latest one when it was asked again. */
-export const briefingOf = (chats: Record<string, Chat>, meetingId: string) =>
+// ---------- the briefing before a meeting: under `## Briefing` in the meeting's note, named after its day and title
+/** The meeting note's name, as the vault names them: `YYYY-MM-DD Title`, without what a file name cannot hold. */
+export const meetingNoteName = (meeting: Meeting, timeZone?: string) =>
+  `${meetingDay(meeting.start, timeZone)} ${meeting.title
+    .replace(/[\\/:*?"<>|#^[\]]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()}`;
+const BRIEFING = /^## Briefing[ \t]*$/m;
+/** Where the briefing section's body starts and ends in a note; null without one. */
+function briefingSpan(text: string) {
+  const heading = BRIEFING.exec(text);
+  if (!heading) return null;
+  const start = heading.index + heading[0].length;
+  const next = /^#{1,2} /m.exec(text.slice(start));
+  return { start, end: next ? start + next.index : text.length };
+}
+/** The briefing in a meeting note; null when it has none (yet). */
+export function briefingIn(text: string) {
+  const span = briefingSpan(text);
+  return span ? text.slice(span.start, span.end).trim() : null;
+}
+/** The note with its briefing replaced by `body`, the rest as it was. */
+export function withBriefing(text: string, body: string) {
+  const span = briefingSpan(text);
+  if (!span) return text;
+  return `${text.slice(0, span.start)}\n${body.trim()}\n\n${text.slice(span.end).replace(/^\n+/, "")}`.replace(
+    /\n+$/,
+    "\n",
+  );
+}
+/** The conversation a meeting's briefing was asked in, the latest one when it was asked again. */
+export const prepChatOf = (chats: Record<string, Chat>, meetingId: string) =>
   Object.values(chats)
     .filter(chat => chat.meeting === meetingId)
     .sort((a, b) => b.at - a.at)[0]?.key ?? null;
-/** The briefing itself: the last answer of the first turn (the prompt the button sent), not what was asked after it. */
-export function briefingText(items: Item[] | undefined) {
-  const turns = (items || []).flatMap((item, i) => (item.kind === "me" ? [i] : []));
-  if (!turns.length) return "";
-  const firstTurn = items!.slice(turns[0], turns[1]);
-  return [...firstTurn].reverse().find(item => item.kind === "ai")?.text ?? "";
-}

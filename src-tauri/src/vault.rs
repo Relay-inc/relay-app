@@ -80,6 +80,16 @@ pub fn note(vault: &str, target: &str) -> Option<(String, String)> {
     Some((rel(&root, &real), fs::read_to_string(&real).ok()?))
 }
 
+/// Overwrite a note `note` finds (so only an existing markdown file inside the vault), via a temp file and a
+/// rename so a reader never sees half of it. Its path relative to the vault.
+pub fn write_note(vault: &str, target: &str, text: &str) -> Option<String> {
+    let (path, _) = note(vault, target)?;
+    let p = PathBuf::from(canon(vault)).join(&path);
+    let tmp = p.with_extension("md.tmp");
+    fs::write(&tmp, text).and_then(|_| fs::rename(&tmp, &p)).ok()?;
+    Some(path)
+}
+
 /// Guess the mapping of a vault: the known layouts first, then a search for the files by name.
 /// Returns the canonical vault path and the mapping ("" where nothing was found).
 pub fn detect(vault: &str) -> (String, Value) {
@@ -234,5 +244,23 @@ mod tests {
         for bad in ["secret.txt", "../note-out/Out.md", "Link.md", out.join("Out.md").to_str().unwrap(), "Nope", "A/Nope", ""] {
             assert_eq!(note(v, bad), None, "{bad}");
         }
+    }
+    #[test]
+    fn write_note_only_overwrites_a_note_in_the_vault() {
+        let d = tmp("write");
+        let v = d.to_str().unwrap();
+        fs::create_dir_all(d.join("Calendar")).unwrap();
+        fs::write(d.join("Calendar/Meet.md"), "old").unwrap();
+        let out = tmp("write-out");
+        fs::write(out.join("Out.md"), "x").unwrap();
+        symlink(out.join("Out.md"), d.join("Link.md")).unwrap();
+        assert_eq!(write_note(v, "Meet", "new"), Some("Calendar/Meet.md".to_string()));
+        assert_eq!(fs::read_to_string(d.join("Calendar/Meet.md")).unwrap(), "new");
+        assert!(!d.join("Calendar/Meet.md.tmp").exists());
+        for bad in ["Nope", "Link.md", "../write-out/Out.md"] {
+            assert_eq!(write_note(v, bad, "y"), None, "{bad}");
+        }
+        assert!(!d.join("Nope.md").exists());
+        assert_eq!(fs::read_to_string(out.join("Out.md")).unwrap(), "x");
     }
 }

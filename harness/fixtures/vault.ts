@@ -136,8 +136,12 @@ export const notes = [
   "Resources/Frameworks/Feasibility Analysis.md",
   "Calendar/2026-10-01.md",
 ];
+/** The lunch meeting's note (integrations.ts), with the briefing written before it: shown under Today. */
+export const BRIEFING_NOTE = "2026-10-01 Lunch with the accountant";
+const briefingNote = `---\ntype: Meeting\n---\n# Lunch with the accountant\n\n## Briefing\n**Next action:** bring the Q3 VAT numbers.\n\n### Open points\n1. The Q3 VAT return is due 20 October\n2. Two invoices from September still unpaid\n\n**Next:** export the Q3 report before lunch.\n\n## Notes\n- \n`;
 export const noteText = (target: string) => {
   const name = target.split("/").pop()!.replace(/\.md$/, "");
+  if (name === BRIEFING_NOTE) return { path: `Calendar/${BRIEFING_NOTE}.md`, text: briefingNote };
   return {
     path: notes.find(n => n.endsWith(`/${name}.md`)) || target,
     text: `---\ntype: Document\n---\n# ${name}\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Laurent |\n| Phase | Build |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
