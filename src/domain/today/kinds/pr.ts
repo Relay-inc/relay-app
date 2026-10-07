@@ -67,7 +67,7 @@ export const pr: SubjectDef<"pr", PrAct> = {
       });
     return out;
   },
-  actions: (entry: EntryOf<"pr">, _flags, w) => {
+  actions: (entry: EntryOf<"pr">, flags, w) => {
     const github = { id: "github" as const, label: w.t("today.onGithub"), icon: "out", key: "⌫" };
     const inRelay = { id: "inRelay" as const, label: w.t("today.openInPrs"), icon: "pr" };
     const findTicket = { id: "findTicket" as const, label: w.t("today.link.again"), icon: "refresh" };
@@ -89,7 +89,12 @@ export const pr: SubjectDef<"pr", PrAct> = {
               key: "↵",
               tip: w.t("today.reviewTogetherTip", { ticket: group.title }),
             }
-          : { id: "review" as const, label: w.t("today.reviewWithClaude"), key: "↵", tip: w.t("today.reviewTip") },
+          : {
+              id: "review" as const,
+              label: w.t("today.reviewWithClaude", { agent: flags.reviewer }),
+              key: "↵",
+              tip: w.t("today.reviewTip", { agent: flags.reviewer }),
+            },
         github,
         inRelay,
         { id: "reviewChat", label: w.t("today.reviewInChat"), icon: "chat" },

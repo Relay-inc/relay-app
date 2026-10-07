@@ -1,3 +1,4 @@
+import { agentOf, reviewWriter } from "../agents/agents";
 import { t, tn } from "../../shared/i18n";
 import { PROVIDERS } from "../../shared/plugins";
 import { todayIso } from "../../domain/reminders/rules";
@@ -31,6 +32,7 @@ export const flags = (): Flags => ({
   trackers: trackers(),
   boardsReady: useBoardStore.getState().ready.length > 0,
   mailExperimental: mailExperimental(),
+  reviewer: agentOf(reviewWriter())?.name ?? reviewWriter(),
 });
 
 /** Everything Today's items are derived from, read from the stores now. */

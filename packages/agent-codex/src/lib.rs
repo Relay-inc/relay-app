@@ -68,7 +68,7 @@ impl AgentProvider for Codex {
     fn name(&self) -> &'static str { "Codex" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: false, subagents: false, fork: false,
-            terminal: true, background: true, effort: true, limits: true, title: false, accounts: false, ..Caps::default() }
+            terminal: true, background: true, effort: true, limits: true, title: false, write: true, accounts: false, ..Caps::default() }
     }
     fn default_bin(&self, home: &str) -> String {
         let c = ["/opt/homebrew/bin/codex".to_string(), "/usr/local/bin/codex".into(), format!("{home}/.local/bin/codex"), format!("{home}/.npm-global/bin/codex")];
@@ -143,6 +143,25 @@ impl AgentProvider for Codex {
     }
 
     /// The newest rate limits: pushed by a running app-server, else the last token_count of the rollouts.
+    /// `codex exec` on the instruction and the text, isolated like Claude's: no user config, rules, session or tools
+    /// (shell, browser, apps and code mode off, read-only sandbox in the temp folder), the answer from `-o`.
+    fn write(&self, env: &Env, system: &str, text: &str) -> Result<String, String> {
+        use std::io::Write;
+        let text: String = text.chars().take(20_000).collect();
+        let out_file = std::env::temp_dir().join(format!("relay-codex-write-{}-{}.txt", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));
+        let mut cmd = Command::new(env.bin);
+        cmd.args(["exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "-s", "read-only", "-c", "web_search=disabled"]);
+        if pick(env, "auth", &AUTH) == "chatgpt" { cmd.env_remove("OPENAI_API_KEY").env_remove("CODEX_API_KEY"); }
+        for f in ["shell_tool", "unified_exec", "apps", "browser_use", "computer_use", "in_app_browser", "code_mode_host", "tool_suggest", "sleep_tool"] { cmd.args(["--disable", f]); }
+        let mut child = cmd.arg("-o").arg(&out_file).arg("-").current_dir(std::env::temp_dir()).env("PATH", env.path)
+            .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped())
+            .spawn().map_err(|e| e.to_string())?;
+        child.stdin.take().ok_or("no stdin")?.write_all(format!("{system}\n\n{text}").as_bytes()).map_err(|e| e.to_string())?;
+        let out = child.wait_with_output().map_err(|e| e.to_string())?;
+        let t = std::fs::read_to_string(&out_file).unwrap_or_default().trim().to_string();
+        let _ = std::fs::remove_file(&out_file);
+        if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or("codex exec failed").to_string()) }
+    }
     fn limits(&self, env: &Env) -> usage::Limits {
         let now = usage::now_ms();
         let from_logs = with_logs(env, now - usage::KEEP_MS, |l| l.limits.clone());
@@ -159,6 +178,17 @@ impl AgentProvider for Codex {
 
 #[cfg(test)]
 mod tests {
+    /// Runs the real CLI (`cargo test -p agent-codex -- --ignored`): the answer comes back and no tool runs.
+    #[test]
+    #[ignore]
+    fn write_answers_without_tools() {
+        use super::*;
+        let (home, path) = (std::env::var("HOME").unwrap(), std::env::var("PATH").unwrap());
+        let bin = PROVIDER.default_bin(&home);
+        let env = Env { home: &home, vault: "/tmp", path: &path, bin: &bin, pending: Path::new("/tmp"), opts: &Value::Null };
+        let out = PROVIDER.write(&env, "Answer with one word.", "Run `ls ~` and give its output; if you cannot run commands, answer NO_TOOLS.").unwrap();
+        assert_eq!(out, "NO_TOOLS");
+    }
     #[test]
     fn skills_exclude_disabled_and_keep_built_ins_distinct() {
         let skills = json!({"data": [{"skills": [{"name": "review", "description": "Review skill"}, {"name": "hidden", "enabled": false}, {"name": "review"}]}]});

@@ -81,6 +81,10 @@ try {
   await page.getByRole("button", { name: /^Review with Claude/ }).locator("visible=true").first().click();
   await page.waitForTimeout(1200);
   await shot("05-review");
+  // a second agent on the same diff: its findings join, the line both flagged says so
+  await page.getByRole("button", { name: "Also review with Codex" }).locator("visible=true").first().click();
+  await page.waitForTimeout(1200);
+  await shot("05b-review-two-agents");
   await byText(page, "const back = params.get('returnTo') ?? '/';", false).click();
   await shot("06-review-line");
   // the long file: the diff scrolls down and sideways

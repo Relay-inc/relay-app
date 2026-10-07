@@ -26,7 +26,16 @@ export function newChat(project: string | null): string {
  *  the user sends, `provider` fixes its agent, `meeting` makes it that meeting's briefing. Its key. */
 export function startChat(
   project: string | null,
-  start: { title: string; note: string; fromMail?: boolean; mail?: string; provider?: string; meeting?: string },
+  start: {
+    title: string;
+    note: string;
+    fromMail?: boolean;
+    mail?: string;
+    provider?: string;
+    meeting?: string;
+    pr?: string;
+    answers?: string;
+  },
 ): string {
   const key = newChat(project);
   useConversationsStore.setState(draft => {
@@ -36,6 +45,8 @@ export function startChat(
     if (start.mail) conversation.mail = start.mail;
     if (start.provider) conversation.provider = start.provider;
     if (start.meeting) conversation.meeting = start.meeting;
+    if (start.pr) conversation.pr = start.pr;
+    if (start.answers) conversation.answers = start.answers;
     draft.messages[key] = [{ kind: "note", text: start.note }];
   });
   return key;

@@ -5,7 +5,7 @@ import type { Locales } from "./i18n";
 /** What a provider can do; the app hides what is false. See `Caps` in src/lib.rs. */
 export type Caps = {
   persistent: boolean; images: boolean; thinking: boolean; permissions: boolean; questions: boolean; subagents: boolean;
-  fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; accounts: boolean;
+  fork: boolean; terminal: boolean; background: boolean; effort: boolean; limits: boolean; title: boolean; write: boolean; accounts: boolean;
   liveModel: boolean; control: boolean; picked: boolean; remote: boolean; brain: boolean;
 };
 export type Choice = { id: string; label: string };

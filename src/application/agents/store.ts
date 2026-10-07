@@ -11,6 +11,7 @@ type AgentsState = {
   loaded: boolean;
   picked: Record<string, string>; // by pick key (`model`, `effort.codex`, …), as stored
   seen: Record<string, Seen>; // by provider, stored as `defaults.<id>`
+  review: string; // the agent PR reviews last started on, stored as `review.agent`
 };
 
 export const seenKey = (id: string) => `defaults.${id}`;
@@ -24,4 +25,5 @@ export const useAgentsStore = makeStore<AgentsState>(() => ({
     ),
   ),
   seen: Object.fromEntries(AGENTS.map(agent => [agent.id, storage.get<Seen>(seenKey(agent.id), {})])),
+  review: storage.get("review.agent", ""),
 }));
