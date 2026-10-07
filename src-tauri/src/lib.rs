@@ -7,13 +7,13 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
-use agent_core::{pending, usage, AgentProvider, Event, Image, Launch, Terminal, Turn, IMAGE_TYPES};
+use agent_core::{pending, usage, AgentProvider, Terminal};
 
 mod actions;
 mod agents;
@@ -41,6 +41,7 @@ mod relay_config;
 mod reminders;
 mod retry;
 mod scratch;
+mod session;
 #[cfg(feature = "selftest")]
 mod selftest;
 mod snapshot;
@@ -48,6 +49,8 @@ mod updater;
 mod tray;
 mod vault;
 mod worktrees;
+
+use session::{account_of, limit_key, pipe_ok, pipe_reply, quit, reattach, reattach_remote, spawn_or_get, Proc};
 
 fn home() -> String { std::env::var("HOME").unwrap_or_default() }
 /// The vault folder from the settings, "" before one is chosen.
@@ -296,20 +299,6 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
     let window = Submenu::with_items(h, t("window"), true, &[
         &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?])?;
     Menu::with_items(h, &[&app, &chat, &edit, &window])
-}
-
-// A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
-// with. tainted: it holds mail text (see mark_tainted), kept in its broker file for after a restart.
-// turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
-// picked: the messages Claude took up in the turn running (Event::Picked), the ones its turn end answers
-// account: the config folder it runs on ("" the CLI's own), see agents::accounts
-// remote: on a work machine (machines.rs), stopped and taken back through its relay-server
-struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, picked: u32, account: String, remote: bool }
-impl Proc {
-    /// The turns running, also in the broker's file: a restart takes them from there.
-    fn set_turns(&mut self, turns: u32) {
-        if turns != self.turns { self.turns = turns; broker::save_turns(&self.key, self.child.id(), turns); }
-    }
 }
 
 struct App {
@@ -647,30 +636,6 @@ fn env_of(app: &AppHandle, st: &App, p: &dyn AgentProvider) -> EnvBuf {
     }
     EnvBuf { home: home(), vault: s["vault"].as_str().unwrap_or("").into(), path: st.path.clone(), bin: agents::bin(&s, p, &home(), &st.path), pending: pending_dir(app), opts }
 }
-/// The key of a provider's account in `limits` and `spent`.
-fn limit_key(p: &dyn AgentProvider, account: &str) -> String { format!("{}:{account}", p.id()) }
-/// An account with no room for `model`: a turn was refused on it, or a window it last read that applies is at 100%.
-fn is_spent(st: &App, p: &dyn AgentProvider, account: &str, model: &str) -> bool {
-    let k = limit_key(p, account);
-    st.spent.lock().unwrap().contains(&k) || st.limits.lock().unwrap().get(&k).is_some_and(|(_, v)| agents::used_up(v, model))
-}
-/// An account auto-switch may move to: its limits did not come back without a login (not read yet counts as fine).
-fn is_ready(st: &App, p: &dyn AgentProvider, account: &str) -> bool {
-    !st.limits.lock().unwrap().get(&limit_key(p, account)).is_some_and(|(_, v)| agents::no_login(v))
-}
-/// The account a conversation runs on: its session's, else the active one; with auto-switch on and that one used up
-/// for `model`, the next signed-in one that is not. Reads what the limits last said, never asks (no network in a send).
-/// ponytail: the limits are at most 5 minutes old (the webview's poll); a refused turn marks an account at once
-fn account_of(st: &App, p: &dyn AgentProvider, key: &str, model: &str) -> String {
-    if !p.caps().accounts { return String::new(); }
-    let own = st.sids.lock().unwrap().get(key).filter(|x| x.provider == p.id()).map(|x| x.account.clone());
-    let (list, cur, auto) = {
-        let s = st.settings.lock().unwrap();
-        let c = &s["agents"]["providers"][p.id()];
-        (agents::accounts(&s, p), own.unwrap_or_else(|| c["active"].as_str().unwrap_or("").into()), c["auto"] == true)
-    };
-    agents::pick_account(&list, &cur, auto, |a| is_spent(st, p, a, model), |a| is_ready(st, p, a))
-}
 fn mail_on(s: &Value) -> bool { s["mail"]["on"] == true && !mail::accounts(&s["mail"]).is_empty() }
 /// A conversation's provider: its session's, else the one asked for when switched on, else the default.
 fn provider_of(st: &App, key: &str, asked: Option<&str>) -> &'static dyn AgentProvider {
@@ -707,424 +672,21 @@ fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
     }
 }
 
-/// Marks a session that holds mail text: it stays on this Mac (see send) and a worker's report says so. Its
-/// permissions do not change, it runs in the user's own mode.
-fn mark_tainted(p: &mut Proc) {
-    p.tainted = true;
-    if let Some(m) = broker::load_meta(&broker::meta_path(&p.key)) { broker::save_meta(&broker::Meta { tainted: true, ..m }); }
-}
-/// The request that opens the pipe: which in-process MCP servers the app answers for.
-fn pipe_init(mail_on: bool, orch_on: bool) -> Value {
-    let servers: Vec<&str> = [(mail_on, "relay-mail"), (orch_on, "relay-orch")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
-    json!({"type": "control_request", "request_id": "init", "request": {"subtype": "initialize", "sdkMcpServers": servers}})
-}
-
-#[allow(clippy::too_many_arguments)]
-fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &str, name: &str, fork: Option<&str>, opts: (String, String), turn: Option<&Turn>, from_mail: bool, account: &str, machine: Option<&str>, about: Option<&str>) -> Result<Proc, String> {
-    let dir = need_vault(state)?;
-    let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
-    let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
-    let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
-    let claude = p.id() == "claude";
-    let settings = state.settings.lock().unwrap().clone();
-    // where the composer or Settings › Machines says (machines.rs); a fork copies a session of this Mac, so stays
-    let remote = if claude && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
-    // a work machine has its own login: no account of this Mac goes along
-    let account = if remote.is_some() { "" } else { account };
-    let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: u32::from(turn.is_some()) };
-    let (c, mail_on, remote) = if let Some((m, mut bind)) = remote {
-        if from_mail { return Err(trc("err.machine_mail")); }
-        let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
-        bind.cwd = machines::cwd_or_vault(bind.cwd, &info);
-        let mut eb = env_of(app, state, p);
-        // that machine's paths and its claude; no mail tools there
-        eb.opts["mail"] = json!(false);
-        let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
-        let mut cmd = p.command(&eb.env(), &l)?;
-        cmd.current_dir(&bind.cwd).env("PATH", &info.path);
-        // the mirror gives the session there what Claude Code here has: context, plugins, permissions, the vault's memory
-        let (args, env) = mirror::session_args(&info, &bind.cwd);
-        cmd.args(args).envs(env);
-        let c = state.machines.client(&m).launch(&meta, &broker::Spec::of(&cmd)).map_err(|e| format!("{} start ({}): {e}", p.id(), m["name"].as_str().unwrap_or("")))?;
-        state.machines.set_bind(project, bind);
-        (c, false, true)
-    } else {
-        let mut eb = env_of(app, state, p);
-        if p.caps().accounts { eb.opts["account"] = json!(account); }
-        if claude && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
-        // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
-        // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
-        if claude && !from_mail && cw_on(state) {
-            if let Some((b, repo)) = about.and_then(|a| commonwealth::session(&home(), &repo_projects(&dir), a)) {
-                eb.opts["commonwealth_brain"] = json!(b);
-                eb.opts["commonwealth_source"] = json!(repo);
-            }
-        }
-        let mut cmd = p.command(&eb.env(), &l)?;
-        // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
-        let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
-        cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
-        (broker::launch(&meta, &cmd).map_err(|e| format!("{} start: {e}", p.id()))?, eb.opts["mail"] == true, false)
-    };
-    let broker::Conn { agent, mut stdin, frames, backlog } = c;
-    // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)
-    if claude { writeln!(stdin, "{}", pipe_init(mail_on, !remote && orch::is_orch(project))).and_then(|_| stdin.flush()).map_err(|e| format!("claude start: {e}"))?; }
-    // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults
-    let fresh = resume.is_none() && fork.is_none();
-    let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
-    let pid = agent.id();
-    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), picked: 0, account: account.into(), remote };
-    read_agent(app, project, p, pid, frames, backlog, inherit, account);
-    // a chat about a mail, or one that read mail before a restart, starts restricted
-    if from_mail { mark_tainted(&mut proc); }
-    Ok(proc)
-}
-
-/// The agent's output, from its broker: each stdout line through the provider's parser to the webview as `agent`
-/// events, stderr collected for when it ends. The first `backlog` lines came in while the app was closed: their
-/// effects (session id, permission cards, Claude's pipe requests) still happen, but the webview only hears the turn
-/// end, it reads the rest from the transcript. `inherit`: whether the model and the effort were left to the CLI.
-#[allow(clippy::too_many_arguments)]
-fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32, frames: Box<dyn BufRead + Send>, backlog: usize, inherit: (bool, bool), account: &str) {
-    let (a, k, id, claude, pend, mut parse) = (app.clone(), key.to_string(), p.id(), p.id() == "claude", pending_dir(app), p.parser());
-    let (account, lk) = (account.to_string(), limit_key(p, account));
-    // the account's limits are used up: the next message moves to another one (with auto-switch on)
-    let spend = move |a: &AppHandle| { a.state::<App>().spent.lock().unwrap().insert(lk.clone()); };
-    std::thread::spawn(move || {
-        let mut exited = false;
-        let emit = |ev: Value| { a.emit("agent", json!({"project": k, "provider": id, "event": ev})).ok(); };
-        let mut err: Vec<String> = vec![];
-        let mut last = String::new(); // the agent's last text block, for a worker that ends without a report (orch.rs)
-        // this turn: refused for the account's limit (and the reset Claude named, epoch ms), and whether it did anything
-        let (mut limited, mut hint, mut worked) = (false, None::<i64>, false);
-        // worktrees there were before each tool call that may add one, by call id (see worktrees.rs)
-        let (wt_root, mut wt_before) = (PathBuf::from(home()).join("projects"), HashMap::<String, std::collections::HashSet<PathBuf>>::new());
-        // the same for the repos' reflogs around a tool call that may commit (see commits.rs)
-        let mut commit_before = HashMap::<String, commits::Snapshot>::new();
-        for (n, f) in frames.lines().map_while(Result::ok).enumerate() {
-            let line = match broker::frame(&f) { broker::Frame::Out(l) => l, broker::Frame::Err(l) => { err.push(l); continue; } broker::Frame::Exit => { exited = true; break } };
-            let replay = n < backlog;
-            // the refusal itself comes as an assistant message of model "<synthetic>": not work the turn did
-            let synthetic = claude && line.contains("\"<synthetic>\"");
-            // Claude's pipe traffic stays between the CLI and the app: the relay-mail MCP server and its restrictions
-            if claude {
-                if let Ok(ev) = serde_json::from_str::<Value>(&line) {
-                    if ev["type"] == "rate_limit_event" && ev["rate_limit_info"]["status"] == "rejected" {
-                        spend(&a);
-                        limited = true;
-                        hint = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
-                    }
-                    if ev["type"] == "control_request" { control(&a, &k, pid, &ev); continue; }
-                    if ev["type"] == "control_response" {
-                        if ev["response"]["subtype"] == "error" {
-                            let rid = ev["response"]["request_id"].as_str().unwrap_or("");
-                            emit(json!({"type": "stderr", "text": format!("relay-mail ({rid}): {}", ev["response"]["error"])}));
-                        }
-                        // the slash commands and skills this vault has, for the composer's completion
-                        if ev["response"]["request_id"] == "init" && ev["response"]["response"]["commands"].is_array() {
-                            emit(json!({"type": "commands", "commands": ev["response"]["response"]["commands"]}));
-                        }
-                        continue;
-                    }
-                }
-            }
-            for ev in parse(&line) {
-                // Replayed activity restores turns surviving an app restart. Repeated model steps never
-                // count as extra user messages; Claude's assistant blocks also provide this signal.
-                if !synthetic && matches!(&ev, Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) { worked = true; }
-                if matches!(&ev, Event::Working | Event::Text { .. } | Event::Thinking { .. } | Event::ToolCall { .. }) {
-                    if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.set_turns(x.turns.max(1)); }
-                }
-                match &ev {
-                    Event::ToolCall { id: call, input, .. } if !replay && commits::may_commit(input) => { commit_before.insert(call.clone(), commits::snapshot(&wt_root)); }
-                    Event::ToolResult { id: call, .. } if commit_before.contains_key(call) => {
-                        let before = commit_before.remove(call).unwrap_or_default();
-                        for repo in unlinked_repos(&a, &k, commits::changed(&before, &commits::snapshot(&wt_root))) { a.emit("repo-unlinked", json!({"key": k, "repo": repo})).ok(); }
-                    }
-                    _ => {}
-                }
-                match &ev {
-                    Event::Session { id: sid } => {
-                        let st = a.state::<App>();
-                        let mut sids = st.sids.lock().unwrap();
-                        sids.insert(k.clone(), agents::Sess { provider: id.into(), sid: sid.clone(), account: account.clone() });
-                        save_sids(&a, &sids);
-                    }
-                    // raised in the provider's own protocol: a card like any other, answered through respond()
-                    Event::Permission { request } => {
-                        let mut r = request.clone();
-                        (r.project, r.provider, r.relay) = (k.clone(), id.into(), true);
-                        pending::write(&pend, &r).ok();
-                    }
-                    Event::ToolCall { id: call, input, .. } if worktrees::may_add(input) => { wt_before.insert(call.clone(), worktrees::snapshot(&wt_root)); }
-                    Event::ToolResult { id: call, .. } if wt_before.contains_key(call) => {
-                        let before = wt_before.remove(call).unwrap_or_default();
-                        let new: Vec<String> = worktrees::snapshot(&wt_root).difference(&before).map(|p| p.to_string_lossy().into()).collect();
-                        if !new.is_empty() {
-                            let st = a.state::<App>();
-                            let mut w = st.worktrees.lock().unwrap();
-                            w.entry(k.clone()).or_default().extend(new);
-                            save_worktrees(&a, &w);
-                        }
-                    }
-                    Event::Resolved { model, effort } => {
-                        if !replay { emit(json!({"type": "resolved", "model": model, "effort": effort, "default_model": inherit.0, "default_effort": inherit.1})); }
-                        continue;
-                    }
-                    Event::Text { text, delta } => { if !delta { last.clear(); } last.push_str(text); }
-                    // a turn end answers every message taken up in its turn, at least the one that started it
-                    Event::Picked { .. } => { if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.picked += 1; } }
-                    Event::TurnEnd { error, .. } => {
-                        let e = error.as_deref().unwrap_or("").to_lowercase();
-                        // "usage limit" (Codex), "You've hit your limit" and "You've hit your weekly limit · resets 9pm" (Claude)
-                        if e.contains("usage limit") || (e.contains("hit your") && e.contains("limit")) { spend(&a); limited = true; }
-                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(x.picked.max(1))); x.picked = 0; x.opts.0.clone() });
-                        retry::turn_end(&a, &k, p, &account, &model.unwrap_or_default(), limited, hint, !worked);
-                        (limited, hint, worked) = (false, None, false);
-                        // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
-                        if orch::is_worker(&k) { orch::turn_end(&a, &k, &last); }
-                        if !replay && orch::is_orch(&k) { orch::flush(&a, &k); } // what Relay queued while the turn ran
-                        last.clear();
-                    }
-                    _ => {}
-                }
-                if !replay || matches!(ev, Event::TurnEnd { .. }) { emit(serde_json::to_value(&ev).unwrap_or_default()); }
-            }
-        }
-        if !err.is_empty() { emit(json!({"type": "stderr", "text": err.join("\n")})); }
-        // a work machine's connection that dropped without the agent ending (the Mac slept, the wifi went): its
-        // agent goes on there, take it back once the machine answers again
-        if !exited && a.state::<App>().machines.bind_of(&k).is_some() && reconnect(&a, &k, p, pid) { return; }
-        broker::forget(&k, pid);
-        // a process replaced for a model or effort switch exits quietly, its successor keeps the slot
-        {
-            let st = a.state::<App>();
-            let mut procs = st.procs.lock().unwrap();
-            if procs.get(&k).is_some_and(|x| x.child.id() != pid) { return; }
-            procs.remove(&k);
-        }
-        if orch::is_worker(&k) { orch::exited(&a, &k); }
-        emit(json!({"type": "exit"}));
-    });
-}
-
-/// The app quits: an agent with no turn running stops (the next message resumes its session, nothing is lost), so
-/// only a running turn keeps an agent and its broker alive while the app is closed.
-fn quit(app: &AppHandle) {
-    // a work machine's agents stay: that is what the machine is for, and its server winds an idle one down itself
-    for (_, mut x) in app.state::<App>().procs.lock().unwrap().drain().filter(|(_, x)| x.turns == 0 && !x.remote) { x.child.kill().ok(); broker::forget(&x.key, x.child.id()); }
-}
-
-/// Take a work machine's conversation back after its connection dropped: every few seconds while its slot still holds
-/// this agent, for at most an hour. False when it is gone (it ended there, or was stopped).
-fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32) -> bool {
-    let st = app.state::<App>();
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3600);
-    while std::time::Instant::now() < deadline {
-        std::thread::sleep(std::time::Duration::from_secs(3));
-        if !st.procs.lock().unwrap().get(key).is_some_and(|x| x.child.id() == pid) { return true; } // stopped or replaced: nothing to do
-        let Some(m) = st.machines.bind_of(key).and_then(|b| machines::Machines::find(&st.settings.lock().unwrap(), &b.machine)) else { return false };
-        match st.machines.client(&m).attach(key) {
-            Ok(Some(c)) if c.agent.id() == pid => {
-                let broker::Conn { agent, stdin, frames, backlog } = c;
-                if let Some(x) = st.procs.lock().unwrap().get_mut(key) { x.stdin = stdin; x.child = agent; }
-                read_agent(app, key, p, pid, frames, backlog, (false, false), "");
-                return true;
-            }
-            Ok(_) => return false,
-            Err(_) => continue,
-        }
-    }
-    false
-}
-
-/// After a restart, a work machine's conversations: the ones whose broker still runs there are the app's again.
-/// Off the setup thread, a machine that does not answer only delays its own conversations.
-fn reattach_remote(app: &AppHandle) {
-    let st = app.state::<App>();
-    let list = st.settings.lock().unwrap()["machines"].as_array().cloned().unwrap_or_default();
-    for m in list {
-        let c = st.machines.client(&m);
-        let Ok(metas) = c.list() else { continue };
-        for meta in metas.into_iter().filter(|x| st.machines.bind_of(&x.key).is_some_and(|b| m["id"] == b.machine.as_str())) {
-            let (Ok(p), Ok(Some(conn))) = (agents::get(&meta.provider), c.attach(&meta.key)) else { continue };
-            if st.procs.lock().unwrap().contains_key(&meta.key) { continue; }
-            let broker::Conn { agent, stdin, frames, backlog } = conn;
-            let pid = agent.id();
-            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, picked: 0, account: String::new(), remote: true };
-            st.procs.lock().unwrap().insert(meta.key.clone(), x);
-            read_agent(app, &meta.key, p, pid, frames, backlog, (false, false), "");
-        }
-    }
-}
-
-/// After a restart: the conversations whose broker is still there are the app's again, the files of the others go.
-/// Each with the turns its file says are running: a turn that ended before the restart is not running again, one that
-/// ended while the app was away ends with its replayed turn end.
-fn reattach(app: &AppHandle) {
-    let Ok(dir) = fs::read_dir(broker::dir()) else { return };
-    for f in dir.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
-        let Some(m) = broker::load_meta(&f) else { fs::remove_file(&f).ok(); continue };
-        let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
-        let broker::Conn { agent, stdin, frames, backlog } = c;
-        let pid = agent.id();
-        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, picked: 0, account: m.account.clone(), remote: false };
-        app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
-        read_agent(app, &m.key, p, pid, frames, backlog, (false, false), &m.account);
-    }
-}
-
-/// A request from the CLI over the pipe. Only relay-mail's MCP messages are answered, a tool call runs off this
-/// reader thread so the conversation keeps streaming while IMAP works.
-fn control(app: &AppHandle, key: &str, pid: u32, ev: &Value) {
-    let (rid, req) = (ev["request_id"].clone(), &ev["request"]);
-    if req["subtype"] == "mcp_message" && req["server_name"] == "relay-orch" && orch::is_orch(key) { return orch::control(app, key, pid, rid, &req["message"]); }
-    if req["subtype"] != "mcp_message" || req["server_name"] != "relay-mail" {
-        return pipe_reply(app, key, pid, json!({"subtype": "error", "request_id": rid, "error": "unsupported"}));
-    }
-    match mail::rpc(&req["message"]) {
-        mail::Rpc::Reply(r) => pipe_reply(app, key, pid, pipe_ok(rid, r)),
-        mail::Rpc::Call { id, name, args } => {
-            // mail text is about to enter this session: marked before the tool runs
-            if ["search", "read", "thread", "attachment"].contains(&name.as_str()) {
-                let st = app.state::<App>();
-                let mut procs = st.procs.lock().unwrap();
-                if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid && !p.tainted) { mark_tainted(p); }
-            }
-            let (app, key) = (app.clone(), key.to_string());
-            tauri::async_runtime::spawn(async move {
-                let st = app.state::<App>();
-                let (on, accts, default) = { let s = st.settings.lock().unwrap(); (s["mail"]["on"] == true, mail::accounts(&s["mail"]), s["mail"]["account"].as_str().unwrap_or("").to_string()) };
-                let dl = PathBuf::from(home()).join("Downloads/Relay-mail");
-                let res = if on { st.mail.tool(&accts, &default, &name, &args, &dl).await }
-                    else { json!({"content": [{"type": "text", "text": "Mail is switched off in the app."}], "isError": true}) };
-                if name == "save_draft" && res["isError"] != true {
-                    // the chat shows who the draft is really for, whatever Claude writes about it
-                    let d: Value = serde_json::from_str(res["content"][0]["text"].as_str().unwrap_or("")).unwrap_or_default();
-                    app.emit("agent", json!({"project": key, "provider": "claude", "event": {"type": "draft_saved", "folder": d["folder"], "to": d["to"], "cc": d["cc"], "bcc": d["bcc"]}})).ok();
-                }
-                pipe_reply(&app, &key, pid, pipe_ok(rid, mail::rpc_result(id, res)));
-            });
-        }
-    }
-}
-fn pipe_ok(rid: Value, r: Value) -> Value { json!({"subtype": "success", "request_id": rid, "response": {"mcp_response": r}}) }
-/// Write a control_response to the process that asked, if it is still the one in that slot.
-fn pipe_reply(app: &AppHandle, key: &str, pid: u32, response: Value) {
-    let st = app.state::<App>();
-    let mut procs = st.procs.lock().unwrap();
-    if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid) {
-        writeln!(p.stdin, "{}", json!({"type": "control_response", "response": response})).and_then(|_| p.stdin.flush()).ok();
-    }
-}
-
-/// What a changed model or effort asks of a running process: a restart, and/or a set_model over its pipe.
-#[derive(Debug, PartialEq)]
-struct SwitchPlan { restart: bool, model: bool }
-fn switch_plan(cur: &(String, String), want: &(String, String), live_model: bool, busy: bool) -> SwitchPlan {
-    if !live_model { return SwitchPlan { restart: cur != want, model: false }; }
-    // ponytail: effort is not changed live (apply_flag_settings accepts it but its effect is unverified), so it waits for an idle moment
-    SwitchPlan { restart: cur.1 != want.1 && !busy, model: cur.0 != want.0 }
-}
-/// Claude's control_request that changes the model for the turns after it ("default": the CLI's own).
-fn set_model_request(model: &str) -> Value {
-    json!({"type": "control_request", "request_id": "model", "request": {"subtype": "set_model", "model": if model.is_empty() { "default" } else { model }}})
-}
-
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
         model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>, about: Option<String>) -> Result<(), String> {
-    let p = provider_of(&state, &project, provider.as_deref());
-    // the orchestrator's conversations stay on this Mac, its tools are answered over this pipe (orch.rs)
-    let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
-    // the project the agent is told about: the line in front of the message (agent_core::envelope)
-    let text = match told.filter(|t| !t.is_empty()) { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
-    // pasted images, only the types the webview allows, for a provider that takes them
-    let images: Vec<Image> = if !p.caps().images { vec![] } else {
-        images.unwrap_or_default().into_iter().filter_map(|i| Some(Image { media_type: i["media_type"].as_str()?.into(), data: i["data"].as_str()?.into() }))
-            .filter(|i| IMAGE_TYPES.contains(&i.media_type.as_str())).collect()
-    };
-    if images.is_empty() && text.trim().is_empty() { return Err(tr(ui_lang_of(&state.settings.lock().unwrap()), "err.empty")); }
-    let turn = Turn { text, images };
-    // empty = the CLI default from its settings. Only aliases and model ids, never a stray flag
-    let model = model.filter(|m| agent_core::safe_model(m)).unwrap_or_default();
-    let effort = effort.filter(|e| p.efforts().iter().any(|c| c.id == *e)).unwrap_or_default();
-    let opts = (model, effort);
-    let name = name.unwrap_or_else(|| project.clone());
-    let mut account = account_of(&state, p, &project, &opts.0);
-    // an orchestrator conversation that heard a stranger's text stays restricted, also in a new process (orch.rs)
-    let orch_taint = orch::is_orch(&project) && orch::tainted(&app, &project);
-    let mut procs = state.procs.lock().unwrap();
-    // a turn still running stays where it is: the account moves once the conversation is idle
-    if let Some(x) = procs.get(&project).filter(|x| x.turns > 0 && x.provider == p.id()) { account = x.account.clone(); }
-    if !p.caps().persistent {
-        // one process per turn: the next message waits for this one
-        if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, Some(&turn), false, &account, machine.as_deref(), about.as_deref())?;
-        procs.insert(project, x);
-        return Ok(());
-    }
-    // account is a start flag, so is effort: a switch restarts the process on the same session. Claude takes a new model
-    // over the pipe (set_model), so a model switch never kills a turn; an effort switch waits until the turn is over
-    let mut was_tainted = false;
-    // (a work machine's conversation runs on that machine's login, so this Mac's account never restarts it)
-    if let Some(x) = procs.get_mut(&project) {
-        let moved = x.provider != p.id() || (x.account != account && !x.remote);
-        let plan = switch_plan(&x.opts, &opts, p.id() == "claude", x.turns > 0);
-        if moved || plan.restart {
-            if let Some(mut x) = procs.remove(&project) { x.child.kill().ok(); was_tainted = x.tainted; }
-        } else if plan.model {
-            writeln!(x.stdin, "{}", set_model_request(&opts.0)).and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
-            x.opts.0 = opts.0.clone();
-        }
-    }
-    if !procs.contains_key(&project) {
-        let x = spawn(&app, &state, p, &project, &name, fork.as_deref(), opts, None, mail.unwrap_or(false) || was_tainted || orch_taint, &account, machine.as_deref(), about.as_deref())?;
-        procs.insert(project.clone(), x);
-    }
-    let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
-    let x = procs.get_mut(&project).unwrap();
-    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
-    x.set_turns(x.turns + 1);
-    Ok(())
+    session::send(&app, &state, session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about })
 }
 
 #[tauri::command]
-fn stop(app: AppHandle, state: State<App>, project: String) {
-    if orch::is_worker(&project) { orch::stop(&app, &project); return; }
-    if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
-}
+fn stop(app: AppHandle, state: State<App>, project: String) { session::stop(&app, &state, &project) }
 
 /// The orchestrator's workers, oldest first (orch.rs).
 #[tauri::command]
 fn orch_workers(app: AppHandle) -> Vec<orch::Worker> { orch::load(&app) }
 #[tauri::command]
 fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
-
-/// Relay itself writes a turn into a conversation of the app (the orchestrator's briefs and reports): its process
-/// is started when it is not running, on this Mac, on the model it runs with, else `model`. `taint`: the text may
-/// carry a stranger's words, so the conversation is restricted first. False, and nothing written, while a turn runs.
-fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, taint: bool, text: &str) -> Result<bool, String> {
-    let state = app.state::<App>();
-    let p = provider_of(&state, key, Some("claude"));
-    if p.id() != "claude" { return Err("the orchestrator runs on Claude Code".into()); }
-    let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
-    let account = account_of(&state, p, key, &model);
-    let taint = taint || orch::tainted(app, key);
-    let mut procs = state.procs.lock().unwrap();
-    if procs.get(key).is_some_and(|x| x.turns > 0) { return Ok(false); }
-    if !procs.contains_key(key) {
-        let x = spawn(app, &state, p, key, name, None, (model, String::new()), None, taint, &account, Some(""), None)?;
-        procs.insert(key.to_string(), x);
-    }
-    let x = procs.get_mut(key).unwrap();
-    if taint && !x.tainted { mark_tainted(x); }
-    let line = p.input(&Turn { text: text.to_string(), images: vec![] }).ok_or("claude: no input")?;
-    writeln!(x.stdin, "{line}").and_then(|_| x.stdin.flush()).map_err(|e| e.to_string())?;
-    x.set_turns(x.turns + 1);
-    Ok(true)
-}
 
 /// A conversation closes: remove the worktrees it made that are safe to remove (see worktrees::remove). The ones
 /// kept stay linked, a next close tries again. Returns {removed, kept}.
@@ -1237,7 +799,7 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), Strin
         let x = procs.get(key);
         if !to.is_empty() && (mail || x.is_some_and(|x| x.tainted)) { return Err(trc("err.machine_mail")); }
         let card = pending::list(&pending_dir(app)).into_iter().chain(state.machines.pending()).any(|c| c["project"] == key);
-        if x.is_some_and(|x| x.turns > 0) || card { return Err(trc("err.move_busy")); }
+        if x.is_some_and(|x| x.turns.busy()) || card { return Err(trc("err.move_busy")); }
     }
     let settings = state.settings.lock().unwrap().clone();
     let vault = need_vault(&state)?;
@@ -1344,7 +906,7 @@ fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<
 
 #[tauri::command]
 fn running(state: State<App>) -> HashMap<String, u32> {
-    state.procs.lock().unwrap().iter().map(|(key, proc)| (key.clone(), proc.turns)).collect()
+    state.procs.lock().unwrap().iter().map(|(key, proc)| (key.clone(), proc.turns.count())).collect()
 }
 
 /// The open permission requests and questions of every provider.
@@ -2341,12 +1903,6 @@ mod github_tests {
 #[cfg(test)]
 mod mail_tests {
     #[test]
-    fn pipe_init_names_the_apps_servers() {
-        assert_eq!(super::pipe_init(true, false)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail"]));
-        assert_eq!(super::pipe_init(false, false)["request"]["sdkMcpServers"], serde_json::json!([]));
-        assert_eq!(super::pipe_init(true, true)["request"]["sdkMcpServers"], serde_json::json!(["relay-mail", "relay-orch"]));
-    }
-    #[test]
     fn only_the_apps_own_pages_navigate() {
         let ok = |u: &str| super::nav_internal(&u.parse().unwrap());
         for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x"] { assert!(ok(u), "{u}"); }
@@ -2381,31 +1937,5 @@ mod terminal_tests {
         assert_eq!(terminal_of("auto", |_| false), "terminal");
         assert_eq!(terminal_of("iterm", |_| false), "iterm");
         assert_eq!(terminal_of("bogus", |_| true), "terminal");
-    }
-}
-
-#[cfg(test)]
-mod switch_tests {
-    use super::{set_model_request, switch_plan, SwitchPlan};
-    fn o(m: &str, e: &str) -> (String, String) { (m.into(), e.into()) }
-    #[test]
-    fn model_goes_over_the_pipe_effort_waits_for_idle() {
-        let (idle, busy) = (false, true);
-        assert_eq!(switch_plan(&o("opus", "high"), &o("opus", "high"), true, busy), SwitchPlan { restart: false, model: false });
-        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "high"), true, busy), SwitchPlan { restart: false, model: true });
-        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "high"), true, idle), SwitchPlan { restart: false, model: true });
-        // a running turn is never killed for an effort switch, the model part still applies
-        assert_eq!(switch_plan(&o("opus", "high"), &o("sonnet", "low"), true, busy), SwitchPlan { restart: false, model: true });
-        assert_eq!(switch_plan(&o("opus", "high"), &o("opus", "low"), true, idle), SwitchPlan { restart: true, model: false });
-        // other providers: any change restarts, as before
-        assert_eq!(switch_plan(&o("a", ""), &o("b", ""), false, idle), SwitchPlan { restart: true, model: false });
-    }
-    #[test]
-    fn set_model_json() {
-        let v = set_model_request("sonnet");
-        assert_eq!(v["type"], "control_request");
-        assert_eq!(v["request"]["subtype"], "set_model");
-        assert_eq!(v["request"]["model"], "sonnet");
-        assert_eq!(set_model_request("")["request"]["model"], "default");
     }
 }

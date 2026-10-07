@@ -213,7 +213,7 @@ fn mail(app: &AppHandle, key: &str, name: &str, args: &Value) -> Result<Value, S
     let st = app.state::<crate::App>();
     // mail text is about to enter this session, as for relay-mail
     if name != "save_draft" {
-        if let Some(p) = st.procs.lock().unwrap().get_mut(key).filter(|p| !p.tainted) { crate::mark_tainted(p); }
+        if let Some(p) = st.procs.lock().unwrap().get_mut(key).filter(|p| !p.tainted) { p.mark_tainted(); }
     }
     let mut args = args.clone();
     for k in ["limit", "index"] { if let Some(n) = args[k].as_str().and_then(|s| s.parse::<u64>().ok()) { args[k] = json!(n); } }
