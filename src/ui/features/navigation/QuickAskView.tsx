@@ -3,7 +3,10 @@ import type { Img } from "../../../domain/conversations/types";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { openProject, quickProjects, toggleQuickAsk } from "../../../application/navigation/navigation";
 import { quickSend } from "../../../application/conversations/actions";
-import { openFoundCard, searchTickets } from "../../../application/board/board";
+import { knownTickets, openFoundCard, searchTickets, type Found } from "../../../application/board/board";
+import { findMeetings, timeOf } from "../../../application/calendar/calendar";
+import { openFoundMeeting } from "../../../application/today/today";
+import type { Meeting } from "../../../domain/calendar/types";
 import { prepImages, releaseImages } from "../../../application/conversations/images";
 import { dropTarget, fromPaths } from "../../../application/conversations/attachments";
 import { onPasteFiles } from "../../components/image-files";
@@ -16,10 +19,14 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 
 const close = () => toggleQuickAsk(false);
-type Ticket = Awaited<ReturnType<typeof searchTickets>>[number];
-type Option = ({ kind: "project" } & ReturnType<typeof quickProjects>[number]) | ({ kind: "ticket" } & Ticket);
-/** Tickets are searched from this many characters, once typing pauses this long (ms). */
+type Option =
+  | ({ kind: "project" } & ReturnType<typeof quickProjects>[number])
+  | { kind: "meeting"; meeting: Meeting }
+  | ({ kind: "ticket" } & Found);
+const ticketKey = (found: Found) => `${found.provider.id}:${found.hit.id}`;
+/** Meetings and loaded cards show from this many characters, the trackers are searched once typing pauses this long (ms). */
 const MIN_QUERY = 3;
+const HINT = { project: "qk.openHint", meeting: "qk.meetingHint", ticket: "qk.ticketHint" } as const;
 const PAUSE = 250;
 
 /** Cmd-K: open a matching project or ticket, or send a quick question in the background. Mounted while `quickAsk`. */
@@ -43,7 +50,10 @@ export function QuickAskView() {
   const projects = asking ? [] : found;
   // the trackers' tickets, searched once typing pauses; the last answer stays until the next one is in
   const query = asking ? "" : typed.trim();
-  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [tickets, setTickets] = useState<Found[]>([]);
+  // what is known without asking anyone: the day's meetings and the cards already loaded, at once
+  const meetings = useDerived(() => (query.length < MIN_QUERY ? [] : findMeetings(query)));
+  const known = useDerived(() => (query.length < MIN_QUERY ? [] : knownTickets(query)));
   // the query the shown tickets answer; a different one is still being searched
   const [answered, setAnswered] = useState("");
   const searching = query.length >= MIN_QUERY && answered !== query;
@@ -52,11 +62,10 @@ export function QuickAskView() {
     let live = true;
     const timer = setTimeout(
       () =>
-        searchTickets(query).then(next => {
-          if (!live) return;
-          setTickets(next);
-          setAnswered(query);
-          setPicked(-1);
+        searchTickets(query, next => {
+          if (live) setTickets(next);
+        }).then(() => {
+          if (live) setAnswered(query);
         }),
       PAUSE,
     );
@@ -67,7 +76,11 @@ export function QuickAskView() {
   }, [query]);
   const options: Option[] = [
     ...projects.map(project => ({ kind: "project" as const, ...project })),
-    ...(query.length < MIN_QUERY ? [] : tickets).map(ticket => ({ kind: "ticket" as const, ...ticket })),
+    ...meetings.map(meeting => ({ kind: "meeting" as const, meeting })),
+    // the loaded cards first, the trackers' answers after them: a late answer adds rows below, the selection stays put
+    ...[...new Map([...known, ...(query.length < MIN_QUERY ? [] : tickets)].map(x => [ticketKey(x), x])).values()].map(
+      ticket => ({ kind: "ticket" as const, ...ticket }),
+    ),
   ];
   const update = (next: Img[]) => {
     waiting.current = next;
@@ -111,6 +124,7 @@ export function QuickAskView() {
   const choose = (option: Option) => {
     close();
     if (option.kind === "project") openProject(option.name);
+    else if (option.kind === "meeting") openFoundMeeting(option.meeting.id);
     else openFoundCard(option.provider, option.hit);
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -201,7 +215,13 @@ export function QuickAskView() {
         <div id="quick-options" role="listbox" aria-label={t("qk.options")}>
           {options.map((option, i) => (
             <button
-              key={option.kind === "project" ? option.name : `${option.provider.id}:${option.hit.id}`}
+              key={
+                option.kind === "project"
+                  ? option.name
+                  : option.kind === "meeting"
+                    ? `meeting:${option.meeting.id}`
+                    : ticketKey(option)
+              }
               id={`quick-option-${i}`}
               type="button"
               role="option"
@@ -213,6 +233,11 @@ export function QuickAskView() {
             >
               {option.kind === "project" ? (
                 <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{option.label}</span>
+              ) : option.kind === "meeting" ? (
+                <>
+                  <Icon name="cal" className="glyph size-4 flex-none" />
+                  <span className="flex-1 min-w-0 truncate text-[13px] font-medium">{option.meeting.title}</span>
+                </>
               ) : (
                 <>
                   <Glyph svg={option.provider.glyph} className="size-4 flex-none" />
@@ -223,15 +248,17 @@ export function QuickAskView() {
                 </>
               )}
               <span className="text-xs text-secondary truncate max-w-40">
-                {option.kind === "project" ? option.context : option.hit.where}
+                {option.kind === "project"
+                  ? option.context
+                  : option.kind === "meeting"
+                    ? timeOf(option.meeting.start)
+                    : option.hit.where}
               </span>
             </button>
           ))}
         </div>
         <div className="flex items-center gap-2 text-xs text-secondary mt-1.5">
-          <span className="flex-1 min-w-0">
-            {t(!options[picked] ? "qk.hint" : options[picked].kind === "project" ? "qk.openHint" : "qk.ticketHint")}
-          </span>
+          <span className="flex-1 min-w-0">{t(!options[picked] ? "qk.hint" : HINT[options[picked].kind])}</span>
           {searching ? (
             <span role="status" aria-label={t("qk.searching")} title={t("qk.searching")}>
               <Icon name="refresh" className="glyph size-3.5 animate-spin" />

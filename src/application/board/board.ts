@@ -1,6 +1,6 @@
 import { t, currentLocale } from "../../shared/i18n";
 import { PROVIDERS } from "../../shared/plugins";
-import type { BoardProvider, Card, Column, Hit, View } from "../../domain/board/types";
+import type { BoardProvider, BoardRef, Card, Column, Hit, View } from "../../domain/board/types";
 import {
   refOf,
   colOf,
@@ -29,6 +29,7 @@ import { typeInto } from "../conversations/actions";
 import { useWorkspaceStore } from "../workspace/store";
 import { projectLabel } from "../workspace/vault";
 import { storedBoard, useBoardStore } from "./store";
+import { useTodayStore } from "../today/store";
 import { ctxOf, providerReady } from "./ctx";
 
 // A provider's board as a kanban or a list (domain/board/rules.ts). The backend holds the token.
@@ -42,18 +43,61 @@ export const checkBoards = async () => {
 };
 export const readyBoards = () => PROVIDERS.filter(x => bs().ready.includes(x.id));
 
-/** Cmd-K: the cards matching `q` in every connected tracker that searches, in the order of the sidebar; a tracker
- *  that fails is left out, the others still show. */
-export async function searchTickets(q: string) {
-  const found = await Promise.all(
-    readyBoards().map(provider =>
-      (provider.search?.(ctxOf(provider), q) ?? Promise.resolve([])).then(
-        hits => hits.map(hit => ({ provider, hit })),
-        e => (console.error(e), []),
+export type Found = { provider: BoardProvider; hit: Hit };
+// the trackers' answers this session, per query: the same query again (a backspace) shows them at once, then refreshes.
+// ponytail: only emptied by resetBoard, a few KB per query typed
+const searched = new Map<string, Found[]>();
+
+/** Cmd-K before any tracker answers: the open cards already loaded (a board seen, the boards Today reads) whose
+ *  number or title holds `q`, at most `max`. */
+export function knownTickets(q: string, max = 8): Found[] {
+  const needle = q.toLowerCase().replace(/^#/, "");
+  const out = new Map<string, Found>();
+  const add = (provider: BoardProvider | undefined, ref: BoardRef, cards: Card[], where: string) => {
+    if (!provider || !readyBoards().includes(provider)) return;
+    for (const card of cards) {
+      if (out.size >= max) return;
+      if (card.state === "done") continue;
+      if (!card.title.toLowerCase().includes(needle) && !card.number.toLowerCase().includes(needle)) continue;
+      out.set(`${provider.id}:${card.id}`, {
+        provider,
+        hit: { id: card.id, title: card.title, number: card.number, ref, where },
+      });
+    }
+  };
+  for (const provider of PROVIDERS) {
+    const state = boardState(provider);
+    add(provider, refOf(provider, state), state.cards, state.projects?.find(x => x.id === state.project)?.name ?? "");
+  }
+  for (const [project, board] of Object.entries(useTodayStore.getState().boards))
+    add(
+      PROVIDERS.find(x => x.id === board.provider),
+      board.ref,
+      board.cards,
+      projectLabel(project),
+    );
+  return [...out.values()];
+}
+
+/** Cmd-K: the cards matching `q` in every connected tracker that searches, in the order of the sidebar. `show` gets
+ *  the list each time a tracker answers, so a slow one holds no other back; a tracker that fails is left out. */
+export async function searchTickets(q: string, show: (found: Found[]) => void) {
+  const cached = searched.get(q);
+  if (cached) show(cached);
+  const providers = readyBoards().filter(provider => provider.search);
+  const per = providers.map(provider => (cached ?? []).filter(found => found.provider === provider));
+  await Promise.all(
+    providers.map((provider, i) =>
+      provider.search!(ctxOf(provider), q).then(
+        hits => {
+          per[i] = hits.map(hit => ({ provider, hit }));
+          show(per.flat());
+        },
+        e => console.error(e),
       ),
     ),
   );
-  return found.flat();
+  searched.set(q, per.flat());
 }
 
 /** The provider's board as it is shown (every provider has one from the start, application/board/store.ts). */
@@ -135,6 +179,7 @@ export function resetBoard() {
     draft.resets++;
   });
   PROVIDERS.forEach(provider => provider.reset?.());
+  searched.clear();
 }
 
 // ---------- loading

@@ -19,7 +19,7 @@ import { todayIso } from "../../domain/reminders/rules";
 import { isQuestion } from "../../domain/conversations/rules";
 import { joinable } from "../../domain/calendar/rules";
 import { mailKey, prKey } from "../../domain/navigation/keys";
-import { PRS } from "../../domain/navigation/views";
+import { PRS, WAIT } from "../../domain/navigation/views";
 import type { Pending, AgentSession } from "../../domain/conversations/types";
 import type { Meeting } from "../../domain/calendar/types";
 import type { Reminder } from "../../domain/reminders/types";
@@ -658,6 +658,11 @@ export function openMeeting(meetingId: string) {
   if (!inContext(useTodayStore.getState().context, projectOf(item.project)?.context)) setContext("");
   selectEntry(item.id);
   return true;
+}
+/** Cmd-K picked a meeting: Today, with its prep or note open when it has one. */
+export async function openFoundMeeting(meetingId: string) {
+  await select(WAIT);
+  openMeeting(meetingId);
 }
 /** A review item that holds the PRs of one ticket: reviewed together. */
 export function reviewGroupOf(entry: Entry) {
