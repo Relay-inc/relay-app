@@ -34,6 +34,16 @@ const sent = new Set<string>();
 export const calendarOn = () => isCalendarOn(settings());
 export const soonMeetings = () => (calendarOn() ? soon(cal().list, cal().now) : []);
 export const timeOf = (iso: string) => clockTime(iso, currentLocale());
+/** Cmd-K: the loaded meetings (the day's, application/calendar) whose title, organizer or a guest holds `q`. */
+export function findMeetings(q: string) {
+  const needle = q.toLowerCase();
+  if (!calendarOn()) return [];
+  return cal().list.filter(meeting =>
+    [meeting.title, meeting.organizer, ...meeting.people.map(person => person.name)].some(text =>
+      text.toLowerCase().includes(needle),
+    ),
+  );
+}
 
 export async function loadMeetings() {
   if (!calendarOn()) {

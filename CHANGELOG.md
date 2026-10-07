@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **⌘K answers faster and finds meetings**: cards from boards you already opened (and the ones Today reads) show while you type, each tracker's results show as soon as that tracker answers instead of after the slowest one, and a query you typed before shows its results at once. Today's meetings match on title, organizer or guest and open under Today
+
 ### Fixed
 
 - **Commonwealth notes file under their project**: a conversation about a project whose repos route to a brain now tells Commonwealth that repo (`COMMONWEALTH_SOURCE`), so its captured notes no longer all land in the brain's `vault/` folder. Needs Commonwealth with kristoffeys/commonwealth#323
