@@ -1,11 +1,11 @@
 {
-  "version": "0.0.12",
-  "notes": "### Added\n\n- Agents can search and read tickets: `relay productive.search`, `productive.task` and `productive.comments`; `relay trello.search` and `trello.card` (with its comments); `relay linear.search` and `linear.issue` (with its comments). Reads, so they run without a card unless Settings says otherwise (#134)\n\n### Changed\n\n- **Cmd-K finds open tickets only**: closed Productive tasks, archived Trello cards and completed or canceled Linear issues no longer show, and a spinner next to the hint says the trackers are still being searched (#135)",
-  "pub_date": "2026-10-07T09:54:22.371Z",
+  "version": "0.0.13",
+  "notes": "### Added\n\n- **The briefing shows under Today**: a meeting you prepared shows its briefing (the answer to the prep question) when you open it under Today, with a button to the conversation. Prepare opens that conversation again instead of starting a second one. **Edit** rewrites the briefing in place (⌘↵ saves); saving it empty goes back to Claude's answer (#137)",
+  "pub_date": "2026-10-07T11:50:01.878Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnBQcmZzMnVHUlZ2YWxMUUNmdjZaMi9WU3B3cG9QakZxNFVEWXNGcWVXMUQ4TmRvcWJ3Y0w0alZJeGE1NmsvcmEyNXZvQkJCSWtNY3dyVnBhdFJGS2dVPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzY2ODQzCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xMgpZT2NXWk92eTNJakZnSWtZZStocVVFSG02Y3hudFFWTkptU1U0eE1YR1o3bEUzMEpvNlFrb0tBTTFuSkxvdGFzeHZzSUVqSXZSZUVjZGh2RXdnSndEUT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/618268929"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnJpeW1jelpERnpsY2V3aWJjTWhudzIrZGVtQlRiSzFacDcxSDJYTHBUUmxzL1BBQUh3dXB6M0pqbjRBK2xCcytxRy9kVXI1UEp1RU1TNWVjenpoR0FvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzczNzg2CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xMwpTRXJIRkdQRWpYQlYvTUQwemRxZTlUcFRqSFVhY1d4YlM4QjJpTXRhMXQxY284bFNJZVFMNnRzT005dDJWajFXcUpPbE01N21BTGtDQU5uN3FsM1hEdz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/618540865"
     }
   }
 }
