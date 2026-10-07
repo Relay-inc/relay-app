@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **A running meeting opens under Today**: clicking a meeting while it runs opens it with its briefing; before, nothing opened between its start and its end
 - **Commonwealth notes file under their project**: a conversation about a project whose repos route to a brain now tells Commonwealth that repo (`COMMONWEALTH_SOURCE`), so its captured notes no longer all land in the brain's `vault/` folder. Needs Commonwealth with kristoffeys/commonwealth#323
 
 ## [0.0.13] - 2026-10-07

@@ -251,7 +251,8 @@ export function entries(now = Date.now()): Entry[] {
     const base = { project: meetingProjectOf(meeting), subject: { type: "meeting", meeting } as Subject };
     const when = `${timeOf(meeting.start)}–${timeOf(meeting.end)}`;
     const where = [when, meeting.location].filter(Boolean).join(" · ");
-    if (start > now)
+    // the prep stays until the meeting ends: while it runs, a click on it still opens its briefing
+    if (end > now)
       add("prep", {
         ...base,
         id: `prep:${meeting.id}`,
@@ -259,7 +260,10 @@ export function entries(now = Date.now()): Entry[] {
         by: start,
         title: t("today.prepTitle", { title: meeting.title || t("wait.meetingUntitled") }),
         where,
-        why: t("today.starts", { time: timeOf(meeting.start) }),
+        why:
+          start > now
+            ? t("today.starts", { time: timeOf(meeting.start) })
+            : `${t("wait.meetingNow")} · ${t("today.until", { time: timeOf(meeting.end) })}`,
         tone: start - now < 60 * MIN ? "soon" : "",
       });
     else if (end <= now)
