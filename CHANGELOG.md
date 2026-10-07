@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
-- **⌘K answers faster and finds meetings**: cards from boards you already opened (and the ones Today reads) show while you type, each tracker's results show as soon as that tracker answers instead of after the slowest one, and a query you typed before shows its results at once. Today's meetings match on title, organizer or guest and open under Today
+- **⌘K answers faster and finds meetings**: cards from boards you already opened (and the ones Today reads) show while you type, each tracker's results show as soon as that tracker answers instead of after the slowest one, and a query you typed before shows its results at once. Today's meetings match on title, organizer or guest and open under Today (#141)
 
 ### Fixed
 

@@ -136,6 +136,22 @@ const VIEWS = {
     await page.keyboard.type("Summarise this");
     await settle(page, 300);
   },
+  // Cmd-K finds the day's meetings, at once (#141)
+  "cmd-k-meeting": async () => {
+    await open(page, server.url, { fixture: "calendar", sel: "__board:productive" });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("review");
+    await settle(page, 300);
+  },
+  // Cmd-K shows the cards of a board already loaded before the tracker answers, the tracker's own hits below (#141)
+  "cmd-k-ticket": async () => {
+    await open(page, server.url, { fixture: "calendar", sel: "__board:productive" });
+    await page.keyboard.press("Meta+k");
+    await settle(page);
+    await page.keyboard.type("export");
+    await settle(page, 500);
+  },
   // a sent message with its files as chips
   "conversation-files": async () => {
     await open(page, server.url, { sel: keys.switchTo });
