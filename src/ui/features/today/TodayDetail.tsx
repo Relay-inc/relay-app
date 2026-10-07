@@ -1,58 +1,41 @@
-import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { Status } from "../../../domain/today/plan";
+import { KINDS, kindLabelKey } from "../../../domain/today/kinds";
 import {
-  actionsOf,
   putOff,
   selectEntry,
-  setStatus,
   snooze,
   snoozeOptions,
-  type Action,
   type Entry,
   type TodayModel,
   openTicketOf,
   projectChip,
 } from "../../../application/today/today";
+import { actionsOf, setStatus, type Action } from "../../../application/today/actions";
 import { setPop, setTab, useDetailsStore } from "../../../application/today/details";
-import { cardAct, loadCard, loadPr, toastAssigned } from "../../../application/today/load";
+import { cardAct, toastAssigned } from "../../../application/today/load";
 import { ticketLinks, openLinked } from "../../../application/board/board";
 import { provider } from "../../../shared/plugins";
 import { t as translate } from "../../../shared/i18n";
-import { isQuestion } from "../../../domain/conversations/rules";
 import { timeOf } from "../../../application/calendar/calendar";
-import { lastAi } from "../../../application/conversations/selectors";
-import { dropProposal } from "../../../application/today/capture";
-import type { Capture } from "../../../domain/today/capture";
-import { openMail } from "../../../application/navigation/panel";
 import { projectLabel } from "../../../application/workspace/vault";
 import { prsOfCard, ticketOf } from "../../../application/today/links";
 import { usePullRequestsStore } from "../../../application/pull-requests/store";
 import { cardKey } from "../../../domain/navigation/keys";
 import { useDismiss } from "../../hooks/useDismiss";
-import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
-import { Markdown } from "../../components/Markdown";
-import { PendingRequest } from "../conversations/PendingRequest";
-import { MailComposer, MailSection } from "./sections/MailSection";
-import { PrSection, prTabs } from "./sections/PrSection";
-import { CardSection, cardTabs } from "./sections/CardSection";
-import { MeetingSection } from "./sections/MeetingSection";
-import { KIND_ICON } from "./parts";
+import { MailComposer } from "./sections/MailSection";
+import { prTabs } from "./sections/PrSection";
+import { cardTabs } from "./sections/CardSection";
+import { ConnectedList } from "./sections/ConnectedList";
+import { sectionOf } from "./sections";
+import type { Connected } from "./sections/types";
+import { ICON_BUTTON } from "./parts";
 
 const BUTTON =
   "inline-flex items-center gap-1.5 h-7.5 px-2.5 rounded-lg text-[13px] font-medium whitespace-nowrap cursor-pointer";
-const ICON_BUTTON =
-  "grid place-items-center size-7.5 rounded-lg text-secondary cursor-pointer hover:bg-fill-2 hover:text-label";
 const MENU = "absolute top-9 z-20 w-60 p-1 rounded-[10px] bg-raised shadow-xl ring-[0.5px] ring-separator-strong";
-
-/** What kind of item it is, as the chip in front of where it is from says it. */
-const kindLabel = (entry: Entry) =>
-  entry.subject.type === "ask"
-    ? isQuestion(entry.subject.request)
-      ? "today.kind.question"
-      : "today.kind.ask"
-    : (`today.kind.${entry.kind}` as const);
 
 /** The item open next to the queue. On top where it is from and why it is here, its title and its actions (the
  *  main two as buttons, the rest under "…", snooze, later and done on the right). Below that the item itself, per
@@ -67,14 +50,10 @@ export function TodayDetail({ model }: { model: TodayModel }) {
   const cardView = useDetailsStore(s => (entry?.subject.type === "card" ? s.card[entry.id] : undefined));
 
   // what the item needs from its source, fetched when it opens
-  const subject = entry?.subject;
   const entryId = entry?.id ?? "";
   // once per item it opens on: the clock rebuilds the items every 30 seconds, that is no reason to read them again
   const load = useEffectEvent(() => {
-    if (!subject) return;
-    if (subject.type === "mail") openMail(subject.key);
-    if (subject.type === "pr") loadPr(entryId, subject.pr);
-    if (subject.type === "card") loadCard(entryId, subject.card);
+    if (entry) sectionOf(entry).load?.(entry);
   });
   useEffect(() => load(), [entryId]);
 
@@ -100,47 +79,14 @@ export function TodayDetail({ model }: { model: TodayModel }) {
   const tabs = s.type === "pr" ? prTabs(prDetail) : s.type === "card" ? cardTabs(cardView, connected.length) : [];
   const tab = tabOf || tabs[0]?.id || "";
 
-  const body = (): ReactNode => {
-    switch (s.type) {
-      case "ask":
-        return <AskBody entry={entry} />;
-      case "blocked":
-        return (
-          <p className="m-0 text-sm text-secondary">
-            {t("wait.bg", { date: s.session.startedAt ? new Date(s.session.startedAt).toLocaleDateString() : "" })}
-          </p>
-        );
-      case "meeting":
-        return <MeetingSection meeting={s.meeting} after={entry.kind === "note"} />;
-      case "reminder":
-        return s.reminder.text !== s.reminder.title ? (
-          <Markdown text={s.reminder.text} className="text-sm leading-relaxed text-secondary max-w-170" />
-        ) : null;
-      case "card":
-        return tab === "linked" ? (
-          <ConnectedList items={connected} />
-        ) : (
-          <CardSection id={entry.id} item={s.card} tab={tab} />
-        );
-      case "pr":
-        return <PrSection id={entry.id} tab={tab} pr={s.pr} />;
-      case "mail":
-        return <MailSection mailKey={s.key} id={s.mail.id} />;
-      case "chat":
-        return <ChatBody chat={s.key} />;
-      case "time":
-        return <p className="m-0 text-sm text-secondary">{t("today.timeBody", { n: s.minutes })}</p>;
-      case "capture":
-        return <CaptureBody capture={s.capture} />;
-    }
-  };
+  const { Body } = sectionOf(entry);
 
   return (
     <div className="min-w-0 min-h-0 flex flex-col">
       <div className="flex-none flex flex-col gap-2.5 mx-10 pt-8 pb-5 border-b border-separator">
         {/* what it is and where from, said once and quietly; the title; then its facts and the next step */}
         <span className="text-xs text-tertiary truncate">
-          {[t(kindLabel(entry)), chip?.label, entry.where].filter(Boolean).join(" · ")}
+          {[t(kindLabelKey(entry)), chip?.label, entry.where].filter(Boolean).join(" · ")}
         </span>
         <h1 className="m-0 text-2xl leading-snug font-semibold tracking-tight text-pretty select-text">
           {entry.title}
@@ -149,7 +95,7 @@ export function TodayDetail({ model }: { model: TodayModel }) {
         <ActionBar entry={entry} acts={acts} done={done} pop={pop} now={model.now} />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto px-10 pt-6 pb-8 select-text cursor-auto">
-        {body()}
+        <Body entry={entry} tab={tab} connected={connected} />
         {tabs.length > 1 ? (
           <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6">
             {tabs
@@ -286,55 +232,7 @@ function ActionBar({
   );
 }
 
-/** An agent's permission or question: what it last said, then its card (Enter allows). */
-function AskBody({ entry }: { entry: Entry }) {
-  const { t } = useT();
-  const s = entry.subject;
-  // what the agent last said; lastAi's own fallback ("Done") when it said nothing is no context
-  const said = useDerived(() => (s.type === "ask" && lastAi(s.chat) !== t("work.done") ? lastAi(s.chat) : ""));
-  if (s.type !== "ask") return null;
-  return (
-    <div className="flex flex-col gap-3 max-w-170">
-      {said ? <Markdown text={said} className="md-panel text-sm leading-relaxed text-secondary line-clamp-6" /> : null}
-      <PendingRequest request={s.request} keys />
-    </div>
-  );
-}
-function ChatBody({ chat }: { chat: string }) {
-  const text = useDerived(() => lastAi(chat));
-  return <Markdown text={text} className="md-panel text-sm leading-relaxed text-secondary max-w-170" />;
-}
-
-/** What a closed conversation proposes for the vault: per note what changes, each one can be left out. Apply
- *  makes the rest in a conversation (application/today/capture). */
-function CaptureBody({ capture }: { capture: Capture }) {
-  const { t } = useT();
-  return (
-    <ol className="m-0 p-0 list-none flex flex-col gap-4 max-w-170">
-      {capture.proposals.map((proposal, i) => (
-        <li key={`${proposal.file}:${i}`} className="flex gap-3">
-          <div className="min-w-0 flex-1 flex flex-col gap-1">
-            <span className="text-sm font-semibold">{proposal.title}</span>
-            <span className="text-xs text-tertiary truncate select-text">{proposal.file}</span>
-            <Markdown text={proposal.change} className="md-panel text-sm leading-relaxed text-secondary select-text" />
-          </div>
-          <button
-            type="button"
-            className={ICON_BUTTON}
-            title={t("capture.leaveOut")}
-            aria-label={t("capture.leaveOut")}
-            onClick={() => dropProposal(capture.key, i)}
-          >
-            <Icon name="close" className="glyph size-4" />
-          </button>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 // ---------- the bottom: status, when, facts, connected
-type Connected = { id: string; icon: string; title: string; meta: string; go: () => unknown };
 /** Other items of the same project in the queue, and for a card the conversations and PRs it links to. */
 function connectedOf(model: TodayModel, entry: Entry): Connected[] {
   const same = model.queue
@@ -342,7 +240,7 @@ function connectedOf(model: TodayModel, entry: Entry): Connected[] {
     .slice(0, 5)
     .map(other => ({
       id: other.id,
-      icon: KIND_ICON[other.kind],
+      icon: KINDS[other.kind].icon,
       title: other.title,
       meta: other.why,
       go: () => selectEntry(other.id),
@@ -403,28 +301,6 @@ function connectedOf(model: TodayModel, entry: Entry): Connected[] {
     ...same,
   ];
 }
-function ConnectedList({ items }: { items: Connected[] }) {
-  const { t } = useT();
-  if (!items.length) return <div className="text-[13px] text-secondary">{t("today.nothingConnected")}</div>;
-  return (
-    <div className="flex flex-col gap-0.5">
-      {items.map(item => (
-        <button
-          key={item.id}
-          onClick={item.go}
-          className="flex items-start gap-2 px-2 py-1.5 -mx-2 rounded-lg text-left cursor-pointer hover:bg-fill-2"
-        >
-          <Icon name={item.icon} className="glyph size-3.5 mt-0.5 flex-none text-secondary" />
-          <span className="flex-1 min-w-0 flex flex-col leading-[1.35]">
-            <span className="text-[13px] truncate">{item.title}</span>
-            <span className="text-[11px] text-tertiary truncate">{item.meta}</span>
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
 // a fact as label and value; the value of a picker is a select that looks like text until hovered
 const PILL = "inline-flex items-center gap-1.5 text-[13px]";
 const PICK =
@@ -449,42 +325,11 @@ function Meta({ entry }: { entry: Entry }) {
   );
 }
 
-type T = ReturnType<typeof useT>["t"];
 // what is known about the item that its header (kind, where, why, title) does not show, as label and value
-function factsOf(entry: Entry, locale: string, t: T): [string, string][] {
-  const s = entry.subject;
+function factsOf(entry: Entry, locale: string, t: ReturnType<typeof useT>["t"]): [string, string][] {
   const day = (iso: string) =>
     new Date(iso).toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
-  switch (s.type) {
-    case "mail":
-      return [[t("today.fact.to"), s.mail.to.map(a => a.name || a.email).join(", ")]];
-    case "pr": {
-      const link = ticketOf(s.pr.url);
-      return [
-        [
-          t("today.fact.ticket"),
-          link
-            ? `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}`
-            : "",
-        ],
-        [t("today.fact.updated"), day(s.pr.updated)],
-      ];
-    }
-    case "card":
-      return [
-        [t("today.fact.due"), s.card.card.due ? day(s.card.card.due) : ""],
-        [t("today.fact.labels"), (s.card.card.labels ?? []).join(", ")],
-      ];
-    case "meeting":
-      return [
-        [t("today.fact.organizer"), s.meeting.organizer],
-        [t("today.fact.people"), String(s.meeting.people.length || "")],
-      ];
-    case "reminder":
-      return [[t("today.fact.repeat"), s.reminder.repeat ?? ""]];
-    default:
-      return [];
-  }
+  return sectionOf(entry).facts?.(entry, day, t) ?? [];
 }
 
 /** The status as a small picker: a card's own workflow in its tracker, else to do / in progress / done (setStatus). */

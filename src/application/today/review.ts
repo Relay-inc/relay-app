@@ -124,8 +124,6 @@ let seq = 0;
 const nextId = () => `r${++seq}`;
 /** A line of the review: by the file's place in it (two PRs can both have a README), the side and the number. */
 export const lineKey = (file: number, side: Side, line: number) => `${file}|${side}|${line}`;
-/** The review id of the PRs of one ticket, reviewed together (a single PR's review is its Today item's id). */
-export const groupId = (provider: string, card: string) => `group:${provider}:${card}`;
 
 /** Start (or go back to) a review: its own view, in the sidebar under the project. `prs`: one PR, or the PRs of one
  *  ticket (`title` names that ticket). */

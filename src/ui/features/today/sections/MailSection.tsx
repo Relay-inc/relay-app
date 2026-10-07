@@ -20,12 +20,14 @@ import { useMailStore } from "../../../../application/mail/store";
 import { Linked, MailLinkBar } from "../../mail/MailText";
 import { MailFrame } from "../../mail/MailFrame";
 import { openAttachment } from "../../../../application/mail/mail";
+import { openMail } from "../../../../application/navigation/panel";
 import { useNavigationStore } from "../../../../application/navigation/store";
 import { mailExperimental } from "../../../../application/settings/settings";
 import { agent } from "../../../../shared/plugins";
 import { useT } from "../../../hooks/useT";
 import { Glyph } from "../../../components/Glyph";
 import { Icon } from "../../../components/Icon";
+import type { SectionDef, SectionProps } from "./types";
 
 const initials = (a?: Addr | { name: string | null; email: string }) =>
   (a?.name || a?.email || "?")
@@ -63,8 +65,10 @@ const ClaudeGlyph = ({ className }: { className: string }) => {
 /** A mail under Today, as the design draws it: the earlier mails of its thread folded (a click opens one), the mail
  *  itself as a card (who, to whom, when, the text, the attachments; the original HTML one click away), and Claude's
  *  quick replies while no reply is being written. */
-export function MailSection({ mailKey, id }: { mailKey: string; id: string }) {
+export function MailSection({ entry }: SectionProps<"mail">) {
   const { t, locale } = useT();
+  const mailKey = entry.subject.key;
+  const id = entry.subject.mail.id;
   const thread = useDetailsStore(s => s.thread[mailKey]);
   const quick = useDetailsStore(s => s.quick[mailKey]);
   const composing = useDetailsStore(s => s.compose?.key === mailKey);
@@ -382,3 +386,8 @@ export function MailComposer() {
     </div>
   );
 }
+
+export const mailFacts: SectionDef<"mail">["facts"] = (entry, _day, t) => [
+  [t("today.fact.to"), entry.subject.mail.to.map(a => a.name || a.email).join(", ")],
+];
+export const mailLoad: SectionDef<"mail">["load"] = entry => void openMail(entry.subject.key);

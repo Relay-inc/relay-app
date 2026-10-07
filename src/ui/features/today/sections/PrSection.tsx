@@ -1,10 +1,19 @@
 import type { GhActor, PR, PrDetail } from "../../../../domain/pull-requests/types";
 import { useEffect, useState } from "react";
-import { chooseTicket, ticketState, trackerOfLink, unlinkPr, useLinksStore } from "../../../../application/today/links";
+import {
+  chooseTicket,
+  ticketOf,
+  ticketState,
+  trackerOfLink,
+  unlinkPr,
+  useLinksStore,
+} from "../../../../application/today/links";
+import { loadPr } from "../../../../application/today/load";
 import { useTodayStore } from "../../../../application/today/store";
 import { projectLabel } from "../../../../application/workspace/vault";
 import { useDerived } from "../../../hooks/useDerived";
-import { findTicketAgain, openTicketOf } from "../../../../application/today/today";
+import { openTicketOf } from "../../../../application/today/today";
+import { findTicketAgain } from "../../../../application/today/actions";
 import {
   linkRepo,
   linkVaultBoard,
@@ -18,6 +27,7 @@ import { useT } from "../../../hooks/useT";
 import { Icon } from "../../../components/Icon";
 import { Markdown } from "../../../components/Markdown";
 import { Caps } from "../parts";
+import type { SectionDef, SectionProps } from "./types";
 
 const name = (actor: GhActor) => actor?.name || actor?.login || "ghost";
 const initials = (actor: GhActor) => name(actor).slice(0, 2).toUpperCase();
@@ -50,8 +60,10 @@ export const prTabs = (pr: PrDetail | undefined) =>
 
 /** A pull request under Today, per tab: its branch, size, description and reviewers; the files it changes; its
  *  checks; and the conversation on it. Read from GitHub when it opens. */
-export function PrSection({ id, tab, pr: row }: { id: string; tab: string; pr: PR }) {
+export function PrSection({ entry, tab }: SectionProps<"pr">) {
   const { t, locale } = useT();
+  const id = entry.id;
+  const row = entry.subject.pr;
   const pr = useDetailsStore(s => s.pr[id]);
   const err = useDetailsStore(s => s.err[id]);
   if (err && !pr) return <div className="err-box">{err}</div>;
@@ -422,3 +434,15 @@ function BoardLinker({ project }: { project: string }) {
     </div>
   );
 }
+export const prFacts: SectionDef<"pr">["facts"] = (entry, day, t) => {
+  const { pr } = entry.subject;
+  const link = ticketOf(pr.url);
+  return [
+    [
+      t("today.fact.ticket"),
+      link ? `${link.number ? `${/^\d+$/.test(link.number) ? "#" : ""}${link.number} ` : ""}${link.title ?? ""}` : "",
+    ],
+    [t("today.fact.updated"), day(pr.updated)],
+  ];
+};
+export const prLoad: SectionDef<"pr">["load"] = entry => void loadPr(entry.id, entry.subject.pr);

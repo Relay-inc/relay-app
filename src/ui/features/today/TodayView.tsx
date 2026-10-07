@@ -8,16 +8,14 @@ import { ContextFilter } from "./ContextFilter";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { cardOf } from "../../../application/navigation/panel";
 import {
-  actionsOf,
   loadTodayCards,
   noteSeen,
   openMeeting,
-  openTodayCard,
   putOff,
   selectEntry,
-  setStatus,
   todayModel,
 } from "../../../application/today/today";
+import { actionsOf, openTodayCard, setStatus } from "../../../application/today/actions";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { BoardTicket } from "../board/BoardTicket";
