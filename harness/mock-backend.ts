@@ -271,6 +271,9 @@ function handle(cmd: string, a: Args): unknown {
       pending = pending.filter(x => x.id !== a.id);
       return null;
     case "send":
+      // Claude Code echoes a message when it takes it up (--replay-user-messages); `echo: false` keeps it unread
+      if (harness.echo && (a.provider ?? "claude") === "claude")
+        setTimeout(() => emitAgent(a.project, { type: "picked", text: a.text }), 0);
       if (harness.autoReply)
         setTimeout(() => harness.stream({ key: a.project, deltas: 40, tokensPerDelta: 3, ratePerSecond: 60 }), 30);
       return null;
@@ -601,6 +604,7 @@ const harness = {
   calls,
   unmocked,
   autoReply: true,
+  echo: true,
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,
   /** What `pick_files` answers (the + button's dialog): [] is cancelled. */

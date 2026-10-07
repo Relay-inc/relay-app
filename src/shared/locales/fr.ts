@@ -862,6 +862,7 @@ export default {
   "notify.isWaiting": "En attente : autorisation pour {tool}.",
   "work.interrupted": "Interrompu : le processus s'est arrêté au milieu du tour.",
   "work.outside": "Toujours en cours hors de l'app, l'app suit",
+  "work.waiting": "En attente que {agent} le lise",
   "work.waitOutside": "Ce tour tourne encore hors de l'app. Envoyez quand il est terminé.",
   "mail.earlier": "Messages précédents",
   "mail.linkOpen": "Ouvrir",

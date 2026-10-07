@@ -853,6 +853,7 @@ const en = {
   "notify.isWaiting": "Waiting for you: permission for {tool}.",
   "work.interrupted": "Interrupted: the process stopped in the middle of the turn.",
   "work.outside": "Still running outside the app, following along",
+  "work.waiting": "Waiting until {agent} reads it",
   "work.waitOutside": "This turn still runs outside the app. Send once it is done.",
   "mail.earlier": "Earlier messages",
   "mail.linkOpen": "Open",

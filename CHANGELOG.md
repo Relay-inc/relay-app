@@ -21,6 +21,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **The spinner stops when Claude is done, and a message sent mid-turn shows where Claude read it**: a message you send while Claude works waits, dimmed, below the conversation until Claude takes it up, then moves into the conversation at that point. Claude often answers it in the turn already running; Relay used to wait for a second turn that never came, so the spinner kept spinning.
 - **Mail that waits on you stays on Today, however old**: unanswered mail from a person dropped off Today after two days without being archived (a Friday mail was gone by Monday). It now stays until it is answered or archived. (#124)
 - **A work machine keeps its own Claude settings**: a conversation started from the laptop sent Claude on relay-server to `~/.claude.json` outside the volume, so its settings were missing and gone with every new container. The server now always uses its own Claude config folder.
 

@@ -26,6 +26,7 @@ export type AgentEvent =
   | { type: "working" }
   | { type: "session"; id: string }
   | { type: "user"; text: string; images: (Image | null)[] }
+  | { type: "picked"; text: string } // live, Claude Code only: the agent took up a message sent to it
   | { type: "text"; text: string; delta: boolean }
   | { type: "thinking"; text: string; delta: boolean }
   | { type: "tool_call"; id: string; name: string; input: any }

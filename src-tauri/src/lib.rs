@@ -291,9 +291,10 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
 // A conversation's agent, run by its broker (broker.rs) so it outlives the app. opts: the model and effort it runs
 // with. tainted: it holds mail text (see mark_tainted), kept in its broker file for after a restart.
 // turns: messages sent and not answered yet; at quit only an agent with a turn running stays (see quit)
+// picked: the messages Claude took up in the turn running (Event::Picked), the ones its turn end answers
 // account: the config folder it runs on ("" the CLI's own), see agents::accounts
 // remote: on a work machine (machines.rs), stopped and taken back through its relay-server
-struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, account: String, remote: bool }
+struct Proc { child: broker::Agent, stdin: Box<dyn Write + Send>, opts: (String, String), provider: &'static str, tainted: bool, key: String, turns: u32, picked: u32, account: String, remote: bool }
 impl Proc {
     /// The turns running, also in the broker's file: a restart takes them from there.
     fn set_turns(&mut self, turns: u32) {
@@ -709,7 +710,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, project: &
     let fresh = resume.is_none() && fork.is_none();
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
     let pid = agent.id();
-    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), account: account.into(), remote };
+    let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: u32::from(turn.is_some()), picked: 0, account: account.into(), remote };
     read_agent(app, project, p, pid, frames, backlog, inherit, account);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if from_mail { mark_tainted(&mut proc); }
@@ -808,11 +809,13 @@ fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u3
                         continue;
                     }
                     Event::Text { text, delta } => { if !delta { last.clear(); } last.push_str(text); }
+                    // a turn end answers every message taken up in its turn, at least the one that started it
+                    Event::Picked { .. } => { if let Some(x) = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid) { x.picked += 1; } }
                     Event::TurnEnd { error, .. } => {
                         let e = error.as_deref().unwrap_or("").to_lowercase();
                         // "usage limit" (Codex), "You've hit your limit" and "You've hit your weekly limit · resets 9pm" (Claude)
                         if e.contains("usage limit") || (e.contains("hit your") && e.contains("limit")) { spend(&a); limited = true; }
-                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(1)); x.opts.0.clone() });
+                        let model = a.state::<App>().procs.lock().unwrap().get_mut(&k).filter(|x| x.child.id() == pid).map(|x| { x.set_turns(x.turns.saturating_sub(x.picked.max(1))); x.picked = 0; x.opts.0.clone() });
                         retry::turn_end(&a, &k, p, &account, &model.unwrap_or_default(), limited, hint, !worked);
                         (limited, hint, worked) = (false, None, false);
                         // ponytail: a turn end replayed after a restart counts again, fine while reports are rare
@@ -885,7 +888,7 @@ fn reattach_remote(app: &AppHandle) {
             if st.procs.lock().unwrap().contains_key(&meta.key) { continue; }
             let broker::Conn { agent, stdin, frames, backlog } = conn;
             let pid = agent.id();
-            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, account: String::new(), remote: true };
+            let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: 1, picked: 0, account: String::new(), remote: true };
             st.procs.lock().unwrap().insert(meta.key.clone(), x);
             read_agent(app, &meta.key, p, pid, frames, backlog, (false, false), "");
         }
@@ -902,7 +905,7 @@ fn reattach(app: &AppHandle) {
         let (Ok(p), Some(c)) = (agents::get(&m.provider), broker::reattach(&m.key)) else { fs::remove_file(&f).ok(); continue };
         let broker::Conn { agent, stdin, frames, backlog } = c;
         let pid = agent.id();
-        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, account: m.account.clone(), remote: false };
+        let x = Proc { child: agent, stdin, opts: (m.model, m.effort), provider: p.id(), tainted: m.tainted, key: m.key.clone(), turns: m.turns, picked: 0, account: m.account.clone(), remote: false };
         app.state::<App>().procs.lock().unwrap().insert(m.key.clone(), x);
         read_agent(app, &m.key, p, pid, frames, backlog, (false, false), &m.account);
     }
