@@ -248,7 +248,7 @@ export function usageTokens() {
 }
 
 // ---------- agents
-const caps = (all: boolean) => ({ persistent: true, images: all, thinking: !all, permissions: all, questions: all, subagents: all, fork: all, terminal: all, background: all, effort: true, limits: all, title: true, accounts: all, liveModel: all, control: all, picked: all, remote: all, brain: all });
+const caps = (all: boolean) => ({ persistent: true, images: all, thinking: !all, permissions: all, questions: all, subagents: all, fork: all, terminal: all, background: all, effort: true, limits: all, title: true, write: true, accounts: all, liveModel: all, control: all, picked: all, remote: all, brain: all });
 const choices = (pairs: [string, string][]) => pairs.map(([id, label]) => ({ id, label }));
 export const agentsStatus = {
   default: "claude",

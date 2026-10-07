@@ -11,6 +11,7 @@ import { select } from "../navigation/navigation";
 import { startChat } from "../conversations/chats";
 import { sendMsg } from "../conversations/actions";
 import { projectOf } from "../conversations/selectors";
+import { reviewAgent } from "../agents/agents";
 import { usePullRequestsStore } from "./store";
 
 const set = usePullRequestsStore.setState;
@@ -61,6 +62,7 @@ export async function reviewPr(key: string) {
   // the conversation goes under the project of the PR's row in the lists, when the vault knows it
   const rowName = rowProject(usePullRequestsStore.getState().list, repo, pr.number);
   const chatKey = startChat(rowName && project(rowName) ? rowName : null, {
+    provider: reviewAgent(),
     title: `Review ${repo.split("/")[1]} #${pr.number}`,
     note: t("note.reviewStarted", { repo, n: pr.number }),
   });

@@ -285,6 +285,11 @@ const VIEWS = {
     await click("Fix the SSO redirect loop on the portal");
     await waitText("src/auth/callback.ts");
   },
+  "pr-review-agent": async () => {
+    await VIEWS["pr-detail"]();
+    await button("Agent").click();
+    await settle(page);
+  },
   board: async () => {
     await open(page, server.url);
     await click("Productive");

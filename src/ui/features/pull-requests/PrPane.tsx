@@ -20,6 +20,8 @@ import { Markdown } from "../../components/Markdown";
 import { Avatar } from "../../components/Avatar";
 import { ModalLink } from "../../components/ModalLink";
 import { agent } from "../../../shared/plugins";
+import { onAgents, reviewAgent, setReviewAgent } from "../../../application/agents/agents";
+import { PickMenu } from "../conversations/PickMenu";
 import { tintText } from "../../../shared/tints";
 import { CI, age } from "./prState";
 
@@ -85,7 +87,8 @@ export function PrPane({ prKey }: { prKey: string }) {
   const pr = useNavigationStore(s => s.panel.detail[prKey]) as PrDetail | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const heading = useDerived(() => prHeading(prKey));
-  const claude = agent("claude");
+  const review = useDerived(() => ({ id: reviewAgent(), agents: onAgents() }));
+  const reviewer = agent(review.id);
   const formatDate = (iso: string) => dayMonth(iso, locale);
 
   const entry = (key: number, who: string, at: string, body: string | undefined, extra?: ReactNode) => (
@@ -169,13 +172,30 @@ export function PrPane({ prKey }: { prKey: string }) {
             ) : null}
             <span className="flex-1"></span>
             <ModalLink href={pr.url}>{t("pr.openGh")}</ModalLink>
+            {/* with one agent there is nothing to pick */}
+            {review.agents.length > 1 ? (
+              <PickMenu
+                pill
+                below
+                options={review.agents.map(option => ({
+                  ...option,
+                  icon: agent(option.id) ? (
+                    <Glyph svg={agent(option.id)!.glyph} className="glyph size-3.5 flex-none" />
+                  ) : null,
+                }))}
+                value={review.id}
+                label={t("composer.agent")}
+                onPick={setReviewAgent}
+              />
+            ) : null}
             <button
-              className="btn btn-primary cursor-pointer inline-flex items-center gap-1.5 h-7 px-3 text-xs"
-              title={t("pr.reviewTitle")}
+              className="btn btn-primary cursor-pointer inline-flex items-center gap-1.5 h-7 px-3 text-xs whitespace-nowrap"
+              title={t("pr.reviewTitle", { agent: reviewer?.name ?? review.id })}
               onClick={() => reviewPr(prKey)}
             >
-              {claude ? <Glyph svg={claude.glyph} className="glyph size-3.25" /> : null}
-              {t("pr.review")}
+              {reviewer ? <Glyph svg={reviewer.glyph} className="glyph size-3.25" /> : null}
+              {/* the pick next to it names the agent already */}
+              {review.agents.length > 1 ? t("pr.reviewGo") : t("pr.review", { agent: reviewer?.name ?? review.id })}
             </button>
           </div>
           <h2 className="m-0 text-xl leading-snug font-semibold tracking-tight text-pretty">

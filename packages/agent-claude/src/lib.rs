@@ -86,7 +86,7 @@ impl AgentProvider for Claude {
     fn name(&self) -> &'static str { "Claude Code" }
     fn caps(&self) -> Caps {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
-            terminal: true, background: true, effort: true, limits: true, title: true, accounts: true,
+            terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
             live_model: true, control: true, picked: true, remote: true, brain: true }
     }
     fn default_bin(&self, home: &str) -> String { format!("{home}/.local/bin/claude") }

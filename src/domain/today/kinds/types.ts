@@ -51,6 +51,7 @@ export type Flags = {
   trackers: Record<string, string>; // tracker id -> its name
   boardsReady: boolean; // a board is connected: a mail can become a ticket
   mailExperimental: boolean; // archive and trash exist
+  reviewer: string; // the name of the agent a review's first pass runs on
 };
 /** Everything the entries are derived from, read from the stores once. */
 export type Snapshot = Pick<Flags, "trackers"> & {

@@ -448,6 +448,12 @@ function handle(cmd: string, a: Args): unknown {
           const all = [...String(a.text).matchAll(new RegExp(`^--- (.*${path.replace(/[.]/g, "\\.")})$`, "gm"))];
           return (last ? all.at(-1) : all[0])?.[1] ?? path;
         };
+        // Codex: one line Claude also flags, one of its own
+        if (a.provider === "codex")
+          return JSON.stringify([
+            { path: named("src/auth/callback.ts"), line: 14, side: "RIGHT", severity: "bug", text: "returnTo is an unchecked redirect target; allow only same-origin paths." },
+            { path: named("src/auth/callback.ts"), line: 17, side: "RIGHT", severity: "question", text: "Should the user id come from the verified token instead of the query?" },
+          ]);
         return JSON.stringify([
           { path: named("src/auth/callback.ts"), line: 14, side: "RIGHT", severity: "bug", text: "The return URL is read from the query without checking its host: an open redirect." },
           { path: named("src/auth/callback.ts"), line: 18, side: "RIGHT", severity: "risk", text: "The session is written before the token is verified." },

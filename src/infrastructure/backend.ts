@@ -237,7 +237,8 @@ export const mailTool = <T = unknown>(
   args: Record<string, unknown>,
 ) => invoke<T>("mail_tool", { name, args });
 /** A text the agent writes from `text` following `system`, with no tools (a reply draft, a rewrite). */
-export const aiWrite = (system: string, text: string) => invoke<string>("ai_write", { system, text });
+export const aiWrite = (system: string, text: string, provider?: string) =>
+  invoke<string>("ai_write", { system, text, provider });
 export const mailMove = (account: string, ids: string[], trash: boolean) =>
   invoke<void>("mail_move", { account, ids, trash });
 /** Gmail without a server; a generic IMAP account with its host and port. */

@@ -35,6 +35,22 @@ export const chatCaps = (chatKey: string) => agentOf(chatAgent(chatKey))?.caps ?
 /** The slash commands of a conversation's agent that take no attachments. */
 export const chatTextOnly = (chatKey: string) =>
   agentOf(chatAgent(chatKey))?.textOnly ?? knownTextOnly(chatAgent(chatKey));
+/** The agent a PR review starts on: the one picked last while it is still switched on, else the default. */
+export const reviewAgent = () =>
+  onAgents().some(x => x.id === as().review) ? as().review : as().status.default || "claude";
+export function setReviewAgent(id: string) {
+  storage.set("review.agent", id);
+  useAgentsStore.setState(draft => {
+    draft.review = id;
+  });
+}
+/** The switched-on agents that can read a diff in one call without tools: the review screen's. */
+export const writeAgents = () => onAgents().filter(x => x.caps.write);
+/** The review screen's first pass: the PR review pick when that agent can, else the first that can. */
+export const reviewWriter = () => {
+  const writers = writeAgents();
+  return writers.some(x => x.id === reviewAgent()) ? reviewAgent() : (writers[0]?.id ?? "claude");
+};
 /** The providers whose limits and tokens the usage view lists; Claude's alone until they are known. */
 export const usageAgents = () =>
   as().loaded ? onAgents().map(x => ({ id: x.id, limits: x.caps.limits })) : [{ id: "claude", limits: true }];

@@ -17,7 +17,12 @@ export const words: Words = {
   tn: (base, count) => `${base}#${count}`,
   clock: iso => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
 };
-export const flags: Flags = { trackers: { prod: "Productive" }, boardsReady: true, mailExperimental: false };
+export const flags: Flags = {
+  trackers: { prod: "Productive" },
+  boardsReady: true,
+  mailExperimental: false,
+  reviewer: "Claude Code",
+};
 
 export const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
   trackers: flags.trackers,

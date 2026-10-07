@@ -734,8 +734,12 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
 /// settings, MCP or a transcript, so third-party text in it (a mail) can make it do nothing but write. Today's mail
 /// composer drafts and rewrites replies with it; the user edits the result before it is saved anywhere.
 #[tauri::command]
-async fn ai_write(app: AppHandle, state: State<'_, App>, system: String, text: String) -> Result<String, String> {
-    let p = { let on = agents::enabled(&state.settings.lock().unwrap()); on.iter().copied().find(|p| p.caps().title) };
+async fn ai_write(app: AppHandle, state: State<'_, App>, system: String, text: String, provider: Option<String>) -> Result<String, String> {
+    // the asked provider when it is on and can, else the first switched-on one that can
+    let p = {
+        let on = agents::enabled(&state.settings.lock().unwrap());
+        provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().write)).or_else(|| on.iter().copied().find(|p| p.caps().write))
+    };
     let p = p.ok_or_else(|| trc("err.no_agent"))?;
     let mut eb = env_of(&app, &state, p);
     if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "sonnet")); }

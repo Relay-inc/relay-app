@@ -43,6 +43,8 @@ pub struct Caps {
     pub limits: bool,
     /// Can title a new conversation with one quick call ([`AgentProvider::title`]).
     pub title: bool,
+    /// Can write a text from an instruction in one call without tools ([`AgentProvider::write`]).
+    pub write: bool,
     /// Runs on more than one login: `opts.accounts` lists the extra config folders, the app sets `opts.account`
     /// to the one a process or a limits call is for ("" for the CLI's own folder).
     pub accounts: bool,

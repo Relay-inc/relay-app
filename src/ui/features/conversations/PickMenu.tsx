@@ -13,6 +13,7 @@ export function PickMenu({
   label,
   title = label,
   pill = false,
+  below = false,
   disabled = false,
   onPick,
 }: {
@@ -21,6 +22,7 @@ export function PickMenu({
   label: string;
   title?: string;
   pill?: boolean;
+  below?: boolean; // opens downwards, for a pick at the top of a pane
   disabled?: boolean;
   onPick: (id: string) => void;
 }) {
@@ -69,7 +71,7 @@ export function PickMenu({
     <span ref={root} className="relative inline-flex">
       <button
         ref={trigger}
-        className={`inline-flex items-center gap-1.5 h-6.5 px-2 rounded-[7px] border-0 text-xs disabled:opacity-50 ${pill ? "bg-fill-2 text-label hover:bg-separator-strong" : "bg-transparent text-secondary enabled:hover:bg-fill-2 enabled:hover:text-label"}`}
+        className={`inline-flex items-center gap-1.5 h-6.5 px-2 whitespace-nowrap rounded-[7px] border-0 text-xs disabled:opacity-50 ${pill ? "bg-fill-2 text-label hover:bg-separator-strong" : "bg-transparent text-secondary enabled:hover:bg-fill-2 enabled:hover:text-label"}`}
         title={title}
         aria-label={label}
         disabled={disabled}
@@ -87,7 +89,7 @@ export function PickMenu({
           ref={menu}
           role="menu"
           aria-label={label}
-          className="absolute bottom-full left-0 mb-1.5 z-20 min-w-40 grid p-1 bg-bg border border-separator rounded-lg shadow-lg"
+          className={`absolute ${below ? "top-full mt-1.5 right-0" : "bottom-full mb-1.5 left-0"} z-20 min-w-40 grid p-1 bg-bg border border-separator rounded-lg shadow-lg`}
           onKeyDown={onMenuKey}
         >
           {options.map(option => (

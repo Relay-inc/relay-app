@@ -9,6 +9,7 @@ import {
   findings as runFindings,
   lineKey,
   pickLine,
+  readAgain,
   removeComment,
   setBody,
   setLineDraft,
@@ -25,6 +26,8 @@ import { anchorOf } from "../../../domain/pull-requests/diff";
 import { fileTree, type TreeNode } from "../../../domain/pull-requests/tree";
 import { timeOf } from "../../../application/calendar/calendar";
 import { agent } from "../../../shared/plugins";
+import { writeAgents } from "../../../application/agents/agents";
+import { agreed, finder } from "../../../domain/pull-requests/findings";
 import { useT } from "../../hooks/useT";
 import { Glyph } from "../../components/Glyph";
 import { Icon } from "../../components/Icon";
@@ -60,6 +63,7 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
   const details = useDetailsStore(st => st.pr);
   const at = useDerived(() => todayModel().placed[entry.id]);
   const [hot, setHot] = useState("");
+  const writers = useDerived(() => writeAgents());
   if (!r) return null;
   const prs = r.prs;
   const several = prs.length > 1;
@@ -69,6 +73,9 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
   const fileIndex = Math.min(r.file, Math.max(0, files.length - 1));
   const file = files[fileIndex];
   const claude = agent("claude")?.glyph ?? "";
+  const glyphOf = (id: string) => agent(id)?.glyph ?? "";
+  const nameOf = (id: string) => agent(id)?.name ?? id;
+  const descriptions = () => prs.map(pr => detailOf(pr.url)?.body ?? "");
   // GitHub's open threads on this file, by side and line
   const threads = (file ? (detailOf(file.pr)?.reviewThreads?.nodes ?? []) : []).filter(
     th => th.path === file?.path && !th.isResolved && !th.isOutdated,
@@ -269,10 +276,15 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
                                 >
                                   {numberOf.get(f.id)}
                                 </span>
-                                {claude ? <Glyph svg={claude} className="glyph size-3 text-accent-text" /> : null}
+                                {glyphOf(finder(f)) ? (
+                                  <Glyph svg={glyphOf(finder(f))} className="glyph size-3 text-accent-text" />
+                                ) : null}
                                 <span className={`font-semibold ${SEVERITY[f.severity]}`}>
                                   {t(`review.sev.${f.severity}`)}
                                 </span>
+                                {agreed(r.findings, f) ? (
+                                  <span className="text-[11px] text-secondary">{t("review.agree")}</span>
+                                ) : null}
                                 <span className="flex-1" />
                                 <button
                                   className="h-6.5 px-2.25 rounded-[7px] text-xs font-medium text-secondary cursor-pointer hover:text-label"
@@ -363,32 +375,46 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
         <aside className="min-h-0 flex flex-col border-l border-separator bg-sidebar">
           <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-4 pb-3 flex flex-col gap-2.5">
             <div className="flex items-center gap-2 text-xs text-secondary">
-              {claude ? <Glyph svg={claude} className="glyph size-3.5 text-accent-text" /> : null}
-              <b className="font-semibold text-label">{t("review.byClaude")}</b>
+              {(r.by.length ? r.by : [r.reading]).map(a =>
+                glyphOf(a) ? <Glyph key={a} svg={glyphOf(a)} className="glyph size-3.5 text-accent-text" /> : null,
+              )}
+              <b className="font-semibold text-label">
+                {t("review.by", { agents: (r.by.length ? r.by : [r.reading]).map(nameOf).join(" + ") })}
+              </b>
               {r.ran && r.read < files.length ? (
-                <span className="text-soon" title={t("review.readSomeTip")}>
+                <span className="text-soon whitespace-nowrap" title={t("review.readSomeTip")}>
                   · {t("review.readSome", { n: r.read, total: files.length })}
                 </span>
               ) : (
-                <span>· {t("review.readFiles", { n: files.length })}</span>
+                <span className="whitespace-nowrap">· {t("review.readFiles", { n: files.length })}</span>
               )}
               <span className="flex-1" />
               <button
                 disabled={r.running || !r.files}
-                onClick={() =>
-                  runFindings(
-                    id,
-                    prs.map(pr => detailOf(pr.url)?.body ?? ""),
-                  )
-                }
-                className="text-xs text-secondary cursor-pointer hover:text-label disabled:opacity-50"
+                onClick={() => readAgain(id, descriptions())}
+                className="text-xs text-secondary whitespace-nowrap cursor-pointer hover:text-label disabled:opacity-50"
               >
                 {t("review.again")}
               </button>
             </div>
+            {/* another agent reads the same diff: its findings join the list, each with its icon */}
+            {!r.running && r.files
+              ? writers
+                  .filter(w => !r.by.includes(w.id))
+                  .map(w => (
+                    <button
+                      key={w.id}
+                      onClick={() => runFindings(id, descriptions(), w.id)}
+                      className="self-start inline-flex items-center gap-1.5 h-7 px-2.5 rounded-[7px] border border-separator-strong bg-raised text-xs font-medium cursor-pointer"
+                    >
+                      {glyphOf(w.id) ? <Glyph svg={glyphOf(w.id)} className="glyph size-3" /> : null}
+                      {t("review.alsoWith", { agent: w.name })}
+                    </button>
+                  ))
+              : null}
             <span className="text-[13px] text-secondary">
               {r.running
-                ? t("review.reading")
+                ? t("review.reading", { agent: nameOf(r.reading || finder({})) })
                 : t("review.found", { n: r.findings.filter(f => f.severity !== "answer").length })}
             </span>
             {/* an index of the findings: the full text and the buttons are under their line in the diff */}
@@ -411,6 +437,8 @@ export function ReviewScreen({ id, entries }: { id: string; entries: Entry[] }) 
                     <span className="font-mono text-[11px] text-tertiary truncate">
                       {several ? `#${prs.find(x => x.url === f.pr)?.number} · ` : ""}
                       {f.path.split("/").pop()}:{f.line}
+                      {r.by.length > 1 ? ` · ${nameOf(finder(f))}` : ""}
+                      {agreed(r.findings, f) ? ` · ${t("review.agree")}` : ""}
                       {f.state === "added"
                         ? ` · ${t("review.added")}`
                         : f.state === "dismissed"
