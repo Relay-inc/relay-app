@@ -1,0 +1,11 @@
+{
+  "version": "0.0.10",
+  "notes": "### Added\n\n- **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)\n- **Closing a conversation proposes what it leaves for the vault**: Claude reads it once more for decisions, project state and follow-ups, and puts what is missing on Today as one item, with a toast to review it. Nothing is written until you press Apply, which makes the changes in a new conversation where you allow each edit; leave out what you don't want, or Skip all of it. Quick questions (fewer than 3 messages) and conversations about mail are skipped. Off in Settings › General. (#130)",
+  "pub_date": "2026-10-07T07:27:33.123Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnZBOUIvNFRrdy84Q3l6ZE0zTG82dEtiTFcvRUZmY3poSGNIZkQyTFVCbnlodlJKWXFaTkdIaDYwSHNtWnh4aU0xY0Era0VNbmxUZjlieDZIRjhiNUE0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxMzU4MDM0CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xMApkeERwMWNETVNUR3RBQWhsbWNrbEdmNDNlQU1Va0srZ01xb2tmWWdVSHdhRjZWNy90QkZwdnVTNVpKY1NRRUk5TnhPNHVPUVVVa0RSNWJlN0J0dWRCUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/617934443"
+    }
+  }
+}
