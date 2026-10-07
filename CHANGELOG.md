@@ -13,12 +13,17 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **A conversation's changes, from git**: the new Changes button in a conversation's title bar opens its changed files in the drawer, per repo it wrote in (the repos of the files it edited and the worktrees it made), against where its branch left the default branch, so committed and uncommitted work both show. A file opens its diff in a window over the app (‹ › step through the files, Esc closes it); click a line to comment on it, and the comments go to the composer together as one message for the agent. Files outside a git repo don't show, and in a shared checkout the diff holds every change in it, not only the agent's
+
 ### Changed
 
 - **⌘K answers faster and finds meetings**: cards from boards you already opened (and the ones Today reads) show while you type, each tracker's results show as soon as that tracker answers instead of after the slowest one, and a query you typed before shows its results at once. Today's meetings match on title, organizer or guest and open under Today (#141)
 
 ### Fixed
 
+- **The composer shows line breaks**: text with newlines (Shift-Enter, or text put in from elsewhere) showed as one run-on paragraph
 - **A running meeting opens under Today**: clicking a meeting while it runs opens it with its briefing; before, nothing opened between its start and its end
 - **Commonwealth notes file under their project**: a conversation about a project whose repos route to a brain now tells Commonwealth that repo (`COMMONWEALTH_SOURCE`), so its captured notes no longer all land in the brain's `vault/` folder. Needs Commonwealth with kristoffeys/commonwealth#323
 

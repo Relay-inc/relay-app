@@ -107,7 +107,7 @@ export function closeTool() {
   else openProject(tool.project);
 }
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
-export const toggleDrawer = (tool: "terminal" | "notes" | "workers") =>
+export const toggleDrawer = (tool: "terminal" | "notes" | "workers" | "changes") =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
     draft.panel.open = "";

@@ -8,6 +8,8 @@
   font-size: 15px;
   line-height: 1.5;
   color: var(--label);
+  white-space: pre-wrap; /* all:unset made it normal, which hid every newline */
+  overflow-wrap: break-word;
 }
 .relay-composer textarea::placeholder {
   color: var(--tertiary);

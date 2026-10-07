@@ -6,6 +6,7 @@ import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types"
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { Proposal } from "../domain/today/capture";
+import type { RepoChanges } from "../domain/conversations/changes";
 import type {
   AgentSession,
   Pending,
@@ -131,6 +132,9 @@ export const stop = (project: string) => invoke("stop", { project });
 /** Removes the git worktrees a conversation made; the ones with work git would lose stay. */
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });
+/** What a conversation changed, per repo, from git: the repos of the paths it wrote and the worktrees it made. */
+export const conversationChanges = (key: string, paths: string[]) =>
+  invoke<RepoChanges[]>("conversation_changes", { key, paths });
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });
