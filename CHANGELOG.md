@@ -16,6 +16,33 @@ a PR. Versions follow
 ### Added
 
 - **Time from sessions**: from 16:00 Today offers "Book today's time", built from when you wrote in your Claude Code conversations that day (10 minutes around each message, rounded to 15 per project). Relay opens a conversation that subtracts what Productive already has and proposes one time entry per project, each one approved on its card. Settings › General switches it off: then the item goes and the transcripts are not read for it (#112)
+- Commonwealth, the team brain, works without setup. When its Claude Code plugin is installed (Settings › Integrations › Commonwealth installs it, no fields to fill in, and its switch turns it off again), a conversation about a project whose GitHub repositories your own Commonwealth rules route to a brain reads that brain and stages what it learns; personal projects and projects no rule matches never touch one. The new Brain view lists the notes waiting for review, per brain, with Promote and Reject. Reading the brain runs without a permission card, staging a note with `remember` still asks (#47)
+
+## [0.0.10] - 2026-10-07
+
+### Added
+
+- **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)
+- **Closing a conversation proposes what it leaves for the vault**: Claude reads it once more for decisions, project state and follow-ups, and puts what is missing on Today as one item, with a toast to review it. Nothing is written until you press Apply, which makes the changes in a new conversation where you allow each edit; leave out what you don't want, or Skip all of it. Quick questions (fewer than 3 messages) and conversations about mail are skipped. Off in Settings › General. (#130)
+
+## [0.0.9] - 2026-10-06
+
+### Added
+
+- **Whisper as a speech model**: Settings › Voice offers OpenAI's Whisper Large v3 Turbo (574 MB, about 100 languages including Dutch) next to Parakeet, Canary, Cohere and Moonshine, for dictation and meetings. It runs on this Mac's GPU via whisper.cpp. Building Relay now needs `cmake` (`brew install cmake`)
+
+### Fixed
+
+- **Mail that waits on you stays on Today, however old**: unanswered mail from a person dropped off Today after two days without being archived (a Friday mail was gone by Monday). It now stays until it is answered or archived. (#124)
+- **A work machine keeps its own Claude settings**: a conversation started from the laptop sent Claude on relay-server to `~/.claude.json` outside the volume, so its settings were missing and gone with every new container. The server now always uses its own Claude config folder.
+- **The spinner stops when Claude is done, and a message sent mid-turn shows where Claude read it**: a message you send while Claude works waits, dimmed, below the conversation until Claude takes it up, then moves into the conversation at that point. Claude often answers it in the turn already running; Relay used to wait for a second turn that never came, so the spinner kept spinning.
+- **No more empty Thinking blocks**: when Claude keeps its reasoning to itself, Relay no longer shows a Thinking line that opens to nothing. (#126)
+
+## [0.0.8] - 2026-10-06
+
+### Added
+
+- **Drag column edges to make them wider or smaller**: the sidebar, the right drawer, the lists in Today, Mail and Pull requests, the file tree and Claude panel of a PR review, and the side panel of a ticket. Each keeps its width across restarts; double-click an edge to reset it. (#121)
 - **"Always allow" on a permission card**: when Claude offers to remember a choice (this command, the folder, edits for the session), the card has a third button next to Deny and Allow that allows it and keeps it, so the same ask doesn't come back. Enter still allows once. (#118)
 - **Make ticket from a mail**: a button next to the draft-reply ones (and in a mail's … menu in Today, shortcut T) starts a conversation that reads the mail and its thread, finds the board (the one linked to the mail's project, else it picks one), and creates one task in the intake list with a short title and a summary, with the full mail as a comment on it. You approve the create before anything is made, and Relay never sends mail (#111)
 - **Claude shows when it compacts a conversation and how full its context is**: a "Compacting conversation…" line turns into "Conversation compacted" with the size before and after, your history stays, and a small "42% context" next to the model pick shows how much of the window is used. (#115)
@@ -28,7 +55,9 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Claude's thinking shows again**: the "Thinking" fold was always empty because the `claude` CLI now leaves thinking out unless asked; Relay asks for the summarized thinking. (#120)
 - **Switching model or effort no longer kills a running reply**: a new model applies at once to what you send next without restarting Claude, and a new effort waits until the reply is done. (#114)
+- **Claude starts when your login shell isn't zsh**: Relay read the PATH from zsh, so with fish or bash a `claude` installed through npm or Homebrew wasn't found and starting a conversation failed with "claude start: No such file or directory". It now asks your own login shell. (#123)
 
 ## [0.0.7] - 2026-10-05
 
@@ -264,7 +293,10 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...v0.0.10
+[0.0.9]: https://github.com/Relay-inc/relay-app/compare/v0.0.8...v0.0.9
+[0.0.8]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...v0.0.7
 [0.0.6]: https://github.com/Relay-inc/relay-app/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/Relay-inc/relay-app/compare/v0.0.4...v0.0.5

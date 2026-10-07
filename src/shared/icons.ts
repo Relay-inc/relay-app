@@ -4,6 +4,7 @@
 import {
   Notification01Icon,
   ServerStack01Icon,
+  Brain02Icon,
   LeftToRightListBulletIcon,
   Message01Icon,
   ComputerTerminal01Icon,
@@ -77,6 +78,7 @@ const ICONS: Record<string, Icon> = {
   right: ArrowRight01Icon,
   pr: GitPullRequestIcon,
   mail: Mail01Icon,
+  brain: Brain02Icon,
   close: Cancel01Icon,
   read: MailOpen01Icon,
   text: TextAlignLeftIcon,

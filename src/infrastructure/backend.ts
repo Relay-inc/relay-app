@@ -5,6 +5,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
+import type { Proposal } from "../domain/today/capture";
 import type {
   AgentSession,
   Pending,
@@ -31,6 +32,7 @@ import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
+import type { BrainNote, BrainStatus } from "../domain/brain/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
@@ -89,6 +91,8 @@ export const favicons = (projects: { name: string; aliases: string[] }[]) =>
   invoke<Record<string, { site: string; data: string | null }>>("favicons", { projects });
 export const findIconSites = (projects: { name: string; context: string; summary: string }[]) =>
   invoke<Record<string, string>>("find_icon_sites", { projects });
+/** What a closed conversation leaves for the vault, as proposals: nothing is written (lib.rs capture_proposals). */
+export const captureProposals = (key: string) => invoke<Proposal[]>("capture_proposals", { key });
 export const projectRepos = () => invoke<Record<string, string[]>>("project_repos");
 export const setProjectRepos = (project: string, repos: string[]) => invoke("set_project_repos", { project, repos });
 /** A GitHub repo no project has, an answered "not now": no conversation asks about it again. */
@@ -118,6 +122,8 @@ type SendArgs = {
   machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the default
   /** The project to tell the agent about; the backend puts the project line in front of `text`. */
   told: string | null;
+  /** The conversation's project, sent on every message so the team brain files what it learns under it. */
+  about: string | null;
   context: string | null;
 };
 export const send = (args: SendArgs) => invoke("send", args);
@@ -208,6 +214,13 @@ export const githubPrReview = (
   comments: { path: string; line: number; side: "LEFT" | "RIGHT"; body: string }[],
 ) => invoke<void>("github_pr_review", { repo, number, event, body, comments });
 export const githubStatus = () => invoke<string>("github_status");
+
+// ---------- Commonwealth, the team brain
+export const commonwealthStatus = () => invoke<BrainStatus>("commonwealth_status");
+export const commonwealthInstall = () => invoke<void>("commonwealth_install");
+export const commonwealthNotes = () => invoke<BrainNote[]>("commonwealth_notes");
+export const commonwealthAct = (brain: string, verb: "promote" | "reject", ids: string[]) =>
+  invoke<void>("commonwealth_act", { brain, verb, ids });
 
 // ---------- mail
 export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_list", { account, page });

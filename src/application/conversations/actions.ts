@@ -1,7 +1,7 @@
 import { t, tn } from "../../shared/i18n";
-import type { Img, Pending, CardChoice } from "../../domain/conversations/types";
+import type { Img, Item, Pending, CardChoice } from "../../domain/conversations/types";
 import { NEW, decisionOf } from "../../domain/conversations/rules";
-import { push } from "../../domain/conversations/events";
+import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
 import { fileName, withFiles } from "../../domain/conversations/files";
 import { WAIT } from "../../domain/navigation/views";
@@ -35,6 +35,7 @@ import { prepImages, releaseImages } from "./images";
 import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
 import { pollAgents } from "./polls";
+import { captureOnClose } from "../today/capture";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
 // to a project, closing and reopening, and Cmd-K. Most act on the open conversation.
@@ -176,16 +177,19 @@ function generateTitle(key: string, typedTitle: string, text: string) {
     })
     .catch(() => {});
 }
-// the message shows up and the conversation is busy until its turn ends
+// the message shows up and the conversation is busy until its turn ends. Claude Code says when it takes a message
+// up (a message sent during a turn often joins it): until then the message waits below the conversation
 function queueMessage(key: string, text: string, images: Img[], files: string[]) {
   flush();
   set(draft => {
-    push(draft, key, {
+    const item: Item = {
       kind: "me",
       text,
       ...(images.length ? { imgs: images.map(image => image.url) } : {}),
       ...(files.length ? { files } : {}),
-    });
+    };
+    if (chatAgent(key) === "claude") (draft.waiting[key] ||= []).push(item);
+    else push(draft, key, item);
     draft.status[key] = "busy";
     draft.queued[key] = (draft.queued[key] || 0) + 1;
   });
@@ -223,6 +227,7 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       // where it runs, as the composer shows it; the backend only reads it at the first spawn
       machine: machineChoice(key).value,
       told: told || null,
+      about: conversation?.project ?? null,
       context: context || null,
     });
     if (told && cs().chats[key]) {
@@ -233,6 +238,9 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
     }
   } catch (error) {
     set(draft => {
+      // it never reached the agent: it shows where it was sent, with why
+      const item = draft.waiting[key]?.pop();
+      if (item) push(draft, key, item);
       push(draft, key, { kind: "err", text: String(error) });
       draft.queued[key] = Math.max(0, (draft.queued[key] || 1) - 1);
       draft.status[key] = draft.queued[key] ? "busy" : "idle";
@@ -276,6 +284,7 @@ const stopChat = () => {
   backend.stop(key);
   flush();
   set(draft => {
+    releaseWaiting(draft, key);
     draft.queued[key] = 0;
     draft.status[key] = "idle";
     push(draft, key, { kind: "note", text: t("note.stopped") });
@@ -403,6 +412,7 @@ export function openTerminal() {
   }
   backend.openTerminal(key, null, `${projectOf(key) || t("general")}: ${label(key)}`);
   set(draft => {
+    releaseWaiting(draft, key);
     draft.queued[key] = 0;
     draft.status[key] = "idle";
   });
@@ -437,8 +447,12 @@ async function hide(key: string) {
     draft.chats[key].closed = Date.now();
     delete draft.status[key];
     delete draft.queued[key];
+    delete draft.waiting[key];
+    delete draft.taken[key];
   });
   saveChats();
+  // what it leaves for the vault, proposed on Today (application/today/capture)
+  captureOnClose(key);
   return worktrees;
 }
 const worktreeNote = (removed: number, kept: number) =>

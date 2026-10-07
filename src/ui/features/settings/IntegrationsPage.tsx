@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { PROVIDERS } from "../../../shared/plugins";
 import type { BoardProvider } from "../../../domain/board/types";
+import { cwOn } from "../../../domain/settings/types";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
   askMcp,
@@ -9,6 +10,8 @@ import {
   loadIntegrations,
   switchIntegration,
 } from "../../../application/settings/integrations";
+import { useBrainStore } from "../../../application/brain/store";
+import { loadBrainStatus } from "../../../application/brain/brain";
 import { Glyph } from "../../components/Glyph";
 import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
@@ -18,6 +21,7 @@ import { ActionsSection } from "./ActionsSection";
 import { BUTTON_GLYPH, buttonClass, TILE } from "./blocks";
 import { BoardSettings } from "./BoardSettings";
 import { CalendarSettings } from "./CalendarSettings";
+import { CommonwealthSettings } from "./CommonwealthSettings";
 import { Footer } from "./Footer";
 import { GithubSettings } from "./GithubSettings";
 import { MailSettings } from "./MailSettings";
@@ -58,6 +62,8 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const mailOn = useSettingsStore(s => !!s.settings.mail?.on);
   const calendarCount = useSettingsStore(s => s.settings.calendar?.feeds.length ?? 0);
   const calendarOn = useSettingsStore(s => !!s.settings.calendar?.on);
+  const cwPlugin = useBrainStore(s => s.status?.plugin);
+  const cwSwitched = useSettingsStore(s => cwOn(s.settings));
   // per provider: set up, and in the list
   const boardsState = useDerived(() =>
     Object.fromEntries(
@@ -68,6 +74,7 @@ export function IntegrationsPage({ active }: { active: boolean }) {
   const [detail, setDetail] = useState<string | null>(null);
   useEffect(() => {
     loadIntegrations();
+    loadBrainStatus();
   }, []);
   useEffect(() => {
     if (active) askMcp();
@@ -141,6 +148,19 @@ export function IntegrationsPage({ active }: { active: boolean }) {
           <CalendarSettings />
           <ActionsSection ext="calendar" name={t("cal.name")} />
         </>
+      ),
+    },
+    {
+      id: "commonwealth",
+      icon: <Icon name="brain" className={TILE} />,
+      name: "Commonwealth",
+      status: <StatusLine level={cwPlugin ? "ok" : "off"}>{t(cwPlugin ? "cw.installed" : "cw.missing")}</StatusLine>,
+      // on when switched on (the default) and its plugin is installed; switching on without it opens the page to install
+      on: (!!cwPlugin && cwSwitched) || detail === "commonwealth",
+      page: () => (
+        <Section title={t("int.connection")}>
+          <CommonwealthSettings />
+        </Section>
       ),
     },
   ];

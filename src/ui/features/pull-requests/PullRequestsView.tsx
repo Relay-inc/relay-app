@@ -7,6 +7,7 @@ import { prKey } from "../../../domain/navigation/keys";
 import { useT } from "../../hooks/useT";
 import { PrRow } from "./PrRow";
 import { PrPane } from "./PrPane";
+import { ColumnResize } from "../navigation/ColumnResize";
 
 /** The Pull requests view, as Mail does it: the list on the left (what waits for your review, what you opened), the
  *  PR you picked on the right, so you can go from one to the next without closing anything. Reloading is the title
@@ -66,7 +67,8 @@ export function PullRequestsView({ className = "" }: { className?: string }) {
     );
   else if (!busy) lists = <div className="text-secondary text-sm text-center p-4">{t("pr.notLoaded")}</div>;
   return (
-    <div className={`${className} grid grid-cols-[380px_minmax(0,1fr)] min-h-0`}>
+    <div className={`${className} relative grid grid-cols-[var(--prs-w)_minmax(0,1fr)] min-h-0`}>
+      <ColumnResize column="prs" />
       <div className="min-h-0 overflow-y-auto border-r border-separator pb-4">
         {err ? <div className="err-box m-4">{err}</div> : null}
         {lists}

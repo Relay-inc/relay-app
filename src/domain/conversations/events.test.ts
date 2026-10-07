@@ -202,3 +202,107 @@ test("a transcript shows its compaction boundary and ends with the context it le
   );
   assert.deepEqual(contextOf(history), { used: 9_500, window: 200_000 });
 });
+
+// two messages sent to Claude Code, neither read yet
+const sentTwo = () =>
+  produce(fresh(), draft => {
+    draft.status["c:1"] = "busy";
+    draft.queued["c:1"] = 2;
+    draft.waiting["c:1"] = [
+      { kind: "me", text: "one" },
+      { kind: "me", text: "two" },
+    ];
+  });
+
+test("a message sent during a turn joins it where Claude reads it, and one turn end answers both", () => {
+  const { next } = run(
+    sentTwo(),
+    { type: "picked", text: "one (with context)" },
+    { type: "text", text: "ok", delta: false },
+    { type: "picked", text: "two" },
+    { type: "text", text: "hi", delta: false },
+    { type: "turn_end", ok: true },
+  );
+  assert.deepEqual(
+    next.messages["c:1"].map(item => item.text),
+    ["one", "ok", "two", "hi", "work.done"],
+  );
+  assert.equal(next.status["c:1"], "idle");
+  assert.equal(next.queued["c:1"], 0);
+  assert.equal(next.waiting["c:1"].length, 0);
+});
+
+test("a message Claude keeps for its own turn waits through the first turn's end", () => {
+  const first = run(
+    sentTwo(),
+    { type: "picked", text: "one" },
+    { type: "text", text: "ok", delta: false },
+    {
+      type: "turn_end",
+      ok: true,
+    },
+  ).next;
+  assert.equal(first.status["c:1"], "busy");
+  assert.deepEqual(first.waiting["c:1"], [{ kind: "me", text: "two" }]);
+  const { next } = run(first, { type: "picked", text: "two" }, { type: "turn_end", ok: true });
+  assert.equal(next.status["c:1"], "idle");
+  assert.deepEqual(
+    next.messages["c:1"].map(item => item.text),
+    ["one", "ok", "two", "work.done"],
+  );
+});
+
+test("a turn that echoes nothing (a slash command) takes up the oldest waiting message", () => {
+  const sent = produce(fresh(), draft => {
+    draft.queued["c:1"] = 1;
+    draft.waiting["c:1"] = [{ kind: "me", text: "/cost" }];
+  });
+  const answered = run(sent, { type: "text", text: "$0.12", delta: false }, { type: "turn_end", ok: true }).next;
+  assert.deepEqual(
+    answered.messages["c:1"].map(item => item.text),
+    ["/cost", "$0.12", "work.done"],
+  );
+  const cleared = run(sent, { type: "turn_end", ok: true }).next;
+  assert.deepEqual(cleared.messages["c:1"][0], { kind: "me", text: "/cost" });
+  assert.equal(cleared.status["c:1"], "idle");
+});
+
+test("Relay's own turn is answered without taking up the user's waiting message", () => {
+  const sent = produce(fresh(), draft => {
+    draft.queued["c:1"] = 2;
+    draft.waiting["c:1"] = [{ kind: "me", text: "mine" }];
+  });
+  const { next } = run(
+    sent,
+    { type: "picked", text: "[Relay] Report" },
+    { type: "text", text: "noted", delta: false },
+    {
+      type: "turn_end",
+      ok: true,
+    },
+  );
+  assert.deepEqual(next.waiting["c:1"], [{ kind: "me", text: "mine" }]);
+  assert.equal(next.status["c:1"], "busy");
+});
+
+test("waiting messages show in the conversation when the process exits", () => {
+  const { next } = run(sentTwo(), { type: "exit" });
+  assert.deepEqual(
+    next.messages["c:1"].map(item => item.text),
+    ["one", "two", "work.interrupted"],
+  );
+  assert.equal(next.waiting["c:1"], undefined);
+});
+
+test("a message sent while a turn Claude started itself runs waits for its echo", () => {
+  const working = run(fresh(), { type: "text", text: "The task finished", delta: false }).next;
+  const sent = produce(working, draft => {
+    draft.queued["c:1"] = 2;
+    draft.waiting["c:1"] = [{ kind: "me", text: "and now?" }];
+  });
+  const more = run(sent, { type: "text", text: ", all good", delta: true }).next;
+  assert.deepEqual(more.waiting["c:1"], [{ kind: "me", text: "and now?" }]);
+  const { next } = run(more, { type: "picked", text: "and now?" }, { type: "turn_end", ok: true });
+  assert.equal(next.status["c:1"], "idle");
+  assert.equal(next.messages["c:1"][1].text, "and now?");
+});

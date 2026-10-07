@@ -1,6 +1,7 @@
 import type { TodayCard } from "../../domain/today/rules";
 import type { BoardRef, Card } from "../../domain/board/types";
 import type { Kind } from "../../domain/today/plan";
+import type { Capture } from "../../domain/today/capture";
 import { todayIso } from "../../domain/reminders/rules";
 import { storage } from "../../infrastructure/storage";
 import { makeStore } from "../make-store";
@@ -20,6 +21,7 @@ export type DayState = {
 export type Snooze = { until: string; title: string; kind: Kind; project?: string | null; reminder?: string };
 export type TodayState = DayState & {
   snoozed: Record<string, Snooze>;
+  captures: Record<string, Capture>; // per closed conversation: what it proposes for the vault, until applied or skipped
   cards: TodayCard[]; // the user's cards for today, from every board linked to a vault project
   boards: Record<string, { provider: string; ref: BoardRef; cards: Card[] }>; // per vault project: its board's open cards, to find a PR's ticket
   errors: string[]; // per board that did not load
@@ -45,6 +47,7 @@ export const useTodayStore = makeStore<TodayState>(() => ({
       ([, snooze]) => snooze.until > todayIso(-30),
     ),
   ),
+  captures: storage.get<Record<string, Capture>>("todayCaptures", {}),
   cards: [],
   boards: {},
   errors: [],
@@ -72,6 +75,15 @@ export function setSnooze(id: string, snooze: Snooze | null) {
     else delete draft.snoozed[id];
   });
   storage.set("todaySnooze", useTodayStore.getState().snoozed);
+}
+
+/** Keep a closed conversation's proposals for the vault, or drop them (null). */
+export function setCapture(key: string, capture: Capture | null) {
+  useTodayStore.setState(draft => {
+    if (capture) draft.captures[key] = capture;
+    else delete draft.captures[key];
+  });
+  storage.set("todayCaptures", useTodayStore.getState().captures);
 }
 
 /** Show only one context's items under Today ("" all, "-" the ones without a project). */

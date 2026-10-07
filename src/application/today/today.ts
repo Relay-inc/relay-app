@@ -1,4 +1,4 @@
-import { t } from "../../shared/i18n";
+import { t, tn } from "../../shared/i18n";
 import { provider } from "../../shared/plugins";
 import { byDue, myCardToday, prsForMe, type TodayCard } from "../../domain/today/rules";
 import {
@@ -25,6 +25,7 @@ import type { Meeting } from "../../domain/calendar/types";
 import type { Reminder } from "../../domain/reminders/types";
 import type { PR } from "../../domain/pull-requests/types";
 import type { Mail } from "../../domain/mail/types";
+import type { Capture } from "../../domain/today/capture";
 import * as backend from "../../infrastructure/backend";
 import { settings } from "../settings/settings";
 import { useBoardStore } from "../board/store";
@@ -55,6 +56,7 @@ import { reminderAction, chatAboutReminder } from "../reminders/reminders";
 import { changeDay, setContext, setSnooze, useTodayStore, type TodayState } from "./store";
 import { linkPrs, relinkPr, ticketOf, ticketState } from "./links";
 import { useDetailsStore } from "./details";
+import { applyCapture, skipCapture } from "./capture";
 
 // Today: one queue of everything that needs the user, planned into the free time between today's meetings
 // (domain/today/plan.ts). This module turns the stores into that queue, and runs an item's actions.
@@ -125,11 +127,6 @@ const asleep = (id: string) => {
   const snooze = useTodayStore.getState().snoozed[id];
   return !!snooze && snooze.until > todayIso();
 };
-// snoozed and its day has come: an item that only shows while recent (mail) comes back anyway
-const woke = (id: string) => {
-  const snooze = useTodayStore.getState().snoozed[id];
-  return !!snooze && snooze.until <= todayIso();
-};
 /** Snooze for `days` (a week by default): a reminder is pushed in the vault, anything else stays off Today until then. */
 export async function snooze(entry: Entry, days = 7) {
   // a reminder moves in the vault; it is kept as snoozed too, so Today lists it and does not count it as cleared
@@ -177,7 +174,8 @@ export type Subject =
   | { type: "pr"; pr: PR; prs?: PR[] }
   | { type: "mail"; key: string; mail: Mail }
   | { type: "chat"; key: string }
-  | { type: "time"; date: string; minutes: number };
+  | { type: "time"; date: string; minutes: number }
+  | { type: "capture"; capture: Capture };
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
 export type Entry = Item & {
   status: Status;
@@ -356,14 +354,14 @@ export function entries(now = Date.now()): Entry[] {
       subject: { type: "pr", pr },
     });
 
-  // mail of the last two days that waits on you: unread, or (when the Inbox/Other split knows a person from a machine)
-  // read but not answered yet, until it is archived. Older mail is triage for the Mail view, not today's work
+  // mail that waits on you, however old: unread, or (when the Inbox/Other split knows a person from a machine)
+  // read but not answered yet, until it is archived. The first page per account (PAGE_SIZE) bounds how many
   // ponytail: "answered" is IMAP's \Answered, which Gmail's web app doesn't set; archive (Done) clears those
   for (const mail of useMailStore.getState().list ?? []) {
     const at = Date.parse(mail.date);
     const key = mailKey(mail);
     const waits = mail.unread || (mail.other === false && !mail.answered);
-    if (!waits || mail.other || mail.answered || (now - at > 2 * DAY && !woke(`mail:${key}`))) continue;
+    if (!waits || mail.other || mail.answered) continue;
     add("mail", {
       id: `mail:${key}`,
       at,
@@ -403,6 +401,18 @@ export function entries(now = Date.now()): Entry[] {
       tone: "",
       project: null,
       subject: { type: "time", date: todayIso(), minutes: timeMin },
+    });
+  // what a closed conversation proposes for the vault, until applied or skipped (application/today/capture)
+  for (const capture of Object.values(useTodayStore.getState().captures))
+    add("capture", {
+      id: `capture:${capture.key}`,
+      at: capture.at,
+      title: capture.title,
+      where: "", // the project chip says it already
+      why: tn("capture.why", capture.proposals.length),
+      tone: "",
+      project: capture.project,
+      subject: { type: "capture", capture },
     });
   const { dismissed } = useTodayStore.getState();
   return out.filter(entry => !dismissed.includes(entry.id) && !asleep(entry.id));
@@ -552,6 +562,8 @@ export async function setStatus(entry: Entry, status: Status) {
       return mailExperimental() ? mailMove([s.key], false) : mailSeen(s.key, true);
     case "chat":
       return markSeen(s.key);
+    case "capture":
+      return skipCapture(s.capture.key);
     case "blocked":
       return backgroundAction("hide", s.session.id);
     case "ask":
@@ -863,6 +875,15 @@ export function actionsOf(entry: Entry): Actions {
         [
           { label: t("today.read"), key: "↵", run: () => select(s.key) },
           { label: t("today.markRead"), key: "⌫", run: () => markSeen(s.key) },
+        ],
+        0,
+        1,
+      );
+    case "capture":
+      return of(
+        [
+          { label: t("capture.apply"), icon: "check", key: "↵", run: () => applyCapture(s.capture.key) },
+          { label: t("capture.skip"), key: "⌫", run: () => skipCapture(s.capture.key) },
         ],
         0,
         1,

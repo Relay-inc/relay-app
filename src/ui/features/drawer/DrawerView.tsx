@@ -31,7 +31,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
     <aside className={`relay-drawer ${className}`}>
       <div className="flex flex-col flex-1 min-h-0 border-l border-separator">
         <div
-          className="h-12 flex-none flex items-center gap-2 pl-4.5 pr-3 border-b border-separator min-w-115 select-none"
+          className="h-12 flex-none flex items-center gap-2 pl-4.5 pr-3 border-b border-separator min-w-(--drawer-w) select-none"
           data-tauri-drag-region
         >
           <h2 className="flex-1 text-[15px] font-semibold">{t(TITLES[drawer])}</h2>
@@ -40,7 +40,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           </button>
         </div>
         <div
-          className={`min-w-115 ${drawer === "detail" || drawer === "workers" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
+          className={`min-w-(--drawer-w) ${drawer === "detail" || drawer === "workers" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}

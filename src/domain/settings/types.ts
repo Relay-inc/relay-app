@@ -95,6 +95,7 @@ export type Settings = {
   voice?: VoiceCfg; // Settings › Voice (domain/settings/voice.ts)
   autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true
   timeFromSessions?: boolean; // Today proposes the day's Productive time from the conversations, on unless false
+  captureOnClose?: boolean; // propose vault updates when a conversation closes (application/today/capture), on unless false
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
   sidebar?: SidebarCfg;
@@ -117,6 +118,8 @@ export const EMPTY_SETTINGS: Settings = {
 export const ghOn = (settings: Settings) => !!settings.github?.on;
 export const mailOn = (settings: Settings) => !!settings.mail?.on;
 export const mailExperimental = (settings: Settings) => mailOn(settings) && !!settings.mail?.experimental;
+/** Commonwealth, on unless switched off in Settings › Integrations (it needs its plugin too, application/brain). */
+export const cwOn = (settings: Settings) => settings.integrations?.commonwealth?.on !== false;
 export const calendarOn = (settings: Settings) => !!settings.calendar?.on && !!settings.calendar.feeds?.length;
 /** A message under a settings section: what the last action said, and whether it worked. */
 export type Message = { text: string; ok: boolean };

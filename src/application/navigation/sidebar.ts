@@ -19,7 +19,7 @@ import { ORCH } from "../../domain/orchestrator/rules";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
 import type { SidebarCfg } from "../../domain/settings/types";
 import { viewItems } from "../../domain/navigation/sidebar-views";
-import { WAIT, REM, PRS, MAIL } from "../../domain/navigation/views";
+import { WAIT, REM, PRS, MAIL, BRAIN } from "../../domain/navigation/views";
 import type { Chat, TerminalSession } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { unread } from "../../domain/mail/rules";
@@ -42,6 +42,8 @@ import { contexts, projectLabel } from "../workspace/vault";
 import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
+import { brainOn } from "../brain/brain";
+import { useBrainStore } from "../brain/store";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { runningWorkers } from "../orchestrator/orchestrator";
 import { useNavigationStore } from "./store";
@@ -227,6 +229,10 @@ const mailMeta = (): Meta | undefined => {
   const unreadCount = useMailStore.getState().list?.filter(unread).length ?? 0;
   return unreadCount ? { kind: "count", n: unreadCount } : undefined;
 };
+const brainMeta = (): Meta | undefined => {
+  const pending = useBrainStore.getState().notes?.length ?? 0;
+  return pending ? { kind: "count", n: pending, title: t("nav.brainPending") } : undefined;
+};
 // the orchestrator's coordinator: its running workers
 const orchMeta = (): Meta | undefined => {
   const running = runningWorkers();
@@ -238,13 +244,14 @@ const META: Record<string, () => Meta | undefined> = {
   [REM]: remindersMeta,
   [PRS]: prsMeta,
   [MAIL]: mailMeta,
+  [BRAIN]: brainMeta,
 };
 
 export const sidebarCfg = (): SidebarCfg => settings().sidebar ?? {};
 export const viewsLayout = () => sidebarCfg().layout ?? "icons";
 export const moreOn = () => sidebarCfg().more !== false;
 /** Every view there is now, in the user's order, the switched-off ones included. */
-const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), t), sidebarCfg());
+const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), brainOn(), t), sidebarCfg());
 export const hiddenViews = () => allViews().filter(view => isHidden(view.key, sidebarCfg()));
 const viewRows = (): ViewRow[] =>
   allViews()

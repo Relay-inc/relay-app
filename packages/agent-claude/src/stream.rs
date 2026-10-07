@@ -14,6 +14,11 @@ pub fn user_message(turn: &Turn) -> Value {
     json!({"type": "user", "message": {"role": "user", "content": content}})
 }
 
+/// The text of a user message: a string, or its text blocks.
+fn user_text(c: &Value) -> String {
+    c.as_str().map(String::from).unwrap_or_else(|| c.as_array().into_iter().flatten().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n\n"))
+}
+
 /// The blocks of an assistant message: text (not blank, unless it streamed already) and tool calls.
 fn assistant(content: &Value, streamed: bool, out: &mut Vec<Event>) {
     for c in content.as_array().into_iter().flatten() {
@@ -58,7 +63,8 @@ impl State {
                     let (text, delta) = piece(t, self);
                     self.streamed.insert(self.message.clone());
                     out.push(Event::Text { text, delta });
-                } else if let Some(t) = d["thinking"].as_str().filter(|_| d["type"] == "thinking_delta") {
+                // a model that keeps its thinking to itself still streams empty thinking deltas
+                } else if let Some(t) = d["thinking"].as_str().filter(|t| d["type"] == "thinking_delta" && !t.is_empty()) {
                     let (text, delta) = piece(t, self);
                     out.push(Event::Thinking { text, delta });
                 }
@@ -73,6 +79,9 @@ impl State {
         let mut out = vec![];
         match ev["type"].as_str().unwrap_or("") {
             "stream_event" => self.delta(&ev, &mut out),
+            "user" if ev["isReplay"] == true => {
+                if ev["parent_tool_use_id"].is_null() { out.push(Event::Picked { text: user_text(&ev["message"]["content"]) }); }
+            }
             "assistant" => {
                 let streamed = ev["message"]["id"].as_str().is_some_and(|id| self.streamed.contains(id));
                 assistant(&ev["message"]["content"], streamed, &mut out);
@@ -194,6 +203,18 @@ mod tests {
     }
 
     #[test]
+    fn an_echoed_message_is_picked_up() {
+        let mut st = State::default();
+        let echo = |c: Value, parent: Value| json!({"type": "user", "isReplay": true, "parent_tool_use_id": parent, "message": {"role": "user", "content": c}}).to_string();
+        assert_eq!(st.parse(&echo(json!("also say hi"), Value::Null)), vec![Event::Picked { text: "also say hi".into() }]);
+        assert_eq!(st.parse(&echo(json!([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}]), Value::Null)), vec![Event::Picked { text: "a\n\nb".into() }]);
+        assert_eq!(st.parse(&echo(json!("sub"), json!("toolu_1"))), vec![]); // a subagent's prompt
+        // a tool result is no message of the user's
+        let result = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}).to_string();
+        assert_eq!(st.parse(&result), vec![Event::ToolResult { id: "t1".into(), error: false }]);
+    }
+
+    #[test]
     fn stream_json_to_events() {
         let mut st = State::default();
         let mut ev: Vec<Event> = STREAM.lines().flat_map(|l| st.parse(l)).collect();
@@ -223,6 +244,7 @@ mod tests {
         let mut go = |l: &str| st.parse(l);
         assert_eq!(go(&start), vec![]);
         assert_eq!(go(&block), vec![]);
+        assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": ""}), Value::Null)), vec![]);
         assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": "hm"}), Value::Null)), vec![Event::Thinking { text: "hm".into(), delta: false }]);
         assert_eq!(go(&delta("content_block_delta", json!({"type": "thinking_delta", "thinking": "m"}), Value::Null)), vec![Event::Thinking { text: "m".into(), delta: true }]);
         assert_eq!(go(&block), vec![]);
