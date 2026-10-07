@@ -239,9 +239,11 @@ export function PrPane({ prKey }: { prKey: string }) {
                 >
                   {agent(r.provider) ? <Glyph svg={agent(r.provider)!.glyph} className="glyph size-3" /> : null}
                   {nameOf(r.provider)}
+                  <span className="text-secondary">· {t(r.second ? "pr.kindSecond" : "pr.kindReview")}</span>
                   {r.busy ? <span className="text-secondary">· {t("pr.reviewRunning")}</span> : null}
                 </button>
               ))}
+              {reviews.answers ? <span className="w-px h-3.5 mx-1 bg-separator-strong"></span> : null}
               {reviews.answers ? (
                 <button
                   title={t("pr.secondOpinionTitle", { agent: nameOf(review.id), first: nameOf(reviews.answers) })}

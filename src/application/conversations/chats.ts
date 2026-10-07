@@ -34,6 +34,7 @@ export function startChat(
     provider?: string;
     meeting?: string;
     pr?: string;
+    answers?: string;
   },
 ): string {
   const key = newChat(project);
@@ -45,6 +46,7 @@ export function startChat(
     if (start.provider) conversation.provider = start.provider;
     if (start.meeting) conversation.meeting = start.meeting;
     if (start.pr) conversation.pr = start.pr;
+    if (start.answers) conversation.answers = start.answers;
     draft.messages[key] = [{ kind: "note", text: start.note }];
   });
   return key;

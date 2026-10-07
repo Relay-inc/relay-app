@@ -74,12 +74,18 @@ export async function reviewPr(key: string) {
   await select(chatKey);
   sendMsg(reviewPrompt(pr, repo));
 }
-/** The last finished review of the PR in the detail: its conversation and its answer, "" while none is done. */
-export function finishedReview(key: string) {
+/** The last finished review of the PR in the detail by another agent than `not` (a second opinion never answers its
+ *  own agent) that `not` didn't answer yet: its conversation and its answer, null while there is none. */
+export function finishedReview(key: string, not: string) {
   const pr = useNavigationStore.getState().panel.detail[key] as PrDetail | undefined;
   if (!pr) return null;
   const { chats, messages, status } = useConversationsStore.getState();
-  const done = reviewsOf(chats, pr.url).filter(chat => status[chat.key] !== "busy");
+  const done = reviewsOf(chats, pr.url).filter(
+    chat =>
+      status[chat.key] !== "busy" &&
+      (chat.provider || "claude") !== not &&
+      !Object.values(chats).some(x => x.answers === chat.key && (x.provider || "claude") === not && !x.closed),
+  );
   const last = done[done.length - 1];
   return last ? { key: last.key, provider: last.provider || "claude", text: briefingText(messages[last.key]) } : null;
 }
@@ -93,16 +99,17 @@ export function prReviews(key: string) {
         key: chat.key,
         title: chat.title,
         provider: chat.provider || "claude",
+        second: !!chat.answers,
         busy: status[chat.key] === "busy",
       }))
     : [];
-  return { list, answers: finishedReview(key)?.provider ?? "" };
+  return { list, answers: finishedReview(key, reviewAgent())?.provider ?? "" };
 }
 /** A second agent answers the last finished review: a conversation of its own, listed with the PR's reviews. */
 export async function secondOpinion(key: string) {
   const pr = useNavigationStore.getState().panel.detail[key] as PrDetail | undefined;
   const item = panelItem(key);
-  const first = finishedReview(key);
+  const first = finishedReview(key, reviewAgent());
   if (!pr || item?.kind !== "pr" || !first) return;
   await ensureHistory(first.key); // after a restart its messages are not read yet
   const review = briefingText(useConversationsStore.getState().messages[first.key]);
@@ -114,6 +121,7 @@ export async function secondOpinion(key: string) {
     title: `Second opinion ${repo.split("/")[1]} #${pr.number}`,
     note: t("note.secondOpinion", { repo, n: pr.number, agent: firstName }),
     pr: pr.url,
+    answers: first.key,
   });
   await select(chatKey);
   sendMsg(secondOpinionPrompt(pr, repo, firstName, review));

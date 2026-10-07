@@ -982,6 +982,8 @@ const en = {
   "pr.reviewGo": "Review",
   "pr.reviews": "Reviews",
   "pr.reviewRunning": "running",
+  "pr.kindReview": "review",
+  "pr.kindSecond": "second opinion",
   "pr.secondOpinion": "Second opinion with {agent}",
   "pr.secondOpinionTitle":
     "A conversation in which {agent} gets {first}'s review, reads the PR itself and says where it agrees, where not and what was missed",

@@ -993,6 +993,8 @@ export default {
   "pr.reviewGo": "Relire",
   "pr.reviews": "Revues",
   "pr.reviewRunning": "en cours",
+  "pr.kindReview": "revue",
+  "pr.kindSecond": "second avis",
   "pr.secondOpinion": "Second avis avec {agent}",
   "pr.secondOpinionTitle":
     "Une conversation où {agent} reçoit la revue de {first}, lit la PR lui-même et dit où il est d'accord, où non et ce qui manque",

@@ -985,6 +985,8 @@ export default {
   "pr.reviewGo": "Review",
   "pr.reviews": "Reviews",
   "pr.reviewRunning": "bezig",
+  "pr.kindReview": "review",
+  "pr.kindSecond": "second opinion",
   "pr.secondOpinion": "Second opinion met {agent}",
   "pr.secondOpinionTitle":
     "Een gesprek waarin {agent} de review van {first} krijgt, de PR zelf leest en zegt waar het akkoord is, waar niet en wat er gemist werd",

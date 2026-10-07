@@ -991,6 +991,8 @@ export default {
   "pr.reviewGo": "Review",
   "pr.reviews": "Reviews",
   "pr.reviewRunning": "läuft",
+  "pr.kindReview": "Review",
+  "pr.kindSecond": "Zweitmeinung",
   "pr.secondOpinion": "Zweitmeinung mit {agent}",
   "pr.secondOpinionTitle":
     "Ein Gespräch, in dem {agent} das Review von {first} bekommt, den PR selbst liest und sagt, wo es zustimmt, wo nicht und was fehlt",
