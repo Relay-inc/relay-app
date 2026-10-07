@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Added
 
 - **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)
+- **Closing a conversation proposes what it leaves for the vault**: Claude reads it once more for decisions, project state and follow-ups, and puts what is missing on Today as one item, with a toast to review it. Nothing is written until you press Apply, which makes the changes in a new conversation where you allow each edit; leave out what you don't want, or Skip all of it. Quick questions (fewer than 3 messages) and conversations about mail are skipped. Off in Settings › General.
 
 ## [0.0.9] - 2026-10-06
 
