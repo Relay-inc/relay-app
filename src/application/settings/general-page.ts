@@ -59,6 +59,7 @@ export async function changeAccent(accent: Accent) {
 export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), terminal });
 export const saveKeepAwake = (keepAwake: boolean) => save({ ...current(), keepAwake });
 export const saveAutoRetry = (autoRetry: boolean) => save({ ...current(), autoRetry });
+export const saveTimeFromSessions = (timeFromSessions: boolean) => save({ ...current(), timeFromSessions });
 export const saveCaptureOnClose = (captureOnClose: boolean) => save({ ...current(), captureOnClose });
 /** The sidebar's views: the layout, the order, the ones switched off (each patch keeps the rest). */
 export const saveSidebar = (patch: SidebarCfg) => save({ ...current(), sidebar: { ...current().sidebar, ...patch } });

@@ -106,7 +106,7 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-77 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+78 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:

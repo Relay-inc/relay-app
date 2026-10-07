@@ -46,7 +46,8 @@ import { backgroundAction, typeInto } from "../conversations/actions";
 import { markSeen, newChat } from "../conversations/chats";
 import { useMailStore } from "../mail/store";
 import { loadMails, mailChat, mailMove, mailProject, mailSeen } from "../mail/mail";
-import { mailExperimental, mailOn } from "../settings/settings";
+import { mailExperimental, mailOn, timeFromSessionsOn } from "../settings/settings";
+import { proposeTime, loadTodayTime } from "../time/time";
 import { startRecording } from "../calendar/recording";
 import { openCompose } from "./mail";
 import { forgetDetails } from "./load";
@@ -112,6 +113,7 @@ export async function refreshToday() {
     loadMeetings(),
     loadPrs(),
     loadSnapshot(),
+    loadTodayTime(),
     mailOn() ? loadMails() : null,
   ]);
   useTodayStore.setState(draft => {
@@ -172,6 +174,7 @@ export type Subject =
   | { type: "pr"; pr: PR; prs?: PR[] }
   | { type: "mail"; key: string; mail: Mail }
   | { type: "chat"; key: string }
+  | { type: "time"; date: string; minutes: number }
   | { type: "capture"; capture: Capture };
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
 export type Entry = Item & {
@@ -385,6 +388,20 @@ export function entries(now = Date.now()): Entry[] {
       subject: { type: "chat", key },
     });
   }
+  // from 16:00, when the conversations of the day show 15 minutes or more: Productive is not asked, the agent finds
+  // out what is booked already
+  const { timeMin } = useTodayStore.getState();
+  if (timeFromSessionsOn() && timeMin >= 15 && new Date(now).getHours() >= 16)
+    add("time", {
+      id: `time:${todayIso()}`,
+      at: now,
+      title: t("today.timeTitle"),
+      where: t("today.timeWhere"),
+      why: t("today.timeWhy", { n: timeMin }),
+      tone: "",
+      project: null,
+      subject: { type: "time", date: todayIso(), minutes: timeMin },
+    });
   // what a closed conversation proposes for the vault, until applied or skipped (application/today/capture)
   for (const capture of Object.values(useTodayStore.getState().captures))
     add("capture", {
@@ -454,6 +471,8 @@ export function todayModel(now = Date.now()) {
       !current.has(id) &&
       !everyId.has(id) &&
       !asleep(id) &&
+      // the day's time to book left because Time from sessions was switched off, not because it was booked
+      !(id.startsWith("time:") && !timeFromSessionsOn()) &&
       inContext(state.context, projectOf(state.log[id]?.project ?? null)?.context),
   );
   const cleared = gone.length;
@@ -844,6 +863,13 @@ export function actionsOf(entry: Entry): Actions {
           : { label: t("today.markRead"), icon: "read", key: "E", run: () => mailSeen(s.key, true) },
       );
     }
+    case "time":
+      return of(
+        [{ label: t("today.timeBook"), icon: "clock", key: "↵", run: () => proposeTime(s.date) }],
+        0,
+        null,
+        done(),
+      );
     case "chat":
       return of(
         [

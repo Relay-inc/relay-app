@@ -13,6 +13,7 @@ export const KIND_ICON: Record<Kind, string> = {
   card: "board",
   review: "pr",
   fix: "pr",
+  time: "clock",
   finished: "chat",
   capture: "notes",
 };

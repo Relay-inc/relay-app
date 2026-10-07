@@ -412,6 +412,10 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("Accent");
   },
+  "settings-time": async () => {
+    await settingsPage("General");
+    await intoView("Propose the day's time from conversations");
+  },
   "settings-sidebar": async () => {
     await settingsPage("General");
     await scrollMain("bottom");
@@ -475,6 +479,21 @@ const VIEWS = {
     await page.evaluate(() => window.__harness.dictationLevel(0.4));
     await click("Reminders");
     await waitText("Dictating ·");
+  },
+  // Today after 16:00 with activity in the day's conversations: the "Book today's time" item (Time from sessions)
+  "today-time": async () => {
+    await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));
+    await open(page, server.url);
+    await waitText("Book today's time");
+    await click("Book today's time");
+  },
+  // switched off in Settings › General: the item goes, and the transcripts are not read for it
+  "today-time-off": async () => {
+    await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));
+    await open(page, server.url);
+    await waitText("Book today's time");
+    await page.evaluate(() => window.__harness.changeSettings({ timeFromSessions: false }));
+    await page.waitForFunction(() => !document.body.innerText.includes("Book today's time"));
   },
   // Claude compacting the conversation (the quiet "42% context" under the field, a pulsing line in the conversation),
   // then the line once it is done: the history stays, the context shrinks (#115)

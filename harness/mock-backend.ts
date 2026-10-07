@@ -242,6 +242,13 @@ function handle(cmd: string, a: Args): unknown {
       return conv.conversations.map(c => conv.sidOf(c.key));
     case "app_sessions":
       return sidKeys();
+    case "activity": {
+      // the user's own messages that day in the first four sessions: 9:00, 11:00 and 14:00, a little shifted per session
+      const day = Date.parse(`${a.date}T00:00:00+02:00`);
+      return Object.fromEntries(
+        (a.sessions as string[]).slice(0, 4).map((sid, i) => [sid, [9, 9.2, 11, 11.1, 14].map(h => day + (h + i * 0.05) * 3600_000)]),
+      );
+    }
     case "agents":
       return terminalAgents();
     case "running":
@@ -664,6 +671,11 @@ const harness = {
     meetingTicks && sendTo(meetingTicks.channel, meetingTicks.index++, { secs, me, others }),
   /** the composer's dictation hearing something */
   dictationLevel: (level: number) => dictationLevels && sendTo(dictationLevels.channel, dictationLevels.index++, level),
+  /** a setting changed in the Settings window: saved, and the main window told (settings-changed) */
+  changeSettings: (patch: Record<string, unknown>) => {
+    settings = { ...settings, ...structuredClone(patch) };
+    emit("settings-changed", structuredClone(settings));
+  },
   /** a relay:// link while the app runs (Raycast, a browser), as the deep-link plugin delivers it */
   deepLink: (url: string) => emit("deep-link://new-url", [url]),
   /** a permission card that turns up in the next `pending` poll */

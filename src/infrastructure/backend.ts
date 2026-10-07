@@ -149,6 +149,9 @@ export const subagents = (keys: string[]) => invoke<Record<string, Sub[]>>("suba
 export const agents = () => invoke<AgentSession[]>("agents");
 export const appSids = () => invoke<string[]>("app_sids");
 export const appSessions = () => invoke<SessionOf>("app_sessions");
+/** When the user wrote in each of these Claude Code sessions on a day (yyyy-mm-dd, local), in ms. */
+export const activity = (date: string, sessions: string[]) =>
+  invoke<Record<string, number[]>>("activity", { date, sessions });
 
 // ---------- the orchestrator (src-tauri/src/orch.rs): its coordinator talks through `send` like any conversation
 /** Every worker the coordinator started, also the ones made while no page listened. */

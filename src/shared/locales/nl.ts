@@ -256,6 +256,18 @@ export default {
   "today.inProgress": "Bezig",
   "today.open": "Openen",
   "today.finished": "Klaar, nog niet gelezen",
+  "today.kind.time": "Tijd",
+  "today.doneIn.time": "Klaar enkel op Vandaag",
+  "today.timeTitle": "Boek de tijd van vandaag",
+  "today.timeWhere": "Uit je gesprekken",
+  "today.timeWhy": "{n} min activiteit",
+  "today.timeBook": "Tijd boeken",
+  "today.timeBody":
+    "Relay telde ongeveer {n} minuten eigen activiteit in de gesprekken van vandaag, per project. Tijd boeken vraagt de agent af te trekken wat in Productive al staat en per project één tijdsregistratie voor te stellen, die je een voor een goedkeurt.",
+  "time.title": "Tijd {date}",
+  "time.note": "De tijd van {date} boeken vanuit je gesprekken",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "{tool} toestaan?",
   "today.waiting": "Wacht · {ago}",
   "today.blockedSession": "Achtergrondsessie",
@@ -669,6 +681,9 @@ export default {
   "set.autoRetry": "Opnieuw proberen als een gebruikslimiet vrijkomt",
   "set.autoRetryHelp":
     "Wordt een gesprek geweigerd omdat de gebruikslimiet van de provider bereikt is en is er geen ander account om naar over te schakelen, dan stuurt Relay het opnieuw zodra de limiet vrijkomt. Staat <b>Mac wakker houden</b> aan, dan blijft de Mac tot dan wakker.",
+  "set.timeFromSessions": "De dagtijd voorstellen uit gesprekken",
+  "set.timeFromSessionsHelp":
+    "Vanaf 16:00 stelt Today de <b>Productive</b>-tijdsregistraties van de dag voor, op basis van wanneer je in je gesprekken schreef (Claude Code). Niets wordt geboekt zonder jouw akkoord. Uit: Relay leest de transcripten hiervoor niet.",
   "set.captureOnClose": "Vault-updates voorstellen als een gesprek sluit",
   "set.captureOnCloseHelp":
     "Sluit je een gesprek, dan leest Claude het nog één keer op wat in de vault hoort: beslissingen, projectstatus, opvolging. Er wordt niets geschreven: de voorstellen komen op <b>Vandaag</b>, en Toepassen maakt ze in een nieuw gesprek waarin je elke wijziging toestaat. Korte vragen (minder dan 3 berichten) worden overgeslagen.",

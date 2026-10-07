@@ -256,6 +256,18 @@ export default {
   "today.inProgress": "In Arbeit",
   "today.open": "Öffnen",
   "today.finished": "Fertig, noch nicht gelesen",
+  "today.kind.time": "Zeit",
+  "today.doneIn.time": "Erledigt nur unter Heute",
+  "today.timeTitle": "Zeit von heute buchen",
+  "today.timeWhere": "Aus deinen Gesprächen",
+  "today.timeWhy": "{n} Min. Aktivität",
+  "today.timeBook": "Zeit buchen",
+  "today.timeBody":
+    "Relay hat in den Gesprächen von heute etwa {n} Minuten eigene Aktivität gezählt, pro Projekt. Zeit buchen bittet den Agenten, abzuziehen, was in Productive schon steht, und pro Projekt einen Zeiteintrag vorzuschlagen, den du einzeln freigibst.",
+  "time.title": "Zeit {date}",
+  "time.note": "Die Zeit vom {date} aus deinen Gesprächen buchen",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "{tool} erlauben?",
   "today.waiting": "Wartet · {ago}",
   "today.blockedSession": "Hintergrundsitzung",
@@ -672,6 +684,9 @@ export default {
   "set.autoRetry": "Erneut versuchen, wenn ein Nutzungslimit zurückgesetzt wird",
   "set.autoRetryHelp":
     "Wird eine Unterhaltung abgelehnt, weil das Nutzungslimit des Anbieters erreicht ist, und gibt es kein anderes Konto zum Wechseln, sendet Relay sie erneut, sobald das Limit zurückgesetzt ist. Ist <b>Mac wach halten</b> an, bleibt der Mac bis dahin wach.",
+  "set.timeFromSessions": "Die Tageszeit aus Gesprächen vorschlagen",
+  "set.timeFromSessionsHelp":
+    "Ab 16:00 schlägt Today die <b>Productive</b>-Zeiteinträge des Tages vor, danach, wann du in deinen Gesprächen geschrieben hast (Claude Code). Nichts wird ohne deine Zustimmung gebucht. Aus: Relay liest die Transkripte dafür nicht.",
   "set.captureOnClose": "Vault-Updates vorschlagen, wenn eine Unterhaltung schließt",
   "set.captureOnCloseHelp":
     "Wenn du eine Unterhaltung schließt, liest Claude sie noch einmal auf das, was in den Vault gehört: Entscheidungen, Projektstand, Folgeaufgaben. Es wird nichts geschrieben: Die Vorschläge landen in <b>Heute</b>, und Übernehmen setzt sie in einer neuen Unterhaltung um, in der du jede Änderung erlaubst. Kurze Fragen (weniger als 3 Nachrichten) werden übersprungen.",

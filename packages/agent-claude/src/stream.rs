@@ -162,6 +162,16 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     if !texts.is_empty() || !images.is_empty() { out.push(Event::User { text: texts.join("\n\n"), images }); }
 }
 
+/// The timestamps (ISO, as written) of the user's own messages in a transcript: what `history_line` shows as the user's
+/// text or images, so no tool results, harness text or sidechains. A permission answer leaves no line of its own.
+pub fn user_times(text: &str) -> Vec<String> {
+    text.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).filter_map(|v| {
+        let mut ev = vec![];
+        history_line(&v, &mut ev);
+        ev.iter().any(|e| matches!(e, Event::User { .. })).then(|| v["timestamp"].as_str().map(String::from)).flatten()
+    }).collect()
+}
+
 /// A transcript from byte offset `from`, up to its last whole line, and where to continue: transcripts only grow at the end.
 pub fn history(path: &Path, from: u64) -> (Vec<Event>, u64) {
     use std::io::{Read, Seek, SeekFrom};
@@ -180,6 +190,17 @@ mod tests {
     use super::*;
     const STREAM: &str = include_str!("../tests/fixtures/stream.jsonl");
     const TRANSCRIPT: &str = include_str!("../tests/fixtures/transcript.jsonl");
+
+    #[test]
+    fn user_times_skip_tool_results_and_harness_text() {
+        let t = r#"{"type":"user","timestamp":"2026-10-05T08:00:00.000Z","message":{"content":"hallo"}}
+{"type":"assistant","timestamp":"2026-10-05T08:00:05.000Z","message":{"content":[{"type":"text","text":"ok"}]}}
+{"type":"user","timestamp":"2026-10-05T08:00:09.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"x","content":"done"}]}}
+{"type":"user","isMeta":true,"timestamp":"2026-10-05T08:00:10.000Z","message":{"content":"meta"}}
+{"type":"user","timestamp":"2026-10-05T08:00:11.000Z","message":{"content":"<system-reminder>x</system-reminder>"}}
+{"type":"user","timestamp":"2026-10-05T08:05:00.000Z","message":{"content":[{"type":"text","text":"en nu?"}]}}"#;
+        assert_eq!(user_times(t), ["2026-10-05T08:00:00.000Z", "2026-10-05T08:05:00.000Z"]);
+    }
 
     #[test]
     fn an_echoed_message_is_picked_up() {

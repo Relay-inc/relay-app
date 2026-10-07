@@ -14,6 +14,8 @@ export const settings = () => useSettingsStore.getState().settings;
 export const ghOn = () => githubOn(settings());
 export const mailOn = () => mailIsOn(settings());
 export const mailExperimental = () => mailIsExperimental(settings());
+/** Time from sessions: on unless switched off in Settings › General. */
+export const timeFromSessionsOn = () => settings().timeFromSessions !== false;
 /** The settings as the backend sent them (merged over what is known, as an older backend may leave fields out). */
 export const setSettingsState = (next: Partial<Settings>) =>
   useSettingsStore.setState(draft => {

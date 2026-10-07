@@ -36,6 +36,7 @@ import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
 import { loadMeetings, tick } from "./calendar/calendar";
 import { loadTodayCards } from "./today/today";
+import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
@@ -184,6 +185,7 @@ async function adoptEarlierConversations() {
   await pollAgents();
   await checkBoards();
   loadTodayCards();
+  loadTodayTime(); // after the sessions are known
 }
 
 // the open view is gone (conversation removed, board or integration switched off): start on the waiting view
@@ -247,5 +249,6 @@ function startPolls() {
   loadMeetings(); // the meetings about to start, under Waiting, with a banner 5 minutes before
   setInterval(loadMeetings, 5 * 60000);
   setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today
+  setInterval(loadTodayTime, 5 * 60000); // the day's time to book
   setInterval(tick, 30000);
 }

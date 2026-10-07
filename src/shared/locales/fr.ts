@@ -258,6 +258,18 @@ export default {
   "today.inProgress": "En cours",
   "today.open": "Ouvrir",
   "today.finished": "Terminé, pas encore lu",
+  "today.kind.time": "Temps",
+  "today.doneIn.time": "Terminé uniquement dans Aujourd'hui",
+  "today.timeTitle": "Saisir le temps d'aujourd'hui",
+  "today.timeWhere": "Depuis tes conversations",
+  "today.timeWhy": "{n} min d'activité",
+  "today.timeBook": "Saisir le temps",
+  "today.timeBody":
+    "Relay a compté environ {n} minutes de ton activité dans les conversations d'aujourd'hui, par projet. Saisir le temps demande à l'agent de déduire ce que Productive contient déjà et de proposer une entrée par projet, que tu approuves une par une.",
+  "time.title": "Temps {date}",
+  "time.note": "Saisie du temps du {date} depuis tes conversations",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "Autoriser {tool} ?",
   "today.waiting": "En attente · {ago}",
   "today.blockedSession": "Session en arrière-plan",
@@ -672,6 +684,9 @@ export default {
   "set.autoRetry": "Réessayer quand une limite d'utilisation se réinitialise",
   "set.autoRetryHelp":
     "Quand une conversation est refusée parce que la limite d'utilisation du fournisseur est atteinte et qu'aucun autre compte n'est disponible, Relay la renvoie dès que la limite se réinitialise. Le Mac reste éveillé jusque-là si <b>Garder le Mac éveillé</b> est activé.",
+  "set.timeFromSessions": "Proposer le temps de la journée à partir des conversations",
+  "set.timeFromSessionsHelp":
+    "À partir de 16:00, Today propose les saisies de temps <b>Productive</b> de la journée selon les moments où vous avez écrit dans vos conversations (Claude Code). Rien n'est saisi sans votre accord. Désactivé : Relay ne lit pas les transcriptions pour cela.",
   "set.captureOnClose": "Proposer des mises à jour du coffre à la fermeture d'une conversation",
   "set.captureOnCloseHelp":
     "Quand vous fermez une conversation, Claude la relit pour ce qui a sa place dans le coffre : décisions, état des projets, suivis. Rien n'est écrit : les propositions arrivent dans <b>Aujourd'hui</b>, et Appliquer les fait dans une nouvelle conversation où vous autorisez chaque modification. Les questions rapides (moins de 3 messages) sont ignorées.",

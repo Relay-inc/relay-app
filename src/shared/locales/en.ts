@@ -252,6 +252,18 @@ const en = {
   "today.inProgress": "In progress",
   "today.open": "Open",
   "today.finished": "Finished, not read yet",
+  "today.kind.time": "Time",
+  "today.doneIn.time": "Done on Today only",
+  "today.timeTitle": "Book today's time",
+  "today.timeWhere": "From your conversations",
+  "today.timeWhy": "{n} min of activity",
+  "today.timeBook": "Book time",
+  "today.timeBody":
+    "Relay counted about {n} minutes of your own activity in today's conversations, per project. Book time asks the agent to subtract what Productive already has and to propose one time entry per project, which you approve one by one.",
+  "time.title": "Time {date}",
+  "time.note": "Booking the time of {date} from your conversations",
+  "time.none":
+    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "Allow {tool}?",
   "today.waiting": "Waiting · {ago}",
   "today.blockedSession": "Background session",
@@ -665,6 +677,9 @@ const en = {
   "set.autoRetry": "Retry when a usage limit resets",
   "set.autoRetryHelp":
     "When a conversation is refused because the provider's usage limit is reached and there's no other account to switch to, Relay sends it again once the limit resets. The Mac stays awake until then if <b>Keep Mac awake</b> is on.",
+  "set.timeFromSessions": "Propose the day's time from conversations",
+  "set.timeFromSessionsHelp":
+    "From 16:00, Today proposes the day's <b>Productive</b> time entries from when you wrote in your conversations (Claude Code). Nothing is booked without your approval. Off: Relay doesn't read the transcripts for this.",
   "set.captureOnClose": "Propose vault updates when a conversation closes",
   "set.captureOnCloseHelp":
     "When you close a conversation, Claude reads it once more for what belongs in the vault: decisions, project state, follow-ups. Nothing is written: the proposals land on <b>Today</b>, and Apply makes them in a new conversation where you allow each edit. Skips quick questions (fewer than 3 messages).",

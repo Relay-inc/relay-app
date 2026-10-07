@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Time from sessions**: from 16:00 Today offers "Book today's time", built from when you wrote in your Claude Code conversations that day (10 minutes around each message, rounded to 15 per project). Relay opens a conversation that subtracts what Productive already has and proposes one time entry per project, each one approved on its card. Settings › General switches it off: then the item goes and the transcripts are not read for it (#112)
 - Commonwealth, the team brain, works without setup. When its Claude Code plugin is installed (Settings › Integrations › Commonwealth installs it, no fields to fill in, and its switch turns it off again), a conversation about a project whose GitHub repositories your own Commonwealth rules route to a brain reads that brain and stages what it learns; personal projects and projects no rule matches never touch one. The new Brain view lists the notes waiting for review, per brain, with Promote and Reject. Reading the brain runs without a permission card, staging a note with `remember` still asks (#47)
 - **Cmd-K finds tickets**: type three letters and Cmd-K also lists the matching tickets from Productive, Trello and Linear (the ones set up in Settings › Integrations), under the projects. ↑↓ and Enter open the ticket over its tracker's board. A tracker that doesn't answer is left out, the others still show (#132)
 
