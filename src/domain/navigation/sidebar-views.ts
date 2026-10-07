@@ -8,11 +8,12 @@ import { ORCH } from "../orchestrator/rules.ts";
 /** A view: a named app icon, or a board's monochrome 24×24 mark. */
 export type ViewItem = { key: string; icon?: string; mark?: string; name: string };
 
-/** The views there are, in their own order: the orchestrator's coordinator (a conversation), the boards that are set up, pull requests and mail when they are on. */
+/** The views there are, in their own order: the orchestrator's coordinator (a conversation), the boards that are set up, pull requests and mail when they are on, the brain when its plugin is installed. */
 export const viewItems = (
   boards: { id: string; mark: string; name: string }[],
   github: boolean,
   mail: boolean,
+  brain: boolean,
   t: Translate,
 ): ViewItem[] => [
   { key: ORCH, icon: "agent", name: t("nav.orch") },
@@ -21,4 +22,5 @@ export const viewItems = (
   ...boards.map(board => ({ key: boardKey(board.id), mark: board.mark, name: board.name })),
   ...(github ? [{ key: VIEW.prs, icon: "pr", name: t("nav.prs") }] : []),
   ...(mail ? [{ key: VIEW.mail, icon: "mail", name: t("nav.mail") }] : []),
+  ...(brain ? [{ key: VIEW.brain, icon: "brain", name: t("nav.brain") }] : []),
 ];

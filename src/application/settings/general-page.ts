@@ -3,6 +3,7 @@ import { PROVIDERS } from "../../shared/plugins";
 import type { Accent, SidebarCfg, TerminalApp, Theme } from "../../domain/settings/types";
 import type { MapKey, VaultMap, VaultStatus } from "../../domain/workspace/types";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
+import { brainOn } from "../brain/brain";
 import { viewItems } from "../../domain/navigation/sidebar-views";
 import { applyTheme } from "../../infrastructure/window";
 import { pickVault, pickMapped, checkMapping } from "../workspace/vault-setup";
@@ -69,7 +70,7 @@ export function sidebarViews() {
   const settings = current();
   const cfg = settings.sidebar ?? {};
   const boards = PROVIDERS.filter(board => settings.integrations[board.id]?.on);
-  return arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on, t), cfg).map(item => ({
+  return arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on, brainOn(), t), cfg).map(item => ({
     ...item,
     shown: !isHidden(item.key, cfg),
   }));

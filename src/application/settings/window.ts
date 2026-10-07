@@ -3,6 +3,7 @@ import type { Settings } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { applyTheme, closeWindow, setTitle } from "../../infrastructure/window";
+import { loadBrainStatus } from "../brain/brain";
 import { initLanguage } from "./settings";
 import { useSettingsStore, type SettingsTab } from "./store";
 
@@ -36,6 +37,8 @@ export async function initSettingsWindow() {
     draft.integrations.mail.edit = { ...saved.mail, accounts: saved.mail?.accounts ?? [] };
     draft.loaded = true;
   });
+  // General's sidebar views list Brain once the plugin is known, also before Integrations was opened
+  void loadBrainStatus();
   showTitle();
 }
 /** The window title follows the page (call after the page or the language changed). */

@@ -375,6 +375,12 @@ function handle(cmd: string, a: Args): unknown {
     case "usage_tokens":
       return integ.usageTokens();
 
+    // Commonwealth, the team brain: not installed
+    case "commonwealth_status":
+      return { plugin: false, cli: null, hint: "npm i -g @cmnwlth/cli", projects: [] };
+    case "commonwealth_notes":
+      return [];
+
     // GitHub, mail, boards
     case "github_status":
       return "laurent";

@@ -227,6 +227,7 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       // where it runs, as the composer shows it; the backend only reads it at the first spawn
       machine: machineChoice(key).value,
       told: told || null,
+      about: conversation?.project ?? null,
       context: context || null,
     });
     if (told && cs().chats[key]) {

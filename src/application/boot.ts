@@ -7,7 +7,7 @@ import {
   isTerminal,
   boardKey,
 } from "../domain/navigation/keys";
-import { WAIT, PRS, MAIL, isView } from "../domain/navigation/views";
+import { WAIT, PRS, MAIL, BRAIN, isView } from "../domain/navigation/views";
 import type { Settings } from "../domain/settings/types";
 import * as backend from "../infrastructure/backend";
 import { storage } from "../infrastructure/storage";
@@ -30,6 +30,7 @@ import { select, newHere } from "./navigation/navigation";
 import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
+import { loadBrain } from "./brain/brain";
 import { loadPrs, resetPrs, loadProjectRepos, askRepo } from "./pull-requests/prs";
 import { loadMails, resetMail, mailLinkClicked } from "./mail/mail";
 import { startUsage, reloadUsage } from "./usage/usage";
@@ -240,6 +241,9 @@ function startPolls() {
   startUsage(); // plan limits for the sidebar, tokens while the view is open
   if (selected() !== MAIL) loadMails();
   setInterval(loadMails, 5 * 60000);
+  if (selected() !== BRAIN) loadBrain();
+  setInterval(loadBrain, 5 * 60000);
+  window.addEventListener("focus", loadBrain);
   loadMeetings(); // the meetings about to start, under Waiting, with a banner 5 minutes before
   setInterval(loadMeetings, 5 * 60000);
   setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today

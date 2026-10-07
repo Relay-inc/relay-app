@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- Commonwealth, the team brain, works without setup. When its Claude Code plugin is installed (Settings › Integrations › Commonwealth installs it, no fields to fill in, and its switch turns it off again), a conversation about a project whose GitHub repositories your own Commonwealth rules route to a brain reads that brain and stages what it learns; personal projects and projects no rule matches never touch one. The new Brain view lists the notes waiting for review, per brain, with Promote and Reject. Reading the brain runs without a permission card, staging a note with `remember` still asks (#47)
+
 ## [0.0.10] - 2026-10-07
 
 ### Added

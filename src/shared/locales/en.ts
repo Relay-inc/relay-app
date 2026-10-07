@@ -1244,6 +1244,31 @@ const en = {
   "mc.mirrorConflicts_one": "{n} conflict. Both versions were kept:",
   "mc.mirrorConflicts_other": "{n} conflicts. Both versions were kept:",
   "mc.mirrorConflict": "conflict copy: {path}",
+  "nav.brain": "Brain",
+  "nav.brainPending": "Notes waiting for review",
+  "brain.pick": "Pick a note to review it",
+  "brain.none": "Nothing waiting for review.",
+  "brain.notLoaded": "Not loaded yet.",
+  "brain.off": "Commonwealth is not installed. Settings › Integrations › Commonwealth installs it.",
+  "brain.noCli":
+    "The commonwealth command was not found, so notes cannot be promoted or rejected. Install it with <code>{hint}</code>.",
+  "brain.promote": "Promote",
+  "brain.promoteTitle": "Add the note to the brain",
+  "brain.reject": "Reject",
+  "brain.rejectTitle": "Discard the note",
+  "brain.by": "{author} · {date}",
+  "cw.help":
+    "The team brain: Claude Code reads it and stages what it learns for review, in the brain a project's repositories are routed to by your own Commonwealth rules. Nothing to configure here.",
+  "cw.plugin": "Claude Code plugin",
+  "cw.installed": "Installed",
+  "cw.missing": "Not installed",
+  "cw.install": "Install",
+  "cw.installing": "Installing…",
+  "cw.cli": "Command line",
+  "cw.cliFound": "Found at {path}",
+  "cw.cliMissing": "Not found. Install it with <code>{hint}</code>.",
+  "cw.projects": "Brain per project",
+  "cw.noProjects": "No project has a repository that a Commonwealth rule routes, so no conversation uses a brain.",
 };
 export type Key = keyof typeof en;
 export default en;

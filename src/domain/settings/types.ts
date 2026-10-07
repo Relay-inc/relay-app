@@ -117,6 +117,8 @@ export const EMPTY_SETTINGS: Settings = {
 export const ghOn = (settings: Settings) => !!settings.github?.on;
 export const mailOn = (settings: Settings) => !!settings.mail?.on;
 export const mailExperimental = (settings: Settings) => mailOn(settings) && !!settings.mail?.experimental;
+/** Commonwealth, on unless switched off in Settings › Integrations (it needs its plugin too, application/brain). */
+export const cwOn = (settings: Settings) => settings.integrations?.commonwealth?.on !== false;
 export const calendarOn = (settings: Settings) => !!settings.calendar?.on && !!settings.calendar.feeds?.length;
 /** A message under a settings section: what the last action said, and whether it worked. */
 export type Message = { text: string; ok: boolean };

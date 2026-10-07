@@ -37,6 +37,11 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
 pub const ORCH_WORKER_TOOLS: [&str; 1] = ["mcp__relay-orch__report"];
 
+/// The Commonwealth plugin's read tools run without a card in a session the app routed to a brain (opts.commonwealth_brain).
+/// `remember` keeps its card: it stages into a brain the team shares, and a session can take in a mail's text after it
+/// started, which --allowedTools (fixed at spawn) can no longer take back.
+pub const COMMONWEALTH_TOOLS: [&str; 5] = ["mcp__plugin_commonwealth_commonwealth__ask", "mcp__plugin_commonwealth_commonwealth__search", "mcp__plugin_commonwealth_commonwealth__read", "mcp__plugin_commonwealth_commonwealth__list-work-state", "mcp__plugin_commonwealth_commonwealth__who-is"];
+
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
@@ -122,6 +127,10 @@ impl AgentProvider for Claude {
             mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
             allowed.extend(if role == "coordinator" { &ORCH_COORD_TOOLS[..] } else { &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
         }
+        // opts.commonwealth_brain, set by the app for a project whose repos the Commonwealth registry routes: the hooks and
+        // the MCP server treat this vault session as in scope of that brain (COMMONWEALTH_BRAIN_DIR)
+        let brain = env.opt("commonwealth_brain");
+        if !brain.is_empty() { allowed.extend(COMMONWEALTH_TOOLS.iter().map(|t| t.to_string())); }
         let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(strs("deny")).collect();
         let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
         let mut cmd = Command::new(env.bin);
@@ -132,6 +141,7 @@ impl AgentProvider for Claude {
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
             .arg("--replay-user-messages");
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
+        if !brain.is_empty() { cmd.env("COMMONWEALTH_BRAIN_DIR", brain); }
         let ask = strs("ask");
         if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
@@ -259,6 +269,22 @@ mod tests {
         assert_eq!(args[at("--disallowedTools") + 1..at("--append-system-prompt")].last().unwrap(), "Edit(//v/x)");
         assert!(args[at("--append-system-prompt") + 1].starts_with(agent_core::envelope::HINT) && args[at("--append-system-prompt") + 1].ends_with("be a worker"));
         assert_eq!(args[at("--settings") + 1], r#"{"permissions":{"ask":["Bash(git push*)"]}}"#);
+    }
+    #[test]
+    fn a_routed_project_gets_its_brain_and_the_commonwealth_tools() {
+        let p = PathBuf::from("/tmp/pending");
+        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
+        let none = PROVIDER.command(&env(&p), &l).unwrap();
+        assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_BRAIN_DIR"));
+        assert!(!none.get_args().any(|a| a.to_string_lossy().contains("mcp__plugin_commonwealth")));
+        let opts = json!({"commonwealth_brain": "/b/antenna"});
+        let cmd = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap();
+        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_BRAIN_DIR" && v.is_some_and(|v| v == "/b/antenna")));
+        let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        let (allowed, denied) = (args.iter().position(|a| a == "--allowedTools").unwrap(), args.iter().position(|a| a == "--disallowedTools").unwrap());
+        assert!(args[allowed..denied].contains(&"mcp__plugin_commonwealth_commonwealth__search".to_string()));
+        // staging into a shared brain keeps its card
+        assert!(!args.iter().any(|a| a.contains("commonwealth__remember")));
     }
     #[test]
     fn terminal_commands() {

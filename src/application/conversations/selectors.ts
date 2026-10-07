@@ -3,7 +3,7 @@ import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
-import { WAIT, REM, PRS, MAIL, USAGE, isView, reviewOf } from "../../domain/navigation/views";
+import { WAIT, REM, PRS, MAIL, BRAIN, USAGE, isView, reviewOf } from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { ghOn, settings } from "../settings/settings";
@@ -64,6 +64,7 @@ const VIEW_ICONS: Record<string, string> = {
   [REM]: "list",
   [PRS]: "pr",
   [MAIL]: "mail",
+  [BRAIN]: "brain",
   [ORCH]: "agent",
 };
 
@@ -114,6 +115,7 @@ export function chatBar(key: string) {
     [PRS]: "nav.prs",
     [USAGE]: "nav.usage",
     [MAIL]: "nav.mail",
+    [BRAIN]: "nav.brain",
     [REM]: "nav.reminders",
     [WAIT]: "nav.today",
     [ORCH]: "nav.orch",
