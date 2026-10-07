@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.10] - 2026-10-07
+
 ### Added
 
 - **Relay updates itself**: at start and once a day Relay checks for a new release and offers to install it and restart; Relay › Check for Updates… looks right away. It downloads with your gh login, so you need gh signed in with access to the repo. This version still has to be installed by hand, once. (#129)
@@ -286,7 +288,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...HEAD
+[0.0.10]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/Relay-inc/relay-app/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/Relay-inc/relay-app/compare/v0.0.7...v0.0.8
 [0.0.7]: https://github.com/Relay-inc/relay-app/compare/v0.0.6...v0.0.7
