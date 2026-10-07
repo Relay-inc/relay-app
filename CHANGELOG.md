@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **Cmd-K finds open tickets only**: closed Productive tasks, archived Trello cards and completed or canceled Linear issues no longer show, and a spinner next to the hint says the trackers are still being searched
+
 ## [0.0.11] - 2026-10-07
 
 ### Added

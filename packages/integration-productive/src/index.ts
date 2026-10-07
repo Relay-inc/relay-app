@@ -201,9 +201,9 @@ const productive: BoardProvider<Key> = {
     return tasks.sort((a: any, b: any) => at(a.id) - at(b.id))
       .map((v: any) => ({ id: v.id, name: v.attributes.name, filters: toFilters(v.attributes.params, names), group: toGroup(v.attributes.group_by), layout: toLayout(v.attributes.layout_id) }));
   },
-  // Productive's own search over the task title and number, closed tasks too; the folder is the task list's
+  // Productive's own search over the task title and number, open tasks only; the folder is the task list's
   search: async (c, q) => {
-    const r = await c.call("GET", `/tasks?filter[query]=${queryText(q)}&page[size]=5&include=project,task_list.folder`);
+    const r = await c.call("GET", `/tasks?filter[query]=${queryText(q)}&filter[status]=1&page[size]=5&include=project,task_list.folder`);
     const inc = r.included || [];
     return (r.data || []).map((x: any) => ({ id: x.id, title: x.attributes.title, number: String(x.attributes.number ?? ""),
       ref: { provider: "productive", project: x.relationships.project?.data?.id ?? "", board: pick(inc, "task_lists", x.relationships.task_list)?.relationships?.folder?.data?.id ?? "" },

@@ -51,9 +51,9 @@ const trello: BoardProvider<Key> = {
     if (r?.shortUrl) links.set(r.id, r.shortUrl);
     return mapCards([r])[0];
   },
-  // Trello's search over the open boards, `partial` so a word being typed matches too
+  // Trello's search over the open boards, open cards only (`is:open`), `partial` so a word being typed matches too
   search: async (c, q) => {
-    const r = await c.call("GET", `/search?query=${queryText(q)}&modelTypes=cards&partial=true&cards_limit=5&card_fields=name,idShort,idBoard,shortUrl&card_board=true&board_fields=name,idOrganization`);
+    const r = await c.call("GET", `/search?query=${queryText(`is:open ${q}`)}&modelTypes=cards&partial=true&cards_limit=5&card_fields=name,idShort,idBoard,shortUrl&card_board=true&board_fields=name,idOrganization`);
     return (r?.cards || []).map((x: any) => {
       links.set(x.id, x.shortUrl);
       return { id: x.id, title: x.name, number: String(x.idShort), where: x.board?.name || "",

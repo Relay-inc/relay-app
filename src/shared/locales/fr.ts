@@ -763,6 +763,7 @@ export default {
   "qk.openHint": "↵ ouvrir le projet · ↑↓ choisir · échap ferme",
   "qk.ticketHint": "↵ ouvrir le ticket · ↑↓ choisir · échap ferme",
   "note.reviewStarted": "Revue de {repo} #{n} lancée depuis Pull requests",
+  "qk.searching": "Recherche de tickets…",
   "card.other": "Autre réponse…",
   "card.skip": "Passer",
   "nav.prs": "Pull requests",

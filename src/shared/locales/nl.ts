@@ -758,6 +758,7 @@ export default {
   "qk.openHint": "↵ project openen · ↑↓ kiezen · esc sluit",
   "qk.ticketHint": "↵ ticket openen · ↑↓ kiezen · esc sluit",
   "note.reviewStarted": "Review van {repo} #{n} gestart vanuit Pull requests",
+  "qk.searching": "Tickets zoeken…",
   "card.other": "Ander antwoord…",
   "card.skip": "Overslaan",
   "nav.prs": "Pull requests",

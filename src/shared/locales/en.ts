@@ -753,6 +753,7 @@ const en = {
   "qk.openHint": "↵ open project · ↑↓ select · esc closes",
   "qk.ticketHint": "↵ open ticket · ↑↓ select · esc closes",
   "note.reviewStarted": "Review of {repo} #{n} started from Pull requests",
+  "qk.searching": "Searching tickets…",
   "card.other": "Other answer…",
   "card.skip": "Skip",
   "nav.prs": "Pull requests",
