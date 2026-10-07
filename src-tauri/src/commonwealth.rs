@@ -51,10 +51,15 @@ fn hit(reg: &Registry, repo: &str) -> Option<Hit> {
 // ponytail: mirrors Commonwealth's ADR-0024 resolution partially (repo and org rules only, no path prefixes, markers or
 // `*` catch-all, no shared-rule shadowing). Ceiling: a registry that routes in ways this does not see. Upgrade: ask
 // Commonwealth itself, a `commonwealth registry resolve` CLI.
-pub fn resolve(reg: &Registry, repos: &[String]) -> Option<String> {
-    let hits: Vec<Hit> = repos.iter().filter_map(|r| hit(reg, r)).collect();
-    if hits.iter().any(|h| matches!(h, Hit::Deny)) { return None; }
-    hits.into_iter().find_map(|h| match h { Hit::Brain(b) => b, Hit::Deny => None })
+pub fn resolve(reg: &Registry, repos: &[String]) -> Option<String> { route(reg, repos).map(|(b, _)| b) }
+/// The brain and the repo that routed to it. That repo is the session's COMMONWEALTH_SOURCE: a vault session runs in the
+/// vault, and without it Commonwealth files every note under "vault".
+// ponytail: a project with several routed repos (o2o) files under the first one, sorted. Upgrade: a per-project
+// source in .relay/config.json, if one repo is the wrong home.
+fn route(reg: &Registry, repos: &[String]) -> Option<(String, String)> {
+    let hits: Vec<(&String, Hit)> = repos.iter().filter_map(|r| Some((r, hit(reg, r)?))).collect();
+    if hits.iter().any(|(_, h)| matches!(h, Hit::Deny)) { return None; }
+    hits.into_iter().find_map(|(r, h)| match h { Hit::Brain(b) => Some((b?, r.clone())), Hit::Deny => None })
 }
 /// A resolved brain that exists on this machine.
 fn is_brain(p: &str) -> bool { Path::new(p).join(".commonwealth/schema-version").is_file() }
@@ -65,6 +70,13 @@ pub fn brains(home: &str, repo_projects: &std::collections::HashMap<String, Stri
     let mut by: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (repo, project) in repo_projects { by.entry(project.clone()).or_default().push(repo.clone()); }
     by.into_iter().map(|(p, mut repos)| { repos.sort(); (p, resolve(&reg, &repos).filter(|b| is_brain(b))) }).collect()
+}
+
+/// The brain a project's sessions use and the repo to file their notes under, like `brains` for one project.
+pub fn session(home: &str, repo_projects: &std::collections::HashMap<String, String>, project: &str) -> Option<(String, String)> {
+    let mut repos: Vec<String> = repo_projects.iter().filter(|(_, p)| *p == project).map(|(r, _)| r.clone()).collect();
+    repos.sort(); // a checkout's own casing ("o2o-Bicycle-leasing/x") sorts before the config's lowercased key
+    route(&load(home), &repos).filter(|(b, _)| is_brain(b))
 }
 
 pub fn brain_name(brain: &str) -> &str { brain.trim_end_matches('/').rsplit('/').next().unwrap_or(brain) }
@@ -149,6 +161,7 @@ mod tests {
         assert_eq!(resolve(&r, &repos(&["acme/web"])), Some("/b/team".into()));
         assert_eq!(resolve(&r, &repos(&["acme/special"])), Some("/b/special".into()));
         assert_eq!(resolve(&r, &repos(&["ACME/Web", "x/y"])), Some("/b/team".into()));
+        assert_eq!(route(&r, &repos(&["x/y", "acme/web"])), Some(("/b/team".into(), "acme/web".into()))); // the repo that routed
     }
     #[test]
     fn unmatched_and_repoless_projects_get_no_brain_even_with_a_default() {
