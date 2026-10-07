@@ -13,13 +13,15 @@ a PR. Versions follow
 
 ## [Unreleased]
 
-### Changed
-
-- **Cmd-K finds open tickets only**: closed Productive tasks, archived Trello cards and completed or canceled Linear issues no longer show, and a spinner next to the hint says the trackers are still being searched (#135)
+## [0.0.12] - 2026-10-07
 
 ### Added
 
-- Agents can search and read tickets: `relay productive.search`, `productive.task` and `productive.comments`; `relay trello.search` and `trello.card` (with its comments); `relay linear.search` and `linear.issue` (with its comments). Reads, so they run without a card unless Settings says otherwise
+- Agents can search and read tickets: `relay productive.search`, `productive.task` and `productive.comments`; `relay trello.search` and `trello.card` (with its comments); `relay linear.search` and `linear.issue` (with its comments). Reads, so they run without a card unless Settings says otherwise (#134)
+
+### Changed
+
+- **Cmd-K finds open tickets only**: closed Productive tasks, archived Trello cards and completed or canceled Linear issues no longer show, and a spinner next to the hint says the trackers are still being searched (#135)
 
 ## [0.0.11] - 2026-10-07
 
@@ -304,7 +306,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.11...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.12...HEAD
+[0.0.12]: https://github.com/Relay-inc/relay-app/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...v0.0.10
 [0.0.9]: https://github.com/Relay-inc/relay-app/compare/v0.0.8...v0.0.9
