@@ -10,6 +10,7 @@ import { onPasteFiles } from "../../components/image-files";
 import { ImageThumbs } from "../../components/ImageThumbs";
 import { FileChips } from "../../components/FileChips";
 import { Glyph } from "../../components/Glyph";
+import { Icon } from "../../components/Icon";
 import { numbered } from "../board/format";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -43,6 +44,9 @@ export function QuickAskView() {
   // the trackers' tickets, searched once typing pauses; the last answer stays until the next one is in
   const query = asking ? "" : typed.trim();
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  // the query the shown tickets answer; a different one is still being searched
+  const [answered, setAnswered] = useState("");
+  const searching = query.length >= MIN_QUERY && answered !== query;
   useEffect(() => {
     if (query.length < MIN_QUERY) return;
     let live = true;
@@ -51,6 +55,7 @@ export function QuickAskView() {
         searchTickets(query).then(next => {
           if (!live) return;
           setTickets(next);
+          setAnswered(query);
           setPicked(-1);
         }),
       PAUSE,
@@ -223,8 +228,15 @@ export function QuickAskView() {
             </button>
           ))}
         </div>
-        <div className="text-xs text-secondary mt-1.5">
-          {t(!options[picked] ? "qk.hint" : options[picked].kind === "project" ? "qk.openHint" : "qk.ticketHint")}
+        <div className="flex items-center gap-2 text-xs text-secondary mt-1.5">
+          <span className="flex-1 min-w-0">
+            {t(!options[picked] ? "qk.hint" : options[picked].kind === "project" ? "qk.openHint" : "qk.ticketHint")}
+          </span>
+          {searching ? (
+            <span role="status" aria-label={t("qk.searching")} title={t("qk.searching")}>
+              <Icon name="refresh" className="glyph size-3.5 animate-spin" />
+            </span>
+          ) : null}
         </div>
       </div>
     </div>

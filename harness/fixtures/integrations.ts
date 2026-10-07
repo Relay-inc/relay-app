@@ -180,10 +180,10 @@ export function productive(method: string, path: string, body: unknown): unknown
   if (p === "/projects") return page([{ id: "p1", type: "projects", attributes: { name: "Northwind Portal" } }, { id: "p2", type: "projects", attributes: { name: "Beacon Billing" } }, { id: "p3", type: "projects", attributes: { name: "Internal" } }]);
   if (p === "/folders") return page(f("project_id") === "p1" ? [{ id: "f1", type: "folders", attributes: { name: "Portal v2", placement: 1 } }, { id: "f2", type: "folders", attributes: { name: "Maintenance", placement: 2 } }] : [{ id: `f-${f("project_id")}`, type: "folders", attributes: { name: "Board", placement: 1 } }]);
   if (p === "/task_lists") return page(LISTS);
-  // Cmd-K's search: the first five whose title has the text, in the first project
+  // Cmd-K's search: the first five open ones whose title has the text, in the first project
   if (p === "/tasks" && f("query") !== null) {
     const q = f("query")!.toLowerCase();
-    const hits = TASKS.filter(x => x.attributes.title.toLowerCase().includes(q)).slice(0, 5);
+    const hits = TASKS.filter(x => x.attributes.title.toLowerCase().includes(q) && (f("status") !== "1" || !x.attributes.closed)).slice(0, 5);
     return page(hits.map(x => ({ ...x, relationships: { ...x.relationships, project: { data: { type: "projects", id: "p1" } } } })),
       [...LISTS, { id: "p1", type: "projects", attributes: { name: "Northwind Portal" } }]);
   }

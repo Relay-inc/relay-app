@@ -329,6 +329,12 @@ const VIEWS = {
     await page.keyboard.press("ArrowDown");
     await settle(page);
   },
+  // the tickets still being searched: the spinner next to the hint
+  "cmd-k-searching": async () => {
+    await VIEWS["cmd-k"]();
+    await page.keyboard.type("export");
+    await settle(page, 0);
+  },
   "deep-link-ask": async () => {
     await open(page, server.url, { sel: keys.switchTo, link: "relay://ask" }); // the link the app was launched with
     await settle(page, 300);

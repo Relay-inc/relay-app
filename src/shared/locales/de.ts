@@ -761,6 +761,7 @@ export default {
   "qk.openHint": "↵ Projekt öffnen · ↑↓ wählen · Esc schließt",
   "qk.ticketHint": "↵ Ticket öffnen · ↑↓ wählen · Esc schließt",
   "note.reviewStarted": "Review von {repo} #{n} aus Pull Requests gestartet",
+  "qk.searching": "Tickets werden gesucht…",
   "card.other": "Andere Antwort…",
   "card.skip": "Überspringen",
   "nav.prs": "Pull Requests",
