@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **The briefing shows under Today**: a meeting you prepared shows its briefing (the answer to the prep question) when you open it under Today, with a button to the conversation. Prepare opens that conversation again instead of starting a second one
+- **The briefing shows under Today**: a meeting you prepared shows its briefing (the answer to the prep question) when you open it under Today, with a button to the conversation. Prepare opens that conversation again instead of starting a second one. **Edit** rewrites the briefing in place (⌘↵ saves); saving it empty goes back to Claude's answer
 
 ## [0.0.12] - 2026-10-07
 

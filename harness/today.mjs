@@ -132,6 +132,13 @@ try {
   // a meeting with a briefing already asked: the briefing itself, not the Write briefing button
   await byText(page, "Lunch with the accountant", true).click();
   await shot("13b-meeting-briefing");
+  // edited there: the text in a field, saved with Cmd-Enter, shown with "edited"
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await shot("13c-briefing-editing");
+  await page.keyboard.type("\n\n- Ask about the car lease");
+  await page.keyboard.press("Meta+Enter");
+  await settle(page, 200);
+  await shot("13d-briefing-edited");
   // work in progress in the sidebar: a reply draft under its section, a click brings the mail and its draft back
   await rowOf("Acceptance checklist portal v2");
   await page.keyboard.press("r");

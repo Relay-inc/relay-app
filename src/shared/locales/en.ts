@@ -428,6 +428,11 @@ const en = {
   "today.briefing": "Briefing",
   "today.openBriefing": "Open the conversation",
   "today.briefingBusy": "Claude is writing the briefing…",
+  "today.editBriefing": "Edit",
+  "today.saveBriefing": "Save",
+  "today.cancelEdit": "Cancel",
+  "today.briefingEdited": "edited",
+  "today.briefingEmpty": "Save it empty to go back to Claude's answer",
   "today.briefingHint":
     "Claude reads the project note, the last meeting notes and what is open in your queue, and writes what to know before it starts.",
   "today.noteHint": "Claude turns the meeting into a note in the vault, with the decisions and to-dos.",

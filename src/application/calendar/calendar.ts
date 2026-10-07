@@ -18,7 +18,7 @@ import { findProjects } from "../workspace/vault";
 import { select, toast } from "../navigation/navigation";
 import { useAgentsStore } from "../agents/store";
 import { agentOf } from "../agents/agents";
-import { startChat } from "../conversations/chats";
+import { saveChats, startChat } from "../conversations/chats";
 import { useConversationsStore } from "../conversations/store";
 import { sendMsg } from "../conversations/actions";
 import { useCalendarStore } from "./store";
@@ -95,6 +95,16 @@ export async function meetingChat(id: string, how: MeetingChat) {
   if (briefing) return select(briefing);
   const meeting = cal().list.find(x => x.id === id);
   if (meeting) await chatAbout(meeting, how);
+}
+/** The briefing as rewritten under Today; empty goes back to the agent's answer. */
+export function editBriefing(key: string, text: string) {
+  useConversationsStore.setState(draft => {
+    const chat = draft.chats[key];
+    if (!chat) return;
+    if (text.trim()) chat.briefing = text;
+    else delete chat.briefing;
+  });
+  saveChats();
 }
 /** The same for a meeting already in hand: a recording outlives the meeting's place in the list. */
 export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: Recording) {
