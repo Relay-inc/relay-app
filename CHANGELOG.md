@@ -13,9 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.13] - 2026-10-07
+
 ### Added
 
-- **The briefing shows under Today**: a meeting you prepared shows its briefing (the answer to the prep question) when you open it under Today, with a button to the conversation. Prepare opens that conversation again instead of starting a second one. **Edit** rewrites the briefing in place (⌘↵ saves); saving it empty goes back to Claude's answer
+- **The briefing shows under Today**: a meeting you prepared shows its briefing (the answer to the prep question) when you open it under Today, with a button to the conversation. Prepare opens that conversation again instead of starting a second one. **Edit** rewrites the briefing in place (⌘↵ saves); saving it empty goes back to Claude's answer (#137)
 
 ## [0.0.12] - 2026-10-07
 
@@ -310,7 +312,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.12...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.13...HEAD
+[0.0.13]: https://github.com/Relay-inc/relay-app/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/Relay-inc/relay-app/compare/v0.0.11...v0.0.12
 [0.0.11]: https://github.com/Relay-inc/relay-app/compare/v0.0.10...v0.0.11
 [0.0.10]: https://github.com/Relay-inc/relay-app/compare/v0.0.9...v0.0.10
