@@ -4,7 +4,7 @@ import { NOW, HOUR, iso, uuid, rng, pngBase64 } from "./util";
 import { projectNames, VAULT, terminalSessions } from "./vault";
 
 type Ev = Record<string, unknown> & { type: string };
-type Chat = { key: string; project: string | null; title: string; at: number; provider: string };
+type Chat = { key: string; project: string | null; title: string; at: number; provider: string; meeting?: string };
 
 const TITLES = [
   "Review the open PR", "Plan the sprint demo", "Draft a status mail", "Estimate the export feature",
@@ -36,6 +36,11 @@ const special = (project: string, title: string, minutesAgo: number) => {
   chat.at = NOW - minutesAgo * 60000;
   return chat.key;
 };
+// the briefing asked for the lunch meeting (integrations.ts), shown under Today when that meeting is opened: the oldest
+// general conversation, so the first ones keep their titles
+const briefing = chats.filter(c => c.project === null).at(-1)!;
+Object.assign(briefing, { title: "Prepare Lunch with the accountant", meeting: `lunch@${iso(NOW + 90 * 60000)}` });
+export const BRIEFING_KEY = briefing.key;
 export const LONG_KEY = special("Beacon Billing", "Billing sync double balances", 3);
 export const PERMISSION_KEY = special("Northwind Portal", "Push the portal fix", 5);
 export const SWITCH_KEY = chats.filter(c => c.project === "Northwind Portal")[1].key;
@@ -136,6 +141,15 @@ export function longHistory(): Ev[] {
 
 export function history(key: string): Ev[] {
   if (key === LONG_KEY) return longHistory();
+  if (key === BRIEFING_KEY)
+    return [
+      user("Prepare me for this meeting: what the vault says about the people and the subject."),
+      tool("Read", { file_path: `${VAULT}/Calendar/2026-10-01.md` }),
+      ai("Reading the last notes first."),
+      ai("**Next action:** bring the Q3 VAT numbers.\n\n## Open points\n1. The Q3 VAT return is due 20 October\n2. Two invoices from September still unpaid\n\n**Next:** export the Q3 report before lunch."),
+      user("And the car lease?"),
+      ai("Nothing about the car lease in the vault."),
+    ];
   const index = chats.findIndex(c => c.key === key);
   if (index < 0) return [];
   const base = shortHistory(chats[index], index);

@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { soon, bannerDue, minutesLeft, meetingDay, meetingPrompt, joinable } from "./rules.ts";
+import {
+  soon,
+  bannerDue,
+  minutesLeft,
+  meetingDay,
+  meetingPrompt,
+  joinable,
+  briefingOf,
+  briefingText,
+} from "./rules.ts";
+import type { Chat, Item } from "../conversations/types";
 import type { Meeting } from "./types";
 
 const now = Date.parse("2026-10-01T10:00:00Z");
@@ -117,4 +127,24 @@ test("after a recording the prompt names its files and marks the transcript untr
     meetingPrompt(at("x", 5), "transcript", () => "t", "UTC", { ...recording, audio: null }),
     /Audio:/,
   );
+});
+
+test("a meeting's briefing: the latest conversation for it, and the answer to the first turn only", () => {
+  const chat = (key: string, at: number, meeting?: string): Chat => ({ key, project: null, title: key, at, meeting });
+  const chats = { a: chat("a", 1, "m1"), b: chat("b", 2, "m1"), c: chat("c", 3, "m2"), d: chat("d", 4) };
+  assert.equal(briefingOf(chats, "m1"), "b");
+  assert.equal(briefingOf(chats, "m3"), null);
+  const item = (kind: Item["kind"], text: string): Item => ({ kind, text });
+  assert.equal(briefingText(undefined), "");
+  assert.equal(briefingText([item("note", "started"), item("me", "prep")]), "");
+  const items = [
+    item("note", "started"),
+    item("me", "prep"),
+    item("ai", "searching"),
+    item("tool", "grep"),
+    item("ai", "the briefing"),
+    item("me", "and the PR?"),
+    item("ai", "something else"),
+  ];
+  assert.equal(briefingText(items), "the briefing");
 });

@@ -23,10 +23,10 @@ export function newChat(project: string | null): string {
 }
 /** A new conversation that starts from something (a mail, a PR review): its title and a first note, which also keeps
  *  the title (no generated one). `fromMail` gives it the mail restrictions, `mail` goes in front of the first message
- *  the user sends, `provider` fixes its agent. Its key. */
+ *  the user sends, `provider` fixes its agent, `meeting` makes it that meeting's briefing. Its key. */
 export function startChat(
   project: string | null,
-  start: { title: string; note: string; fromMail?: boolean; mail?: string; provider?: string },
+  start: { title: string; note: string; fromMail?: boolean; mail?: string; provider?: string; meeting?: string },
 ): string {
   const key = newChat(project);
   useConversationsStore.setState(draft => {
@@ -35,6 +35,7 @@ export function startChat(
     if (start.fromMail) conversation.fromMail = true;
     if (start.mail) conversation.mail = start.mail;
     if (start.provider) conversation.provider = start.provider;
+    if (start.meeting) conversation.meeting = start.meeting;
     draft.messages[key] = [{ kind: "note", text: start.note }];
   });
   return key;

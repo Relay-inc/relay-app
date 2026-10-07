@@ -1,3 +1,4 @@
+import type { Chat, Item } from "../conversations/types";
 import type { Meeting } from "./types";
 
 // The timing of the meetings under Waiting and their banner, and the prompts of a conversation about one. The clock
@@ -98,3 +99,17 @@ const transcriptPrompt = (recording: Recording) =>
   ]
     .filter(Boolean)
     .join("\n");
+
+// ---------- the briefing before a meeting
+/** The conversation that holds a meeting's briefing, the latest one when it was asked again. */
+export const briefingOf = (chats: Record<string, Chat>, meetingId: string) =>
+  Object.values(chats)
+    .filter(chat => chat.meeting === meetingId)
+    .sort((a, b) => b.at - a.at)[0]?.key ?? null;
+/** The briefing itself: the last answer of the first turn (the prompt the button sent), not what was asked after it. */
+export function briefingText(items: Item[] | undefined) {
+  const turns = (items || []).flatMap((item, i) => (item.kind === "me" ? [i] : []));
+  if (!turns.length) return "";
+  const firstTurn = items!.slice(turns[0], turns[1]);
+  return [...firstTurn].reverse().find(item => item.kind === "ai")?.text ?? "";
+}
