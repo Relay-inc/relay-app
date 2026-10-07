@@ -178,7 +178,6 @@ export default {
   "changes.notGit": "Dateien außerhalb eines Git-Repos erscheinen hier nicht.",
   "changes.vs": "gegenüber {base}",
   "changes.refresh": "Aktualisieren",
-  "changes.back": "Alle Dateien",
   "changes.binary": "Binärdatei, kein Diff.",
   "changes.clickLine": "Klicke auf eine Zeile, um sie zu kommentieren. Die Kommentare gehen gesammelt an den Agenten.",
   "changes.linePlaceholder": "Kommentar zu Zeile {n}…",

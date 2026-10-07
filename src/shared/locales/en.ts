@@ -175,7 +175,6 @@ const en = {
   "changes.notGit": "Files outside a git repo do not show here.",
   "changes.vs": "against {base}",
   "changes.refresh": "Refresh",
-  "changes.back": "All files",
   "changes.binary": "Binary file, no diff to show.",
   "changes.clickLine": "Click a line to comment on it. Comments go to the agent together.",
   "changes.linePlaceholder": "Comment on line {n}…",

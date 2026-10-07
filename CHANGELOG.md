@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **A conversation's changes, from git**: the new Changes button in a conversation's title bar opens its changed files in the drawer, per repo it wrote in (the repos of the files it edited and the worktrees it made), against where its branch left the default branch, so committed and uncommitted work both show. A file opens its diff; click a line to comment on it, and the comments go to the composer together as one message for the agent. Files outside a git repo don't show, and in a shared checkout the diff holds every change in it, not only the agent's
+- **A conversation's changes, from git**: the new Changes button in a conversation's title bar opens its changed files in the drawer, per repo it wrote in (the repos of the files it edited and the worktrees it made), against where its branch left the default branch, so committed and uncommitted work both show. A file opens its diff in a window over the app (‹ › step through the files, Esc closes it); click a line to comment on it, and the comments go to the composer together as one message for the agent. Files outside a git repo don't show, and in a shared checkout the diff holds every change in it, not only the agent's
 
 ### Changed
 

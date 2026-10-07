@@ -26,6 +26,8 @@ import { ConversationsView } from "../features/conversations/ConversationsView";
 import { DrawerView } from "../features/drawer/DrawerView";
 import { QuickAskView } from "../features/navigation/QuickAskView";
 import { WorkspaceView } from "../features/workspace/WorkspaceView";
+import { useChangesStore } from "../../application/changes/store";
+import { openFile } from "../../application/changes/changes";
 import { ColumnResize } from "../features/navigation/ColumnResize";
 
 const isQuickAskKey = (e: KeyboardEvent) => e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK";
@@ -37,7 +39,7 @@ const closest = <T extends HTMLElement>(e: Event, match: (node: HTMLElement) => 
   e.composedPath().find((node): node is T => node instanceof HTMLElement && match(node));
 
 // ---------- the shortcuts that work anywhere in the main window, registered once
-// Esc closes the image, then the ticket window, then the right drawer, then a project's board or PRs, then stops the
+// Esc closes the image, then the ticket window or a changed file's window, then the right drawer, then a project's board or PRs, then stops the
 // running turn
 function onEscape(e: KeyboardEvent) {
   const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected } = useNavigationStore.getState();
@@ -49,6 +51,11 @@ function onEscape(e: KeyboardEvent) {
   if (panel.modal) {
     e.preventDefault();
     closeTicket();
+    return;
+  }
+  if (useChangesStore.getState().open) {
+    e.preventDefault();
+    openFile("", "");
     return;
   }
   // Esc in a terminal or a note is theirs (vim, a shell prompt): it neither closes the drawer nor stops the turn

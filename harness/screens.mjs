@@ -80,8 +80,8 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.action });
     await waitText("relay productive.create_task", 10000).catch(() => waitText("Depot import script"));
   },
-  // the conversation's changes from git in the drawer: the file list, then a file's diff with a comment on a line,
-  // then the comments sent to the composer
+  // the conversation's changes from git in the drawer: the file list, then a file's diff in a window over the app with a
+  // comment on a line, then the comments sent to the composer (which closes the window)
   "changes-list": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
@@ -101,7 +101,8 @@ const VIEWS = {
   "changes-sent": async () => {
     await VIEWS["changes-diff"]();
     await page.keyboard.press("Escape");
-    await button("Send 1 comment to the composer").click();
+    // the window's own button: the drawer's is under the backdrop
+    await page.locator(".ticket-window").getByRole("button", { name: "Send 1 comment to the composer" }).click();
     await settle(page);
   },
   "conversation-code": async () => {

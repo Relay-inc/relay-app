@@ -178,7 +178,6 @@ export default {
   "changes.notGit": "Bestanden buiten een git-repo staan hier niet.",
   "changes.vs": "tegenover {base}",
   "changes.refresh": "Vernieuwen",
-  "changes.back": "Alle bestanden",
   "changes.binary": "Binair bestand, geen diff.",
   "changes.clickLine": "Klik op een regel om erop te reageren. De opmerkingen gaan samen naar de agent.",
   "changes.linePlaceholder": "Opmerking bij regel {n}…",

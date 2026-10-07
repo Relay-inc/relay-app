@@ -180,7 +180,6 @@ export default {
   "changes.notGit": "Les fichiers hors d’un dépôt git n’apparaissent pas ici.",
   "changes.vs": "par rapport à {base}",
   "changes.refresh": "Actualiser",
-  "changes.back": "Tous les fichiers",
   "changes.binary": "Fichier binaire, pas de diff.",
   "changes.clickLine": "Cliquez sur une ligne pour la commenter. Les commentaires partent ensemble vers l’agent.",
   "changes.linePlaceholder": "Commentaire sur la ligne {n}…",
