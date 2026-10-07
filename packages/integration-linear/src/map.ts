@@ -13,6 +13,7 @@ export const ISSUES = "query Issues($filter: IssueFilter, $after: String) { issu
 /** A new issue in a team's workflow state, in a Linear project when the board is one (projectId null otherwise). It
  *  answers with the issue as ISSUES does. The backend lets only this exact mutation through (src/lib.rs, CREATE). */
 export const CREATE = "mutation Create($teamId: String!, $stateId: String!, $title: String!, $description: String!, $projectId: String) { issueCreate(input: { teamId: $teamId, stateId: $stateId, title: $title, description: $description, projectId: $projectId }) { success issue { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } } }";
+export const SEARCH = "query Search($term: String!) { searchIssues(term: $term, first: 5) { nodes { id identifier title url team { id name } project { id } } } }";
 export const ISSUE_URL = "query Url($id: String!) { issue(id: $id) { url } }";
 
 /** Workflow state types in board order: triage first when a team uses it, closed states last. */

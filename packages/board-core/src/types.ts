@@ -55,6 +55,8 @@ export type ViewFilters = Partial<Record<"state" | "status" | "who" | "folder" |
 export type View = { id: string; name: string; filters: ViewFilters | null; group?: string; layout?: "kanban" | "list" };
 /** Which board a vault project maps to, settings.boards[vault project]. */
 export type BoardRef = { provider: string; project: string; board: string };
+/** A card a search found on any board, for Cmd-K: the board it is on (what its detail needs) and where that is, to show. */
+export type Hit = { id: string; title: string; number: string; ref: BoardRef; where: string };
 
 /** What a provider gets for each call: its settings.integrations.<id>, and one API call through the backend. */
 export type Ctx = { config: Record<string, any>; call: (method: string, path: string, body?: unknown) => Promise<any>;
@@ -111,6 +113,9 @@ export interface BoardProvider<K extends string = string> {
   groupHint?: K;
   /** The board's saved views in the tracker, read only. */
   views?(ctx: Ctx, ref: BoardRef): Promise<View[]>;
+  /** The cards matching what was typed, on every board the user can see, the best few first. Without it Cmd-K leaves
+   *  the tracker out. */
+  search?(ctx: Ctx, q: string): Promise<Hit[]>;
   /** The card's page in the tracker's web app. */
   url(ctx: Ctx, ref: BoardRef, card: string): Promise<string>;
   detail?: CardDetail;

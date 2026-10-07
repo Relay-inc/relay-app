@@ -321,6 +321,14 @@ const VIEWS = {
     await page.keyboard.type("harb");
     await settle(page);
   },
+  // a project and the tickets the trackers found for the same text, the first ticket picked
+  "cmd-k-ticket": async () => {
+    await VIEWS["cmd-k"]();
+    await page.keyboard.type("export");
+    await settle(page, 600);
+    await page.keyboard.press("ArrowDown");
+    await settle(page);
+  },
   "deep-link-ask": async () => {
     await open(page, server.url, { sel: keys.switchTo, link: "relay://ask" }); // the link the app was launched with
     await settle(page, 300);

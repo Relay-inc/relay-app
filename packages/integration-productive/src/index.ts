@@ -1,4 +1,4 @@
-import { currentLocale, translator, type BoardProvider, type BoardRef, type Card, type CardView, type Ctx, type Opt, type State, type Tone } from "@relay/board-core";
+import { currentLocale, queryText, translator, type BoardProvider, type BoardRef, type Card, type CardView, type Ctx, type Opt, type State, type Tone } from "@relay/board-core";
 import { toneOf } from "@relay/board-core/tone";
 import { safeUrl } from "@relay/board-core/detail";
 import strings, { type Key } from "./locales";
@@ -200,6 +200,14 @@ const productive: BoardProvider<Key> = {
     const at = (id: string) => (order.indexOf(id) + 1 || order.length + 1);
     return tasks.sort((a: any, b: any) => at(a.id) - at(b.id))
       .map((v: any) => ({ id: v.id, name: v.attributes.name, filters: toFilters(v.attributes.params, names), group: toGroup(v.attributes.group_by), layout: toLayout(v.attributes.layout_id) }));
+  },
+  // Productive's own search over the task title and number, closed tasks too; the folder is the task list's
+  search: async (c, q) => {
+    const r = await c.call("GET", `/tasks?filter[query]=${queryText(q)}&page[size]=5&include=project,task_list.folder`);
+    const inc = r.included || [];
+    return (r.data || []).map((x: any) => ({ id: x.id, title: x.attributes.title, number: String(x.attributes.number ?? ""),
+      ref: { provider: "productive", project: x.relationships.project?.data?.id ?? "", board: pick(inc, "task_lists", x.relationships.task_list)?.relationships?.folder?.data?.id ?? "" },
+      where: pick(inc, "projects", x.relationships.project)?.attributes.name || "" }));
   },
   url: async (c, ref, id) => { await ready(c); return taskUrl(ref, id); },
   reset: () => { orgSlug = ""; fields = null; details.clear(); opts.clear(); optsDone.clear(); },

@@ -35,7 +35,7 @@ pub const PROVIDER: Provider = Provider {
         let add = card && parts.len() == 3 && parts[2] == "idMembers" && method == "POST"
             && only_keys(body, &["value"]) && body.as_ref().is_some_and(|b| b["value"].as_str().is_some_and(trello_id));
         let remove = card && parts.len() == 4 && parts[2] == "idMembers" && trello_id(parts[3]) && method == "DELETE" && body.is_none();
-        let read = method == "GET" && (card_read || ["/members/me", "/boards/", "/organizations/"].iter().any(|p| path.starts_with(p)));
+        let read = method == "GET" && (card_read || ["/members/me", "/boards/", "/organizations/", "/search?"].iter().any(|p| path.starts_with(p)));
         let one_card = path.strip_prefix("/cards/").is_some_and(trello_id);
         let move_only = only_keys(body, &["idList", "pos"]) && body.as_ref().is_some_and(|b| b["idList"].as_str().is_some_and(trello_id));
         // a new card from the board: in a list, with a name, nothing else
@@ -103,6 +103,8 @@ mod tests {
         assert!((p.url)(&c, "PUT", &format!("/cards/{card}"), &Some(json!({ "pos": "top" }))).is_none());
         assert!((p.url)(&c, "PUT", &format!("/cards/{card}"), &None).is_none());
         assert!((p.url)(&c, "DELETE", &format!("/cards/{card}"), &None).is_none());
+        assert!((p.url)(&c, "GET", "/search?query=invoice%20list&modelTypes=cards&partial=true", &None).is_some());
+        assert!((p.url)(&c, "POST", "/search?query=x", &Some(json!({}))).is_none());
         assert!((p.url)(&c, "GET", "/tokens/abc", &None).is_none());
         assert!((p.url)(&c, "GET", "/boards/../x", &None).is_none());
         let h = (p.headers)(&c, &["k1".into(), "t2".into()]);

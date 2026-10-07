@@ -132,6 +132,7 @@ interface BoardProvider {
   columns(ctx, ref, group?): Promise<Column[]>;        // task lists, lists, workflow states
   cards(ctx, ref): Promise<Card[]>;
   move(ctx, ref, card, toColumn, group?): Promise<number | void>; // resolves with the new placement if known
+  search?(ctx, q): Promise<Hit[]>;                     // Cmd-K: matching cards on any board, each with its BoardRef
   url(ctx, ref, cardId): Promise<string>;              // the card in the browser
   detail?: CardDetail;                                 // right panel as data: view(d) gives fields, description, feed, files,
                                                        // actions; the app draws it. act() runs comment, status, assignee, attach
