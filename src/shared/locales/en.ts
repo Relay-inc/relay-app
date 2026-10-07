@@ -425,6 +425,9 @@ const en = {
   "today.archiveAfter": "Archive after",
   "today.readAfter": "Mark read after",
   "today.askClaude": "Ask Claude",
+  "today.briefing": "Briefing",
+  "today.openBriefing": "Open the conversation",
+  "today.briefingBusy": "Claude is writing the briefing…",
   "today.briefingHint":
     "Claude reads the project note, the last meeting notes and what is open in your queue, and writes what to know before it starts.",
   "today.noteHint": "Claude turns the meeting into a note in the vault, with the decisions and to-dos.",

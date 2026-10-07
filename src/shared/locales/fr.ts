@@ -432,6 +432,9 @@ export default {
   "today.archiveAfter": "Archiver ensuite",
   "today.readAfter": "Marquer lu ensuite",
   "today.askClaude": "Demander à Claude",
+  "today.briefing": "Briefing",
+  "today.openBriefing": "Ouvrir la conversation",
+  "today.briefingBusy": "Claude rédige le briefing…",
   "today.briefingHint":
     "Claude lit la note du projet, les dernières notes de réunion et ce qui est ouvert dans votre file, et écrit ce qu'il faut savoir avant de commencer.",
   "today.noteHint": "Claude fait de la réunion une note dans le vault, avec les décisions et les tâches.",

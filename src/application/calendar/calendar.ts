@@ -2,6 +2,7 @@ import { currentLocale, t } from "../../shared/i18n";
 import { clockTime } from "../../shared/format";
 import {
   bannerDue,
+  briefingOf,
   joinable,
   meetingPrompt,
   soon,
@@ -18,6 +19,7 @@ import { select, toast } from "../navigation/navigation";
 import { useAgentsStore } from "../agents/store";
 import { agentOf } from "../agents/agents";
 import { startChat } from "../conversations/chats";
+import { useConversationsStore } from "../conversations/store";
 import { sendMsg } from "../conversations/actions";
 import { useCalendarStore } from "./store";
 
@@ -88,6 +90,9 @@ export const joinMeeting = (link: string) => joinable(link) && backend.openUrl(l
  *  src-tauri/src/lib.rs). It always starts on Claude, whatever the default agent; with Claude switched off it does not
  *  start. */
 export async function meetingChat(id: string, how: MeetingChat) {
+  // a briefing asked before opens again instead of a second one
+  const briefing = how === "prep" ? briefingOf(useConversationsStore.getState().chats, id) : null;
+  if (briefing) return select(briefing);
   const meeting = cal().list.find(x => x.id === id);
   if (meeting) await chatAbout(meeting, how);
 }
@@ -100,6 +105,7 @@ export async function chatAbout(meeting: Meeting, how: MeetingChat, recording?: 
     title: `${how === "prep" ? t("cal.prepTitle") : ""}${meeting.title}`.slice(0, 48),
     note: t("note.meetingStarted", { title: meeting.title }),
     fromMail: true,
+    meeting: how === "prep" ? meeting.id : undefined,
   });
   await select(key);
   sendMsg(meetingPrompt(meeting, how, timeOf, undefined, recording));

@@ -432,6 +432,9 @@ export default {
   "today.archiveAfter": "Danach archivieren",
   "today.readAfter": "Danach als gelesen",
   "today.askClaude": "Claude fragen",
+  "today.briefing": "Briefing",
+  "today.openBriefing": "Gespräch öffnen",
+  "today.briefingBusy": "Claude schreibt das Briefing…",
   "today.briefingHint":
     "Claude liest die Projektnotiz, die letzten Meeting-Notizen und was in deiner Warteschlange offen ist, und schreibt, was du vorher wissen solltest.",
   "today.noteHint": "Claude macht aus dem Meeting eine Notiz im Vault, mit Entscheidungen und To-dos.",

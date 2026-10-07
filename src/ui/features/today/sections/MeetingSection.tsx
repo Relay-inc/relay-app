@@ -1,5 +1,10 @@
+import { useEffect } from "react";
 import type { Meeting } from "../../../../domain/calendar/types";
+import { briefingOf, briefingText } from "../../../../domain/calendar/rules";
 import { meetingChat, timeOf } from "../../../../application/calendar/calendar";
+import { useConversationsStore } from "../../../../application/conversations/store";
+import { ensureHistory } from "../../../../application/conversations/history";
+import { Markdown } from "../../../components/Markdown";
 import { useT } from "../../../hooks/useT";
 import { Glyph } from "../../../components/Glyph";
 import { agent } from "../../../../shared/plugins";
@@ -30,6 +35,12 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
   const { t } = useT();
   const agenda = agendaOf(meeting.description);
   const claude = agent("claude")?.glyph ?? "";
+  const briefing = useConversationsStore(s => (after ? null : briefingOf(s.chats, meeting.id)));
+  const text = useConversationsStore(s => (briefing ? briefingText(s.messages[briefing]) : ""));
+  // its transcript, when the conversation was not opened since the app started
+  useEffect(() => {
+    if (briefing) ensureHistory(briefing).catch(() => {});
+  }, [briefing]);
   return (
     <div className="flex flex-col gap-4 max-w-170">
       <div className="text-[13px] text-secondary">
@@ -64,15 +75,32 @@ export function MeetingSection({ meeting, after }: { meeting: Meeting; after: bo
           ))}
         </section>
       ) : null}
-      <div className="flex items-center gap-3 p-3.5 rounded-[10px] border border-dashed border-separator-strong">
-        {claude ? <Glyph svg={claude} className="glyph size-4 flex-none" /> : null}
-        <span className="flex-1 text-[13px] text-secondary">
-          {after ? t("today.noteHint") : t("today.briefingHint")}
-        </span>
-        <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, after ? "note" : "prep")}>
-          {after ? t("today.makeNote") : t("today.writeBriefing")}
-        </button>
-      </div>
+      {briefing ? (
+        <section className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-3">
+            <Caps>{t("today.briefing")}</Caps>
+            <span className="flex-1" />
+            <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, "prep")}>
+              {t("today.openBriefing")}
+            </button>
+          </div>
+          {text ? (
+            <Markdown text={text} className="md-panel text-sm leading-relaxed select-text" />
+          ) : (
+            <div className="text-sm text-tertiary">{t("today.briefingBusy")}</div>
+          )}
+        </section>
+      ) : (
+        <div className="flex items-center gap-3 p-3.5 rounded-[10px] border border-dashed border-separator-strong">
+          {claude ? <Glyph svg={claude} className="glyph size-4 flex-none" /> : null}
+          <span className="flex-1 text-[13px] text-secondary">
+            {after ? t("today.noteHint") : t("today.briefingHint")}
+          </span>
+          <button className="btn cursor-pointer" onClick={() => meetingChat(meeting.id, after ? "note" : "prep")}>
+            {after ? t("today.makeNote") : t("today.writeBriefing")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

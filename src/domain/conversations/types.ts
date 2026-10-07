@@ -64,6 +64,7 @@ export type Chat = {
   told?: string; // the project the agent was last told this conversation is about
   ask?: string[]; // the projects a Cmd-K question named: offered once, after it started
   orch?: true; // a worker the orchestrator started
+  meeting?: string; // the meeting (Meeting.id) whose briefing this is, shown under Today
 };
 /** How full a conversation's context is, in tokens. */
 export type ContextUse = { used: number; window: number };

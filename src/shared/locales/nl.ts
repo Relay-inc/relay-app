@@ -430,6 +430,9 @@ export default {
   "today.archiveAfter": "Daarna archiveren",
   "today.readAfter": "Daarna als gelezen",
   "today.askClaude": "Vraag Claude",
+  "today.briefing": "Briefing",
+  "today.openBriefing": "Open het gesprek",
+  "today.briefingBusy": "Claude schrijft de briefing…",
   "today.briefingHint":
     "Claude leest de projectnote, de laatste meeting notes en wat er openstaat in je wachtrij, en schrijft wat je moet weten voor het begint.",
   "today.noteHint": "Claude maakt van de meeting een note in de vault, met de beslissingen en to-do's.",

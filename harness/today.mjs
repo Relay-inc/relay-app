@@ -129,6 +129,9 @@ try {
   // the next meeting, named in the header, opens too
   await page.locator("button", { hasText: /· then / }).first().click();
   await shot("13-next-meeting-in-header");
+  // a meeting with a briefing already asked: the briefing itself, not the Write briefing button
+  await byText(page, "Lunch with the accountant", true).click();
+  await shot("13b-meeting-briefing");
   // work in progress in the sidebar: a reply draft under its section, a click brings the mail and its draft back
   await rowOf("Acceptance checklist portal v2");
   await page.keyboard.press("r");
