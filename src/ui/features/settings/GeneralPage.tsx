@@ -32,6 +32,7 @@ import { buttonClass, OPTIONAL_TEXT, SELECT, TILE, withoutColon } from "./blocks
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { PathField } from "./PathField";
+import { PermissionsSection } from "./PermissionsSection";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
@@ -42,8 +43,8 @@ const trimmed = (map: VaultMap) => Object.fromEntries(KEYS.map(([key]) => [key, 
 const SWATCH = { relay: "bg-[#3a5ffb]", graphite: "bg-label" };
 
 /** General: the vault folder with its mapping, what agents may do with reminders, the interface (language, colour
- *  scheme, accent, favicons, terminal) and the views on top of the sidebar. */
-export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
+ *  scheme, accent, favicons, terminal), the views on top of the sidebar and what macOS lets Relay do. */
+export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus; active: boolean }) {
   const { t, th } = useT();
   const language = useSettingsStore(s => s.settings.language);
   const theme = useSettingsStore(s => s.settings.theme || "system");
@@ -252,6 +253,7 @@ export function GeneralPage({ vaultStatus }: { vaultStatus: VaultStatus }) {
           <Switch id="sb-more" on={more} onToggle={on => saveSidebar({ more: on })} />
         </Field>
       </Section>
+      <PermissionsSection active={active} />
     </>
   );
 }
