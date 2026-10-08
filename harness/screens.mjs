@@ -145,6 +145,15 @@ const VIEWS = {
     await page.keyboard.type("/");
     await settle(page);
   },
+  // a large paste: the field stops growing at 40% of the window and scrolls, the conversation stays in view
+  "composer-paste": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    const field = page.locator("textarea").locator("visible=true").last();
+    await field.click();
+    await field.fill(Array.from({ length: 200 }, (_, i) => `line ${i + 1} of a pasted log`).join("\n"));
+    await settle(page);
+  },
   // a picture and two files waiting by their path, the drop highlight off (drag-leave)
   "composer-files": async () => {
     await open(page, server.url, { sel: keys.switchTo });
