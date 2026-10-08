@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **New vault from the welcome screen**: no vault yet? New vault seeds one in `~/Documents/Relay` (or another empty folder): a `work-state.md` with a Projects table, a `Projects/` folder and a `CLAUDE.md` that tells agents how to keep them
+
 ### Changed
 
 - **Work-state is optional**: any folder can be the vault. Without a `work-state.md` the sidebar lists no projects, but conversations, reminders and the rest work, so Relay runs on a vault that doesn't follow this layout

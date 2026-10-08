@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../../domain/workspace/types";
-import { checkMapping, pickMapped, pickVault, saveOnboardingVault } from "../../../application/workspace/vault-setup";
+import { checkMapping, newVault, pickMapped, pickVault, saveOnboardingVault } from "../../../application/workspace/vault-setup";
 import { useT } from "../../hooks/useT";
 import mark from "../../assets/relay-mark.svg";
 
@@ -25,6 +25,15 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
     const picked = await pickVault();
     if (picked) setStatus(picked);
   };
+  const startVault = async (elsewhere: boolean) => {
+    setMessage("");
+    try {
+      const made = await newVault(elsewhere);
+      if (made) setStatus(made);
+    } catch (err) {
+      setMessage(String(err));
+    }
+  };
   const chooseMappedPath = async (key: MapKey) => {
     setMessage("");
     setStatus(await pickMapped(status!, key, trimmed(map!)));
@@ -40,7 +49,7 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
   };
   const foundClass = (found: boolean, required: boolean) => {
     if (found) return "text-secondary";
-    return required ? "text-late" : "text-secondary mb-3";
+    return required ? "text-late" : "text-secondary";
   };
 
   return (
@@ -58,6 +67,15 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
           />
           <button className={`btn ${status ? "" : "btn-primary"}`} onClick={chooseVault}>
             {t("vault.choose")}
+          </button>
+        </div>
+        <div className="flex gap-2 items-center text-secondary">
+          <span className="flex-1">{t("vault.newHelp")}</span>
+          <button className="btn" onClick={() => startVault(false)}>
+            {t("vault.new")}
+          </button>
+          <button className="btn" onClick={() => startVault(true)}>
+            {t("vault.newElsewhere")}
           </button>
         </div>
         {status && map ? (

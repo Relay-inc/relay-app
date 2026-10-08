@@ -96,6 +96,33 @@ pub fn detect(vault: &str) -> (String, Value) {
     (v, json!({"workState": r(work), "reminders": reminders, "notes": r(notes)}))
 }
 
+/// What a new vault starts with: (path, text). An empty project table under `## Projects`, the folder of that name
+/// (a context, as snapshot.rs takes the vault's folders as contexts) and a CLAUDE.md telling agents how to keep it.
+const SEED: [(&str, &str); 3] = [
+    ("work-state.md", "# Work State\n\n## Projects\n\n| Project | State | Last Touched | Left Off |\n|---------|-------|--------------|----------|\n"),
+    ("Projects/.gitkeep", ""),
+    ("CLAUDE.md", "# Relay vault\n\nThis folder is the memory Relay and its agents work from: plain markdown, Obsidian is optional.\n\n\
+- `work-state.md`: one row per project under `## Projects`, as `| Name | State | YYYY-MM-DD | Left off |`. State is Active, Blocked, Quiet or Paused. When a conversation changes where a project stands, update its row: the date to today, Left off to one or two sentences on where it is now.\n\
+- `Projects/<Name>.md`: one note per project, open items as `- [ ] …` under `## Open`, where it stands under `## Status`.\n\
+- `reminders.md`: kept by Relay.\n\n\
+Keep notes short and factual. Add a project (its row and its note) only when the user asks for one.\n"),
+];
+
+/// Seeds a new vault in `dir`, created when missing. An existing vault (a work-state.md in it) is left as is; any other
+/// folder must be empty, so the seed never lands between someone's own files.
+pub fn create(dir: &str) -> Result<String, String> {
+    let root = Path::new(dir);
+    if root.join("work-state.md").is_file() { return Ok(canon(dir)); }
+    let busy = fs::read_dir(root).map(|mut r| r.any(|e| e.is_ok_and(|e| !e.file_name().to_string_lossy().starts_with('.')))).unwrap_or(false);
+    if busy { return Err(format!("err.not_empty:{dir}")); }
+    for (rel, text) in SEED {
+        let p = root.join(rel);
+        fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
+        fs::write(&p, text).map_err(|e| e.to_string())?;
+    }
+    Ok(canon(dir))
+}
+
 /// The detected mapping with the stored one on top, keeping only known keys with text values.
 pub fn merge(detected: &Value, stored: &Value) -> Value {
     let mut m = Map::new();
@@ -191,6 +218,25 @@ mod tests {
         assert_eq!((s["ok"].clone(), s["found"]["workState"].clone()), (json!(true), json!(false)), "work-state is optional");
         assert_eq!(status("", &json!({}))["ok"], false);
         assert_eq!(status(d.join("gone").to_str().unwrap(), &json!({}))["ok"], false);
+    }
+
+    #[test]
+    fn creates_a_vault_that_lists_projects() {
+        let d = tmp("create");
+        let dir = d.join("Relay");
+        let v = create(dir.to_str().unwrap()).unwrap();
+        let s = det(&dir);
+        assert_eq!((s["ok"].clone(), s["map"]["workState"].clone()), (json!(true), json!("work-state.md")));
+        assert!(dir.join("Projects").is_dir() && dir.join("CLAUDE.md").is_file());
+        // a row added the way the seeded CLAUDE.md asks shows up as a project in the Projects context
+        let ws = dir.join("work-state.md");
+        fs::write(&ws, fs::read_to_string(&ws).unwrap() + "| Acme | Active | 2026-10-08 | started |\n").unwrap();
+        let snap = crate::snapshot::snapshot(&v, ws.to_str().unwrap(), "", chrono::NaiveDate::from_ymd_opt(2026, 10, 8).unwrap(), "", &d.join("cache.json"), "").unwrap();
+        assert_eq!((snap["projects"][0]["name"].clone(), snap["projects"][0]["context"].clone()), (json!("Acme"), json!("Projects")));
+        assert_eq!(create(dir.to_str().unwrap()).unwrap(), v, "an existing vault is reused, not reseeded");
+        touch(&d, "Busy/mine.txt");
+        assert!(create(d.join("Busy").to_str().unwrap()).unwrap_err().starts_with("err.not_empty"));
+        fs::remove_dir_all(&d).ok();
     }
 
     #[test]

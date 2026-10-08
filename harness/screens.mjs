@@ -515,6 +515,11 @@ const VIEWS = {
   onboarding: async () => {
     await open(page, server.url, { fixture: "onboarding" });
   },
+  "onboarding-new-vault": async () => {
+    await open(page, server.url, { fixture: "onboarding" });
+    await page.getByRole("button", { name: "New vault", exact: true }).click();
+    await waitText("Files in this vault");
+  },
   "dark-waiting": async () => {
     await open(page, server.url, { fixture: "dark" });
     await waitText(titles.permission);

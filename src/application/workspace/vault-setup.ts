@@ -8,6 +8,12 @@ export async function pickVault(): Promise<VaultStatus | null> {
   const folder = await backend.pickFolder();
   return folder ? backend.detectVault(folder) : null;
 }
+/** A new vault, in ~/Documents/Relay or, with `elsewhere`, in a folder the user picks. Null when the pick is cancelled. */
+export async function newVault(elsewhere: boolean): Promise<VaultStatus | null> {
+  if (!elsewhere) return backend.createVault();
+  const folder = await backend.pickFolder();
+  return folder ? backend.createVault(folder) : null;
+}
 export const checkMapping = (vault: string, map: VaultMap) => backend.checkVault(vault, map);
 /** Pick one mapped path, stored relative when it lies in the vault. Returns the new status. */
 export async function pickMapped(status: VaultStatus, key: MapKey, map: VaultMap): Promise<VaultStatus> {

@@ -167,6 +167,8 @@ function handle(cmd: string, a: Args): unknown {
     case "vault_status":
       return vault.vaultStatus(vaultOk);
     case "detect_vault":
+    case "create_vault":
+      return { ...vault.vaultStatus(true), vault: a.path ?? "/Users/me/Documents/Relay", map: { workState: "work-state.md", reminders: "reminders.md", notes: "" }, found: { workState: true, reminders: false, notes: false } };
     case "check_vault":
       return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
     case "pick_folder":
