@@ -86,6 +86,10 @@ export const pickPath = (folder: boolean, start: string) => invoke<string | null
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });
 /** Seeds a new vault in `path`, ~/Documents/Relay without one. Rejects for a folder that already holds other files. */
 export const createVault = (path?: string) => invoke<VaultStatus>("create_vault", { path: path ?? null });
+/** A new project in the vault's work-state and its note; resolves with the name as stored. */
+export const addProject = (name: string, context: string | null) => invoke<string>("add_project", { name, context });
+/** The project's Last Touched in work-state to today. */
+export const touchProject = (name: string) => invoke("touch_project", { name });
 export const checkVault = (path: string, map: VaultMap) => invoke<VaultStatus>("check_vault", { path, map });
 export const projectIcons = () => invoke<Record<string, ProjectIcon>>("project_icons");
 export const setProjectIcon = (project: string, kind: IconKind, value: string) =>

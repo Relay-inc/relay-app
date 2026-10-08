@@ -8,7 +8,7 @@ type NavigationState = {
   selected: string; // the open conversation or view (`sel`)
   drawer: Drawer; // the right drawer: what it shows, "" while closed
   tool: Tool | null; // set while a project's board or PRs, opened from its title bar, is what the middle column shows
-  projectPanel: boolean; // the conversation's project panel under the title
+  projectPanel: boolean | "new"; // the conversation's project panel under the title, "new" opens it on a new project
   toast: Toast | null;
   zoom: string; // the image shown large
   quickAsk: boolean; // Cmd-K

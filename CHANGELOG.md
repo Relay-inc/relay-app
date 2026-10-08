@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **New project**: the folder button in the sidebar, or "New project…" in a conversation's project panel, adds the project to work-state (a row under the chosen context) and makes its note, and moves the conversation there. A vault without work-state gets one. When a conversation in a project closes, Relay sets that project's Last Touched to today
 - **New vault from the welcome screen**: no vault yet? New vault seeds one in `~/Documents/Relay` (or another empty folder): a `work-state.md` with a Projects table, a `Projects/` folder and a `CLAUDE.md` that tells agents how to keep them
 
 ### Changed
