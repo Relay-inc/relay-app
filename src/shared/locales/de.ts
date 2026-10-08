@@ -37,6 +37,8 @@ export default {
   "orch.questions": "Offene Fragen",
   "orch.diff": "Änderungen",
   "orch.flags": "Hinweise",
+  "orch.checking": "Checks laufen",
+  "orch.reviewing": "Review läuft",
   "orch.ticket": "Ticket #{number}",
   "orch.pr": "Pull Request",
   "orch.fromRelay": "Von Relay",
@@ -145,6 +147,17 @@ export default {
   "pl.label": "Nur mit Label",
   "pl.labelHelp": "Leer: jedes Ticket in der Spalte.",
   "pl.parallel": "Agents gleichzeitig",
+  "pl.checks": "Checks",
+  "pl.checksHelp":
+    "Laufen im Worktree, sobald der Agent sagt, er sei fertig: Lint, statische Analyse, Tests. Der Worktree startet ohne Abhängigkeiten, installiere sie also zuerst. Leer: keine Checks.",
+  "pl.review": "Review",
+  "pl.reviewHelp":
+    "Nach den Checks prüft ein anderer Agent den Diff. Blockierende Befunde gehen zurück an den Agent, die übrigen in den PR.",
+  "pl.reviewAny": "Erster Agent, der es kann",
+  "pl.reviewOff": "Kein Review",
+  "pl.rounds": "Runden",
+  "pl.roundsHelp":
+    "Wie oft ein fehlgeschlagener Check oder Review zurück an den Agent geht, bevor das Ticket zu einer Person geht.",
   "pl.mode": "Holt ab",
   "pl.modeAuto": "Automatisch",
   "pl.modeManual": "Selbst gewählt",

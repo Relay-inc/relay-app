@@ -24,6 +24,12 @@ export type Pipeline = {
   label: string;
   /** workers running at once */
   parallel: number;
+  /** Relay's validation of a done before it pushes (orch.rs validate): a shell command in the worktree (lint, static
+   *  analysis, tests), a review of the diff by an agent ("" the first that can, a provider id, "off"), and how many
+   *  times a failure goes back to the agent before a person gets the ticket */
+  checks?: string;
+  reviewer?: string;
+  rounds?: number;
   /** auto: Relay picks up every ticket in the pick column; manual: only the tickets you start from the ticket window.
    *  Absent: auto */
   mode?: "auto" | "manual";

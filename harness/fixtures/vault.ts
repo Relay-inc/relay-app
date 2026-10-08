@@ -296,7 +296,8 @@ export function settings(fixture: string) {
     // off: a running pipeline would move the board's cards in every view
     pipelines: {
       "Northwind Portal": { on: fixture.startsWith("pipeline"), mode: fixture === "pipeline-manual" ? "manual" : "auto", repo: "/Users/demo/code/northwind", base: "develop", group: "list", pick: "tl2", busy: "tl3",
-        review: "tl4", input: "tl1", merged: "tl5", label: fixture === "pipeline" ? "" : "agent", parallel: 1 },
+        review: "tl4", input: "tl1", merged: "tl5", label: fixture === "pipeline" ? "" : "agent", parallel: 1,
+        checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit", reviewer: "codex", rounds: 3 },
     },
     github: { on: true, owners: "acme" },
     mail: {

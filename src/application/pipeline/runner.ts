@@ -199,6 +199,7 @@ async function claim(b: Board, project: string, card: Card) {
       repo: b.p.repo,
       base: b.p.base,
       ticket,
+      validate: { checks: b.p.checks ?? "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
     });
     adopt(w);
     await comment(b, card.id, t("pl.picked", { branch: w.branch ?? "" }));

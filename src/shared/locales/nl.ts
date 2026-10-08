@@ -37,6 +37,8 @@ export default {
   "orch.questions": "Open vragen",
   "orch.diff": "Wijzigingen",
   "orch.flags": "Meldingen",
+  "orch.checking": "Checks lopen",
+  "orch.reviewing": "Review loopt",
   "orch.ticket": "Ticket #{number}",
   "orch.pr": "Pull request",
   "orch.fromRelay": "Van Relay",
@@ -144,6 +146,17 @@ export default {
   "pl.label": "Enkel met label",
   "pl.labelHelp": "Leeg: elk ticket in de kolom.",
   "pl.parallel": "Agents tegelijk",
+  "pl.checks": "Checks",
+  "pl.checksHelp":
+    "Draait in de worktree zodra de agent zegt dat hij klaar is: lint, statische analyse, tests. De worktree start zonder dependencies, installeer die dus eerst. Leeg: geen checks.",
+  "pl.review": "Review",
+  "pl.reviewHelp":
+    "Na de checks reviewt een andere agent de diff. Blokkerende bevindingen gaan terug naar de agent, de rest komt in de PR.",
+  "pl.reviewAny": "Eerste agent die het kan",
+  "pl.reviewOff": "Geen review",
+  "pl.rounds": "Rondes",
+  "pl.roundsHelp":
+    "Hoe vaak een mislukte check of review teruggaat naar de agent voor het ticket naar een persoon gaat.",
   "pl.mode": "Pikt op",
   "pl.modeAuto": "Automatisch",
   "pl.modeManual": "Zelf gekozen",

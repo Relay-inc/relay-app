@@ -105,6 +105,37 @@ export function PipelineSettings({ name }: { name: string }) {
           />
         </Field>
       )}
+      <Field label={t("pl.checks")} hint={t("pl.checksHelp")}>
+        <ChangeInput
+          className={`${FIELD} font-mono text-xs`}
+          value={p.checks ?? ""}
+          placeholder="pnpm install && pnpm lint && pnpm test"
+          spellCheck={false}
+          onCommit={v => set({ checks: v.trim() })}
+        />
+      </Field>
+      <Field label={t("pl.review")} hint={t("pl.reviewHelp")}>
+        <Select
+          className={SELECT}
+          aria-label={t("pl.review")}
+          options={[
+            { id: "", name: t("pl.reviewAny") },
+            { id: "claude", name: "Claude Code" },
+            { id: "codex", name: "Codex" },
+            { id: "off", name: t("pl.reviewOff") },
+          ]}
+          value={p.reviewer ?? ""}
+          onChange={reviewer => set({ reviewer })}
+        />
+      </Field>
+      <Field label={t("pl.rounds")} hint={t("pl.roundsHelp")}>
+        <ChangeInput
+          className={FIELD}
+          value={String(p.rounds ?? 3)}
+          inputMode="numeric"
+          onCommit={v => set({ rounds: Math.min(10, Math.max(1, Number.parseInt(v, 10) || 3)) })}
+        />
+      </Field>
       {clients && (
         <Field label={t("pl.hidden")} hint={t("pl.hiddenHelp")}>
           <Switch id={`pl-hidden-${name}`} on={p.hidden !== false} onToggle={hidden => set({ hidden })} />

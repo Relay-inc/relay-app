@@ -175,6 +175,7 @@ export const orchDispatchTicket = (a: {
   repo: string;
   base: string;
   ticket: Ticket;
+  validate: { checks: string; review: string; rounds: number };
 }) => invoke<Worker>("orch_dispatch_ticket", a);
 export const orchMessage = (key: string, text: string) => invoke<void>("orch_message", { key, text });
 export const orchPr = (key: string) => invoke<PrStatus>("orch_pr", { key });

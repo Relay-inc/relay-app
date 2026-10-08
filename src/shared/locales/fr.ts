@@ -37,6 +37,8 @@ export default {
   "orch.questions": "Questions ouvertes",
   "orch.diff": "Modifications",
   "orch.flags": "Signalements",
+  "orch.checking": "Vérifications en cours",
+  "orch.reviewing": "Revue en cours",
   "orch.ticket": "Ticket #{number}",
   "orch.pr": "Pull request",
   "orch.fromRelay": "De Relay",
@@ -148,6 +150,17 @@ export default {
   "pl.label": "Seulement avec le libellé",
   "pl.labelHelp": "Vide : chaque ticket de la colonne.",
   "pl.parallel": "Agents en même temps",
+  "pl.checks": "Vérifications",
+  "pl.checksHelp":
+    "Lancées dans le worktree quand l'agent dit avoir fini : lint, analyse statique, tests. Le worktree démarre sans dépendances, installez-les d'abord. Vide : aucune vérification.",
+  "pl.review": "Revue",
+  "pl.reviewHelp":
+    "Après les vérifications, un autre agent relit le diff. Les points bloquants retournent à l'agent, les autres vont dans la PR.",
+  "pl.reviewAny": "Premier agent qui peut",
+  "pl.reviewOff": "Pas de revue",
+  "pl.rounds": "Tours",
+  "pl.roundsHelp":
+    "Combien de fois une vérification ou une revue ratée retourne à l'agent avant que le ticket aille à une personne.",
   "pl.mode": "Prend",
   "pl.modeAuto": "Automatiquement",
   "pl.modeManual": "Au choix",

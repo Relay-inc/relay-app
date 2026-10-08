@@ -548,6 +548,12 @@ const VIEWS = {
     await unfold("Northwind Portal");
     await intoView("Board pipeline");
   },
+  // the same: the validation before a PR (checks, review, rounds)
+  "settings-pipeline-validation": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Rounds");
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");

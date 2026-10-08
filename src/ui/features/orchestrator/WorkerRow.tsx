@@ -59,7 +59,8 @@ export function WorkerRow({
           <span className="flex-none text-xs text-tertiary tabular-nums">{when}</span>
         </div>
         <span className="text-xs text-secondary truncate">
-          {project} · {t(STATE[worker.state])}
+          {project} ·{" "}
+          {worker.phase ? t(worker.phase === "review" ? "orch.reviewing" : "orch.checking") : t(STATE[worker.state])}
         </span>
         {ticket ? (
           <span className="flex flex-wrap items-baseline gap-x-2 text-xs">

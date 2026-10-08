@@ -693,9 +693,9 @@ fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
 /// note what it did on the board. Off the main thread: git fetch, push and gh go over the network.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, project: String, repo: String, base: Option<String>, model: Option<String>, ticket: Value) -> Result<orch::Worker, String> {
+async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, project: String, repo: String, base: Option<String>, model: Option<String>, ticket: Value, validate: Option<orch::Validate>) -> Result<orch::Worker, String> {
     let base = base.map(|b| b.trim().to_string()).filter(|b| !b.is_empty());
-    tauri::async_runtime::spawn_blocking(move || orch::dispatch_ticket(&app, title, task, project, repo, model, orch::Pipe { base, ticket })).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || orch::dispatch_ticket(&app, title, task, project, repo, model, orch::Pipe { base, ticket, validate: validate.unwrap_or_default() })).await.map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn orch_message(app: AppHandle, key: String, text: String) -> Result<(), String> { orch::pipe_message(&app, &key, &text) }
@@ -754,16 +754,21 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
 /// settings, MCP or a transcript, so third-party text in it (a mail) can make it do nothing but write. Today's mail
 /// composer drafts and rewrites replies with it; the user edits the result before it is saved anywhere.
 #[tauri::command]
-async fn ai_write(app: AppHandle, state: State<'_, App>, system: String, text: String, provider: Option<String>) -> Result<String, String> {
-    // the asked provider when it is on and can, else the first switched-on one that can
+async fn ai_write(app: AppHandle, system: String, text: String, provider: Option<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || write_blocking(&app, provider.as_deref(), &system, &text)).await.map_err(|e| e.to_string())?
+}
+/// ai_write for Rust callers (the board pipeline's review), blocking: the asked provider when it is on and can write,
+/// else the first switched-on one that can.
+pub(crate) fn write_blocking(app: &AppHandle, provider: Option<&str>, system: &str, text: &str) -> Result<String, String> {
+    let state = app.state::<App>();
     let p = {
         let on = agents::enabled(&state.settings.lock().unwrap());
-        provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().write)).or_else(|| on.iter().copied().find(|p| p.caps().write))
+        provider.and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().write)).or_else(|| on.iter().copied().find(|p| p.caps().write))
     };
     let p = p.ok_or_else(|| trc("err.no_agent"))?;
-    let mut eb = env_of(&app, &state, p);
+    let mut eb = env_of(app, &state, p);
     if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "sonnet")); }
-    tauri::async_runtime::spawn_blocking(move || p.write(&eb.env(), &system, &text)).await.map_err(|e| e.to_string())?
+    p.write(&eb.env(), system, text)
 }
 
 /// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
