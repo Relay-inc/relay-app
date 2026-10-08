@@ -702,7 +702,8 @@ async fn drop_worktrees(app: AppHandle, state: State<'_, App>, project: String) 
 }
 
 /// What a conversation changed, per repo (changes.rs): the repos of the files its tool calls wrote (`paths`) and the
-/// worktrees it made. Files outside a git checkout do not show.
+/// worktrees it made. In a checkout it did not make (the vault, a shared repo) only the files it wrote show, else the
+/// drawer holds every other session's uncommitted work too. Files outside a git checkout do not show.
 #[tauri::command]
 async fn conversation_changes(state: State<'_, App>, key: String, paths: Vec<String>) -> Result<Value, String> {
     let made = state.worktrees.lock().unwrap().get(&key).cloned().unwrap_or_default();
@@ -711,7 +712,8 @@ async fn conversation_changes(state: State<'_, App>, key: String, paths: Vec<Str
         let mut tops: Vec<String> = made.iter().chain(paths.iter()).filter_map(|p| changes::top_of(p, &path)).collect();
         tops.sort();
         tops.dedup();
-        Value::Array(tops.iter().map(|t| changes::of_repo(t, &path)).collect())
+        let own: Vec<String> = made.iter().filter_map(|p| changes::top_of(p, &path)).collect();
+        Value::Array(tops.iter().map(|t| changes::of_repo(t, (!own.contains(t)).then_some(&paths[..]), &path)).collect())
     }).await.map_err(|e| e.to_string())
 }
 
