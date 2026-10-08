@@ -47,7 +47,7 @@ export function SettingsApp() {
         </div>
         <div className="mx-auto grid max-w-150 grid-cols-1 content-start gap-7 px-8 pt-6 pb-10 [&>*]:min-w-0">
           <div className={page("general")}>
-            <GeneralPage vaultStatus={vaultStatus} />
+            <GeneralPage vaultStatus={vaultStatus} active={tab === "general"} />
           </div>
           <div className={page("projects")}>
             <ProjectsPage active={tab === "projects"} />

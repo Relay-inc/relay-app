@@ -116,7 +116,7 @@ board, card-detail (the ticket window), board-list, board-filters, board-presets
 Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, usage-details (Details folded open), cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
 deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Orchestrator: orchestrator (the coordinator with the worker board in the drawer), orchestrator-open (the report and a worker's details unfolded), orchestrator-live (a worker starts, another reports), orchestrator-worker (a worker under its project). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
-settings-interface (appearance, accent, terminal), settings-sidebar, settings-integration-productive,
+settings-interface (appearance, accent, terminal), settings-sidebar, settings-permissions (Settings › General › Permissions, Full Disk Access missing), settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
 settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding, dark-waiting,

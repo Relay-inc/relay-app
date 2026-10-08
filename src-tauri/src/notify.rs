@@ -61,6 +61,13 @@ pub fn banner(title: &str, body: &str) {
         use mac_notification_sys::{set_application, Notification, NotificationResponse};
         let id = if tauri::is_dev() { "com.apple.Terminal" } else { "be.laurentmeersman.relay" };
         set_application(id).ok();
+        // Once Relay quits (the parent becomes launchd, pid 1) a click has nothing to open, so stop waiting for one.
+        std::thread::spawn(|| {
+            while std::os::unix::process::parent_id() != 1 {
+                std::thread::sleep(std::time::Duration::from_secs(10));
+            }
+            std::process::exit(0);
+        });
         // ponytail: icon from the checkout, fine while the app runs on this machine, a resource when it ships
         let icon = concat!(env!("CARGO_MANIFEST_DIR"), "/icons/128x128@2x.png");
         let r = Notification::new().title(title).message(body).app_icon(icon).wait_for_click(true).send();
