@@ -766,7 +766,8 @@ export default {
   "vault.found": "gefunden",
   "vault.missing": "fehlt",
   "vault.k.workState": "Arbeitsstand",
-  "vault.h.workState": "work-state.md mit einer Projekttabelle pro Kontext. Ohne sie zeigt die Seitenleiste keine Projekte.",
+  "vault.h.workState":
+    "work-state.md mit einer Projekttabelle pro Kontext. Ohne sie zeigt die Seitenleiste keine Projekte.",
   "vault.k.reminders": "Erinnerungen",
   "vault.h.reminders": "reminders.md mit der Erinnerungstabelle.",
   "vault.k.notes": "Projektnotizen",
