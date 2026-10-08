@@ -2,7 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Card, CardView } from "../board/types.ts";
 import type { Worker } from "../orchestrator/types.ts";
-import { briefOf, EMPTY_PIPELINE, htmlText, inReview, picks, ready, review, step } from "./rules.ts";
+import {
+  briefOf,
+  buildState,
+  EMPTY_PIPELINE,
+  htmlText,
+  inReview,
+  picks,
+  pipelineAt,
+  ready,
+  review,
+  step,
+} from "./rules.ts";
 import type { PrStatus } from "./types.ts";
 
 const P = {
@@ -170,4 +181,18 @@ test("briefOf: the whole ticket at the start, only what is new for a resume", ()
   const news = briefOf(v, 100);
   assert.ok(news.includes("answer") && !news.includes("first") && !news.includes("Description"), news);
   assert.equal(htmlText("a<br>b&nbsp;c"), "a\nb c");
+});
+
+test("hand-picked: no pick column needed; the board's pipeline; what the ticket window offers", () => {
+  assert.equal(ready({ ...P, pick: "" }), false);
+  assert.equal(ready({ ...P, pick: "", mode: "manual" }), true);
+  const ref = { provider: "productive", project: "p1", board: "f1" };
+  const boards = { Acme: ref, Other: { ...ref, board: "f2" } };
+  assert.equal(pipelineAt(boards, { Acme: P }, ref), "Acme");
+  assert.equal(pipelineAt(boards, { Acme: { ...P, on: false } }, ref), undefined, "switched off");
+  assert.equal(pipelineAt(boards, { Other: P }, ref), undefined, "another board's pipeline");
+  assert.equal(buildState([], "a"), "build");
+  assert.equal(buildState([worker("a", "running")], "a"), "running");
+  assert.equal(buildState([worker("a", "blocked")], "a"), "continue");
+  assert.equal(buildState([worker("a", "done", { board: "merged" })], "a"), "build", "merged: a new run");
 });

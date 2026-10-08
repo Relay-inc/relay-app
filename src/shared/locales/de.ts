@@ -145,6 +145,17 @@ export default {
   "pl.label": "Nur mit Label",
   "pl.labelHelp": "Leer: jedes Ticket in der Spalte.",
   "pl.parallel": "Agents gleichzeitig",
+  "pl.mode": "Holt ab",
+  "pl.modeAuto": "Automatisch",
+  "pl.modeManual": "Selbst gewählt",
+  "pl.modeAutoHelp":
+    "Jedes Ticket in der Abholspalte bekommt einen Agent. Mit Agent bauen im Ticket startet sofort einen.",
+  "pl.modeManualHelp": "Nur die Tickets, die du mit Mit Agent bauen im Ticketfenster startest.",
+  "pl.blockedManual": "Der Agent braucht Input:\n\n{questions}\n\nAntworte hier, dann Mit Agent weitermachen in Relay.",
+  "pl.full": "Für dieses Projekt bauen schon {n} Agents: starte dieses, sobald einer fertig ist.",
+  "kb.build": "Mit Agent bauen",
+  "kb.buildContinue": "Mit Agent weitermachen",
+  "kb.buildRunning": "Agent baut",
   "pl.hidden": "Kommentare vor dem Kunden verborgen",
   "pl.hiddenHelp":
     "Relays Kommentare zum Ticket sind intern, nicht im Kundenportal von Productive. In einem internen Projekt sind es normale Kommentare.",

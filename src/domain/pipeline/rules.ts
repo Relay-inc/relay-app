@@ -1,4 +1,4 @@
-import type { Card, CardView } from "../board/types";
+import type { BoardRef, Card, CardView } from "../board/types";
 import type { Worker } from "../orchestrator/types";
 import type { Pipeline, PrStatus, Step, Ticket } from "./types";
 
@@ -16,9 +16,32 @@ export const EMPTY_PIPELINE: Pipeline = {
   parallel: 1,
 };
 
-/** Switched on and every field it cannot run without filled in. */
+/** You start each ticket yourself, nothing is picked up from a column. */
+export const manual = (p: Pipeline) => p.mode === "manual";
+
+/** Switched on and every field it cannot run without filled in (the pick column only when it picks by itself). */
 export const ready = (p: Pipeline | undefined): p is Pipeline =>
-  !!p?.on && !!p.repo && !!p.pick && !!p.busy && !!p.review && !!p.input;
+  !!p?.on && !!p.repo && (manual(p) || !!p.pick) && !!p.busy && !!p.review && !!p.input;
+
+/** The vault project whose ready pipeline runs on this board, if any. */
+export function pipelineAt(
+  boards: Record<string, BoardRef> | undefined,
+  pipelines: Record<string, Pipeline> | undefined,
+  ref: BoardRef,
+) {
+  return Object.entries(boards ?? {}).find(
+    ([project, b]) =>
+      b.provider === ref.provider && b.project === ref.project && b.board === ref.board && ready(pipelines?.[project]),
+  )?.[0];
+}
+
+/** What the ticket window offers for a ticket: start an agent, continue with the one that ran on it, or nothing while
+ *  one runs. A merged ticket starts over. */
+export function buildState(workers: Worker[], card: string): "build" | "continue" | "running" {
+  const w = lastWorker(workers, card);
+  if (!w || w.board === "merged") return "build";
+  return w.state === "running" ? "running" : "continue";
+}
 
 export const ticketOf = (w: Pick<Worker, "ticket">) => (w.ticket ?? null) as Ticket | null;
 

@@ -24,6 +24,9 @@ export type Pipeline = {
   label: string;
   /** workers running at once */
   parallel: number;
+  /** auto: Relay picks up every ticket in the pick column; manual: only the tickets you start from the ticket window.
+   *  Absent: auto */
+  mode?: "auto" | "manual";
   /** Relay's comments on the ticket are internal, kept from the client (Productive); absent: hidden */
   hidden?: boolean;
 };

@@ -10,6 +10,7 @@ import { ChangeInput } from "./ChangeInput";
 import { ERROR_MESSAGE, FIELD, SELECT } from "./blocks";
 import { Field } from "./Field";
 import { PathField } from "./PathField";
+import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
 
 type Cols = { groupings: { id: string; label: string }[]; group: string; columns: Column[] };
@@ -40,6 +41,17 @@ export function PipelineSettings({ name }: { name: string }) {
         <Switch id={`pl-${name}`} on={p.on} onToggle={on => set({ on })} />
       </Field>
       {err && <span className={ERROR_MESSAGE}>{err}</span>}
+      <Field label={t("pl.mode")} hint={t(p.mode === "manual" ? "pl.modeManualHelp" : "pl.modeAutoHelp")}>
+        <Segmented
+          label={t("pl.mode")}
+          options={[
+            ["auto", t("pl.modeAuto")],
+            ["manual", t("pl.modeManual")],
+          ]}
+          value={p.mode ?? "auto"}
+          onPick={mode => set({ mode })}
+        />
+      </Field>
       <Field label={t("pl.repo")} hint={t("pl.repoHelp")}>
         <PathField
           value={p.repo}
@@ -70,7 +82,7 @@ export function PipelineSettings({ name }: { name: string }) {
           />
         </Field>
       )}
-      {COLUMNS.map(k => (
+      {COLUMNS.filter(k => k !== "pick" || p.mode !== "manual").map(k => (
         <Field key={k} label={t(`pl.col.${k}`)} hint={t(`pl.col.${k}Help`)}>
           <Select
             className={SELECT}
@@ -82,15 +94,17 @@ export function PipelineSettings({ name }: { name: string }) {
           />
         </Field>
       ))}
-      <Field label={t("pl.label")} hint={t("pl.labelHelp")}>
-        <ChangeInput
-          className={FIELD}
-          value={p.label}
-          placeholder="agent"
-          spellCheck={false}
-          onCommit={v => set({ label: v.trim() })}
-        />
-      </Field>
+      {p.mode !== "manual" && (
+        <Field label={t("pl.label")} hint={t("pl.labelHelp")}>
+          <ChangeInput
+            className={FIELD}
+            value={p.label}
+            placeholder="agent"
+            spellCheck={false}
+            onCommit={v => set({ label: v.trim() })}
+          />
+        </Field>
+      )}
       {clients && (
         <Field label={t("pl.hidden")} hint={t("pl.hiddenHelp")}>
           <Switch id={`pl-hidden-${name}`} on={p.hidden !== false} onToggle={hidden => set({ hidden })} />

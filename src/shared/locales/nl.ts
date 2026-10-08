@@ -144,6 +144,17 @@ export default {
   "pl.label": "Enkel met label",
   "pl.labelHelp": "Leeg: elk ticket in de kolom.",
   "pl.parallel": "Agents tegelijk",
+  "pl.mode": "Pikt op",
+  "pl.modeAuto": "Automatisch",
+  "pl.modeManual": "Zelf gekozen",
+  "pl.modeAutoHelp":
+    "Elk ticket in de opneemkolom krijgt een agent. Bouwen met agent in een ticket start er meteen een.",
+  "pl.modeManualHelp": "Enkel de tickets die je start met Bouwen met agent in het ticketvenster.",
+  "pl.blockedManual": "De agent heeft input nodig:\n\n{questions}\n\nAntwoord hier, daarna Verder met agent in Relay.",
+  "pl.full": "Er bouwen al {n} agents voor dit project: start dit zodra er een klaar is.",
+  "kb.build": "Bouwen met agent",
+  "kb.buildContinue": "Verder met agent",
+  "kb.buildRunning": "Agent bouwt",
   "pl.hidden": "Commentaar verborgen voor de klant",
   "pl.hiddenHelp":
     "Het commentaar van Relay op het ticket is intern, niet zichtbaar in het klantenportaal van Productive. In een intern project is het gewoon commentaar.",

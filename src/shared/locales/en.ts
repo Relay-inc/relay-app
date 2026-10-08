@@ -141,6 +141,17 @@ const en = {
   "pl.label": "Only with label",
   "pl.labelHelp": "Empty: every ticket in the column.",
   "pl.parallel": "Agents at once",
+  "pl.mode": "Picks up",
+  "pl.modeAuto": "Automatically",
+  "pl.modeManual": "Hand-picked",
+  "pl.modeAutoHelp":
+    "Every ticket in the pick column gets an agent. Build with agent in a ticket starts one right away.",
+  "pl.modeManualHelp": "Only the tickets you start with Build with agent in the ticket window.",
+  "pl.blockedManual": "The agent needs input:\n\n{questions}\n\nAnswer here, then Continue with agent in Relay.",
+  "pl.full": "{n} agents are already building for this project: start this one when one is done.",
+  "kb.build": "Build with agent",
+  "kb.buildContinue": "Continue with agent",
+  "kb.buildRunning": "Agent building",
   "pl.hidden": "Comments hidden from the client",
   "pl.hiddenHelp":
     "Relay's comments on the ticket are internal, out of Productive's client portal. In an internal project they are normal comments.",

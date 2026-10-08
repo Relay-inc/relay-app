@@ -330,6 +330,14 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Amount excl. VAT");
   },
+  // the ticket window of a board with a hand-picked pipeline: Build with agent under Start conversation
+  "ticket-build": async () => {
+    await open(page, server.url, { fixture: "pipeline-manual" });
+    await click("Productive");
+    await waitText(markers.card);
+    await click(markers.card);
+    await waitText("Build with agent");
+  },
   "board-list": async () => {
     await VIEWS.board();
     await button("List").click();

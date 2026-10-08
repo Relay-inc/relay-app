@@ -148,6 +148,18 @@ export default {
   "pl.label": "Seulement avec le libellé",
   "pl.labelHelp": "Vide : chaque ticket de la colonne.",
   "pl.parallel": "Agents en même temps",
+  "pl.mode": "Prend",
+  "pl.modeAuto": "Automatiquement",
+  "pl.modeManual": "Au choix",
+  "pl.modeAutoHelp":
+    "Chaque ticket de la colonne reçoit un agent. Construire avec un agent dans un ticket en démarre un tout de suite.",
+  "pl.modeManualHelp": "Seulement les tickets que vous lancez avec Construire avec un agent dans la fenêtre du ticket.",
+  "pl.blockedManual":
+    "L'agent a besoin d'informations :\n\n{questions}\n\nRépondez ici, puis Continuer avec l'agent dans Relay.",
+  "pl.full": "{n} agents construisent déjà pour ce projet : lancez celui-ci quand l'un d'eux a fini.",
+  "kb.build": "Construire avec un agent",
+  "kb.buildContinue": "Continuer avec l'agent",
+  "kb.buildRunning": "L'agent construit",
   "pl.hidden": "Commentaires cachés au client",
   "pl.hiddenHelp":
     "Les commentaires de Relay sur le ticket sont internes, hors du portail client de Productive. Dans un projet interne, ce sont des commentaires normaux.",
