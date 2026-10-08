@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Added
 
 - **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows
+- **New project**: the folder button in the sidebar, or "New project…" in a conversation's project panel, adds the project to work-state (a row under the chosen context) and makes its note, and moves the conversation there. A vault without work-state gets one. When a conversation in a project closes, Relay sets that project's Last Touched to today
 - **New vault from the welcome screen**: no vault yet? New vault seeds one in `~/Documents/Relay` (or another empty folder): a `work-state.md` with a Projects table, a `Projects/` folder and a `CLAUDE.md` that tells agents how to keep them
 
 ### Changed

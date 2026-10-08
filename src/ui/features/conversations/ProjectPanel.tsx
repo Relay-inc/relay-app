@@ -4,12 +4,16 @@ import { useWorkspaceStore } from "../../../application/workspace/store";
 import { iconFrom } from "../../../application/workspace/icons";
 import { settings } from "../../../application/settings/settings";
 import { selectedProject } from "../../../application/conversations/selectors";
-import { saveProjectPanel } from "../../../application/conversations/actions";
+import { createProjectFor, saveProjectPanel } from "../../../application/conversations/actions";
+import { contexts as vaultContexts } from "../../../application/workspace/vault";
+import { useNavigationStore } from "../../../application/navigation/store";
 import { closeProjectPanel } from "../../../application/navigation/navigation";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { ProjectImg } from "../../components/ProjectImg";
 
+// the select's option for a project that does not exist yet
+const NEW = "\u0000new";
 // a long project name in the select or the inputs never pushes past the panel
 const fieldLabel = "grid grid-cols-1 gap-1.5 text-sm text-secondary select-none";
 
@@ -30,13 +34,19 @@ export function ProjectPanel() {
       label: current ? settings().projects[current]?.label || "" : "",
     };
   });
-  const [projectName, setProjectName] = useState(current);
+  const opensNew = useNavigationStore(s => s.projectPanel) === "new";
+  const [projectName, setProjectName] = useState(opensNew ? NEW : current);
+  const [newName, setNewName] = useState("");
+  const contexts = vaultContexts();
+  const [context, setContext] = useState(contexts[0] ?? "");
   const [img, setImg] = useState(start.img);
   const [emoji, setEmoji] = useState(start.emoji);
   const [label, setLabel] = useState(start.label);
   const [err, setErr] = useState("");
   const select = useRef<HTMLSelectElement>(null);
-  useEffect(() => select.current?.focus(), []);
+  useEffect(() => {
+    if (projectName !== NEW) select.current?.focus();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pickFile = async (file: File | undefined) => {
     if (!file) return;
@@ -49,6 +59,7 @@ export function ProjectPanel() {
     setEmoji("");
   };
   const save = async () => {
+    if (projectName === NEW) return setErr(await createProjectFor(newName, context || null));
     const edited = current ? { img, emoji: emoji.trim(), label: label.trim() } : undefined;
     setErr(await saveProjectPanel(projectName, edited));
   };
@@ -66,13 +77,38 @@ export function ProjectPanel() {
           onChange={e => setProjectName(e.target.value || null)}
         >
           <option value="">{t("general")}</option>
+          <option value={NEW}>{t("pop.newProject")}</option>
           {names.map(name => (
             <option key={name}>{name}</option>
           ))}
         </select>
       </label>
+      {projectName === NEW ? (
+        <>
+          <label className={fieldLabel}>
+            {t("pop.newName")}
+            <input
+              className="field"
+              autoFocus
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && save()}
+            />
+          </label>
+          {contexts.length > 1 ? (
+            <label className={fieldLabel}>
+              {t("pop.context")}
+              <select className="field" value={context} onChange={e => setContext(e.target.value)}>
+                {contexts.map(name => (
+                  <option key={name}>{name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </>
+      ) : null}
       {/* the sidebar entry of the project: its image or emoji, and its label */}
-      {current ? (
+      {current && projectName !== NEW ? (
         <div className={fieldLabel}>
           {t("pop.sidebar", { name: current })}
           <div className="flex gap-2 items-center">

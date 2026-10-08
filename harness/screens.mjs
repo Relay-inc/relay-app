@@ -597,6 +597,11 @@ const VIEWS = {
   onboarding: async () => {
     await open(page, server.url, { fixture: "onboarding" });
   },
+  "new-project": async () => {
+    await open(page, server.url);
+    await page.getByRole("button", { name: "New project", exact: true }).click();
+    await page.getByLabel("Name").fill("Acme");
+  },
   "onboarding-new-vault": async () => {
     await open(page, server.url, { fixture: "onboarding" });
     await page.getByRole("button", { name: "New vault", exact: true }).click();

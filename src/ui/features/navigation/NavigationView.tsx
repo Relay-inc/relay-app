@@ -8,7 +8,13 @@ import {
 } from "../../../domain/navigation/sidebar";
 import { USAGE } from "../../../domain/navigation/views";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { select, openProject, openProjectPanel, openSettings } from "../../../application/navigation/navigation";
+import {
+  select,
+  openProject,
+  openProjectPanel,
+  openSettings,
+  newProject,
+} from "../../../application/navigation/navigation";
 import {
   sidebarModel,
   setFind,
@@ -315,6 +321,9 @@ export function NavigationView({ className }: { className: string }) {
           onClick={() => select(newChat(null))}
         >
           <Icon name="compose" className="glyph size-4" />
+        </button>
+        <button className="btn-icon" title={t("nav.newProject")} aria-label={t("nav.newProject")} onClick={newProject}>
+          <Icon name="folder" className="glyph size-4" />
         </button>
       </div>
       <label className="flex items-center gap-2 mx-3 mb-1.5 h-7.5 px-2.5 rounded-lg bg-fill-2 text-tertiary">

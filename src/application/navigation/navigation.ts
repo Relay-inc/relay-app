@@ -112,13 +112,18 @@ export const toggleDrawer = (tool: "terminal" | "notes" | "workers" | "changes")
     draft.drawer = draft.drawer === tool ? "" : tool;
     draft.panel.open = "";
   });
-export const openProjectPanel = () => {
+export const openProjectPanel = (newProject = false) => {
   // the coordinator belongs to no project and never moves
   if (isView(nav().selected) || nav().selected === ORCH) return;
   set(draft => {
-    draft.projectPanel = true;
+    draft.projectPanel = newProject ? "new" : true;
   });
 };
+/** The sidebar's New project: a new conversation with its project panel open on a new project. */
+export async function newProject() {
+  await select(newChat(null));
+  openProjectPanel(true);
+}
 export const closeProjectPanel = () =>
   set(draft => {
     draft.projectPanel = false;

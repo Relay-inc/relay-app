@@ -168,6 +168,10 @@ function handle(cmd: string, a: Args): unknown {
     case "vault_status":
       return vault.vaultStatus(vaultOk);
     case "detect_vault":
+    case "add_project":
+      return a.name.trim();
+    case "touch_project":
+      return null;
     case "create_vault":
       return {
         ...vault.vaultStatus(true),

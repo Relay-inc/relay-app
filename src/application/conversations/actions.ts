@@ -16,7 +16,7 @@ import { request } from "../navigation/requests";
 import { chatAgent, chatCaps, chatTextOnly, picks } from "../agents/agents";
 import { saveMainSettings, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
-import { findProjects, project as vaultProject } from "../workspace/vault";
+import { findProjects, loadSnapshot, project as vaultProject } from "../workspace/vault";
 import { setIcon } from "../workspace/icons";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
@@ -451,8 +451,10 @@ async function hide(key: string) {
     delete draft.taken[key];
   });
   saveChats();
-  // what it leaves for the vault, proposed on Today (application/today/capture)
+  // what it leaves for the vault, proposed on Today (application/today/capture), and its project touched today
   captureOnClose(key);
+  const closedIn = cs().chats[key]?.project;
+  if (closedIn) backend.touchProject(closedIn).catch(() => {});
   return worktrees;
 }
 const worktreeNote = (removed: number, kept: number) =>
@@ -591,6 +593,19 @@ export async function saveProjectPanel(project: string | null, fields?: ProjectF
   if (failed) return failed;
   closeProjectPanel();
   return "";
+}
+
+/** A new project in the vault (its work-state row and note), the open conversation moved to it. `context` null: the
+ *  backend picks the first. Resolves with an error to show, or "". */
+export async function createProjectFor(name: string, context: string | null): Promise<string> {
+  let made: string;
+  try {
+    made = await backend.addProject(name, context);
+  } catch (error) {
+    return String(error);
+  }
+  await loadSnapshot();
+  return saveProjectPanel(made);
 }
 
 // ---------- the agents of the open conversation, above the composer
