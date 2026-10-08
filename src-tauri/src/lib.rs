@@ -1569,21 +1569,24 @@ async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -
     let key = mirror::key(&data_dir(&app), &id)?;
     let code = tauri::async_runtime::spawn_blocking(move || c.pair_device()).await.map_err(|e| e.to_string())??;
     let s = |k: &str| m[k].as_str().unwrap_or("").to_string();
-    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key) }.format();
+    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key.clone()) }.format();
     let qr = qrcode::QrCode::new(&line).map_err(|e| e.to_string())?.render::<qrcode::render::svg::Color>().min_dimensions(240, 240).build();
-    Ok(json!({"line": line, "qr": qr}))
+    Ok(json!({"line": line, "qr": qr, "ntfy": ntfy_url(&key)}))
 }
 /// How this Mac starts Claude on a machine, for a conversation its phone starts there: Claude's settings here without
 /// the mail tools (answered by this app) or this Mac's accounts (the machine has its own login), and the mirror's flags
 /// for the vault there, as `spawn` (session/mod.rs) adds them.
-fn machine_profile(mut opts: Value, info: &relay_remote::proto::Info) -> Value {
+fn machine_profile(mut opts: Value, info: &relay_remote::proto::Info, notify: &str) -> Value {
     if let Some(o) = opts.as_object_mut() {
         o.insert("mail".into(), json!(false));
         for k in ["account", "accounts", "active"] { o.remove(k); }
     }
     let (args, env) = mirror::session_args(info, &format!("{}/vault", info.work));
-    json!({"opts": opts, "args": args, "env": env})
+    json!({"opts": opts, "args": args, "env": env, "notify": notify})
 }
+/// The ntfy topic a machine sends this Mac's phone notifications to: made from the mirror's key, so nobody guesses it
+/// and the phone (which has the key from pairing) knows it without being told.
+fn ntfy_url(mirror_key: &str) -> String { format!("https://ntfy.sh/relay-{}", &relay_remote::sync::sha256_hex(format!("ntfy:{mirror_key}").as_bytes())[..32]) }
 /// This Mac's name, for the server's list of paired devices.
 fn sys_name() -> String {
     Command::new("/usr/sbin/scutil").args(["--get", "ComputerName"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
@@ -1840,7 +1843,8 @@ pub fn run() {
                     let client = st.machines.client(m);
                     st.mirrors.round(&data_dir(&h), m, &client, &info, &vault);
                     let Ok(p) = agents::get("claude") else { continue };
-                    let profile = machine_profile(env_of(&h, &st, p).opts, &info);
+                    let notify = mirror::key(&data_dir(&h), id).map(|k| ntfy_url(&k)).unwrap_or_default();
+                    let profile = machine_profile(env_of(&h, &st, p).opts, &info, &notify);
                     let text = profile.to_string();
                     if profiles.get(id) != Some(&text) && client.profile_put(&profile).is_ok() { profiles.insert(id.into(), text); }
                 }
@@ -1889,7 +1893,10 @@ mod machine_tests {
     #[test]
     fn a_machine_profile_keeps_mail_and_accounts_here() {
         let info = relay_remote::proto::Info { work: "/w/abc".into(), ..Default::default() };
-        let p = machine_profile(json!({"mail": true, "account": "/a", "accounts": [{"dir": "/a"}], "active": "/a", "permission": "plan"}), &info);
+        let p = machine_profile(json!({"mail": true, "account": "/a", "accounts": [{"dir": "/a"}], "active": "/a", "permission": "plan"}), &info, "https://ntfy.sh/t");
+        assert_eq!(p["notify"], "https://ntfy.sh/t");
+        let url = ntfy_url(&"a".repeat(64));
+        assert!(url.starts_with("https://ntfy.sh/relay-") && url.len() == "https://ntfy.sh/relay-".len() + 32 && url != ntfy_url(&"b".repeat(64)));
         assert_eq!(p["opts"], json!({"mail": false, "permission": "plan"}));
         let args: Vec<&str> = p["args"].as_array().unwrap().iter().filter_map(|a| a.as_str()).collect();
         assert_eq!(args[..2], ["--add-dir", "/w/abc/context"]);

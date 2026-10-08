@@ -1281,6 +1281,8 @@ export default {
     "Scanne das mit Relay auf deinem Telefon. Das Telefon sieht dann die Gespräche dieses Macs auf {name} und kann den gespiegelten Vault dort öffnen, während dieser Mac zu ist. Gilt einmal, 10 Minuten; Vergessen dieser Maschine entkoppelt auch das Telefon.",
   "mc.phoneLine":
     "Oder füge diese Zeile in Relay auf dem Telefon ein. Sie enthält den Schlüssel zum gespiegelten Vault, teile sie also nicht.",
+  "mc.phoneNtfy":
+    "Benachrichtigungen, während dieser Mac zu ist: abonniere dieses Thema in der ntfy-App auf dem Telefon. Sie sagen nur, dass Claude wartet oder fertig ist, nichts aus dem Gespräch.",
   "mc.hostClients": "Gekoppelte Geräte:",
   "mc.hostNoClients": "Noch kein Gerät gekoppelt.",
   "mc.copy": "Kopieren",

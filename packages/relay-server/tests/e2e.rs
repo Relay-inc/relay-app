@@ -36,7 +36,7 @@ fn start_on(tag: &str, port: u16) -> Server {
     // Claude turn, which needs this Mac's login
     if tag != "claude" { cmd.env("CLAUDE_CONFIG_DIR", data.join("claude")); }
     // a stand-in for claude that says how it was started (start_builds_claude_from_the_laptops_profile)
-    if tag == "start" { cmd.env("RELAY_CLAUDE", data.join("fake-claude")); }
+    if tag == "start" || tag == "notify" { cmd.env("RELAY_CLAUDE", data.join("fake-claude")); }
     let child = cmd.args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &data).env("RELAY_AGENTS_DIR", &agents)
         .stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
@@ -231,6 +231,56 @@ fn start_builds_claude_from_the_laptops_profile() {
     assert_eq!(next(&mut c.frames), "in hi");
     // the laptop sees the conversation its phone started
     assert_eq!(laptop.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["p:1"]);
+}
+
+/// A stand-in ntfy server: the body of each POST it gets.
+fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<String>) {
+    use std::io::Read;
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/relay-topic", l.local_addr().unwrap());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || for mut c in l.incoming().map_while(Result::ok) {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let body = loop {
+            let n = c.read(&mut chunk).unwrap_or(0);
+            if n == 0 { break String::new(); }
+            buf.extend_from_slice(&chunk[..n]);
+            let text = String::from_utf8_lossy(&buf).to_string();
+            let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
+            let len = head.lines().find_map(|h| h.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+            if body.len() >= len { break body[..len].to_string(); }
+        };
+        c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").ok();
+        tx.send(body).ok();
+    });
+    (url, rx)
+}
+
+#[test]
+fn a_waiting_conversation_nobody_follows_goes_to_ntfy() {
+    let s = start("notify");
+    let fake = s.data.join("fake-claude");
+    std::fs::write(&fake, "#!/bin/sh\nwhile IFS= read -r l; do case \"$l\" in\n ask) echo '{\"type\":\"control_request\",\"request_id\":\"r1\",\"request\":{\"subtype\":\"can_use_tool\",\"tool_name\":\"Bash\"}}';;\n later) sleep 1; echo '{\"type\":\"result\",\"subtype\":\"success\"}';;\nesac; done\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let (url, posts) = fake_ntfy();
+    let laptop = paired(&s, "laptop");
+    laptop.unlock(&relay_remote::tls::random_key()).unwrap();
+    laptop.profile_put(&serde_json::json!({"opts": {}, "args": [], "env": [], "notify": url})).unwrap();
+
+    // a card while the laptop follows the conversation: it sees it, no notification
+    let mut c = laptop.start("n:1", "N", "", "", None).unwrap();
+    writeln!(c.stdin, "ask").unwrap();
+    c.stdin.flush().unwrap();
+    assert!(next(&mut c.frames).contains("can_use_tool"));
+    assert!(posts.recv_timeout(Duration::from_millis(2500)).is_err());
+
+    // the laptop goes mid-turn: the turn's end is a notification, with nothing of the conversation in it
+    writeln!(c.stdin, "later").unwrap();
+    c.stdin.flush().unwrap();
+    drop(c);
+    let body = posts.recv_timeout(Duration::from_secs(8)).expect("a notification");
+    assert!(body.starts_with("Claude finished on "), "{body}");
 }
 
 #[test]

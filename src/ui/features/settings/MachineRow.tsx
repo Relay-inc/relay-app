@@ -104,6 +104,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
           <div className="grid min-w-0 flex-1 gap-2">
             <span className={HINT_IN_ROW}>{t("mc.phoneHelp", { name: machine.name })}</span>
             <CommandBlock hint={t("mc.phoneLine")} command={phone.line} />
+            <CommandBlock hint={t("mc.phoneNtfy")} command={phone.ntfy} />
           </div>
         </div>
       ) : null}

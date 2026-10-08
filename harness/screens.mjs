@@ -54,6 +54,7 @@ const VIEWS = {
     await settingsPage("Machines", null, "phone");
     await click("Add phone");
     await waitText("Scan this with Relay on your phone");
+    await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
   waiting: async () => {
     await open(page, server.url);

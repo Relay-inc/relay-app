@@ -1266,6 +1266,8 @@ const en = {
   "mc.phoneHelp":
     "Scan this with Relay on your phone. The phone then sees this Mac's conversations on {name}, and can open its mirror there while this Mac is closed. Works once, for 10 minutes; Forget this machine unpairs the phone too.",
   "mc.phoneLine": "Or paste this line in Relay on the phone. It holds the key to the mirror, so do not share it.",
+  "mc.phoneNtfy":
+    "Notifications while this Mac is closed: subscribe to this topic in the ntfy app on the phone. They only say that Claude waits or finished, nothing of the conversation.",
   "mc.hostClients": "Paired devices:",
   "mc.hostNoClients": "No device paired yet.",
   "mc.copy": "Copy",

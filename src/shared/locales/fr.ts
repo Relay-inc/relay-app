@@ -1286,6 +1286,8 @@ export default {
     "Scannez ceci avec Relay sur votre téléphone. Le téléphone voit alors les conversations de ce Mac sur {name} et peut ouvrir son miroir là-bas pendant que ce Mac est fermé. Valable une fois, 10 minutes ; Oublier cette machine dissocie aussi le téléphone.",
   "mc.phoneLine":
     "Ou collez cette ligne dans Relay sur le téléphone. Elle contient la clé du miroir, ne la partagez donc pas.",
+  "mc.phoneNtfy":
+    "Notifications pendant que ce Mac est fermé : abonnez-vous à ce sujet dans l'app ntfy sur le téléphone. Elles disent seulement que Claude attend ou a fini, rien de la conversation.",
   "mc.hostClients": "Appareils associés :",
   "mc.hostNoClients": "Aucun appareil associé pour l'instant.",
   "mc.copy": "Copier",

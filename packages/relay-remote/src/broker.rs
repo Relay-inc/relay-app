@@ -134,6 +134,9 @@ fn launch_as(meta: &Meta, spec: &Spec, id: &str) -> Result<Conn, String> {
 }
 /// Take back a conversation whose broker outlived the app. None when there is none (it ended, or its grace ran out).
 pub fn reattach(key: &str) -> Option<Conn> { connect(&sock_path(key), APP).ok()?.ok() }
+/// Follow a conversation as `id` beside the apps (a relay-server's notifications): every line from now on, and what
+/// that id missed. None when its broker is gone.
+pub fn follow(key: &str, id: &str) -> Option<Conn> { connect(&sock_path(key), id).ok()?.ok() }
 
 fn connect(sock: &Path, id: &str) -> std::io::Result<Result<Conn, String>> {
     let s = UnixStream::connect(sock)?;

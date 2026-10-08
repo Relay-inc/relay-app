@@ -1270,6 +1270,8 @@ export default {
     "Scan dit met Relay op je telefoon. De telefoon ziet dan de gesprekken van deze Mac op {name}, en kan de gespiegelde vault daar openen terwijl deze Mac dicht is. Werkt één keer, 10 minuten; Vergeten van deze machine ontkoppelt ook de telefoon.",
   "mc.phoneLine":
     "Of plak deze regel in Relay op de telefoon. Hij bevat de sleutel van de gespiegelde vault, deel hem dus niet.",
+  "mc.phoneNtfy":
+    "Meldingen terwijl deze Mac dicht is: abonneer je in de ntfy-app op de telefoon op dit onderwerp. Ze zeggen alleen dat Claude wacht of klaar is, niets van het gesprek.",
   "mc.hostClients": "Gekoppelde apparaten:",
   "mc.hostNoClients": "Nog geen apparaat gekoppeld.",
   "mc.copy": "Kopieer",

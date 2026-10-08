@@ -25,7 +25,8 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, thread};
 
@@ -139,14 +140,18 @@ pub fn info(data: &Path, path: &str) -> Info {
 
 // ---------- serving
 
-pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror> }
+/// `attached`: per conversation, how many devices follow it now (no notification then); `watching`: the conversations
+/// followed for notifications.
+pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>,
+    attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>> }
 
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
         fs::create_dir_all(data.join("pending"))?;
         fs::remove_file(data.join("perm_server.py")).ok(); // the Python tool of before
         let id = identity(data)?;
-        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data) })
+        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data),
+            attached: Mutex::default(), watching: Mutex::default() })
     }
     pub fn fingerprint(&self) -> &str { &self.fp }
 
@@ -162,6 +167,8 @@ impl Server {
             let known: Vec<String> = clients(&m2.data).iter().map(|c| c.fp[..16].to_string()).collect();
             m2.mirror.drop_unknown(&known);
         });
+        let m3 = me.clone();
+        thread::spawn(move || loop { m3.watch_all(); thread::sleep(Duration::from_secs(2)); });
         for tcp in listener.incoming() {
             let Ok(tcp) = tcp else { continue };
             let me = me.clone();
@@ -239,10 +246,10 @@ impl Server {
             "answer" => reply(&mut w, agent_core::pending::answer(&pending, req["id"].as_str().unwrap_or(""), &req["decision"]).map(|_| json!({}))),
             "history" => reply(&mut w, Ok(self.history(&req))),
             "exists" => reply(&mut w, Ok(json!({"dir": req["path"].as_str().is_some_and(|p| p.starts_with('/') && Path::new(p).is_dir())}))),
-            "launch" => { self.revoked_closes(&fp, &w); self.launch(ns, &req, None, r, w) }
+            "launch" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["meta"]["key"])); self.launch(ns, &req, None, r, w) }
             "profile_put" => reply(&mut w, write_private(&self.profile_path(ns), &req["profile"].to_string()).map(|_| json!({})).map_err(|e| e.to_string())),
-            "start" => { self.revoked_closes(&fp, &w); self.start(ns, &req, r, w) }
-            "attach" => { self.revoked_closes(&fp, &w); attach(&key(&req["key"]), r, w) }
+            "start" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); self.start(ns, &req, r, w) }
+            "attach" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); attach(&key(&req["key"]), r, w) }
             _ => reply(&mut w, Err(format!("unknown request {op:?}"))),
         }
     }
@@ -313,6 +320,37 @@ impl Server {
         Ok(json!({}))
     }
 
+    /// A device follows a conversation while this lives.
+    fn attach_guard(&self, key: &str) -> Attached<'_> {
+        *self.attached.lock().unwrap().entry(key.into()).or_default() += 1;
+        Attached { s: self, key: key.into() }
+    }
+    /// Notifications: follow every running conversation of a device whose laptop gave an ntfy topic (in its profile).
+    fn watch_all(self: &Arc<Self>) {
+        for m in fs::read_dir(broker::dir()).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).filter_map(|p| broker::load_meta(&p)) {
+            let Some((ns, _)) = m.key.split_once(':') else { continue };
+            let Some(url) = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|p| p["notify"].as_str().map(String::from)) else { continue };
+            if !url.starts_with("https://") && !url.starts_with("http://") { continue; }
+            if !self.watching.lock().unwrap().insert(m.key.clone()) { continue; }
+            let me = self.clone();
+            thread::spawn(move || { me.watch(&m.key, &url); me.watching.lock().unwrap().remove(&m.key); });
+        }
+    }
+    /// Follow one conversation as `notify`: a permission card or a turn that ended, while no device follows it, goes to
+    /// the ntfy topic. Nothing of the conversation goes along (ntfy.sh is a public server), only that something waits.
+    fn watch(&self, key: &str, url: &str) {
+        let Some(c) = broker::follow(key, "notify") else { return };
+        let _stdin = c.stdin;
+        for l in c.frames.lines().map_while(Result::ok) {
+            let broker::Frame::Out(o) = broker::frame(&l) else { if l.starts_with('x') { break } else { continue } };
+            let Ok(ev) = serde_json::from_str::<Value>(&o) else { continue };
+            let what = if ev["type"] == "control_request" && ev["request"]["subtype"] == "can_use_tool" { "Claude is waiting for your answer" }
+                else if ev["type"] == "result" { "Claude finished" } else { continue };
+            if self.attached.lock().unwrap().get(key).copied().unwrap_or(0) > 0 { continue; }
+            notify(url, &format!("{what} on {}", self.info.host));
+        }
+    }
+
     /// What the laptop sends about how it starts Claude here (profile_put): its Claude settings and the mirror's flags.
     fn profile_path(&self, ns: &str) -> PathBuf { self.data.join("profiles").join(format!("{ns}.json")) }
 
@@ -363,6 +401,21 @@ impl Server {
             Err(e) => bang(&mut w, &e),
         }
     }
+}
+
+struct Attached<'a> { s: &'a Server, key: String }
+impl Drop for Attached<'_> {
+    fn drop(&mut self) {
+        let mut a = self.s.attached.lock().unwrap();
+        if let Some(n) = a.get_mut(&self.key) { *n -= 1; if *n == 0 { a.remove(&self.key); } }
+    }
+}
+
+/// One notification to an ntfy topic, with curl (on a Mac and in the image): no HTTP client in this binary for it.
+fn notify(url: &str, text: &str) {
+    let ok = std::process::Command::new("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-d", text, url])
+        .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
+    if !ok { eprintln!("relay-server: a notification to {url} failed"); }
 }
 
 fn reply(w: &mut tls::Writer, res: Result<Value, String>) -> io::Result<()> {
