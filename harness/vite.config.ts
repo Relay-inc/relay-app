@@ -15,7 +15,9 @@ export default defineConfig((env: ConfigEnv) =>
           order: "pre",
           handler: (html: string) => ({
             html,
-            tags: [{ tag: "script", attrs: { type: "module", src: "/harness/mock-backend.ts" }, injectTo: "head-prepend" }],
+            tags: [
+              { tag: "script", attrs: { type: "module", src: "/harness/mock-backend.ts" }, injectTo: "head-prepend" },
+            ],
           }),
         },
       },

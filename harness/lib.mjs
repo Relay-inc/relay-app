@@ -21,7 +21,12 @@ export async function startServer({ prod = false } = {}) {
   const configFile = `${HERE}vite.config.ts`;
   if (prod) {
     await build({ configFile, logLevel: "warn", build: { outDir: `${HERE}dist`, emptyOutDir: true } });
-    const server = await preview({ configFile, logLevel: "warn", build: { outDir: `${HERE}dist` }, preview: { port: 1431, strictPort: true, host: "127.0.0.1" } });
+    const server = await preview({
+      configFile,
+      logLevel: "warn",
+      build: { outDir: `${HERE}dist` },
+      preview: { port: 1431, strictPort: true, host: "127.0.0.1" },
+    });
     return { url: "http://127.0.0.1:1431", close: () => new Promise(resolve => server.httpServer.close(resolve)) };
   }
   const server = await createServer({ configFile, logLevel: "warn" });
@@ -36,18 +41,27 @@ export async function launch(name = "chromium") {
   try {
     return await chromium.launch();
   } catch {
-    if (!existsSync(CHROME)) throw new Error("no Chromium: install one with `pnpm exec playwright-core install chromium`");
+    if (!existsSync(CHROME))
+      throw new Error("no Chromium: install one with `pnpm exec playwright-core install chromium`");
     return chromium.launch({ executablePath: CHROME, args: ["--headless=new"] });
   }
 }
 
 export async function newPage(browser, { scale = 2, fixedTime = true } = {}) {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: scale, reducedMotion: "reduce", colorScheme: "light", locale: "en-GB", timezoneId: "Europe/Brussels" });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    deviceScaleFactor: scale,
+    reducedMotion: "reduce",
+    colorScheme: "light",
+    locale: "en-GB",
+    timezoneId: "Europe/Brussels",
+  });
   const page = await context.newPage();
   if (fixedTime) await page.clock.setFixedTime(FIXED_NOW);
   page.on("pageerror", e => console.error(`  [page error] ${e.message}`));
   page.on("console", m => {
-    if (m.type() === "error" || (m.type() === "warning" && m.text().startsWith("[harness]"))) console.error(`  [console ${m.type()}] ${m.text()}`);
+    if (m.type() === "error" || (m.type() === "warning" && m.text().startsWith("[harness]")))
+      console.error(`  [console ${m.type()}] ${m.text()}`);
   });
   return page;
 }
@@ -90,27 +104,38 @@ export const PAGE_HELPERS = () => {
     }
   };
   window.__dom = {
-    all: (selector) => [...walk(document.documentElement)].filter(n => n.matches?.(selector)),
+    all: selector => [...walk(document.documentElement)].filter(n => n.matches?.(selector)),
     /** some element whose own text contains `text`, rendered (not display:none) */
-    hasText: (text) => {
+    hasText: text => {
       for (const n of walk(document.documentElement)) {
         if (n.nodeType !== 1 || n.tagName === "STYLE" || n.tagName === "SCRIPT") continue;
-        for (const c of n.childNodes) if (c.nodeType === 3 && c.data.includes(text) && n.getClientRects().length) return true;
+        for (const c of n.childNodes)
+          if (c.nodeType === 3 && c.data.includes(text) && n.getClientRects().length) return true;
       }
       return false;
     },
     /** the element that scrolls the most content: the conversation, the mail list, ... */
     mainScroller: () => {
-      let best = null, most = 0;
+      let best = null,
+        most = 0;
       for (const n of walk(document.documentElement)) {
         if (n.nodeType !== 1) continue;
         const extra = n.scrollHeight - n.clientHeight;
-        if (extra > most && n.clientHeight > 200 && getComputedStyle(n).overflowY.match(/auto|scroll/)) { best = n; most = extra; }
+        if (extra > most && n.clientHeight > 200 && getComputedStyle(n).overflowY.match(/auto|scroll/)) {
+          best = n;
+          most = extra;
+        }
       }
       return best;
     },
   };
 };
 
-export const median = xs => { const s = [...xs].sort((a, b) => a - b); return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : NaN; };
-export const pct = (xs, p) => { const s = [...xs].sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)] : NaN; };
+export const median = xs => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : NaN;
+};
+export const pct = (xs, p) => {
+  const s = [...xs].sort((a, b) => a - b);
+  return s.length ? s[Math.min(s.length - 1, Math.ceil((p / 100) * s.length) - 1)] : NaN;
+};

@@ -758,7 +758,8 @@ export default {
     "Choisissez le dossier de votre coffre Obsidian. Relay y cherche votre work-state, vos rappels et les autres fichiers qu'il lit ; vérifiez ci-dessous ce qu'il a trouvé.",
   "vault.none": "Aucun dossier choisi",
   "vault.choose": "Choisir le dossier du coffre…",
-  "vault.newHelp": "Pas encore de coffre ? Relay en crée un : un dossier markdown avec vos projets, leurs notes et vos rappels.",
+  "vault.newHelp":
+    "Pas encore de coffre ? Relay en crée un : un dossier markdown avec vos projets, leurs notes et vos rappels.",
   "vault.new": "Nouveau coffre",
   "vault.newElsewhere": "Dans un autre dossier…",
   "vault.use": "Utiliser ce coffre",
@@ -771,7 +772,8 @@ export default {
   "vault.found": "trouvé",
   "vault.missing": "absent",
   "vault.k.workState": "État du travail",
-  "vault.h.workState": "work-state.md avec un tableau de projets par contexte. Sans lui, la barre latérale ne liste aucun projet.",
+  "vault.h.workState":
+    "work-state.md avec un tableau de projets par contexte. Sans lui, la barre latérale ne liste aucun projet.",
   "vault.k.reminders": "Rappels",
   "vault.h.reminders": "reminders.md avec le tableau des rappels.",
   "vault.k.notes": "Notes de projet",

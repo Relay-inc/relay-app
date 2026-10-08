@@ -758,7 +758,8 @@ export default {
     "Wähle den Ordner deines Obsidian-Vaults. Relay sucht darin work-state, Erinnerungen und die anderen Dateien, die es liest; prüfe unten, was gefunden wurde.",
   "vault.none": "Kein Ordner gewählt",
   "vault.choose": "Vault-Ordner wählen…",
-  "vault.newHelp": "Noch kein Vault? Relay legt einen an: ein Ordner mit Markdown für deine Projekte, ihre Notizen und Erinnerungen.",
+  "vault.newHelp":
+    "Noch kein Vault? Relay legt einen an: ein Ordner mit Markdown für deine Projekte, ihre Notizen und Erinnerungen.",
   "vault.new": "Neuer Vault",
   "vault.newElsewhere": "In einem anderen Ordner…",
   "vault.use": "Diesen Vault verwenden",
@@ -770,7 +771,8 @@ export default {
   "vault.found": "gefunden",
   "vault.missing": "fehlt",
   "vault.k.workState": "Arbeitsstand",
-  "vault.h.workState": "work-state.md mit einer Projekttabelle pro Kontext. Ohne sie zeigt die Seitenleiste keine Projekte.",
+  "vault.h.workState":
+    "work-state.md mit einer Projekttabelle pro Kontext. Ohne sie zeigt die Seitenleiste keine Projekte.",
   "vault.k.reminders": "Erinnerungen",
   "vault.h.reminders": "reminders.md mit der Erinnerungstabelle.",
   "vault.k.notes": "Projektnotizen",

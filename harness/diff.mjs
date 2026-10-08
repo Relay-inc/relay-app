@@ -10,7 +10,9 @@ if (!a || !b) {
   console.error("usage: node harness/diff.mjs <labelA> <labelB>");
   process.exit(2);
 }
-const dirA = `${HERE}screens/${a}`, dirB = `${HERE}screens/${b}`, out = `${HERE}screens/diff-${a}-${b}`;
+const dirA = `${HERE}screens/${a}`,
+  dirB = `${HERE}screens/${b}`,
+  out = `${HERE}screens/diff-${a}-${b}`;
 mkdirSync(out, { recursive: true });
 
 const views = [...new Set([...readdirSync(dirA), ...readdirSync(dirB)])].filter(f => f.endsWith(".png")).sort();
@@ -24,11 +26,13 @@ for (const file of views) {
   const imgA = PNG.sync.read(readFileSync(`${dirA}/${file}`));
   const imgB = PNG.sync.read(readFileSync(`${dirB}/${file}`));
   // different sizes: compare the shared top-left area, count the rest as differing
-  const width = Math.min(imgA.width, imgB.width), height = Math.min(imgA.height, imgB.height);
+  const width = Math.min(imgA.width, imgB.width),
+    height = Math.min(imgA.height, imgB.height);
   const crop = img => {
     if (img.width === width && img.height === height) return img.data;
     const data = Buffer.alloc(width * height * 4);
-    for (let y = 0; y < height; y++) img.data.copy(data, y * width * 4, y * img.width * 4, y * img.width * 4 + width * 4);
+    for (let y = 0; y < height; y++)
+      img.data.copy(data, y * width * 4, y * img.width * 4, y * img.width * 4 + width * 4);
     return data;
   };
   const diff = new PNG({ width, height });
@@ -36,8 +40,16 @@ for (const file of views) {
   const total = Math.max(imgA.width * imgA.height, imgB.width * imgB.height);
   const percent = ((changed + (total - width * height)) / total) * 100;
   writeFileSync(`${out}/${file}`, PNG.sync.write(diff));
-  rows.push([view, `${percent.toFixed(2)} %`, imgA.width !== imgB.width || imgA.height !== imgB.height ? "size differs" : ""]);
+  rows.push([
+    view,
+    `${percent.toFixed(2)} %`,
+    imgA.width !== imgB.width || imgA.height !== imgB.height ? "size differs" : "",
+  ]);
 }
-const table = [`| View | Pixels differing | Note |`, `|---|---:|---|`, ...rows.map(([v, p, n = ""]) => `| ${v} | ${p} | ${n} |`)].join("\n");
+const table = [
+  `| View | Pixels differing | Note |`,
+  `|---|---:|---|`,
+  ...rows.map(([v, p, n = ""]) => `| ${v} | ${p} | ${n} |`),
+].join("\n");
 writeFileSync(`${out}/report.md`, `# ${a} vs ${b}\n\n${table}\n`);
 console.log(table);
