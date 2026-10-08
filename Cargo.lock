@@ -4184,6 +4184,8 @@ dependencies = [
 name = "relay-mobile"
 version = "0.0.15"
 dependencies = [
+ "agent-claude",
+ "agent-core",
  "relay-remote",
  "serde_json",
  "tauri",

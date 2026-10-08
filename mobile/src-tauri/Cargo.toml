@@ -15,3 +15,5 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde_json.workspace = true
 relay-remote = { path = "../../packages/relay-remote" }
+agent-core.workspace = true
+agent-claude = { path = "../../packages/agent-claude" }

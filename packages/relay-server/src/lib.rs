@@ -141,9 +141,9 @@ pub fn info(data: &Path, path: &str) -> Info {
 // ---------- serving
 
 /// `attached`: per conversation, how many devices follow it now (no notification then); `watching`: the conversations
-/// followed for notifications.
+/// the server follows itself; `sids`: the Claude session of each, for a device that joins after it started (a phone).
 pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>,
-    attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>> }
+    attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>> }
 
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
@@ -151,7 +151,8 @@ impl Server {
         fs::remove_file(data.join("perm_server.py")).ok(); // the Python tool of before
         let id = identity(data)?;
         Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data),
-            attached: Mutex::default(), watching: Mutex::default() })
+            attached: Mutex::default(), watching: Mutex::default(),
+            sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()) })
     }
     pub fn fingerprint(&self) -> &str { &self.fp }
 
@@ -177,7 +178,7 @@ impl Server {
         Ok(())
     }
 
-    fn conn(&self, tcp: TcpStream) -> io::Result<()> {
+    fn conn(self: &Arc<Self>, tcp: TcpStream) -> io::Result<()> {
         let peer = tcp.peer_addr().map(|a| a.to_string()).unwrap_or_default();
         // inside the handshake: a known device, or any device while a pairing code is open (it may then only pair)
         let data = self.data.clone();
@@ -240,7 +241,12 @@ impl Server {
                 if ok { let data = self.data.clone(); thread::spawn(move || { thread::sleep(Duration::from_millis(300)); upgrade::restart(&data) }); }
                 Ok(())
             }
-            "list" => reply(&mut w, Ok(json!({"metas": metas(ns)}))),
+            "list" => {
+                let metas = metas(ns);
+                let sids = self.sids.lock().unwrap();
+                let of: serde_json::Map<String, Value> = metas.iter().filter_map(|m| sids.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
+                reply(&mut w, Ok(json!({"metas": metas, "sids": of})))
+            }
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
             "answer" => reply(&mut w, agent_core::pending::answer(&pending, req["id"].as_str().unwrap_or(""), &req["decision"]).map(|_| json!({}))),
@@ -292,7 +298,9 @@ impl Server {
         use agent_core::AgentProvider;
         let (sid, from, cwd) = (req["sid"].as_str().unwrap_or(""), req["from"].as_u64().unwrap_or(0), req["cwd"].as_str().unwrap_or(""));
         let pending = self.data.join("pending");
-        let env = agent_core::Env { home: &self.info.home, vault: cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &Value::Null };
+        // Claude files a session under the folder as it resolves it (/tmp is /private/tmp on a Mac)
+        let cwd = fs::canonicalize(cwd).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| cwd.to_string());
+        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &Value::Null };
         let (items, next) = agent_claude::PROVIDER.history(&env, sid, from);
         json!({"items": items, "next": next})
     }
@@ -325,30 +333,42 @@ impl Server {
         *self.attached.lock().unwrap().entry(key.into()).or_default() += 1;
         Attached { s: self, key: key.into() }
     }
-    /// Notifications: follow every running conversation of a device whose laptop gave an ntfy topic (in its profile).
+    /// Follow every running conversation (watch), also the ones from before this process.
     fn watch_all(self: &Arc<Self>) {
         for m in fs::read_dir(broker::dir()).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).filter_map(|p| broker::load_meta(&p)) {
-            let Some((ns, _)) = m.key.split_once(':') else { continue };
-            let Some(url) = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|p| p["notify"].as_str().map(String::from)) else { continue };
-            if !url.starts_with("https://") && !url.starts_with("http://") { continue; }
-            if !self.watching.lock().unwrap().insert(m.key.clone()) { continue; }
-            let me = self.clone();
-            thread::spawn(move || { me.watch(&m.key, &url); me.watching.lock().unwrap().remove(&m.key); });
+            if m.key.contains(':') { self.watch_key(&m.key); }
         }
     }
-    /// Follow one conversation as `notify`: a permission card or a turn that ended, while no device follows it, goes to
-    /// the ntfy topic. Nothing of the conversation goes along (ntfy.sh is a public server), only that something waits.
-    fn watch(&self, key: &str, url: &str) {
-        let Some(c) = broker::follow(key, "notify") else { return };
+    /// Follow a conversation unless it is followed already: connected here, read on a thread of its own.
+    fn watch_key(self: &Arc<Self>, key: &str) {
+        if !self.watching.lock().unwrap().insert(key.into()) { return; }
+        let Some(c) = broker::follow(key, "notify") else { self.watching.lock().unwrap().remove(key); return };
+        let (me, key) = (self.clone(), key.to_string());
+        thread::spawn(move || { me.watch(&key, c); me.watching.lock().unwrap().remove(&key); });
+    }
+    /// Follow one conversation as `notify`: its Claude session (for `list`), and, when the device's laptop gave an ntfy
+    /// topic (in its profile), a permission card or a turn that ended while no device follows it goes there. Nothing of
+    /// the conversation goes along (ntfy.sh is a public server), only that something waits.
+    fn watch(&self, key: &str, c: broker::Conn) {
         let _stdin = c.stdin;
+        let ns = key.split_once(':').map_or("", |x| x.0);
         for l in c.frames.lines().map_while(Result::ok) {
             let broker::Frame::Out(o) = broker::frame(&l) else { if l.starts_with('x') { break } else { continue } };
             let Ok(ev) = serde_json::from_str::<Value>(&o) else { continue };
+            if let Some(sid) = ev["session_id"].as_str().filter(|s| agent_core::safe_id(s)) { self.set_sid(key, Some(sid)); }
             let what = if ev["type"] == "control_request" && ev["request"]["subtype"] == "can_use_tool" { "Claude is waiting for your answer" }
                 else if ev["type"] == "result" { "Claude finished" } else { continue };
             if self.attached.lock().unwrap().get(key).copied().unwrap_or(0) > 0 { continue; }
-            notify(url, &format!("{what} on {}", self.info.host));
+            let url = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|p| p["notify"].as_str().map(String::from));
+            if let Some(url) = url.filter(|u| u.starts_with("https://") || u.starts_with("http://")) { notify(&url, &format!("{what} on {}", self.info.host)); }
         }
+        self.set_sid(key, None);
+    }
+    /// A conversation's session, kept in sids.json too: after a restart its broker still runs, the line is long gone.
+    fn set_sid(&self, key: &str, sid: Option<&str>) {
+        let mut sids = self.sids.lock().unwrap();
+        let changed = match sid { Some(s) => sids.insert(key.into(), s.into()).as_deref() != Some(s), None => sids.remove(key).is_some() };
+        if changed { write_private(&self.data.join("sids.json"), &serde_json::to_string(&*sids).unwrap()).ok(); }
     }
 
     /// What the laptop sends about how it starts Claude here (profile_put): its Claude settings and the mirror's flags.
@@ -357,7 +377,7 @@ impl Server {
     /// Start a Claude conversation in the device's mirrored vault without the laptop (a phone): the command is built
     /// here with the provider's own code, the way the laptop builds it, from the laptop's last profile. `resume` goes on
     /// with a session. No mail tools: those are answered by the laptop.
-    fn start(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+    fn start(self: &Arc<Self>, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         use agent_core::AgentProvider;
         let Some(profile) = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) else {
             return bang(&mut w, "no way to start Claude here yet: open Relay on the laptop once while this machine is online");
@@ -378,7 +398,7 @@ impl Server {
     }
 
     /// `init`: a first line for a new agent's stdin (Claude's initialize), not sent to one that already runs.
-    fn launch(&self, ns: &str, req: &Value, init: Option<String>, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+    fn launch(self: &Arc<Self>, ns: &str, req: &Value, init: Option<String>, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
         let (mut meta, mut spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
         meta.key = format!("{ns}:{}", meta.key);
@@ -395,6 +415,8 @@ impl Server {
         // the broker connection launch makes is dropped at once: attach takes it over with a hello of its own
         match broker::launch_spec(&meta, &spec) {
             Ok(mut c) => {
+                // followed before any device: the session line at the start goes nowhere else first
+                self.watch_key(&meta.key);
                 if let Some(l) = init { writeln!(c.stdin, "{l}").and_then(|_| c.stdin.flush()).ok(); }
                 attach(&meta.key, r, w)
             }
