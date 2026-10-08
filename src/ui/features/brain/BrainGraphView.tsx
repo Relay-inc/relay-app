@@ -11,7 +11,15 @@ import { agoOf } from "./ago";
 
 /** Graph: every note of the folder as a dot, its links as lines. One row of controls above it: the legend, the
  *  counts, hide index notes, the conversation glow and which conversation it shows. */
-export function BrainGraphView({ root, graph, glow }: { root: BrainRoot; graph: BrainGraph; glow: Map<string, Glow> | null }) {
+export function BrainGraphView({
+  root,
+  graph,
+  glow,
+}: {
+  root: BrainRoot;
+  graph: BrainGraph;
+  glow: Map<string, Glow> | null;
+}) {
   const { t, locale } = useT();
   const hideHubs = useBrainStore(s => s.hideHubs);
   const glowKey = useBrainStore(s => s.glowKey);

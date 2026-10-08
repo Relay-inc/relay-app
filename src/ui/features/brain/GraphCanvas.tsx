@@ -183,7 +183,8 @@ export function GraphCanvas({
       const ty = d.y! + radius.current[i] + 12 / k;
       const half = ctx.measureText(text).width / 2;
       const box: [number, number, number, number] = [d.x! - half, ty - lineH, d.x! + half, ty + 2 / k];
-      if (i !== hover.current && boxes.some(b => box[0] < b[2] && b[0] < box[2] && box[1] < b[3] && b[1] < box[3])) continue;
+      if (i !== hover.current && boxes.some(b => box[0] < b[2] && b[0] < box[2] && box[1] < b[3] && b[1] < box[3]))
+        continue;
       boxes.push(box);
       ctx.strokeText(text, d.x!, ty);
       ctx.fillText(text, d.x!, ty);
@@ -202,7 +203,7 @@ export function GraphCanvas({
       y1 = Math.max(y1, d.y!);
     }
     const k = Math.min(2, (c.clientWidth - 48) / Math.max(1, x1 - x0), (c.clientHeight - 48) / Math.max(1, y1 - y0));
-    view.current = { k, x: -k * (x0 + x1) / 2, y: -k * (y0 + y1) / 2 };
+    view.current = { k, x: (-k * (x0 + x1)) / 2, y: (-k * (y0 + y1)) / 2 };
   }
   /** The dot under a point of the canvas (CSS pixels), -1 for none. The hit area is wider than the dot. */
   function dotAt(px: number, py: number) {
@@ -229,7 +230,9 @@ export function GraphCanvas({
     dots.current = shown.map(i => {
       const at = placed.get(`${root}\n${graph.nodes[i].p}`);
       // a new note starts next to a placed neighbour, so it settles in place instead of flying in
-      const friend = !at ? adj.current[i].map(j => placed.get(`${root}\n${graph.nodes[j].p}`)).find(Boolean) : undefined;
+      const friend = !at
+        ? adj.current[i].map(j => placed.get(`${root}\n${graph.nodes[j].p}`)).find(Boolean)
+        : undefined;
       return {
         i,
         x: at?.x ?? (friend ? friend.x + Math.random() * 10 : undefined),
@@ -242,7 +245,12 @@ export function GraphCanvas({
       if (visible.has(graph.edges[e]) && visible.has(graph.edges[e + 1]))
         links.push({ source: graph.edges[e], target: graph.edges[e + 1] });
     const s = forceSimulation<Dot>(dots.current)
-      .force("link", forceLink<Dot, { source: number; target: number }>(links).id(d => d.i).distance(28))
+      .force(
+        "link",
+        forceLink<Dot, { source: number; target: number }>(links)
+          .id(d => d.i)
+          .distance(28),
+      )
       .force("charge", forceManyBody<Dot>().strength(-36).distanceMax(420))
       .force("center", forceCenter(0, 0))
       // loose notes stay near instead of drifting off

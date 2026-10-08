@@ -167,7 +167,12 @@ export function ChatBar({
           </button>
           {/* the notes this conversation read and wrote, lit in the Brain graph */}
           {onShowInBrain ? (
-            <button className="btn-icon" title={t("brain.showInTitle")} aria-label={t("brain.showIn")} onClick={onShowInBrain}>
+            <button
+              className="btn-icon"
+              title={t("brain.showInTitle")}
+              aria-label={t("brain.showIn")}
+              onClick={onShowInBrain}
+            >
               <Icon name="brain" className="glyph size-4" />
             </button>
           ) : null}

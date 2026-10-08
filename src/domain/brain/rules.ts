@@ -79,6 +79,7 @@ export const glowLevel = (at: number, now: number, days: number) =>
 /** The conversations that touched notes in a folder, the most recent first. */
 export function touchedKeys(touches: Touch[], root: string): string[] {
   const last = new Map<string, number>();
-  for (const touch of touches) if (touch.root === root) last.set(touch.key, Math.max(touch.at, last.get(touch.key) ?? 0));
+  for (const touch of touches)
+    if (touch.root === root) last.set(touch.key, Math.max(touch.at, last.get(touch.key) ?? 0));
   return [...last].sort((a, b) => b[1] - a[1]).map(([key]) => key);
 }

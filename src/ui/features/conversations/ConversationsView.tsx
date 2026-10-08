@@ -130,9 +130,7 @@ export function ConversationsView({ className }: { className: string }) {
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}
-      onShowInBrain={
-        bar.renamable && !bar.session ? () => showInBrain(selected).then(() => select(BRAIN)) : undefined
-      }
+      onShowInBrain={bar.renamable && !bar.session ? () => showInBrain(selected).then(() => select(BRAIN)) : undefined}
     />
   );
   if (ownScroll)
