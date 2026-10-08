@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows
 - **New project**: the folder button in the sidebar, or "New project…" in a conversation's project panel, adds the project to work-state (a row under the chosen context) and makes its note, and moves the conversation there. A vault without work-state gets one. When a conversation in a project closes, Relay sets that project's Last Touched to today
 - **New vault from the welcome screen**: no vault yet? New vault seeds one in `~/Documents/Relay` (or another empty folder): a `work-state.md` with a Projects table, a `Projects/` folder and a `CLAUDE.md` that tells agents how to keep them
 
@@ -25,6 +26,8 @@ a PR. Versions follow
 ### Fixed
 
 - **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout
+- **A large paste no longer takes over the conversation**: the composer stops growing at 40% of the window and scrolls inside, so the messages and the send button stay in view
+- **Banners no longer eat memory**: the process behind each unclicked banner grew by a few MB a minute (up to ~5 GB) and stayed alive after Relay quit, 46 of them held ~129 GB. The click wait in mac-notification-sys leaked a copy of the delivered banners 10 times a second; Relay now builds a patched copy (`src-tauri/vendor/mac-notification-sys`) and a banner stays at ~9 MB. A banner's process also exits once Relay quits
 
 ## [0.0.14] - 2026-10-07
 
