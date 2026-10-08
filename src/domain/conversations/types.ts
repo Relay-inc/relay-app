@@ -106,6 +106,8 @@ export type Pending = {
   tool_name: string;
   input: ToolInput;
   suggestions?: unknown[];
+  at?: number; // when it was raised, seconds since the epoch
+  provider?: string;
 };
 /** A transcript read from an offset: its events and where the next read starts. */
 export type Transcript<E> = { items: E[]; next: number };

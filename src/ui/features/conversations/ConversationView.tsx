@@ -29,8 +29,9 @@ function groupSteps(items: Item[]) {
 }
 
 /** The open conversation: what was said and done, a question about the project, the cards waiting, the working
- *  indicator and the messages the agent has not read yet. A stream delta changes one item; the others keep their identity and do not redraw. */
-export function ConversationView() {
+ *  indicator and the messages the agent has not read yet. A stream delta changes one item; the others keep their identity and do not redraw.
+ *  `cards`: false where the container shows the cards itself (the phone docks them under the conversation). */
+export function ConversationView({ cards = true }: { cards?: boolean }) {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
   const items = useConversationsStore(s => s.messages[selected]);
@@ -77,9 +78,7 @@ export function ConversationView() {
       )}
       {routeHits ? <RouteChoice hits={routeHits} onRoute={routeTo} /> : null}
       {askHits ? <RouteChoice hits={askHits} onRoute={answerAsk} /> : null}
-      {waiting.map(request => (
-        <PendingRequest key={request.id} request={request} />
-      ))}
+      {cards ? waiting.map(request => <PendingRequest key={request.id} request={request} />) : null}
       {/* every provider shares the same indicator; permission cards take its place while waiting */}
       {busy && !waiting.length ? <Working label={working} text={outside ? t("work.outside") : working} /> : null}
       {where.writing ? <Working text={t("term.writing")} /> : null}
