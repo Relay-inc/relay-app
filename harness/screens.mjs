@@ -49,6 +49,18 @@ const settingsPage = async (tab, sub, fixture = "default") => {
 };
 
 const VIEWS = {
+  // the phone (mobile.html) at an iPhone's width: the conversation list, and one with a permission card
+  "phone-list": async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, server.url, { path: "/mobile.html" });
+    await waitText("Conversations");
+  },
+  "phone-conversation": async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, server.url, { path: "/mobile.html" });
+    await page.locator("button:has(span.font-medium)").first().click(); // the first row: the conversation with the card
+    await waitText("Always allow"); // the card, with the next pending poll
+  },
   // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
     await settingsPage("Machines", null, "phone");

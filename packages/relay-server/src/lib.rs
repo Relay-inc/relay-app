@@ -143,7 +143,8 @@ pub fn info(data: &Path, path: &str) -> Info {
 /// `attached`: per conversation, how many devices follow it now (no notification then); `watching`: the conversations
 /// the server follows itself; `sids`: the Claude session of each, for a device that joins after it started (a phone).
 pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>,
-    attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>> }
+    attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>>,
+    titles: Mutex<HashMap<String, String>> }
 
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
@@ -152,7 +153,8 @@ impl Server {
         let id = identity(data)?;
         Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data),
             attached: Mutex::default(), watching: Mutex::default(),
-            sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()) })
+            sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()),
+            titles: Mutex::default() })
     }
     pub fn fingerprint(&self) -> &str { &self.fp }
 
@@ -245,7 +247,9 @@ impl Server {
                 let metas = metas(ns);
                 let sids = self.sids.lock().unwrap();
                 let of: serde_json::Map<String, Value> = metas.iter().filter_map(|m| sids.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
-                reply(&mut w, Ok(json!({"metas": metas, "sids": of})))
+                let titles = self.titles.lock().unwrap();
+                let named: serde_json::Map<String, Value> = metas.iter().filter_map(|m| titles.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
+                reply(&mut w, Ok(json!({"metas": metas, "sids": of, "titles": named})))
             }
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
@@ -356,6 +360,14 @@ impl Server {
             let broker::Frame::Out(o) = broker::frame(&l) else { if l.starts_with('x') { break } else { continue } };
             let Ok(ev) = serde_json::from_str::<Value>(&o) else { continue };
             if let Some(sid) = ev["session_id"].as_str().filter(|s| agent_core::safe_id(s)) { self.set_sid(key, Some(sid)); }
+            // the first thing said in it names it in a phone's list (memory only, gone with a restart)
+            if ev["type"] == "user" && !self.titles.lock().unwrap().contains_key(key) {
+                let c = &ev["message"]["content"];
+                let text = c.as_str().map(String::from).or_else(|| c.as_array()?.iter().find(|b| b["type"] == "text").and_then(|b| b["text"].as_str()).map(String::from));
+                if let Some(t) = text.map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|t| !t.is_empty()) {
+                    self.titles.lock().unwrap().insert(key.into(), t.chars().take(80).collect());
+                }
+            }
             let what = if ev["type"] == "control_request" && ev["request"]["subtype"] == "can_use_tool" { "Claude is waiting for your answer" }
                 else if ev["type"] == "result" { "Claude finished" } else { continue };
             if self.attached.lock().unwrap().get(key).copied().unwrap_or(0) > 0 { continue; }
@@ -363,6 +375,7 @@ impl Server {
             if let Some(url) = url.filter(|u| u.starts_with("https://") || u.starts_with("http://")) { notify(&url, &format!("{what} on {}", self.info.host)); }
         }
         self.set_sid(key, None);
+        self.titles.lock().unwrap().remove(key);
     }
     /// A conversation's session, kept in sids.json too: after a restart its broker still runs, the line is long gone.
     fn set_sid(&self, key: &str, sid: Option<&str>) {

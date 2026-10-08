@@ -62,6 +62,13 @@ export async function select(key: string, tool: Tool | null = null) {
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");
 }
+/** Only open a conversation and scroll to its end, without what `select` loads for the desktop's views (the phone). */
+export function show(key: string) {
+  set(draft => {
+    draft.selected = key;
+  });
+  if (key) request("scroll-bottom");
+}
 /** A project's newest conversation, or a new one under it. */
 export const openProject = (project: string) => select(chatsOf(project)[0]?.key || newChat(project));
 /** A new conversation under the open one's project, or a general one. */

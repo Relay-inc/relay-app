@@ -276,6 +276,20 @@ function handle(cmd: string, a: Args): unknown {
       return terminalAgents();
     case "running":
       return {}; // conversation key -> turns running, for the processes the app started
+    // the phone (mobile.html): the paired machine, the laptop's conversations there, following one
+    case "info":
+      return { host: "server", version: "0.0.15", mirror_open: true };
+    case "conversations":
+      return [conv.PERMISSION_KEY, conv.LONG_KEY].map(key => ({
+        key,
+        title: conv.conversations.find(c => c.key === key)?.title ?? null,
+        provider: "claude",
+        model: "sonnet",
+        effort: "",
+        sid: conv.sidOf(key),
+      }));
+    case "open":
+      return null;
     case "conversation_changes":
       return a.key === conv.LONG_KEY ? changes : [];
     case "drop_worktrees":

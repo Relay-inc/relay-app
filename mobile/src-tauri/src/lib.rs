@@ -67,11 +67,12 @@ fn info(app: AppHandle) -> Result<Value, String> {
     Ok(json!(c.info()?))
 }
 
-/// The laptop's conversations on the server: [{key, provider, model, effort, sid}], `sid` where the server saw it.
+/// The laptop's conversations on the server: [{key, title, provider, model, effort, sid}], `sid` and `title` (the first
+/// thing said in it) where the server saw them.
 #[tauri::command]
 fn conversations(app: AppHandle) -> Result<Value, String> {
-    let (metas, sids) = server(&app)?.list_sessions()?;
-    Ok(json!(metas.iter().map(|m| json!({"key": m.key, "provider": m.provider, "model": m.model, "effort": m.effort, "sid": sids.get(&m.key)})).collect::<Vec<_>>()))
+    let (metas, sids, titles) = server(&app)?.list_named()?;
+    Ok(json!(metas.iter().map(|m| json!({"key": m.key, "title": titles.get(&m.key), "provider": m.provider, "model": m.model, "effort": m.effort, "sid": sids.get(&m.key)})).collect::<Vec<_>>()))
 }
 
 /// The conversations whose agent runs, with the turns each has in flight as this phone saw them (desktop: `running`).

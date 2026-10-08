@@ -261,7 +261,7 @@ fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<String>) {
 fn a_waiting_conversation_nobody_follows_goes_to_ntfy() {
     let s = start("notify");
     let fake = s.data.join("fake-claude");
-    std::fs::write(&fake, "#!/bin/sh\nwhile IFS= read -r l; do case \"$l\" in\n *initialize*) echo '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"0b1e2c3d-0000-4000-8000-000000000001\"}';;\n ask) echo '{\"type\":\"control_request\",\"request_id\":\"r1\",\"request\":{\"subtype\":\"can_use_tool\",\"tool_name\":\"Bash\"}}';;\n later) sleep 1; echo '{\"type\":\"result\",\"subtype\":\"success\"}';;\nesac; done\n").unwrap();
+    std::fs::write(&fake, "#!/bin/sh\nwhile IFS= read -r l; do case \"$l\" in\n *initialize*) echo '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"0b1e2c3d-0000-4000-8000-000000000001\"}';;\n name) echo '{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Check the   portal  redirect\"}]}}';;\n ask) echo '{\"type\":\"control_request\",\"request_id\":\"r1\",\"request\":{\"subtype\":\"can_use_tool\",\"tool_name\":\"Bash\"}}';;\n later) sleep 1; echo '{\"type\":\"result\",\"subtype\":\"success\"}';;\nesac; done\n").unwrap();
     std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
     let (url, posts) = fake_ntfy();
     let laptop = paired(&s, "laptop");
@@ -273,6 +273,17 @@ fn a_waiting_conversation_nobody_follows_goes_to_ntfy() {
     assert!(next(&mut c.frames).contains("session_id"));
     // the server saw the session too: a device that comes later (a phone) gets it with the list
     assert_eq!(laptop.list_sessions().unwrap().1.get("n:1").map(String::as_str), Some("0b1e2c3d-0000-4000-8000-000000000001"));
+    // and its first message names it, on one line
+    writeln!(c.stdin, "name").unwrap();
+    c.stdin.flush().unwrap();
+    assert!(next(&mut c.frames).contains("\"user\""));
+    let t = Instant::now();
+    let title = loop {
+        let title = laptop.list_named().unwrap().2.remove("n:1");
+        if title.is_some() || t.elapsed() > Duration::from_secs(2) { break title; }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(title.as_deref(), Some("Check the portal redirect"));
     writeln!(c.stdin, "ask").unwrap();
     c.stdin.flush().unwrap();
     assert!(next(&mut c.frames).contains("can_use_tool"));

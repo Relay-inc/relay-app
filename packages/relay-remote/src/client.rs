@@ -108,9 +108,13 @@ impl Client {
     }
     /// The same with each one's Claude session id where the server saw it: (metas, key -> session id).
     pub fn list_sessions(&self) -> Result<(Vec<Meta>, std::collections::HashMap<String, String>), String> {
+        self.list_named().map(|(m, s, _)| (m, s))
+    }
+    /// The same with each one's title too, the first thing said in it (key -> title), where the server saw it.
+    pub fn list_named(&self) -> Result<(Vec<Meta>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>), String> {
         let v = self.call(json!({"op": "list"}))?;
         let metas = serde_json::from_value(v["metas"].clone()).map_err(|e| e.to_string())?;
-        Ok((metas, serde_json::from_value(v["sids"].clone()).unwrap_or_default()))
+        Ok((metas, serde_json::from_value(v["sids"].clone()).unwrap_or_default(), serde_json::from_value(v["titles"].clone()).unwrap_or_default()))
     }
     pub fn kill(&self, key: &str, pid: u32) -> Result<(), String> { self.call(json!({"op": "kill", "key": key, "pid": pid})).map(|_| ()) }
     pub fn pending(&self) -> Result<Vec<Value>, String> {
