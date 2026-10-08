@@ -187,5 +187,6 @@ const nameOf = (b: Board, id: string) => b.columns.find(c => c.id === id)?.name 
 // the providers move and comment by the card's id alone
 const move = (b: Board, id: string, to: string) => b.prov.move(ctxOf(b.prov), b.ref, { id } as Card, to, b.group);
 async function comment(b: Board, id: string, value: string) {
-  if (value && b.prov.detail?.act) await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", { value, files: [] });
+  if (value && b.prov.detail?.act)
+    await b.prov.detail.act(ctxOf(b.prov), b.ref, id, "comment", { value, files: [], hidden: b.p.hidden !== false });
 }

@@ -145,6 +145,9 @@ export default {
   "pl.label": "Nur mit Label",
   "pl.labelHelp": "Leer: jedes Ticket in der Spalte.",
   "pl.parallel": "Agents gleichzeitig",
+  "pl.hidden": "Kommentare vor dem Kunden verborgen",
+  "pl.hiddenHelp":
+    "Relays Kommentare zum Ticket sind intern, nicht im Kundenportal von Productive. In einem internen Projekt sind es normale Kommentare.",
   "pl.error": "Board-Pipeline {project}: {error}",
   "pl.noBoard": "kein Board mit diesem Projekt verknüpft",
   "pl.noColumn": "eine Spalte der Pipeline ist nicht mehr auf dem Board, prüfe Einstellungen › Projekte",

@@ -148,6 +148,9 @@ export default {
   "pl.label": "Seulement avec le libellé",
   "pl.labelHelp": "Vide : chaque ticket de la colonne.",
   "pl.parallel": "Agents en même temps",
+  "pl.hidden": "Commentaires cachés au client",
+  "pl.hiddenHelp":
+    "Les commentaires de Relay sur le ticket sont internes, hors du portail client de Productive. Dans un projet interne, ce sont des commentaires normaux.",
   "pl.error": "Pipeline du tableau {project} : {error}",
   "pl.noBoard": "aucun tableau lié à ce projet",
   "pl.noColumn": "une colonne de la pipeline n'est plus sur le tableau, vérifiez Réglages › Projets",

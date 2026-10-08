@@ -141,6 +141,9 @@ const en = {
   "pl.label": "Only with label",
   "pl.labelHelp": "Empty: every ticket in the column.",
   "pl.parallel": "Agents at once",
+  "pl.hidden": "Comments hidden from the client",
+  "pl.hiddenHelp":
+    "Relay's comments on the ticket are internal, out of Productive's client portal. In an internal project they are normal comments.",
   "pl.error": "Board pipeline {project}: {error}",
   "pl.noBoard": "no board linked to this project",
   "pl.noColumn": "a column of the pipeline is no longer on the board, check Settings › Projects",

@@ -24,6 +24,8 @@ export type Pipeline = {
   label: string;
   /** workers running at once */
   parallel: number;
+  /** Relay's comments on the ticket are internal, kept from the client (Productive); absent: hidden */
+  hidden?: boolean;
 };
 
 /** What a pipeline worker carries about its ticket (orch.rs keeps it as given). */

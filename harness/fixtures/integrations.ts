@@ -214,7 +214,7 @@ export function productive(method: string, path: string, body: unknown): unknown
   ]);
   if (p === "/custom_fields") return page([]);
   if (p.startsWith("/organizations/")) return one({ id: "40001", type: "organizations", attributes: { name: "Acme Agency" } });
-  if (p.startsWith("/projects/")) return one({ id: p.split("/")[2], type: "projects", attributes: { name: "Northwind Portal", preferences: { navigation_order: ["v2", "v1", "v3"] } }, relationships: { workflow: { data: { type: "workflows", id: "wf1" } } } });
+  if (p.startsWith("/projects/")) return one({ id: p.split("/")[2], type: "projects", attributes: { name: "Northwind Portal", project_type_id: p.split("/")[2] === "p3" ? 1 : 2, preferences: { navigation_order: ["v2", "v1", "v3"] } }, relationships: { workflow: { data: { type: "workflows", id: "wf1" } } } });
   if (p === "/workflow_statuses") return page(STATUSES);
   if (p === "/people" || p.startsWith("/people/")) return p === "/people" ? page(PEOPLE) : one(PEOPLE[0]);
   return page([]);

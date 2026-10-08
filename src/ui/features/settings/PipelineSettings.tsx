@@ -22,6 +22,8 @@ export function PipelineSettings({ name }: { name: string }) {
   const stored = useSettingsStore(s => s.settings.pipelines?.[name]);
   const p: Pipeline = { ...EMPTY_PIPELINE, ...stored };
   const linked = useSettingsStore(s => !!s.settings.boards?.[name]);
+  // only Productive has a client portal to keep comments out of
+  const clients = useSettingsStore(s => s.settings.boards?.[name]?.provider === "productive");
   const [cols, setCols] = useState<Cols | null>(null);
   const [err, setErr] = useState("");
   useEffect(() => {
@@ -89,6 +91,11 @@ export function PipelineSettings({ name }: { name: string }) {
           onCommit={v => set({ label: v.trim() })}
         />
       </Field>
+      {clients && (
+        <Field label={t("pl.hidden")} hint={t("pl.hiddenHelp")}>
+          <Switch id={`pl-hidden-${name}`} on={p.hidden !== false} onToggle={hidden => set({ hidden })} />
+        </Field>
+      )}
       <Field label={t("pl.parallel")}>
         <ChangeInput
           className={FIELD}

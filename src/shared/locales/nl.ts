@@ -144,6 +144,9 @@ export default {
   "pl.label": "Enkel met label",
   "pl.labelHelp": "Leeg: elk ticket in de kolom.",
   "pl.parallel": "Agents tegelijk",
+  "pl.hidden": "Commentaar verborgen voor de klant",
+  "pl.hiddenHelp":
+    "Het commentaar van Relay op het ticket is intern, niet zichtbaar in het klantenportaal van Productive. In een intern project is het gewoon commentaar.",
   "pl.error": "Bordpipeline {project}: {error}",
   "pl.noBoard": "geen bord gekoppeld aan dit project",
   "pl.noColumn": "een kolom van de pipeline staat niet meer op het bord, kijk Instellingen › Projecten na",

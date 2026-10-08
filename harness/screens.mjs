@@ -534,6 +534,12 @@ const VIEWS = {
     await unfold("Northwind Portal");
     await intoView("Agents at once");
   },
+  // the same, its top: the per-project switch, the checkout and the branch
+  "settings-pipeline-top": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Board pipeline");
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");
