@@ -11,7 +11,8 @@ import { projectLabel } from "../workspace/vault";
 import { useTodayStore } from "../today/store";
 
 // "Time from sessions": the day's time per project from when the user wrote in their conversations (Claude Code
-// transcripts, read by the backend), proposed as Productive time entries the user approves one by one.
+// transcripts, read by the backend), proposed as Productive time entries the user approves one by one. The agent adds
+// the other sources weareantenna/antenna-tools' timesheet skill reads (calendar, Slack, git, other sessions, ...).
 
 /** The day's time lines from the conversations under a project. Other providers' conversations are not counted. */
 async function linesOf(date: string) {
@@ -20,12 +21,12 @@ async function linesOf(date: string) {
   for (const [key, chat] of Object.entries(chats))
     if (chat.project && sidOf[key]?.provider === "claude")
       bySid.set(sidOf[key].sid, { project: chat.project, title: chat.title });
-  if (!bySid.size) return [];
+  if (!bySid.size) return Object.assign([], { sids: [] as string[] });
   const days = await backend.activity(date, [...bySid.keys()]);
   const events: Activity[] = Object.entries(days).flatMap(([sid, times]) =>
     times.map(at => ({ ...bySid.get(sid)!, at })),
   );
-  return timeLines(events);
+  return Object.assign(timeLines(events), { sids: Object.keys(days) });
 }
 
 /** Minutes of activity today that look unbooked: Productive is not asked, the backend only reads local transcripts. */
@@ -42,7 +43,6 @@ export async function proposeTime(date: string) {
   const lines = await linesOf(date);
   const key = startChat(null, { provider: "claude", title: t("time.title", { date }), note: t("time.note", { date }) });
   await select(key);
-  if (!lines.length) return sendMsg(t("time.none", { date }));
   const boards = settings().boards || {};
   return sendMsg(
     timePrompt(
@@ -52,6 +52,7 @@ export async function proposeTime(date: string) {
         label: projectLabel(line.project),
         board: boards[line.project]?.provider === "productive" ? boards[line.project].project : undefined,
       })),
+      lines.sids,
     ),
   );
 }

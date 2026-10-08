@@ -82,11 +82,22 @@ pub fn upcoming(s: &Value) -> Value {
     let midnight = Local::now().date_naive().and_hms_opt(0, 0, 0).and_then(|d| d.and_local_timezone(Local).earliest())
         .map(|d| d.with_timezone(&Utc)).unwrap_or(now - Duration::hours(1));
     let until = (midnight + Duration::days(1)).max(now + Duration::hours(12));
+    between(s, midnight, until)
+}
+
+/// The meetings of one local day, midnight to midnight (23 or 25 hours on a DST day): what "Time from sessions" books.
+pub fn on(s: &Value, day: NaiveDate) -> Result<Value, String> {
+    let midnight = |d: NaiveDate| d.and_hms_opt(0, 0, 0).and_then(|t| t.and_local_timezone(Local).earliest()).map(|t| t.with_timezone(&Utc));
+    let (from, to) = midnight(day).zip(day.succ_opt().and_then(midnight)).ok_or("bad date")?;
+    Ok(between(s, from, to))
+}
+
+fn between(s: &Value, from: DateTime<Utc>, until: DateTime<Utc>) -> Value {
     let (mut all, mut errors) = (vec![], vec![]);
     for email in feeds(s) {
         let got = secret(&email).ok_or_else(|| super::trc_v("err.cal_no_url", &email)).and_then(|u| fetch(&u));
         match got {
-            Ok(ics) => all.extend(meetings(&ics, &email, midnight, until)),
+            Ok(ics) => all.extend(meetings(&ics, &email, from, until)),
             Err(e) => errors.push(format!("{email}: {e}")),
         }
     }
