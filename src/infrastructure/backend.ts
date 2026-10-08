@@ -33,7 +33,7 @@ import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
-import type { BrainNote, BrainStatus } from "../domain/brain/types";
+import type { BrainGraph, BrainNote, BrainRoot, BrainStatus, SearchHit, Touch } from "../domain/brain/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
@@ -225,6 +225,12 @@ export const commonwealthInstall = () => invoke<void>("commonwealth_install");
 export const commonwealthNotes = () => invoke<BrainNote[]>("commonwealth_notes");
 export const commonwealthAct = (brain: string, verb: "promote" | "reject", ids: string[]) =>
   invoke<void>("commonwealth_act", { brain, verb, ids });
+// ---------- the Brain view: the vault and the brains, browsed, searched and drawn
+export const brainRoots = () => invoke<BrainRoot[]>("brain_roots");
+export const brainGraph = (root: string) => invoke<BrainGraph>("brain_graph", { root });
+export const brainSearch = (root: string, query: string) => invoke<SearchHit[]>("brain_search", { root, query });
+export const brainNote = (root: string, path: string) => invoke<{ path: string; text: string }>("brain_note", { root, path });
+export const brainTouches = (days: number) => invoke<Touch[]>("brain_touches", { days });
 
 // ---------- mail
 export const mailList = (account: string, page: number) => invoke<Mail[]>("mail_list", { account, page });

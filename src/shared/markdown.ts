@@ -100,3 +100,14 @@ function mdHtml(text: string) {
  *  what the result depends on, though only through module state: passing them makes memoisation on the arguments parse
  *  again when a note is made after the text was first drawn, or the language changes. */
 export const markdownHtml = (text: string, _notesVersion: number, _lang: string) => mdHtml(text);
+/** Markdown as HTML where the notes that link are the ones `known` says exist, not the vault's: a brain's note in
+ *  the Brain view. Not cached, the view parses one note at a time. */
+export function markdownWith(text: string, known: (target: string) => boolean) {
+  const vault = noteKnown;
+  noteKnown = known;
+  try {
+    return marked.parse(text, { async: false }) as string;
+  } finally {
+    noteKnown = vault;
+  }
+}

@@ -23,6 +23,8 @@ import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
 import { todayRest } from "../today/today";
+import { useBrainStore } from "../brain/store";
+import { graphOf } from "../brain/brain";
 
 // Reads over the conversations as they are now, in the UI language set last. Components call them inside
 // `useDerived` (ui/hooks), which redraws when what they return changes.
@@ -88,6 +90,11 @@ function viewSummary(key: string) {
     if (!list) return "";
     const n = list.filter(unread).length;
     return n ? t("mail.unread", { n }) : t("bar.mailRead");
+  }
+  if (key === BRAIN) {
+    const pending = useBrainStore.getState().notes?.length ?? 0;
+    const n = graphOf()?.nodes.length;
+    return pending ? t("bar.brainReview", { n: pending }) : n ? t("bar.brainNotes", { n: n.toLocaleString() }) : "";
   }
   if (key === ORCH) {
     const n = runningWorkers();

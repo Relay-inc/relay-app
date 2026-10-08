@@ -25,11 +25,14 @@
   min-height: 0;
   background: var(--bg);
 }
-/* a vault note in the drawer looks like one in a conversation: md-defaults' link colour would win otherwise */
-.relay-drawer .md-panel a.vlink {
+/* a vault note in the drawer (and a note in the Brain view) looks like one in a conversation: md-defaults' link colour
+   would win otherwise */
+.relay-drawer .md-panel a.vlink,
+.relay-brain-note.md-panel a.vlink {
   color: var(--accent);
   text-decoration-color: var(--separator);
 }
-.relay-drawer .md-panel a.vlink:hover {
+.relay-drawer .md-panel a.vlink:hover,
+.relay-brain-note.md-panel a.vlink:hover {
   text-decoration-color: currentColor;
 }

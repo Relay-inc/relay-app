@@ -1,55 +1,97 @@
-import { useEffect } from "react";
-import { brainKey, brainName, byBrain } from "../../../domain/brain/rules";
+import { brainKey, brainName, glowOf } from "../../../domain/brain/rules";
 import type { BrainNote } from "../../../domain/brain/types";
-import { useBrainStore } from "../../../application/brain/store";
-import { brainAct, openNote } from "../../../application/brain/brain";
+import { cwOn } from "../../../domain/settings/types";
+import { useBrainStore, type BrainMode } from "../../../application/brain/store";
+import { useSettingsStore } from "../../../application/settings/store";
+import { brainAct, openNote, setMode, setTab } from "../../../application/brain/brain";
+import { Segmented } from "../settings/Segmented";
+import { BrainBrowse } from "./BrainBrowse";
+import { BrainGraphView } from "./BrainGraphView";
 import { useT } from "../../hooks/useT";
 import { Html } from "../../components/Html";
 import { Markdown } from "../../components/Markdown";
 
-/** The Brain view, as Pull requests does it: the notes staged for review on the left, grouped by the brain they belong
- *  to, the one you picked on the right with Promote and Reject. The CLI does the promoting. */
+/** The Brain view: the vault, and next to it every Commonwealth brain while that is on, as tabs. Each folder can be
+ *  browsed and searched, drawn as a graph, and a brain's staged notes reviewed. */
 export function BrainView({ className = "" }: { className?: string }) {
   const { t } = useT();
-  const notes = useBrainStore(s => s.notes);
+  const roots = useBrainStore(s => s.roots);
   const status = useBrainStore(s => s.status);
-  const err = useBrainStore(s => s.err);
-  const busy = useBrainStore(s => s.busy);
-  const open = useBrainStore(s => s.open);
-  const note = notes?.find(row => brainKey(row) === open);
+  const tab = useBrainStore(s => s.tab);
+  const mode = useBrainStore(s => s.mode);
+  const graphs = useBrainStore(s => s.graphs);
+  const graphErr = useBrainStore(s => s.graphErr);
+  const notes = useBrainStore(s => s.notes);
+  const glowOn = useBrainStore(s => s.glow);
+  const glowKey = useBrainStore(s => s.glowKey);
+  const touches = useBrainStore(s => s.touches);
+  const since = useBrainStore(s => s.touchesSince);
+  const settings = useSettingsStore(s => s.settings);
+  // brains only while Commonwealth is on (its plugin, Settings): visibleRoots, as a selector
+  const cw = !!status?.plugin && cwOn(settings);
+  const shown = (roots ?? []).filter(r => r.kind === "vault" || cw);
+  const root = shown.find(r => r.id === tab) ?? shown[0];
+  const graph = root ? graphs[root.id] : undefined;
+  const glow = glowOn && root ? glowOf(touches ?? [], root.id, since, glowKey) : null;
+  const pending = root?.kind === "brain" ? (notes ?? []).filter(n => brainName(n.brain) === root.name) : [];
+  const modes: [BrainMode, string][] = [
+    ["browse", t("brain.browse")],
+    ["graph", t("brain.graph")],
+    ...(root?.kind === "brain" ? [["review", pending.length ? `${t("brain.review")} ${pending.length}` : t("brain.review")] as [BrainMode, string]] : []),
+  ];
+  const current = modes.some(([m]) => m === mode) ? mode : "browse";
 
-  // with nothing picked yet, the first note of the list
-  const firstKey = notes?.[0] ? brainKey(notes[0]) : "";
-  useEffect(() => {
-    if (!open && firstKey) openNote(firstKey);
-  }, [open, firstKey]);
+  let body;
+  if (!root) body = <Centered text={graphErr || t("brain.notLoaded")} />;
+  else if (current === "review") body = <Review notes={pending} />;
+  else if (!graph) body = <Centered text={graphErr || t("brain.loading")} />;
+  else if (current === "graph") body = <BrainGraphView root={root} graph={graph} glow={glow} />;
+  else body = <BrainBrowse root={root} graph={graph} glow={glow} />;
 
-  let list = null;
-  if (status && !status.plugin) list = <div className="text-secondary text-sm p-4">{t("brain.off")}</div>;
-  else if (!notes) {
-    if (!busy) list = <div className="text-secondary text-sm text-center p-4">{t("brain.notLoaded")}</div>;
-  } else if (!notes.length) list = <div className="text-secondary text-sm px-4 py-4">{t("brain.none")}</div>;
-  else
-    list = byBrain(notes).map(([path, rows]) => (
-      <section key={path}>
-        <h2
-          className="flex items-baseline gap-1.5 px-4 pt-4.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-tertiary"
-          title={path}
-        >
-          {brainName(path)} <span className="tabular-nums">{rows.length}</span>
-        </h2>
-        <div className="flex flex-col gap-0.5 px-2">
-          {rows.map(row => (
-            <BrainRow key={brainKey(row)} note={row} selected={brainKey(row) === open} />
-          ))}
-        </div>
-      </section>
-    ));
   return (
-    <div className={`${className} grid grid-cols-[380px_minmax(0,1fr)] min-h-0`}>
-      <div className="min-h-0 overflow-y-auto border-r border-separator pb-4">
+    <div className={`${className} flex flex-col min-h-0`}>
+      <div className="flex items-center gap-3 px-4 h-11 border-b border-separator">
+        {shown.length > 1 ? (
+          <Segmented
+            label={t("nav.brain")}
+            options={shown.map(r => [r.id, r.name] as const)}
+            value={root?.id ?? ""}
+            onPick={setTab}
+          />
+        ) : null}
+        <span className="flex-1"></span>
+        <Segmented label={t("brain.mode")} options={modes} value={current} onPick={setMode} />
+      </div>
+      {graphErr && root && graph ? <div className="err-box m-3">{graphErr}</div> : null}
+      {body}
+    </div>
+  );
+}
+
+const Centered = ({ text }: { text: string }) => (
+  <div className="flex-1 grid place-items-center text-[13px] text-tertiary">{text}</div>
+);
+
+/** Review: a brain's staged notes on the left, the one you picked on the right with Promote and Reject. The CLI does
+ *  the promoting. */
+function Review({ notes }: { notes: BrainNote[] }) {
+  const { t } = useT();
+  const err = useBrainStore(s => s.err);
+  const open = useBrainStore(s => s.open);
+  const note = notes.find(row => brainKey(row) === open) ?? notes[0];
+  return (
+    <div className="flex-1 grid grid-cols-[380px_minmax(0,1fr)] min-h-0">
+      <div className="min-h-0 overflow-y-auto border-r border-separator pb-4 pt-2">
         {err ? <div className="err-box m-4">{err}</div> : null}
-        {list}
+        {notes.length ? (
+          <div className="flex flex-col gap-0.5 px-2">
+            {notes.map(row => (
+              <BrainRow key={brainKey(row)} note={row} selected={row === note} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-secondary text-sm px-4 py-4">{t("brain.none")}</div>
+        )}
       </div>
       <div className="min-h-0 overflow-y-auto">
         {note ? (
