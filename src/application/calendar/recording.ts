@@ -1,7 +1,12 @@
 import { t } from "../../shared/i18n";
 import type { Meeting } from "../../domain/calendar/types";
 import { voiceOf } from "../../domain/settings/voice";
-import { meetingRecordCancel, meetingRecordStart, meetingRecordStop } from "../../infrastructure/backend";
+import {
+  meetingRecordCancel,
+  meetingRecordRetry,
+  meetingRecordStart,
+  meetingRecordStop,
+} from "../../infrastructure/backend";
 import { settings } from "../settings/settings";
 import { makeStore } from "../make-store";
 import { toast } from "../navigation/navigation";
@@ -23,6 +28,7 @@ type RecordingState = {
   why: string; // why it is not
   progress: number;
   error: string;
+  kept: boolean; // the error came after the recording was kept, so it can be tried again
 };
 export const useRecordingStore = makeStore<RecordingState>(() => ({
   meeting: null,
@@ -35,6 +41,7 @@ export const useRecordingStore = makeStore<RecordingState>(() => ({
   why: "",
   progress: 0,
   error: "",
+  kept: false,
 }));
 const set = (patch: Partial<RecordingState>) => useRecordingStore.setState(patch);
 const rec = () => useRecordingStore.getState();
@@ -42,34 +49,41 @@ const rec = () => useRecordingStore.getState();
 export async function startRecording(id: string) {
   const meeting = useCalendarStore.getState().list.find(x => x.id === id);
   if (!meeting || rec().phase !== "idle") return;
-  set({ meeting, phase: "recording", secs: 0, me: 0, others: 0, heard: false, progress: 0, error: "" });
+  set({ meeting, phase: "recording", secs: 0, me: 0, others: 0, heard: false, progress: 0, error: "", kept: false });
   try {
     const { system, why } = await meetingRecordStart(({ secs, me = 0, others = 0 }) =>
       set({ secs, me, others, heard: rec().heard || others > 0 }),
     );
     set({ system, why: why ?? "" });
   } catch (e) {
-    set({ phase: "idle", error: String(e) });
+    // nothing recorded yet: a missing model is caught before the microphone opens
+    set({ phase: "idle", meeting: null, error: e === "model" ? t("rec.noModelStart") : String(e) });
   }
 }
 
 export async function stopRecording() {
-  const { meeting, phase } = rec();
-  if (!meeting || phase !== "recording") return;
-  set({ phase: "saving", progress: 0 });
+  if (rec().phase === "recording") await save(meetingRecordStop);
+}
+
+/** Transcribes the recording a failed stop kept, once more (after downloading the model, say). */
+export async function retryRecording() {
+  if (rec().phase === "idle" && rec().kept) await save(meetingRecordRetry);
+}
+
+async function save(write: typeof meetingRecordStop) {
+  const { meeting } = rec();
+  if (!meeting) return;
+  set({ phase: "saving", progress: 0, error: "", kept: false });
   try {
-    const recording = await meetingRecordStop(
-      meeting.title || t("wait.meetingUntitled"),
-      t("rec.me"),
-      t("rec.others"),
-      progress => set({ progress }),
+    const recording = await write(meeting.title || t("wait.meetingUntitled"), t("rec.me"), t("rec.others"), progress =>
+      set({ progress }),
     );
     set({ phase: "idle", meeting: null });
     if (voiceOf(settings().voice).summarize) await chatAbout(meeting, "transcript", recording);
     else toast(t("rec.saved", { path: recording.transcript }));
   } catch (e) {
-    // the backend kept the recording and says where in the error
-    set({ phase: "idle", error: e === "model" ? t("rec.noModel") : String(e) });
+    // the backend kept the recording and says where after the reason
+    set({ phase: "idle", kept: true, error: String(e).startsWith("model") ? t("rec.noModel") : String(e) });
   }
 }
 
@@ -78,4 +92,4 @@ export async function cancelRecording() {
   await meetingRecordCancel().catch(() => {});
   set({ phase: "idle", meeting: null });
 }
-export const dismissRecordingError = () => set({ error: "" });
+export const dismissRecordingError = () => set({ error: "", kept: false, meeting: null });

@@ -10,8 +10,10 @@ import {
   openProjectPanel,
   openSettings,
   openTool,
+  select,
   toggleDrawer,
 } from "../../../application/navigation/navigation";
+import { showInBrain } from "../../../application/brain/brain";
 import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
 import { useUiRequest } from "../../hooks/useUiRequest";
@@ -128,6 +130,7 @@ export function ConversationsView({ className }: { className: string }) {
       // a project without repos sends you to the settings to link one
       onOpenPrs={() => (bar.tools?.repos ? openTool(bar.tools.project, PRS) : openSettings())}
       onToggleDrawer={toggleDrawer}
+      onShowInBrain={bar.renamable && !bar.session ? () => showInBrain(selected).then(() => select(BRAIN)) : undefined}
     />
   );
   if (ownScroll)

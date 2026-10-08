@@ -635,6 +635,52 @@ const VIEWS = {
     await waitText("Drafting the reminder mails");
     await scrollMain("bottom");
   },
+  // the Brain view with Commonwealth on: the team brain's tab, a note found by search (#158)
+  "brain-note": async () => {
+    await open(page, server.url, { fixture: "brain", sel: "__brain" });
+    await page.getByRole("radio", { name: "team-brain" }).click();
+    await page.getByPlaceholder("Search team-brain").fill("cache note 25");
+    await waitText("cache note 25 in northwind-portal");
+    await page.getByText("cache note 25 in northwind-portal").first().click();
+    await settle(page, 400);
+  },
+  // the team brain as a graph, coloured by kind, index notes hidden (#158)
+  "brain-graph": async () => {
+    await open(page, server.url, { fixture: "brain", sel: "__brain" });
+    await page.getByRole("radio", { name: "team-brain" }).click();
+    await page.getByRole("radio", { name: "Graph" }).click();
+    await page.waitForTimeout(5000); // the layout settles
+  },
+  // conversation glow: the notes conversations read and wrote, lit (#158)
+  "brain-glow": async () => {
+    await open(page, server.url, { fixture: "brain", sel: "__brain" });
+    await page.getByRole("radio", { name: "team-brain" }).click();
+    await page.getByRole("radio", { name: "Graph" }).click();
+    await page.getByRole("button", { name: "Conversation glow" }).click();
+    await page.waitForTimeout(5000);
+  },
+  // Browse's Touched filter: the notes conversations touched, newest first, with the open note's conversation (#158)
+  "brain-touched": async () => {
+    await open(page, server.url, { fixture: "brain", sel: "__brain" });
+    await page.getByRole("radio", { name: "team-brain" }).click();
+    await page.getByRole("button", { name: "Touched" }).click();
+    await page.getByText("cache note 25 in northwind-portal").first().click();
+    await settle(page, 400);
+  },
+  // the vault alone, without Commonwealth: no tabs (#158)
+  "brain-vault": async () => {
+    await open(page, server.url, { sel: "__brain" });
+    await page.getByRole("button", { name: /^Contexts/ }).click();
+    await page.getByRole("button", { name: /^Agency/ }).click();
+    await settle(page, 300);
+  },
+  // a conversation's Brain button opens the graph with only its notes lit (#158)
+  "brain-show-conversation": async () => {
+    await open(page, server.url, { fixture: "brain", sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.getByRole("button", { name: "Show in Brain" }).click();
+    await page.waitForTimeout(4000);
+  },
   "dark-mail": async () => {
     await open(page, server.url, { fixture: "dark" });
     await click("Mail");

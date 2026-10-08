@@ -19,19 +19,28 @@ a PR. Versions follow
 - **A phone can start a conversation on a machine while this Mac is closed**: Relay tells each machine how this Mac starts Claude there (its Claude settings without mail and accounts, and the mirror's context, plugins and permissions), and relay-server builds the same command for the phone, in the mirrored vault (#161)
 - **Phone notifications through ntfy**: a machine notifies when Claude waits for an answer or finished a turn in a conversation no device follows, on an ntfy topic made from the mirror's key. Add phone shows the topic to subscribe to in the ntfy app. The notification only says that Claude waits or finished on which machine, nothing of the conversation (ntfy.sh is a public server) (#161)
 
-- **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows
-
 ### Changed
 
 - **Several devices follow one conversation on a machine**: this Mac and its phone both get every line of a conversation there, and each gets what it missed when it comes back, without taking the conversation from the other. The protocol between Relay and relay-server changes with it: update every machine to this version (Settings › Machines › Update) (#161)
 
-- **Booking time reads every source of the Antenna timesheet skill**: the "Time <date>" conversation still starts from your Relay conversations, and the agent now adds the day's meetings (`relay calendar.meetings` takes a `date`), your Slack messages, your git commits, Claude Code sessions outside Relay (terminal, other repos), and what you edited in Google Drive, Jira, Notion and Figma, the same sources as weareantenna/antenna-tools' timesheet. It skips a source that isn't connected and says so, never counts a meeting twice, and ends with how much of an 8-hour day is still uncovered. A day without Relay conversations is no longer stopped right away
+## [0.0.15] - 2026-10-08
+
+### Added
+
+- **The Brain view browses the vault and every Commonwealth brain**: Brain is always in the sidebar now. With Commonwealth on, a tab per brain sits next to the vault, otherwise you only see the vault. Each tab has Browse (folder tree, full-text search, the note with its tags and linked notes, `[[links]]` that stay inside that brain, and "Ask about it" to start a conversation with the note's path), Graph (every note as a dot coloured by kind, links as lines, zoom with a pinch, drag to pan, click to open, index notes hidden by default) and, on a brain, Review (the staged notes, as before) (#158)
+- **Conversation glow**: in the Brain graph, the notes Relay's conversations read and wrote in the last 7 days light up, brighter the more recent, with reads and writes in their own colour. Hover a note to see which conversations touched it, or pick one conversation from the list. Browse has the same filter as "Touched". A conversation's title bar has a Brain button that opens the graph with only its notes lit. It reads Claude Code conversations only, and notes found with Grep or a shell command don't count (#158)
+- **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows (#153)
+
+### Changed
+
+- **Booking time reads every source of the Antenna timesheet skill**: the "Time <date>" conversation still starts from your Relay conversations, and the agent now adds the day's meetings (`relay calendar.meetings` takes a `date`), your Slack messages, your git commits, Claude Code sessions outside Relay (terminal, other repos), and what you edited in Google Drive, Jira, Notion and Figma, the same sources as weareantenna/antenna-tools' timesheet. It skips a source that isn't connected and says so, never counts a meeting twice, and ends with how much of an 8-hour day is still uncovered. A day without Relay conversations is no longer stopped right away (#157)
 
 ### Fixed
 
-- **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout
-- **A large paste no longer takes over the conversation**: the composer stops growing at 40% of the window and scrolls inside, so the messages and the send button stay in view
-- **Banners no longer eat memory**: the process behind each unclicked banner grew by a few MB a minute (up to ~5 GB) and stayed alive after Relay quit, 46 of them held ~129 GB. The click wait in mac-notification-sys leaked a copy of the delivered banners 10 times a second; Relay now builds a patched copy (`src-tauri/vendor/mac-notification-sys`) and a banner stays at ~9 MB. A banner's process also exits once Relay quits
+- **A meeting recording that fails can be tried again**: Try again on the error transcribes the kept recording once more, after downloading the speech model say, and names the files by when the meeting started. Recording no longer starts without the meeting's speech model, so you don't find out after the meeting. A missing model now says so instead of "model", the audio only lands in the vault once the transcript worked (a retry gives no second copy), and a long error wraps so its close button stays in view (#152)
+- **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout (#149)
+- **A large paste no longer takes over the conversation**: the composer stops growing at 40% of the window and scrolls inside, so the messages and the send button stay in view (#151)
+- **Banners no longer eat memory**: the process behind each unclicked banner grew by a few MB a minute (up to ~5 GB) and stayed alive after Relay quit, 46 of them held ~129 GB. The click wait in mac-notification-sys leaked a copy of the delivered banners 10 times a second; Relay now builds a patched copy (`src-tauri/vendor/mac-notification-sys`) and a banner stays at ~9 MB. A banner's process also exits once Relay quits (#150)
 
 ## [0.0.14] - 2026-10-07
 
@@ -349,7 +358,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.14...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.15...HEAD
+[0.0.15]: https://github.com/Relay-inc/relay-app/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/Relay-inc/relay-app/compare/v0.0.13...v0.0.14
 [0.0.13]: https://github.com/Relay-inc/relay-app/compare/v0.0.12...v0.0.13
 [0.0.12]: https://github.com/Relay-inc/relay-app/compare/v0.0.11...v0.0.12

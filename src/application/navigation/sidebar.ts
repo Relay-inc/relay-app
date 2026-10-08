@@ -42,7 +42,6 @@ import { contexts, projectLabel } from "../workspace/vault";
 import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
-import { brainOn } from "../brain/brain";
 import { useBrainStore } from "../brain/store";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { runningWorkers } from "../orchestrator/orchestrator";
@@ -251,7 +250,7 @@ export const sidebarCfg = (): SidebarCfg => settings().sidebar ?? {};
 export const viewsLayout = () => sidebarCfg().layout ?? "icons";
 export const moreOn = () => sidebarCfg().more !== false;
 /** Every view there is now, in the user's order, the switched-off ones included. */
-const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), brainOn(), t), sidebarCfg());
+const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), t), sidebarCfg());
 export const hiddenViews = () => allViews().filter(view => isHidden(view.key, sidebarCfg()));
 const viewRows = (): ViewRow[] =>
   allViews()

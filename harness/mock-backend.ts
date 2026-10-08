@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch|brain, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -9,6 +9,7 @@ import * as vault from "./fixtures/vault";
 import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
 import * as orch from "./fixtures/orchestrator";
+import * as brain from "./fixtures/brain";
 import { changes } from "./fixtures/changes";
 
 type Args = Record<string, any>;
@@ -50,6 +51,8 @@ let actionConfig = integ.actionConfig();
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
 const orchOn = fixture === "orch";
+// Commonwealth installed, with one brain (the Brain view's tabs)
+const brainOn = fixture === "brain";
 let workers = orchOn ? structuredClone(orch.workers) : [];
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
@@ -412,11 +415,41 @@ function handle(cmd: string, a: Args): unknown {
     case "usage_tokens":
       return integ.usageTokens();
 
-    // Commonwealth, the team brain: not installed
+    // Commonwealth, the team brain: not installed, except in fixture "brain" (one brain, two staged notes)
     case "commonwealth_status":
-      return { plugin: false, cli: null, hint: "npm i -g @cmnwlth/cli", projects: [] };
+      return {
+        plugin: brainOn,
+        cli: brainOn ? "/usr/local/bin/commonwealth" : null,
+        hint: "npm i -g @cmnwlth/cli",
+        projects: brainOn ? [{ project: "Northwind Portal", brain: brain.BRAIN, name: "team-brain" }] : [],
+      };
     case "commonwealth_notes":
-      return [];
+      return brainOn
+        ? ["Retry only idempotent export calls", "Deploys go through the staging gate"].map((title, i) => ({
+            brain: brain.BRAIN,
+            id: `2026-09-30-staged-${i + 1}`,
+            kind: i ? "decision" : "memory",
+            title,
+            created: "2026-09-30",
+            author: "Laurent",
+            source: "northwind-portal",
+            body: `${title}. Learned while fixing the export job.`,
+          }))
+        : [];
+    case "commonwealth_act":
+      return null;
+
+    // the Brain view: the vault, and the team brain in fixture "brain"
+    case "brain_roots":
+      return brain.roots(brainOn);
+    case "brain_graph":
+      return brain.graph(a.root);
+    case "brain_search":
+      return brain.search(a.root, a.query);
+    case "brain_note":
+      return brain.note(a.root, a.path);
+    case "brain_touches":
+      return brain.touches();
 
     // GitHub, mail, boards
     case "github_status":
