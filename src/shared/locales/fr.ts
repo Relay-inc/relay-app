@@ -755,7 +755,7 @@ export default {
   "vault.none": "Aucun dossier choisi",
   "vault.choose": "Choisir le dossier du coffre…",
   "vault.use": "Utiliser ce coffre",
-  "vault.invalid": "Aucun work-state.md trouvé : indiquez-le dans État du travail pour continuer.",
+  "vault.invalid": "Dossier introuvable : choisissez-en un autre.",
   "vault.map": "Fichiers de ce coffre",
   "vault.mapHelp":
     "Les chemins sont relatifs au dossier du coffre. Les facultatifs peuvent rester vides : la fonction est alors désactivée.",
@@ -764,7 +764,7 @@ export default {
   "vault.found": "trouvé",
   "vault.missing": "absent",
   "vault.k.workState": "État du travail",
-  "vault.h.workState": "work-state.md avec un tableau de projets par contexte. Obligatoire.",
+  "vault.h.workState": "work-state.md avec un tableau de projets par contexte. Sans lui, la barre latérale ne liste aucun projet.",
   "vault.k.reminders": "Rappels",
   "vault.h.reminders": "reminders.md avec le tableau des rappels.",
   "vault.k.notes": "Notes de projet",

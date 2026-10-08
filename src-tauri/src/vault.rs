@@ -6,10 +6,10 @@ use serde_json::{json, Map, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-/// The mapping keys: (key, is a folder, required). Only workState is required: it makes a folder a
-/// vault. The others switch a feature off when missing, except reminders: the first one creates the file.
+/// The mapping keys: (key, is a folder, required). Any folder is a vault, so nothing is required: a missing
+/// one switches its feature off (no work-state, no project list), except reminders: the first one creates the file.
 pub const KEYS: [(&str, bool, bool); 3] = [
-    ("workState", false, true),  // the project tables per context
+    ("workState", false, false),  // the project tables per context
     ("reminders", false, false), // the reminder table, REMINDERS in the vault root when none is found
     ("notes", true, false),      // folder searched for project notes (## Open, Stand van zaken)
 ];
@@ -106,7 +106,7 @@ pub fn merge(detected: &Value, stored: &Value) -> Value {
     Value::Object(m)
 }
 
-/// Which mapped paths exist, and whether the vault is usable (its work-state is there).
+/// Which mapped paths exist, and whether the vault is usable (the folder is there).
 pub fn status(vault: &str, map: &Value) -> Value {
     let mut found = Map::new();
     for (k, dir, _) in KEYS {
@@ -184,12 +184,13 @@ mod tests {
     }
 
     #[test]
-    fn not_a_vault() {
+    fn any_folder_is_a_vault() {
         let d = tmp("empty");
         touch(&d, "notes/a.md");
         let s = det(&d);
-        assert_eq!(s["ok"], false);
+        assert_eq!((s["ok"].clone(), s["found"]["workState"].clone()), (json!(true), json!(false)), "work-state is optional");
         assert_eq!(status("", &json!({}))["ok"], false);
+        assert_eq!(status(d.join("gone").to_str().unwrap(), &json!({}))["ok"], false);
     }
 
     #[test]

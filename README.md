@@ -31,7 +31,7 @@ Vault › Settings… (Cmd-,). Vaults differ, so the app keeps a mapping per vau
 
 Paths are relative to the vault (absolute ones work too). Picking a folder detects them: the
 `System/` layout, the old `Resources/Meta/Claude/` one, else a search by file name; symlinks are
-resolved. Only `workState` is required; a missing `reminders` file is created by the first reminder you add (default `reminders.md` in the vault root).
+resolved. Nothing is required: without `workState` the sidebar lists no projects, but conversations work; a missing `reminders` file is created by the first reminder you add (default `reminders.md` in the vault root).
 
 `pnpm tauri build` builds the .app.
 

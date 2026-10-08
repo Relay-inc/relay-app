@@ -751,7 +751,7 @@ export default {
   "vault.none": "Geen map gekozen",
   "vault.choose": "Kies vault-map…",
   "vault.use": "Gebruik deze vault",
-  "vault.invalid": "Geen work-state.md gevonden: wijs Work-state ernaar om verder te gaan.",
+  "vault.invalid": "Map niet gevonden: kies een andere.",
   "vault.map": "Bestanden in deze vault",
   "vault.mapHelp":
     "Paden zijn relatief tegenover de vault-map. Optionele mogen leeg blijven: die functie staat dan uit.",
@@ -760,7 +760,7 @@ export default {
   "vault.found": "gevonden",
   "vault.missing": "ontbreekt",
   "vault.k.workState": "Work-state",
-  "vault.h.workState": "work-state.md met een projecttabel per context. Verplicht.",
+  "vault.h.workState": "work-state.md met een projecttabel per context. Zonder toont de zijbalk geen projecten.",
   "vault.k.reminders": "Reminders",
   "vault.h.reminders": "reminders.md met de reminder-tabel.",
   "vault.k.notes": "Projectnotities",

@@ -53,7 +53,9 @@ pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::Naive
     Ok(json!({ "today": today.format("%Y-%m-%d").to_string(), "projects": projs, "sessions": ses }))
 }
 
+/// The projects in work-state; none when the vault has no work-state (`work_state` is "").
 fn projects(work_state: &str, contexts: &HashSet<String>, n: &Notes) -> Result<Vec<Value>, String> {
+    if work_state.is_empty() { return Ok(vec![]); }
     let text = read(Path::new(work_state)).ok_or_else(|| format!("snapshot: cannot read {work_state}"))?;
     let (head, row) = (rx(r"^#{2,3} (.+?)\s*$"), rx(r"^\| (?:\[\[([^\]]+)\]\][^|]*|([^|\[]+?)) \| (\w+) \| ([\d-]+) \| (.*) \|$"));
     let (mut out, mut context) = (vec![], None::<String>);
@@ -268,6 +270,7 @@ mod tests {
         assert_eq!(p[0]["aliases"], json!(["Spar", "Dex"]));
         assert_eq!((p[1]["open"].clone(), p[1]["open_items"].clone()), (json!(0), json!([])), "falls back to Brutsaert.md, not the skipped Documents one");
         assert_eq!((p[2]["open"].clone(), p[2]["stand"].clone()), (Value::Null, Value::Null), "no note");
+        assert_eq!(projects("", &HashSet::new(), &Notes { root: notes.clone(), skip: vec![], open: rx("x"), status: rx("x"), status_line: rx("x") }).unwrap(), Vec::<Value>::new(), "no work-state, no projects");
         let m = Matcher::new(&p);
         assert_eq!(m.find("talk to SPARDEX, not Spardexer or xDex"), ["Spardex"]);
         fs::remove_dir_all(&d).ok();

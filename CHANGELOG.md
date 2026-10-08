@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **Work-state is optional**: any folder can be the vault. Without a `work-state.md` the sidebar lists no projects, but conversations, reminders and the rest work, so Relay runs on a vault that doesn't follow this layout
+
 ### Fixed
 
 - **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout

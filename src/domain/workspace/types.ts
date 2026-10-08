@@ -39,7 +39,7 @@ export type VaultMap = Record<MapKey, string>;
 export type VaultStatus = { vault: string; map: VaultMap; found: Record<MapKey, boolean>; ok: boolean };
 // key, is a folder, required: the same list as KEYS in src-tauri/src/vault.rs
 export const KEYS: [MapKey, boolean, boolean][] = [
-  ["workState", false, true],
+  ["workState", false, false],
   ["reminders", false, false],
   ["notes", true, false],
 ];
