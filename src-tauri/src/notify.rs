@@ -61,12 +61,9 @@ pub fn banner(title: &str, body: &str) {
         use mac_notification_sys::{set_application, Notification, NotificationResponse};
         let id = if tauri::is_dev() { "com.apple.Terminal" } else { "be.laurentmeersman.relay" };
         set_application(id).ok();
-        // The wait for a click keeps growing (up to ~5 GB after a few days) and outlived Relay when it quit (the parent
-        // becomes launchd, pid 1). Exit once Relay is gone or after an hour; the banner stays in Notification Center,
-        // a later click just doesn't open the conversation.
+        // Once Relay quits (the parent becomes launchd, pid 1) a click has nothing to open, so stop waiting for one.
         std::thread::spawn(|| {
-            let start = std::time::Instant::now();
-            while std::os::unix::process::parent_id() != 1 && start.elapsed().as_secs() < 3600 {
+            while std::os::unix::process::parent_id() != 1 {
                 std::thread::sleep(std::time::Duration::from_secs(10));
             }
             std::process::exit(0);
