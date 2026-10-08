@@ -1,6 +1,11 @@
 {
   "$schema": "../gen/schemas/mobile-schema.json",
   "identifier": "default",
-  "windows": ["main"],
-  "permissions": ["core:default"]
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "deep-link:default"
+  ]
 }

@@ -3,6 +3,7 @@ import { isLang, setLanguage } from "../../shared/i18n";
 import * as backend from "../../infrastructure/backend";
 import {
   cancelScan,
+  onLinks,
   phoneConversations,
   phoneInfo,
   phoneOpen,
@@ -68,6 +69,11 @@ export async function bootPhone() {
   show("");
   backend.onAgent((key, event, provider) => onAgentEvent(key, event, provider));
   useNavigationStore.subscribe(backFollows);
+  // a notification tapped (relay-server's ntfy Click): its conversation
+  onLinks(url => {
+    const key = /^relay:\/\/conversation\/(.+)$/.exec(url)?.[1];
+    if (key) openConversation(decodeURIComponent(key), true);
+  }).catch(() => {});
   setInterval(() => pollPending().catch(() => {}), 1000);
   // the list keeps itself current while it shows
   setInterval(() => {

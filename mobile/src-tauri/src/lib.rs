@@ -115,6 +115,11 @@ fn stop(app: AppHandle, state: State<App>, project: String) -> Result<(), String
     server(&app)?.kill(&project, pid)
 }
 
+/// The desktop's banner for a turn that ended while its window was away (the conversation code asks for it): the
+/// phone hears about its conversations from relay-server's notifications (ntfy) instead, so nothing here.
+#[tauri::command]
+fn notify() {}
+
 /// The open cards, as the desktop's `pending` gives them.
 #[tauri::command]
 fn pending(state: State<App>) -> Vec<Value> {
@@ -216,6 +221,8 @@ pub fn run() {
     tauri::Builder::default()
         .manage(App::default())
         .plugin(sealed::init())
+        // relay://conversation/<key>: a notification tapped opens its conversation (src/application/mobile)
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             // the camera, for the pairing code the laptop shows (Settings › Machines › Add phone)
             #[cfg(mobile)]
@@ -223,7 +230,7 @@ pub fn run() {
             let _ = app;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![pair, info, conversations, running, open, send, stop, pending, answer, history, history_sid])
+        .invoke_handler(tauri::generate_handler![pair, info, conversations, running, open, send, notify, stop, pending, answer, history, history_sid])
         .build(tauri::generate_context!())
         .expect("error while running Relay")
         .run(|app, ev| {

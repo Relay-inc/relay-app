@@ -33,7 +33,17 @@ export function PhoneApp() {
   const selected = useNavigationStore(s => s.selected);
   return (
     <div className="flex h-full flex-col bg-bg pt-[env(safe-area-inset-top)] text-base text-label">
-      {paired === null ? null : !paired ? <Pairing /> : selected ? <Conversation id={selected} /> : <List />}
+      {paired === null ? <Starting /> : !paired ? <Pairing /> : selected ? <Conversation id={selected} /> : <List />}
+    </div>
+  );
+}
+
+// while it finds out whether it is paired (a cold start reaches the machine first)
+function Starting() {
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-6">
+      <img src={mark} alt="Relay" className="h-12 w-10" />
+      <span className="spinner size-5" />
     </div>
   );
 }

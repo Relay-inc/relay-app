@@ -374,7 +374,9 @@ impl Server {
                 else if ev["type"] == "result" { "Claude finished" } else { continue };
             if self.attached.lock().unwrap().get(key).copied().unwrap_or(0) > 0 { continue; }
             let url = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|p| p["notify"].as_str().map(String::from));
-            if let Some(url) = url.filter(|u| u.starts_with("https://") || u.starts_with("http://")) { notify(&url, &format!("{what} on {}", self.info.host)); }
+            // tapped on the phone: relay://conversation/<key>, the key without the device's namespace (no content)
+            let click = format!("relay://conversation/{}", percent(key.split_once(':').map_or(key, |x| x.1)));
+            if let Some(url) = url.filter(|u| u.starts_with("https://") || u.starts_with("http://")) { notify(&url, &format!("{what} on {}", self.info.host), &click); }
         }
         self.set_sid(key, None);
         self.titles.lock().unwrap().remove(key);
@@ -463,9 +465,14 @@ impl Drop for Attached<'_> {
     }
 }
 
+/// A conversation key in a URL path: letters, digits and -._~ as they are, every other byte as %XX.
+fn percent(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
 /// One notification to an ntfy topic, with curl (on a Mac and in the image): no HTTP client in this binary for it.
-fn notify(url: &str, text: &str) {
-    let ok = std::process::Command::new("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-d", text, url])
+fn notify(url: &str, text: &str, click: &str) {
+    let ok = std::process::Command::new("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-H", &format!("Click: {click}"), "-d", text, url])
         .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
     if !ok { eprintln!("relay-server: a notification to {url} failed"); }
 }

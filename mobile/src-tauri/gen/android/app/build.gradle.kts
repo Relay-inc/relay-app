@@ -25,6 +25,20 @@ android {
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")
     }
+    // Relay's release key (scripts/release.sh): ~/.tauri/relay-android.properties, or the file RELAY_ANDROID_KEYSTORE
+    // names, with password, keyAlias and storeFile. Without one a release build stays unsigned.
+    val keystoreFile = file(System.getenv("RELAY_ANDROID_KEYSTORE") ?: "${System.getProperty("user.home")}/.tauri/relay-android.properties")
+    if (keystoreFile.exists()) {
+        val keystore = Properties().apply { keystoreFile.inputStream().use { load(it) } }
+        signingConfigs {
+            create("release") {
+                keyAlias = keystore["keyAlias"] as String
+                keyPassword = keystore["password"] as String
+                storeFile = file(keystore["storeFile"] as String)
+                storePassword = keystore["password"] as String
+            }
+        }
+    }
     buildTypes {
         getByName("debug") {
             manifestPlaceholders["usesCleartextTraffic"] = "true"
@@ -39,6 +53,7 @@ android {
             }
         }
         getByName("release") {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             optimization {
                enable = true
             }

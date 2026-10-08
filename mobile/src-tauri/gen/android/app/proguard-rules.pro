@@ -19,3 +19,6 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+# The sealed-secrets plugin (SealedPlugin.kt): found by name from Rust, its arguments filled by reflection
+-keep class be.laurentmeersman.relay.mobile.SealedPlugin { *; }
+-keep class be.laurentmeersman.relay.mobile.SealArgs { *; }

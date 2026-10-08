@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { onBackButtonPress } from "@tauri-apps/api/app";
+import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { cancel, checkPermissions, Format, requestPermissions, scan } from "@tauri-apps/plugin-barcode-scanner";
 import type { PhoneConversation, PhoneServer } from "../domain/mobile/types";
 
@@ -17,6 +18,11 @@ export async function scanCode() {
   // the camera is asked for the first time it is needed; refused, it is "camera" (the page says what to do)
   if ((await checkPermissions()) !== "granted" && (await requestPermissions()) !== "granted") throw new Error("camera");
   return (await scan({ formats: [Format.QRCode], windowed: false })).content;
+}
+/** The relay:// links that open the app: the one it started with, then each one while it runs. */
+export async function onLinks(handler: (url: string) => void) {
+  (await getCurrent())?.forEach(handler);
+  await onOpenUrl(urls => urls.forEach(handler));
 }
 /** Close the camera of a scan that runs (its scan rejects as cancelled). */
 export const cancelScan = () => cancel();

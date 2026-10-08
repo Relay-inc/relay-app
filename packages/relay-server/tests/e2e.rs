@@ -233,8 +233,8 @@ fn start_builds_claude_from_the_laptops_profile() {
     assert_eq!(laptop.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["p:1"]);
 }
 
-/// A stand-in ntfy server: the body of each POST it gets.
-fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<String>) {
+/// A stand-in ntfy server: the headers and the body of each POST it gets.
+fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<(String, String)>) {
     use std::io::Read;
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/relay-topic", l.local_addr().unwrap());
@@ -242,17 +242,17 @@ fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<String>) {
     std::thread::spawn(move || for mut c in l.incoming().map_while(Result::ok) {
         let mut buf = Vec::new();
         let mut chunk = [0u8; 4096];
-        let body = loop {
+        let got = loop {
             let n = c.read(&mut chunk).unwrap_or(0);
-            if n == 0 { break String::new(); }
+            if n == 0 { break (String::new(), String::new()); }
             buf.extend_from_slice(&chunk[..n]);
             let text = String::from_utf8_lossy(&buf).to_string();
             let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
             let len = head.lines().find_map(|h| h.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
-            if body.len() >= len { break body[..len].to_string(); }
+            if body.len() >= len { break (head.to_string(), body[..len].to_string()); }
         };
         c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").ok();
-        tx.send(body).ok();
+        tx.send(got).ok();
     });
     (url, rx)
 }
@@ -293,8 +293,10 @@ fn a_waiting_conversation_nobody_follows_goes_to_ntfy() {
     writeln!(c.stdin, "later").unwrap();
     c.stdin.flush().unwrap();
     drop(c);
-    let body = posts.recv_timeout(Duration::from_secs(8)).expect("a notification");
+    let (head, body) = posts.recv_timeout(Duration::from_secs(8)).expect("a notification");
     assert!(body.starts_with("Claude finished on "), "{body}");
+    // tapped on the phone, it opens the conversation: its key, without the device's namespace
+    assert!(head.lines().any(|h| h == "Click: relay://conversation/n%3A1"), "{head}");
 }
 
 #[test]
