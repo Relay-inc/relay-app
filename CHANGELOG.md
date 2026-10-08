@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- New users start with an empty vault: Start on the welcome screen creates one in `~/Relay` with the rules, skills, hooks and templates that give Claude a memory of your projects. "I have a vault" still lets you pick your own.
+- New users start with an empty vault: Start on the welcome screen creates one in `~/Relay` with the rules, skills, hooks and templates that give Claude a memory of your projects. "I have a vault" still lets you pick your own (#162)
 
 ## [0.0.15] - 2026-10-08
 
