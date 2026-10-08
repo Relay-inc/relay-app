@@ -1171,6 +1171,8 @@ export default {
   "rec.failed": "De opname kon niet weggeschreven worden: {error}",
   "rec.noModel":
     "Het spraakmodel voor meetings is nog niet gedownload. Download het in Instellingen › Spraak; de opname blijft bewaard.",
+  "rec.noModelStart": "Download eerst het spraakmodel voor meetings in Instellingen › Spraak, dan kan je opnemen.",
+  "rec.retry": "Opnieuw proberen",
   "voice.mode": "Opnemen",
   "voice.mode.both": "Vasthouden of tikken",
   "voice.mode.hold": "Vasthouden",

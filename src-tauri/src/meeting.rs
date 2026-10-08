@@ -76,7 +76,8 @@ fn track(device: cpal::Device, path: PathBuf) -> Result<Track, String> {
 pub fn meeting_record_start(app: AppHandle, state: State<MeetingRec>, on_tick: Channel<Value>) -> Result<Value, String> {
     let mut session = state.session.lock().unwrap();
     if session.is_some() { return Err("already recording".into()); }
-    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings").join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
+    super::dictation::meeting_model_ready(&app)?;
+    let dir =app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings").join(chrono::Local::now().format("%Y%m%d-%H%M%S").to_string());
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let mic = cpal::default_host().default_input_device().ok_or("no microphone")?;
     let mut tracks = vec![("me", track(mic, dir.join("me.wav"))?)];
@@ -122,6 +123,21 @@ pub fn meeting_record_cancel(state: State<MeetingRec>) -> Result<(), String> {
 #[tauri::command]
 pub async fn meeting_record_stop(app: AppHandle, state: State<'_, MeetingRec>, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
     let dir = end(&state)?;
+    save(app, dir, title, me, others, on_progress).await
+}
+
+/// Writes out the newest recording a failure kept (one that worked or was cancelled is gone), as `meeting_record_stop`.
+#[tauri::command]
+pub async fn meeting_record_retry(app: AppHandle, state: State<'_, MeetingRec>, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
+    if state.session.lock().unwrap().is_some() { return Err("already recording".into()); }
+    let root = app.path().app_data_dir().map_err(|e| e.to_string())?.join("recordings");
+    // the folders are named by their start time, so the last one by name is the newest
+    let dir = std::fs::read_dir(&root).map_err(|e| e.to_string())?.flatten().map(|e| e.path())
+        .filter(|p| p.join("me.wav").is_file()).max().ok_or("no kept recording")?;
+    save(app, dir, title, me, others, on_progress).await
+}
+
+async fn save(app: AppHandle, dir: PathBuf, title: String, me: String, others: String, on_progress: Channel<f64>) -> Result<Value, String> {
     let vault = super::need_vault(&app.state::<super::App>())?;
     let keep_audio = app.state::<super::App>().settings.lock().unwrap()["voice"]["keepAudio"] != false;
     let work = dir.clone();
@@ -152,14 +168,10 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
     }
     let folder = attachments(vault);
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    let stem = free_stem(&folder, &format!("{} {}", chrono::Local::now().format("%Y-%m-%d %H%M"), safe_name(title)));
-    let audio = if keep_audio {
-        let mixed = dir.join("mixed.wav");
-        write_mix(&mixed, &tracks.iter().map(|(_, s)| s.as_slice()).collect::<Vec<_>>())?;
-        let m4a = folder.join(format!("{stem}.m4a"));
-        afconvert(&["-f", "m4af", "-d", "aac", "-b", "48000"], &mixed, &m4a)?;
-        Some(m4a)
-    } else { None };
+    // named by when the recording started (its folder's name), so a retry later in the day keeps the meeting's time
+    let started = dir.file_name().and_then(|n| chrono::NaiveDateTime::parse_from_str(&n.to_string_lossy(), "%Y%m%d-%H%M%S").ok())
+        .unwrap_or_else(|| chrono::Local::now().naive_local());
+    let stem = free_stem(&folder, &format!("{} {}", started.format("%Y-%m-%d %H%M"), safe_name(title)));
     // every stretch of speech of both tracks, transcribed in turn
     let regions: Vec<(usize, (usize, usize))> = tracks.iter().enumerate().flat_map(|(t, (_, s))| speech_regions(s).into_iter().map(move |r| (t, r))).collect();
     let mut lines = vec![];
@@ -172,6 +184,14 @@ fn write_out(app: &AppHandle, dir: &Path, vault: &Path, title: &str, speakers: [
         }
         Ok(())
     })?;
+    // the audio only once the transcript worked, so a failure leaves nothing in the vault and a retry no second copy
+    let audio = if keep_audio {
+        let mixed = dir.join("mixed.wav");
+        write_mix(&mixed, &tracks.iter().map(|(_, s)| s.as_slice()).collect::<Vec<_>>())?;
+        let m4a = folder.join(format!("{stem}.m4a"));
+        afconvert(&["-f", "m4af", "-d", "aac", "-b", "48000"], &mixed, &m4a)?;
+        Some(m4a)
+    } else { None };
     let md = folder.join(format!("{stem}.md"));
     std::fs::write(&md, format!("# {title}\n\n{}", transcript(drop_echo(lines)))).map_err(|e| e.to_string())?;
     let rel = |p: &Path| p.strip_prefix(vault).unwrap_or(p).to_string_lossy().to_string();

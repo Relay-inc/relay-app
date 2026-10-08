@@ -1,6 +1,7 @@
 import {
   cancelRecording,
   dismissRecordingError,
+  retryRecording,
   stopRecording,
   useRecordingStore,
 } from "../../../application/calendar/recording";
@@ -23,7 +24,7 @@ const Meter = ({ label, level }: { label: string; level: number }) => (
  *  transcription's progress, or why it failed. */
 export function RecordingBar() {
   const { t } = useT();
-  const { meeting, phase, secs, me, others, system, heard, why, progress, error } = useRecordingStore();
+  const { meeting, phase, secs, me, others, system, heard, why, progress, error, kept } = useRecordingStore();
   if (phase === "idle" && !error) return null;
   return (
     <section className="grid grid-cols-1 gap-2 rounded-xl border border-separator-strong bg-raised p-3.5">
@@ -61,7 +62,12 @@ export function RecordingBar() {
         </div>
       ) : (
         <div className="flex items-start gap-2.5 text-xs text-late">
-          <span className="flex-1">{t("rec.failed", { error })}</span>
+          <span className="min-w-0 flex-1 wrap-anywhere">{t("rec.failed", { error })}</span>
+          {kept ? (
+            <button className="btn cursor-pointer" onClick={retryRecording}>
+              {t("rec.retry")}
+            </button>
+          ) : null}
           <button
             className="grid size-5 place-items-center rounded border-0 bg-transparent text-secondary hover:bg-fill-2"
             aria-label={t("nav.close")}
