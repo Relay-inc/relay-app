@@ -58,34 +58,45 @@ pub fn identity(data: &Path) -> io::Result<Identity> { Identity::load_or_create(
 
 // ---------- clients and pairing
 
+/// A paired device. `parent`: a linked device (a phone), paired through the device it belongs to; it shares that
+/// device's conversations, cards and mirror, may only work with conversations (LINKED_OPS), and goes when that one does.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
-pub struct Client { pub name: String, pub fp: String, pub added: u64 }
+pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(default, skip_serializing_if = "Option::is_none")] pub parent: Option<String> }
+
+/// What a linked device may ask: its conversations and their cards, and opening the mirror with the key it was given.
+/// Not the mirror's files, moving sessions, updating the server or pairing further devices.
+const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach"];
 
 pub fn clients(data: &Path) -> Vec<Client> {
     fs::read_to_string(data.join("clients.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 fn save_clients(data: &Path, c: &[Client]) -> io::Result<()> { write_private(&data.join("clients.json"), &serde_json::to_string_pretty(c).unwrap()) }
-/// Remove the clients whose name is `who`, or whose fingerprint starts with it (at least 8 characters). Returns them.
+/// Remove the clients whose name is `who`, or whose fingerprint starts with it (at least 8 characters), and the devices
+/// linked to them. Returns them.
 pub fn revoke(data: &Path, who: &str) -> io::Result<Vec<Client>> {
     let who = who.trim();
-    let hit = |c: &Client| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()));
-    let (gone, keep): (Vec<Client>, Vec<Client>) = clients(data).into_iter().partition(hit);
+    let all = clients(data);
+    let hit: Vec<String> = all.iter().filter(|c| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()))).map(|c| c.fp.clone()).collect();
+    let (gone, keep): (Vec<Client>, Vec<Client>) = all.into_iter().partition(|c| hit.contains(&c.fp) || c.parent.as_ref().is_some_and(|p| hit.contains(p)));
     if !gone.is_empty() { save_clients(data, &keep)?; }
-    // a revoked device's mirror goes too; a running server also drops its key and working copy (see Server::run)
-    for c in &gone { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
+    // a revoked device's mirror goes too (a linked one has none of its own); a running server also drops its key and
+    // working copy (see Server::run)
+    for c in gone.iter().filter(|c| c.parent.is_none()) { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
     Ok(gone)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Pairing { secret: String, expires: u64, #[serde(default)] fails: u32 }
+struct Pairing { secret: String, expires: u64, #[serde(default)] fails: u32, #[serde(default)] parent: Option<String> }
 fn pairing(data: &Path) -> Option<Pairing> {
     let p: Pairing = serde_json::from_str(&fs::read_to_string(data.join("pairing.json")).ok()?).ok()?;
     (p.expires > now() && p.fails < PAIR_TRIES).then_some(p)
 }
 /// Open a pairing: a fresh code, PAIR_SECS long, replacing any earlier one. Returns the code.
-pub fn open_pairing(data: &Path) -> io::Result<String> {
+pub fn open_pairing(data: &Path) -> io::Result<String> { open_pairing_for(data, None) }
+/// The same, for a device linked to `parent` (pair_device): the device that pairs with it gets that parent.
+fn open_pairing_for(data: &Path, parent: Option<&str>) -> io::Result<String> {
     let secret = tls::random_secret();
-    write_private(&data.join("pairing.json"), &json!({"secret": secret, "expires": now() + PAIR_SECS}).to_string())?;
+    write_private(&data.join("pairing.json"), &json!({"secret": secret, "expires": now() + PAIR_SECS, "parent": parent}).to_string())?;
     Ok(secret)
 }
 
@@ -168,14 +179,18 @@ impl Server {
         let (r, mut w) = duplex.split();
         let mut r = BufReader::new(r);
         let req = proto::read_json(&mut r, MAX_LINE)?;
-        let known = clients(&self.data).iter().any(|c| c.fp == fp);
+        let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
-        if !known && op != "pair" { return reply(&mut w, Err("not paired".into())); }
-        // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"
-        let ns = &fp[..16];
+        if me.is_none() && op != "pair" { return reply(&mut w, Err("not paired".into())); }
+        let parent = me.and_then(|c| c.parent);
+        if parent.is_some() && !LINKED_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a linked device"))); }
+        // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"; a linked
+        // device works in the one it belongs to
+        let ns = &parent.as_deref().unwrap_or(&fp)[..16];
         let key = |k: &Value| format!("{ns}:{}", k.as_str().unwrap_or(""));
         let pending = self.data.join("pending").join(ns);
         match op {
+            "pair_device" => reply(&mut w, open_pairing_for(&self.data, Some(&fp)).map(|code| json!({"code": code, "fp": self.fp})).map_err(|e| e.to_string())),
             "pair" => { let res = self.pair(&fp, &req); if res.is_ok() { eprintln!("relay-server: paired {} ({peer})", req["name"]); } reply(&mut w, res) }
             "info" => reply(&mut w, Ok(json!({"info": Info { pending: pending.to_string_lossy().into(), work: self.mirror.work_of(ns).to_string_lossy().into(),
                 mirror_open: self.mirror.is_open(ns), in_ram: self.mirror.in_ram, ..self.info.clone() }}))),
@@ -252,12 +267,14 @@ impl Server {
         }
         fs::remove_file(self.data.join("pairing.json")).ok();
         let mut list = clients(&self.data);
+        // the device that opened the pairing was revoked meanwhile: nothing to link to
+        if p.parent.as_ref().is_some_and(|pf| !list.iter().any(|c| &c.fp == pf)) { return Err("the device this pairing was for is no longer paired".into()); }
         list.retain(|c| c.fp != fp);
         // a second device with the same name gets a number, so revoke by name stays unambiguous
         let mut n = name.clone();
         let mut i = 2;
         while list.iter().any(|c| c.name == n) { n = format!("{name} {i}"); i += 1; }
-        list.push(Client { name: n.clone(), fp: fp.into(), added: now() });
+        list.push(Client { name: n.clone(), fp: fp.into(), added: now(), parent: p.parent });
         save_clients(&self.data, &list).map_err(|e| e.to_string())?;
         Ok(json!({"name": n}))
     }
@@ -389,7 +406,7 @@ pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Re
     let host = host.or_else(lan_ip).ok_or_else(|| io::Error::other("no LAN address found, pass --host"))?;
     let fp = identity(data)?.fingerprint();
     let code = open_pairing(data)?;
-    Ok(proto::PairLine { host, port, fp, code }.format())
+    Ok(proto::PairLine { host, port, fp, code, key: None }.format())
 }
 
 

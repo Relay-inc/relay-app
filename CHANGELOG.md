@@ -15,9 +15,13 @@ a PR. Versions follow
 
 ### Added
 
+- **Add phone, per machine in Settings › Machines**: a QR code and a line that pair a phone with the machine as a device of this Mac. The phone sees this Mac's conversations and cards there, and can open the mirror with the key in the line while this Mac is closed. It may only work with conversations (no mirror files, no updates of the server, no further devices), and forgetting this Mac on the machine (`relay-server revoke`) unpairs its phones too. The phone app itself is not released yet (`mobile/`, a first Tauri build for Android and iOS)
+
 - **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows
 
 ### Changed
+
+- **Several devices follow one conversation on a machine**: this Mac and its phone both get every line of a conversation there, and each gets what it missed when it comes back, without taking the conversation from the other. The protocol between Relay and relay-server changes with it: update every machine to this version (Settings › Machines › Update)
 
 - **Booking time reads every source of the Antenna timesheet skill**: the "Time <date>" conversation still starts from your Relay conversations, and the agent now adds the day's meetings (`relay calendar.meetings` takes a `date`), your Slack messages, your git commits, Claude Code sessions outside Relay (terminal, other repos), and what you edited in Google Drive, Jira, Notion and Figma, the same sources as weareantenna/antenna-tools' timesheet. It skips a source that isn't connected and says so, never counts a meeting twice, and ends with how much of an 8-hour day is still uncovered. A day without Relay conversations is no longer stopped right away
 

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Relay</title>
+  <style>
+    body { font: 15px -apple-system, system-ui, sans-serif; margin: 0; padding: env(safe-area-inset-top) 12px 12px; }
+    input, button { font: inherit; padding: 8px; margin: 4px 0; width: 100%; box-sizing: border-box; }
+    pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; background: #f4f4f4; padding: 8px; }
+    li { margin: 6px 0; }
+    @media (prefers-color-scheme: dark) { body { background: #111; color: #eee; } pre { background: #222; } }
+  </style>
+</head>
+<body>
+  <h3>Relay (spike)</h3>
+  <section id="pairing">
+    <input id="line" placeholder="relay://host:47800#fp=…&code=…" autocapitalize="off" autocorrect="off">
+    <input id="name" placeholder="device name" value="phone">
+    <button id="pair">Pair</button>
+  </section>
+  <button id="refresh">Refresh</button>
+  <h4>Conversations</h4><ul id="convs"></ul>
+  <h4>Cards</h4><pre id="cards"></pre>
+  <h4>Log</h4><pre id="log"></pre>
+  <script>
+    const { invoke } = window.__TAURI__.core;
+    const { listen } = window.__TAURI__.event;
+    const $ = id => document.getElementById(id);
+    const log = s => { $('log').textContent = s + '\n' + $('log').textContent.slice(0, 20000); };
+    const call = async (cmd, args) => { try { return await invoke(cmd, args); } catch (e) { log(`${cmd}: ${e}`); throw e; } };
+
+    async function refresh() {
+      const info = await call('info');
+      log(`connected: ${info.host} (${info.os}, v${info.version}), mirror ${info.mirror_open ? 'open' : 'locked'}`);
+      const convs = await call('list');
+      $('convs').replaceChildren(...convs.map(m => {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.textContent = `${m.key} · ${m.provider} ${m.model} · ${m.turns} running`;
+        b.onclick = async () => log(`attached, backlog ${(await call('attach', { key: m.key })).backlog}`);
+        li.append(b);
+        return li;
+      }));
+      if (!convs.length) $('convs').textContent = 'none for this device';
+      $('cards').textContent = JSON.stringify(await call('pending'), null, 1);
+    }
+
+    $('pair').onclick = async () => {
+      const r = await call('pair', { line: $('line').value.trim(), name: $('name').value.trim() || 'phone' });
+      log(`paired with ${r.info.host}`);
+      refresh();
+    };
+    $('refresh').onclick = refresh;
+    listen('frame', e => log(`[${e.payload.kind}] ${e.payload.line}`));
+    refresh().catch(() => {});
+  </script>
+</body>
+</html>

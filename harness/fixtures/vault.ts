@@ -269,9 +269,9 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
  * archive, delete, Inbox/Other) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
-  // a paired work machine that speaks an older protocol (Settings › Machines)
+  // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online
   const machines =
-    fixture === "machines"
+    fixture === "machines" || fixture === "phone"
       ? {
           machines: [
             {

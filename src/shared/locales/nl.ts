@@ -1264,6 +1264,12 @@ export default {
   "mc.hostPair": "Koppelregel maken",
   "mc.hostPairHelp":
     "Plak hem in Relay op de andere Mac onder Instellingen › Machines › Machine koppelen. Werkt één keer, 10 minuten.",
+  "mc.phoneAdd": "Telefoon toevoegen",
+  "mc.phoneClose": "Sluiten",
+  "mc.phoneHelp":
+    "Scan dit met Relay op je telefoon. De telefoon ziet dan de gesprekken van deze Mac op {name}, en kan de gespiegelde vault daar openen terwijl deze Mac dicht is. Werkt één keer, 10 minuten; Vergeten van deze machine ontkoppelt ook de telefoon.",
+  "mc.phoneLine":
+    "Of plak deze regel in Relay op de telefoon. Hij bevat de sleutel van de gespiegelde vault, deel hem dus niet.",
   "mc.hostClients": "Gekoppelde apparaten:",
   "mc.hostNoClients": "Nog geen apparaat gekoppeld.",
   "mc.copy": "Kopieer",

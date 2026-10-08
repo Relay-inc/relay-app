@@ -1261,6 +1261,11 @@ const en = {
   "mc.hostPair": "Make a pairing line",
   "mc.hostPairHelp":
     "Paste it in Relay on the other Mac under Settings › Machines › Pair a machine. Works once, for 10 minutes.",
+  "mc.phoneAdd": "Add phone",
+  "mc.phoneClose": "Close",
+  "mc.phoneHelp":
+    "Scan this with Relay on your phone. The phone then sees this Mac's conversations on {name}, and can open its mirror there while this Mac is closed. Works once, for 10 minutes; Forget this machine unpairs the phone too.",
+  "mc.phoneLine": "Or paste this line in Relay on the phone. It holds the key to the mirror, so do not share it.",
   "mc.hostClients": "Paired devices:",
   "mc.hostNoClients": "No device paired yet.",
   "mc.copy": "Copy",

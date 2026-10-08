@@ -45,7 +45,10 @@ pub fn run(a: &[String]) {
         Some("clients") => {
             let list = clients(&data);
             if list.is_empty() { println!("No paired devices."); }
-            for c in list { println!("{}  {}…  paired {}", c.name, &c.fp[..16], c.added); }
+            for c in &list {
+                let of = c.parent.as_ref().map(|p| format!("  linked to {}", list.iter().find(|x| &x.fp == p).map_or("?", |x| x.name.as_str()))).unwrap_or_default();
+                println!("{}  {}…  paired {}{of}", c.name, &c.fp[..16], c.added);
+            }
         }
         Some("revoke") => {
             let who = a.get(2).unwrap_or_else(|| fail("revoke <name | fingerprint>"));

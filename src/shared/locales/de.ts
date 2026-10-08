@@ -1275,6 +1275,12 @@ export default {
   "mc.hostPair": "Kopplungszeile erstellen",
   "mc.hostPairHelp":
     "Füge sie in Relay auf dem anderen Mac unter Einstellungen › Maschinen › Maschine koppeln ein. Gilt einmal, 10 Minuten.",
+  "mc.phoneAdd": "Telefon hinzufügen",
+  "mc.phoneClose": "Schließen",
+  "mc.phoneHelp":
+    "Scanne das mit Relay auf deinem Telefon. Das Telefon sieht dann die Gespräche dieses Macs auf {name} und kann den gespiegelten Vault dort öffnen, während dieser Mac zu ist. Gilt einmal, 10 Minuten; Vergessen dieser Maschine entkoppelt auch das Telefon.",
+  "mc.phoneLine":
+    "Oder füge diese Zeile in Relay auf dem Telefon ein. Sie enthält den Schlüssel zum gespiegelten Vault, teile sie also nicht.",
   "mc.hostClients": "Gekoppelte Geräte:",
   "mc.hostNoClients": "Noch kein Gerät gekoppelt.",
   "mc.copy": "Kopieren",

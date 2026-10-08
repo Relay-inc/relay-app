@@ -1280,6 +1280,12 @@ export default {
   "mc.hostPair": "Créer une ligne d'association",
   "mc.hostPairHelp":
     "Collez-la dans Relay sur l'autre Mac sous Réglages › Machines › Associer une machine. Valable une fois, 10 minutes.",
+  "mc.phoneAdd": "Ajouter un téléphone",
+  "mc.phoneClose": "Fermer",
+  "mc.phoneHelp":
+    "Scannez ceci avec Relay sur votre téléphone. Le téléphone voit alors les conversations de ce Mac sur {name} et peut ouvrir son miroir là-bas pendant que ce Mac est fermé. Valable une fois, 10 minutes ; Oublier cette machine dissocie aussi le téléphone.",
+  "mc.phoneLine":
+    "Ou collez cette ligne dans Relay sur le téléphone. Elle contient la clé du miroir, ne la partagez donc pas.",
   "mc.hostClients": "Appareils associés :",
   "mc.hostNoClients": "Aucun appareil associé pour l'instant.",
   "mc.copy": "Copier",

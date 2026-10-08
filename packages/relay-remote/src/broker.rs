@@ -2,16 +2,20 @@
 // quitting. It is this same binary started as `relay --broker <socket> <spec>` (main.rs), about 2 MB of its own
 // memory, idle while it waits. The app talks to it over a Unix socket and gets the agent back after a restart.
 //
-// Socket, broker to app, one line each: `p <pid> <backlog>` first (the agent's pid, how many buffered lines follow),
-// or `! <error>` when the agent did not start; then `o <line>` for the agent's stdout, `e <line>` for its stderr,
-// `x <code>` when it exited. App to broker: raw lines for the agent's stdin.
+// Socket, one line each. Broker: `p <pid> ?` first (the agent's pid), or `! <error>` when the agent did not start. App:
+// `i <id>`, who is connecting (`app` for this Mac's app, a device's fingerprint over a relay-server, empty for a
+// connection that only waits for the start). Broker: `n <count>`, how many lines follow that this id has not had yet;
+// then `o <line>` for the agent's stdout, `e <line>` for its stderr, `x <code>` when it exited. App to broker: raw lines
+// for the agent's stdin. A broker from before ids (the app updated while it ran) says `p <pid> <count>` and takes no id.
 //
-// Without the app the broker buffers the agent's output and replays it on reconnect. After its grace without the app it
+// Several apps may follow one conversation (the laptop and its phone): every line goes to each, and each id gets what
+// it missed when it comes back, without taking the conversation from the others. A second connection with the same id
+// replaces the first. Without any app the broker buffers the agent's output and replays it on reconnect. After its grace without the app it
 // closes the agent's stdin and removes its socket: the agent finishes its turn and exits, as it did before brokers,
 // so nothing lingers when the app stays closed.
 
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{BufRead, BufReader, Write};
 use std::sync::OnceLock;
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -31,6 +35,9 @@ fn grace() -> Duration {
 // output buffered while the app is away, at most this many bytes; the oldest lines go first (one Claude line can
 // carry a whole file, so a line count would not bound the memory)
 const MAX_BACKLOG: usize = 4 << 20;
+// how long a new connection has to say who it is, and how long one line to an app may block before that app is dropped
+const HELLO: Duration = Duration::from_secs(10);
+const STALL: Duration = Duration::from_secs(30);
 // the broker's threads only shuttle lines, their stacks stay small
 const STACK: usize = 128 << 10;
 fn spawn<F: FnOnce() + Send + 'static>(f: F) -> thread::JoinHandle<()> { thread::Builder::new().stack_size(STACK).spawn(f).expect("broker thread") }
@@ -99,10 +106,14 @@ impl Agent {
 /// buffered while the app was away). Local brokers are a Unix socket, a work machine's a TLS stream.
 pub struct Conn { pub agent: Agent, pub stdin: Box<dyn Write + Send>, pub frames: Box<dyn BufRead + Send>, pub backlog: usize }
 
-/// Start a broker for `cmd` and connect to it.
-pub fn launch(meta: &Meta, cmd: &Command) -> Result<Conn, String> { launch_spec(meta, &Spec::of(cmd)) }
-/// The same for a command as a Spec, the way a relay-server gets it from the app.
-pub fn launch_spec(meta: &Meta, spec: &Spec) -> Result<Conn, String> {
+/// The id this Mac's app connects to its own brokers with.
+pub const APP: &str = "app";
+/// Start a broker for `cmd` and connect to it, as the app.
+pub fn launch(meta: &Meta, cmd: &Command) -> Result<Conn, String> { launch_as(meta, &Spec::of(cmd), APP) }
+/// Start a broker for a Spec, the way a relay-server gets it from the app, and wait until it runs. The connection
+/// takes no lines: the device that asked attaches with its own id and gets them all.
+pub fn launch_spec(meta: &Meta, spec: &Spec) -> Result<Conn, String> { launch_as(meta, spec, "") }
+fn launch_as(meta: &Meta, spec: &Spec, id: &str) -> Result<Conn, String> {
     fs::create_dir_all(dir()).map_err(|e| e.to_string())?;
     let sock = sock_path(&meta.key);
     fs::remove_file(&sock).ok();
@@ -113,7 +124,7 @@ pub fn launch_spec(meta: &Meta, spec: &Spec) -> Result<Conn, String> {
         .process_group(0).spawn().map_err(|e| format!("broker: {e}"))?;
     spawn(move || { b.wait().ok(); });
     for _ in 0..100 {
-        if let Ok(c) = connect(&sock) {
+        if let Ok(c) = connect(&sock, id) {
             if let Ok(c) = &c { save_meta(&Meta { pid: c.agent.id(), ..meta.clone() }); }
             return c;
         }
@@ -122,19 +133,27 @@ pub fn launch_spec(meta: &Meta, spec: &Spec) -> Result<Conn, String> {
     Err("broker: no socket".into())
 }
 /// Take back a conversation whose broker outlived the app. None when there is none (it ended, or its grace ran out).
-pub fn reattach(key: &str) -> Option<Conn> { connect(&sock_path(key)).ok()?.ok() }
+pub fn reattach(key: &str) -> Option<Conn> { connect(&sock_path(key), APP).ok()?.ok() }
 
-fn connect(sock: &Path) -> std::io::Result<Result<Conn, String>> {
+fn connect(sock: &Path, id: &str) -> std::io::Result<Result<Conn, String>> {
     let s = UnixStream::connect(sock)?;
     let frames = BufReader::new(s.try_clone()?);
-    open(Box::new(s), Box::new(frames))
+    open(Box::new(s), Box::new(frames), id)
 }
-/// Read a broker's first line from any stream: the agent and its backlog, or why it did not start.
-pub fn open(stdin: Box<dyn Write + Send>, mut frames: Box<dyn BufRead + Send>) -> std::io::Result<Result<Conn, String>> {
+/// Say hello to a broker over any stream as `id`: the agent and the lines this id missed, or why it did not start.
+pub fn open(mut stdin: Box<dyn Write + Send>, mut frames: Box<dyn BufRead + Send>, id: &str) -> std::io::Result<Result<Conn, String>> {
     let mut hello = String::new();
     frames.read_line(&mut hello)?;
     let mut w = hello.trim_end().splitn(3, ' ');
     Ok(match (w.next(), w.next(), w.next()) {
+        (Some("p"), Some(pid), Some("?")) => {
+            writeln!(stdin, "i {id}")?;
+            stdin.flush()?;
+            let mut n = String::new();
+            frames.read_line(&mut n)?;
+            let backlog = n.trim_end().strip_prefix("n ").and_then(|n| n.parse().ok()).ok_or_else(|| std::io::Error::other(format!("broker: {}", n.trim())))?;
+            Ok(Conn { agent: Agent::from(pid.parse::<u32>().unwrap_or(0)), stdin, frames, backlog })
+        }
         (Some("p"), Some(pid), Some(n)) => Ok(Conn { agent: Agent::from(pid.parse::<u32>().unwrap_or(0)), stdin, frames, backlog: n.parse().unwrap_or(0) }),
         (Some("!"), ..) => Err(hello.get(2..).unwrap_or("").trim().to_string()),
         _ => Err(format!("broker: {}", hello.trim())),
@@ -149,19 +168,39 @@ pub fn frame(line: &str) -> Frame {
 
 // ---------- the broker process
 
-// gen: which app connection is current, so an old one ending does not mark a newer one gone
-// winding: stdin closed after GRACE, no more connections
-struct State { client: Option<UnixStream>, gen: u64, away: Option<Instant>, backlog: VecDeque<String>, bytes: usize, winding: bool }
+// A connected app: gen tells two connections of the same id apart, so an old one ending does not drop a newer one.
+struct Client { id: String, gen: u64, s: UnixStream }
+// ring: the lines some id that connected before has not had yet, the first numbered `first`; seen: per id, the number
+// of the next line it gets. winding: stdin closed after GRACE, no more connections.
+struct State { clients: Vec<Client>, seen: HashMap<String, u64>, ring: VecDeque<String>, first: u64, bytes: usize, gen: u64, away: Option<Instant>, winding: bool }
 impl State {
-    // to the app, or into the backlog while it is away
+    fn next(&self) -> u64 { self.first + self.ring.len() as u64 }
+    // to every app; kept until every id that came before has it
     fn send(&mut self, frame: String) {
-        if let Some(c) = &mut self.client {
-            if writeln!(c, "{frame}").is_ok() { return; }
-            self.client = None; self.away = Some(Instant::now());
-        }
+        let n = self.next();
+        let State { clients, seen, .. } = self;
+        clients.retain_mut(|c| {
+            let ok = writeln!(c.s, "{frame}").is_ok();
+            if ok { seen.insert(c.id.clone(), n + 1); } else { c.s.shutdown(std::net::Shutdown::Both).ok(); }
+            ok
+        });
+        if self.clients.is_empty() && self.away.is_none() { self.away = Some(Instant::now()); }
         self.bytes += frame.len();
-        self.backlog.push_back(frame);
-        while self.bytes > MAX_BACKLOG { if let Some(f) = self.backlog.pop_front() { self.bytes -= f.len(); } else { break; } }
+        self.ring.push_back(frame);
+        self.trim();
+    }
+    // what every id has goes; past MAX_BACKLOG the oldest goes anyway
+    fn trim(&mut self) {
+        let low = self.seen.values().min().copied().unwrap_or(self.first);
+        while self.first < low || self.bytes > MAX_BACKLOG {
+            let Some(f) = self.ring.pop_front() else { break };
+            self.bytes -= f.len();
+            self.first += 1;
+        }
+    }
+    fn gone(&mut self, gen: u64) {
+        self.clients.retain(|c| c.gen != gen);
+        if self.clients.is_empty() && self.away.is_none() { self.away = Some(Instant::now()); }
     }
 }
 
@@ -177,7 +216,7 @@ pub fn main(sock: &str, spec: &str) {
         }
     };
     let pid = child.id();
-    let st = Arc::new(Mutex::new(State { client: None, gen: 0, away: Some(Instant::now()), backlog: VecDeque::new(), bytes: 0, winding: false }));
+    let st = Arc::new(Mutex::new(State { clients: Vec::new(), seen: HashMap::new(), ring: VecDeque::new(), first: 0, bytes: 0, gen: 0, away: Some(Instant::now()), winding: false }));
     // its own lock: a write that blocks on a full pipe must not hold up the output threads
     let stdin = Arc::new(Mutex::new(child.stdin.take()));
     let pipe = |r: Box<dyn std::io::Read + Send>, tag: &'static str| {
@@ -200,29 +239,46 @@ pub fn main(sock: &str, spec: &str) {
     spawn(move || loop {
         thread::sleep(Duration::from_secs(30));
         let mut s = st3.lock().unwrap();
-        if s.client.is_none() && s.away.is_some_and(|t| t.elapsed() > grace()) { s.winding = true; *in3.lock().unwrap() = None; fs::remove_file(&sock3).ok(); return; }
+        if s.clients.is_empty() && s.away.is_some_and(|t| t.elapsed() > grace()) { s.winding = true; *in3.lock().unwrap() = None; fs::remove_file(&sock3).ok(); return; }
     });
     for conn in listener.incoming() {
         let Ok(c) = conn else { continue };
-        let mut s = st.lock().unwrap();
-        if s.winding { continue; } // winding down: the app follows the transcript instead
-        let mut c2 = match c.try_clone() { Ok(x) => x, Err(_) => continue };
-        // a new app connection replaces the old one and gets what it missed
-        if let Some(old) = s.client.take() { old.shutdown(std::net::Shutdown::Both).ok(); }
-        let sent = writeln!(c2, "p {pid} {}", s.backlog.len()).is_ok() && s.backlog.iter().all(|f| writeln!(c2, "{f}").is_ok());
-        if !sent { continue; } // the backlog stays for the next connection
-        s.backlog = VecDeque::new(); s.bytes = 0; // the memory goes back too
-        s.client = Some(c2); s.away = None; s.gen += 1;
-        let gen = s.gen;
-        drop(s);
-        // the app's lines go to the agent's stdin; when the app goes, the agent keeps running
+        if st.lock().unwrap().winding { continue; } // winding down: the app follows the transcript instead
+        // its own thread: waiting for an app's id must not hold up the others
         let (st4, in4) = (st.clone(), stdin.clone());
         spawn(move || {
-            for l in BufReader::new(c).lines().map_while(Result::ok) {
+            let Ok(mut c2) = c.try_clone() else { return };
+            if writeln!(c2, "p {pid} ?").is_err() { return; }
+            let mut r = BufReader::new(c);
+            let mut hello = String::new();
+            r.get_ref().set_read_timeout(Some(HELLO)).ok();
+            if r.read_line(&mut hello).is_err() { return; }
+            r.get_ref().set_read_timeout(None).ok();
+            let Some(id) = hello.strip_prefix("i ").map(|i| i.trim_end().to_string()) else { return };
+            // a stalled app (a phone gone out of range) must not hold up the agent or the others: it is dropped, and
+            // gets the lines again when it comes back
+            c2.set_write_timeout(Some(STALL)).ok();
+            let mut s = st4.lock().unwrap();
+            if id.is_empty() { writeln!(c2, "n 0").ok(); return; } // only waited for the start
+            let from = s.seen.get(&id).copied().unwrap_or(s.first).max(s.first);
+            let skip = (from - s.first) as usize;
+            let sent = writeln!(c2, "n {}", s.ring.len() - skip).is_ok() && s.ring.iter().skip(skip).all(|f| writeln!(c2, "{f}").is_ok());
+            if !sent { return; } // the lines stay for its next connection
+            // a new connection of the same app replaces the old one
+            s.clients.retain(|o| { let same = o.id == id; if same { o.s.shutdown(std::net::Shutdown::Both).ok(); } !same });
+            s.gen += 1;
+            let gen = s.gen;
+            let next = s.next();
+            s.seen.insert(id.clone(), next);
+            s.clients.push(Client { id, gen, s: c2 });
+            s.away = None;
+            s.trim();
+            drop(s);
+            // the app's lines go to the agent's stdin; when the app goes, the agent keeps running
+            for l in r.lines().map_while(Result::ok) {
                 if let Some(i) = &mut *in4.lock().unwrap() { if writeln!(i, "{l}").and_then(|_| i.flush()).is_err() { break; } }
             }
-            let mut s = st4.lock().unwrap();
-            if s.gen == gen { s.client = None; s.away = Some(Instant::now()); }
+            st4.lock().unwrap().gone(gen);
         });
     }
 }

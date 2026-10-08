@@ -15,6 +15,9 @@ going while your laptop is closed. Relay connects to it over the LAN, or over yo
   the line, then proves it knows the code with an HMAC bound to both certificates.
 - **Revoke per device.** `relay-server revoke <name>` removes one device; its next connection fails.
 - **Each device its own conversations.** Two paired laptops never see or stop each other's conversations or cards.
+- **Linked devices (a phone).** A paired device can open a pairing for a device of its own (`pair_device`). That one
+  shares its conversations, cards and mirror, but may only work with conversations: no mirror files, no moving
+  sessions, no updating the server, no pairing further devices. Revoking a device revokes the devices linked to it.
 
 What it does not change: an agent here runs with the same rights as on your laptop, and the permission cards still
 come to Relay. Mail never runs here (Relay answers the mail tools itself). The vault comes as an encrypted mirror (below).

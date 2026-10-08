@@ -192,6 +192,80 @@ fn update_goes_on_in_the_binary_sent() {
 }
 
 #[test]
+fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
+    let s = start("link");
+    let laptop = paired(&s, "laptop");
+    let other = paired(&s, "other");
+    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
+    let mut conn = laptop.launch(&meta("c:1"), &spec(&tmp)).unwrap();
+    writeln!(conn.stdin, "one").unwrap();
+    conn.stdin.flush().unwrap();
+    assert_eq!(next(&mut conn.frames), "got one");
+    drop(conn);
+
+    // the laptop opens a pairing for its phone; the phone pairs with it like with any line
+    let code = laptop.pair_device().unwrap();
+    let (host, port) = laptop.addr.rsplit_once(':').unwrap();
+    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: laptop.fp.clone(), code, key: None }.format();
+    let id = device("phone");
+    let (l, _) = client::pair(&line, &id, "phone").unwrap();
+    let phone = Client::new(&l.host, l.port, &l.fp, id);
+
+    // it sees the laptop's conversation; the other device's walls still stand
+    assert_eq!(phone.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["c:1"]);
+    assert!(other.list().unwrap().is_empty());
+
+    // both follow it at once: what either sends, both see, and neither takes it from the other
+    let mut lap = laptop.attach("c:1").unwrap().unwrap();
+    assert_eq!(lap.backlog, 0);
+    let mut ph = phone.attach("c:1").unwrap().unwrap();
+    // what came before it joined ("got one") the laptop already had, so it is gone: a phone reads that from `history`
+    assert_eq!(ph.backlog, 0);
+    writeln!(ph.stdin, "two").unwrap();
+    ph.stdin.flush().unwrap();
+    assert_eq!(next(&mut ph.frames), "got two");
+    assert_eq!(next(&mut lap.frames), "got two");
+    writeln!(lap.stdin, "three").unwrap();
+    lap.stdin.flush().unwrap();
+    assert_eq!(next(&mut lap.frames), "got three");
+    assert_eq!(next(&mut ph.frames), "got three");
+
+    // the laptop away while the phone goes on: it gets exactly what it missed, the phone keeps its stream
+    drop(lap);
+    std::thread::sleep(Duration::from_millis(200));
+    writeln!(ph.stdin, "four").unwrap();
+    ph.stdin.flush().unwrap();
+    assert_eq!(next(&mut ph.frames), "got four");
+    let mut lap = laptop.attach("c:1").unwrap().unwrap();
+    assert_eq!(lap.backlog, 1);
+    assert_eq!(next(&mut lap.frames), "got four");
+    writeln!(lap.stdin, "five").unwrap();
+    lap.stdin.flush().unwrap();
+    assert_eq!(next(&mut ph.frames), "got five");
+    drop((lap, ph));
+
+    // conversations only: not the mirror, not the server, no further devices
+    for e in [phone.wipe().err(), phone.pair_device().err(), phone.update("0", b"x").err()] { assert!(e.unwrap().contains("not allowed from a linked device")); }
+    let out = bin().args(["clients"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("linked to laptop"));
+
+    // the laptop's mirror: locked after a restart, the phone opens it with the key from its pairing line, for both
+    let key = relay_remote::tls::random_key();
+    laptop.unlock(&key).unwrap();
+    let s = restart(s);
+    assert!(!phone.info().unwrap().mirror_open);
+    assert!(phone.unlock(&relay_remote::tls::random_key()).unwrap_err().contains("another key"));
+    phone.unlock(&key).unwrap();
+    assert!(laptop.info().unwrap().mirror_open);
+
+    // the laptop goes, its phone with it
+    let out = bin().args(["revoke", "laptop"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Revoked phone"));
+    assert!(phone.info().is_err());
+    assert!(other.info().is_ok());
+}
+
+#[test]
 fn a_wrong_code_closes_the_pairing_after_five_tries() {
     let s = start("code");
     let line = pair_line(&s);

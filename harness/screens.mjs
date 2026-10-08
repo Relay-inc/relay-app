@@ -49,6 +49,12 @@ const settingsPage = async (tab, sub, fixture = "default") => {
 };
 
 const VIEWS = {
+  // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
+  "settings-machines-phone": async () => {
+    await settingsPage("Machines", null, "phone");
+    await click("Add phone");
+    await waitText("Scan this with Relay on your phone");
+  },
   waiting: async () => {
     await open(page, server.url);
     await waitText(titles.permission);

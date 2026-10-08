@@ -1,0 +1,17 @@
+[package]
+name = "relay-mobile"
+version.workspace = true
+description = "Relay on a phone: a remote control for the conversations on a relay-server"
+edition = "2021"
+
+[lib]
+name = "relay_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json.workspace = true
+relay-remote = { path = "../../packages/relay-remote" }

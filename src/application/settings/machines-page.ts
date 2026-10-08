@@ -80,6 +80,24 @@ export async function makeHostLine() {
     });
   }
 }
+/** Makes a pairing for a phone of this Mac on a machine (shown as a QR), or closes it with `close`. */
+export async function pairPhone(id: string, close = false) {
+  change(draft => {
+    draft.phone[id] = null;
+    draft.messages[id] = null;
+  });
+  if (close) return;
+  try {
+    const pairing = await backend.machinePairPhone(id);
+    change(draft => {
+      draft.phone[id] = pairing;
+    });
+  } catch (error) {
+    change(draft => {
+      draft.messages[id] = { text: String(error), ok: false };
+    });
+  }
+}
 export async function checkMachine(id: string) {
   change(draft => {
     draft.status[id] = "checking";

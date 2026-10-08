@@ -1,6 +1,6 @@
 # The app (src-tauri) and the packages (packages/*: board-core and one crate per tracker, agent-core and one crate per agent).
 [workspace]
-members = ["src-tauri", "packages/*"]
+members = ["src-tauri", "mobile/src-tauri", "packages/*"]
 resolver = "2"
 
 # Relay's version, for the app and relay-server alike (a machine reports it), the same as package.json

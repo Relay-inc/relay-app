@@ -71,6 +71,11 @@ impl Client {
     pub fn unlock(&self, key_hex: &str) -> Result<(), String> {
         self.call_bin(json!({"op": "unlock", "key": key_hex}), None, None, Duration::from_secs(120)).map(|_| ())
     }
+    /// Open a pairing for a device linked to this one (a phone): the code, for a line with the address that device
+    /// reaches the server at. It works once, for 10 minutes; the device then shares this one's conversations.
+    pub fn pair_device(&self) -> Result<String, String> {
+        Ok(self.call(json!({"op": "pair_device"}))?["code"].as_str().unwrap_or_default().to_string())
+    }
     pub fn wipe(&self) -> Result<(), String> { self.call(json!({"op": "wipe"})).map(|_| ()) }
     /// A Claude session's transcript there, to move its conversation to another place.
     pub fn session_get(&self, sid: &str) -> Result<Vec<u8>, String> {
@@ -124,7 +129,8 @@ impl Client {
     fn stream(&self, req: Value, key: &str) -> Result<Option<Conn>, String> {
         let (r, mut w) = self.open()?;
         proto::write_json(&mut w, &req).map_err(|e| e.to_string())?;
-        match broker::open(Box::new(w), Box::new(r)).map_err(|e| e.to_string())? {
+        // this device's own id at the broker: the laptop and its phone each get what they missed
+        match broker::open(Box::new(w), Box::new(r), &self.id.fingerprint()[..16]).map_err(|e| e.to_string())? {
             Ok(mut c) => { c.agent = broker::Agent::remote(c.agent.id(), self.stop(key)); Ok(Some(c)) }
             Err(e) if e == "gone" => Ok(None),
             Err(e) => Err(e),
