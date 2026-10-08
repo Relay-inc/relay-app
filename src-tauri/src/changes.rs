@@ -1,7 +1,7 @@
 // What a conversation changed, read from git: per repo it touched, the working tree against where its branch left
 // the default branch (`git merge-base`), so committed and uncommitted work both show, like a PR would. New files git
-// does not track yet come from `git diff --no-index`. Git cannot tell who made a change: in a shared checkout the
-// diff holds everyone's, in a worktree the conversation made it is exactly the agent's.
+// does not track yet come from `git diff --no-index`. Git cannot tell who made a change, so a shared checkout shows only
+// the files the conversation's tools wrote; a worktree the conversation made shows all of it, that is exactly the agent's.
 use serde_json::{json, Value};
 use std::path::Path;
 use std::process::Command;
@@ -18,6 +18,14 @@ fn ok(dir: &str, args: &[&str], path_env: &str) -> Option<String> {
 pub fn top_of(path: &str, path_env: &str) -> Option<String> {
     let dir = Path::new(path).ancestors().find(|p| p.is_dir())?;
     ok(&dir.to_string_lossy(), &["rev-parse", "--show-toplevel"], path_env).filter(|s| !s.is_empty())
+}
+
+/// `path` relative to `top`, which git gives resolved (/var is /private/var): resolve the part of `path` that still
+/// exists the same way, a deleted file has none of its own.
+fn relative(path: &str, top: &str) -> Option<String> {
+    let p = Path::new(path);
+    let (dir, rest) = p.ancestors().find_map(|a| a.canonicalize().ok().map(|c| (c, p.strip_prefix(a).unwrap().to_path_buf())))?;
+    dir.join(rest).strip_prefix(top).ok().map(|r| r.to_string_lossy().into_owned())
 }
 
 /// One file of a `git diff`: its path, A/M/D/R, the counts, and its hunks from the first `@@` (no header lines).
@@ -42,20 +50,25 @@ fn split(diff: &str) -> Vec<Value> {
 }
 
 // ponytail: no size cap per patch; a huge generated file is sent whole, cap it if a lockfile ever makes the drawer slow
-/// The changes of one checkout: its branch, the base it is compared to, and its files.
-pub fn of_repo(top: &str, path_env: &str) -> Value {
+/// The changes of one checkout: its branch, the base it is compared to, and its files. `only` limits them to those
+/// paths (absolute), for a shared checkout where the rest of the diff is other people's work.
+pub fn of_repo(top: &str, only: Option<&[String]>, path_env: &str) -> Value {
+    let spec: Vec<String> = only.map(|ps| ps.iter().filter_map(|p| relative(p, top)).collect()).unwrap_or_default();
+    let mut tail = vec!["--"];
+    tail.extend(spec.iter().map(String::as_str));
     let base_ref = ok(top, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], path_env).unwrap_or_else(|| "HEAD".into());
     let base = ok(top, &["merge-base", &base_ref, "HEAD"], path_env).unwrap_or_else(|| "HEAD".into());
     let branch = ok(top, &["rev-parse", "--abbrev-ref", "HEAD"], path_env).unwrap_or_default();
-    let tracked = git(top, &["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-M", &base], path_env).map(|(_, o)| o).unwrap_or_default();
+    let name = Path::new(top).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if only.is_some() && spec.is_empty() { return json!({"repo": top, "name": name, "branch": branch, "base": base_ref, "files": []}); }
+    let tracked = git(top, &[&["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-M", &base][..], &tail].concat(), path_env).map(|(_, o)| o).unwrap_or_default();
     let mut files = split(&tracked);
-    let untracked = ok(top, &["-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard"], path_env).unwrap_or_default();
+    let untracked = ok(top, &[&["-c", "core.quotepath=off", "ls-files", "--others", "--exclude-standard"][..], &tail].concat(), path_env).unwrap_or_default();
     for f in untracked.lines().filter(|f| !f.is_empty()) {
         // --no-index exits 1 when the files differ, which they always do here
         let d = git(top, &["diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", f], path_env).map(|(_, o)| o).unwrap_or_default();
         files.extend(split(&d).into_iter().map(|mut v| { v["path"] = json!(f); v["status"] = json!("A"); v }));
     }
-    let name = Path::new(top).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     json!({"repo": top, "name": name, "branch": branch, "base": base_ref, "files": files})
 }
 
@@ -75,7 +88,7 @@ mod tests {
         sh(&tmp, "git checkout -qb work && printf 'a\\nB\\n' > keep.txt && git commit -qam edit && rm gone.txt && printf 'new\\n' > fresh.txt");
         let top = top_of(&tmp.join("keep.txt").to_string_lossy(), &path).unwrap();
         // no origin: compared to HEAD, so only what is not committed shows
-        let v = of_repo(&top, &path);
+        let v = of_repo(&top, None, &path);
         let files = v["files"].as_array().unwrap();
         let by = |p: &str| files.iter().find(|f| f["path"] == p).cloned().unwrap_or(Value::Null);
         assert_eq!(v["branch"], "work");
@@ -86,9 +99,13 @@ mod tests {
         assert!(by("keep.txt").is_null());
         // with an origin at main, the committed edit shows too
         sh(&tmp, "git update-ref refs/remotes/origin/main main && git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main");
-        let v = of_repo(&top, &path);
+        let v = of_repo(&top, None, &path);
         let keep = v["files"].as_array().unwrap().iter().find(|f| f["path"] == "keep.txt").cloned().unwrap();
         assert_eq!((keep["status"].clone(), keep["add"].clone(), keep["del"].clone()), (json!("M"), json!(1), json!(1)));
+        // limited to what the conversation wrote, a shared checkout shows only those files
+        let only = [tmp.join("fresh.txt").to_string_lossy().into_owned()];
+        let v = of_repo(&top, Some(&only), &path);
+        assert_eq!(v["files"].as_array().unwrap().iter().map(|f| f["path"].clone()).collect::<Vec<_>>(), [json!("fresh.txt")]);
         std::fs::remove_dir_all(&tmp).ok();
     }
 }
