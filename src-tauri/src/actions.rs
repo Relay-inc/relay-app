@@ -52,7 +52,7 @@ fn items() -> Vec<Item> {
     out.extend(MAIL.iter().map(|(id, about, args, write)| Item { ext: "mail", id, about, args, write: *write, default: Policy::Auto, run: Run::Mail }));
     out.extend(REMINDERS.iter().map(|(id, about, args)| Item { ext: "reminders", id, about, args, write: *id != "list",
         default: if *id == "list" { Policy::Auto } else { Policy::Ask }, run: Run::Reminders }));
-    out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, with errors per calendar.", args: &[], write: false, default: Policy::Auto, run: Run::Calendar });
+    out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }
 
@@ -178,7 +178,13 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
         }
         Run::Mail => mail(app, key, &provider, it.id, args),
         Run::Reminders => reminder(app, it.id, args),
-        Run::Calendar => Ok(crate::calendar::upcoming(&app.state::<crate::App>().settings.lock().unwrap().clone())),
+        Run::Calendar => {
+            let s = app.state::<crate::App>().settings.lock().unwrap().clone();
+            match args["date"].as_str() {
+                Some(d) => crate::calendar::on(&s, chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map_err(|_| "date is YYYY-MM-DD")?),
+                None => Ok(crate::calendar::upcoming(&s)),
+            }
+        }
     }
 }
 

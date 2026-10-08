@@ -279,8 +279,6 @@ export default {
     "Relay telde ongeveer {n} minuten eigen activiteit in de gesprekken van vandaag, per project. Tijd boeken vraagt de agent af te trekken wat in Productive al staat en per project één tijdsregistratie voor te stellen, die je een voor een goedkeurt.",
   "time.title": "Tijd {date}",
   "time.note": "De tijd van {date} boeken vanuit je gesprekken",
-  "time.none":
-    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "{tool} toestaan?",
   "today.waiting": "Wacht · {ago}",
   "today.blockedSession": "Achtergrondsessie",

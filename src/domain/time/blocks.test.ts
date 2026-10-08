@@ -47,3 +47,10 @@ test("the prompt names every project once with its board", () => {
   assert.match(p, /Spardex: 90 min \(Productive-project 12\)/);
   assert.match(p, /productive\.add_time/);
 });
+
+test("the prompt names every source and leaves out the sessions already counted", () => {
+  const p = timePrompt("2026-10-08", [{ label: "Spardex", minutes: 30, titles: ["DMS"] }], ["abc"]);
+  for (const s of ["calendar.meetings date=2026-10-08", "Slack", "git log", "~/.claude/projects", "Drive", "Jira", "Notion", "Figma", "abc"])
+    assert.ok(p.includes(s), s);
+  assert.ok(timePrompt("2026-10-08", []).includes("geen activiteit"));
+});

@@ -275,8 +275,6 @@ const en = {
     "Relay counted about {n} minutes of your own activity in today's conversations, per project. Book time asks the agent to subtract what Productive already has and to propose one time entry per project, which you approve one by one.",
   "time.title": "Time {date}",
   "time.note": "Booking the time of {date} from your conversations",
-  "time.none":
-    "Boek mijn tijd van {date} in Productive: in mijn gesprekken vond Relay geen activiteit op die dag. Zeg dat kort en stop.",
   "today.allow": "Allow {tool}?",
   "today.waiting": "Waiting · {ago}",
   "today.blockedSession": "Background session",
