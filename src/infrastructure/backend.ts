@@ -36,6 +36,7 @@ import type { PrDetail, PRs } from "../domain/pull-requests/types";
 import type { BrainGraph, BrainNote, BrainRoot, BrainStatus, SearchHit, Touch } from "../domain/brain/types";
 import type { AllTokens, ProvLimits } from "../domain/usage/types";
 import type { OrchEvent, Worker } from "../domain/orchestrator/types";
+import type { PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
 
@@ -165,6 +166,19 @@ export const retries = () => invoke<Retry[]>("retries");
 export const retryCancel = (key: string) => invoke("retry_cancel", { key });
 /** Stops a worker; the backend reports its new state as an `orch` event. */
 export const orchStop = (key: string) => invoke<boolean>("orch_stop", { key });
+/** The board pipeline (orch.rs): a worker on a ticket, a follow-up to one, its PR as gh reads it, and what the pipeline
+ *  did on the board for it. */
+export const orchDispatchTicket = (a: {
+  title: string;
+  task: string;
+  project: string;
+  repo: string;
+  base: string;
+  ticket: Ticket;
+}) => invoke<Worker>("orch_dispatch_ticket", a);
+export const orchMessage = (key: string, text: string) => invoke<void>("orch_message", { key, text });
+export const orchPr = (key: string) => invoke<PrStatus>("orch_pr", { key });
+export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
 
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */

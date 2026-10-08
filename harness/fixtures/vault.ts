@@ -293,6 +293,11 @@ export function settings(fixture: string) {
     overrides: {},
     integrations: { productive: { on: true, org: "40001", user: "70001" } },
     boards: { "Northwind Portal": { provider: "productive", project: "p1", board: "f1" } },
+    // off: a running pipeline would move the board's cards in every view
+    pipelines: {
+      "Northwind Portal": { on: fixture === "pipeline", repo: "/Users/demo/code/northwind", base: "develop", group: "list", pick: "tl2", busy: "tl3",
+        review: "tl4", input: "tl1", merged: "tl5", label: fixture === "pipeline" ? "" : "agent", parallel: 1 },
+    },
     github: { on: true, owners: "acme" },
     mail: {
       on: true,

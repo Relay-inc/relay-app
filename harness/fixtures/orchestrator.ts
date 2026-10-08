@@ -70,7 +70,31 @@ const silent: Worker = {
   ended: NOW - 80 * MIN,
   report: null,
 };
-export const workers: Worker[] = [running, done, silent];
+// a board pipeline's worker: picked from the board, its PR opened by Relay
+const ticketed: Worker = {
+  key: "c:orch-w-d4",
+  project: "Northwind Portal",
+  title: "Export invoices as CSV",
+  task: "Ticket #412 \"Export invoices as CSV\"",
+  repo: "/Users/demo/code/northwind",
+  worktree: "/Users/demo/code/northwind-relay-d4",
+  branch: "relay/export-invoices-as-csv-d4",
+  state: "done",
+  at: NOW - 70 * MIN,
+  ended: NOW - 35 * MIN,
+  report: {
+    status: "done",
+    summary: "Invoices export as CSV from the list's menu, one row per invoice line. Tests for the empty list and for amounts in another currency.",
+    questions: null,
+    diff: " src/Invoice/CsvExport.php | 61 ++++++++++\n tests/Invoice/CsvExportTest.php | 48 +++++++++\n 2 files changed, 109 insertions(+)",
+    flags: [],
+  },
+  ticket: { pipeline: "Northwind Portal", provider: "productive", project: "p1", board: "f1", card: "t12", number: "412", title: "Export invoices as CSV", url: "https://app.productive.io/40001/tasks/t12" },
+  base_branch: "develop",
+  pr: "https://github.com/acme/northwind/pull/88",
+  board: `done:${NOW - 35 * MIN}`,
+};
+export const workers: Worker[] = [running, done, silent, ticketed];
 
 const REPORT = `[Relay] Report from worker ${done.key} (Beacon Billing, "Patch the balance sync"): done
 

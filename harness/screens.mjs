@@ -474,6 +474,11 @@ const VIEWS = {
     await click("From Relay");
     await click("Details");
   },
+  // a board pipeline's worker on the board: its ticket and the PR Relay opened
+  "orchestrator-pipeline": async () => {
+    await VIEWS.orchestrator();
+    await intoView("Export invoices as CSV");
+  },
   "orchestrator-live": async () => {
     await VIEWS.orchestrator();
     await page.evaluate(() => window.__harness.orchLive());
@@ -522,6 +527,12 @@ const VIEWS = {
     await settingsPage("Agents", undefined, "accounts");
     await unfold("Claude Code");
     await intoView("Switch accounts automatically");
+  },
+  // the board pipeline of a project with a linked board, folded open in Settings › Projects
+  "settings-pipeline": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Agents at once");
   },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");

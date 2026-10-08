@@ -31,16 +31,20 @@ export function WorkerRow({
   when,
   onOpen,
   onStop,
+  onLink,
 }: {
   worker: Worker;
   project: string; // the project's label as the sidebar shows it, or Algemeen
   when: string; // "5 min ago": since it ended, or since it started while it runs
   onOpen: () => void;
   onStop: () => void;
+  onLink: (url: string) => void;
 }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const report = worker.report;
+  // a board pipeline's worker: its ticket and its PR, or why it has none
+  const ticket = worker.ticket as { number?: string; url?: string } | undefined;
   const more = !!report && (!!report.questions || !!report.diff || report.flags.length > 0);
   return (
     <li className="flex items-start gap-2.5 py-3 border-b border-separator last:border-b-0">
@@ -57,6 +61,25 @@ export function WorkerRow({
         <span className="text-xs text-secondary truncate">
           {project} · {t(STATE[worker.state])}
         </span>
+        {ticket ? (
+          <span className="flex flex-wrap items-baseline gap-x-2 text-xs">
+            <button
+              className="text-accent bg-transparent border-0 p-0 cursor-default hover:underline"
+              onClick={() => ticket.url && onLink(ticket.url)}
+            >
+              {t("orch.ticket", { number: ticket.number ?? "" })}
+            </button>
+            {worker.pr ? (
+              <button
+                className="text-accent bg-transparent border-0 p-0 cursor-default hover:underline"
+                onClick={() => onLink(worker.pr!)}
+              >
+                {t("orch.pr")}
+              </button>
+            ) : null}
+            {worker.pr_error ? <span className="text-late">{worker.pr_error}</span> : null}
+          </span>
+        ) : null}
         {report ? <Markdown className="md-panel line-clamp-4 select-text" text={report.summary} /> : null}
         {more ? (
           <div>

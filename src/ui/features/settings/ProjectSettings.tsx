@@ -16,6 +16,7 @@ import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass, FIELD, FIELD_CHIP, FIELD_ICON } from "./blocks";
 import { ChangeInput } from "./ChangeInput";
 import { Field } from "./Field";
+import { PipelineSettings } from "./PipelineSettings";
 import { ProjectIcon } from "./ProjectIcon";
 
 /** One project's settings, in its folded-open row: the name in Relay, its icon on one line (tile, emoji or website,
@@ -114,6 +115,7 @@ export function ProjectSettings({ name, icon }: { name: string; icon: Icon | und
           />
         </span>
       </Field>
+      <PipelineSettings name={name} />
     </>
   );
 }
