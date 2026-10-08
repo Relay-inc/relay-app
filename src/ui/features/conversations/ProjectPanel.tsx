@@ -34,7 +34,8 @@ export function ProjectPanel() {
       label: current ? settings().projects[current]?.label || "" : "",
     };
   });
-  const [projectName, setProjectName] = useState(useNavigationStore.getState().projectPanel === "new" ? NEW : current);
+  const opensNew = useNavigationStore(s => s.projectPanel) === "new";
+  const [projectName, setProjectName] = useState(opensNew ? NEW : current);
   const [newName, setNewName] = useState("");
   const contexts = vaultContexts();
   const [context, setContext] = useState(contexts[0] ?? "");

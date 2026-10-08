@@ -8,7 +8,13 @@ import {
 } from "../../../domain/navigation/sidebar";
 import { USAGE } from "../../../domain/navigation/views";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { select, openProject, openProjectPanel, openSettings, newProject } from "../../../application/navigation/navigation";
+import {
+  select,
+  openProject,
+  openProjectPanel,
+  openSettings,
+  newProject,
+} from "../../../application/navigation/navigation";
 import {
   sidebarModel,
   setFind,
