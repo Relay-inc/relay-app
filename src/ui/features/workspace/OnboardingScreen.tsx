@@ -1,6 +1,12 @@
 import { useState } from "react";
 import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../../domain/workspace/types";
-import { checkMapping, pickMapped, pickVault, saveOnboardingVault } from "../../../application/workspace/vault-setup";
+import {
+  checkMapping,
+  pickMapped,
+  pickVault,
+  saveOnboardingVault,
+  startDefaultVault,
+} from "../../../application/workspace/vault-setup";
 import { useT } from "../../hooks/useT";
 import mark from "../../assets/relay-mark.svg";
 
@@ -8,13 +14,15 @@ const HEADING = "text-base font-semibold mt-2.5";
 const trimmed = (map: VaultMap) =>
   Object.fromEntries(Object.entries(map).map(([key, path]) => [key, path.trim()])) as VaultMap;
 
-/** Pick a vault folder, check what the app found in it, fix the paths, and use it. What was configured before (a
- *  folder that no longer holds a vault) stays visible, to fix or replace. */
+/** A first start offers the starter vault (Start), or a vault of one's own: pick the folder, check what the app found
+ *  in it, fix the paths, and use it. What was configured before (a folder that no longer holds a vault) opens on the
+ *  second, to fix or replace. */
 export function OnboardingScreen({ start }: { start: VaultStatus }) {
   const { t } = useT();
   const [status, setStatusState] = useState<VaultStatus | null>(start.vault ? start : null);
   const [map, setMap] = useState<VaultMap | null>(start.vault ? { ...start.map } : null); // the paths as typed
   const [message, setMessage] = useState("");
+  const [own, setOwn] = useState(Boolean(start.vault)); // a vault of one's own, instead of the starter vault
   const setStatus = (next: VaultStatus | null) => {
     setStatusState(next);
     setMap(next ? { ...next.map } : null);
@@ -38,6 +46,14 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
       setMessage(String(err));
     }
   };
+  const startDefault = async () => {
+    setMessage("");
+    try {
+      await startDefaultVault();
+    } catch (err) {
+      setMessage(String(err));
+    }
+  };
   const foundClass = (found: boolean, required: boolean) => {
     if (found) return "text-secondary";
     return required ? "text-late" : "text-secondary mb-3";
@@ -48,18 +64,34 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
       <main className="grid gap-2.5 max-w-2xl mx-auto my-10">
         <img className="block h-11 mb-4" src={mark} alt="" />
         <h2 className={HEADING}>{t("vault.welcome")}</h2>
-        <div className="text-secondary mb-3">{t("vault.intro")}</div>
-        <div className="flex gap-2 items-center">
-          <input
-            className="field flex-1 font-mono"
-            readOnly
-            value={status?.vault ?? ""}
-            placeholder={t("vault.none")}
-          />
-          <button className={`btn ${status ? "" : "btn-primary"}`} onClick={chooseVault}>
-            {t("vault.choose")}
-          </button>
-        </div>
+        {own ? null : (
+          <>
+            <div className="text-secondary mb-3">{t("vault.introDefault")}</div>
+            <div className="flex gap-2 items-center justify-end">
+              {message ? <span className="text-late text-sm">{message}</span> : null}
+              <button className="btn" onClick={() => setOwn(true)}>
+                {t("vault.haveOwn")}
+              </button>
+              <button className="btn btn-primary" onClick={startDefault}>
+                {t("vault.start")}
+              </button>
+            </div>
+          </>
+        )}
+        {own ? <div className="text-secondary mb-3">{t("vault.intro")}</div> : null}
+        {own ? (
+          <div className="flex gap-2 items-center">
+            <input
+              className="field flex-1 font-mono"
+              readOnly
+              value={status?.vault ?? ""}
+              placeholder={t("vault.none")}
+            />
+            <button className={`btn ${status ? "" : "btn-primary"}`} onClick={chooseVault}>
+              {t("vault.choose")}
+            </button>
+          </div>
+        ) : null}
         {status && map ? (
           <>
             <h2 className={HEADING}>{t("vault.map")}</h2>
@@ -103,12 +135,19 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
           </>
         ) : null}
         {status && !status.ok ? <div className="text-late text-sm">{t("vault.invalid")}</div> : null}
-        <div className="flex gap-2 items-center justify-end">
-          {message ? <span className="text-late text-sm">{message}</span> : null}
-          <button className="btn btn-primary" disabled={!status?.ok} onClick={saveVault}>
-            {t("vault.use")}
-          </button>
-        </div>
+        {own ? (
+          <div className="flex gap-2 items-center justify-end">
+            {message ? <span className="text-late text-sm">{message}</span> : null}
+            {start.vault ? null : (
+              <button className="btn" onClick={() => setOwn(false)}>
+                {t("vault.back")}
+              </button>
+            )}
+            <button className="btn btn-primary" disabled={!status?.ok} onClick={saveVault}>
+              {t("vault.use")}
+            </button>
+          </div>
+        ) : null}
       </main>
     </div>
   );

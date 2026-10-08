@@ -75,7 +75,8 @@ function ptyOut(id: number, text: string) {
 }
 // ---------- voice (src-tauri/src/dictation.rs, meeting.rs, anywhere.rs): no microphone in a browser. A recording keeps
 // the channel it was given, so `__harness.recordingTick` / `dictationLevel` can play its levels
-const channelId = (c: unknown) => (typeof c === "object" && c ? (c as { id: number }).id : Number(String(c).split(":")[1]));
+const channelId = (c: unknown) =>
+  typeof c === "object" && c ? (c as { id: number }).id : Number(String(c).split(":")[1]);
 const sendTo = (channel: number | null, index: number, message: unknown) =>
   channel !== null && internals().runCallback(channel, { index, message });
 let meetingTicks: { channel: number; index: number } | null = null;
@@ -172,6 +173,8 @@ function handle(cmd: string, a: Args): unknown {
     case "detect_vault":
     case "check_vault":
       return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
+    case "create_default_vault":
+      return { ...vault.vaultStatus(true), vault: "/Users/me/Relay" };
     case "pick_folder":
       return harness.pickFolder;
     case "pick_path":
@@ -207,8 +210,16 @@ function handle(cmd: string, a: Args): unknown {
       // fixture capture: a closed conversation leaves two changes for the vault (Today's capture item)
       return fixture === "capture"
         ? [
-            { title: "Launch date decided", file: "Contexts/Agency/Portfolio/Portal/Portal.md", change: "Add to **Status**: launch on 1 November (decided today), the launch mail is Jan's." },
-            { title: "Follow-up with Jan", file: "Resources/Meta/Claude/reminders.md", change: "- 2026-10-28: check that Jan has the launch mail ready" },
+            {
+              title: "Launch date decided",
+              file: "Contexts/Agency/Portfolio/Portal/Portal.md",
+              change: "Add to **Status**: launch on 1 November (decided today), the launch mail is Jan's.",
+            },
+            {
+              title: "Follow-up with Jan",
+              file: "Resources/Meta/Claude/reminders.md",
+              change: "- 2026-10-28: check that Jan has the launch mail ready",
+            },
           ]
         : [];
     case "favicons":
@@ -250,7 +261,9 @@ function handle(cmd: string, a: Args): unknown {
       // the user's own messages that day in the first four sessions: 9:00, 11:00 and 14:00, a little shifted per session
       const day = Date.parse(`${a.date}T00:00:00+02:00`);
       return Object.fromEntries(
-        (a.sessions as string[]).slice(0, 4).map((sid, i) => [sid, [9, 9.2, 11, 11.1, 14].map(h => day + (h + i * 0.05) * 3600_000)]),
+        (a.sessions as string[])
+          .slice(0, 4)
+          .map((sid, i) => [sid, [9, 9.2, 11, 11.1, 14].map(h => day + (h + i * 0.05) * 3600_000)]),
       );
     }
     case "agents":
@@ -340,7 +353,11 @@ function handle(cmd: string, a: Args): unknown {
       return { system: true, why: null };
     case "meeting_record_stop":
       meetingTicks = null;
-      return { audio: "Attachments/2026-10-01 0930 Meeting.m4a", transcript: "Attachments/2026-10-01 0930 Meeting.md", seconds: 60 };
+      return {
+        audio: "Attachments/2026-10-01 0930 Meeting.m4a",
+        transcript: "Attachments/2026-10-01 0930 Meeting.md",
+        seconds: 60,
+      };
     case "meeting_record_cancel":
       meetingTicks = null;
       return null;
@@ -445,7 +462,8 @@ function handle(cmd: string, a: Args): unknown {
     case "mail_tool": {
       const m = [...integ.mails, ...integ.studioMails].find(x => x.id === a.args?.id) ?? integ.mails[0];
       const text = integ.mailBody(m.id).text;
-      if (a.name === "attachment") return { path: `/Users/harness/Downloads/Relay-mail/attachment-${a.args?.index}.pdf` };
+      if (a.name === "attachment")
+        return { path: `/Users/harness/Downloads/Relay-mail/attachment-${a.args?.index}.pdf` };
       if (a.name === "thread")
         return {
           account: m.account,
@@ -455,7 +473,8 @@ function handle(cmd: string, a: Args): unknown {
               from: m.to,
               date: new Date(NOW - 30 * 3600_000).toISOString(),
               subject: m.subject,
-              untrusted_mail: "Hi, here is the first version of the checklist. Let me know what is missing before Friday.",
+              untrusted_mail:
+                "Hi, here is the first version of the checklist. Let me know what is missing before Friday.",
             },
             { id: m.id, from: m.from, date: m.date, subject: m.subject, untrusted_mail: text },
           ],
@@ -488,17 +507,49 @@ function handle(cmd: string, a: Args): unknown {
         // Codex: one line Claude also flags, one of its own
         if (a.provider === "codex")
           return JSON.stringify([
-            { path: named("src/auth/callback.ts"), line: 14, side: "RIGHT", severity: "bug", text: "returnTo is an unchecked redirect target; allow only same-origin paths." },
-            { path: named("src/auth/callback.ts"), line: 17, side: "RIGHT", severity: "question", text: "Should the user id come from the verified token instead of the query?" },
+            {
+              path: named("src/auth/callback.ts"),
+              line: 14,
+              side: "RIGHT",
+              severity: "bug",
+              text: "returnTo is an unchecked redirect target; allow only same-origin paths.",
+            },
+            {
+              path: named("src/auth/callback.ts"),
+              line: 17,
+              side: "RIGHT",
+              severity: "question",
+              text: "Should the user id come from the verified token instead of the query?",
+            },
           ]);
         return JSON.stringify([
-          { path: named("src/auth/callback.ts"), line: 14, side: "RIGHT", severity: "bug", text: "The return URL is read from the query without checking its host: an open redirect." },
-          { path: named("src/auth/callback.ts"), line: 18, side: "RIGHT", severity: "risk", text: "The session is written before the token is verified." },
-          { path: named("src/auth/session.ts", true), line: 5, side: "RIGHT", severity: "nit", text: "This helper name hides that it also clears the cookie." },
+          {
+            path: named("src/auth/callback.ts"),
+            line: 14,
+            side: "RIGHT",
+            severity: "bug",
+            text: "The return URL is read from the query without checking its host: an open redirect.",
+          },
+          {
+            path: named("src/auth/callback.ts"),
+            line: 18,
+            side: "RIGHT",
+            severity: "risk",
+            text: "The session is written before the token is verified.",
+          },
+          {
+            path: named("src/auth/session.ts", true),
+            line: 5,
+            side: "RIGHT",
+            severity: "nit",
+            text: "This helper name hides that it also clears the cookie.",
+          },
         ]);
       }
-      if (/twee of drie/.test(a.system)) return "Yes, the VAT column is in\nViewers can't see invoices yet\nCan we call Thursday?";
-      if (/gemarkeerde regel/.test(a.system)) return "It stores where to go after the login. Without a host check any URL is accepted.";
+      if (/twee of drie/.test(a.system))
+        return "Yes, the VAT column is in\nViewers can't see invoices yet\nCan we call Thursday?";
+      if (/gemarkeerde regel/.test(a.system))
+        return "It stores where to go after the login. Without a host check any URL is accepted.";
       return "Hi Sofie,\n\nThe export has the VAT column since this morning, and viewers can't see invoices: that stays for admins.\n\nKind regards";
     case "github_pr_files":
       return [
@@ -515,7 +566,8 @@ function handle(cmd: string, a: Args): unknown {
           status: "modified",
           additions: 3,
           deletions: 1,
-          patch: "@@ -1,6 +1,8 @@\n import { cookies } from './cookies';\n \n-export const clear = () => cookies.delete('sid');\n+export const reset = () => {\n+  cookies.delete('sid');\n+};\n export const get = () => cookies.get('sid');",
+          patch:
+            "@@ -1,6 +1,8 @@\n import { cookies } from './cookies';\n \n-export const clear = () => cookies.delete('sid');\n+export const reset = () => {\n+  cookies.delete('sid');\n+};\n export const get = () => cookies.get('sid');",
         },
         { path: "assets/logo.png", status: "modified", additions: 0, deletions: 0, patch: null },
         // a long file with a very long line: the diff scrolls both ways

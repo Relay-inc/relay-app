@@ -48,7 +48,10 @@
     "macOS": {
       "minimumSystemVersion": "11.0"
     },
-    "createUpdaterArtifacts": true
+    "createUpdaterArtifacts": true,
+    "resources": {
+      "resources/default-vault/": "default-vault/"
+    }
   },
   "plugins": {
     "deep-link": {
