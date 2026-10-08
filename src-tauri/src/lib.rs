@@ -18,6 +18,7 @@ use agent_core::{pending, usage, AgentProvider, Terminal};
 mod actions;
 mod agents;
 mod anywhere;
+mod brain;
 mod awake;
 pub use relay_remote::broker;
 mod calendar;
@@ -592,7 +593,7 @@ fn vault_notes(state: State<App>) -> Result<Value, String> {
 #[tauri::command]
 async fn related_notes(app: AppHandle, state: State<'_, App>, text: String) -> Result<Value, String> {
     let v = need_vault(&state)?;
-    let db = data_dir(&app).join("related.db");
+    let db = index_dir(&app);
     tauri::async_runtime::spawn_blocking(move || related::related(&db, &v, &text, 12)).await.map_err(|e| e.to_string())?.map(Value::from)
 }
 
@@ -1302,6 +1303,74 @@ fn repo_index(vault: &str) -> HashMap<String, String> {
     out
 }
 
+// ---------- the Brain view: the vault and the Commonwealth brains, browsed, searched and drawn (related.rs, brain.rs)
+
+/// Where the note indexes live, one file per folder. The single related.db of older versions goes.
+fn index_dir(app: &AppHandle) -> PathBuf {
+    let d = data_dir(app);
+    fs::remove_file(d.join("related.db")).ok();
+    d.join("index")
+}
+/// The folders the Brain view may read: the vault, then every brain the vault's projects resolve to (none when
+/// Commonwealth is off). [(canonical path, name, "vault" | "brain")]; the frontend names a root by its path.
+fn brain_roots_of(state: &App) -> Result<Vec<(String, String, &'static str)>, String> {
+    let v = vault::canon(&need_vault(state)?);
+    let name = commonwealth::brain_name(&v).to_string();
+    let mut brains: Vec<String> = cw_brains(state).into_values().flatten().map(|b| vault::canon(&b)).collect();
+    brains.sort();
+    brains.dedup();
+    Ok(std::iter::once((v, name, "vault")).chain(brains.into_iter().map(|b| { let n = commonwealth::brain_name(&b).to_string(); (b, n, "brain") })).collect())
+}
+/// A root the frontend sent, if it is one of brain_roots_of: nothing else is read.
+fn brain_root(state: &App, root: &str) -> Result<String, String> {
+    brain_roots_of(state)?.into_iter().map(|r| r.0).find(|r| r == root).ok_or_else(|| "not a brain of this vault".into())
+}
+#[tauri::command]
+fn brain_roots(state: State<App>) -> Result<Value, String> {
+    Ok(json!(brain_roots_of(&state)?.into_iter().map(|(id, name, kind)| json!({"id": id, "name": name, "kind": kind})).collect::<Vec<_>>()))
+}
+/// Every note of a root and the links between them (related::graph).
+#[tauri::command]
+async fn brain_graph(app: AppHandle, state: State<'_, App>, root: String) -> Result<Value, String> {
+    let root = brain_root(&state, &root)?;
+    let dir = index_dir(&app);
+    tauri::async_runtime::spawn_blocking(move || related::graph(&dir, &root)).await.map_err(|e| e.to_string())?
+}
+/// The notes of a root that match what was typed, [{path, title, snippet}].
+#[tauri::command]
+async fn brain_search(app: AppHandle, state: State<'_, App>, root: String, query: String) -> Result<Value, String> {
+    let root = brain_root(&state, &root)?;
+    let dir = index_dir(&app);
+    tauri::async_runtime::spawn_blocking(move || related::find(&dir, &root, &query, 60)).await.map_err(|e| e.to_string())?.map(Value::from)
+}
+/// One note of a root, {path, text}; vault::note keeps the read inside the root.
+#[tauri::command]
+fn brain_note(state: State<App>, root: String, path: String) -> Result<Value, String> {
+    let root = brain_root(&state, &root)?;
+    vault::note(&root, &path).map(|(path, text)| json!({"path": path, "text": text})).ok_or_else(|| tr_v(ui_lang_of(&state.settings.lock().unwrap()), "err.note", &path))
+}
+/// The notes Relay's Claude Code conversations read and wrote in the last `days`, in every root:
+/// [{key, root, path, at, kind}]. Only transcripts written in that window are opened.
+#[tauri::command]
+async fn brain_touches(app: AppHandle, state: State<'_, App>, days: u32) -> Result<Value, String> {
+    let roots: Vec<String> = brain_roots_of(&state)?.into_iter().map(|r| r.0).collect();
+    let since = chrono::Utc::now().timestamp_millis() - days.min(60) as i64 * 86_400_000;
+    let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
+    let env = env_of(&app, &state, p);
+    let files: Vec<(String, PathBuf)> = state.sids.lock().unwrap().iter().filter(|(_, s)| s.provider == p.id() && agent_core::safe_id(&s.sid))
+        .map(|(k, s)| (k.clone(), PathBuf::from(agent_claude::transcripts_of(&env.env(), &s.sid)).join(format!("{}.jsonl", s.sid)))).collect();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut out = vec![];
+        for (key, f) in files {
+            let fresh = fs::metadata(&f).and_then(|m| m.modified()).ok().and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok()).is_some_and(|d| d.as_millis() as i64 >= since);
+            if !fresh { continue; }
+            let Ok(text) = fs::read_to_string(&f) else { continue };
+            out.extend(brain::touches(&text, &roots, since).iter().map(|t| brain::touch_json(&key, t)));
+        }
+        Value::from(out)
+    }).await.map_err(|e| e.to_string())
+}
+
 // ---------- Commonwealth (commonwealth.rs): detected, never configured; on when the Claude Code plugin is installed
 
 fn claude_bin(app: &AppHandle, state: &App) -> String { env_of(app, state, &agent_claude::PROVIDER).bin }
@@ -1817,7 +1886,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

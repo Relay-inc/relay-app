@@ -15,6 +15,8 @@ a PR. Versions follow
 
 ### Added
 
+- **The Brain view browses the vault and every Commonwealth brain**: Brain is always in the sidebar now. With Commonwealth on, a tab per brain sits next to the vault, otherwise you only see the vault. Each tab has Browse (folder tree, full-text search, the note with its tags and linked notes, `[[links]]` that stay inside that brain, and "Ask about it" to start a conversation with the note's path), Graph (every note as a dot coloured by kind, links as lines, zoom with a pinch, drag to pan, click to open, index notes hidden by default) and, on a brain, Review (the staged notes, as before)
+- **Conversation glow**: in the Brain graph, the notes Relay's conversations read and wrote in the last 7 days light up, brighter the more recent, with reads and writes in their own colour. Hover a note to see which conversations touched it, or pick one conversation from the list. Browse has the same filter as "Touched". A conversation's title bar has a Brain button that opens the graph with only its notes lit. It reads Claude Code conversations only, and notes found with Grep or a shell command don't count
 - **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows
 
 ### Changed

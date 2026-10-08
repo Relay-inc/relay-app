@@ -116,7 +116,7 @@ fn read_note(brain: &str, p: &Path) -> Option<Value> {
     Some(json!({"brain": brain, "id": id, "kind": get("kind"), "title": get("title"), "created": get("created"), "author": get("author"),
         "source": get("source"), "body": body.trim()}))
 }
-fn unquote(v: &str) -> String {
+pub(crate) fn unquote(v: &str) -> String {
     if v.len() >= 2 && v.starts_with('\'') && v.ends_with('\'') { v[1..v.len() - 1].replace("''", "'") }
     else if v.len() >= 2 && v.starts_with('"') && v.ends_with('"') { v[1..v.len() - 1].replace("\\\"", "\"") }
     else { v.to_string() }
