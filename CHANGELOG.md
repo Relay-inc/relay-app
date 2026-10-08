@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Fixed
 
 - **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout
+- **Banners no longer eat memory**: the process behind each unclicked banner kept growing (up to ~5 GB) and stayed alive after Relay quit, 46 of them held ~129 GB. It now exits when Relay quits or after an hour; a click on an older banner no longer opens its conversation
 
 ## [0.0.14] - 2026-10-07
 
