@@ -330,6 +330,10 @@ function handle(cmd: string, a: Args): unknown {
     case "dictation_models":
       return structuredClone(voiceModels);
     case "dictation_model":
+    case "permissions":
+      return { microphone: "ok", accessibility: "ok", fullDisk: "missing", systemAudio: null, notifications: null };
+    case "permissions_open":
+      return null;
     case "dictation_access":
     case "dictation_ask_access":
       return true;

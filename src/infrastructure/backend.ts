@@ -335,6 +335,11 @@ export const onDictatedChat = (handler: (text: string) => void) =>
   listen<string>("dictated-chat", e => handler(e.payload));
 /** Shows macOS's Accessibility dialog; resolves with whether it is already allowed. */
 export const dictationAskAccess = () => invoke<boolean>("dictation_ask_access");
+/** What macOS lets Relay do, per permission: "ok", "missing", "ask" (not asked yet) or null when it cannot be told
+ *  (src-tauri/src/permissions.rs). */
+export const permissions = () => invoke<Record<string, "ok" | "missing" | "ask" | null>>("permissions");
+/** Opens the pane of System Settings where one permission is switched. */
+export const permissionsOpen = (which: string) => invoke("permissions_open", { which });
 /** What the dictation pill shows, sent by the backend to its window. */
 export type PillState = {
   phase: "hidden" | "recording" | "transcribing" | "copied" | "error";

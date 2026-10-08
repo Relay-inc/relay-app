@@ -19,3 +19,8 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+# mac-notification-sys 0.6.15 with an autorelease pool per pass of its click wait, else every pass (10 a second)
+# leaks a copy of the delivered banners: src-tauri/vendor/mac-notification-sys/objc/notify.m. Drop once upstream has it.
+[patch.crates-io]
+mac-notification-sys = { path = "src-tauri/vendor/mac-notification-sys" }
