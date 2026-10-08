@@ -498,6 +498,12 @@ const VIEWS = {
     await settingsPage("General");
     await intoView("Propose the day's time from conversations");
   },
+  // Settings › General › Permissions: the mock has Full Disk Access missing (PR permissions-check)
+  "settings-permissions": async () => {
+    await settingsPage("General");
+    await scrollMain("bottom");
+    await settle(page);
+  },
   "settings-sidebar": async () => {
     await settingsPage("General");
     await scrollMain("bottom");
