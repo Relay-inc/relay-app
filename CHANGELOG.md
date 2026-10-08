@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Fixed
 
 - **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout
+- **A large paste no longer takes over the conversation**: the composer stops growing at 40% of the window and scrolls inside, so the messages and the send button stay in view
 
 ## [0.0.14] - 2026-10-07
 
