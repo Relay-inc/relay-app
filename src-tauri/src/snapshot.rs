@@ -39,7 +39,7 @@ pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::Naive
         status_line: rx(&format!(r"(?i)^\*{status_h}[^\n]*\n")),
         root,
     };
-    // a context is a work-state heading the config names, or one named after a folder of the notes (Contexts/Antenna…)
+    // a context is a work-state heading the config names, or one named after a folder of the notes (Contexts/Work…)
     let mut contexts: HashSet<String> = list(&cfg, &["contexts"], &[]).into_iter().collect();
     for e in fs::read_dir(&n.root).map_err(|e| e.to_string())?.flatten() {
         let name = e.file_name().to_string_lossy().into_owned();
@@ -85,7 +85,7 @@ fn section<'a>(heading: &Regex, s: &'a str) -> Option<&'a str> {
 }
 
 fn note_state(name: &str, n: &Notes) -> Map<String, Value> {
-    // "Brutsaert (ERP op maat)": Brutsaert.md too
+    // "Kestrel (ERP)": Kestrel.md too
     let short = rx(r"\s*\(.*\)$").replace(name, "").into_owned();
     let mut names = vec![name.to_string()];
     if short != name { names.push(short); }
@@ -251,25 +251,25 @@ mod tests {
         fs::create_dir_all(notes.join("Acme/Portfolio/Documents")).unwrap();
         fs::create_dir_all(d.join(".relay")).unwrap();
         fs::write(d.join(".relay/config.json"), r#"{"headings":{"open":["Openstaand"]},"contexts":["Elders"]}"#).unwrap();
-        fs::write(notes.join("Acme/Portfolio/Spardex.md"), "---\ntype: Product\naliases:\n  - \"Spar\"\n  - Dex\n---\n# Spardex\n## OPENSTAAND\n- [ ] Ask [[Pieter|P]] now\n- [x] done\n- [ ] Second\n## Stand van zaken\n*Stand van zaken: bold*\nGoing [[well]].\n## Other\n").unwrap();
-        fs::write(notes.join("Acme/Portfolio/Documents/Brutsaert.md"), "## Openstaand\n- [ ] skipped folder\n").unwrap();
-        fs::write(notes.join("Acme/Portfolio/Brutsaert.md"), "## Openstaand\n\n").unwrap();
+        fs::write(notes.join("Acme/Portfolio/Bluebird.md"), "---\ntype: Product\naliases:\n  - \"Blue\"\n  - Bird\n---\n# Bluebird\n## OPENSTAAND\n- [ ] Ask [[Jane|P]] now\n- [x] done\n- [ ] Second\n## Stand van zaken\n*Stand van zaken: bold*\nGoing [[well]].\n## Other\n").unwrap();
+        fs::write(notes.join("Acme/Portfolio/Documents/Kestrel.md"), "## Openstaand\n- [ ] skipped folder\n").unwrap();
+        fs::write(notes.join("Acme/Portfolio/Kestrel.md"), "## Openstaand\n\n").unwrap();
         let ws = d.join("work-state.md");
-        fs::write(&ws, "# W\n## Acme\n| P | S | L | N |\n|---|---|---|---|\n| Spardex | Active | 2026-10-01 | sum |\n| [[Brutsaert (ERP)]] extra | Quiet | 2026-01-02 | x |\n| Ghost | Active | 2026-01-01 | y |\n## Nope\n| Skipped | Active | 2026-01-01 | z |\n### Elders\n| Else | Active | 2026-01-01 | w |\n").unwrap();
+        fs::write(&ws, "# W\n## Acme\n| P | S | L | N |\n|---|---|---|---|\n| Bluebird | Active | 2026-10-01 | sum |\n| [[Kestrel (ERP)]] extra | Quiet | 2026-01-02 | x |\n| Ghost | Active | 2026-01-01 | y |\n## Nope\n| Skipped | Active | 2026-01-01 | z |\n### Elders\n| Else | Active | 2026-01-01 | w |\n").unwrap();
         let p = projects(ws.to_str().unwrap(), &["Elders".into(), "Acme".into()].into_iter().collect(), &Notes {
             root: notes.clone(), skip: vec!["Documents".into()], open: rx(r"(?mi)^## (?:Openstaand)[ \t]*\n"),
             status: rx(r"(?mi)^## (?:Stand van zaken)[ \t]*\n"), status_line: rx(r"(?i)^\*(?:Stand van zaken)[^\n]*\n") }).unwrap();
         let names: Vec<_> = p.iter().map(|p| p["name"].as_str().unwrap()).collect();
-        assert_eq!(names, ["Spardex", "Brutsaert (ERP)", "Ghost", "Else"]);
+        assert_eq!(names, ["Bluebird", "Kestrel (ERP)", "Ghost", "Else"]);
         assert_eq!(p[0]["context"], "Acme");
         assert_eq!(p[0]["open"], 2);
-        assert_eq!(p[0]["open_items"], json!(["Ask Pieter now", "Second"]));
+        assert_eq!(p[0]["open_items"], json!(["Ask Jane now", "Second"]));
         assert_eq!(p[0]["stand"], "Going well.");
-        assert_eq!(p[0]["aliases"], json!(["Spar", "Dex"]));
-        assert_eq!((p[1]["open"].clone(), p[1]["open_items"].clone()), (json!(0), json!([])), "falls back to Brutsaert.md, not the skipped Documents one");
+        assert_eq!(p[0]["aliases"], json!(["Blue", "Bird"]));
+        assert_eq!((p[1]["open"].clone(), p[1]["open_items"].clone()), (json!(0), json!([])), "falls back to Kestrel.md, not the skipped Documents one");
         assert_eq!((p[2]["open"].clone(), p[2]["stand"].clone()), (Value::Null, Value::Null), "no note");
         let m = Matcher::new(&p);
-        assert_eq!(m.find("talk to SPARDEX, not Spardexer or xDex"), ["Spardex"]);
+        assert_eq!(m.find("talk to BLUEBIRD, not Bluebirder or xBird"), ["Bluebird"]);
         fs::remove_dir_all(&d).ok();
     }
 }

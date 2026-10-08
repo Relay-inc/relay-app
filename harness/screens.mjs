@@ -530,6 +530,10 @@ const VIEWS = {
   onboarding: async () => {
     await open(page, server.url, { fixture: "onboarding" });
   },
+  "onboarding-own": async () => {
+    await open(page, server.url, { fixture: "onboarding" });
+    await button("I have a vault").click();
+  },
   "dark-waiting": async () => {
     await open(page, server.url, { fixture: "dark" });
     await waitText(titles.permission);

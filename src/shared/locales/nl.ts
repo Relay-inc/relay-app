@@ -764,6 +764,11 @@ export default {
   "vault.welcome": "Welkom bij Relay",
   "vault.intro":
     "Kies de map van je Obsidian-vault. Relay zoekt je work-state, reminders en de andere bestanden die het leest; controleer hieronder wat het vond.",
+  "vault.introDefault":
+    "Relay start met een lege vault in ~/Relay: de notities, regels en skills die Claude een geheugen van je projecten geven. Heb je al een vault? Kies dan die.",
+  "vault.start": "Start",
+  "vault.haveOwn": "Ik heb al een vault",
+  "vault.back": "Terug",
   "vault.none": "Geen map gekozen",
   "vault.choose": "Kies vault-map…",
   "vault.use": "Gebruik deze vault",
