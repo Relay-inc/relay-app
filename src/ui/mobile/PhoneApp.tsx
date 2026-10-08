@@ -10,6 +10,7 @@ import {
   closeConversation,
   openConversation,
   pair,
+  scanToPair,
   startConversation,
   titleOf,
   usePhoneStore,
@@ -83,6 +84,13 @@ function Pairing() {
         onClick={() => pair(line)}
       >
         {t("phone.pair")}
+      </button>
+      <button
+        className="-mt-2.5 inline-flex h-11 items-center justify-center gap-2 font-medium text-accent-text"
+        onClick={scanToPair}
+      >
+        <Icon name="qr" className="glyph size-4.5" />
+        {t("phone.scan")}
       </button>
     </div>
   );
@@ -254,7 +262,7 @@ function Conversation({ id }: { id: string }) {
         <span className="size-10" />
       </header>
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-5 py-4.5">
-        <ConversationView cards={false} />
+        <ConversationView cards={false} empty={t("phone.emptyChat", { agent: name })} />
       </div>
       {card ? (
         <DockedCard request={card} />

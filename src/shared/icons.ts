@@ -3,6 +3,7 @@
 // width are left to the CSS, so a row can colour its glyph the way it did with the hand-drawn ones
 import {
   Notification01Icon,
+  QrCodeIcon,
   ServerStack01Icon,
   Brain02Icon,
   LeftToRightListBulletIcon,
@@ -119,6 +120,7 @@ const ICONS: Record<string, Icon> = {
   board: DashboardSquare01Icon,
   workflow: WorkflowSquare01Icon,
   mic: Mic01Icon,
+  qr: QrCodeIcon,
 };
 // the attributes without React's key and the stroke settings the CSS owns
 const own = ([tag, attrs]: Shape): Shape => [

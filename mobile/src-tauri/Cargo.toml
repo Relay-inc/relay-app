@@ -17,3 +17,8 @@ serde_json.workspace = true
 relay-remote = { path = "../../packages/relay-remote" }
 agent-core.workspace = true
 agent-claude = { path = "../../packages/agent-claude" }
+base64 = "0.23"
+serde = { version = "1.0.229", features = ["derive"] }
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"

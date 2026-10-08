@@ -17,6 +17,8 @@ use std::sync::Mutex;
 use std::{fs, thread};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, State};
 
+mod sealed;
+
 /// A conversation this phone follows: what goes to its agent's stdin, and its pid there (for stop).
 struct Live { stdin: Box<dyn Write + Send>, pid: u32 }
 
@@ -31,9 +33,9 @@ struct App {
     cards: Mutex<Vec<pending::Request>>,
 }
 
-/// The app's data folder: this phone's certificate (`phone.{crt,key}.der`) and the paired server (`server.json`).
+/// The app's data folder: the sealed secrets (sealed.rs) and where the paired server is (`server.json`, no secret).
 fn dir(app: &AppHandle) -> Result<PathBuf, String> { app.path().app_data_dir().map_err(|e| e.to_string()) }
-fn identity(app: &AppHandle) -> Result<Identity, String> { Identity::load_or_create(&dir(app)?, "phone").map_err(|e| e.to_string()) }
+fn identity(app: &AppHandle) -> Result<Identity, String> { Ok(sealed::load(app, &dir(app)?)?.id) }
 fn saved(app: &AppHandle) -> Result<Value, String> {
     serde_json::from_str(&fs::read_to_string(dir(app)?.join("server.json")).map_err(|_| "not paired yet")?).map_err(|e| e.to_string())
 }
@@ -48,10 +50,13 @@ fn vault_there(c: &Client) -> Result<String, String> { Ok(format!("{}/vault", c.
 /// server is and the key to the laptop's mirror there.
 #[tauri::command]
 fn pair(app: AppHandle, line: String, name: String) -> Result<Value, String> {
-    let (l, info) = client::pair(&line, &identity(&app)?, &name)?;
-    // ponytail: the mirror key sits in the app's private data folder; the Keychain / Android Keystore comes next
-    let s = json!({"host": l.host, "port": l.port, "fp": l.fp, "key": l.key});
-    fs::write(dir(&app)?.join("server.json"), s.to_string()).map_err(|e| e.to_string())?;
+    let d = dir(&app)?;
+    let mut secrets = sealed::load(&app, &d)?;
+    let (l, info) = client::pair(&line, &secrets.id, &name)?;
+    secrets.mirror = l.key.clone();
+    sealed::save(&app, &d, &secrets)?;
+    let s = json!({"host": l.host, "port": l.port, "fp": l.fp});
+    fs::write(d.join("server.json"), s.to_string()).map_err(|e| e.to_string())?;
     Ok(json!({"server": s, "info": info}))
 }
 
@@ -62,7 +67,7 @@ fn info(app: AppHandle) -> Result<Value, String> {
     let c = server(&app)?;
     let info = c.info()?;
     if info.mirror_open { return Ok(json!(info)); }
-    let Some(key) = saved(&app)?["key"].as_str().map(String::from) else { return Ok(json!(info)) };
+    let Some(key) = sealed::load(&app, &dir(&app)?)?.mirror else { return Ok(json!(info)) };
     c.unlock(&key)?;
     Ok(json!(c.info()?))
 }
@@ -210,6 +215,14 @@ fn read(app: &AppHandle, key: &str, frames: Box<dyn BufRead + Send>, backlog: us
 pub fn run() {
     tauri::Builder::default()
         .manage(App::default())
+        .plugin(sealed::init())
+        .setup(|app| {
+            // the camera, for the pairing code the laptop shows (Settings › Machines › Add phone)
+            #[cfg(mobile)]
+            app.handle().plugin(tauri_plugin_barcode_scanner::init())?;
+            let _ = app;
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![pair, info, conversations, running, open, send, stop, pending, answer, history, history_sid])
         .build(tauri::generate_context!())
         .expect("error while running Relay")

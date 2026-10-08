@@ -247,7 +247,13 @@ impl Server {
                 let metas = metas(ns);
                 let sids = self.sids.lock().unwrap();
                 let of: serde_json::Map<String, Value> = metas.iter().filter_map(|m| sids.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
-                let titles = self.titles.lock().unwrap();
+                // a title kept in memory only: after a restart it comes from the session's transcript (once)
+                let mut titles = self.titles.lock().unwrap();
+                for m in &metas {
+                    let k = format!("{ns}:{}", m.key);
+                    if titles.contains_key(&k) { continue; }
+                    if let Some(t) = sids.get(&k).and_then(|sid| self.session_find(sid)).and_then(|p| transcript_title(&p)) { titles.insert(k, t); }
+                }
                 let named: serde_json::Map<String, Value> = metas.iter().filter_map(|m| titles.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
                 reply(&mut w, Ok(json!({"metas": metas, "sids": of, "titles": named})))
             }
@@ -360,13 +366,9 @@ impl Server {
             let broker::Frame::Out(o) = broker::frame(&l) else { if l.starts_with('x') { break } else { continue } };
             let Ok(ev) = serde_json::from_str::<Value>(&o) else { continue };
             if let Some(sid) = ev["session_id"].as_str().filter(|s| agent_core::safe_id(s)) { self.set_sid(key, Some(sid)); }
-            // the first thing said in it names it in a phone's list (memory only, gone with a restart)
-            if ev["type"] == "user" && !self.titles.lock().unwrap().contains_key(key) {
-                let c = &ev["message"]["content"];
-                let text = c.as_str().map(String::from).or_else(|| c.as_array()?.iter().find(|b| b["type"] == "text").and_then(|b| b["text"].as_str()).map(String::from));
-                if let Some(t) = text.map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|t| !t.is_empty()) {
-                    self.titles.lock().unwrap().insert(key.into(), t.chars().take(80).collect());
-                }
+            // the first thing said in it names it in a phone's list
+            if !self.titles.lock().unwrap().contains_key(key) {
+                if let Some(t) = title_of(&ev) { self.titles.lock().unwrap().insert(key.into(), t); }
             }
             let what = if ev["type"] == "control_request" && ev["request"]["subtype"] == "can_use_tool" { "Claude is waiting for your answer" }
                 else if ev["type"] == "result" { "Claude finished" } else { continue };
@@ -436,6 +438,21 @@ impl Server {
             Err(e) => bang(&mut w, &e),
         }
     }
+}
+
+/// A conversation's title from one of its lines: the text of a user message, on one line, at most 80 characters. A
+/// tool result (also a user message) has no text block and names nothing.
+fn title_of(ev: &Value) -> Option<String> {
+    if ev["type"] != "user" { return None; }
+    let c = &ev["message"]["content"];
+    let text = c.as_str().map(String::from).or_else(|| c.as_array()?.iter().find(|b| b["type"] == "text").and_then(|b| b["text"].as_str()).map(String::from))?;
+    let one = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!one.is_empty()).then(|| one.chars().take(80).collect())
+}
+/// The title in a Claude transcript: its first user message with text.
+fn transcript_title(path: &Path) -> Option<String> {
+    let f = fs::File::open(path).ok()?;
+    BufReader::new(f).lines().map_while(Result::ok).take(2000).filter_map(|l| serde_json::from_str::<Value>(&l).ok()).find_map(|ev| title_of(&ev))
 }
 
 struct Attached<'a> { s: &'a Server, key: String }
@@ -562,5 +579,24 @@ pub fn service_file() -> String {
     } else {
         format!("# ~/.config/systemd/user/relay-server.service, then:\n#   systemctl --user enable --now relay-server\n#   loginctl enable-linger $USER   (keeps it running without a login)\n\
 [Unit]\nDescription=Relay server\nAfter=network-online.target\n\n[Service]\nExecStart={exe} serve\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n")
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+    #[test]
+    fn a_title_is_the_first_thing_said() {
+        let p = std::env::temp_dir().join(format!("relay-title-{}.jsonl", std::process::id()));
+        let lines = [
+            json!({"type": "system", "subtype": "init"}),
+            json!({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "x"}]}}),
+            json!({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Check  the\nportal redirect"}]}}),
+            json!({"type": "user", "message": {"role": "user", "content": "later"}}),
+        ];
+        fs::write(&p, lines.iter().map(|l| l.to_string() + "\n").collect::<String>()).unwrap();
+        assert_eq!(transcript_title(&p).as_deref(), Some("Check the portal redirect"));
+        assert_eq!(title_of(&json!({"type": "user", "message": {"content": "x".repeat(100)}})).unwrap().len(), 80);
+        fs::remove_file(p).ok();
     }
 }

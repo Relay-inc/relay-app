@@ -30,8 +30,9 @@ function groupSteps(items: Item[]) {
 
 /** The open conversation: what was said and done, a question about the project, the cards waiting, the working
  *  indicator and the messages the agent has not read yet. A stream delta changes one item; the others keep their identity and do not redraw.
- *  `cards`: false where the container shows the cards itself (the phone docks them under the conversation). */
-export function ConversationView({ cards = true }: { cards?: boolean }) {
+ *  `cards`: false where the container shows the cards itself (the phone docks them under the conversation); `empty`:
+ *  the line of a conversation with nothing in it yet, where the desktop's (about projects) does not fit. */
+export function ConversationView({ cards = true, empty }: { cards?: boolean; empty?: string }) {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
   const items = useConversationsStore(s => s.messages[selected]);
@@ -68,11 +69,12 @@ export function ConversationView({ cards = true }: { cards?: boolean }) {
       ) : (
         <NoteLine
           text={
-            where.coordinator
+            empty ??
+            (where.coordinator
               ? t("chat.emptyOrch")
               : where.name
                 ? t("chat.emptyProject", { name: where.name })
-                : t("chat.emptyGeneral")
+                : t("chat.emptyGeneral"))
           }
         />
       )}
