@@ -252,7 +252,8 @@ export async function showInBrain(key: string) {
   });
   await loadTouches();
   const count = new Map<string, number>();
-  for (const touch of brain().touches ?? []) if (touch.key === key) count.set(touch.root, (count.get(touch.root) ?? 0) + 1);
+  for (const touch of brain().touches ?? [])
+    if (touch.key === key) count.set(touch.root, (count.get(touch.root) ?? 0) + 1);
   const best = [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
   if (best && visibleRoots().some(root => root.id === best))
     set(draft => {

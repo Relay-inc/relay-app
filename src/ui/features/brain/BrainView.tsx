@@ -37,7 +37,14 @@ export function BrainView({ className = "" }: { className?: string }) {
   const modes: [BrainMode, string][] = [
     ["browse", t("brain.browse")],
     ["graph", t("brain.graph")],
-    ...(root?.kind === "brain" ? [["review", pending.length ? `${t("brain.review")} ${pending.length}` : t("brain.review")] as [BrainMode, string]] : []),
+    ...(root?.kind === "brain"
+      ? [
+          ["review", pending.length ? `${t("brain.review")} ${pending.length}` : t("brain.review")] as [
+            BrainMode,
+            string,
+          ],
+        ]
+      : []),
   ];
   const current = modes.some(([m]) => m === mode) ? mode : "browse";
 

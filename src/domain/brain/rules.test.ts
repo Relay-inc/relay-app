@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { adjacency, brainKey, brainName, byBrain, folderSize, folderTree, glowLevel, glowOf, topKinds, touchedKeys } from "./rules.ts";
+import {
+  adjacency,
+  brainKey,
+  brainName,
+  byBrain,
+  folderSize,
+  folderTree,
+  glowLevel,
+  glowOf,
+  topKinds,
+  touchedKeys,
+} from "./rules.ts";
 import type { BrainNote } from "./types.ts";
 
 const note = (brain: string, id: string): BrainNote => ({
@@ -51,7 +62,9 @@ test("adjacency goes both ways", () => {
 });
 
 test("three kinds get a colour, hubs do not count", () => {
-  const nodes = [..."mmmmddddpppii"].map((k, i) => node(`${i}`, { m: "memory", d: "decision", p: "person", i: "index" }[k]));
+  const nodes = [..."mmmmddddpppii"].map((k, i) =>
+    node(`${i}`, { m: "memory", d: "decision", p: "person", i: "index" }[k]),
+  );
   nodes.push(node("h1", "index", true), node("h2", "index", true));
   assert.deepEqual(topKinds(nodes), ["decision", "memory", "person"]);
 });

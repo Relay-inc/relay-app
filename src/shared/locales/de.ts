@@ -1356,7 +1356,8 @@ export default {
   "brain.wroteAgo": "Geschrieben {ago}",
   "brain.agoDay": "vor {n} T",
   "brain.glow": "Gesprächsleuchten",
-  "brain.glowTitle": "Hebt die Notizen hervor, die Relay-Gespräche in den letzten 7 Tagen gelesen und geschrieben haben",
+  "brain.glowTitle":
+    "Hebt die Notizen hervor, die Relay-Gespräche in den letzten 7 Tagen gelesen und geschrieben haben",
   "brain.touchedFilter": "Berührt",
   "brain.allChats": "Alle Gespräche",
   "brain.hideHubs": "Indexnotizen ausblenden ({n})",
@@ -1366,7 +1367,8 @@ export default {
   "brain.noGlow": "Kein Gespräch hat hier in den letzten 7 Tagen eine Notiz gelesen oder geschrieben.",
   "brain.untitled": "Gespräch",
   "brain.showIn": "Im Brain zeigen",
-  "brain.showInTitle": "Die Notizen, die dieses Gespräch gelesen und geschrieben hat, im Graph des Brains hervorgehoben",
+  "brain.showInTitle":
+    "Die Notizen, die dieses Gespräch gelesen und geschrieben hat, im Graph des Brains hervorgehoben",
   "bar.brainReview": "{n} zu prüfen",
   "bar.brainNotes": "{n} Notizen",
   "cw.help":

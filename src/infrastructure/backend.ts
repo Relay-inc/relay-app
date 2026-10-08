@@ -229,7 +229,8 @@ export const commonwealthAct = (brain: string, verb: "promote" | "reject", ids: 
 export const brainRoots = () => invoke<BrainRoot[]>("brain_roots");
 export const brainGraph = (root: string) => invoke<BrainGraph>("brain_graph", { root });
 export const brainSearch = (root: string, query: string) => invoke<SearchHit[]>("brain_search", { root, query });
-export const brainNote = (root: string, path: string) => invoke<{ path: string; text: string }>("brain_note", { root, path });
+export const brainNote = (root: string, path: string) =>
+  invoke<{ path: string; text: string }>("brain_note", { root, path });
 export const brainTouches = (days: number) => invoke<Touch[]>("brain_touches", { days });
 
 // ---------- mail

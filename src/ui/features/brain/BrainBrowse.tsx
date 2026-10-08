@@ -2,14 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { BrainGraph, BrainRoot, Folder, Glow } from "../../../domain/brain/types";
 import { adjacency, folderSize, folderTree, topKinds } from "../../../domain/brain/rules";
 import { useBrainStore } from "../../../application/brain/store";
-import {
-  askAbout,
-  followLink,
-  openBrainNote,
-  runSearch,
-  setQuery,
-  toggleGlow,
-} from "../../../application/brain/brain";
+import { askAbout, followLink, openBrainNote, runSearch, setQuery, toggleGlow } from "../../../application/brain/brain";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { select } from "../../../application/navigation/navigation";
 import { markdownWith } from "../../../shared/markdown";
@@ -19,7 +12,15 @@ import { agoOf } from "./ago";
 
 /** Browse: the folder tree (or the search hits, or the notes conversations touched) on the left, the open note on the
  *  right with the notes it links to and from. */
-export function BrainBrowse({ root, graph, glow }: { root: BrainRoot; graph: BrainGraph; glow: Map<string, Glow> | null }) {
+export function BrainBrowse({
+  root,
+  graph,
+  glow,
+}: {
+  root: BrainRoot;
+  graph: BrainGraph;
+  glow: Map<string, Glow> | null;
+}) {
   const { t } = useT();
   const query = useBrainStore(s => s.query);
   const hits = useBrainStore(s => s.hits);
@@ -209,7 +210,11 @@ function NotePane({
           {path}
         </span>
         <span className="flex-1"></span>
-        <button className="btn whitespace-nowrap" title={t("brain.askTitle")} onClick={() => askAbout(root.id, path, root.kind)}>
+        <button
+          className="btn whitespace-nowrap"
+          title={t("brain.askTitle")}
+          onClick={() => askAbout(root.id, path, root.kind)}
+        >
           {t("brain.ask")}
         </button>
       </div>
@@ -230,7 +235,12 @@ function NotePane({
             {t(glow.write ? "brain.wroteAgo" : "brain.readAgo", { ago: agoOf(glow.at, t) })}
           </span>
           {glow.keys.map(key => (
-            <button key={key} type="button" className="text-left text-accent-text hover:underline w-fit" onClick={() => select(key)}>
+            <button
+              key={key}
+              type="button"
+              className="text-left text-accent-text hover:underline w-fit"
+              onClick={() => select(key)}
+            >
               {chats[key]?.title || t("brain.untitled")}
             </button>
           ))}
@@ -301,7 +311,9 @@ function LocalGraph({
     <svg viewBox={`0 0 ${w} ${h}`} className="w-full h-auto" role="img" aria-label={graph.nodes[center].t}>
       {shown.map((j, n) => {
         const [x, y] = at(n);
-        return <line key={`l${j}`} x1={w / 2} y1={h / 2} x2={x} y2={y} className="stroke-separator-strong" strokeWidth={1} />;
+        return (
+          <line key={`l${j}`} x1={w / 2} y1={h / 2} x2={x} y2={y} className="stroke-separator-strong" strokeWidth={1} />
+        );
       })}
       {shown.map((j, n) => {
         const [x, y] = at(n);
