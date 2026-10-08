@@ -123,6 +123,13 @@ impl Client {
     pub fn launch(&self, meta: &Meta, spec: &Spec) -> Result<Conn, String> {
         self.stream(json!({"op": "launch", "meta": meta, "spec": spec}), &meta.key)?.ok_or_else(|| "relay-server: no broker".into())
     }
+    /// How this Mac starts Claude there, for a phone that starts conversations while this Mac is closed: its Claude
+    /// settings (`opts`) and the mirror's flags (`args`, `env`).
+    pub fn profile_put(&self, profile: &Value) -> Result<(), String> { self.call(json!({"op": "profile_put", "profile": profile})).map(|_| ()) }
+    /// Start a Claude conversation there, built by the server from the laptop's profile, in the mirrored vault.
+    pub fn start(&self, key: &str, name: &str, model: &str, effort: &str, resume: Option<&str>) -> Result<Conn, String> {
+        self.stream(json!({"op": "start", "key": key, "name": name, "model": model, "effort": effort, "resume": resume}), key)?.ok_or_else(|| "relay-server: no broker".into())
+    }
     /// Take back a conversation whose broker runs there. None when there is none any more.
     pub fn attach(&self, key: &str) -> Result<Option<Conn>, String> { self.stream(json!({"op": "attach", "key": key}), key) }
 

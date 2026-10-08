@@ -35,6 +35,8 @@ fn start_on(tag: &str, port: u16) -> Server {
     // the mirror links transcripts into Claude Code's projects folder: a folder of the test's own, except for the real
     // Claude turn, which needs this Mac's login
     if tag != "claude" { cmd.env("CLAUDE_CONFIG_DIR", data.join("claude")); }
+    // a stand-in for claude that says how it was started (start_builds_claude_from_the_laptops_profile)
+    if tag == "start" { cmd.env("RELAY_CLAUDE", data.join("fake-claude")); }
     let child = cmd.args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &data).env("RELAY_AGENTS_DIR", &agents)
         .stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
@@ -191,6 +193,46 @@ fn update_goes_on_in_the_binary_sent() {
     assert!(c.info().unwrap().update);
 }
 
+/// A phone of `parent`: the laptop opens a pairing for it, the phone pairs with that line like with any.
+fn linked(parent: &Client, tag: &str) -> Client {
+    let code = parent.pair_device().unwrap();
+    let (host, port) = parent.addr.rsplit_once(':').unwrap();
+    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None }.format();
+    let id = device(tag);
+    let (l, _) = client::pair(&line, &id, tag).unwrap();
+    Client::new(&l.host, l.port, &l.fp, id)
+}
+
+#[test]
+fn start_builds_claude_from_the_laptops_profile() {
+    let s = start("start");
+    let fake = s.data.join("fake-claude");
+    std::fs::write(&fake, "#!/bin/sh\necho \"args $*\"\npwd\nwhile IFS= read -r l; do echo \"in $l\"; done\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let laptop = paired(&s, "laptop");
+    let phone = linked(&laptop, "phone");
+
+    // nothing to start from before the laptop sent its profile, and only the laptop sends one
+    assert!(phone.start("p:1", "Phone", "", "", None).err().unwrap().contains("open Relay on the laptop"));
+    let profile = serde_json::json!({"opts": {}, "args": ["--add-dir", "/ctx"], "env": [["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "1"]]});
+    assert!(phone.profile_put(&profile).unwrap_err().contains("not allowed from a linked device"));
+    laptop.profile_put(&profile).unwrap();
+    // the vault there is the mirror's: locked until a key opens it
+    assert!(phone.start("p:1", "Phone", "", "", None).err().unwrap().contains("locked"));
+    phone.unlock(&relay_remote::tls::random_key()).unwrap();
+
+    let mut c = phone.start("p:1", "Phone", "", "", None).unwrap();
+    let args = next(&mut c.frames);
+    assert!(args.starts_with("args ") && args.contains("--add-dir /ctx") && args.contains("stream-json"), "{args}");
+    assert!(next(&mut c.frames).ends_with("/vault"));
+    assert!(next(&mut c.frames).contains("\"initialize\""));
+    writeln!(c.stdin, "hi").unwrap();
+    c.stdin.flush().unwrap();
+    assert_eq!(next(&mut c.frames), "in hi");
+    // the laptop sees the conversation its phone started
+    assert_eq!(laptop.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["p:1"]);
+}
+
 #[test]
 fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
     let s = start("link");
@@ -203,13 +245,7 @@ fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
     assert_eq!(next(&mut conn.frames), "got one");
     drop(conn);
 
-    // the laptop opens a pairing for its phone; the phone pairs with it like with any line
-    let code = laptop.pair_device().unwrap();
-    let (host, port) = laptop.addr.rsplit_once(':').unwrap();
-    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: laptop.fp.clone(), code, key: None }.format();
-    let id = device("phone");
-    let (l, _) = client::pair(&line, &id, "phone").unwrap();
-    let phone = Client::new(&l.host, l.port, &l.fp, id);
+    let phone = linked(&laptop, "phone");
 
     // it sees the laptop's conversation; the other device's walls still stand
     assert_eq!(phone.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["c:1"]);

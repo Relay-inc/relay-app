@@ -1573,6 +1573,17 @@ async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -
     let qr = qrcode::QrCode::new(&line).map_err(|e| e.to_string())?.render::<qrcode::render::svg::Color>().min_dimensions(240, 240).build();
     Ok(json!({"line": line, "qr": qr}))
 }
+/// How this Mac starts Claude on a machine, for a conversation its phone starts there: Claude's settings here without
+/// the mail tools (answered by this app) or this Mac's accounts (the machine has its own login), and the mirror's flags
+/// for the vault there, as `spawn` (session/mod.rs) adds them.
+fn machine_profile(mut opts: Value, info: &relay_remote::proto::Info) -> Value {
+    if let Some(o) = opts.as_object_mut() {
+        o.insert("mail".into(), json!(false));
+        for k in ["account", "accounts", "active"] { o.remove(k); }
+    }
+    let (args, env) = mirror::session_args(info, &format!("{}/vault", info.work));
+    json!({"opts": opts, "args": args, "env": env})
+}
 /// This Mac's name, for the server's list of paired devices.
 fn sys_name() -> String {
     Command::new("/usr/sbin/scutil").args(["--get", "ComputerName"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
@@ -1814,7 +1825,10 @@ pub fn run() {
             });
             // the mirrors: a round every 5 s for each machine that has one and answers, on a thread of their own so a
             // first big copy never holds up the cards
+            // With each round, how this Mac starts Claude there (when it changed), so its phone can start conversations
+            // there while this Mac is closed (relay-server's `start`)
             let h = app.handle().clone();
+            let mut profiles: HashMap<String, String> = HashMap::new();
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(5));
                 let st = h.state::<App>();
@@ -1823,7 +1837,12 @@ pub fn run() {
                 for m in s["machines"].as_array().into_iter().flatten() {
                     let id = m["id"].as_str().unwrap_or("");
                     let Some(info) = st.machines.seen.lock().unwrap().get(id).filter(|x| x.error.is_none()).and_then(|x| x.info.clone()) else { continue };
-                    st.mirrors.round(&data_dir(&h), m, &st.machines.client(m), &info, &vault);
+                    let client = st.machines.client(m);
+                    st.mirrors.round(&data_dir(&h), m, &client, &info, &vault);
+                    let Ok(p) = agents::get("claude") else { continue };
+                    let profile = machine_profile(env_of(&h, &st, p).opts, &info);
+                    let text = profile.to_string();
+                    if profiles.get(id) != Some(&text) && client.profile_put(&profile).is_ok() { profiles.insert(id.into(), text); }
                 }
             });
             tray::init(app.handle())?;
@@ -1863,6 +1882,21 @@ mod lang_tests {
     }
 }
 
+
+#[cfg(test)]
+mod machine_tests {
+    use super::*;
+    #[test]
+    fn a_machine_profile_keeps_mail_and_accounts_here() {
+        let info = relay_remote::proto::Info { work: "/w/abc".into(), ..Default::default() };
+        let p = machine_profile(json!({"mail": true, "account": "/a", "accounts": [{"dir": "/a"}], "active": "/a", "permission": "plan"}), &info);
+        assert_eq!(p["opts"], json!({"mail": false, "permission": "plan"}));
+        let args: Vec<&str> = p["args"].as_array().unwrap().iter().filter_map(|a| a.as_str()).collect();
+        assert_eq!(args[..2], ["--add-dir", "/w/abc/context"]);
+        assert!(args.iter().any(|a| a.contains("/w/abc/memory"))); // the vault's memory: it runs in the vault there
+        assert_eq!(p["env"], json!([["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "1"]]));
+    }
+}
 
 #[cfg(test)]
 mod capture_tests {

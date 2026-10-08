@@ -65,7 +65,7 @@ pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(de
 
 /// What a linked device may ask: its conversations and their cards, and opening the mirror with the key it was given.
 /// Not the mirror's files, moving sessions, updating the server or pairing further devices.
-const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach"];
+const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach", "start"];
 
 pub fn clients(data: &Path) -> Vec<Client> {
     fs::read_to_string(data.join("clients.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
@@ -239,7 +239,9 @@ impl Server {
             "answer" => reply(&mut w, agent_core::pending::answer(&pending, req["id"].as_str().unwrap_or(""), &req["decision"]).map(|_| json!({}))),
             "history" => reply(&mut w, Ok(self.history(&req))),
             "exists" => reply(&mut w, Ok(json!({"dir": req["path"].as_str().is_some_and(|p| p.starts_with('/') && Path::new(p).is_dir())}))),
-            "launch" => { self.revoked_closes(&fp, &w); self.launch(ns, &req, r, w) }
+            "launch" => { self.revoked_closes(&fp, &w); self.launch(ns, &req, None, r, w) }
+            "profile_put" => reply(&mut w, write_private(&self.profile_path(ns), &req["profile"].to_string()).map(|_| json!({})).map_err(|e| e.to_string())),
+            "start" => { self.revoked_closes(&fp, &w); self.start(ns, &req, r, w) }
             "attach" => { self.revoked_closes(&fp, &w); attach(&key(&req["key"]), r, w) }
             _ => reply(&mut w, Err(format!("unknown request {op:?}"))),
         }
@@ -311,7 +313,34 @@ impl Server {
         Ok(json!({}))
     }
 
-    fn launch(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+    /// What the laptop sends about how it starts Claude here (profile_put): its Claude settings and the mirror's flags.
+    fn profile_path(&self, ns: &str) -> PathBuf { self.data.join("profiles").join(format!("{ns}.json")) }
+
+    /// Start a Claude conversation in the device's mirrored vault without the laptop (a phone): the command is built
+    /// here with the provider's own code, the way the laptop builds it, from the laptop's last profile. `resume` goes on
+    /// with a session. No mail tools: those are answered by the laptop.
+    fn start(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+        use agent_core::AgentProvider;
+        let Some(profile) = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) else {
+            return bang(&mut w, "no way to start Claude here yet: open Relay on the laptop once while this machine is online");
+        };
+        let s = |k: &str| req[k].as_str().unwrap_or("");
+        let cwd = self.mirror.work_of(ns).join("vault").to_string_lossy().into_owned();
+        let pending = self.data.join("pending").join(ns);
+        let mut opts = profile["opts"].clone();
+        if opts.is_object() { opts["mail"] = json!(false); }
+        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &opts };
+        let launch = agent_core::Launch { key: s("key"), name: s("name"), model: s("model"), effort: s("effort"), resume: Some(s("resume")).filter(|x| !x.is_empty()), fork: None, turn: None };
+        let mut cmd = match agent_claude::PROVIDER.command(&env, &launch) { Ok(c) => c, Err(e) => return bang(&mut w, &e) };
+        cmd.current_dir(&cwd).env("PATH", &self.info.path);
+        cmd.args(profile["args"].as_array().into_iter().flatten().filter_map(Value::as_str));
+        for kv in profile["env"].as_array().into_iter().flatten() { if let (Some(k), Some(v)) = (kv[0].as_str(), kv[1].as_str()) { cmd.env(k, v); } }
+        let meta = Meta { key: s("key").into(), provider: "claude".into(), model: s("model").into(), effort: s("effort").into(), tainted: false, pid: 0, account: String::new(), turns: 0 };
+        self.launch(ns, &json!({"meta": meta, "spec": Spec::of(&cmd)}), agent_claude::PROVIDER.control_init(&[]), r, w)
+    }
+
+    /// `init`: a first line for a new agent's stdin (Claude's initialize), not sent to one that already runs.
+    fn launch(&self, ns: &str, req: &Value, init: Option<String>, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
         let (mut meta, mut spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
         meta.key = format!("{ns}:{}", meta.key);
@@ -326,7 +355,13 @@ impl Server {
         // goes on, a second agent on the same session would write the transcript twice
         if UnixStream::connect(sock_of(&meta.key)).is_ok() { return attach(&meta.key, r, w); }
         // the broker connection launch makes is dropped at once: attach takes it over with a hello of its own
-        match broker::launch_spec(&meta, &spec) { Ok(_) => attach(&meta.key, r, w), Err(e) => bang(&mut w, &e) }
+        match broker::launch_spec(&meta, &spec) {
+            Ok(mut c) => {
+                if let Some(l) = init { writeln!(c.stdin, "{l}").and_then(|_| c.stdin.flush()).ok(); }
+                attach(&meta.key, r, w)
+            }
+            Err(e) => bang(&mut w, &e),
+        }
     }
 }
 

@@ -259,26 +259,32 @@ pub fn main(sock: &str, spec: &str) {
             // gets the lines again when it comes back
             c2.set_write_timeout(Some(STALL)).ok();
             let mut s = st4.lock().unwrap();
-            if id.is_empty() { writeln!(c2, "n 0").ok(); return; } // only waited for the start
-            let from = s.seen.get(&id).copied().unwrap_or(s.first).max(s.first);
-            let skip = (from - s.first) as usize;
-            let sent = writeln!(c2, "n {}", s.ring.len() - skip).is_ok() && s.ring.iter().skip(skip).all(|f| writeln!(c2, "{f}").is_ok());
-            if !sent { return; } // the lines stay for its next connection
-            // a new connection of the same app replaces the old one
-            s.clients.retain(|o| { let same = o.id == id; if same { o.s.shutdown(std::net::Shutdown::Both).ok(); } !same });
-            s.gen += 1;
-            let gen = s.gen;
-            let next = s.next();
-            s.seen.insert(id.clone(), next);
-            s.clients.push(Client { id, gen, s: c2 });
-            s.away = None;
-            s.trim();
+            // no id: a connection that waited for the start (and may write a first line), it gets no output
+            let gen = if id.is_empty() {
+                if writeln!(c2, "n 0").is_err() { return; }
+                None
+            } else {
+                let from = s.seen.get(&id).copied().unwrap_or(s.first).max(s.first);
+                let skip = (from - s.first) as usize;
+                let sent = writeln!(c2, "n {}", s.ring.len() - skip).is_ok() && s.ring.iter().skip(skip).all(|f| writeln!(c2, "{f}").is_ok());
+                if !sent { return; } // the lines stay for its next connection
+                // a new connection of the same app replaces the old one
+                s.clients.retain(|o| { let same = o.id == id; if same { o.s.shutdown(std::net::Shutdown::Both).ok(); } !same });
+                s.gen += 1;
+                let gen = s.gen;
+                let next = s.next();
+                s.seen.insert(id.clone(), next);
+                s.clients.push(Client { id, gen, s: c2 });
+                s.away = None;
+                s.trim();
+                Some(gen)
+            };
             drop(s);
             // the app's lines go to the agent's stdin; when the app goes, the agent keeps running
             for l in r.lines().map_while(Result::ok) {
                 if let Some(i) = &mut *in4.lock().unwrap() { if writeln!(i, "{l}").and_then(|_| i.flush()).is_err() { break; } }
             }
-            st4.lock().unwrap().gone(gen);
+            if let Some(gen) = gen { st4.lock().unwrap().gone(gen); }
         });
     }
 }
