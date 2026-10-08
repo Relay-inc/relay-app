@@ -13,6 +13,14 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Permissions in Settings › General**: whether Relay has Full Disk Access, the microphone and Accessibility, with a button to each pane of System Settings (also for System Audio Recording and Notifications, which macOS does not report). Full Disk Access stops the separate prompts for Documents, Photos, Music and so on. A build not signed by Apple loses these grants with every update, and this is where that shows
+
+### Changed
+
+- **Booking time reads every source of the Antenna timesheet skill**: the "Time <date>" conversation still starts from your Relay conversations, and the agent now adds the day's meetings (`relay calendar.meetings` takes a `date`), your Slack messages, your git commits, Claude Code sessions outside Relay (terminal, other repos), and what you edited in Google Drive, Jira, Notion and Figma, the same sources as weareantenna/antenna-tools' timesheet. It skips a source that isn't connected and says so, never counts a meeting twice, and ends with how much of an 8-hour day is still uncovered. A day without Relay conversations is no longer stopped right away
+
 ### Fixed
 
 - **A meeting recording that fails can be tried again**: Try again on the error transcribes the kept recording once more, after downloading the speech model say, and names the files by when the meeting started. Recording no longer starts without the meeting's speech model, so you don't find out after the meeting. A missing model now says so instead of "model", the audio only lands in the vault once the transcript worked (a retry gives no second copy), and a long error wraps so its close button stays in view
