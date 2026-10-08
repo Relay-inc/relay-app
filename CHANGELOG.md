@@ -23,6 +23,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **A meeting recording that fails can be tried again**: Try again on the error transcribes the kept recording once more, after downloading the speech model say, and names the files by when the meeting started. Recording no longer starts without the meeting's speech model, so you don't find out after the meeting. A missing model now says so instead of "model", the audio only lands in the vault once the transcript worked (a retry gives no second copy), and a long error wraps so its close button stays in view
 - **Changes shows only what the conversation wrote**: in a checkout the conversation did not make (the vault, a shared repo) the drawer lists only the files its tools edited, no longer every uncommitted change in it. A worktree it made still shows everything. Files it changed only through shell commands don't show in a shared checkout
 - **A large paste no longer takes over the conversation**: the composer stops growing at 40% of the window and scrolls inside, so the messages and the send button stay in view
 - **Banners no longer eat memory**: the process behind each unclicked banner grew by a few MB a minute (up to ~5 GB) and stayed alive after Relay quit, 46 of them held ~129 GB. The click wait in mac-notification-sys leaked a copy of the delivered banners 10 times a second; Relay now builds a patched copy (`src-tauri/vendor/mac-notification-sys`) and a banner stays at ~9 MB. A banner's process also exits once Relay quits

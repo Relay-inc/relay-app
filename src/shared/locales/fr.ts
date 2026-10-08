@@ -1201,6 +1201,8 @@ export default {
   "rec.failed": "L'enregistrement n'a pas pu être écrit : {error}",
   "rec.noModel":
     "Le modèle vocal pour les réunions n'est pas encore téléchargé. Téléchargez-le dans Réglages › Voix ; l'enregistrement est gardé.",
+  "rec.noModelStart": "Téléchargez d'abord le modèle vocal pour les réunions dans Réglages › Voix, puis enregistrez.",
+  "rec.retry": "Réessayer",
   "voice.mode": "Enregistrement",
   "voice.mode.both": "Maintenir ou toucher",
   "voice.mode.hold": "Maintenir",

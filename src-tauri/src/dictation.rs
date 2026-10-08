@@ -110,6 +110,11 @@ pub(crate) fn with_meeting_model<T>(app: &AppHandle, f: impl FnOnce(&mut dyn Spe
     with_model(&app.state::<Dictation>().loaded, m, &dir, |model| f(model, &options))
 }
 
+/// Err("model") when the model a meeting uses is not downloaded, so no recording starts that cannot be transcribed.
+pub(crate) fn meeting_model_ready(app: &AppHandle) -> Result<(), String> {
+    if installed(&models_dir(app)?.join(picked(app, true)?.0.id)) { Ok(()) } else { Err("model".into()) }
+}
+
 #[derive(Serialize)]
 pub struct ModelInfo { id: &'static str, mb: u32, langs: &'static [&'static str], auto: bool, installed: bool, downloading: bool }
 

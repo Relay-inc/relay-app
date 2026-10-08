@@ -1196,6 +1196,8 @@ export default {
   "rec.failed": "Die Aufnahme konnte nicht geschrieben werden: {error}",
   "rec.noModel":
     "Das Sprachmodell für Meetings ist noch nicht geladen. Lade es in Einstellungen › Sprache; die Aufnahme bleibt erhalten.",
+  "rec.noModelStart": "Lade zuerst das Sprachmodell für Meetings in Einstellungen › Sprache, dann kannst du aufnehmen.",
+  "rec.retry": "Erneut versuchen",
   "voice.mode": "Aufnahme",
   "voice.mode.both": "Halten oder tippen",
   "voice.mode.hold": "Halten",

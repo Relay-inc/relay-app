@@ -1184,6 +1184,8 @@ const en = {
   "rec.failed": "The recording could not be written: {error}",
   "rec.noModel":
     "The speech model for meetings is not downloaded yet. Download it in Settings › Voice; the recording is kept.",
+  "rec.noModelStart": "Download the speech model for meetings in Settings › Voice before you record.",
+  "rec.retry": "Try again",
   "voice.mode": "Recording",
   "voice.mode.both": "Hold or tap",
   "voice.mode.hold": "Hold",

@@ -370,6 +370,12 @@ export const meetingRecordStop = (title: string, me: string, others: string, onP
   channel.onmessage = onProgress;
   return invoke<Recording>("meeting_record_stop", { title, me, others, onProgress: channel });
 };
+/** Writes out the newest recording a failed stop kept, as `meetingRecordStop`. */
+export const meetingRecordRetry = (title: string, me: string, others: string, onProgress: (done: number) => void) => {
+  const channel = new Channel<number>();
+  channel.onmessage = onProgress;
+  return invoke<Recording>("meeting_record_retry", { title, me, others, onProgress: channel });
+};
 export const meetingRecordCancel = () => invoke("meeting_record_cancel");
 
 // ---------- events from the backend
