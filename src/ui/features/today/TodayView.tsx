@@ -88,7 +88,7 @@ export function TodayView({ className = "" }: { className?: string }) {
       else if (key === "ArrowUp" || key === "k") step(-1);
       else if (!entry || !actions) return;
       else if (key === "l") putOff(entry.id);
-      else if (key === "s") setPop("snooze");
+      else if (key === "s" && entry.subject.type !== "meeting") setPop("snooze");
       else if (key === "e" && actions.done) actions.done.run();
       else if (key === "p" && entry.kind !== "ask")
         setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
