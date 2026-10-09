@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.19] - 2026-10-09
+
 ### Added
 
 - **Add phone, per machine in Settings › Machines**: a QR code and a line that pair a phone with the machine as a device of this Mac. The phone sees this Mac's conversations and cards there, and can open the mirror with the key in the line while this Mac is closed. It may only work with conversations (no mirror files, no updates of the server, no further devices), and forgetting this Mac on the machine (`relay-server revoke`) unpairs its phones too. The phone app itself is not released yet (`mobile/`, a first Tauri build for Android and iOS) (#161)
@@ -26,7 +28,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **Reviewing your own PRs**: Review together on your own PRs opened "This pull request no longer waits on you". The review now finds its PRs in the PR list when Today does not queue them (your own PRs with green checks)
+- **Reviewing your own PRs**: Review together on your own PRs opened "This pull request no longer waits on you". The review now finds its PRs in the PR list when Today does not queue them (your own PRs with green checks) (#171)
 
 ## [0.0.18] - 2026-10-09
 
@@ -388,7 +390,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.18...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...HEAD
+[0.0.19]: https://github.com/Relay-inc/relay-app/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/Relay-inc/relay-app/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/Relay-inc/relay-app/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/Relay-inc/relay-app/compare/v0.0.15...v0.0.16
