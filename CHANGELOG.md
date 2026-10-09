@@ -16,15 +16,17 @@ a PR. Versions follow
 ### Changed
 
 - **Pairing a phone starts with the camera**: Scan the code is the main button on the phone, pasting the line sits behind Paste the line instead. While it connects the button shows a spinner, and a failed pairing says why (#174)
-- **Add phone keeps its code fresh**: a pairing works for 10 minutes, so the QR code and line in Settings › Machines are replaced by new ones every 9 minutes while they show
- (#174)
+- **Add phone keeps its code fresh**: a pairing works for 10 minutes, so the QR code and line in Settings › Machines are replaced by new ones every 9 minutes while they show (#174)
+ 
 ### Fixed
 
 - **Scanning the pairing code crashed the Android app**: the release build stripped what the barcode scanner needs to start (#174)
 - **The phone could not reach a machine on Android 17**: the app now asks for access to devices on the local network (Android shows it as nearby devices); without it every connection timed out (#174)
 - **The phone app froze while it talked to the machine**: those requests no longer run on the app's main thread (#174)
-- **The phone app has Relay's icon** instead of Tauri's
- (#174)
+- **The phone app has Relay's icon** instead of Tauri's (#174)
+- **Conversations the phone starts show on this Mac too**: Relay looks for them on each machine every 5 seconds and adds them to the list, with their history and live replies, and you can carry on in them from here. While this Mac follows one, the phone gets no notification for it (#175)
+- **A Mac that runs conversations for other devices no longer shows them as open in the terminal**: those belong to the other device (its laptop or phone) and stay hidden on the machine itself (#175)
+ 
 ## [0.0.19] - 2026-10-09
 
 ### Added

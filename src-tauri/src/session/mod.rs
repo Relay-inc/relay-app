@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
 use std::path::PathBuf;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 /// The messages a process has not answered yet. `running`: sent and not answered, also in the broker's file so a
 /// restart takes them from there; at quit only an agent with a turn running stays. `picked`: the messages Claude
@@ -277,17 +277,36 @@ fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32
     false
 }
 
-/// After a restart, a work machine's conversations: the ones whose broker still runs there are the app's again.
-/// Off the setup thread, a machine that does not answer only delays its own conversations.
+/// After a restart, and every few seconds after that, a work machine's conversations: the ones whose broker runs
+/// there are the app's (again). One this Mac did not start (its phone did, on the same machine) is adopted: bound to
+/// that machine in its mirrored vault, its session recorded, and listed (`remote-chat`), so its history and replies
+/// go there like any of this Mac's. Off the setup thread, a machine that does not answer only delays its own.
 pub(crate) fn reattach_remote(app: &AppHandle) {
     let st = app.state::<App>();
     let list = st.settings.lock().unwrap()["machines"].as_array().cloned().unwrap_or_default();
     for m in list {
+        let id = m["id"].as_str().unwrap_or("").to_string();
         let c = st.machines.client(&m);
-        let Ok(metas) = c.list() else { continue };
-        for meta in metas.into_iter().filter(|x| st.machines.bind_of(&x.key).is_some_and(|b| m["id"] == b.machine.as_str())) {
-            let (Ok(p), Ok(Some(conn))) = (agents::get(&meta.provider), c.attach(&meta.key)) else { continue };
+        let Ok((metas, sids, titles)) = c.list_named() else { continue };
+        for meta in metas {
             if st.procs.lock().unwrap().contains_key(&meta.key) { continue; }
+            match st.machines.bind_of(&meta.key) {
+                Some(b) if b.machine == id => {}
+                Some(_) => continue,
+                // a conversation of this Mac with the same key: not the phone's
+                None if st.sids.lock().unwrap().contains_key(&meta.key) => continue,
+                None => {
+                    // the session id comes with its first turn: without one yet, the next round
+                    let (Some(sid), Ok(info)) = (sids.get(&meta.key), st.machines.info(&m)) else { continue };
+                    st.machines.set_bind(&meta.key, machines::Bind { machine: id.clone(), cwd: machines::cwd_or_vault(String::new(), &info) });
+                    let mut all = st.sids.lock().unwrap();
+                    all.insert(meta.key.clone(), agents::Sess { provider: meta.provider.clone(), sid: sid.clone(), account: String::new() });
+                    crate::save_sids(app, &all);
+                    drop(all);
+                    app.emit("remote-chat", json!({"key": meta.key, "title": titles.get(&meta.key), "provider": meta.provider})).ok();
+                }
+            }
+            let (Ok(p), Ok(Some(conn))) = (agents::get(&meta.provider), c.attach(&meta.key)) else { continue };
             let broker::Conn { agent, stdin, frames, backlog } = conn;
             let pid = agent.id();
             let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: Turns::new(1), account: String::new(), remote: true };
