@@ -40,6 +40,7 @@ import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
+import { onPipelineWorker, runPipelines } from "./pipeline/runner";
 import { loadRetries, onRetryEvent } from "./conversations/retry";
 
 // The main window's start: listeners first, then settings, language and vault, then the conversations from earlier
@@ -108,7 +109,10 @@ function listenToBackend() {
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
   backend.onMenu(onMenu);
-  backend.onOrch(onOrchEvent);
+  backend.onOrch(event => {
+    onOrchEvent(event);
+    if (event.type === "worker") onPipelineWorker(event.worker);
+  });
   backend.onRetry(onRetryEvent);
   backend.onDictatedChat(chatFromDictation);
   listenToPill(); // the sidebar shows dictation from any app too
@@ -251,4 +255,6 @@ function startPolls() {
   setInterval(loadTodayCards, 5 * 60000); // the user's cards under Today
   setInterval(loadTodayTime, 5 * 60000); // the day's time to book
   setInterval(tick, 30000);
+  runPipelines(); // the board pipelines: ended runs on the board, PRs in review, new tickets
+  setInterval(runPipelines, 5 * 60000);
 }

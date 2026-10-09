@@ -1,5 +1,7 @@
 import type { BoardProvider, CardDetail } from "../../../domain/board/types";
-import { cardsIn, filtered, type Board } from "../../../domain/board/rules";
+import { cardsIn, filtered, refOf, type Board } from "../../../domain/board/rules";
+import { buildTicket, pipelineOfBoard, ticketBuildState } from "../../../application/pipeline/runner";
+import { useDerived } from "../../hooks/useDerived";
 import { openBoardCard, ticketChat } from "../../../application/board/board";
 import { cardAct, cardOf, closeTicket } from "../../../application/navigation/panel";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -41,6 +43,10 @@ export function BoardTicket({
   const actErr = useNavigationStore(s => s.panel.actErr);
   const acting = useNavigationStore(s => s.panel.acting);
   const open = modal ? cardOf(modal) : undefined;
+  // the board's pipeline, when one runs on it: the sidebar's Build with agent
+  const ref = refOf(provider, board);
+  const piped = useDerived(() => !!pipelineOfBoard(ref));
+  const buildState = useDerived(() => (open ? ticketBuildState(open.id) : "build"));
   if (!open || open.provider.id !== provider.id) return null;
   const view = viewOf(open.detail, data, lang);
 
@@ -117,7 +123,17 @@ export function BoardTicket({
             onComment={(text, mentions) => cardAct(modal, "comment", { value: text, files: [], mentions })}
           />
         </div>
-        <TicketSidebar view={view} projectName={projectName} onAct={act} onChat={startChat} />
+        <TicketSidebar
+          view={view}
+          projectName={projectName}
+          onAct={act}
+          onChat={startChat}
+          build={
+            piped
+              ? { state: buildState, onBuild: () => buildTicket(ref, { id: open.id, title: view.title, number }) }
+              : undefined
+          }
+        />
       </div>
     );
   };

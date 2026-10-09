@@ -330,6 +330,14 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Amount excl. VAT");
   },
+  // the ticket window of a board with a hand-picked pipeline: Build with agent under Start conversation
+  "ticket-build": async () => {
+    await open(page, server.url, { fixture: "pipeline-manual" });
+    await click("Productive");
+    await waitText(markers.card);
+    await click(markers.card);
+    await waitText("Build with agent");
+  },
   "board-list": async () => {
     await VIEWS.board();
     await button("List").click();
@@ -474,6 +482,11 @@ const VIEWS = {
     await click("From Relay");
     await click("Details");
   },
+  // a board pipeline's worker on the board: its ticket and the PR Relay opened
+  "orchestrator-pipeline": async () => {
+    await VIEWS.orchestrator();
+    await intoView("Export invoices as CSV");
+  },
   "orchestrator-live": async () => {
     await VIEWS.orchestrator();
     await page.evaluate(() => window.__harness.orchLive());
@@ -522,6 +535,24 @@ const VIEWS = {
     await settingsPage("Agents", undefined, "accounts");
     await unfold("Claude Code");
     await intoView("Switch accounts automatically");
+  },
+  // the board pipeline of a project with a linked board, folded open in Settings › Projects
+  "settings-pipeline": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Agents at once");
+  },
+  // the same, its top: the per-project switch, the checkout and the branch
+  "settings-pipeline-top": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Board pipeline");
+  },
+  // the same: the validation before a PR (checks, review, rounds)
+  "settings-pipeline-validation": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Rounds");
   },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
