@@ -26,6 +26,7 @@ import type {
   MirrorStatus,
   ServerSetup,
   HostStatus,
+  PhonePairing,
   MailAcct,
   Settings,
 } from "../domain/settings/types";
@@ -195,6 +196,8 @@ export const machinesList = () => invoke<MachineChoice[]>("machines_list");
 /** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */
 export const machinePair = (line: string, name: string) => invoke<Machine>("machine_pair", { line, name });
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
+/** A one-time pairing for a phone of this Mac on a machine, valid 10 minutes: the line (with the mirror's key) and a QR (SVG). */
+export const machinePairPhone = (id: string) => invoke<PhonePairing>("machine_pair_phone", { id });
 /** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
 export const serverSetup = () => invoke<ServerSetup>("server_setup");
 /** This Mac as a work machine: whether its LaunchAgent and server run. */

@@ -17,16 +17,23 @@ await page.addInitScript(PAGE_HELPERS);
 
 // the fixture's keys and titles, from the mock itself
 await open(page, server.url);
-const { keys, titles, markers } = await page.evaluate(() => ({ keys: window.__harness.keys, titles: window.__harness.titles, markers: window.__harness.markers }));
+const { keys, titles, markers } = await page.evaluate(() => ({
+  keys: window.__harness.keys,
+  titles: window.__harness.titles,
+  markers: window.__harness.markers,
+}));
 
 const waitText = (text, timeout = 10000) =>
-  page.waitForFunction(t => window.__dom.hasText(t), text, { timeout }).catch(() => {
-    throw new Error(`text not shown: "${text}"`);
-  });
-const scrollMain = to => page.evaluate(to => {
-  const el = window.__dom.mainScroller();
-  if (el) el.scrollTop = to === "top" ? 0 : el.scrollHeight;
-}, to);
+  page
+    .waitForFunction(t => window.__dom.hasText(t), text, { timeout })
+    .catch(() => {
+      throw new Error(`text not shown: "${text}"`);
+    });
+const scrollMain = to =>
+  page.evaluate(to => {
+    const el = window.__dom.mainScroller();
+    if (el) el.scrollTop = to === "top" ? 0 : el.scrollHeight;
+  }, to);
 const click = async text => {
   await byText(page, text).click();
   await settle(page);
@@ -38,7 +45,11 @@ const intoView = async text => {
 };
 /** a folded row of a settings list (an agent, an integration), opened by its name */
 const unfold = async name => {
-  await page.getByRole("button", { name: new RegExp(`^${name}\\b`), expanded: false }).locator("visible=true").first().click();
+  await page
+    .getByRole("button", { name: new RegExp(`^${name}\\b`), expanded: false })
+    .locator("visible=true")
+    .first()
+    .click();
   await settle(page);
 };
 const settingsPage = async (tab, sub, fixture = "default") => {
@@ -49,6 +60,47 @@ const settingsPage = async (tab, sub, fixture = "default") => {
 };
 
 const VIEWS = {
+  // the phone (mobile.html) at an iPhone's width: the conversation list, and one with a permission card
+  "phone-list": async () => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, server.url, { path: "/mobile.html" });
+    await waitText("Claude waits on you"); // the card on top, with the first pending poll
+  },
+  "phone-new": async () => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, server.url, { path: "/mobile.html" });
+    await click("New conversation");
+    await page.locator("textarea").fill("Check why the export skips archived orders");
+  },
+  "phone-list-dark": async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await open(page, server.url, { path: "/mobile.html" });
+    await waitText("Claude waits on you");
+  },
+  "phone-conversation-dark": async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ colorScheme: "dark" });
+    await open(page, server.url, { path: "/mobile.html" });
+    await page.locator("button:has(span.font-semibold)").nth(1).click(); // the row that needs you
+    await waitText("Always allow");
+  },
+  "phone-conversation": async () => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, server.url, { path: "/mobile.html" });
+    await page.locator("button:has(span.font-semibold)").nth(1).click(); // the row that needs you
+    await waitText("Always allow"); // the card, with the next pending poll
+  },
+  // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
+  "settings-machines-phone": async () => {
+    await settingsPage("Machines", null, "phone");
+    await click("Add phone");
+    await waitText("Scan this with Relay on your phone");
+    await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
+  },
   waiting: async () => {
     await open(page, server.url);
     await waitText(titles.permission);
@@ -118,7 +170,11 @@ const VIEWS = {
     await page.evaluate(key => {
       const h = window.__harness;
       h.emitAgent(key, { type: "thinking", text: "The user asks for the open invoices. ", delta: false });
-      h.emitAgent(key, { type: "thinking", text: "I should read the ledger first, then group by client.", delta: true });
+      h.emitAgent(key, {
+        type: "thinking",
+        text: "I should read the ledger first, then group by client.",
+        delta: true,
+      });
       h.emitAgent(key, { type: "text", text: "Three invoices are still open", delta: false });
       h.emitAgent(key, { type: "text", text: ": Northwind (", delta: true });
     }, keys.switchTo);
@@ -158,7 +214,13 @@ const VIEWS = {
   "composer-files": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
-    await page.evaluate(() => window.__harness.dropPaths(["/Users/demo/Pictures/site photo.png", "/Users/demo/Downloads/Q3 report.pdf", "/Users/demo/Downloads/Budget 2027.xlsx"]));
+    await page.evaluate(() =>
+      window.__harness.dropPaths([
+        "/Users/demo/Pictures/site photo.png",
+        "/Users/demo/Downloads/Q3 report.pdf",
+        "/Users/demo/Downloads/Budget 2027.xlsx",
+      ]),
+    );
     await page.evaluate(() => window.__harness.emit("tauri://drag-leave", null));
     await settle(page, 300);
   },
@@ -192,7 +254,10 @@ const VIEWS = {
     await waitText(markers.switchEnd);
     await page.evaluate(() => {
       window.__harness.autoReply = false;
-      return window.__harness.dropPaths(["/Users/demo/Downloads/Q3 report.pdf", "/Users/demo/Downloads/Budget 2027.xlsx"]);
+      return window.__harness.dropPaths([
+        "/Users/demo/Downloads/Q3 report.pdf",
+        "/Users/demo/Downloads/Budget 2027.xlsx",
+      ]);
     });
     await page.locator("textarea").locator("visible=true").last().click();
     await page.keyboard.type("Compare these with the plan");
@@ -221,7 +286,11 @@ const VIEWS = {
     await waitText(markers.switchEnd);
     await page.evaluate(key => window.__harness.resolved(key), keys.switchTo);
     // the label is the picker's selected option (a native select)
-    await page.waitForFunction(() => window.__dom.all("select").some(s => s.selectedOptions[0]?.textContent.includes("Opus (default)")), null, { timeout: 5000 });
+    await page.waitForFunction(
+      () => window.__dom.all("select").some(s => s.selectedOptions[0]?.textContent.includes("Opus (default)")),
+      null,
+      { timeout: 5000 },
+    );
   },
   "conversation-question": async () => {
     await open(page, server.url, { sel: keys.question });
@@ -356,14 +425,26 @@ const VIEWS = {
     await button("List").click();
     await settle(page);
   },
-  ...Object.fromEntries([["filters", "Filters"], ["presets", "Presets"], ["group", "Task lists"]].map(([name, label]) => [`board-${name}`, async () => {
-    await VIEWS.board();
-    await button(label).click();
-    await settle(page);
-  }])),
+  ...Object.fromEntries(
+    [
+      ["filters", "Filters"],
+      ["presets", "Presets"],
+      ["group", "Task lists"],
+    ].map(([name, label]) => [
+      `board-${name}`,
+      async () => {
+        await VIEWS.board();
+        await button(label).click();
+        await settle(page);
+      },
+    ]),
+  ),
   "ticket-activity": async () => {
     await VIEWS["card-detail"]();
-    await page.getByPlaceholder(/^(Leave a comment|Comment…)/).first().scrollIntoViewIfNeeded();
+    await page
+      .getByPlaceholder(/^(Leave a comment|Comment…)/)
+      .first()
+      .scrollIntoViewIfNeeded();
     await settle(page);
   },
   reminders: async () => {
@@ -390,21 +471,30 @@ const VIEWS = {
   },
   usage: async () => {
     await open(page, server.url);
-    await page.getByRole("button", { name: /^(Usage|Claude Code)/ }).first().click();
+    await page
+      .getByRole("button", { name: /^(Usage|Claude Code)/ })
+      .first()
+      .click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
   // the usage redesign: Claude Code's Details folded open, per model and per conversation (#105)
   "usage-details": async () => {
     await VIEWS.usage();
-    await page.getByRole("button", { name: /^Details/ }).first().click();
+    await page
+      .getByRole("button", { name: /^Details/ })
+      .first()
+      .click();
     await waitText("By model");
     await settle(page);
   },
   // the usage redesign in dark mode (#105)
   "dark-usage": async () => {
     await open(page, server.url, { fixture: "dark" });
-    await page.getByRole("button", { name: /^(Usage|Claude Code)/ }).first().click();
+    await page
+      .getByRole("button", { name: /^(Usage|Claude Code)/ })
+      .first()
+      .click();
     await waitText("All of Claude Code", 10000);
     await settle(page);
   },
@@ -444,7 +534,12 @@ const VIEWS = {
   "sidebar-menu": async () => {
     await open(page, server.url);
     await click("GENERAL"); // folded, so the project sits high enough for its whole menu
-    await page.getByRole("navigation").first().getByText("Northwind Portal", { exact: true }).first().click({ button: "right" });
+    await page
+      .getByRole("navigation")
+      .first()
+      .getByText("Northwind Portal", { exact: true })
+      .first()
+      .click({ button: "right" });
     await settle(page);
   },
   "closed-toast": async () => {
@@ -472,7 +567,10 @@ const VIEWS = {
     await VIEWS["project-tools"]();
     await page.getByRole("button", { name: "Notes", exact: true, pressed: false }).click();
     await click("+ New note");
-    await page.getByRole("textbox").last().fill("Ask Mara about the VAT column\n- export: viewers see no button\n- check the staging seed");
+    await page
+      .getByRole("textbox")
+      .last()
+      .fill("Ask Mara about the VAT column\n- export: viewers see no button\n- check the staging seed");
   },
   "tool-board": async () => {
     await VIEWS["project-tools"]();
@@ -510,7 +608,12 @@ const VIEWS = {
     await open(page, server.url, { fixture: "orch", sel: keys.orchWorker });
     await waitText("From Relay");
   },
-  ...Object.fromEntries(["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [`settings-${tab.toLowerCase()}`, () => settingsPage(tab)])),
+  ...Object.fromEntries(
+    ["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [
+      `settings-${tab.toLowerCase()}`,
+      () => settingsPage(tab),
+    ]),
+  ),
   // the speech models, Whisper among them
   "settings-voice-models": async () => {
     await settingsPage("Voice");
@@ -535,7 +638,12 @@ const VIEWS = {
     await scrollMain("bottom");
     await settle(page);
   },
-  ...Object.fromEntries(["Productive", "GitHub", "Mail"].map(name => [`settings-integration-${name.toLowerCase()}`, () => settingsPage("Integrations", name)])),
+  ...Object.fromEntries(
+    ["Productive", "GitHub", "Mail"].map(name => [
+      `settings-integration-${name.toLowerCase()}`,
+      () => settingsPage("Integrations", name),
+    ]),
+  ),
   "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
   // Claude Code's row folded open: no extra accounts yet, then two with the work one active
@@ -748,7 +856,9 @@ for (const [name, go] of Object.entries(VIEWS)) {
 }
 const unmocked = [...unmockedAll];
 if (unmocked.length) console.log(`unmocked commands: ${unmocked.join(", ")}`);
-console.log(`${Object.keys(VIEWS).length - failed.length} views in ${dir}${failed.length ? `, failed: ${failed.join(", ")}` : ""}`);
+console.log(
+  `${Object.keys(VIEWS).length - failed.length} views in ${dir}${failed.length ? `, failed: ${failed.join(", ")}` : ""}`,
+);
 await browser.close();
 await server.close();
 process.exit(failed.length ? 1 : 0);

@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|orch|brain, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch|brain, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -144,13 +144,21 @@ function handle(cmd: string, a: Args): unknown {
     case "plugin:deep-link|get_current":
       return query.get("link") ? [query.get("link")] : null;
 
-    // work machines (fixture "machines": one that speaks an older protocol)
+    // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
     case "machine_status":
+      if (fixture === "phone") return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       return {
         ok: false,
         outdated: "server",
         version: "0.1.0",
         error: "relay-server 0.1.0 speaks protocol 1, this Relay 2",
+      };
+    // a pairing for a phone: the line and a QR, here a stand-in square pattern
+    case "machine_pair_phone":
+      return {
+        line: `relay://192.168.1.2:47800#fp=${"0f9534960dd3570a".padEnd(64, "0")}&code=${"c".repeat(32)}&key=${"k".repeat(64)}`,
+        ntfy: "https://ntfy.sh/relay-0123456789abcdef0123456789abcdef",
+        qr: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path d="M0 0h7v7H0zM14 0h7v7h-7zM0 14h7v7H0zM9 9h3v3H9zM15 15h2v2h-2z" fill="#000"/></svg>`,
       };
     case "server_setup":
       return { version: "0.0.4", image: "ghcr.io/relay-inc/relay-server" };
@@ -275,6 +283,20 @@ function handle(cmd: string, a: Args): unknown {
       return terminalAgents();
     case "running":
       return {}; // conversation key -> turns running, for the processes the app started
+    // the phone (mobile.html): the paired machine, the laptop's conversations there, following one
+    case "info":
+      return { host: "server", version: "0.0.15", mirror_open: true };
+    case "conversations":
+      return [conv.PERMISSION_KEY, conv.LONG_KEY].map(key => ({
+        key,
+        title: conv.conversations.find(c => c.key === key)?.title ?? null,
+        provider: "claude",
+        model: "sonnet",
+        effort: "",
+        sid: conv.sidOf(key),
+      }));
+    case "open":
+      return null;
     case "conversation_changes":
       return a.key === conv.LONG_KEY ? changes : [];
     case "drop_worktrees":

@@ -25,7 +25,8 @@ use std::io::{self, BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use std::{fs, thread};
 
@@ -58,34 +59,45 @@ pub fn identity(data: &Path) -> io::Result<Identity> { Identity::load_or_create(
 
 // ---------- clients and pairing
 
+/// A paired device. `parent`: a linked device (a phone), paired through the device it belongs to; it shares that
+/// device's conversations, cards and mirror, may only work with conversations (LINKED_OPS), and goes when that one does.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
-pub struct Client { pub name: String, pub fp: String, pub added: u64 }
+pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(default, skip_serializing_if = "Option::is_none")] pub parent: Option<String> }
+
+/// What a linked device may ask: its conversations and their cards, and opening the mirror with the key it was given.
+/// Not the mirror's files, moving sessions, updating the server or pairing further devices.
+const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach", "start"];
 
 pub fn clients(data: &Path) -> Vec<Client> {
     fs::read_to_string(data.join("clients.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 fn save_clients(data: &Path, c: &[Client]) -> io::Result<()> { write_private(&data.join("clients.json"), &serde_json::to_string_pretty(c).unwrap()) }
-/// Remove the clients whose name is `who`, or whose fingerprint starts with it (at least 8 characters). Returns them.
+/// Remove the clients whose name is `who`, or whose fingerprint starts with it (at least 8 characters), and the devices
+/// linked to them. Returns them.
 pub fn revoke(data: &Path, who: &str) -> io::Result<Vec<Client>> {
     let who = who.trim();
-    let hit = |c: &Client| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()));
-    let (gone, keep): (Vec<Client>, Vec<Client>) = clients(data).into_iter().partition(hit);
+    let all = clients(data);
+    let hit: Vec<String> = all.iter().filter(|c| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()))).map(|c| c.fp.clone()).collect();
+    let (gone, keep): (Vec<Client>, Vec<Client>) = all.into_iter().partition(|c| hit.contains(&c.fp) || c.parent.as_ref().is_some_and(|p| hit.contains(p)));
     if !gone.is_empty() { save_clients(data, &keep)?; }
-    // a revoked device's mirror goes too; a running server also drops its key and working copy (see Server::run)
-    for c in &gone { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
+    // a revoked device's mirror goes too (a linked one has none of its own); a running server also drops its key and
+    // working copy (see Server::run)
+    for c in gone.iter().filter(|c| c.parent.is_none()) { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
     Ok(gone)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
-struct Pairing { secret: String, expires: u64, #[serde(default)] fails: u32 }
+struct Pairing { secret: String, expires: u64, #[serde(default)] fails: u32, #[serde(default)] parent: Option<String> }
 fn pairing(data: &Path) -> Option<Pairing> {
     let p: Pairing = serde_json::from_str(&fs::read_to_string(data.join("pairing.json")).ok()?).ok()?;
     (p.expires > now() && p.fails < PAIR_TRIES).then_some(p)
 }
 /// Open a pairing: a fresh code, PAIR_SECS long, replacing any earlier one. Returns the code.
-pub fn open_pairing(data: &Path) -> io::Result<String> {
+pub fn open_pairing(data: &Path) -> io::Result<String> { open_pairing_for(data, None) }
+/// The same, for a device linked to `parent` (pair_device): the device that pairs with it gets that parent.
+fn open_pairing_for(data: &Path, parent: Option<&str>) -> io::Result<String> {
     let secret = tls::random_secret();
-    write_private(&data.join("pairing.json"), &json!({"secret": secret, "expires": now() + PAIR_SECS}).to_string())?;
+    write_private(&data.join("pairing.json"), &json!({"secret": secret, "expires": now() + PAIR_SECS, "parent": parent}).to_string())?;
     Ok(secret)
 }
 
@@ -128,14 +140,21 @@ pub fn info(data: &Path, path: &str) -> Info {
 
 // ---------- serving
 
-pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror> }
+/// `attached`: per conversation, how many devices follow it now (no notification then); `watching`: the conversations
+/// the server follows itself; `sids`: the Claude session of each, for a device that joins after it started (a phone).
+pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>,
+    attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>>,
+    titles: Mutex<HashMap<String, String>> }
 
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
         fs::create_dir_all(data.join("pending"))?;
         fs::remove_file(data.join("perm_server.py")).ok(); // the Python tool of before
         let id = identity(data)?;
-        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data) })
+        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data),
+            attached: Mutex::default(), watching: Mutex::default(),
+            sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()),
+            titles: Mutex::default() })
     }
     pub fn fingerprint(&self) -> &str { &self.fp }
 
@@ -151,6 +170,8 @@ impl Server {
             let known: Vec<String> = clients(&m2.data).iter().map(|c| c.fp[..16].to_string()).collect();
             m2.mirror.drop_unknown(&known);
         });
+        let m3 = me.clone();
+        thread::spawn(move || loop { m3.watch_all(); thread::sleep(Duration::from_secs(2)); });
         for tcp in listener.incoming() {
             let Ok(tcp) = tcp else { continue };
             let me = me.clone();
@@ -159,7 +180,7 @@ impl Server {
         Ok(())
     }
 
-    fn conn(&self, tcp: TcpStream) -> io::Result<()> {
+    fn conn(self: &Arc<Self>, tcp: TcpStream) -> io::Result<()> {
         let peer = tcp.peer_addr().map(|a| a.to_string()).unwrap_or_default();
         // inside the handshake: a known device, or any device while a pairing code is open (it may then only pair)
         let data = self.data.clone();
@@ -168,14 +189,18 @@ impl Server {
         let (r, mut w) = duplex.split();
         let mut r = BufReader::new(r);
         let req = proto::read_json(&mut r, MAX_LINE)?;
-        let known = clients(&self.data).iter().any(|c| c.fp == fp);
+        let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
-        if !known && op != "pair" { return reply(&mut w, Err("not paired".into())); }
-        // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"
-        let ns = &fp[..16];
+        if me.is_none() && op != "pair" { return reply(&mut w, Err("not paired".into())); }
+        let parent = me.and_then(|c| c.parent);
+        if parent.is_some() && !LINKED_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a linked device"))); }
+        // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"; a linked
+        // device works in the one it belongs to
+        let ns = &parent.as_deref().unwrap_or(&fp)[..16];
         let key = |k: &Value| format!("{ns}:{}", k.as_str().unwrap_or(""));
         let pending = self.data.join("pending").join(ns);
         match op {
+            "pair_device" => reply(&mut w, open_pairing_for(&self.data, Some(&fp)).map(|code| json!({"code": code, "fp": self.fp})).map_err(|e| e.to_string())),
             "pair" => { let res = self.pair(&fp, &req); if res.is_ok() { eprintln!("relay-server: paired {} ({peer})", req["name"]); } reply(&mut w, res) }
             "info" => reply(&mut w, Ok(json!({"info": Info { pending: pending.to_string_lossy().into(), work: self.mirror.work_of(ns).to_string_lossy().into(),
                 mirror_open: self.mirror.is_open(ns), in_ram: self.mirror.in_ram, ..self.info.clone() }}))),
@@ -218,14 +243,29 @@ impl Server {
                 if ok { let data = self.data.clone(); thread::spawn(move || { thread::sleep(Duration::from_millis(300)); upgrade::restart(&data) }); }
                 Ok(())
             }
-            "list" => reply(&mut w, Ok(json!({"metas": metas(ns)}))),
+            "list" => {
+                let metas = metas(ns);
+                let sids = self.sids.lock().unwrap();
+                let of: serde_json::Map<String, Value> = metas.iter().filter_map(|m| sids.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
+                // a title kept in memory only: after a restart it comes from the session's transcript (once)
+                let mut titles = self.titles.lock().unwrap();
+                for m in &metas {
+                    let k = format!("{ns}:{}", m.key);
+                    if titles.contains_key(&k) { continue; }
+                    if let Some(t) = sids.get(&k).and_then(|sid| self.session_find(sid)).and_then(|p| transcript_title(&p)) { titles.insert(k, t); }
+                }
+                let named: serde_json::Map<String, Value> = metas.iter().filter_map(|m| titles.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
+                reply(&mut w, Ok(json!({"metas": metas, "sids": of, "titles": named})))
+            }
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
             "answer" => reply(&mut w, agent_core::pending::answer(&pending, req["id"].as_str().unwrap_or(""), &req["decision"]).map(|_| json!({}))),
             "history" => reply(&mut w, Ok(self.history(&req))),
             "exists" => reply(&mut w, Ok(json!({"dir": req["path"].as_str().is_some_and(|p| p.starts_with('/') && Path::new(p).is_dir())}))),
-            "launch" => { self.revoked_closes(&fp, &w); self.launch(ns, &req, r, w) }
-            "attach" => { self.revoked_closes(&fp, &w); attach(&key(&req["key"]), r, w) }
+            "launch" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["meta"]["key"])); self.launch(ns, &req, None, r, w) }
+            "profile_put" => reply(&mut w, write_private(&self.profile_path(ns), &req["profile"].to_string()).map(|_| json!({})).map_err(|e| e.to_string())),
+            "start" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); self.start(ns, &req, r, w) }
+            "attach" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); attach(&key(&req["key"]), r, w) }
             _ => reply(&mut w, Err(format!("unknown request {op:?}"))),
         }
     }
@@ -252,12 +292,14 @@ impl Server {
         }
         fs::remove_file(self.data.join("pairing.json")).ok();
         let mut list = clients(&self.data);
+        // the device that opened the pairing was revoked meanwhile: nothing to link to
+        if p.parent.as_ref().is_some_and(|pf| !list.iter().any(|c| &c.fp == pf)) { return Err("the device this pairing was for is no longer paired".into()); }
         list.retain(|c| c.fp != fp);
         // a second device with the same name gets a number, so revoke by name stays unambiguous
         let mut n = name.clone();
         let mut i = 2;
         while list.iter().any(|c| c.name == n) { n = format!("{name} {i}"); i += 1; }
-        list.push(Client { name: n.clone(), fp: fp.into(), added: now() });
+        list.push(Client { name: n.clone(), fp: fp.into(), added: now(), parent: p.parent });
         save_clients(&self.data, &list).map_err(|e| e.to_string())?;
         Ok(json!({"name": n}))
     }
@@ -266,7 +308,9 @@ impl Server {
         use agent_core::AgentProvider;
         let (sid, from, cwd) = (req["sid"].as_str().unwrap_or(""), req["from"].as_u64().unwrap_or(0), req["cwd"].as_str().unwrap_or(""));
         let pending = self.data.join("pending");
-        let env = agent_core::Env { home: &self.info.home, vault: cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &Value::Null };
+        // Claude files a session under the folder as it resolves it (/tmp is /private/tmp on a Mac)
+        let cwd = fs::canonicalize(cwd).map(|p| p.to_string_lossy().into_owned()).unwrap_or_else(|_| cwd.to_string());
+        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &Value::Null };
         let (items, next) = agent_claude::PROVIDER.history(&env, sid, from);
         json!({"items": items, "next": next})
     }
@@ -294,7 +338,84 @@ impl Server {
         Ok(json!({}))
     }
 
-    fn launch(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+    /// A device follows a conversation while this lives.
+    fn attach_guard(&self, key: &str) -> Attached<'_> {
+        *self.attached.lock().unwrap().entry(key.into()).or_default() += 1;
+        Attached { s: self, key: key.into() }
+    }
+    /// Follow every running conversation (watch), also the ones from before this process.
+    fn watch_all(self: &Arc<Self>) {
+        for m in fs::read_dir(broker::dir()).into_iter().flatten().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")).filter_map(|p| broker::load_meta(&p)) {
+            if m.key.contains(':') { self.watch_key(&m.key); }
+        }
+    }
+    /// Follow a conversation unless it is followed already: connected here, read on a thread of its own.
+    fn watch_key(self: &Arc<Self>, key: &str) {
+        if !self.watching.lock().unwrap().insert(key.into()) { return; }
+        let Some(c) = broker::follow(key, "notify") else { self.watching.lock().unwrap().remove(key); return };
+        let (me, key) = (self.clone(), key.to_string());
+        thread::spawn(move || { me.watch(&key, c); me.watching.lock().unwrap().remove(&key); });
+    }
+    /// Follow one conversation as `notify`: its Claude session (for `list`), and, when the device's laptop gave an ntfy
+    /// topic (in its profile), a permission card or a turn that ended while no device follows it goes there. Nothing of
+    /// the conversation goes along (ntfy.sh is a public server), only that something waits.
+    fn watch(&self, key: &str, c: broker::Conn) {
+        let _stdin = c.stdin;
+        let ns = key.split_once(':').map_or("", |x| x.0);
+        for l in c.frames.lines().map_while(Result::ok) {
+            let broker::Frame::Out(o) = broker::frame(&l) else { if l.starts_with('x') { break } else { continue } };
+            let Ok(ev) = serde_json::from_str::<Value>(&o) else { continue };
+            if let Some(sid) = ev["session_id"].as_str().filter(|s| agent_core::safe_id(s)) { self.set_sid(key, Some(sid)); }
+            // the first thing said in it names it in a phone's list
+            if !self.titles.lock().unwrap().contains_key(key) {
+                if let Some(t) = title_of(&ev) { self.titles.lock().unwrap().insert(key.into(), t); }
+            }
+            let what = if ev["type"] == "control_request" && ev["request"]["subtype"] == "can_use_tool" { "Claude is waiting for your answer" }
+                else if ev["type"] == "result" { "Claude finished" } else { continue };
+            if self.attached.lock().unwrap().get(key).copied().unwrap_or(0) > 0 { continue; }
+            let url = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).and_then(|p| p["notify"].as_str().map(String::from));
+            // tapped on the phone: relay://conversation/<key>, the key without the device's namespace (no content)
+            let click = format!("relay://conversation/{}", percent(key.split_once(':').map_or(key, |x| x.1)));
+            if let Some(url) = url.filter(|u| u.starts_with("https://") || u.starts_with("http://")) { notify(&url, &format!("{what} on {}", self.info.host), &click); }
+        }
+        self.set_sid(key, None);
+        self.titles.lock().unwrap().remove(key);
+    }
+    /// A conversation's session, kept in sids.json too: after a restart its broker still runs, the line is long gone.
+    fn set_sid(&self, key: &str, sid: Option<&str>) {
+        let mut sids = self.sids.lock().unwrap();
+        let changed = match sid { Some(s) => sids.insert(key.into(), s.into()).as_deref() != Some(s), None => sids.remove(key).is_some() };
+        if changed { write_private(&self.data.join("sids.json"), &serde_json::to_string(&*sids).unwrap()).ok(); }
+    }
+
+    /// What the laptop sends about how it starts Claude here (profile_put): its Claude settings and the mirror's flags.
+    fn profile_path(&self, ns: &str) -> PathBuf { self.data.join("profiles").join(format!("{ns}.json")) }
+
+    /// Start a Claude conversation in the device's mirrored vault without the laptop (a phone): the command is built
+    /// here with the provider's own code, the way the laptop builds it, from the laptop's last profile. `resume` goes on
+    /// with a session. No mail tools: those are answered by the laptop.
+    fn start(self: &Arc<Self>, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+        use agent_core::AgentProvider;
+        let Some(profile) = fs::read_to_string(self.profile_path(ns)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()) else {
+            return bang(&mut w, "no way to start Claude here yet: open Relay on the laptop once while this machine is online");
+        };
+        let s = |k: &str| req[k].as_str().unwrap_or("");
+        let cwd = self.mirror.work_of(ns).join("vault").to_string_lossy().into_owned();
+        let pending = self.data.join("pending").join(ns);
+        let mut opts = profile["opts"].clone();
+        if opts.is_object() { opts["mail"] = json!(false); }
+        let env = agent_core::Env { home: &self.info.home, vault: &cwd, path: &self.info.path, bin: &self.info.claude, pending: &pending, opts: &opts };
+        let launch = agent_core::Launch { key: s("key"), name: s("name"), model: s("model"), effort: s("effort"), resume: Some(s("resume")).filter(|x| !x.is_empty()), fork: None, turn: None };
+        let mut cmd = match agent_claude::PROVIDER.command(&env, &launch) { Ok(c) => c, Err(e) => return bang(&mut w, &e) };
+        cmd.current_dir(&cwd).env("PATH", &self.info.path);
+        cmd.args(profile["args"].as_array().into_iter().flatten().filter_map(Value::as_str));
+        for kv in profile["env"].as_array().into_iter().flatten() { if let (Some(k), Some(v)) = (kv[0].as_str(), kv[1].as_str()) { cmd.env(k, v); } }
+        let meta = Meta { key: s("key").into(), provider: "claude".into(), model: s("model").into(), effort: s("effort").into(), tainted: false, pid: 0, account: String::new(), turns: 0 };
+        self.launch(ns, &json!({"meta": meta, "spec": Spec::of(&cmd)}), agent_claude::PROVIDER.control_init(&[]), r, w)
+    }
+
+    /// `init`: a first line for a new agent's stdin (Claude's initialize), not sent to one that already runs.
+    fn launch(self: &Arc<Self>, ns: &str, req: &Value, init: Option<String>, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
         let parsed = serde_json::from_value::<Meta>(req["meta"].clone()).and_then(|m| Ok((m, serde_json::from_value::<Spec>(req["spec"].clone())?)));
         let (mut meta, mut spec) = match parsed { Ok(x) => x, Err(e) => return bang(&mut w, &format!("bad launch: {e}")) };
         meta.key = format!("{ns}:{}", meta.key);
@@ -309,8 +430,51 @@ impl Server {
         // goes on, a second agent on the same session would write the transcript twice
         if UnixStream::connect(sock_of(&meta.key)).is_ok() { return attach(&meta.key, r, w); }
         // the broker connection launch makes is dropped at once: attach takes it over with a hello of its own
-        match broker::launch_spec(&meta, &spec) { Ok(_) => attach(&meta.key, r, w), Err(e) => bang(&mut w, &e) }
+        match broker::launch_spec(&meta, &spec) {
+            Ok(mut c) => {
+                // followed before any device: the session line at the start goes nowhere else first
+                self.watch_key(&meta.key);
+                if let Some(l) = init { writeln!(c.stdin, "{l}").and_then(|_| c.stdin.flush()).ok(); }
+                attach(&meta.key, r, w)
+            }
+            Err(e) => bang(&mut w, &e),
+        }
     }
+}
+
+/// A conversation's title from one of its lines: the text of a user message, on one line, at most 80 characters. A
+/// tool result (also a user message) has no text block and names nothing.
+fn title_of(ev: &Value) -> Option<String> {
+    if ev["type"] != "user" { return None; }
+    let c = &ev["message"]["content"];
+    let text = c.as_str().map(String::from).or_else(|| c.as_array()?.iter().find(|b| b["type"] == "text").and_then(|b| b["text"].as_str()).map(String::from))?;
+    let one = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!one.is_empty()).then(|| one.chars().take(80).collect())
+}
+/// The title in a Claude transcript: its first user message with text.
+fn transcript_title(path: &Path) -> Option<String> {
+    let f = fs::File::open(path).ok()?;
+    BufReader::new(f).lines().map_while(Result::ok).take(2000).filter_map(|l| serde_json::from_str::<Value>(&l).ok()).find_map(|ev| title_of(&ev))
+}
+
+struct Attached<'a> { s: &'a Server, key: String }
+impl Drop for Attached<'_> {
+    fn drop(&mut self) {
+        let mut a = self.s.attached.lock().unwrap();
+        if let Some(n) = a.get_mut(&self.key) { *n -= 1; if *n == 0 { a.remove(&self.key); } }
+    }
+}
+
+/// A conversation key in a URL path: letters, digits and -._~ as they are, every other byte as %XX.
+fn percent(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
+/// One notification to an ntfy topic, with curl (on a Mac and in the image): no HTTP client in this binary for it.
+fn notify(url: &str, text: &str, click: &str) {
+    let ok = std::process::Command::new("curl").args(["-fsS", "-m", "10", "-H", "Title: Relay", "-H", &format!("Click: {click}"), "-d", text, url])
+        .stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success());
+    if !ok { eprintln!("relay-server: a notification to {url} failed"); }
 }
 
 fn reply(w: &mut tls::Writer, res: Result<Value, String>) -> io::Result<()> {
@@ -389,7 +553,7 @@ pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Re
     let host = host.or_else(lan_ip).ok_or_else(|| io::Error::other("no LAN address found, pass --host"))?;
     let fp = identity(data)?.fingerprint();
     let code = open_pairing(data)?;
-    Ok(proto::PairLine { host, port, fp, code }.format())
+    Ok(proto::PairLine { host, port, fp, code, key: None }.format())
 }
 
 
@@ -422,5 +586,24 @@ pub fn service_file() -> String {
     } else {
         format!("# ~/.config/systemd/user/relay-server.service, then:\n#   systemctl --user enable --now relay-server\n#   loginctl enable-linger $USER   (keeps it running without a login)\n\
 [Unit]\nDescription=Relay server\nAfter=network-online.target\n\n[Service]\nExecStart={exe} serve\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=default.target\n")
+    }
+}
+
+#[cfg(test)]
+mod title_tests {
+    use super::*;
+    #[test]
+    fn a_title_is_the_first_thing_said() {
+        let p = std::env::temp_dir().join(format!("relay-title-{}.jsonl", std::process::id()));
+        let lines = [
+            json!({"type": "system", "subtype": "init"}),
+            json!({"type": "user", "message": {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "t", "content": "x"}]}}),
+            json!({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Check  the\nportal redirect"}]}}),
+            json!({"type": "user", "message": {"role": "user", "content": "later"}}),
+        ];
+        fs::write(&p, lines.iter().map(|l| l.to_string() + "\n").collect::<String>()).unwrap();
+        assert_eq!(transcript_title(&p).as_deref(), Some("Check the portal redirect"));
+        assert_eq!(title_of(&json!({"type": "user", "message": {"content": "x".repeat(100)}})).unwrap().len(), 80);
+        fs::remove_file(p).ok();
     }
 }

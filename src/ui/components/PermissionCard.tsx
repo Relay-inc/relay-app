@@ -37,7 +37,7 @@ window.addEventListener("keydown", e => {
 });
 
 // what a permission card shows: the command, the file (and what is written to it), or the input as it is
-function describe(request: Pending): string {
+export function describe(request: Pending): string {
   const input = request.input || {};
   if (request.tool_name === "Bash") return String(input.command ?? "");
   if (input.file_path)

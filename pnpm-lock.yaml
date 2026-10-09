@@ -41,6 +41,9 @@ importers:
       '@tauri-apps/api':
         specifier: ^2
         version: 2.12.0
+      '@tauri-apps/plugin-barcode-scanner':
+        specifier: ^2.5.1
+        version: 2.5.1
       '@tauri-apps/plugin-deep-link':
         specifier: ^2.6.1
         version: 2.6.1
@@ -646,6 +649,9 @@ packages:
     resolution: {integrity: sha512-GIShnAR4C16kSTA8NO02fo8fOw/I5z5sAUEB5S2HlPHFnBkbihL4c9a/MpkxOm1+q5S+tFd3X4QUjHWxfyGzpQ==}
     engines: {node: '>= 10'}
     hasBin: true
+
+  '@tauri-apps/plugin-barcode-scanner@2.5.1':
+    resolution: {integrity: sha512-VepKHdSGAKqFcPIXS3Nd0GA5uqQ840cJnHKY1B1Tf1Am9y2RSCyTht4FQd/tMpbu7g9vAmk3HI+qvN71jiQIyA==}
 
   '@tauri-apps/plugin-deep-link@2.6.1':
     resolution: {integrity: sha512-yomIOIoiiDwXW3Bgy/V5c4frWo9sfWM9WZQew2s7vr7hXtDdbLDCLzvytIMCjMxbnln9O0oJsTI3XdDd2T9XlA==}
@@ -1804,6 +1810,10 @@ snapshots:
       '@tauri-apps/cli-win32-arm64-msvc': 2.12.0
       '@tauri-apps/cli-win32-ia32-msvc': 2.12.0
       '@tauri-apps/cli-win32-x64-msvc': 2.12.0
+
+  '@tauri-apps/plugin-barcode-scanner@2.5.1':
+    dependencies:
+      '@tauri-apps/api': 2.12.0
 
   '@tauri-apps/plugin-deep-link@2.6.1':
     dependencies:

@@ -13,6 +13,17 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Add phone, per machine in Settings › Machines**: a QR code and a line that pair a phone with the machine as a device of this Mac. The phone sees this Mac's conversations and cards there, and can open the mirror with the key in the line while this Mac is closed. It may only work with conversations (no mirror files, no updates of the server, no further devices), and forgetting this Mac on the machine (`relay-server revoke`) unpairs its phones too. The phone app itself is not released yet (`mobile/`, a first Tauri build for Android and iOS) (#161)
+- **A phone can start a conversation on a machine while this Mac is closed**: Relay tells each machine how this Mac starts Claude there (its Claude settings without mail and accounts, and the mirror's context, plugins and permissions), and relay-server builds the same command for the phone, in the mirrored vault (#161)
+- **Relay for Android with each release** (`Relay_<version>_android.apk`): the phone app, signed with Relay's own key so a new version installs over the old one. Pair it by scanning the code from Settings › Machines › Add phone (or pasting the line); its key and the mirror's are sealed with the Android Keystore. Tapping a notification opens its conversation (#161)
+- **Phone notifications through ntfy**: a machine notifies when Claude waits for an answer or finished a turn in a conversation no device follows, on an ntfy topic made from the mirror's key. Add phone shows the topic to subscribe to in the ntfy app. The notification only says that Claude waits or finished on which machine, nothing of the conversation (ntfy.sh is a public server) (#161)
+
+### Changed
+
+- **Several devices follow one conversation on a machine**: this Mac and its phone both get every line of a conversation there, and each gets what it missed when it comes back, without taking the conversation from the other. The protocol between Relay and relay-server changes with it: update every machine to this version (Settings › Machines › Update) (#161)
+
 ### Fixed
 
 - **Reviewing your own PRs**: Review together on your own PRs opened "This pull request no longer waits on you". The review now finds its PRs in the PR list when Today does not queue them (your own PRs with green checks)

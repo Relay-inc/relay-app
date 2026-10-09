@@ -26,6 +26,7 @@
     "@relay/integration-productive": "workspace:*",
     "@relay/integration-trello": "workspace:*",
     "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-barcode-scanner": "^2.5.1",
     "@tauri-apps/plugin-deep-link": "^2.6.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",

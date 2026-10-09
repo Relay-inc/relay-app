@@ -3998,6 +3998,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quick-xml"
 version = "0.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4150,6 +4156,7 @@ dependencies = [
  "objc2-core-foundation",
  "objc2-foundation",
  "portable-pty",
+ "qrcode",
  "regex",
  "relay-remote",
  "relay-server",
@@ -4171,6 +4178,22 @@ dependencies = [
  "transcribe-rs",
  "unicode-normalization",
  "url",
+]
+
+[[package]]
+name = "relay-mobile"
+version = "0.0.18"
+dependencies = [
+ "agent-claude",
+ "agent-core",
+ "base64 0.23.1",
+ "relay-remote",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-barcode-scanner",
+ "tauri-plugin-deep-link",
 ]
 
 [[package]]
@@ -5330,6 +5353,20 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-barcode-scanner"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "683b51f5ce9112c0e81e166cd71903dfea749cf6e8411adcc0f00a501eecf0db"
+dependencies = [
+ "log",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

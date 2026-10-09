@@ -31,13 +31,7 @@ impl Identity {
     pub fn load_or_create(dir: &Path, name: &str) -> io::Result<Identity> {
         let (crt, key) = (dir.join(format!("{name}.crt.der")), dir.join(format!("{name}.key.der")));
         if crt.exists() && key.exists() { return Ok(Identity { cert_der: fs::read(&crt)?, key_der: fs::read(&key)? }); }
-        let pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(io::Error::other)?;
-        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).map_err(io::Error::other)?;
-        params.distinguished_name = rcgen::DistinguishedName::new();
-        params.distinguished_name.push(rcgen::DnType::CommonName, "relay");
-        (params.not_before, params.not_after) = (rcgen::date_time_ymd(2025, 1, 1), rcgen::date_time_ymd(2125, 1, 1));
-        let cert = params.self_signed(&pair).map_err(io::Error::other)?;
-        let id = Identity { cert_der: cert.der().to_vec(), key_der: pair.serialize_der() };
+        let id = Identity::generate()?;
         fs::create_dir_all(dir)?;
         // the key first, private before its first byte (an older file keeps its mode through open, hence the chmod);
         // the certificate last, so a pair cut off halfway is made again
@@ -46,6 +40,16 @@ impl Identity {
         f.write_all(&id.key_der)?;
         fs::write(&crt, &id.cert_der)?;
         Ok(id)
+    }
+    /// A new one in memory only (the phone seals it before it touches the disk).
+    pub fn generate() -> io::Result<Identity> {
+        let pair = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256).map_err(io::Error::other)?;
+        let mut params = rcgen::CertificateParams::new(Vec::<String>::new()).map_err(io::Error::other)?;
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        params.distinguished_name.push(rcgen::DnType::CommonName, "relay");
+        (params.not_before, params.not_after) = (rcgen::date_time_ymd(2025, 1, 1), rcgen::date_time_ymd(2125, 1, 1));
+        let cert = params.self_signed(&pair).map_err(io::Error::other)?;
+        Ok(Identity { cert_der: cert.der().to_vec(), key_der: pair.serialize_der() })
     }
     pub fn fingerprint(&self) -> String { fingerprint(&self.cert_der) }
     fn chain(&self) -> (Vec<CertificateDer<'static>>, PrivateKeyDer<'static>) {

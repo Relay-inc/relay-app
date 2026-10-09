@@ -70,6 +70,8 @@ export type MachineStatus = {
 /** What `server_setup` gives for setting up a machine: this Relay's version and the relay-server image. */
 export type ServerSetup = { version: string; image: string; dev?: boolean }; // dev: a development build, version "latest"
 /** This Mac as a work machine (`host_status`): Relay's own relay-server under a LaunchAgent. */
+/** A pairing made for a phone of this Mac on a machine: the line (it carries the mirror's key) and the same as a QR (SVG). */
+export type PhonePairing = { line: string; qr: string; ntfy: string }; // ntfy: the topic for the phone's notifications
 export type HostStatus = {
   supported: boolean; // false in a development build: launchd can only run the Relay installed in Applications
   on: boolean; // the LaunchAgent is installed

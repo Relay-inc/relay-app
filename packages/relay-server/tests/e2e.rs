@@ -35,6 +35,8 @@ fn start_on(tag: &str, port: u16) -> Server {
     // the mirror links transcripts into Claude Code's projects folder: a folder of the test's own, except for the real
     // Claude turn, which needs this Mac's login
     if tag != "claude" { cmd.env("CLAUDE_CONFIG_DIR", data.join("claude")); }
+    // a stand-in for claude that says how it was started (start_builds_claude_from_the_laptops_profile)
+    if tag == "start" || tag == "notify" { cmd.env("RELAY_CLAUDE", data.join("fake-claude")); }
     let child = cmd.args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &data).env("RELAY_AGENTS_DIR", &agents)
         .stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
@@ -189,6 +191,180 @@ fn update_goes_on_in_the_binary_sent() {
     let t = Instant::now();
     while c.info().is_err() { assert!(t.elapsed() < Duration::from_secs(10), "not back after the update"); std::thread::sleep(Duration::from_millis(100)); }
     assert!(c.info().unwrap().update);
+}
+
+/// A phone of `parent`: the laptop opens a pairing for it, the phone pairs with that line like with any.
+fn linked(parent: &Client, tag: &str) -> Client {
+    let code = parent.pair_device().unwrap();
+    let (host, port) = parent.addr.rsplit_once(':').unwrap();
+    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None }.format();
+    let id = device(tag);
+    let (l, _) = client::pair(&line, &id, tag).unwrap();
+    Client::new(&l.host, l.port, &l.fp, id)
+}
+
+#[test]
+fn start_builds_claude_from_the_laptops_profile() {
+    let s = start("start");
+    let fake = s.data.join("fake-claude");
+    std::fs::write(&fake, "#!/bin/sh\necho \"args $*\"\npwd\nwhile IFS= read -r l; do echo \"in $l\"; done\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let laptop = paired(&s, "laptop");
+    let phone = linked(&laptop, "phone");
+
+    // nothing to start from before the laptop sent its profile, and only the laptop sends one
+    assert!(phone.start("p:1", "Phone", "", "", None).err().unwrap().contains("open Relay on the laptop"));
+    let profile = serde_json::json!({"opts": {}, "args": ["--add-dir", "/ctx"], "env": [["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "1"]]});
+    assert!(phone.profile_put(&profile).unwrap_err().contains("not allowed from a linked device"));
+    laptop.profile_put(&profile).unwrap();
+    // the vault there is the mirror's: locked until a key opens it
+    assert!(phone.start("p:1", "Phone", "", "", None).err().unwrap().contains("locked"));
+    phone.unlock(&relay_remote::tls::random_key()).unwrap();
+
+    let mut c = phone.start("p:1", "Phone", "", "", None).unwrap();
+    let args = next(&mut c.frames);
+    assert!(args.starts_with("args ") && args.contains("--add-dir /ctx") && args.contains("stream-json"), "{args}");
+    assert!(next(&mut c.frames).ends_with("/vault"));
+    assert!(next(&mut c.frames).contains("\"initialize\""));
+    writeln!(c.stdin, "hi").unwrap();
+    c.stdin.flush().unwrap();
+    assert_eq!(next(&mut c.frames), "in hi");
+    // the laptop sees the conversation its phone started
+    assert_eq!(laptop.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["p:1"]);
+}
+
+/// A stand-in ntfy server: the headers and the body of each POST it gets.
+fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<(String, String)>) {
+    use std::io::Read;
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/relay-topic", l.local_addr().unwrap());
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || for mut c in l.incoming().map_while(Result::ok) {
+        let mut buf = Vec::new();
+        let mut chunk = [0u8; 4096];
+        let got = loop {
+            let n = c.read(&mut chunk).unwrap_or(0);
+            if n == 0 { break (String::new(), String::new()); }
+            buf.extend_from_slice(&chunk[..n]);
+            let text = String::from_utf8_lossy(&buf).to_string();
+            let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
+            let len = head.lines().find_map(|h| h.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+            if body.len() >= len { break (head.to_string(), body[..len].to_string()); }
+        };
+        c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").ok();
+        tx.send(got).ok();
+    });
+    (url, rx)
+}
+
+#[test]
+fn a_waiting_conversation_nobody_follows_goes_to_ntfy() {
+    let s = start("notify");
+    let fake = s.data.join("fake-claude");
+    std::fs::write(&fake, "#!/bin/sh\nwhile IFS= read -r l; do case \"$l\" in\n *initialize*) echo '{\"type\":\"system\",\"subtype\":\"init\",\"session_id\":\"0b1e2c3d-0000-4000-8000-000000000001\"}';;\n name) echo '{\"type\":\"user\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"Check the   portal  redirect\"}]}}';;\n ask) echo '{\"type\":\"control_request\",\"request_id\":\"r1\",\"request\":{\"subtype\":\"can_use_tool\",\"tool_name\":\"Bash\"}}';;\n later) sleep 1; echo '{\"type\":\"result\",\"subtype\":\"success\"}';;\nesac; done\n").unwrap();
+    std::fs::set_permissions(&fake, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let (url, posts) = fake_ntfy();
+    let laptop = paired(&s, "laptop");
+    laptop.unlock(&relay_remote::tls::random_key()).unwrap();
+    laptop.profile_put(&serde_json::json!({"opts": {}, "args": [], "env": [], "notify": url})).unwrap();
+
+    // a card while the laptop follows the conversation: it sees it, no notification
+    let mut c = laptop.start("n:1", "N", "", "", None).unwrap();
+    assert!(next(&mut c.frames).contains("session_id"));
+    // the server saw the session too: a device that comes later (a phone) gets it with the list
+    assert_eq!(laptop.list_sessions().unwrap().1.get("n:1").map(String::as_str), Some("0b1e2c3d-0000-4000-8000-000000000001"));
+    // and its first message names it, on one line
+    writeln!(c.stdin, "name").unwrap();
+    c.stdin.flush().unwrap();
+    assert!(next(&mut c.frames).contains("\"user\""));
+    let t = Instant::now();
+    let title = loop {
+        let title = laptop.list_named().unwrap().2.remove("n:1");
+        if title.is_some() || t.elapsed() > Duration::from_secs(2) { break title; }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(title.as_deref(), Some("Check the portal redirect"));
+    writeln!(c.stdin, "ask").unwrap();
+    c.stdin.flush().unwrap();
+    assert!(next(&mut c.frames).contains("can_use_tool"));
+    assert!(posts.recv_timeout(Duration::from_millis(2500)).is_err());
+
+    // the laptop goes mid-turn: the turn's end is a notification, with nothing of the conversation in it
+    writeln!(c.stdin, "later").unwrap();
+    c.stdin.flush().unwrap();
+    drop(c);
+    let (head, body) = posts.recv_timeout(Duration::from_secs(8)).expect("a notification");
+    assert!(body.starts_with("Claude finished on "), "{body}");
+    // tapped on the phone, it opens the conversation: its key, without the device's namespace
+    assert!(head.lines().any(|h| h == "Click: relay://conversation/n%3A1"), "{head}");
+}
+
+#[test]
+fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
+    let s = start("link");
+    let laptop = paired(&s, "laptop");
+    let other = paired(&s, "other");
+    let tmp = std::env::temp_dir().to_string_lossy().into_owned();
+    let mut conn = laptop.launch(&meta("c:1"), &spec(&tmp)).unwrap();
+    writeln!(conn.stdin, "one").unwrap();
+    conn.stdin.flush().unwrap();
+    assert_eq!(next(&mut conn.frames), "got one");
+    drop(conn);
+
+    let phone = linked(&laptop, "phone");
+
+    // it sees the laptop's conversation; the other device's walls still stand
+    assert_eq!(phone.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["c:1"]);
+    assert!(other.list().unwrap().is_empty());
+
+    // both follow it at once: what either sends, both see, and neither takes it from the other
+    let mut lap = laptop.attach("c:1").unwrap().unwrap();
+    assert_eq!(lap.backlog, 0);
+    let mut ph = phone.attach("c:1").unwrap().unwrap();
+    // what came before it joined ("got one") the laptop already had, so it is gone: a phone reads that from `history`
+    assert_eq!(ph.backlog, 0);
+    writeln!(ph.stdin, "two").unwrap();
+    ph.stdin.flush().unwrap();
+    assert_eq!(next(&mut ph.frames), "got two");
+    assert_eq!(next(&mut lap.frames), "got two");
+    writeln!(lap.stdin, "three").unwrap();
+    lap.stdin.flush().unwrap();
+    assert_eq!(next(&mut lap.frames), "got three");
+    assert_eq!(next(&mut ph.frames), "got three");
+
+    // the laptop away while the phone goes on: it gets exactly what it missed, the phone keeps its stream
+    drop(lap);
+    std::thread::sleep(Duration::from_millis(200));
+    writeln!(ph.stdin, "four").unwrap();
+    ph.stdin.flush().unwrap();
+    assert_eq!(next(&mut ph.frames), "got four");
+    let mut lap = laptop.attach("c:1").unwrap().unwrap();
+    assert_eq!(lap.backlog, 1);
+    assert_eq!(next(&mut lap.frames), "got four");
+    writeln!(lap.stdin, "five").unwrap();
+    lap.stdin.flush().unwrap();
+    assert_eq!(next(&mut ph.frames), "got five");
+    drop((lap, ph));
+
+    // conversations only: not the mirror, not the server, no further devices
+    for e in [phone.wipe().err(), phone.pair_device().err(), phone.update("0", b"x").err()] { assert!(e.unwrap().contains("not allowed from a linked device")); }
+    let out = bin().args(["clients"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("linked to laptop"));
+
+    // the laptop's mirror: locked after a restart, the phone opens it with the key from its pairing line, for both
+    let key = relay_remote::tls::random_key();
+    laptop.unlock(&key).unwrap();
+    let s = restart(s);
+    assert!(!phone.info().unwrap().mirror_open);
+    assert!(phone.unlock(&relay_remote::tls::random_key()).unwrap_err().contains("another key"));
+    phone.unlock(&key).unwrap();
+    assert!(laptop.info().unwrap().mirror_open);
+
+    // the laptop goes, its phone with it
+    let out = bin().args(["revoke", "laptop"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Revoked phone"));
+    assert!(phone.info().is_err());
+    assert!(other.info().is_ok());
 }
 
 #[test]

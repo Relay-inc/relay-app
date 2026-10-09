@@ -1,0 +1,25 @@
+[package]
+name = "relay-mobile"
+version.workspace = true
+description = "Relay on a phone: a remote control for the conversations on a relay-server"
+edition = "2021"
+
+[lib]
+name = "relay_mobile_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde_json.workspace = true
+relay-remote = { path = "../../packages/relay-remote" }
+agent-core.workspace = true
+agent-claude = { path = "../../packages/agent-claude" }
+base64 = "0.23"
+serde = { version = "1.0.229", features = ["derive"] }
+tauri-plugin-deep-link = "2"
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"

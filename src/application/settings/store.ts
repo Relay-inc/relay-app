@@ -12,6 +12,7 @@ import {
   type MirrorStatus,
   type ServerSetup,
   type HostStatus,
+  type PhonePairing,
   type Message,
   type Settings,
 } from "../../domain/settings/types";
@@ -60,6 +61,7 @@ export type SettingsState = {
     host: HostStatus | null; // this Mac as a machine, null until read
     hostLine: string; // the pairing line made for another Mac
     hostError: string;
+    phone: Record<string, PhonePairing | null>; // per machine: the pairing made for a phone, until closed
     setupFolder: string; // where the machine keeps relay-server's folders, as typed in the setup section
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
@@ -119,6 +121,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     host: null,
     hostLine: "",
     hostError: "",
+    phone: {},
   },
   actions: { list: [], entries: {}, errors: {} },
   integrations: {

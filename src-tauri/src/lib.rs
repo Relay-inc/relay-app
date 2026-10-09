@@ -1675,6 +1675,34 @@ async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name:
     save_settings(&app, &s)?;
     Ok(m)
 }
+/// A one-time pairing for a phone of this Mac on a machine: the line (with the machine's address as this Mac knows it,
+/// and the key to this Mac's mirror there, so the phone can open it while this Mac is closed) and the same as a QR code
+/// (SVG). The phone then sees this Mac's conversations there; it works once, for 10 minutes.
+#[tauri::command]
+async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -> Result<Value, String> {
+    let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    let c = state.machines.client(&m);
+    let key = mirror::key(&data_dir(&app), &id)?;
+    let code = tauri::async_runtime::spawn_blocking(move || c.pair_device()).await.map_err(|e| e.to_string())??;
+    let s = |k: &str| m[k].as_str().unwrap_or("").to_string();
+    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key.clone()) }.format();
+    let qr = qrcode::QrCode::new(&line).map_err(|e| e.to_string())?.render::<qrcode::render::svg::Color>().min_dimensions(240, 240).build();
+    Ok(json!({"line": line, "qr": qr, "ntfy": ntfy_url(&key)}))
+}
+/// How this Mac starts Claude on a machine, for a conversation its phone starts there: Claude's settings here without
+/// the mail tools (answered by this app) or this Mac's accounts (the machine has its own login), and the mirror's flags
+/// for the vault there, as `spawn` (session/mod.rs) adds them.
+fn machine_profile(mut opts: Value, info: &relay_remote::proto::Info, notify: &str) -> Value {
+    if let Some(o) = opts.as_object_mut() {
+        o.insert("mail".into(), json!(false));
+        for k in ["account", "accounts", "active"] { o.remove(k); }
+    }
+    let (args, env) = mirror::session_args(info, &format!("{}/vault", info.work));
+    json!({"opts": opts, "args": args, "env": env, "notify": notify})
+}
+/// The ntfy topic a machine sends this Mac's phone notifications to: made from the mirror's key, so nobody guesses it
+/// and the phone (which has the key from pairing) knows it without being told.
+fn ntfy_url(mirror_key: &str) -> String { format!("https://ntfy.sh/relay-{}", &relay_remote::sync::sha256_hex(format!("ntfy:{mirror_key}").as_bytes())[..32]) }
 /// This Mac's name, for the server's list of paired devices.
 fn sys_name() -> String {
     Command::new("/usr/sbin/scutil").args(["--get", "ComputerName"]).output().ok().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
@@ -1916,7 +1944,10 @@ pub fn run() {
             });
             // the mirrors: a round every 5 s for each machine that has one and answers, on a thread of their own so a
             // first big copy never holds up the cards
+            // With each round, how this Mac starts Claude there (when it changed), so its phone can start conversations
+            // there while this Mac is closed (relay-server's `start`)
             let h = app.handle().clone();
+            let mut profiles: HashMap<String, String> = HashMap::new();
             std::thread::spawn(move || loop {
                 std::thread::sleep(std::time::Duration::from_secs(5));
                 let st = h.state::<App>();
@@ -1925,7 +1956,13 @@ pub fn run() {
                 for m in s["machines"].as_array().into_iter().flatten() {
                     let id = m["id"].as_str().unwrap_or("");
                     let Some(info) = st.machines.seen.lock().unwrap().get(id).filter(|x| x.error.is_none()).and_then(|x| x.info.clone()) else { continue };
-                    st.mirrors.round(&data_dir(&h), m, &st.machines.client(m), &info, &vault);
+                    let client = st.machines.client(m);
+                    st.mirrors.round(&data_dir(&h), m, &client, &info, &vault);
+                    let Ok(p) = agents::get("claude") else { continue };
+                    let notify = mirror::key(&data_dir(&h), id).map(|k| ntfy_url(&k)).unwrap_or_default();
+                    let profile = machine_profile(env_of(&h, &st, p).opts, &info, &notify);
+                    let text = profile.to_string();
+                    if profiles.get(id) != Some(&text) && client.profile_put(&profile).is_ok() { profiles.insert(id.into(), text); }
                 }
             });
             tray::init(app.handle())?;
@@ -1933,7 +1970,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -1965,6 +2002,24 @@ mod lang_tests {
     }
 }
 
+
+#[cfg(test)]
+mod machine_tests {
+    use super::*;
+    #[test]
+    fn a_machine_profile_keeps_mail_and_accounts_here() {
+        let info = relay_remote::proto::Info { work: "/w/abc".into(), ..Default::default() };
+        let p = machine_profile(json!({"mail": true, "account": "/a", "accounts": [{"dir": "/a"}], "active": "/a", "permission": "plan"}), &info, "https://ntfy.sh/t");
+        assert_eq!(p["notify"], "https://ntfy.sh/t");
+        let url = ntfy_url(&"a".repeat(64));
+        assert!(url.starts_with("https://ntfy.sh/relay-") && url.len() == "https://ntfy.sh/relay-".len() + 32 && url != ntfy_url(&"b".repeat(64)));
+        assert_eq!(p["opts"], json!({"mail": false, "permission": "plan"}));
+        let args: Vec<&str> = p["args"].as_array().unwrap().iter().filter_map(|a| a.as_str()).collect();
+        assert_eq!(args[..2], ["--add-dir", "/w/abc/context"]);
+        assert!(args.iter().any(|a| a.contains("/w/abc/memory"))); // the vault's memory: it runs in the vault there
+        assert_eq!(p["env"], json!([["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "1"]]));
+    }
+}
 
 #[cfg(test)]
 mod capture_tests {

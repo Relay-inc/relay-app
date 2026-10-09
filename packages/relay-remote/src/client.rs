@@ -71,6 +71,11 @@ impl Client {
     pub fn unlock(&self, key_hex: &str) -> Result<(), String> {
         self.call_bin(json!({"op": "unlock", "key": key_hex}), None, None, Duration::from_secs(120)).map(|_| ())
     }
+    /// Open a pairing for a device linked to this one (a phone): the code, for a line with the address that device
+    /// reaches the server at. It works once, for 10 minutes; the device then shares this one's conversations.
+    pub fn pair_device(&self) -> Result<String, String> {
+        Ok(self.call(json!({"op": "pair_device"}))?["code"].as_str().unwrap_or_default().to_string())
+    }
     pub fn wipe(&self) -> Result<(), String> { self.call(json!({"op": "wipe"})).map(|_| ()) }
     /// A Claude session's transcript there, to move its conversation to another place.
     pub fn session_get(&self, sid: &str) -> Result<Vec<u8>, String> {
@@ -101,6 +106,16 @@ impl Client {
     pub fn list(&self) -> Result<Vec<Meta>, String> {
         serde_json::from_value(self.call(json!({"op": "list"}))?["metas"].clone()).map_err(|e| e.to_string())
     }
+    /// The same with each one's Claude session id where the server saw it: (metas, key -> session id).
+    pub fn list_sessions(&self) -> Result<(Vec<Meta>, std::collections::HashMap<String, String>), String> {
+        self.list_named().map(|(m, s, _)| (m, s))
+    }
+    /// The same with each one's title too, the first thing said in it (key -> title), where the server saw it.
+    pub fn list_named(&self) -> Result<(Vec<Meta>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>), String> {
+        let v = self.call(json!({"op": "list"}))?;
+        let metas = serde_json::from_value(v["metas"].clone()).map_err(|e| e.to_string())?;
+        Ok((metas, serde_json::from_value(v["sids"].clone()).unwrap_or_default(), serde_json::from_value(v["titles"].clone()).unwrap_or_default()))
+    }
     pub fn kill(&self, key: &str, pid: u32) -> Result<(), String> { self.call(json!({"op": "kill", "key": key, "pid": pid})).map(|_| ()) }
     pub fn pending(&self) -> Result<Vec<Value>, String> {
         Ok(self.call(json!({"op": "pending"}))?["pending"].as_array().cloned().unwrap_or_default())
@@ -118,13 +133,21 @@ impl Client {
     pub fn launch(&self, meta: &Meta, spec: &Spec) -> Result<Conn, String> {
         self.stream(json!({"op": "launch", "meta": meta, "spec": spec}), &meta.key)?.ok_or_else(|| "relay-server: no broker".into())
     }
+    /// How this Mac starts Claude there, for a phone that starts conversations while this Mac is closed: its Claude
+    /// settings (`opts`) and the mirror's flags (`args`, `env`).
+    pub fn profile_put(&self, profile: &Value) -> Result<(), String> { self.call(json!({"op": "profile_put", "profile": profile})).map(|_| ()) }
+    /// Start a Claude conversation there, built by the server from the laptop's profile, in the mirrored vault.
+    pub fn start(&self, key: &str, name: &str, model: &str, effort: &str, resume: Option<&str>) -> Result<Conn, String> {
+        self.stream(json!({"op": "start", "key": key, "name": name, "model": model, "effort": effort, "resume": resume}), key)?.ok_or_else(|| "relay-server: no broker".into())
+    }
     /// Take back a conversation whose broker runs there. None when there is none any more.
     pub fn attach(&self, key: &str) -> Result<Option<Conn>, String> { self.stream(json!({"op": "attach", "key": key}), key) }
 
     fn stream(&self, req: Value, key: &str) -> Result<Option<Conn>, String> {
         let (r, mut w) = self.open()?;
         proto::write_json(&mut w, &req).map_err(|e| e.to_string())?;
-        match broker::open(Box::new(w), Box::new(r)).map_err(|e| e.to_string())? {
+        // this device's own id at the broker: the laptop and its phone each get what they missed
+        match broker::open(Box::new(w), Box::new(r), &self.id.fingerprint()[..16]).map_err(|e| e.to_string())? {
             Ok(mut c) => { c.agent = broker::Agent::remote(c.agent.id(), self.stop(key)); Ok(Some(c)) }
             Err(e) if e == "gone" => Ok(None),
             Err(e) => Err(e),
