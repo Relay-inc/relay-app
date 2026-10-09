@@ -173,61 +173,76 @@ function ActionBar({
         </button>
       ) : null}
       <span className="flex-1" />
-      <div ref={more} className="relative">
-        <button
-          className={`${ICON_BUTTON} ${pop === "more" || pop === "snooze" ? "bg-fill-2" : ""}`}
-          title={t("today.moreActions")}
-          aria-label={t("today.moreActions")}
-          onClick={() => setPop("more")}
-        >
-          <Icon name="more" className="glyph size-4.5" />
-        </button>
-        {pop === "more" || pop === "snooze" ? (
-          <div className={`${MENU} right-0`}>
-            {rest.map(action => (
-              <button key={action.label} title={action.tip} onClick={() => run(action)} className={item}>
-                {action.icon ? (
-                  <Icon name={action.icon} className="glyph size-3.5 text-secondary" />
-                ) : (
-                  <span className="w-3.5" />
-                )}
-                <span className="flex-1">{action.label}</span>
-              </button>
-            ))}
-            {rest.length ? <div className="my-1 h-px bg-separator" /> : null}
-            {snoozeOptions(now).map(option => (
+      {/* a meeting is not snoozed or put off: its other actions (join, record) are icons, there is no "…" */}
+      {entry.subject.type === "meeting" ? (
+        rest.map(action => (
+          <button
+            key={action.label}
+            className={ICON_BUTTON}
+            title={action.tip ?? action.label}
+            aria-label={action.label}
+            onClick={() => run(action)}
+          >
+            <Icon name={action.icon ?? "more"} className="glyph size-4.5" />
+          </button>
+        ))
+      ) : (
+        <div ref={more} className="relative">
+          <button
+            className={`${ICON_BUTTON} ${pop === "more" || pop === "snooze" ? "bg-fill-2" : ""}`}
+            title={t("today.moreActions")}
+            aria-label={t("today.moreActions")}
+            onClick={() => setPop("more")}
+          >
+            <Icon name="more" className="glyph size-4.5" />
+          </button>
+          {pop === "more" || pop === "snooze" ? (
+            <div className={`${MENU} right-0`}>
+              {rest.map(action => (
+                <button key={action.label} title={action.tip} onClick={() => run(action)} className={item}>
+                  {action.icon ? (
+                    <Icon name={action.icon} className="glyph size-3.5 text-secondary" />
+                  ) : (
+                    <span className="w-3.5" />
+                  )}
+                  <span className="flex-1">{action.label}</span>
+                </button>
+              ))}
+              {rest.length ? <div className="my-1 h-px bg-separator" /> : null}
+              {snoozeOptions(now).map(option => (
+                <button
+                  key={option.id}
+                  onClick={() => {
+                    setPop("");
+                    snooze(entry, option.days);
+                  }}
+                  className={item}
+                >
+                  <Icon name="clock" className="glyph size-3.5 text-secondary" />
+                  <span className="flex-1">{t("today.snoozeFor", { when: t(`today.snooze.${option.id}`) })}</span>
+                  <span className="text-xs text-tertiary">
+                    {new Date(now + option.days * 864e5).toLocaleDateString(locale, {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </span>
+                </button>
+              ))}
               <button
-                key={option.id}
                 onClick={() => {
                   setPop("");
-                  snooze(entry, option.days);
+                  putOff(entry.id);
                 }}
                 className={item}
               >
-                <Icon name="clock" className="glyph size-3.5 text-secondary" />
-                <span className="flex-1">{t("today.snoozeFor", { when: t(`today.snooze.${option.id}`) })}</span>
-                <span className="text-xs text-tertiary">
-                  {new Date(now + option.days * 864e5).toLocaleDateString(locale, {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </span>
+                <Icon name="later" className="glyph size-3.5 text-secondary" />
+                <span className="flex-1">{t("today.later")}</span>
               </button>
-            ))}
-            <button
-              onClick={() => {
-                setPop("");
-                putOff(entry.id);
-              }}
-              className={item}
-            >
-              <Icon name="later" className="glyph size-3.5 text-secondary" />
-              <span className="flex-1">{t("today.later")}</span>
-            </button>
-          </div>
-        ) : null}
-      </div>
+            </div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

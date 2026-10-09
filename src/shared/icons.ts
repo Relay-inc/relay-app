@@ -55,6 +55,7 @@ import {
   DashboardSquare01Icon,
   WorkflowSquare01Icon,
   Mic01Icon,
+  Video01Icon,
 } from "@hugeicons/core-free-icons";
 
 /** One SVG element: its tag and its attributes, camelCase as React takes them. */
@@ -119,6 +120,7 @@ const ICONS: Record<string, Icon> = {
   board: DashboardSquare01Icon,
   workflow: WorkflowSquare01Icon,
   mic: Mic01Icon,
+  video: Video01Icon,
 };
 // the attributes without React's key and the stroke settings the CSS owns
 const own = ([tag, attrs]: Shape): Shape => [
