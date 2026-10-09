@@ -8,6 +8,9 @@ import { useT } from "../../hooks/useT";
 import { PrRow } from "./PrRow";
 import { PrPane } from "./PrPane";
 import { ColumnResize } from "../navigation/ColumnResize";
+import { useLinksStore } from "../../../application/today/links";
+import { byTicket } from "../../../domain/pull-requests/group";
+import { numbered } from "../../../domain/today/kinds/common";
 
 /** The Pull requests view, as Mail does it: the list on the left (what waits for your review, what you opened), the
  *  PR you picked on the right, so you can go from one to the next without closing anything. Reloading is the title
@@ -18,6 +21,7 @@ export function PullRequestsView({ className = "" }: { className?: string }) {
   const err = usePullRequestsStore(s => s.err);
   const busy = usePullRequestsStore(s => s.busy);
   const open = useNavigationStore(s => s.panel.prOpen);
+  const tickets = useLinksStore(s => s.links);
   // opened from a project's title bar: only that project's PRs
   const project = useNavigationStore(s => s.tool?.project);
   const list = useMemo(
@@ -47,9 +51,23 @@ export function PullRequestsView({ className = "" }: { className?: string }) {
       </h2>
       <div className="flex flex-col gap-0.5 px-2">
         {prs.length ? (
-          prs.map(pr => {
-            const key = prKey(pr.repo, pr.number);
-            return <PrRow key={key} pr={pr} mine={mine} selected={open === key} onOpen={() => openPr(key)} />;
+          // the PRs of one ticket together under it, as Today's queue groups them
+          byTicket(prs, tickets).map(({ key, ticket, prs: group }) => {
+            const rows = group.map(pr => {
+              const key = prKey(pr.repo, pr.number);
+              return <PrRow key={key} pr={pr} mine={mine} selected={open === key} onOpen={() => openPr(key)} />;
+            });
+            return ticket ? (
+              <div key={key} className="flex flex-col gap-0.5 pt-2">
+                <div className="px-2.5 text-xs text-secondary truncate">
+                  <span className="font-mono text-[11px]">{numbered(ticket.number)}</span>
+                  {ticket.title ?? group[0].title} · {t("today.prsCount", { n: group.length })}
+                </div>
+                <div className="flex flex-col gap-0.5 ml-2.5 pl-1 border-l border-separator">{rows}</div>
+              </div>
+            ) : (
+              rows
+            );
           })
         ) : (
           <div className="text-secondary text-sm px-2.5 py-2">{t("pr.none")}</div>

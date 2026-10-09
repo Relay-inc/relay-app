@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **PRs grouped by ticket everywhere**: the Pull requests view puts the PRs of one ticket together under it, in both lists, by the same rule as Today. Today also groups your own PRs that need a fix, and Fix with Claude on such a group takes all of them in one conversation. A group across repos names each repo in its subtitle.
+
 ## [0.0.16] - 2026-10-09
 
 ### Added
