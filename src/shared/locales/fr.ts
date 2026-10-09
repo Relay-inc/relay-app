@@ -149,6 +149,9 @@ export default {
   "pl.none": "Le laisser où il est",
   "pl.label": "Seulement avec le libellé",
   "pl.labelHelp": "Vide : chaque ticket de la colonne.",
+  "pl.plan": "D'abord un plan",
+  "pl.planHelp":
+    "L'agent met son plan sur le ticket avant d'écrire du code, et le ticket va à une personne. Commentez si besoin et renvoyez-le (la colonne Prendre dans, ou Continuer avec l'agent) pour qu'il soit construit.",
   "pl.parallel": "Agents en même temps",
   "pl.checks": "Vérifications",
   "pl.checksHelp":
@@ -179,6 +182,8 @@ export default {
   "pl.error": "Pipeline du tableau {project} : {error}",
   "pl.noBoard": "aucun tableau lié à ce projet",
   "pl.noColumn": "une colonne de la pipeline n'est plus sur le tableau, vérifiez Réglages › Projets",
+  "pl.notReady":
+    "Pas pris : le ticket n'a ni description, ni commentaires, ni fichiers. Ajoutez ce qu'il faut et remettez-le dans {column}.",
   "pl.picked": "Pris par Relay : un agent construit ceci sur la branche {branch}.",
   "pl.resumed": "Repris par Relay : l'agent continue avec ce qui est nouveau sur le ticket.",
   "pl.startFailed": "Relay n'a pas pu démarrer d'agent sur ce ticket : {error}",

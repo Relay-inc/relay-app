@@ -33,6 +33,8 @@ export type Pipeline = {
   /** auto: Relay picks up every ticket in the pick column; manual: only the tickets you start from the ticket window.
    *  Absent: auto */
   mode?: "auto" | "manual";
+  /** the agent reports its plan on the ticket first and builds once the ticket comes back to it; absent: off */
+  plan?: boolean;
   /** Relay's comments on the ticket are internal, kept from the client (Productive); absent: hidden */
   hidden?: boolean;
 };

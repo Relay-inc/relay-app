@@ -2,6 +2,7 @@ import type { BoardProvider, BoardRef, Card, Column } from "../../domain/board/t
 import { colOf } from "../../domain/board/rules";
 import type { Worker } from "../../domain/orchestrator/types";
 import {
+  bare,
   briefOf,
   buildState,
   inReview,
@@ -78,7 +79,7 @@ export function buildTicket(ref: BoardRef, card: Pick<Card, "id" | "title" | "nu
     const last = mine.filter(w => ticketOf(w)?.card === card.id).pop();
     if (last?.state === "running") return;
     if (last && last.board !== "merged") await resume(b, card.id, last, "You were asked to continue on this ticket.");
-    else await claim(b, project, card as Card);
+    else await claim(b, project, card as Card, true);
   }).catch(e => toast(t("pl.error", { project: "", error: String((e as Error)?.message ?? e) })));
 }
 
@@ -174,12 +175,17 @@ async function resume(b: Board, id: string, worker: Worker, why: string) {
   await comment(b, id, t("pl.resumed"));
 }
 
-/** A new ticket: moved to busy first (the claim), then a worker with the ticket as its brief. */
-async function claim(b: Board, project: string, card: Card) {
+/** A new ticket: moved to busy first (the claim), then a worker with the ticket as its brief. A ticket from the pick
+ *  column with nothing in it goes to a person instead; one you start yourself (`hand`) is your call. */
+async function claim(b: Board, project: string, card: Card, hand = false) {
   const ctx = ctxOf(b.prov);
   await move(b, card.id, b.p.busy);
   try {
     const view = b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctx, b.ref, card.id)) : null;
+    if (!hand && view && bare(view)) {
+      await move(b, card.id, b.p.input);
+      return await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
+    }
     const url = view?.url || (await b.prov.url(ctx, b.ref, card.id));
     const ticket: Ticket = {
       pipeline: project,
@@ -200,6 +206,7 @@ async function claim(b: Board, project: string, card: Card) {
       base: b.p.base,
       ticket,
       validate: { checks: b.p.checks ?? "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
+      plan: !!b.p.plan,
     });
     adopt(w);
     await comment(b, card.id, t("pl.picked", { branch: w.branch ?? "" }));

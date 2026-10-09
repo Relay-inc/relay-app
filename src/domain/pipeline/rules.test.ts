@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Card, CardView } from "../board/types.ts";
 import type { Worker } from "../orchestrator/types.ts";
 import {
+  bare,
   briefOf,
   buildState,
   EMPTY_PIPELINE,
@@ -195,4 +196,22 @@ test("hand-picked: no pick column needed; the board's pipeline; what the ticket 
   assert.equal(buildState([worker("a", "running")], "a"), "running");
   assert.equal(buildState([worker("a", "blocked")], "a"), "continue");
   assert.equal(buildState([worker("a", "done", { board: "merged" })], "a"), "build", "merged: a new run");
+});
+
+test("bare: a ticket with nothing but a title", () => {
+  const v = (description: string, feed: CardView["feed"] = [], files: CardView["files"] = []) =>
+    ({ description, feed, files }) as unknown as CardView;
+  const note = (html: string, files: CardView["feed"][number]["files"] = []) => ({
+    at: "",
+    who: "",
+    html,
+    change: "",
+    files,
+  });
+  assert.equal(bare(v("")), true);
+  assert.equal(bare(v("<p>&nbsp;</p>", [note("")])), true);
+  assert.equal(bare(v("<p>Fix it</p>")), false);
+  assert.equal(bare(v("", [note("<p>see the screenshot</p>")])), false);
+  assert.equal(bare(v("", [], [{ id: "1", name: "a.png", size: 1, url: "u" }])), false);
+  assert.equal(bare(v("", [note("", [{ id: "1", name: "a.png", size: 1, url: "u" }])])), false);
 });

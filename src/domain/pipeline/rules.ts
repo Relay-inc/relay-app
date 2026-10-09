@@ -123,6 +123,13 @@ export function htmlText(html: string) {
     .trim();
 }
 
+/** A ticket with nothing to build from: no description, no comment with text, no file. The pick column hands it to
+ *  a person instead of an agent. */
+export const bare = (v: CardView) =>
+  !htmlText(v.description || "") &&
+  !v.feed.some(f => htmlText(f.html)) &&
+  !(v.files?.length || v.feed.some(f => f.files.length));
+
 /** The ticket as a brief: title, link, description, the comments (only the ones after `since`, for a worker that picks
  *  it up again) and the files' links. */
 export function briefOf(v: CardView, since?: number) {

@@ -146,6 +146,9 @@ export default {
   "pl.none": "Dort lassen",
   "pl.label": "Nur mit Label",
   "pl.labelHelp": "Leer: jedes Ticket in der Spalte.",
+  "pl.plan": "Zuerst ein Plan",
+  "pl.planHelp":
+    "Der Agent stellt seinen Plan ins Ticket, bevor er Code schreibt, und das Ticket geht an eine Person. Kommentiere bei Bedarf und schick es zurück (die Spalte „Abholen aus“ oder Mit Agent weitermachen), damit es gebaut wird.",
   "pl.parallel": "Agents gleichzeitig",
   "pl.checks": "Checks",
   "pl.checksHelp":
@@ -175,6 +178,8 @@ export default {
   "pl.error": "Board-Pipeline {project}: {error}",
   "pl.noBoard": "kein Board mit diesem Projekt verknüpft",
   "pl.noColumn": "eine Spalte der Pipeline ist nicht mehr auf dem Board, prüfe Einstellungen › Projekte",
+  "pl.notReady":
+    "Nicht übernommen: das Ticket hat keine Beschreibung, keine Kommentare und keine Dateien. Ergänze, was fehlt, und verschiebe es zurück nach {column}.",
   "pl.picked": "Von Relay abgeholt: ein Agent baut das auf Branch {branch}.",
   "pl.resumed": "Von Relay erneut abgeholt: der Agent macht mit dem Neuen im Ticket weiter.",
   "pl.startFailed": "Relay konnte keinen Agent für dieses Ticket starten: {error}",

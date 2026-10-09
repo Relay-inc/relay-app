@@ -145,6 +145,9 @@ export default {
   "pl.none": "Laat het staan",
   "pl.label": "Enkel met label",
   "pl.labelHelp": "Leeg: elk ticket in de kolom.",
+  "pl.plan": "Eerst een plan",
+  "pl.planHelp":
+    "De agent zet zijn plan op het ticket voor hij code schrijft, en het ticket gaat naar een persoon. Reageer indien nodig en stuur het terug (de kolom Oppikken uit, of Verder met agent) om het te laten bouwen.",
   "pl.parallel": "Agents tegelijk",
   "pl.checks": "Checks",
   "pl.checksHelp":
@@ -174,6 +177,8 @@ export default {
   "pl.error": "Bordpipeline {project}: {error}",
   "pl.noBoard": "geen bord gekoppeld aan dit project",
   "pl.noColumn": "een kolom van de pipeline staat niet meer op het bord, kijk Instellingen › Projecten na",
+  "pl.notReady":
+    "Niet opgepikt: het ticket heeft geen beschrijving, reacties of bestanden om van te vertrekken. Vul aan wat nodig is en zet het terug in {column}.",
   "pl.picked": "Opgepikt door Relay: een agent bouwt dit op branch {branch}.",
   "pl.resumed": "Opnieuw opgepikt door Relay: de agent gaat verder met wat nieuw is op het ticket.",
   "pl.startFailed": "Relay kon geen agent starten op dit ticket: {error}",

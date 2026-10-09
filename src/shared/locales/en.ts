@@ -142,6 +142,9 @@ const en = {
   "pl.none": "Leave it where it is",
   "pl.label": "Only with label",
   "pl.labelHelp": "Empty: every ticket in the column.",
+  "pl.plan": "Plan first",
+  "pl.planHelp":
+    "The agent puts its plan on the ticket before it writes code, and the ticket goes to a person. Comment if needed and send it back (the Pick up from column, or Continue with agent) to have it built.",
   "pl.parallel": "Agents at once",
   "pl.checks": "Checks",
   "pl.checksHelp":
@@ -170,6 +173,8 @@ const en = {
   "pl.error": "Board pipeline {project}: {error}",
   "pl.noBoard": "no board linked to this project",
   "pl.noColumn": "a column of the pipeline is no longer on the board, check Settings › Projects",
+  "pl.notReady":
+    "Not picked up: the ticket has no description, comments or files to build from. Add what is needed and move it back to {column}.",
   "pl.picked": "Picked up by Relay: an agent is building this on branch {branch}.",
   "pl.resumed": "Picked up again by Relay: the agent continues with what is new on the ticket.",
   "pl.startFailed": "Relay could not start an agent on this ticket: {error}",
