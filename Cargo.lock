@@ -4182,7 +4182,7 @@ dependencies = [
 
 [[package]]
 name = "relay-mobile"
-version = "0.0.15"
+version = "0.0.18"
 dependencies = [
  "agent-claude",
  "agent-core",
