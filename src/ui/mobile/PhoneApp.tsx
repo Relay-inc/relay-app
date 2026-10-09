@@ -56,6 +56,7 @@ const firstLine = (text: string) => text.split("\n")[0];
 function Pairing() {
   const { t } = useT();
   const error = usePhoneStore(s => s.error);
+  const busy = usePhoneStore(s => s.busy);
   const [line, setLine] = useState("");
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-6 pt-14 pb-[max(env(safe-area-inset-bottom),2rem)]">
@@ -75,33 +76,41 @@ function Pairing() {
         ))}
       </ol>
       <span className="flex-1" />
-      <label className="flex flex-col gap-2">
-        <span className="pl-1 text-sm text-tertiary">{t("phone.line")}</span>
-        <textarea
-          className="min-h-24 resize-none rounded-2xl bg-well px-4 py-3.5 font-mono text-sm break-all outline-none placeholder:text-tertiary focus:ring-3 focus:ring-accent-soft"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          placeholder="relay://…"
-          value={line}
-          onChange={e => setLine(e.target.value)}
-        />
-      </label>
       {error ? <p className="err-box">{error}</p> : null}
       <button
-        className="h-13 rounded-2xl bg-accent text-lg font-semibold text-on-accent disabled:opacity-50"
-        disabled={!line.trim()}
-        onClick={() => pair(line)}
-      >
-        {t("phone.pair")}
-      </button>
-      <button
-        className="-mt-2.5 inline-flex h-11 items-center justify-center gap-2 font-medium text-accent-text"
+        className="inline-flex h-13 items-center justify-center gap-2.5 rounded-2xl bg-accent text-lg font-semibold text-on-accent disabled:opacity-50"
+        disabled={busy}
         onClick={scanToPair}
       >
-        <Icon name="qr" className="glyph size-4.5" />
-        {t("phone.scan")}
+        {busy ? <span className="spinner" /> : <Icon name="qr" className="glyph size-5" />}
+        {t(busy ? "phone.pairing" : "phone.scan")}
       </button>
+      <details className="group flex flex-col">
+        <summary className="flex h-11 cursor-pointer list-none items-center justify-center font-medium text-accent-text group-open:hidden">
+          {t("phone.paste")}
+        </summary>
+        <div className="flex flex-col gap-3">
+          <label className="flex flex-col gap-2">
+            <span className="pl-1 text-sm text-tertiary">{t("phone.line")}</span>
+            <textarea
+              className="min-h-24 resize-none rounded-2xl bg-well px-4 py-3.5 font-mono text-sm break-all outline-none placeholder:text-tertiary focus:ring-3 focus:ring-accent-soft"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="relay://…"
+              value={line}
+              onChange={e => setLine(e.target.value)}
+            />
+          </label>
+          <button
+            className="h-11 rounded-2xl bg-fill-2 font-semibold disabled:opacity-50"
+            disabled={busy || !line.trim()}
+            onClick={() => pair(line)}
+          >
+            {t("phone.pair")}
+          </button>
+        </div>
+      </details>
     </div>
   );
 }
