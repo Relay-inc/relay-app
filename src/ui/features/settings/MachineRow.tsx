@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Machine } from "../../../domain/settings/types";
 import { newerVersion, setupCommands } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
@@ -22,6 +22,12 @@ export function MachineRow({ machine }: { machine: Machine }) {
   const updating = useSettingsStore(s => s.machinesPage.updating === machine.id);
   const phone = useSettingsStore(s => s.machinesPage.phone[machine.id]);
   const [confirming, setConfirming] = useState(false);
+  // a pairing works for 10 minutes: while the code shows, a new one replaces it just before that
+  useEffect(() => {
+    if (!phone) return;
+    const timer = setTimeout(() => pairPhone(machine.id), 9 * 60_000);
+    return () => clearTimeout(timer);
+  }, [phone, machine.id]);
   // a release of Relay brings a machine to its own version, never back to an older one: with the button when the
   // server takes updates, else with the commands (a relay-server from before remote updates)
   const behind =

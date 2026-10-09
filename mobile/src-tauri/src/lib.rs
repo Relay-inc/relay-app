@@ -46,13 +46,16 @@ fn server(app: &AppHandle) -> Result<Client, String> {
 /// The mirrored vault on the server, where the conversations run (their transcripts are found by it).
 fn vault_there(c: &Client) -> Result<String, String> { Ok(format!("{}/vault", c.info()?.work)) }
 
+// The commands that talk to the server are `async`: a plain command runs on the main thread, and a slow or
+// unreachable server froze the app for the whole timeout (no spinner, no error until it gave up).
+
 /// Pair with the line Relay on the laptop made for this phone (Settings › Machines › Add phone), and keep where the
 /// server is and the key to the laptop's mirror there.
-#[tauri::command]
+#[tauri::command(async)]
 fn pair(app: AppHandle, line: String, name: String) -> Result<Value, String> {
     let d = dir(&app)?;
     let mut secrets = sealed::load(&app, &d)?;
-    let (l, info) = client::pair(&line, &secrets.id, &name)?;
+    let (l, info) = client::pair(&line, &secrets.id, &name).inspect_err(|e| eprintln!("relay: pairing failed: {e}"))?;
     secrets.mirror = l.key.clone();
     sealed::save(&app, &d, &secrets)?;
     let s = json!({"host": l.host, "port": l.port, "fp": l.fp});
@@ -62,7 +65,7 @@ fn pair(app: AppHandle, line: String, name: String) -> Result<Value, String> {
 
 /// What the server says about itself. A locked mirror (the server restarted, the laptop is closed) is opened with the
 /// key from pairing, so conversations there can start again.
-#[tauri::command]
+#[tauri::command(async)]
 fn info(app: AppHandle) -> Result<Value, String> {
     let c = server(&app)?;
     let info = c.info()?;
@@ -74,14 +77,14 @@ fn info(app: AppHandle) -> Result<Value, String> {
 
 /// The laptop's conversations on the server: [{key, title, provider, model, effort, sid}], `sid` and `title` (the first
 /// thing said in it) where the server saw them.
-#[tauri::command]
+#[tauri::command(async)]
 fn conversations(app: AppHandle) -> Result<Value, String> {
     let (metas, sids, titles) = server(&app)?.list_named()?;
     Ok(json!(metas.iter().map(|m| json!({"key": m.key, "title": titles.get(&m.key), "provider": m.provider, "model": m.model, "effort": m.effort, "sid": sids.get(&m.key)})).collect::<Vec<_>>()))
 }
 
 /// The conversations whose agent runs, with the turns each has in flight as this phone saw them (desktop: `running`).
-#[tauri::command]
+#[tauri::command(async)]
 fn running(app: AppHandle, state: State<App>) -> Result<HashMap<String, u32>, String> {
     let (metas, _) = server(&app)?.list_sessions()?;
     let turns = state.turns.lock().unwrap();
@@ -90,7 +93,7 @@ fn running(app: AppHandle, state: State<App>) -> Result<HashMap<String, u32>, St
 
 /// A message to a conversation: followed first (taken up again, or started on the server from the laptop's profile,
 /// resuming its session when there is one), then written to its agent.
-#[tauri::command]
+#[tauri::command(async)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, model: Option<String>, effort: Option<String>) -> Result<(), String> {
     follow(&app, &state, &project, model.as_deref().unwrap_or(""), effort.as_deref().unwrap_or(""))?;
     let images: Vec<Image> = images.unwrap_or_default().into_iter().filter_map(|i| serde_json::from_value(i).ok()).collect();
@@ -103,11 +106,11 @@ fn send(app: AppHandle, state: State<App>, project: String, text: String, images
 }
 
 /// Follow a conversation without writing to it (opening it on the phone): what it says from now on comes as events.
-#[tauri::command]
+#[tauri::command(async)]
 fn open(app: AppHandle, state: State<App>, project: String) -> Result<(), String> { follow(&app, &state, &project, "", "") }
 
 /// Stop a conversation's agent on the server, as on the laptop.
-#[tauri::command]
+#[tauri::command(async)]
 fn stop(app: AppHandle, state: State<App>, project: String) -> Result<(), String> {
     let pid = state.live.lock().unwrap().remove(&project).map(|x| x.pid);
     state.wanted.lock().unwrap().remove(&project);
@@ -140,7 +143,7 @@ fn answer(state: State<App>, id: String, decision: Value) -> Result<(), String> 
 }
 
 /// A conversation's whole transcript, by its session on the server (desktop: `history`).
-#[tauri::command]
+#[tauri::command(async)]
 fn history(app: AppHandle, project: String) -> Result<Value, String> {
     let c = server(&app)?;
     let Some(sid) = c.list_sessions()?.1.remove(&project) else { return Ok(json!([])) };
@@ -148,7 +151,7 @@ fn history(app: AppHandle, project: String) -> Result<Value, String> {
 }
 
 /// A transcript by session id from an offset (desktop: `history_sid`): {items, next}.
-#[tauri::command]
+#[tauri::command(async)]
 fn history_sid(app: AppHandle, sid: String, from: Option<u64>) -> Result<Value, String> {
     if !agent_core::safe_id(&sid) { return Ok(json!({"items": [], "next": 0})); }
     let c = server(&app)?;
