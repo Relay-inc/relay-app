@@ -13,6 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Conversations the phone starts show on this Mac too**: Relay looks for them on each machine every 5 seconds and adds them to the list, with their history and live replies, and you can carry on in them from here. While this Mac follows one, the phone gets no notification for it
+- **A Mac that runs conversations for other devices no longer shows them as open in the terminal**: those belong to the other device (its laptop or phone) and stay hidden on the machine itself
+
 ## [0.0.19] - 2026-10-09
 
 ### Added

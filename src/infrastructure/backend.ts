@@ -432,6 +432,9 @@ export const onReposChanged = (handler: () => void) => listen("repos-changed", (
 export const onRepoUnlinked = (handler: (key: string, repo: string) => void) =>
   listen<{ key: string; repo: string }>("repo-unlinked", e => handler(e.payload.key, e.payload.repo));
 export const onRemindersChanged = (handler: () => void) => listen("reminders-changed", () => handler());
+/** A conversation this Mac's phone started on a work machine, now this Mac's too (its first thing said, when known). */
+export const onRemoteChat = (handler: (chat: { key: string; title: string | null; provider: string }) => void) =>
+  listen<{ key: string; title: string | null; provider: string }>("remote-chat", e => handler(e.payload));
 /** The relay:// links that launched the app: they arrive before anything listens. */
 export const launchLinks = async () => (await getCurrent()) ?? [];
 /** Every relay:// link opened while the app runs. */

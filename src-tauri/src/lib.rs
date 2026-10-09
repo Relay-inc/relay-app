@@ -1000,14 +1000,26 @@ fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Res
 }
 
 /// Sessions the switched-on providers know about outside the app (terminal, background), each with its provider.
+/// Not the ones this Mac's relay-server runs for other devices (This Mac as a machine): they are those devices'
+/// conversations, their transcripts sealed in the mirror, so here they could only show as a terminal nobody can follow.
 #[tauri::command]
 fn agents(app: AppHandle, state: State<App>) -> Value {
     let on = agents::enabled(&state.settings.lock().unwrap());
+    let server_work = relay_server::data_dir().join("work");
     let mut out = vec![];
     for p in on.into_iter().filter(|p| p.caps().background) {
-        for mut a in p.sessions(&env_of(&app, &state, p).env()) { a["provider"] = json!(p.id()); out.push(a); }
+        for mut a in p.sessions(&env_of(&app, &state, p).env()) {
+            if runs_for_server(&a, &server_work) { continue; }
+            a["provider"] = json!(p.id());
+            out.push(a);
+        }
     }
     json!(out)
+}
+// ponytail: by cwd, so a server conversation started in a repo outside the mirror still shows; its parent process
+// (`relay --broker`) would catch that too
+fn runs_for_server(agent: &Value, server_work: &std::path::Path) -> bool {
+    agent["cwd"].as_str().is_some_and(|cwd| std::path::Path::new(cwd).starts_with(server_work))
 }
 
 /// Continue a conversation in iTerm. The app's own process for it stops first, so two processes never
@@ -1932,13 +1944,17 @@ pub fn run() {
             updater::start(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
-            // the work machines: their conversations back, then their cards every second (only when there are machines)
+            // the work machines: their conversations back, then their cards every second (only when there are machines),
+            // and every 5 s the conversations its phone started there
             let h = app.handle().clone();
             std::thread::spawn(move || {
                 reattach_remote(&h);
-                loop {
+                for tick in 1u64.. {
                     let s = h.state::<App>().settings.lock().unwrap().clone();
-                    if s["machines"].as_array().is_some_and(|m| !m.is_empty()) { h.state::<App>().machines.poll(&s); }
+                    if s["machines"].as_array().is_some_and(|m| !m.is_empty()) {
+                        h.state::<App>().machines.poll(&s);
+                        if tick % 5 == 0 { reattach_remote(&h); }
+                    }
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 }
             });
@@ -2018,6 +2034,14 @@ mod machine_tests {
         assert_eq!(args[..2], ["--add-dir", "/w/abc/context"]);
         assert!(args.iter().any(|a| a.contains("/w/abc/memory"))); // the vault's memory: it runs in the vault there
         assert_eq!(p["env"], json!([["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "1"]]));
+    }
+    #[test]
+    fn a_conversation_this_macs_server_runs_is_no_terminal_session() {
+        let work = std::path::Path::new("/Users/k/Library/Application Support/relay-server/work");
+        assert!(runs_for_server(&json!({"cwd": "/Users/k/Library/Application Support/relay-server/work/ab12/vault"}), work));
+        assert!(!runs_for_server(&json!({"cwd": "/Users/k/vault"}), work));
+        assert!(!runs_for_server(&json!({"cwd": "/Users/k/Library/Application Support/relay-server/workshop"}), work));
+        assert!(!runs_for_server(&json!({}), work));
     }
 }
 
