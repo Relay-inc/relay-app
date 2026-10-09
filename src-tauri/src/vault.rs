@@ -118,6 +118,40 @@ pub fn status(vault: &str, map: &Value) -> Value {
     json!({"vault": vault, "map": map, "found": found, "ok": ok})
 }
 
+/// Where the starter vault goes on a first start: in the home folder, not in ~/Documents, which macOS guards with
+/// a permission prompt.
+pub const DEFAULT_DIR: &str = "Relay";
+
+/// Copies the starter vault (the app's resources/default-vault) to `dest` and makes it work: hooks and scripts
+/// executable, `.claude` a link to `System`, where Claude Code reads the settings, hooks and skills. A `dest`
+/// that already holds a vault stays as it is (a second first start), any other folder with visible files in it is
+/// refused with the key err.vault_dest_used.
+pub fn create_default(template: &Path, dest: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    if dest.join("System/rules/core/work-state.md").is_file() { return Ok(()); }
+    // hidden files (.DS_Store) do not count, someone else's notes do
+    if fs::read_dir(dest).is_ok_and(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))) { return Err("err.vault_dest_used".into()); }
+    copy_dir(template, dest).map_err(|e| e.to_string())?;
+    for sub in ["System/hooks", "System/scripts"] {
+        for e in fs::read_dir(dest.join(sub)).map_err(|e| e.to_string())?.flatten() {
+            fs::set_permissions(e.path(), fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+        }
+    }
+    let link = dest.join(".claude");
+    if fs::symlink_metadata(&link).is_err() { std::os::unix::fs::symlink("System", &link).map_err(|e| e.to_string())?; }
+    Ok(())
+}
+
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(to)?;
+    for e in fs::read_dir(from)? {
+        let e = e?;
+        let target = to.join(e.file_name());
+        if e.file_type()?.is_dir() { copy_dir(&e.path(), &target)?; } else { fs::copy(e.path(), target)?; }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -234,5 +268,41 @@ mod tests {
         for bad in ["secret.txt", "../note-out/Out.md", "Link.md", out.join("Out.md").to_str().unwrap(), "Nope", "A/Nope", ""] {
             assert_eq!(note(v, bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn default_vault_is_copied_once_and_works() {
+        use std::os::unix::fs::PermissionsExt;
+        let tpl = tmp("tpl");
+        for f in ["System/rules/core/work-state.md", "System/hooks/check.sh", "System/scripts/index.py", ".relay/config.json"] { touch(&tpl, f); }
+        let dest = tmp("dest").join("Relay");
+        create_default(&tpl, &dest).unwrap();
+        assert_eq!(fs::metadata(dest.join("System/hooks/check.sh")).unwrap().permissions().mode() & 0o777, 0o755);
+        assert_eq!(fs::read_link(dest.join(".claude")).unwrap(), PathBuf::from("System"));
+        assert!(dest.join(".relay/config.json").is_file());
+        assert_eq!(det(&dest)["ok"], true);
+        // a second first start keeps the vault and what was written in it
+        fs::write(dest.join("System/rules/core/work-state.md"), "mine").unwrap();
+        create_default(&tpl, &dest).unwrap();
+        assert_eq!(fs::read_to_string(dest.join("System/rules/core/work-state.md")).unwrap(), "mine");
+        // a folder with other files in it is never overwritten
+        let used = tmp("used");
+        touch(&used, "notes.txt");
+        assert_eq!(create_default(&tpl, &used), Err("err.vault_dest_used".into()));
+        // a folder with only hidden files counts as empty
+        let hidden = tmp("hidden");
+        touch(&hidden, ".DS_Store");
+        create_default(&tpl, &hidden).unwrap();
+        assert!(hidden.join("System/rules/core/work-state.md").is_file());
+    }
+
+    #[test]
+    fn shipped_template_is_a_vault() {
+        let tpl = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/default-vault");
+        let dest = tmp("shipped").join("Relay");
+        create_default(&tpl, &dest).unwrap();
+        let s = det(&dest);
+        assert_eq!(s["ok"], true, "{s}");
+        assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md", "notes": "Contexts"}));
     }
 }

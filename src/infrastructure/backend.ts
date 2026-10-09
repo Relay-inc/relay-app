@@ -86,6 +86,8 @@ export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });
 export const checkVault = (path: string, map: VaultMap) => invoke<VaultStatus>("check_vault", { path, map });
+/** The starter vault copied to ~/Relay (kept when it is already there), with its status. */
+export const createDefaultVault = () => invoke<VaultStatus>("create_default_vault");
 export const projectIcons = () => invoke<Record<string, ProjectIcon>>("project_icons");
 export const setProjectIcon = (project: string, kind: IconKind, value: string) =>
   invoke("set_project_icon", { project, kind, value });

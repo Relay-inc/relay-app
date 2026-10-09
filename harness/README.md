@@ -119,7 +119,7 @@ deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a proj
 settings-interface (appearance, accent, terminal), settings-sidebar, settings-permissions (Settings › General › Permissions, Full Disk Access missing), settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
 settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
-folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding, dark-waiting,
+folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding (the starter vault offered), onboarding-own (a vault of one's own), dark-waiting,
 dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail, dark-usage. Recording: recording-meeting (the bar in Waiting
 for you and the sidebar's row), recording-dictation (dictation in a conversation, the row seen from Reminders).
 

@@ -18,6 +18,12 @@ export async function pickMapped(status: VaultStatus, key: MapKey, map: VaultMap
   return checkMapping(status.vault, { ...map, [key]: relative });
 }
 
+/** The welcome screen's Start: the starter vault created in ~/Relay and saved like a picked one. */
+export async function startDefaultVault() {
+  const status = await backend.createDefaultVault();
+  await saveOnboardingVault(status.vault, status.map);
+}
+
 // ---------- first launch, or a vault that is gone: a welcome screen over the main window until a vault is saved
 let saved: (() => void) | null = null;
 /** Shows the welcome screen (ui/features/workspace/WorkspaceView.tsx); resolves once a vault is saved. */

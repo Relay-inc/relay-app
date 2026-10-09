@@ -828,6 +828,11 @@ const en = {
   "vault.welcome": "Welcome to Relay",
   "vault.intro":
     "Choose the folder of your Obsidian vault. Relay looks for your work-state, reminders and the other files it reads; check what it found below.",
+  "vault.introDefault":
+    "Relay starts with an empty vault in ~/Relay: the notes, rules and skills that give Claude a memory of your projects. Already have a vault? Choose that one instead.",
+  "vault.start": "Start",
+  "vault.haveOwn": "I have a vault",
+  "vault.back": "Back",
   "vault.none": "No folder chosen",
   "vault.choose": "Choose vault folder…",
   "vault.use": "Use this vault",

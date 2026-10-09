@@ -842,6 +842,11 @@ export default {
   "vault.welcome": "Bienvenue dans Relay",
   "vault.intro":
     "Choisissez le dossier de votre coffre Obsidian. Relay y cherche votre work-state, vos rappels et les autres fichiers qu'il lit ; vérifiez ci-dessous ce qu'il a trouvé.",
+  "vault.introDefault":
+    "Relay démarre avec un coffre vide dans ~/Relay : les notes, règles et skills qui donnent à Claude la mémoire de vos projets. Vous avez déjà un coffre ? Choisissez-le.",
+  "vault.start": "Démarrer",
+  "vault.haveOwn": "J'ai déjà un coffre",
+  "vault.back": "Retour",
   "vault.none": "Aucun dossier choisi",
   "vault.choose": "Choisir le dossier du coffre…",
   "vault.use": "Utiliser ce coffre",

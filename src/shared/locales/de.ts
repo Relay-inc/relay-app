@@ -838,6 +838,11 @@ export default {
   "vault.welcome": "Willkommen bei Relay",
   "vault.intro":
     "Wähle den Ordner deines Obsidian-Vaults. Relay sucht darin work-state, Erinnerungen und die anderen Dateien, die es liest; prüfe unten, was gefunden wurde.",
+  "vault.introDefault":
+    "Relay startet mit einem leeren Vault in ~/Relay: die Notizen, Regeln und Skills, die Claude ein Gedächtnis deiner Projekte geben. Schon einen Vault? Dann wähle ihn.",
+  "vault.start": "Starten",
+  "vault.haveOwn": "Ich habe einen Vault",
+  "vault.back": "Zurück",
   "vault.none": "Kein Ordner gewählt",
   "vault.choose": "Vault-Ordner wählen…",
   "vault.use": "Diesen Vault verwenden",
