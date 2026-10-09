@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Fixed
 
 - **PR tickets in the Pull requests view**: the PR detail shows the ticket a PR is about, or the way to one (link its repo to a project, link the project's board, pick a card), as Today does. PRs get their ticket as soon as the list loads, so PRs of a newly linked repo group under their ticket without waiting for Today to reload its cards
+- **Review your own PRs together**: the PRs of one ticket under Yours get Review together too, not only the ones waiting for your review
 
 ## [0.0.17] - 2026-10-09
 

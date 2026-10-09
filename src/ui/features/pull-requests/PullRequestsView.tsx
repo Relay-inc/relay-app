@@ -64,16 +64,15 @@ export function PullRequestsView({ className = "" }: { className?: string }) {
               <div key={key} className="flex flex-col gap-0.5 pt-2">
                 <div className="flex items-baseline gap-2 px-2.5 text-xs text-secondary">
                   <span className="min-w-0 flex-1 truncate">{title}</span>
-                  {mine ? null : (
-                    <button
-                      type="button"
-                      className="flex-none font-medium text-accent hover:underline cursor-pointer"
-                      title={t("today.reviewTogetherTip", { ticket: title })}
-                      onClick={() => reviewTogether(each)}
-                    >
-                      {t("today.reviewTogether", { n: group.length })}
-                    </button>
-                  )}
+                  {/* yours too: a review before you ask anyone, as the pane's Review does for one PR */}
+                  <button
+                    type="button"
+                    className="flex-none font-medium text-accent hover:underline cursor-pointer"
+                    title={t("today.reviewTogetherTip", { ticket: title })}
+                    onClick={() => reviewTogether(each)}
+                  >
+                    {t("today.reviewTogether", { n: group.length })}
+                  </button>
                 </div>
                 <div className="flex flex-col gap-0.5 ml-2.5 pl-1 border-l border-separator">{rows}</div>
               </div>
