@@ -108,6 +108,9 @@ export async function refresh() {
 
 /** Pair with the line from the laptop. True when it worked. */
 export async function pair(line: string) {
+  set(draft => {
+    Object.assign(draft, { busy: true, error: "" });
+  });
   try {
     await phonePair(line.trim(), "phone");
     await refresh();
@@ -117,6 +120,10 @@ export async function pair(line: string) {
       draft.error = text(error);
     });
     return false;
+  } finally {
+    set(draft => {
+      draft.busy = false;
+    });
   }
 }
 

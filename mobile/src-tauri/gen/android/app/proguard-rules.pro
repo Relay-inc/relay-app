@@ -22,3 +22,7 @@
 # The sealed-secrets plugin (SealedPlugin.kt): found by name from Rust, its arguments filled by reflection
 -keep class be.laurentmeersman.relay.mobile.SealedPlugin { *; }
 -keep class be.laurentmeersman.relay.mobile.SealArgs { *; }
+# ML Kit (the barcode scanner) finds its component registrars by name and makes them with their no-argument
+# constructor; R8 removed those constructors, so scanning crashed in release builds (NoSuchMethodException, then an NPE)
+-keep class * implements com.google.firebase.components.ComponentRegistrar { <init>(); }
+-keep class com.google.mlkit.** { <init>(); }
