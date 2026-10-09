@@ -1,11 +1,11 @@
 {
-  "version": "0.0.17",
-  "notes": "### Changed\n\n- **Orchestrator permissions**: the coordinator and its workers run with the same permissions as any other conversation. Push, PR create, merge and comment no longer always ask, and workers are no longer denied the vault-wide files or a checkout of main: the role prompts still tell them what not to do\n- **Meeting actions on Today**: Join and Record are their own icon buttons on a meeting instead of living under \"…\", and a meeting can no longer be snoozed (#166)",
-  "pub_date": "2026-10-09T09:32:55.110Z",
+  "version": "0.0.18",
+  "notes": "### Fixed\n\n- **PR tickets in the Pull requests view**: the PR detail shows the ticket a PR is about, or the way to one (link its repo to a project, link the project's board, pick a card), as Today does. PRs get their ticket as soon as the list loads, so PRs of a newly linked repo group under their ticket without waiting for Today to reload its cards (#168)\n- **Review your own PRs together**: the PRs of one ticket under Yours get Review together too, not only the ones waiting for your review (#169)",
+  "pub_date": "2026-10-09T11:09:45.962Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnNWb204Q2g4bkcrdkRBTHVUdXVuN3pjTmQ5TW5LRTZzdWI4bklVUHRSeFRJWEJFQ0ZiWTZDUjlBZjY3RXlwRUdzL3drVk04Z2thZjZmY216Y1NMcWdZPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNTM4MzUxCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xNwo4N0NFdlNjSU5JVmJiWUNUbU5hUWVtWkRDZkc4QjlMc2d4OU5qT1BHK25VbTd3Y0xmMGMvTzM3SUZkV2dFSWlNRkpUVFVYTzRSZnFHNUlYdFI4aXREZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/624509981"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmxnR0RSYmVUa1hZWWQ1K3NXYmlBSjIwdE5iWnBYSlBEa1RaU1hleWtWTWorK2k0SzlkZk9tWHdTV1A1clduR09vR3JpQmRSb1JpSnlZRkNUOGhmcndzPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxNTQ0MTY4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4xOApJdHlxZFM1RXhtMU93YVEwdDdFSjdqb2JWUzF2SjFNRlFtb1ZQeFBPajJnaFFNbExMSFZKM1BjWE9GMEhkQ2dqMEprNVI2L3BZRktxSmk2K1lzamJBUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/624732621"
     }
   }
 }
