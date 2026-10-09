@@ -84,6 +84,9 @@ export const prs = {
     // yours on ticket #312, in two repos: grouped under the ticket
     pr(420, "312 Two-factor: recovery codes", "acme/northwind-portal", { draft: true, project: "Northwind Portal" }),
     pr(77, "312 Two-factor: recovery codes API", "acme/northwind-api", { draft: true, project: "Northwind Portal" }),
+    // yours on ticket #309, nobody else's PRs on it: only reviewable through the PR list
+    pr(421, "309 Audit log export: query", "acme/northwind-portal", { review: "REVIEW_REQUIRED", ci: "SUCCESS", project: "Northwind Portal" }),
+    pr(422, "309 Audit log export: download", "acme/northwind-portal", { review: "REVIEW_REQUIRED", ci: "SUCCESS", project: "Northwind Portal" }),
   ],
 };
 const actor = (login: string) => ({ login, name: login });
