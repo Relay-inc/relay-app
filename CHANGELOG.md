@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reviewing your own PRs together**: Review together on your own PRs of a ticket still opened "This pull request no longer waits on you" when nobody else had a PR on that ticket. Today now knows the ticket of your own PRs too
+
 ## [0.0.19] - 2026-10-09
 
 ### Added

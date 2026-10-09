@@ -371,6 +371,12 @@ const VIEWS = {
     await page.getByRole("button", { name: "Review together (2 PRs)" }).last().click();
     await settle(page, 1500);
   },
+  // your own PRs of ticket #309, which has no PRs of others: Today queues nothing under its id, the review rebuilds it
+  "prs-review-own-only-together": async () => {
+    await VIEWS["prs-list"]();
+    await page.locator('button[title*="Audit log export"]').click();
+    await settle(page, 1500);
+  },
   "pr-detail": async () => {
     await VIEWS["prs-list"]();
     await click("Fix the SSO redirect loop on the portal");

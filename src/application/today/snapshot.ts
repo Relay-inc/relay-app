@@ -4,7 +4,6 @@ import { PROVIDERS } from "../../shared/plugins";
 import { todayIso } from "../../domain/reminders/rules";
 import type { Reminder } from "../../domain/reminders/types";
 import { mailKey } from "../../domain/navigation/keys";
-import { prsForMe } from "../../domain/today/rules";
 import { waitsOnYou } from "../../domain/today/kinds/mail";
 import type { Flags, Snapshot, Words } from "../../domain/today/kinds/types";
 import { useBoardStore } from "../board/store";
@@ -46,7 +45,8 @@ export function snapshot(): Snapshot {
     const project = conversations.chats[key]?.project ?? null;
     return [key, { label: label(key), project, projectLabel: projectLabel(project) }] as const;
   };
-  const tickets = prsForMe(prs).review.flatMap(pr => {
+  // every open PR's ticket, your own too: a review of your own PRs (not queued) is rebuilt with the same group id
+  const tickets = [...(prs?.review ?? []), ...(prs?.mine ?? [])].flatMap(pr => {
     const link = ticketOf(pr.url);
     return link ? [[pr.url, link] as const] : [];
   });
