@@ -254,6 +254,9 @@ pub trait AgentProvider: Sync {
     fn title(&self, _env: &Env, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
     /// A text written from `text` following `system`, with no tools: a reply draft, a rewrite.
     fn write(&self, _env: &Env, _system: &str, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
+    /// An answer about the checkout `dir` following `system`: it may read there (files, git), not write, no network.
+    /// The board pipeline's review of a worker's diff with the code around it.
+    fn review(&self, _env: &Env, _dir: &str, _system: &str, _text: &str) -> Result<String, String> { Err("unsupported".into()) }
 
     /// Plan or rate limits. The app calls it at most once a minute.
     fn limits(&self, _env: &Env) -> usage::Limits { usage::Limits::Off("unsupported".into()) }

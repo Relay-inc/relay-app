@@ -162,6 +162,25 @@ impl AgentProvider for Codex {
         let _ = std::fs::remove_file(&out_file);
         if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or("codex exec failed").to_string()) }
     }
+    /// `codex exec` in the checkout like `write`, but with its shell in the read-only sandbox, so it can read the code
+    /// and run git around the diff; still no user config, rules, session, browser or apps.
+    fn review(&self, env: &Env, dir: &str, system: &str, text: &str) -> Result<String, String> {
+        use std::io::Write;
+        let out_file = std::env::temp_dir().join(format!("relay-codex-review-{}-{}.txt", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));
+        let mut cmd = Command::new(env.bin);
+        cmd.args(["exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "-s", "read-only", "-c", "web_search=disabled"]);
+        if pick(env, "auth", &AUTH) == "chatgpt" { cmd.env_remove("OPENAI_API_KEY").env_remove("CODEX_API_KEY"); }
+        // code mode stays on: it is how codex reads files (with it off, it tries and fails, and reviews the diff blind)
+        for f in ["apps", "browser_use", "computer_use", "in_app_browser", "tool_suggest", "sleep_tool"] { cmd.args(["--disable", f]); }
+        let mut child = cmd.arg("-o").arg(&out_file).arg("-").current_dir(dir).env("PATH", env.path)
+            .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped())
+            .spawn().map_err(|e| e.to_string())?;
+        child.stdin.take().ok_or("no stdin")?.write_all(format!("{system}\n\n{text}").as_bytes()).map_err(|e| e.to_string())?;
+        let out = child.wait_with_output().map_err(|e| e.to_string())?;
+        let t = std::fs::read_to_string(&out_file).unwrap_or_default().trim().to_string();
+        let _ = std::fs::remove_file(&out_file);
+        if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().lines().last().unwrap_or("codex exec failed").to_string()) }
+    }
     fn limits(&self, env: &Env) -> usage::Limits {
         let now = usage::now_ms();
         let from_logs = with_logs(env, now - usage::KEEP_MS, |l| l.limits.clone());
