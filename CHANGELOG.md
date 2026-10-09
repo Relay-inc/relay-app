@@ -13,10 +13,12 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.18] - 2026-10-09
+
 ### Fixed
 
-- **PR tickets in the Pull requests view**: the PR detail shows the ticket a PR is about, or the way to one (link its repo to a project, link the project's board, pick a card), as Today does. PRs get their ticket as soon as the list loads, so PRs of a newly linked repo group under their ticket without waiting for Today to reload its cards
-- **Review your own PRs together**: the PRs of one ticket under Yours get Review together too, not only the ones waiting for your review
+- **PR tickets in the Pull requests view**: the PR detail shows the ticket a PR is about, or the way to one (link its repo to a project, link the project's board, pick a card), as Today does. PRs get their ticket as soon as the list loads, so PRs of a newly linked repo group under their ticket without waiting for Today to reload its cards (#168)
+- **Review your own PRs together**: the PRs of one ticket under Yours get Review together too, not only the ones waiting for your review (#169)
 
 ## [0.0.17] - 2026-10-09
 
@@ -371,7 +373,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.17...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.18...HEAD
+[0.0.18]: https://github.com/Relay-inc/relay-app/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/Relay-inc/relay-app/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/Relay-inc/relay-app/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/Relay-inc/relay-app/compare/v0.0.14...v0.0.15
