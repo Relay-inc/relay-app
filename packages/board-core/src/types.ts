@@ -75,8 +75,10 @@ export interface CardDetail<D = any> {
   /** An action from the window, resolves with the card as it is now: "status" or "assignee" with the picked id,
    * "member-add"/"member-remove" with a person id, "label-add"/"label-remove" with a label, "comment" with the
    * composer's text, "attach" with picked files. A comment carries the people picked with @ in `mentions` (their
-   * "@name" is in the text); a provider that knows mentions writes them its way, the others leave the text as typed. */
-  act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[]; mentions?: Opt[] }): Promise<D>;
+   * "@name" is in the text); a provider that knows mentions writes them its way, the others leave the text as typed.
+   * `hidden`: the comment is internal, kept from the client (Productive's client portal); a provider without clients
+   * ignores it. */
+  act?(ctx: Ctx, ref: BoardRef, id: string, action: string, input: { value: string; files: File[]; mentions?: Opt[]; hidden?: boolean }): Promise<D>;
 }
 
 /** A field of the provider's config in Settings › Integrations, stored as integrations.<id>.<key> (a string).

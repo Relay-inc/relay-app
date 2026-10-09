@@ -81,6 +81,9 @@ export const prs = {
     pr(415, "Invoice export with VAT column", "acme/northwind-portal", { review: "APPROVED", project: "Northwind Portal" }),
     pr(21, "Upgrade to PHP 8.5", "acme/kestrel-api", { draft: true, ci: null, project: "Kestrel API" }),
     pr(9, "Holiday banner", "acme/delmas-shop", { review: "APPROVED", ci: "SUCCESS", project: "Delmas Bakery" }),
+    // yours on ticket #312, in two repos: grouped under the ticket
+    pr(420, "312 Two-factor: recovery codes", "acme/northwind-portal", { draft: true, project: "Northwind Portal" }),
+    pr(77, "312 Two-factor: recovery codes API", "acme/northwind-api", { draft: true, project: "Northwind Portal" }),
   ],
 };
 const actor = (login: string) => ({ login, name: login });
@@ -214,7 +217,7 @@ export function productive(method: string, path: string, body: unknown): unknown
   ]);
   if (p === "/custom_fields") return page([]);
   if (p.startsWith("/organizations/")) return one({ id: "40001", type: "organizations", attributes: { name: "Acme Agency" } });
-  if (p.startsWith("/projects/")) return one({ id: p.split("/")[2], type: "projects", attributes: { name: "Northwind Portal", preferences: { navigation_order: ["v2", "v1", "v3"] } }, relationships: { workflow: { data: { type: "workflows", id: "wf1" } } } });
+  if (p.startsWith("/projects/")) return one({ id: p.split("/")[2], type: "projects", attributes: { name: "Northwind Portal", project_type_id: p.split("/")[2] === "p3" ? 1 : 2, preferences: { navigation_order: ["v2", "v1", "v3"] } }, relationships: { workflow: { data: { type: "workflows", id: "wf1" } } } });
   if (p === "/workflow_statuses") return page(STATUSES);
   if (p === "/people" || p.startsWith("/people/")) return p === "/people" ? page(PEOPLE) : one(PEOPLE[0]);
   return page([]);

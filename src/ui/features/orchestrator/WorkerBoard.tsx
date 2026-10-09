@@ -7,6 +7,7 @@ import { projectLabel } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { WorkerRow } from "./WorkerRow";
+import { openPipelineLink } from "../../../application/pipeline/runner";
 
 /** The orchestrator's workers in the drawer next to the coordinator, newest first. */
 export function WorkerBoard() {
@@ -34,6 +35,7 @@ export function WorkerBoard() {
           when={since(worker.ended ?? worker.at)}
           onOpen={() => select(worker.key)}
           onStop={() => stopWorker(worker.key)}
+          onLink={openPipelineLink}
         />
       ))}
     </ul>

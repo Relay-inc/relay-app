@@ -22,6 +22,17 @@ export type Worker = {
   at: number; // started, ms
   ended: number | null;
   report: OrchReport | null;
+  /** a board pipeline's worker: its ticket (domain/pipeline Ticket), the branch its PR goes to, the PR or why there is
+   *  none, and what the pipeline last did on the board for it */
+  ticket?: unknown;
+  base_branch?: string | null;
+  pr?: string | null;
+  pr_error?: string | null;
+  board?: string | null;
+  /** while Relay validates a pipeline worker's done: "checks" or "review" (it still counts as running) */
+  phase?: string | null;
+  rounds?: number;
+  review_notes?: string | null;
 };
 /** The backend's `orch` event: a worker made or changed, or a user turn Relay wrote into a conversation itself. */
 export type OrchEvent = { type: "worker"; worker: Worker } | { type: "sent"; key: string; text: string };

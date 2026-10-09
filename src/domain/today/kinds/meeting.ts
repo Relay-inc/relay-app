@@ -67,8 +67,8 @@ export const meeting: SubjectDef<"meeting", MeetingAct> = {
     return actionSet(
       [
         { id: "prep", label: w.t("wait.meetingPrep"), icon: "chat", key: "↵" },
-        ...(join ? [{ id: "join" as const, label: w.t("wait.meetingJoin"), key: "⌫" }] : []),
-        { id: "record", label: w.t("rec.record"), tip: w.t("rec.recordHelp") },
+        ...(join ? [{ id: "join" as const, label: w.t("wait.meetingJoin"), icon: "video", key: "⌫" }] : []),
+        { id: "record", label: w.t("rec.record"), icon: "mic", tip: w.t("rec.recordHelp") },
       ],
       0,
       join ? 1 : null,

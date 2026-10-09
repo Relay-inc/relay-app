@@ -233,6 +233,20 @@ impl AgentProvider for Claude {
         let t: String = t.lines().next().unwrap_or("").trim().trim_matches(|c| c == '"' || c == '\'' || c == '.').chars().take(60).collect();
         if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
     }
+    /// One call in the checkout without settings, MCP or a transcript, on the CLI's default model: Read, Grep, Glob and
+    /// read-only git, the rest refused (in print mode a tool that is not allowed is denied, nobody is asked).
+    fn review(&self, env: &Env, dir: &str, system: &str, text: &str) -> Result<String, String> {
+        let mut cmd = Command::new(env.bin);
+        on_account(&mut cmd, account(env));
+        let out = cmd
+            .args(["-p", "--no-session-persistence", "--setting-sources", "", "--strict-mcp-config", "--tools", "Read", "Grep", "Glob", "Bash",
+                "--allowedTools", "Read", "Grep", "Glob", "Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)", "Bash(git status:*)",
+                "--system-prompt", system])
+            .arg(text).current_dir(dir).env("PATH", env.path).env_remove("ANTHROPIC_API_KEY")
+            .stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+        let t = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if out.status.success() && !t.is_empty() { Ok(t) } else { Err(String::from_utf8_lossy(&out.stderr).trim().to_string()) }
+    }
     /// Like `title`: one call outside the vault without settings, tools, MCP or a transcript, here on Sonnet.
     fn write(&self, env: &Env, system: &str, text: &str) -> Result<String, String> {
         let text: String = text.chars().take(20_000).collect();

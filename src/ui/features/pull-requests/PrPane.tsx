@@ -11,7 +11,7 @@ import {
   type Check,
 } from "../../../domain/pull-requests/rules";
 import { useNavigationStore } from "../../../application/navigation/store";
-import { prHeading, prReviews, reviewPr, secondOpinion } from "../../../application/pull-requests/prs";
+import { prHeading, prReviews, prRow, reviewPr, secondOpinion } from "../../../application/pull-requests/prs";
 import { select } from "../../../application/navigation/navigation";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
@@ -25,6 +25,7 @@ import { onAgents, reviewAgent, setReviewAgent } from "../../../application/agen
 import { PickMenu } from "../conversations/PickMenu";
 import { tintText } from "../../../shared/tints";
 import { CI, age } from "./prState";
+import { TicketRow } from "../today/sections/PrSection";
 
 type Tone = "ok" | "bad" | "run" | "";
 const DOT: Record<string, string> = { ok: "bg-ok", bad: "bg-late", run: "bg-soon", "": "bg-separator" };
@@ -88,6 +89,7 @@ export function PrPane({ prKey }: { prKey: string }) {
   const pr = useNavigationStore(s => s.panel.detail[prKey]) as PrDetail | undefined;
   const err = useNavigationStore(s => s.panel.err);
   const heading = useDerived(() => prHeading(prKey));
+  const row = useDerived(() => prRow(prKey));
   const review = useDerived(() => ({ id: reviewAgent(), agents: onAgents() }));
   const reviewer = agent(review.id);
   const reviews = useDerived(() => prReviews(prKey));
@@ -226,6 +228,8 @@ export function PrPane({ prKey }: { prKey: string }) {
             {pr.mergeable === "CONFLICTING" ? chip("bad", t("pr.conflict")) : null}
             {asked.length ? chip("", t("pr.asked", { who: asked.join(", ") })) : null}
           </div>
+          {/* the ticket it is about, or the way to one (link the repo, the board, pick a card), as in Today */}
+          {row ? <TicketRow pr={row} /> : null}
           {/* the conversations that reviewed this PR; once one is done, the picked agent can answer it */}
           {reviews.list.length ? (
             <div className="flex flex-wrap items-center gap-1.5 text-xs">

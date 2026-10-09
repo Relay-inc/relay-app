@@ -1,7 +1,8 @@
 import { t } from "../../shared/i18n";
 import { panelItem } from "../../domain/navigation/keys";
+import { linkPrs } from "../today/links";
 import type { PrDetail } from "../../domain/pull-requests/types";
-import { reviewPrompt, reviewsOf, rowProject, secondOpinionPrompt } from "../../domain/pull-requests/rules";
+import { reviewPrompt, reviewsOf, rowOf, rowProject, secondOpinionPrompt } from "../../domain/pull-requests/rules";
 import { briefingText } from "../../domain/calendar/rules";
 import { ensureHistory } from "../conversations/history";
 import { useConversationsStore } from "../conversations/store";
@@ -20,7 +21,8 @@ import { usePullRequestsStore } from "./store";
 
 const set = usePullRequestsStore.setState;
 
-/** Once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view. */
+/** Once GitHub is switched on in the settings. Refreshed every 5 minutes and on opening the view; then the tickets of
+ *  PRs that have none yet are worked out (links.ts). */
 export async function loadPrs() {
   if (!ghOn() || usePullRequestsStore.getState().busy) return;
   set(draft => {
@@ -41,6 +43,7 @@ export async function loadPrs() {
   set(draft => {
     draft.busy = false;
   });
+  linkPrs(); // a new PR, or a repo just linked to its project: which ticket it is about, without waiting for Today
 }
 /** The GitHub repos per vault project, for the title bar's PRs button. */
 export async function loadProjectRepos() {
@@ -130,6 +133,12 @@ export async function secondOpinion(key: string) {
 export function prProjectLabel(name: string): string {
   const known = project(name);
   return known ? projectLabel(known.name) : "";
+}
+/** The row of the lists a PR detail key stands for: what Today knows of it (its project, its ticket). Read it with
+ *  `useDerived`. */
+export function prRow(key: string) {
+  const item = panelItem(key);
+  return item?.kind === "pr" ? rowOf(usePullRequestsStore.getState().list, item.repo, item.number) : undefined;
 }
 /** The PR detail's header: its repo and, when the vault knows the project of its row in the lists, that project's
  *  label and context tint. Read it with `useDerived`. */

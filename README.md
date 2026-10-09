@@ -17,8 +17,10 @@ pnpm tauri dev
 Needs Rust, pnpm, Claude Code at `~/.local/bin/claude` (logged in), and iTerm
 for "open in terminal".
 
-There is no default vault. On first start the main window asks for the vault folder and shows what it
-found in it, and no conversation, terminal or snapshot runs until one is saved. Change it later in
+On first start the main window offers a starter vault: Start copies `src-tauri/resources/default-vault` to
+`~/Relay` (a vault already there is kept) with `.claude -> System` linked, and uses it. "I have a vault" asks for
+the vault folder instead and shows what it found in it. No conversation, terminal or snapshot runs until a vault is
+saved. `scripts/check-default-vault.py --vault <your vault>` checks the starter vault holds nothing from a real one. Change it later in
 Vault › Settings… (Cmd-,). Vaults differ, so the app keeps a mapping per vault in `settings.json`:
 
 ```json

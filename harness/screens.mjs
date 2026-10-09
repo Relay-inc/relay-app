@@ -358,6 +358,19 @@ const VIEWS = {
     await click("Pull requests");
     await waitText("Fix the SSO redirect loop on the portal");
   },
+  // the PRs of ticket #312 reviewed together from the list, the same review as Today's item
+  "prs-review-together": async () => {
+    await VIEWS["prs-list"]();
+    await button("Review together (2 PRs)").click();
+    await settle(page, 1500);
+  },
+  // your own PRs of ticket #312 (green checks, so not in Today's queue) reviewed together: the review screen, not "no
+  // longer waits on you"
+  "prs-review-own-together": async () => {
+    await VIEWS["prs-list"]();
+    await page.getByRole("button", { name: "Review together (2 PRs)" }).last().click();
+    await settle(page, 1500);
+  },
   "pr-detail": async () => {
     await VIEWS["prs-list"]();
     await click("Fix the SSO redirect loop on the portal");
@@ -398,6 +411,14 @@ const VIEWS = {
     await VIEWS.board();
     await click(markers.card);
     await waitText("Amount excl. VAT");
+  },
+  // the ticket window of a board with a hand-picked pipeline: Build with agent under Start conversation
+  "ticket-build": async () => {
+    await open(page, server.url, { fixture: "pipeline-manual" });
+    await click("Productive");
+    await waitText(markers.card);
+    await click(markers.card);
+    await waitText("Build with agent");
   },
   "board-list": async () => {
     await VIEWS.board();
@@ -572,6 +593,11 @@ const VIEWS = {
     await click("From Relay");
     await click("Details");
   },
+  // a board pipeline's worker on the board: its ticket and the PR Relay opened
+  "orchestrator-pipeline": async () => {
+    await VIEWS.orchestrator();
+    await intoView("Export invoices as CSV");
+  },
   "orchestrator-live": async () => {
     await VIEWS.orchestrator();
     await page.evaluate(() => window.__harness.orchLive());
@@ -631,12 +657,34 @@ const VIEWS = {
     await unfold("Claude Code");
     await intoView("Switch accounts automatically");
   },
+  // the board pipeline of a project with a linked board, folded open in Settings › Projects
+  "settings-pipeline": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Agents at once");
+  },
+  // the same, its top: the per-project switch, the checkout and the branch
+  "settings-pipeline-top": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Board pipeline");
+  },
+  // the same: the validation before a PR (checks, review, rounds)
+  "settings-pipeline-validation": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Rounds");
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");
   },
   onboarding: async () => {
     await open(page, server.url, { fixture: "onboarding" });
+  },
+  "onboarding-own": async () => {
+    await open(page, server.url, { fixture: "onboarding" });
+    await button("I have a vault").click();
   },
   "dark-waiting": async () => {
     await open(page, server.url, { fixture: "dark" });

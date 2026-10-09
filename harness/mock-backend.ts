@@ -112,7 +112,12 @@ const terminalAgents = () => [
   vault.backgroundBlocked,
 ];
 
+// what the board pipeline did (fixture "pipeline"): its orch_* calls and its writes to Productive, in order
+const pipelineCalls: { cmd: string; args: Args }[] = [];
+// every pipeline PR as gh would read it, set with __harness.setPr
+let prStatus: Record<string, unknown> = { state: "OPEN", reviewDecision: null, reviews: [], comments: [], inline: [] };
 function handle(cmd: string, a: Args): unknown {
+  if (cmd.startsWith("orch_") && cmd !== "orch_workers" || (cmd === "integration_call" && a.method !== "GET")) pipelineCalls.push({ cmd, args: structuredClone(a) });
   switch (cmd) {
     // event plugin
     case "plugin:event|listen": {
@@ -181,6 +186,8 @@ function handle(cmd: string, a: Args): unknown {
     case "detect_vault":
     case "check_vault":
       return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
+    case "create_default_vault":
+      return { ...vault.vaultStatus(true), vault: "/Users/me/Relay" };
     case "pick_folder":
       return harness.pickFolder;
     case "pick_path":
@@ -306,6 +313,29 @@ function handle(cmd: string, a: Args): unknown {
       Object.assign(worker, { state: "stopped", ended: Date.now() });
       setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return true;
+    }
+    // the board pipeline: a worker on a ticket, a follow-up, its PR (open, nothing new), what it did on the board
+    case "orch_dispatch_ticket": {
+      const worker = { key: `c:orch-w-t${workers.length}`, project: a.project, title: a.title, task: a.task, repo: a.repo,
+        worktree: `${a.repo}-relay-t${workers.length}`, branch: `relay/ticket-t${workers.length}`, state: "running", at: Date.now(), ended: null,
+        report: null, ticket: a.ticket, base_branch: a.base || "main", pr: null, pr_error: null, board: null } as (typeof workers)[number];
+      workers.push(worker);
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return structuredClone(worker);
+    }
+    case "orch_message": {
+      const worker = workers.find(w => w.key === a.key);
+      if (worker) Object.assign(worker, { state: "running", ended: null });
+      if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return null;
+    }
+    case "orch_pr":
+      return structuredClone(prStatus);
+    case "orch_board": {
+      const worker = workers.find(w => w.key === a.key);
+      if (worker) worker.board = a.mark;
+      if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return worker ? structuredClone(worker) : null;
     }
     case "history_sid": {
       const items = conv.terminalHistory(a.sid);
@@ -811,6 +841,18 @@ const harness = {
     emitAgent(key, { type: "resolved", model, effort, default_model: true, default_effort: true }),
   /** the live events after the long conversation opened: running and failed tools, an error, a draft note */
   liveTail: (key = conv.LONG_KEY) => conv.liveTail().forEach(event => emitAgent(key, event)),
+  /** the board pipeline's calls so far */
+  pipelineCalls: () => structuredClone(pipelineCalls),
+  /** what gh says about the pipeline's PRs from now on */
+  setPr: (status: Record<string, unknown>) => void (prStatus = { state: "OPEN", reviewDecision: null, reviews: [], comments: [], inline: [], ...status }),
+  /** a pipeline worker reports: its state, its PR (what orch.rs sets after the push), the `orch` event */
+  pipelineReport: (key: string, status: string, pr: string | null, extra: Record<string, unknown> = {}) => {
+    const worker = workers.find(w => w.key === key);
+    if (!worker) return false;
+    Object.assign(worker, { state: status, ended: Date.now(), pr, report: { status, summary: "Built it.", questions: null, diff: null, flags: [] }, ...extra });
+    emit("orch", { type: "worker", worker: structuredClone(worker) });
+    return true;
+  },
   /** the orchestrator's live events (fixture "orch"): a worker starts, another reports into the coordinator, one task each */
   orchLive: async () => {
     for (const event of orch.live()) {

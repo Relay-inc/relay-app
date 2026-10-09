@@ -196,6 +196,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("tray.plus_month", ["→ +1 month", "→ +1 maand", "→ +1 mois", "→ +1 Monat"]),
     ("tray.drop", ["✕ Drop", "✕ Schrappen", "✕ Supprimer", "✕ Verwerfen"]),
     ("err.note", ["No note '{v}' in the vault", "Geen note '{v}' in de vault", "Aucune note '{v}' dans le coffre", "Keine Notiz '{v}' im Vault"]),
+    ("err.vault_dest_used", ["{v} already has other files in it, choose your own vault instead", "{v} bevat al andere bestanden, kies je eigen vault", "{v} contient déjà d'autres fichiers, choisissez votre propre coffre", "{v} enthält schon andere Dateien, wähle deinen eigenen Vault"]),
     ("err.no_vault_set", ["No vault chosen yet", "Nog geen vault gekozen", "Aucun coffre choisi", "Noch kein Vault gewählt"]),
     ("err.project", ["Invalid project '{v}': icon (max 4 characters), label (max 60) and img (png data url) must be text",
         "Ongeldig project '{v}': icon (max 4 tekens), label (max 60) en img (png data url) moeten tekst zijn",
@@ -610,6 +611,18 @@ async fn detect_vault(state: State<'_, App>, path: String) -> Result<Value, Stri
     Ok(vault::status(&v, &vault::merge(&m, &known)))
 }
 
+/// A first start without a vault of one's own: the starter vault from the app's resources, copied to ~/Relay
+/// (an existing vault there is kept). Returns its status, for the welcome screen to save like a picked one.
+#[tauri::command]
+fn create_default_vault(app: AppHandle, state: State<App>) -> Result<Value, String> {
+    let lang = ui_lang_of(&state.settings.lock().unwrap());
+    let src = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
+    let dest = PathBuf::from(home()).join(vault::DEFAULT_DIR);
+    vault::create_default(&src, &dest).map_err(|e| if e.starts_with("err.") { tr_v(lang, &e, &dest.to_string_lossy()) } else { e })?;
+    let (v, m) = vault::detect(&dest.to_string_lossy());
+    Ok(vault::status(&v, &m))
+}
+
 /// Found / missing for a mapping being edited, without detection.
 #[tauri::command]
 fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault::merge(&json!({}), &map)) }
@@ -689,6 +702,22 @@ fn stop(app: AppHandle, state: State<App>, project: String) { session::stop(&app
 fn orch_workers(app: AppHandle) -> Vec<orch::Worker> { orch::load(&app) }
 #[tauri::command]
 fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
+/// The board pipeline (webview: application/pipeline): start a worker on a ticket, write to one, read its PR, and
+/// note what it did on the board. Off the main thread: git fetch, push and gh go over the network.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, project: String, repo: String, base: Option<String>, model: Option<String>, ticket: Value, validate: Option<orch::Validate>, plan: Option<bool>) -> Result<orch::Worker, String> {
+    let base = base.map(|b| b.trim().to_string()).filter(|b| !b.is_empty());
+    tauri::async_runtime::spawn_blocking(move || orch::dispatch_ticket(&app, title, task, project, repo, model, orch::Pipe { base, ticket, validate: validate.unwrap_or_default(), plan: plan.unwrap_or(false) })).await.map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn orch_message(app: AppHandle, key: String, text: String) -> Result<(), String> { orch::pipe_message(&app, &key, &text) }
+#[tauri::command]
+async fn orch_pr(app: AppHandle, key: String) -> Result<Value, String> {
+    tauri::async_runtime::spawn_blocking(move || orch::pr_status(&app, &key)).await.map_err(|e| e.to_string())?
+}
+#[tauri::command]
+fn orch_board(app: AppHandle, key: String, mark: String) -> Option<orch::Worker> { orch::set_board(&app, &key, mark) }
 
 /// A conversation closes: remove the worktrees it made that are safe to remove (see worktrees::remove). The ones
 /// kept stay linked, a next close tries again. Returns {removed, kept}.
@@ -738,16 +767,34 @@ async fn ai_title(app: AppHandle, state: State<'_, App>, text: String, provider:
 /// settings, MCP or a transcript, so third-party text in it (a mail) can make it do nothing but write. Today's mail
 /// composer drafts and rewrites replies with it; the user edits the result before it is saved anywhere.
 #[tauri::command]
-async fn ai_write(app: AppHandle, state: State<'_, App>, system: String, text: String, provider: Option<String>) -> Result<String, String> {
-    // the asked provider when it is on and can, else the first switched-on one that can
+async fn ai_write(app: AppHandle, system: String, text: String, provider: Option<String>) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || write_blocking(&app, provider.as_deref(), &system, &text)).await.map_err(|e| e.to_string())?
+}
+/// A read-only review in the checkout `dir` (AgentProvider::review), the same provider pick as write_blocking.
+/// Err("unsupported") when that provider has no review: the caller falls back to write.
+pub(crate) fn review_blocking(app: &AppHandle, provider: Option<&str>, dir: &str, system: &str, text: &str) -> Result<String, String> {
+    let state = app.state::<App>();
     let p = {
         let on = agents::enabled(&state.settings.lock().unwrap());
-        provider.as_deref().and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().write)).or_else(|| on.iter().copied().find(|p| p.caps().write))
+        provider.and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().write)).or_else(|| on.iter().copied().find(|p| p.caps().write))
     };
     let p = p.ok_or_else(|| trc("err.no_agent"))?;
-    let mut eb = env_of(&app, &state, p);
+    let mut eb = env_of(app, &state, p);
+    if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "")); }
+    p.review(&eb.env(), dir, system, text)
+}
+/// ai_write for Rust callers, blocking: the asked provider when it is on and can write,
+/// else the first switched-on one that can.
+pub(crate) fn write_blocking(app: &AppHandle, provider: Option<&str>, system: &str, text: &str) -> Result<String, String> {
+    let state = app.state::<App>();
+    let p = {
+        let on = agents::enabled(&state.settings.lock().unwrap());
+        provider.and_then(|a| on.iter().copied().find(|p| p.id() == a && p.caps().write)).or_else(|| on.iter().copied().find(|p| p.caps().write))
+    };
+    let p = p.ok_or_else(|| trc("err.no_agent"))?;
+    let mut eb = env_of(app, &state, p);
     if p.caps().accounts { eb.opts["account"] = json!(account_of(&state, p, "", "sonnet")); }
-    tauri::async_runtime::spawn_blocking(move || p.write(&eb.env(), &system, &text)).await.map_err(|e| e.to_string())?
+    p.write(&eb.env(), system, text)
 }
 
 /// Past messages of a conversation, as agent events, read from the same transcript the terminal uses.
@@ -1923,7 +1970,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

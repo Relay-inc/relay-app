@@ -17,11 +17,14 @@ export function TicketSidebar({
   projectName,
   onAct,
   onChat,
+  build,
 }: {
   view: CardView;
   projectName: string;
   onAct: (action: string, value: string) => void;
   onChat: () => void;
+  /** the project's board pipeline: start an agent on this ticket, continue with its agent, or one is on it */
+  build?: { state: "build" | "continue" | "running"; onBuild: () => void };
 }) {
   const { t, locale } = useT();
   const day = due(view.due || null, locale);
@@ -182,6 +185,22 @@ export function TicketSidebar({
           <Icon name="chat" className="glyph size-3.5" />
           {t("kb.startChat")}
         </button>
+        {build && (
+          <button
+            className="btn inline-flex items-center justify-center gap-1.5 h-8 rounded-lg"
+            disabled={build.state === "running"}
+            onClick={build.onBuild}
+          >
+            {build.state === "running" ? <span className="spinner" /> : null}
+            {t(
+              build.state === "running"
+                ? "kb.buildRunning"
+                : build.state === "continue"
+                  ? "kb.buildContinue"
+                  : "kb.build",
+            )}
+          </button>
+        )}
         {view.url && (
           <button className="btn h-8 rounded-lg" onClick={() => copyText(view.url)}>
             {t("kb.copyLink")}

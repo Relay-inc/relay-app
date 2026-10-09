@@ -1,6 +1,7 @@
 import type { BoardRef } from "../board/types";
 import type { VoiceCfg } from "./voice";
 import type { VaultMap } from "../workspace/types";
+import type { Pipeline } from "../pipeline/types";
 
 // The app's settings as the backend keeps them (settings.json): the main window reads them, the settings window edits them.
 /** One integration's settings.integrations.<id>: whether it is on, and its provider's own fields (strings, a checkbox). */
@@ -86,6 +87,7 @@ export type Settings = {
   overrides: Record<string, string | null>; // a terminal session's project, by session id
   integrations: Record<string, IntegrationConfig>;
   boards: Record<string, BoardRef>; // the board linked to a vault project
+  pipelines?: Record<string, Pipeline>; // the board pipeline of a vault project (domain/pipeline)
   github: { on: boolean; owners: string };
   mail: MailCfg;
   calendar: CalendarCfg;

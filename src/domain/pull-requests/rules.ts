@@ -20,8 +20,11 @@ export const reviewsOf = (chats: Record<string, Chat>, url: string) =>
     .filter(chat => chat.pr === url && !chat.closed)
     .sort((a, b) => a.at - b.at);
 /** The project of the PR's row in the lists, as gh's answer named it. */
+/** The row of the lists a PR is, by repo and number. */
+export const rowOf = (list: PRs | null, repo: string, number: number) =>
+  [...(list?.review || []), ...(list?.mine || [])].find(x => x.repo === repo && x.number === number);
 export const rowProject = (list: PRs | null, repo: string, number: number) =>
-  [...(list?.review || []), ...(list?.mine || [])].find(x => x.repo === repo && x.number === number)?.project ?? null;
+  rowOf(list, repo, number)?.project ?? null;
 
 // ---------- the PR detail, read from the raw GraphQL answer of github_pr
 /** A check's state as a tone: "ok", "bad", "" (neutral, skipped); a state not listed is still running. */

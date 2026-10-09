@@ -19,6 +19,8 @@ import { useWorkspaceStore } from "../workspace/store";
 import { useCalendarStore } from "../calendar/store";
 import { loadMeetings } from "../calendar/calendar";
 import { loadPrs } from "../pull-requests/prs";
+import { usePullRequestsStore } from "../pull-requests/store";
+import { useReviewStore } from "./review";
 import { loadMails } from "../mail/mail";
 import { mailOn, timeFromSessionsOn } from "../settings/settings";
 import { loadTodayTime } from "../time/time";
@@ -281,7 +283,19 @@ export async function openFoundMeeting(meetingId: string) {
   openMeeting(meetingId);
 }
 /** The Today item a review covers (a group's id is its item's id). */
-export const reviewItemsOf = (id: string): Entry[] => entries().filter(entry => entry.id === id);
+export function reviewItemsOf(id: string): Entry[] {
+  const queued = entries().filter(entry => entry.id === id);
+  if (queued.length) return queued;
+  // a review of PRs Today does not queue (your own, with green checks): the same item, made from the open PRs it was
+  // started on
+  const urls = new Set(useReviewStore.getState().reviews[id]?.prs.map(pr => pr.url));
+  const list = usePullRequestsStore.getState().list;
+  const prs = [...(list?.review ?? []), ...(list?.mine ?? [])].filter(pr => urls.delete(pr.url));
+  if (!prs.length) return [];
+  return deriveEntries({ ...snapshot(), prs: { review: prs, mine: [] } }, words, Date.now()).filter(
+    entry => entry.id === id,
+  );
+}
 /** Open an item under Today, also when the context filter hides it (it goes back to All). */
 export function focusEntry(id: string) {
   const item = entries().find(entry => entry.id === id);

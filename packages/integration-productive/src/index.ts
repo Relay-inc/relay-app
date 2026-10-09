@@ -117,6 +117,18 @@ let warming = 0;
 
 // after a board loads: comments and activities of all its cards, 40 tasks per call, so opening a card
 // needs no wait. Background only: when it fails, a click still loads the task itself.
+// whether a project is internal (no client), once per project
+const internals = new Map<string, Promise<boolean>>();
+const internal = (c: Ctx, project: string) => {
+  let got = internals.get(project);
+  if (!got) {
+    got = c.call("GET", `/projects/${project}`).then((r: any) => r?.data?.attributes?.project_type_id === 1);
+    got.catch(() => internals.delete(project));
+    internals.set(project, got);
+  }
+  return got;
+};
+
 async function prefetch(c: Ctx, ref: BoardRef, tk: { data: any[]; included: any[] }) {
   const g = ++warming;
   try {
@@ -210,7 +222,7 @@ const productive: BoardProvider<Key> = {
       where: pick(inc, "projects", x.relationships.project)?.attributes.name || "" }));
   },
   url: async (c, ref, id) => { await ready(c); return taskUrl(ref, id); },
-  reset: () => { orgSlug = ""; fields = null; details.clear(); opts.clear(); optsDone.clear(); },
+  reset: () => { orgSlug = ""; fields = null; details.clear(); opts.clear(); optsDone.clear(); internals.clear(); },
 
   detail: {
     cached: id => details.get(id),
@@ -233,9 +245,14 @@ const productive: BoardProvider<Key> = {
         statuses: o?.statuses, people: o?.people, files: tk.files, feed: tk.feed };
     },
     /** comment, status, assignee, attach: done in Productive, then the task read again */
-    async act(c, ref, id, action, { value, files, mentions = [] }) {
+    async act(c, ref, id, action, { value, files, mentions = [], hidden = false }) {
       const patch = (rel: any) => c.call("PATCH", `/tasks/${id}`, { data: { type: "tasks", id, relationships: rel } });
-      if (action === "comment" && value.trim()) await c.call("POST", "/comments", { data: { type: "comments", attributes: { body: toHtml(value, mentions) }, relationships: { task: { data: { type: "tasks", id } } } } });
+      // hidden: kept from the client portal. Productive refuses it in an internal project (project_type_id 1), which
+      // has no client to hide it from; any other failure stays a failure, it never falls back to a visible comment
+      if (action === "comment" && value.trim()) {
+        const hide = hidden && !(await internal(c, ref.project));
+        await c.call("POST", "/comments", { data: { type: "comments", attributes: { body: toHtml(value, mentions), ...(hide ? { hidden: true } : {}) }, relationships: { task: { data: { type: "tasks", id } } } } });
+      }
       else if (action === "status" && value) await patch({ workflow_status: { data: { type: "workflow_statuses", id: value } } });
       else if (action === "assignee") await patch({ assignee: { data: value ? { type: "people", id: value } : null } });
       else if ((action === "label-add" || action === "label-remove") && value.trim()) {
