@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **PR tickets in the Pull requests view**: the PR detail shows the ticket a PR is about, or the way to one (link its repo to a project, link the project's board, pick a card), as Today does. PRs get their ticket as soon as the list loads, so PRs of a newly linked repo group under their ticket without waiting for Today to reload its cards
+
 ## [0.0.17] - 2026-10-09
 
 ### Changed

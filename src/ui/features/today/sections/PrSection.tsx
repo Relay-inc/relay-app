@@ -205,7 +205,7 @@ const numbered = (number?: string) => (number ? `${/^\d+$/.test(number) ? "#" : 
 
 /** The ticket the PR is about, or why there is none with the way to fix it: no vault project for the repo (link the
  *  repo), no board for the project (link a board), or nothing found (choose one, or look again). Never a dead end. */
-function TicketRow({ pr }: { pr: PR }) {
+export function TicketRow({ pr }: { pr: PR }) {
   const { t } = useT();
   const link = useLinksStore(s => s.links[pr.url]);
   const picking = useDetailsStore(s => s.picking === pr.url);
