@@ -133,12 +133,11 @@ pub fn start(app: &AppHandle) {
 
 // ---------- RELAY_SELFTEST=orch: the orchestrator against the real claude CLI (scripts/orch-selftest.sh makes the vault
 // with projects Alpha and Beta and Beta's repo in RELAY_SELFTEST_REPO). One message to the coordinator, then what
-// Relay records: workers, reports, the repo's branches, the card a push raises.
+// Relay records: workers, reports, the repo's branches.
 
 const ORCH_ASK: &str = "Selftest. 1) Start a worker in project Alpha: read its project note and report in one sentence which apple trees still have to be planted, change nothing. \
 2) Start a worker in project Beta with repo {repo}: add a.txt with the text a and commit it on its branch. Right after, try to start a second worker in the same repo that adds b.txt, and once the first has reported start it again if it was refused. \
 3) Start a worker in project Alpha with the task: answer in one sentence how many apple trees are already there, and do NOT call report, this tests what Relay does without a report. \
-4) After the a.txt worker reported, send it a message to run exactly `git -C <its worktree> push origin HEAD` (there is no remote, this tests the permission card) and report again. \
 Do not update any shared vault files, this is a test. End with a two-line summary.";
 
 fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
@@ -148,24 +147,16 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     let main_before = git(&["rev-parse", "main"]);
     std::thread::sleep(Duration::from_secs(3));
     r.step("message to the coordinator", orch::inject(app, orch::COORD, "Orchestrator", &ORCH_ASK.replace("{repo}", &repo), "", false).map(|_| "sent".into()));
-    // until every worker is done and the coordinator is idle; on the way: answer the push card, watch one writer per repo
-    let (mut card, mut most_in_repo, end) = (None::<String>, 0usize, Instant::now() + Duration::from_secs(900));
+    // until every worker is done and the coordinator is idle; on the way: allow any card, watch one writer per repo
+    let (mut most_in_repo, end) = (0usize, Instant::now() + Duration::from_secs(900));
     let mut quiet_since = None::<Instant>;
     while Instant::now() < end {
         let ws = orch::load(app);
         let running_in_repo = ws.iter().filter(|w| w.state == "running" && w.repo.is_some()).count();
         most_in_repo = most_in_repo.max(running_in_repo);
         for p in pending::list(&pending_dir(app)) {
-            let cmd = p["input"]["command"].as_str().unwrap_or("");
-            // any form of push: `git push`, `git -C <dir> push`
-            let push = cmd.split_whitespace().skip_while(|w| *w != "git").skip(1).any(|w| w == "push");
-            if orch::is_worker(p["project"].as_str().unwrap_or("")) && push {
-                card = Some(cmd.to_string());
-                crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "deny", "message": "Denied by the selftest."})).ok();
-            } else {
-                // anything else a worker asks in this test is allowed, like a click on Allow
-                crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
-            }
+            // whatever a worker asks in this test is allowed, like a click on Allow
+            crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
         }
         let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns.busy());
         let idle = ws.len() >= 3 && !ws.iter().any(|w| w.state == "running") && !busy;
@@ -188,7 +179,6 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     r.step("main did not move", if git(&["rev-parse", "main"]) == main_before { Ok(main_before.clone()) } else { Err(git(&["log", "--oneline", "-3", "main"])) });
     r.step("one worker per repo at a time", if most_in_repo <= 1 { Ok(format!("at most {most_in_repo}")) } else { Err(format!("{most_in_repo} at once")) });
     r.step("a worker without a report is silent", if ws.iter().any(|w| w.state == "silent") { Ok("yes".into()) } else { Err(list()) });
-    r.step("a push asks on a card", card.ok_or_else(|| "no card for git push".to_string()));
     // the React side against the real backend: the board and the coordinator's Relay blocks in the main window
     let titles = json!(ws.iter().map(|w| w.title.clone()).collect::<Vec<_>>()).to_string();
     let ran = app.get_webview_window("main").ok_or("no main window".to_string())

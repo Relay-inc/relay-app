@@ -13,6 +13,13 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.17] - 2026-10-09
+
+### Changed
+
+- **Orchestrator permissions**: the coordinator and its workers run with the same permissions as any other conversation. Push, PR create, merge and comment no longer always ask, and workers are no longer denied the vault-wide files or a checkout of main: the role prompts still tell them what not to do
+- **Meeting actions on Today**: Join and Record are their own icon buttons on a meeting instead of living under "…", and a meeting can no longer be snoozed (#166)
+
 ## [0.0.16] - 2026-10-09
 
 ### Added
@@ -359,7 +366,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.16...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.17...HEAD
+[0.0.17]: https://github.com/Relay-inc/relay-app/compare/v0.0.16...v0.0.17
 [0.0.16]: https://github.com/Relay-inc/relay-app/compare/v0.0.15...v0.0.16
 [0.0.15]: https://github.com/Relay-inc/relay-app/compare/v0.0.14...v0.0.15
 [0.0.14]: https://github.com/Relay-inc/relay-app/compare/v0.0.13...v0.0.14
