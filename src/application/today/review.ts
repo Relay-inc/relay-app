@@ -1,5 +1,7 @@
 import { t } from "../../shared/i18n";
 import type { PR } from "../../domain/pull-requests/types";
+import type { PrGroup } from "../../domain/pull-requests/group";
+import { groupTitle, reviewIdOf } from "../../domain/today/kinds/pr";
 import { anchorOf, inPatch, parsePatch, type DiffLine, type Side } from "../../domain/pull-requests/diff";
 import { nameOf, reviewText } from "../../domain/pull-requests/prompt";
 import * as backend from "../../infrastructure/backend";
@@ -141,6 +143,8 @@ export async function startReview(id: string, prs: PR[], title?: string) {
   await select(workKey("review", id));
   return openReview(id, prs, title);
 }
+/** Review the PRs of a ticket together: from Today's item or the Pull requests view, the same review. */
+export const reviewTogether = (group: PrGroup) => startReview(reviewIdOf(group), group.prs, groupTitle(group, t));
 /** The review screen: the files of every PR, and Claude's findings the first time. Called by the view itself, so a
  *  review opened from the sidebar or after a restart loads too. A PR that joined the ticket since is added. */
 export async function openReview(id: string, prs: PR[], title?: string) {

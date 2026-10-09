@@ -3,11 +3,20 @@ import type { PR } from "../../pull-requests/types";
 import { byTicket, prNumbers, type PrGroup } from "../../pull-requests/group.ts";
 import { actionSet, doneAction, numbered } from "./common.ts";
 import type { Draft, Entry, EntryOf, SubjectDef } from "./types.ts";
+import type { Translate } from "../../conversations/state";
 
 export type PrAct = "review" | "reviewTogether" | "github" | "inRelay" | "reviewChat" | "findTicket" | "fix";
 
 /** The id of the one item the review PRs of a ticket are, and of their review (a single PR's review is its item's id). */
 export const groupId = (provider: string, card: string) => `group:${provider}:${card}`;
+/** What the PRs of a ticket are called, in Today's queue and the Pull requests view alike: "#452 Title · 2 PRs". */
+export const groupTitle = (group: PrGroup, t: Translate) =>
+  group.ticket
+    ? `${numbered(group.ticket.number)}${group.ticket.title ?? group.prs[0].title} · ${t("today.prsCount", { n: group.prs.length })}`
+    : group.prs[0].title;
+/** The review of a group: one per ticket, else the PR's own. */
+export const reviewIdOf = (group: PrGroup) =>
+  group.ticket ? groupId(group.ticket.provider, group.ticket.card) : `review:${group.prs[0].url}`;
 /** A review item that holds the PRs of one ticket: reviewed together. */
 export function reviewGroupOf(entry: Entry) {
   const s = entry.subject;
@@ -28,15 +37,12 @@ export const pr: SubjectDef<"pr", PrAct> = {
     const out: Draft[] = [];
     const prs = prsForMe(snap.prs);
     // the PRs of one ticket are one item: reviewed (or fixed) together, planned for the time of all of them
-    const title = (group: PrGroup) =>
-      group.ticket
-        ? `${numbered(group.ticket.number)}${group.ticket.title ?? group.prs[0].title} · ${w.t("today.prsCount", { n: group.prs.length })}`
-        : group.prs[0].title;
+    const title = (group: PrGroup) => groupTitle(group, w.t);
     for (const group of byTicket(prs.review, snap.tickets)) {
       const [pr] = group.prs;
       out.push({
         kind: "review",
-        id: group.ticket ? groupId(group.ticket.provider, group.ticket.card) : `review:${pr.url}`,
+        id: reviewIdOf(group),
         at: Math.min(...group.prs.map(x => Date.parse(x.created))),
         title: title(group),
         where: group.ticket
