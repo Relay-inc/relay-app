@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reviewing your own PRs**: Review together on your own PRs opened "This pull request no longer waits on you". The review now finds its PRs in the PR list when Today does not queue them (your own PRs with green checks)
+
 ## [0.0.18] - 2026-10-09
 
 ### Fixed

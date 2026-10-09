@@ -295,6 +295,13 @@ const VIEWS = {
     await button("Review together (2 PRs)").click();
     await settle(page, 1500);
   },
+  // your own PRs of ticket #312 (green checks, so not in Today's queue) reviewed together: the review screen, not "no
+  // longer waits on you"
+  "prs-review-own-together": async () => {
+    await VIEWS["prs-list"]();
+    await page.getByRole("button", { name: "Review together (2 PRs)" }).last().click();
+    await settle(page, 1500);
+  },
   "pr-detail": async () => {
     await VIEWS["prs-list"]();
     await click("Fix the SSO redirect loop on the portal");
