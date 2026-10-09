@@ -11,6 +11,7 @@ import { WAIT, PRS, MAIL, BRAIN, isView } from "../domain/navigation/views";
 import type { Settings } from "../domain/settings/types";
 import * as backend from "../infrastructure/backend";
 import { storage } from "../infrastructure/storage";
+import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
 import { ghOn, initLanguage, mailOn, setSettingsState, settings } from "./settings/settings";
 import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
@@ -241,6 +242,12 @@ function startPolls() {
   setInterval(followOutsideTurns, 2000);
   setInterval(loadSnapshot, 30000);
   backend.onRemindersChanged(loadSnapshot);
+  backend.onRemoteChat(({ key, title, provider }) => {
+    useConversationsStore.setState(draft => {
+      draft.chats[key] ??= { key, project: null, title: title || t("chat.untitled"), at: chatTime(key), provider };
+    });
+    saveChats();
+  });
   setInterval(checkFavicons, 60 * 60000); // a project new in work-state gets its icon within the hour
   if (selected() !== PRS) loadPrs(); // select() already loads it when the view is open
   setInterval(loadPrs, 5 * 60000);
