@@ -13,16 +13,16 @@ a PR. Versions follow
 
 ## [Unreleased]
 
-### Changed
-
-- **PRs grouped by ticket everywhere**: the Pull requests view puts the PRs of one ticket together under it, in both lists, by the same rule as Today, and a ticket's PRs waiting on your review have Review together there too, opening the same review as Today's item. Today also groups your own PRs that need a fix, and Fix with Claude on such a group takes all of them in one conversation. A group across repos names each repo in its subtitle.
-
 ## [0.0.16] - 2026-10-09
 
 ### Added
 
 - **Board pipeline**: Settings › Projects › a project with a linked board can pick tickets up by itself. Relay takes the tickets in one column (optionally only those with a label), moves each to a "building" column, and starts an orchestrator worker on it in its own worktree, with the ticket and its comments as the brief. When the worker reports done, Relay pushes the branch, opens the PR and moves the ticket to review with the link as a comment; questions, no PR or a failed run move it to a column for a person, with why. Review comments on the PR go back to the same worker, a merged PR moves the ticket on, and a ticket moved back to the pick column continues with its worker. Checked every 5 minutes while Relay runs, and right when a worker reports. The workers board shows each one's ticket and PR. It picks up automatically from the column, or only the tickets you hand-pick with Build with agent in the ticket window (that button also starts one right away in an automatic pipeline). Before it pushes, Relay validates the agent's done itself: everything committed, the pipeline's check command (lint, static analysis, tests) in the worktree, then a review by another agent that starts from the diff and can read the rest of the worktree (read-only: files and git, nothing written); a failure goes back to the agent as its next task, and after the last round (3 by default) the ticket goes to a person with what failed. Non-blocking review notes go in the PR. With Plan first on, the agent puts its plan on the ticket before writing code and builds once you send the ticket back. The reviewing agent gets the ticket's text, so it checks the change against what was asked. A bug ticket starts with a test that fails on the bug. A ticket in the pick column with no description, comments or files goes to a person instead of an agent. Each project has its own switch, and on Productive Relay's comments are hidden from the client unless you turn that off (#160)
 - New users start with an empty vault: Start on the welcome screen creates one in `~/Relay` with the rules, skills, hooks and templates that give Claude a memory of your projects. "I have a vault" still lets you pick your own (#162)
+
+### Changed
+
+- **PRs grouped by ticket everywhere**: the Pull requests view puts the PRs of one ticket together under it, in both lists, by the same rule as Today, and a ticket's PRs waiting on your review have Review together there too, opening the same review as Today's item. Today also groups your own PRs that need a fix, and Fix with Claude on such a group takes all of them in one conversation. A group across repos names each repo in its subtitle (#164)
 
 ## [0.0.15] - 2026-10-08
 
