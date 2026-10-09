@@ -17,6 +17,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **Orchestrator permissions**: the coordinator and its workers run with the same permissions as any other conversation. Push, PR create, merge and comment no longer always ask, and workers are no longer denied the vault-wide files or a checkout of main: the role prompts still tell them what not to do
 - **Meeting actions on Today**: Join and Record are their own icon buttons on a meeting instead of living under "…", and a meeting can no longer be snoozed (#166)
 
 ## [0.0.16] - 2026-10-09

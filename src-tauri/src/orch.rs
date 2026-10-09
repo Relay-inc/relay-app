@@ -135,7 +135,7 @@ const COORD_PROMPT: &str = "You are Relay's orchestrator for the user's vault. T
 Rules:
 - Dispatch without asking first. Ask the user only when a big decision depends on it that their request did not settle (scope, money, anything outward-facing or irreversible), and then ask before dispatching that part.
 - Give every worker a complete brief: the goal, what done looks like, constraints, where to look. One project per worker. Two workers never write in the same project or the same repo at the same time: run those one after the other.
-- Code changes: pass `repo`, a checkout path listed in the project's repos. Relay makes a git worktree on a fresh branch. Workers commit on that branch, never on main. Pushing and opening a PR ask the user on a card.
+- Code changes: pass `repo`, a checkout path listed in the project's repos. Relay makes a git worktree on a fresh branch. Workers commit on that branch, never on main. Push and open a PR only when the user asked for it.
 - Reports arrive as user turns starting with [Relay]. Read them, dispatch follow-ups, use `message` to steer a worker, `workers` for the overview.
 - Only you write the vault-wide files: {shared}. Update them the way the vault's own instructions say, once the workers reported. Workers put what those need in their report.
 - When a batch is done, tell the user in a few lines what is done, what waits on them, and where.";
@@ -147,24 +147,14 @@ Rules:
 - In a repo, work only in the worktree from your brief and commit on its branch. Never check out, commit on or push to main, master, develop or dev. Push or open a PR only when the task asks for it.
 - Keep the report short: what changed, where, what is left.";
 
-/// The extra start flags of a coordinator or worker: role, its system prompt, its tools, denies and asks.
+/// The extra start flags of a coordinator or worker: role, its system prompt and its tools. Permissions are the
+/// user's own, as in any other conversation: no extra asks or denies.
 pub fn flags(opts: &mut Value, key: &str, vault: &str, shared: &Shared) {
     if !is_orch(key) { return; }
     if !opts.is_object() { *opts = json!({}); }
     let coord = key == COORD;
     opts["orch"] = json!(if coord { "coordinator" } else { "worker" });
     opts["system"] = json!(if coord { COORD_PROMPT } else { WORKER_PROMPT }.replace("{shared}", &shared.listed(vault)));
-    // push and PRs always ask, also when the user's settings allow them (ask beats allow)
-    // `git -C <dir> push` and `gh -R <repo> pr create` do not start with `git push` or `gh pr`: the `* ` forms catch them
-    // (scripts/orch-check.py). ponytail: a commit message with "push" in it asks too, fine for now
-    opts["ask"] = json!(["Bash(git push*)", "Bash(git * push*)", "Bash(gh pr create*)", "Bash(gh * pr create*)", "Bash(gh pr merge*)", "Bash(gh * pr merge*)", "Bash(gh pr comment*)", "Bash(gh * pr comment*)"]);
-    if !coord {
-        // `//` in front: an absolute path for Claude Code's rules
-        let paths = shared.files.iter().cloned().chain(shared.dirs.iter().map(|d| format!("{d}/**")));
-        let mut deny: Vec<String> = paths.flat_map(|f| [format!("Edit(/{f})"), format!("Write(/{f})")]).collect();
-        for b in PROTECTED { deny.push(format!("Bash(git checkout {b}*)")); deny.push(format!("Bash(git switch {b}*)")); }
-        opts["deny"] = json!(deny);
-    }
 }
 
 // ---------- the relay-orch MCP server
@@ -769,13 +759,11 @@ mod tests {
         flags(&mut o, COORD, "/v", &sh);
         assert!(o["system"].as_str().unwrap().contains("Brain/work-state.md, reminders.md, Brain/index/"), "the prompt names the vault's own files");
         assert_eq!(o["orch"], "coordinator");
-        assert!(o["deny"].is_null(), "the coordinator writes the shared files");
-        assert!(o["ask"].as_array().unwrap().contains(&json!("Bash(git push*)")) && o["ask"].as_array().unwrap().contains(&json!("Bash(git * push*)")));
+        assert!(o["deny"].is_null() && o["ask"].is_null(), "the user's own permissions, as in any conversation");
         let mut o = json!({"mail": true});
         flags(&mut o, "c:orch-w-1", "/v", &sh);
         assert_eq!((o["orch"].as_str(), o["mail"].as_bool()), (Some("worker"), Some(true)));
-        let deny: Vec<&str> = o["deny"].as_array().unwrap().iter().map(|v| v.as_str().unwrap()).collect();
-        assert!(deny.contains(&"Edit(//v/Brain/work-state.md)") && deny.contains(&"Write(//v/Brain/index/**)") && deny.contains(&"Bash(git checkout main*)"));
+        assert!(o["deny"].is_null() && o["ask"].is_null(), "a worker too");
         assert!(!o["system"].as_str().unwrap().contains("{shared}"));
     }
 

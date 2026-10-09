@@ -6,11 +6,6 @@ Proves against the real claude CLI (Haiku, no settings, empty temp dir) what the
   1. relay-orch next to relay-mail as two in-process MCP servers: its tools/list and tools/call arrive as
      mcp_message with server_name relay-orch, and a tool in --allowedTools runs without a card
   2. --append-system-prompt reaches the model
-  3. an ask rule in --settings beats an allow for the same command: git push asks (can_use_tool) even when
-     --allowedTools allows it, the way a worker's push asks while the user's settings allow `git push *`, and
-     `git -C <dir> push` asks through the `git * push*` form
-  4. --disallowedTools Write(//<abs path>) and Edit(//<abs path>) deny the shared vault files without asking,
-     another file in the same folder can still be written
 
 Exit 0 when all hold. Run after a Claude Code update, next to pipe-check.py.
 """
@@ -76,16 +71,6 @@ def main():
     check("relay-orch tools/call arrives with its server name and arguments", a["call"] and a["call"][:2] == ("relay-orch", "dispatch") and a["call"][2].get("title") == "check")
     check("an allowed relay-orch tool needs no card", a["call"] and not a["can_use_tool"])
     check("--append-system-prompt reaches the model", "PELICAN" in a["result"])
-    b = run("Run exactly this Bash command: git push --dry-run origin main. Reply with exactly the output or error you got.",
-            "Bash", lambda d: ["--allowedTools", "Bash(git push*)", "--settings", json.dumps({"permissions": {"ask": ["Bash(git push*)"]}})])
-    check("an ask rule beats an allow: git push asks first", "Bash" in b["can_use_tool"])
-    g = run("Run exactly this Bash command and nothing else: git -C /tmp push origin HEAD. Reply with exactly the output or error you got.",
-            "Bash", lambda d: ["--allowedTools", "Bash(git *)", "--settings", json.dumps({"permissions": {"ask": ["Bash(git push*)", "Bash(git * push*)"]}})])
-    check("git -C <dir> push asks too (the git * push* form)", "Bash" in g["can_use_tool"])
-    c = run("Use the Write tool to create {dir}/System/reminders.md with the text x, then {dir}/free.md with the text y. Reply with what happened to each.",
-            "Write,Edit", lambda d: ["--disallowedTools", f"Write(/{d}/System/reminders.md)", f"Edit(/{d}/System/reminders.md)"], decision="allow")
-    check("a shared file is denied without asking, another file is written", "free.md" in c["written"] and "System" not in c["written"]
-          and not any("reminders" in str(t) for t in c["can_use_tool"]) and c["denied"])
     sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":
