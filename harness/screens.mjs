@@ -289,6 +289,12 @@ const VIEWS = {
     await click("Pull requests");
     await waitText("Fix the SSO redirect loop on the portal");
   },
+  // the PRs of ticket #312 reviewed together from the list, the same review as Today's item
+  "prs-review-together": async () => {
+    await VIEWS["prs-list"]();
+    await button("Review together (2 PRs)").click();
+    await settle(page, 1500);
+  },
   "pr-detail": async () => {
     await VIEWS["prs-list"]();
     await click("Fix the SSO redirect loop on the portal");

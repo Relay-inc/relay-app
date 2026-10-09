@@ -53,7 +53,7 @@ test("the reviews of one ticket are one item, planned for the time of all of the
   assert.equal(group.times, 2);
   assert.equal(group.at, at(7), "from the oldest");
   assert.equal(group.title, '#212 Export · today.prsCount {"n":2}');
-  assert.equal(group.where, "acme/app #7, #8 · bob, cy");
+  assert.equal(group.where, "acme/app #7, acme/api #8 · bob, cy");
   assert.equal(alone.id, "review:u9");
   assert.equal(alone.times, 1);
   assert.deepEqual(group.subject.type === "pr" && group.subject.prs?.map(x => x.number), [7, 8]);
@@ -91,4 +91,21 @@ test("a review offers to review the group together, a lone one by itself; your o
     ["fix", "github", "inRelay", "findTicket"],
   );
   assert.equal(fixing.done?.label, "today.status.done");
+});
+
+test("your own PRs of one ticket that need you are one fix item", () => {
+  const a = pr({ ci: "FAILURE" });
+  const b = pr({ number: 8, url: "u8", repo: "acme/api", review: "CHANGES_REQUESTED" });
+  const entries = kind.entries(
+    snap({ prs: { review: [], mine: [a, b] }, tickets: { [a.url]: ticket, u8: ticket } }),
+    words,
+    NOW,
+  );
+  assert.equal(entries.length, 1);
+  const [fix] = entries;
+  assert.equal(fix.id, `fix:${groupId("prod", "9")}`);
+  assert.equal(fix.where, "acme/app #7, acme/api #8 · today.yours");
+  assert.equal(fix.why, "rv.changes");
+  assert.equal(reviewGroupOf(fix as EntryOf<"pr">), null, "not a review");
+  assert.deepEqual(fix.subject.type === "pr" && fix.subject.prs?.map(x => x.number), [7, 8]);
 });

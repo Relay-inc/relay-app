@@ -196,7 +196,7 @@ const RUN: {
     inRelay: ({ subject }) => openTodayPr(subject.pr.repo, subject.pr.number),
     reviewChat: ({ subject }) => reviewWithClaude(subject.pr),
     findTicket: ({ subject }) => findTicketAgain(subject.pr),
-    fix: ({ subject }) => fixWithClaude(subject.pr),
+    fix: ({ subject }) => fixWithClaude(subject.prs ?? [subject.pr]),
   },
   mail: {
     reply: ({ subject }) => openCompose(subject.key, "reply"),
@@ -280,10 +280,11 @@ async function reviewWithClaude(pr: PR) {
   await openPr(key);
   await reviewPr(key);
 }
-// a conversation under the PR's project with what is wrong typed in, one Enter away from sending
-async function fixWithClaude(pr: PR) {
-  const key = newChat(pr.project);
+// a conversation under the PR's project with what is wrong typed in, one Enter away from sending; the PRs of one
+// ticket in one conversation
+async function fixWithClaude(prs: PR[]) {
+  const key = newChat(prs[0].project);
   await select(key);
-  const what = pr.review === "CHANGES_REQUESTED" ? t("today.fixChanges") : t("today.fixChecks");
-  typeInto(key, `${what}\n${pr.url}`);
+  const what = (pr: PR) => (pr.review === "CHANGES_REQUESTED" ? t("today.fixChanges") : t("today.fixChecks"));
+  typeInto(key, prs.map(pr => `${what(pr)}\n${pr.url}`).join("\n\n"));
 }

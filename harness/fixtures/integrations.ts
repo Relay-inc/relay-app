@@ -81,6 +81,9 @@ export const prs = {
     pr(415, "Invoice export with VAT column", "acme/northwind-portal", { review: "APPROVED", project: "Northwind Portal" }),
     pr(21, "Upgrade to PHP 8.5", "acme/kestrel-api", { draft: true, ci: null, project: "Kestrel API" }),
     pr(9, "Holiday banner", "acme/delmas-shop", { review: "APPROVED", ci: "SUCCESS", project: "Delmas Bakery" }),
+    // yours on ticket #312, in two repos: grouped under the ticket
+    pr(420, "312 Two-factor: recovery codes", "acme/northwind-portal", { draft: true, project: "Northwind Portal" }),
+    pr(77, "312 Two-factor: recovery codes API", "acme/northwind-api", { draft: true, project: "Northwind Portal" }),
   ],
 };
 const actor = (login: string) => ({ login, name: login });

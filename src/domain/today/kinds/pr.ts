@@ -1,16 +1,26 @@
 import { prsForMe } from "../rules.ts";
 import type { PR } from "../../pull-requests/types";
+import { byTicket, prNumbers, type PrGroup } from "../../pull-requests/group.ts";
 import { actionSet, doneAction, numbered } from "./common.ts";
-import type { Draft, Entry, EntryOf, SubjectDef, Ticket } from "./types.ts";
+import type { Draft, Entry, EntryOf, SubjectDef } from "./types.ts";
+import type { Translate } from "../../conversations/state";
 
 export type PrAct = "review" | "reviewTogether" | "github" | "inRelay" | "reviewChat" | "findTicket" | "fix";
 
 /** The id of the one item the review PRs of a ticket are, and of their review (a single PR's review is its item's id). */
 export const groupId = (provider: string, card: string) => `group:${provider}:${card}`;
+/** What the PRs of a ticket are called, in Today's queue and the Pull requests view alike: "#452 Title · 2 PRs". */
+export const groupTitle = (group: PrGroup, t: Translate) =>
+  group.ticket
+    ? `${numbered(group.ticket.number)}${group.ticket.title ?? group.prs[0].title} · ${t("today.prsCount", { n: group.prs.length })}`
+    : group.prs[0].title;
+/** The review of a group: one per ticket, else the PR's own. */
+export const reviewIdOf = (group: PrGroup) =>
+  group.ticket ? groupId(group.ticket.provider, group.ticket.card) : `review:${group.prs[0].url}`;
 /** A review item that holds the PRs of one ticket: reviewed together. */
 export function reviewGroupOf(entry: Entry) {
   const s = entry.subject;
-  if (s.type !== "pr" || !s.prs || s.prs.length < 2) return null;
+  if (entry.kind !== "review" || s.type !== "pr" || !s.prs || s.prs.length < 2) return null;
   return { id: entry.id, prs: s.prs, title: entry.title };
 }
 
@@ -26,45 +36,40 @@ export const pr: SubjectDef<"pr", PrAct> = {
   entries: (snap, w) => {
     const out: Draft[] = [];
     const prs = prsForMe(snap.prs);
-    // the review PRs of one ticket are one item: reviewed together, planned for the time of all of them
-    const byTicket = new Map<string, PR[]>();
-    for (const pr of prs.review) {
-      const link: Ticket | undefined = snap.tickets[pr.url];
-      const key = link?.card && link.provider ? groupId(link.provider, link.card) : `review:${pr.url}`;
-      byTicket.set(key, [...(byTicket.get(key) ?? []), pr]);
-    }
-    for (const [id, group] of byTicket) {
-      const [pr] = group;
-      const link = group.length > 1 ? snap.tickets[pr.url] : undefined;
+    // the PRs of one ticket are one item: reviewed (or fixed) together, planned for the time of all of them
+    const title = (group: PrGroup) => groupTitle(group, w.t);
+    for (const group of byTicket(prs.review, snap.tickets)) {
+      const [pr] = group.prs;
       out.push({
         kind: "review",
-        id: link ? id : `review:${pr.url}`,
-        at: Math.min(...group.map(x => Date.parse(x.created))),
-        title: link
-          ? `${numbered(link.number)}${link.title ?? pr.title} · ${w.t("today.prsCount", { n: group.length })}`
-          : pr.title,
-        where: link
-          ? `${pr.repo} ${group.map(x => `#${x.number}`).join(", ")} · ${[...new Set(group.map(x => x.author))].join(", ")}`
+        id: reviewIdOf(group),
+        at: Math.min(...group.prs.map(x => Date.parse(x.created))),
+        title: title(group),
+        where: group.ticket
+          ? `${prNumbers(group.prs)} · ${[...new Set(group.prs.map(x => x.author))].join(", ")}`
           : where(pr, false, w.t("today.yours")),
         why: w.t("today.reviewAsked"),
         tone: "soon",
         project: pr.project,
-        subject: link ? { type: "pr", pr, prs: group } : { type: "pr", pr },
-        times: group.length,
+        subject: group.ticket ? { type: "pr", pr, prs: group.prs } : { type: "pr", pr },
+        times: group.prs.length,
       });
     }
-    for (const pr of prs.mine)
+    for (const group of byTicket(prs.mine, snap.tickets)) {
+      const [pr] = group.prs;
       out.push({
         kind: "fix",
-        id: `fix:${pr.url}`,
-        at: Date.parse(pr.updated),
-        title: pr.title,
-        where: where(pr, true, w.t("today.yours")),
-        why: pr.review === "CHANGES_REQUESTED" ? w.t("rv.changes") : w.t("today.checksRed"),
+        id: group.ticket ? `fix:${groupId(group.ticket.provider, group.ticket.card)}` : `fix:${pr.url}`,
+        at: Math.max(...group.prs.map(x => Date.parse(x.updated))),
+        title: title(group),
+        where: group.ticket ? `${prNumbers(group.prs)} · ${w.t("today.yours")}` : where(pr, true, w.t("today.yours")),
+        why: group.prs.some(x => x.review === "CHANGES_REQUESTED") ? w.t("rv.changes") : w.t("today.checksRed"),
         tone: "late",
         project: pr.project,
-        subject: { type: "pr", pr },
+        subject: group.ticket ? { type: "pr", pr, prs: group.prs } : { type: "pr", pr },
+        times: group.prs.length,
       });
+    }
     return out;
   },
   actions: (entry: EntryOf<"pr">, flags, w) => {
