@@ -15,7 +15,7 @@ import { t } from "../shared/i18n";
 import { applyTheme } from "../infrastructure/window";
 import { ghOn, initLanguage, mailOn, setSettingsState, settings } from "./settings/settings";
 import { loadSnapshot, project, refreshIcons, reloadIcons, checkFavicons } from "./workspace/vault";
-import { onboard } from "./workspace/vault-setup";
+import { onboard, runSetup, takeSetup } from "./workspace/vault-setup";
 import { useConversationsStore } from "./conversations/store";
 import { saveChats, newChat } from "./conversations/chats";
 import { chatFromDictation } from "./conversations/dictation";
@@ -100,6 +100,7 @@ export async function boot() {
   await pickStartView();
   listenToLinks();
   startPolls();
+  if (takeSetup()) void runSetup();
 }
 
 function listenToBackend() {
@@ -120,11 +121,13 @@ function listenToBackend() {
   listenToFileDrops();
 }
 
-// the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation
+// the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation, Set Up Vault
+// runs the setup interview
 function onMenu(item: string) {
   if (item === "new-general") select(newChat(null));
   else if (item === "new-project") newHere();
   else if (item === "close-chat" && !isView(selected()) && !cs().chats[selected()]?.draft) closeChat(selected());
+  else if (item === "run-setup") void runSetup();
 }
 
 async function loadSettingsAndVault() {

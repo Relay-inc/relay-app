@@ -23,6 +23,7 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
   const [map, setMap] = useState<VaultMap | null>(start.vault ? { ...start.map } : null); // the paths as typed
   const [message, setMessage] = useState("");
   const [own, setOwn] = useState(Boolean(start.vault)); // a vault of one's own, instead of the starter vault
+  const [offer, setOffer] = useState(false); // Start was clicked: offer the setup interview, or skip it
   const setStatus = (next: VaultStatus | null) => {
     setStatusState(next);
     setMap(next ? { ...next.map } : null);
@@ -46,10 +47,10 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
       setMessage(String(err));
     }
   };
-  const startDefault = async () => {
+  const startDefault = async (setup: boolean) => {
     setMessage("");
     try {
-      await startDefaultVault();
+      await startDefaultVault(setup);
     } catch (err) {
       setMessage(String(err));
     }
@@ -64,20 +65,37 @@ export function OnboardingScreen({ start }: { start: VaultStatus }) {
       <main className="grid gap-2.5 max-w-2xl mx-auto my-10">
         <img className="block h-11 mb-4" src={mark} alt="" />
         <h2 className={HEADING}>{t("vault.welcome")}</h2>
-        {own ? null : (
+        {own || offer ? null : (
           <>
             <div className="text-secondary mb-3">{t("vault.introDefault")}</div>
             <div className="flex gap-2 items-center justify-end">
-              {message ? <span className="text-late text-sm">{message}</span> : null}
               <button className="btn" onClick={() => setOwn(true)}>
                 {t("vault.haveOwn")}
               </button>
-              <button className="btn btn-primary" onClick={startDefault}>
+              <button className="btn btn-primary" onClick={() => setOffer(true)}>
                 {t("vault.start")}
               </button>
             </div>
           </>
         )}
+        {offer ? (
+          <>
+            <h2 className={HEADING}>{t("vault.setupTitle")}</h2>
+            <div className="text-secondary mb-3">{t("vault.setupIntro")}</div>
+            <div className="flex gap-2 items-center justify-end">
+              {message ? <span className="text-late text-sm">{message}</span> : null}
+              <button className="btn mr-auto" onClick={() => setOffer(false)}>
+                {t("vault.back")}
+              </button>
+              <button className="btn" onClick={() => startDefault(false)}>
+                {t("vault.setupSkip")}
+              </button>
+              <button className="btn btn-primary" onClick={() => startDefault(true)}>
+                {t("vault.setupStart")}
+              </button>
+            </div>
+          </>
+        ) : null}
         {own ? <div className="text-secondary mb-3">{t("vault.intro")}</div> : null}
         {own ? (
           <div className="flex gap-2 items-center">

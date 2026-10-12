@@ -851,6 +851,15 @@ export default {
     "Relay démarre avec un coffre vide dans ~/Relay : les notes, règles et skills qui donnent à Claude la mémoire de vos projets. Vous avez déjà un coffre ? Choisissez-le.",
   "vault.start": "Démarrer",
   "vault.haveOwn": "J'ai déjà un coffre",
+  "vault.setupTitle": "Configurer votre vault",
+  "vault.setupIntro":
+    "Claude vous pose quelques questions dans une première conversation : qui vous êtes, comment vous répartissez votre travail, les personnes et projets avec lesquels vous travaillez, et comment il doit réfléchir avec vous. Une dizaine de minutes, chaque partie peut être passée, et vous pouvez la relancer plus tard via Conversation › Configurer la vault.",
+  "vault.setupStart": "Configurer avec Claude",
+  "vault.setupSkip": "Passer",
+  "setup.title": "Configurer votre vault",
+  "setup.note":
+    "Configuration : Claude vous interroge et écrit votre profil, vos contextes, personnes et projets dans la vault. Dites « passer » pour sauter une partie, ou arrêtez quand vous voulez.",
+  "setup.prompt": "Lance le skill setup.",
   "vault.back": "Retour",
   "vault.none": "Aucun dossier choisi",
   "vault.choose": "Choisir le dossier du coffre…",

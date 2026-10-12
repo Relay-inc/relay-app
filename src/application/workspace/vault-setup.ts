@@ -1,5 +1,9 @@
 import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../domain/workspace/types";
 import * as backend from "../../infrastructure/backend";
+import { t } from "../../shared/i18n";
+import { select } from "../navigation/navigation";
+import { startChat } from "../conversations/chats";
+import { sendMsg } from "../conversations/actions";
 import { useWorkspaceStore } from "./store";
 
 // The vault and its mapping, shared by the first-launch screen and the settings window. The backend detects, checks and saves.
@@ -18,10 +22,26 @@ export async function pickMapped(status: VaultStatus, key: MapKey, map: VaultMap
   return checkMapping(status.vault, { ...map, [key]: relative });
 }
 
-/** The welcome screen's Start: the starter vault created in ~/Relay and saved like a picked one. */
-export async function startDefaultVault() {
+let setupAsked = false;
+/** The welcome screen's Start: the starter vault created in ~/Relay and saved like a picked one. `setup`: the setup
+ *  interview starts once the app has loaded (takeSetup), Skip leaves it out. */
+export async function startDefaultVault(setup: boolean) {
   const status = await backend.createDefaultVault();
+  setupAsked = setup;
   await saveOnboardingVault(status.vault, status.map);
+}
+/** Whether Start asked for the setup interview; asked once. */
+export function takeSetup(): boolean {
+  const asked = setupAsked;
+  setupAsked = false;
+  return asked;
+}
+/** A general conversation that runs the vault's setup skill (System/skills/setup): the interview that fills in the
+ *  profile, contexts, people and projects. From Start, and from Conversation › Set Up Vault. */
+export async function runSetup() {
+  const key = startChat(null, { provider: "claude", title: t("setup.title"), note: t("setup.note") });
+  await select(key);
+  return sendMsg(t("setup.prompt"));
 }
 
 // ---------- first launch, or a vault that is gone: a welcome screen over the main window until a vault is saved

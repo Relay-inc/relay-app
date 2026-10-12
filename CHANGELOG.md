@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Vault setup**: after Start, Relay offers to set up the new vault with Claude (or Skip). A first conversation interviews you about yourself, your contexts, people, projects and how Claude should think along, and writes the answers into the vault; Productive projects can become project notes. Run it again from Conversation › Set Up Vault
+
 ### Fixed
 
 - **Old Claude Code**: a conversation on a Claude Code older than 2.1.294 now stops with "run `claude update`" instead of failing every turn on `unknown option '--thinking-display'`

@@ -843,6 +843,15 @@ export default {
     "Relay start met een lege vault in ~/Relay: de notities, regels en skills die Claude een geheugen van je projecten geven. Heb je al een vault? Kies dan die.",
   "vault.start": "Start",
   "vault.haveOwn": "Ik heb al een vault",
+  "vault.setupTitle": "Je vault instellen",
+  "vault.setupIntro":
+    "Claude stelt je in een eerste gesprek een paar vragen: wie je bent, hoe je je werk opdeelt, met welke mensen en projecten je werkt, en hoe het moet meedenken. Ongeveer tien minuten, elk deel kan je overslaan, en je kan het later opnieuw doen via Gesprek › Vault instellen.",
+  "vault.setupStart": "Instellen met Claude",
+  "vault.setupSkip": "Overslaan",
+  "setup.title": "Je vault instellen",
+  "setup.note":
+    'Instellen: Claude interviewt je en schrijft je profiel, contexten, mensen en projecten in de vault. Zeg "overslaan" om een deel over te slaan, of stop wanneer je wil.',
+  "setup.prompt": "Voer de setup-skill uit.",
   "vault.back": "Terug",
   "vault.none": "Geen map gekozen",
   "vault.choose": "Kies vault-map…",
