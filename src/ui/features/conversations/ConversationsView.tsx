@@ -38,11 +38,17 @@ import { TodayReload } from "../today/TodayReload";
 import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
-import { WorkersToggle } from "../orchestrator/WorkersToggle";
+import { ORCH } from "../../../domain/orchestrator/rules";
+import { useOrchestratorStore } from "../../../application/orchestrator/store";
+import { WorkerDetail } from "../orchestrator/WorkerDetail";
+import { OrchestratorEmpty } from "../orchestrator/OrchestratorEmpty";
+import { OrchestratorBack } from "../orchestrator/OrchestratorBack";
 import { chatWidth, column } from "./layout";
+import { useT } from "../../hooks/useT";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
+  const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
   const drawer = useNavigationStore(s => s.drawer);
   const projectPanel = useNavigationStore(s => s.projectPanel);
@@ -54,6 +60,11 @@ export function ConversationsView({ className }: { className: string }) {
   const board = boardOf(selected);
   const hasSubagents = useConversationsStore(s => !onView && !!s.subs[selected]?.length);
   const bar = useDerived(() => chatBar(selected));
+  // a worker shown as its page next to the orchestrator's column, and the orchestrator before its first task
+  const workerPage = useNavigationStore(s => s.orchDetail);
+  const noWorkers = useOrchestratorStore(s => !Object.keys(s.workers).length);
+  const orchEmpty = useConversationsStore(s => selected === ORCH && !s.messages[ORCH]?.length) && noWorkers;
+  const orchHint = selected === ORCH ? "orch.hint.coord" : workerPage ? "orch.hint.worker" : null;
 
   // stay at the bottom while it grows: true when the log was within 80 px of the bottom. Followed on every resize of
   // the content and of the log itself (a toast, the agents or a taller composer take its height), in conversations only
@@ -128,8 +139,6 @@ export function ConversationsView({ className }: { className: string }) {
           <TodayReload />
         ) : selected === MAIL ? (
           <MailReload />
-        ) : bar.coordinator ? (
-          <WorkersToggle />
         ) : null
       }
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
@@ -163,7 +172,7 @@ export function ConversationsView({ className }: { className: string }) {
     );
   return (
     <div className={`${className} flex flex-col relative bg-bg`}>
-      {chatBarEl}
+      {workerPage ? <OrchestratorBack /> : chatBarEl}
       {projectPanel ? <ProjectPanel /> : null}
       <div
         id="log"
@@ -176,7 +185,7 @@ export function ConversationsView({ className }: { className: string }) {
           id="msgs"
           className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : selected === USAGE ? "w-full max-w-245 px-7" : `w-full ${chatWidth} px-8`}`}
         >
-          <SelectedView />
+          {workerPage ? <WorkerDetail workerKey={selected} /> : orchEmpty ? <OrchestratorEmpty /> : <SelectedView />}
           {/* on Reminders the chip sticks to the bottom of the scroller */}
           {toast && selected === REM ? (
             <div className="sticky bottom-3 pt-2 pb-1">
@@ -185,8 +194,8 @@ export function ConversationsView({ className }: { className: string }) {
           ) : null}
         </div>
       </div>
-      {hasSubagents ? <Subagents className={`${column} mb-1.5`} /> : null}
-      {onView ? null : <Todos className={`${column} mb-1.5`} />}
+      {hasSubagents && !workerPage ? <Subagents className={`${column} mb-1.5`} /> : null}
+      {onView || workerPage ? null : <Todos className={`${column} mb-1.5`} />}
       {toast && selected !== REM ? (
         <div className={`${column} mb-2`}>
           <Toast toast={toast} />
@@ -195,7 +204,9 @@ export function ConversationsView({ className }: { className: string }) {
       <RepoBar className={column} />
       <RetryBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
-      {onView ? null : <Composer className={`${column} mt-2 mb-4.5`} />}
+      {onView ? null : <Composer className={`${column} mt-2 ${orchHint ? "mb-1.5" : "mb-4.5"}`} />}
+      {/* who the composer talks to in the orchestrator: the coordinator, or the open worker */}
+      {orchHint ? <span className={`${column} mb-4 pl-9 text-[11px] text-tertiary`}>{t(orchHint)}</span> : null}
     </div>
   );
 }

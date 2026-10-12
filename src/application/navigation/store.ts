@@ -9,6 +9,7 @@ type NavigationState = {
   drawer: Drawer; // the right drawer: what it shows, "" while closed
   tool: Tool | null; // set while a project's board or PRs, opened from its title bar, is what the middle column shows
   projectPanel: boolean; // the conversation's project panel under the title
+  orchDetail: boolean; // the open conversation is a worker shown as its page next to the orchestrator's workers (openWorker)
   toast: Toast | null;
   zoom: string; // the image shown large
   quickAsk: boolean; // Cmd-K
@@ -44,6 +45,7 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
   drawer: "",
   tool: null,
   projectPanel: false,
+  orchDetail: false,
   toast: null,
   zoom: "",
   quickAsk: false,
