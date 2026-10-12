@@ -16,7 +16,7 @@ a PR. Versions follow
 ### Added
 
 - **Vault setup**: after Start, Relay offers to set up the new vault with Claude (or Skip). A first conversation interviews you about yourself, your contexts, people, projects and how Claude should think along, and writes the answers into the vault; Productive projects can become project notes. Run it again from Conversation › Set Up Vault (#182)
-- **Back to the start**: once a conversation is scrolled a screen away from its top, an arrow at the top right takes you back to its first message
+- **Arrows in a long conversation**: scrolled up from the end, an arrow above the composer takes you down to the latest and follows the stream again, with a dot when output came in while you read back. A screen away from the top, an arrow beside the messages takes you back to the first one
 
 ### Fixed
 

@@ -244,6 +244,8 @@ export default {
     "Beträge sind Schätzungen zu API-Listenpreisen: das Abo selbst ist pauschal. Tokens enthalten den Cache. Fahre über eine Zeile für die Aufteilung in Eingabe, Ausgabe und Cache.",
   "bar.openTerminal": "In externem Terminal fortsetzen",
   "chat.toTop": "Zum Anfang",
+  "chat.toEnd": "Zum Neuesten",
+  "chat.toEndNew": "Zum Neuesten: neue Ausgabe",
   "bar.linkRepo": "Ein GitHub-Repo in den Einstellungen mit diesem Projekt verknüpfen",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notizen",
