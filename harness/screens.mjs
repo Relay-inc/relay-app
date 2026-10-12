@@ -724,6 +724,13 @@ const VIEWS = {
     await view.getByText("Rolled 4 on a d6").waitFor();
     await settle(page);
   },
+  // a plugin with two views shows a tab per view; picking the second one loads that view in the frame (#189)
+  "plugin-view-tabs": async () => {
+    await open(page, server.url, { fixture: "plugins", sel: "__plugin:example" });
+    await page.getByRole("radio", { name: "History" }).click();
+    await page.frameLocator("iframe[title=History]").getByText(/^Ready/).waitFor();
+    await settle(page);
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");

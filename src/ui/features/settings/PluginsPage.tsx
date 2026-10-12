@@ -60,7 +60,7 @@ export function PluginsPage({ active }: { active: boolean }) {
     );
 
   const status = (plugin: Plugin) =>
-    plugin.view ? (
+    plugin.views.length ? (
       <StatusLine level="ok">
         {t("plug.viewStatus")}, {tn("plug.allowed", plugin.allowed.length)}
       </StatusLine>

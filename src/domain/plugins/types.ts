@@ -2,8 +2,8 @@
 /** The view a plugin brings: a `ui://` resource of its server. */
 export type PluginViewRef = { uri: string; name: string };
 /** One entry of settings.json `plugins`. `secrets` are names of environment variables whose values sit in the keychain;
- *  `allowed` the tools the plugin's view may call; `view` what the last test found, which is what puts the plugin in the
- *  sidebar without starting it. */
+ *  `allowed` the tools the plugin's views may call; `views` what the last test found (shown as tabs), which is what puts
+ *  the plugin in the sidebar without starting it. */
 export type Plugin = {
   id: string;
   name: string;
@@ -13,7 +13,7 @@ export type Plugin = {
   secrets: string[];
   on: boolean;
   allowed: string[];
-  view: PluginViewRef | null;
+  views: PluginViewRef[];
 };
 /** A tool as the test lists it: `view` is the `ui://` resource it renders in, `app` whether a view may call it. */
 export type PluginTool = { name: string; description?: string; view: string | null; app: boolean };

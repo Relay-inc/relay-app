@@ -56,7 +56,7 @@ export async function savePlugin(plugin: Plugin, values: Record<string, string>,
   }
 }
 
-/** Start the plugin afresh and list what it offers; its first view becomes its sidebar entry. */
+/** Start the plugin afresh and list what it offers; its views become its sidebar entry, a tab each. */
 export async function testPlugin(id: string) {
   const busy = (on: boolean, result = st().pluginsPage.tests[id]?.result ?? null) =>
     change(draft => {
@@ -117,6 +117,8 @@ export async function importPlugin(name: string) {
     await put([...plugins(), plugin]);
     await readSecrets();
     say("", null);
+    // read its views right away, as a save does, so it lands in the sidebar
+    await testPlugin(plugin.id);
     return plugin.id;
   } catch (error) {
     say("", fail(error));

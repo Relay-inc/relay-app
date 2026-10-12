@@ -174,10 +174,10 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 
 A plugin is an MCP server that Relay starts on this Mac and hosts the views of ([MCP Apps](https://github.com/modelcontextprotocol/ext-apps),
 spec revision 2026-01-26). Add one under Settings › Plugins (a command, arguments, environment and secrets) or import it
-from Claude Code's MCP config; Save and test lists its tools and views. Secrets live in the keychain
+from Claude Code's MCP config; saving it starts the server and lists its tools and views. Secrets live in the keychain
 (`vault-app.plugin.<id>`, one entry per name), never in `settings.json` (`plugins`) or the webview.
 
-A plugin with a `ui://` resource (`_meta.ui.resourceUri` on a tool, or a listed resource) shows in the sidebar. Its HTML is
+A plugin with a `ui://` resource (`_meta.ui.resourceUri` on a tool, or a listed resource) shows in the sidebar, with a tab per view when it has more than one. Its HTML is
 served from the `relay-plugin://` scheme with the Content-Security-Policy its `_meta.ui.csp` declares (default: nothing
 but inline script and style, no network) and shown in an iframe with `sandbox="allow-scripts"`: an opaque origin, so no
 Tauri IPC and no access to the app. The view talks to Relay over postMessage (`ui/initialize`, `tools/call`,

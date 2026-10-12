@@ -4,24 +4,61 @@ import { startHost } from "../../../application/plugins/host";
 import { loadPluginView } from "../../../application/plugins/plugins";
 import { useSettingsStore } from "../../../application/settings/store";
 import { useT } from "../../hooks/useT";
+import { Segmented } from "../settings/Segmented";
 
 type Loaded = { status: "loading" } | { status: "ready"; info: PluginViewInfo } | { status: "error"; message: string };
 
 /** A plugin's view in the middle column: its `ui://` page in a frame that cannot reach Relay (`sandbox="allow-scripts"`
  *  without allow-same-origin gives it an opaque origin, so no Tauri IPC and no access to this page) and has the policy the
- *  plugin declared. Everything the view may do goes through the bridge (application/plugins/host.ts). Keyed by the plugin
- *  and the attempt, so Try again starts the server and reads the view afresh. */
+ *  plugin declared. Everything the view may do goes through the bridge (application/plugins/host.ts). A plugin with more
+ *  than one view gets a tab per view; only the picked one runs. Keyed by the plugin, the view and the attempt, so Try
+ *  again starts the server and reads the view afresh. */
 export function PluginView({ id, className = "" }: { id: string; className?: string }) {
+  const { t } = useT();
+  const views = useSettingsStore(s => s.settings.plugins?.find(p => p.id === id)?.views) ?? [];
+  const [picked, setPicked] = useState("");
   const [attempt, setAttempt] = useState(0);
-  return <PluginFrame key={`${id}:${attempt}`} id={id} className={className} retry={() => setAttempt(attempt + 1)} />;
+  const uri = (views.find(v => v.uri === picked) ?? views[0])?.uri;
+  const frame = (
+    <PluginFrame
+      key={`${id}:${uri}:${attempt}`}
+      id={id}
+      uri={uri}
+      className={views.length > 1 ? "flex-1" : className}
+      retry={() => setAttempt(attempt + 1)}
+    />
+  );
+  if (views.length < 2) return frame;
+  return (
+    <div className={`${className} flex flex-col min-h-0`}>
+      <div className="flex items-center px-4 h-11 border-b border-separator">
+        <Segmented
+          label={t("plug.views")}
+          options={views.map(v => [v.uri, v.name] as const)}
+          value={uri ?? ""}
+          onPick={setPicked}
+        />
+      </div>
+      {frame}
+    </div>
+  );
 }
 
-function PluginFrame({ id, className, retry }: { id: string; className: string; retry: () => void }) {
+function PluginFrame({
+  id,
+  uri,
+  className,
+  retry,
+}: {
+  id: string;
+  uri?: string;
+  className: string;
+  retry: () => void;
+}) {
   const { t } = useT();
   const plugin = useSettingsStore(s => s.settings.plugins?.find(p => p.id === id));
   const [loaded, setLoaded] = useState<Loaded>({ status: "loading" });
   const frame = useRef<HTMLIFrameElement>(null);
-  const uri = plugin?.view?.uri;
   useEffect(() => {
     let live = true;
     loadPluginView(id, uri).then(

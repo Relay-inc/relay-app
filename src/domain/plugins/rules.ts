@@ -34,9 +34,9 @@ export const formatEnv = (env: Record<string, string>) =>
 /** The arguments as typed, one per line (an argument may hold spaces); empty lines are left out. */
 export const parseArgs = (text: string) => text.split("\n").filter(line => line.trim());
 /** The plugins that show in the sidebar: switched on and with a view. */
-export const shownPlugins = (plugins: Plugin[] = []) => plugins.filter(plugin => plugin.on && plugin.view);
-/** The entry after a test: the first view it found (the sidebar entry), and only allowed tools the server still has. */
+export const shownPlugins = (plugins: Plugin[] = []) => plugins.filter(plugin => plugin.on && plugin.views.length);
+/** The entry after a test: the views it found (the sidebar entry, a tab each), and only allowed tools the server still has. */
 export function afterTest(plugin: Plugin, found: PluginTest): Plugin {
   const known = found.tools.filter(tool => tool.app).map(tool => tool.name);
-  return { ...plugin, view: found.views[0] ?? null, allowed: plugin.allowed.filter(name => known.includes(name)) };
+  return { ...plugin, views: found.views, allowed: plugin.allowed.filter(name => known.includes(name)) };
 }

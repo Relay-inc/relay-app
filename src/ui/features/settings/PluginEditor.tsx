@@ -41,7 +41,7 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
   const clash = names.some(secret => secret in envMap) || new Set(names).size !== names.length;
   const complete = !!name.trim() && !!command.trim() && !clash;
 
-  const save = async (andTest: boolean) => {
+  const save = async () => {
     setBusy(true);
     const entry: Plugin = {
       id:
@@ -57,7 +57,7 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
       secrets: names,
       on: plugin?.on ?? true,
       allowed: plugin?.allowed ?? [],
-      view: plugin?.view ?? null,
+      views: plugin?.views ?? [],
     };
     const values = Object.fromEntries(secrets.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]));
     const ok = await savePlugin(
@@ -68,7 +68,8 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
     if (ok) {
       setSecrets(secrets.filter(row => row.name.trim()).map(row => ({ name: row.name.trim(), value: "" })));
       if (!plugin) onSaved(entry.id);
-      if (andTest) await testPlugin(entry.id);
+      // every save starts the server afresh and reads its views, so the sidebar entry is there without a separate test
+      await testPlugin(entry.id);
     }
     setBusy(false);
   };
@@ -128,11 +129,8 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
         }
         footer={
           <Footer message={clash ? { text: t("plug.secretClash"), ok: false } : message}>
-            <button className={buttonClass()} disabled={busy || !complete} onClick={() => save(false)}>
+            <button className={buttonClass("primary")} disabled={busy || !complete} onClick={save}>
               {t("set.save")}
-            </button>
-            <button className={buttonClass("primary")} disabled={busy || !complete} onClick={() => save(true)}>
-              {t("plug.saveTest")}
             </button>
           </Footer>
         }

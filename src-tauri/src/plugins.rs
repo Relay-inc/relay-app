@@ -228,16 +228,16 @@ fn strings(v: &Value, max: usize, len: usize) -> Option<Vec<&str>> {
     let out: Vec<&str> = a.iter().filter_map(|x| x.as_str().filter(|s| s.len() <= len && !s.contains('\0'))).collect();
     (a.len() <= max && out.len() == a.len()).then_some(out)
 }
-/// One entry of `plugins`: `{id, name, command, args, env, secrets, on, allowed, view}`. `view` is the one the last
-/// test found (`{uri, name}` or null), which is what puts the plugin in the sidebar without starting it.
+/// One entry of `plugins`: `{id, name, command, args, env, secrets, on, allowed, views}`. `views` are the ones the last
+/// test found (`{uri, name}`, shown as tabs), which is what puts the plugin in the sidebar without starting it.
 pub fn valid(p: &Value) -> bool {
     let (Some(_), Some(secrets), Some(_)) = (strings(&p["args"], 50, 2000), strings(&p["secrets"], 20, 60), strings(&p["allowed"], 200, 200)) else { return false };
     let env_ok = p["env"].as_object().is_some_and(|e| e.len() <= 50 && e.iter().all(|(k, v)| valid_env_name(k) && v.as_str().is_some_and(|v| v.len() <= 2000 && !v.contains('\0'))));
-    let view_ok = p["view"].is_null() || (p["view"]["uri"].as_str().is_some_and(|u| u.starts_with("ui://") && u.len() <= 500) && p["view"]["name"].as_str().is_some_and(|n| n.len() <= 100));
+    let views_ok = p["views"].as_array().is_some_and(|a| a.len() <= 20 && a.iter().all(|v| v["uri"].as_str().is_some_and(|u| u.starts_with("ui://") && u.len() <= 500) && v["name"].as_str().is_some_and(|n| n.len() <= 100)));
     p["id"].as_str().is_some_and(valid_id)
         && p["name"].as_str().is_some_and(|n| (1..=60).contains(&n.chars().count()))
         && p["command"].as_str().is_some_and(|c| (1..=500).contains(&c.len()) && !c.contains('\0'))
-        && p["on"].is_boolean() && env_ok && view_ok
+        && p["on"].is_boolean() && env_ok && views_ok
         && secrets.iter().all(|s| valid_env_name(s) && p["env"].get(*s).is_none())
 }
 pub fn norm(v: &mut Value) { if !v["plugins"].is_array() { v["plugins"] = json!([]); } }
@@ -458,7 +458,7 @@ pub fn plugin_import(state: tauri::State<App>, name: String) -> Result<Value, St
         let Some(v) = v.as_str() else { continue };
         if secret_name(k) { keychain_set(&service(&id), k, v)?; secrets.push(json!(k)); } else { env.insert(k.clone(), json!(v)); }
     }
-    let p = json!({"id": id, "name": name, "command": s["command"], "args": string_list(&s["args"]), "env": env, "secrets": secrets, "on": true, "allowed": [], "view": null});
+    let p = json!({"id": id, "name": name, "command": s["command"], "args": string_list(&s["args"]), "env": env, "secrets": secrets, "on": true, "allowed": [], "views": []});
     if valid(&p) { Ok(p) } else { Err(trc_v("err.plugin_bad", &name)) }
 }
 
@@ -520,15 +520,16 @@ mod tests {
 
     #[test]
     fn entries_in_settings() {
-        let ok = json!({"id": "garmin", "name": "Garmin", "command": "uvx", "args": ["a"], "env": {"X": "1"}, "secrets": ["PASSWORD"], "on": true, "allowed": ["t"], "view": null});
+        let ok = json!({"id": "garmin", "name": "Garmin", "command": "uvx", "args": ["a"], "env": {"X": "1"}, "secrets": ["PASSWORD"], "on": true, "allowed": ["t"], "views": []});
         assert!(valid(&ok));
         let with = |k: &str, v: Value| { let mut p = ok.clone(); p[k] = v; p };
         assert!(!valid(&with("id", json!("Bad Id"))));
         assert!(!valid(&with("command", json!(""))));
         assert!(!valid(&with("env", json!({"1X": "a"}))));
         assert!(!valid(&with("secrets", json!(["X"]))), "a name is a secret or plain env, not both");
-        assert!(!valid(&with("view", json!({"uri": "https://x", "name": "n"}))));
-        assert!(valid(&with("view", json!({"uri": "ui://x/y", "name": "n"}))));
+        assert!(!valid(&with("views", json!([{"uri": "https://x", "name": "n"}]))));
+        assert!(!valid(&with("views", Value::Null)));
+        assert!(valid(&with("views", json!([{"uri": "ui://x/y", "name": "n"}, {"uri": "ui://x/z", "name": "m"}]))));
         let mut s = json!({"plugins": [ok.clone(), ok]});
         assert!(check(&s).is_err(), "the same id twice");
         s["plugins"].as_array_mut().unwrap().pop();

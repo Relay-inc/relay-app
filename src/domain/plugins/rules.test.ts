@@ -12,7 +12,7 @@ const plugin = (over: Partial<Plugin> = {}): Plugin => ({
   secrets: [],
   on: true,
   allowed: [],
-  view: null,
+  views: [],
   ...over,
 });
 
@@ -33,13 +33,15 @@ test("env and arguments as typed", () => {
 test("a plugin shows in the sidebar when it is on and has a view", () => {
   const view = { uri: "ui://x/y", name: "Y" };
   assert.deepEqual(
-    shownPlugins([plugin({ view }), plugin({ id: "b", view, on: false }), plugin({ id: "c" })]).map(p => p.id),
+    shownPlugins([plugin({ views: [view] }), plugin({ id: "b", views: [view], on: false }), plugin({ id: "c" })]).map(
+      p => p.id,
+    ),
     ["garmin"],
   );
   assert.deepEqual(shownPlugins(undefined), []);
 });
 
-test("a test sets the view and drops allowed tools the server no longer has or hides from apps", () => {
+test("a test sets the views and drops allowed tools the server no longer has or hides from apps", () => {
   const found = {
     server: null,
     tools: [
@@ -50,6 +52,9 @@ test("a test sets the view and drops allowed tools the server no longer has or h
   };
   const after = afterTest(plugin({ allowed: ["roll", "hidden", "gone"] }), found);
   assert.deepEqual(after.allowed, ["roll"]);
-  assert.equal(after.view?.uri, "ui://x/y");
-  assert.equal(afterTest(plugin(), { server: null, tools: [], views: [] }).view, null);
+  assert.deepEqual(
+    after.views.map(v => v.uri),
+    ["ui://x/y"],
+  );
+  assert.equal(afterTest(plugin(), { server: null, tools: [], views: [] }).views.length, 0);
 });

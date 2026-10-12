@@ -59,7 +59,19 @@ const brainOn = fixture === "brain";
 const pluginSecrets = new Map<string, Set<string>>(
   (settings.plugins ?? []).map((p: { id: string; secrets: string[] }) => [p.id, new Set(p.secrets)]),
 );
-const diceTools = [{ name: "roll", description: "Roll a die with the given number of sides.", view: "ui://relay-example/dice", app: true }];
+// two views, so the plugin view shows its tabs; the harness serves the dice page for both
+const diceViews = [
+  { uri: "ui://relay-example/dice", name: "Dice" },
+  { uri: "ui://relay-example/history", name: "History" },
+];
+const diceTools = [
+  {
+    name: "roll",
+    description: "Roll a die with the given number of sides.",
+    view: "ui://relay-example/dice",
+    app: true,
+  },
+];
 let workers = orchOn ? structuredClone(orch.workers) : [];
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
@@ -124,7 +136,8 @@ const pipelineCalls: { cmd: string; args: Args }[] = [];
 // every pipeline PR as gh would read it, set with __harness.setPr
 let prStatus: Record<string, unknown> = { state: "OPEN", reviewDecision: null, reviews: [], comments: [], inline: [] };
 function handle(cmd: string, a: Args): unknown {
-  if (cmd.startsWith("orch_") && cmd !== "orch_workers" || (cmd === "integration_call" && a.method !== "GET")) pipelineCalls.push({ cmd, args: structuredClone(a) });
+  if ((cmd.startsWith("orch_") && cmd !== "orch_workers") || (cmd === "integration_call" && a.method !== "GET"))
+    pipelineCalls.push({ cmd, args: structuredClone(a) });
   switch (cmd) {
     // event plugin
     case "plugin:event|listen": {
@@ -163,7 +176,8 @@ function handle(cmd: string, a: Args): unknown {
           {
             version: "0.0.23",
             date: "2026-10-12T08:00:00Z",
-            notes: "### Added\n\n- **Updates in Settings**: Settings › Updates shows the releases since your version and installs the newest, and updates the coding agents (#190)\n\n### Fixed\n\n- **Cmd-K**: a search for a ticket number finds it on every board",
+            notes:
+              "### Added\n\n- **Updates in Settings**: Settings › Updates shows the releases since your version and installs the newest, and updates the coding agents (#190)\n\n### Fixed\n\n- **Cmd-K**: a search for a ticket number finds it on every board",
           },
           {
             version: "0.0.22",
@@ -174,12 +188,29 @@ function handle(cmd: string, a: Args): unknown {
         ],
       };
     case "updates_install":
-      [0.2, 0.55, 1].forEach((f, i) => setTimeout(() => emit("update-progress", { done: f * 24e6, total: 24e6 }), 300 * (i + 1)));
+      [0.2, 0.55, 1].forEach((f, i) =>
+        setTimeout(() => emit("update-progress", { done: f * 24e6, total: 24e6 }), 300 * (i + 1)),
+      );
       return new Promise(() => {}); // the app restarts
     case "agent_updates":
       return [
-        { id: "claude", name: "Claude Code", on: true, installed: "2.1.289", latest: "2.1.296", command: "/Users/me/.npm-global/bin/npm install -g --prefix /Users/me/.npm-global @anthropic-ai/claude-code@latest" },
-        { id: "codex", name: "Codex", on: true, installed: "0.162.1", latest: "0.162.1", command: "/opt/homebrew/bin/brew upgrade codex" },
+        {
+          id: "claude",
+          name: "Claude Code",
+          on: true,
+          installed: "2.1.289",
+          latest: "2.1.296",
+          command:
+            "/Users/me/.npm-global/bin/npm install -g --prefix /Users/me/.npm-global @anthropic-ai/claude-code@latest",
+        },
+        {
+          id: "codex",
+          name: "Codex",
+          on: true,
+          installed: "0.162.1",
+          latest: "0.162.1",
+          command: "/opt/homebrew/bin/brew upgrade codex",
+        },
         { id: "opencode", name: "OpenCode", on: false, installed: "1.1.6", latest: "1.19.0", command: null },
         { id: "pi", name: "Pi", on: false, installed: null, latest: null, command: null },
       ];
@@ -357,9 +388,24 @@ function handle(cmd: string, a: Args): unknown {
     }
     // the board pipeline: a worker on a ticket, a follow-up, its PR (open, nothing new), what it did on the board
     case "orch_dispatch_ticket": {
-      const worker = { key: `c:orch-w-t${workers.length}`, project: a.project, title: a.title, task: a.task, repo: a.repo,
-        worktree: `${a.repo}-relay-t${workers.length}`, branch: `relay/ticket-t${workers.length}`, state: "running", at: Date.now(), ended: null,
-        report: null, ticket: a.ticket, base_branch: a.base || "main", pr: null, pr_error: null, board: null } as (typeof workers)[number];
+      const worker = {
+        key: `c:orch-w-t${workers.length}`,
+        project: a.project,
+        title: a.title,
+        task: a.task,
+        repo: a.repo,
+        worktree: `${a.repo}-relay-t${workers.length}`,
+        branch: `relay/ticket-t${workers.length}`,
+        state: "running",
+        at: Date.now(),
+        ended: null,
+        report: null,
+        ticket: a.ticket,
+        base_branch: a.base || "main",
+        pr: null,
+        pr_error: null,
+        board: null,
+      } as (typeof workers)[number];
       workers.push(worker);
       setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return structuredClone(worker);
@@ -725,24 +771,36 @@ function handle(cmd: string, a: Args): unknown {
       pluginSecrets.delete(a.id);
       return null;
     case "plugin_test":
-      return { server: { name: "relay-example", version: "0.1.0" }, tools: diceTools, views: [{ uri: "ui://relay-example/dice", name: "Dice" }] };
+      return { server: { name: "relay-example", version: "0.1.0" }, tools: diceTools, views: diceViews };
     case "plugin_view":
       return {
         url: URL.createObjectURL(new Blob([diceView], { type: "text/html" })),
-        uri: "ui://relay-example/dice",
-        name: "Dice",
+        ...(diceViews.find(v => v.uri === a.uri) ?? diceViews[0]),
         prefersBorder: false,
         csp: { connectDomains: [], resourceDomains: [], frameDomains: [], baseUriDomains: [] },
       };
     case "plugin_call": {
       const plugin = (settings.plugins ?? []).find((p: { id: string }) => p.id === a.id);
       if (!plugin?.allowed.includes(a.tool)) throw `The tool '${a.tool}' is not allowed for this plugin`;
-      return { content: [{ type: "text", text: `Rolled 4 on a d${a.args?.sides ?? 6}` }], structuredContent: { value: 4, sides: a.args?.sides ?? 6 } };
+      return {
+        content: [{ type: "text", text: `Rolled 4 on a d${a.args?.sides ?? 6}` }],
+        structuredContent: { value: 4, sides: a.args?.sides ?? 6 },
+      };
     }
     case "plugin_import_list":
       return fixture.startsWith("plugins") ? ["garmin"] : [];
     case "plugin_import":
-      return { id: "garmin", name: a.name, command: "uvx", args: ["garmin-mcp"], env: {}, secrets: ["GARMIN_PASSWORD"], on: true, allowed: [], view: null };
+      return {
+        id: "garmin",
+        name: a.name,
+        command: "uvx",
+        args: ["garmin-mcp"],
+        env: {},
+        secrets: ["GARMIN_PASSWORD"],
+        on: true,
+        allowed: [],
+        views: [],
+      };
     case "integration_status":
     case "integration_has_token":
       return a.provider === "productive";
@@ -928,12 +986,19 @@ const harness = {
   /** the board pipeline's calls so far */
   pipelineCalls: () => structuredClone(pipelineCalls),
   /** what gh says about the pipeline's PRs from now on */
-  setPr: (status: Record<string, unknown>) => void (prStatus = { state: "OPEN", reviewDecision: null, reviews: [], comments: [], inline: [], ...status }),
+  setPr: (status: Record<string, unknown>) =>
+    void (prStatus = { state: "OPEN", reviewDecision: null, reviews: [], comments: [], inline: [], ...status }),
   /** a pipeline worker reports: its state, its PR (what orch.rs sets after the push), the `orch` event */
   pipelineReport: (key: string, status: string, pr: string | null, extra: Record<string, unknown> = {}) => {
     const worker = workers.find(w => w.key === key);
     if (!worker) return false;
-    Object.assign(worker, { state: status, ended: Date.now(), pr, report: { status, summary: "Built it.", questions: null, diff: null, flags: [] }, ...extra });
+    Object.assign(worker, {
+      state: status,
+      ended: Date.now(),
+      pr,
+      report: { status, summary: "Built it.", questions: null, diff: null, flags: [] },
+      ...extra,
+    });
     emit("orch", { type: "worker", worker: structuredClone(worker) });
     return true;
   },
