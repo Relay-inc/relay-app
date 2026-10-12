@@ -99,6 +99,7 @@ const ICONS: Record<string, Icon> = {
   server: ServerStack01Icon,
   search: Search01Icon,
   send: ArrowUp02Icon,
+  top: ArrowUp02Icon,
   agent: BotIcon,
   upload: ImageUploadIcon,
   none: ImageNotFound01Icon,

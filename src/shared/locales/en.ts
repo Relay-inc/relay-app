@@ -239,6 +239,7 @@ const en = {
   "usage.estimate":
     "Amounts are estimates at API list prices: the plan itself is a subscription. Tokens include cache reads and writes. Hover a row for its input, output and cache split.",
   "bar.openTerminal": "Resume in external terminal",
+  "chat.toTop": "Back to the start",
   "bar.linkRepo": "Link a GitHub repo to this project in Settings",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notes",

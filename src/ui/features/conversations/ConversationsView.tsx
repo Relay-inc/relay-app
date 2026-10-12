@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isView, BRAIN, MAIL, PRS, REM, USAGE, WAIT, reviewOf } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
@@ -17,6 +17,8 @@ import { showInBrain } from "../../../application/brain/brain";
 import { boardKey } from "../../../domain/navigation/keys";
 import { useDerived } from "../../hooks/useDerived";
 import { useUiRequest } from "../../hooks/useUiRequest";
+import { useT } from "../../hooks/useT";
+import { Icon } from "../../components/Icon";
 import { SelectedView } from "../../app/SelectedView";
 import { PullRequestsView } from "../pull-requests/PullRequestsView";
 import { BrainView } from "../brain/BrainView";
@@ -42,6 +44,7 @@ import { chatWidth, column } from "./layout";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
+  const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
   const drawer = useNavigationStore(s => s.drawer);
   const projectPanel = useNavigationStore(s => s.projectPanel);
@@ -75,8 +78,11 @@ export function ConversationsView({ className }: { className: string }) {
   // a scroll event is dispatched a frame late, after more text may have come in: only a move up unsticks, so a
   // stream into a log at the bottom keeps following
   const lastTop = useRef(0);
+  // the arrow to the start of the conversation shows once the log is a screen away from the top
+  const [away, setAway] = useState(false);
   const onScroll = () => {
     const el = log.current!;
+    setAway(el.scrollTop > el.clientHeight);
     if (el.scrollHeight - el.scrollTop - el.clientHeight < 80) stick.current = true;
     else if (el.scrollTop < lastTop.current) stick.current = false;
     lastTop.current = el.scrollTop;
@@ -160,6 +166,22 @@ export function ConversationsView({ className }: { className: string }) {
         className={`flex-1 overflow-y-auto pb-3 ${selected === REM ? "pt-6" : "pt-7"}`}
         onScroll={onScroll}
       >
+        {/* zero height and sticky, so it floats at the top right of the log without pushing the messages down */}
+        {away && !onView ? (
+          <div className="sticky top-2 z-10 h-0 flex justify-end pr-4">
+            <button
+              className="btn-icon bg-raised shadow-xs ring-[0.5px] ring-separator-strong"
+              title={t("chat.toTop")}
+              aria-label={t("chat.toTop")}
+              onClick={() => {
+                stick.current = false;
+                log.current?.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+            >
+              <Icon name="top" className="glyph size-4" />
+            </button>
+          </div>
+        ) : null}
         <div
           ref={msgs}
           id="msgs"
