@@ -706,6 +706,37 @@ const VIEWS = {
     await settingsPage("Plugins", "Dice", "plugins");
     await intoView("Switch on the tools");
   },
+  // Add from GitHub: the repo field, then the confirmation card (command, install command, secrets, the Claude Code switch
+  // with its "already has a server" note, the warning)
+  ...Object.fromEntries(
+    ["", "-dark"].flatMap(dark => [
+      [
+        `settings-plugin-github${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Add from GitHub", `plugins${dark}`);
+        },
+      ],
+      [
+        `settings-plugin-github-card${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Add from GitHub", `plugins${dark}`);
+          await page.locator("#plugrepo").fill("kristoffeys/relay-plugin-garmin");
+          await click("Download and read");
+          await waitText("Install Garmin");
+          await intoView("This plugin runs as a program");
+        },
+      ],
+      [
+        `settings-plugin-update${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Garmin", `plugins-repo${dark}`);
+          await click("Check for updates");
+          await waitText("Update Garmin");
+          await intoView("Changed in this version");
+        },
+      ],
+    ]),
+  ),
   // the example plugin's view in the middle column: the frame is up (ui/initialize done) and a roll went through the
   // bridge to the server's tool
   "plugin-view": async () => {
