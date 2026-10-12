@@ -16,27 +16,13 @@ import type { Kind } from "../plan.ts";
 import type { Pending } from "../../conversations/types";
 import type { Entry } from "./types.ts";
 
-const ALL: Kind[] = [
-  "ask",
-  "blocked",
-  "prep",
-  "mail",
-  "reminder",
-  "card",
-  "note",
-  "review",
-  "fix",
-  "time",
-  "finished",
-  "capture",
-];
+const ALL: Kind[] = ["ask", "blocked", "prep", "mail", "reminder", "card", "note", "review", "fix", "time", "finished"];
 
 test("every kind is registered once, with its subject", () => {
   assert.deepEqual(Object.keys(KINDS).sort(), [...ALL].sort());
   assert.deepEqual(Object.keys(SUBJECTS).sort(), [
     "ask",
     "blocked",
-    "capture",
     "card",
     "chat",
     "mail",
@@ -64,7 +50,6 @@ test("how long and how urgent: the ranks and estimates the queue was planned wit
     fix: [7, 20],
     time: [7, 5],
     finished: [8, 5],
-    capture: [5, 3],
   });
   assert.equal(rankOf("reminder", true), 1.5, "overdue: two and a half steps earlier");
   assert.equal(rankOf("card"), 4);

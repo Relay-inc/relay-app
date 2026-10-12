@@ -23,6 +23,7 @@ a PR. Versions follow
 
 - **Reminders in the menu bar**: the icon is the Relay mark in one colour, which follows a light or dark menu bar, with one number for what is overdue or due today, red while something is overdue. It replaces the alarm clock emoji and the two numbers (#184)
 - **Updates check quietly, twice a day**: Relay looks for an update at start and every 12 hours instead of once a day, and no longer pops a dialog. A dot on the settings button in the sidebar says there is one, and the button then opens Settings › Updates; so does Relay › Check for Updates (#188)
+- **Vault updates on close are written, not proposed**: closing a conversation has Claude write what belongs in the vault straight in, with the vault's own rules and hooks. Nothing lands on Today and nothing is asked; the vault's git history is the review. Settings › General still turns it off
 
 ## [0.0.21] - 2026-10-12
 

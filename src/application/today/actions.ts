@@ -7,7 +7,6 @@ import { reviewGroupOf } from "../../domain/today/kinds/pr";
 import type { ActionSpec, Entry, EntryOf, SubjectType } from "../../domain/today/kinds/types";
 import type { AskAct } from "../../domain/today/kinds/ask";
 import type { BlockedAct } from "../../domain/today/kinds/blocked";
-import type { CaptureAct } from "../../domain/today/kinds/capture";
 import type { CardAct } from "../../domain/today/kinds/card";
 import type { ChatAct } from "../../domain/today/kinds/chat";
 import type { MailAct } from "../../domain/today/kinds/mail";
@@ -38,7 +37,6 @@ import { startReview } from "./review";
 import { changeDay, useTodayStore } from "./store";
 import { relinkPr, ticketState } from "./links";
 import { useDetailsStore } from "./details";
-import { applyCapture, skipCapture } from "./capture";
 import { loadTodayCards, dismiss, entries, selectEntry } from "./today";
 import { flags, words } from "./snapshot";
 
@@ -129,7 +127,6 @@ const FINISH: Finish = {
   reminder: ({ subject }) => reminderAction(subject.reminder, "done"),
   mail: ({ subject }) => (mailExperimental() ? mailMove([subject.key], false) : mailSeen(subject.key, true)),
   chat: ({ subject }) => markSeen(subject.key),
-  capture: ({ subject }) => skipCapture(subject.capture.key),
   blocked: ({ subject }) => backgroundAction("hide", subject.session.id),
   ask: () => undefined, // an agent's question is done by answering it
 };
@@ -155,7 +152,6 @@ const RUN: {
   mail: Run<"mail", MailAct>;
   chat: Run<"chat", ChatAct>;
   time: Run<"time", TimeAct>;
-  capture: Run<"capture", CaptureAct>;
 } = {
   ask: { open: ({ subject }) => select(subject.chat) },
   blocked: {
@@ -213,10 +209,6 @@ const RUN: {
     markRead: ({ subject }) => markSeen(subject.key),
   },
   time: { book: ({ subject }) => proposeTime(subject.date) },
-  capture: {
-    apply: ({ subject }) => applyCapture(subject.capture.key),
-    skip: ({ subject }) => skipCapture(subject.capture.key),
-  },
 };
 const run = (entry: Entry, id: string) =>
   id === "done"
