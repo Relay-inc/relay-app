@@ -57,28 +57,36 @@ pub fn check(s: &Value) -> Result<(), String> {
 // ---------- keychain
 
 fn service(p: &Provider) -> String { format!("vault-app.{}", p.id) }
-fn secret(p: &Provider, account: &str) -> Option<String> {
-    let o = Command::new("/usr/bin/security").args(["find-generic-password", "-s", &service(p), "-a", account, "-w"]).output().ok()?;
-    let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
-    (o.status.success() && !t.is_empty()).then_some(t)
-}
+fn secret(p: &Provider, account: &str) -> Option<String> { keychain_get(&service(p), account) }
 /// Every secret of the provider, in the order of `secrets`, or None when one is missing.
 pub fn token(p: &Provider) -> Option<Vec<String>> { p.secrets.iter().map(|a| secret(p, a)).collect() }
 /// Save one secret (`account` is one of the provider's `secrets`), or remove it when empty.
 pub fn set_token(p: &Provider, account: &str, t: &str) -> Result<(), String> {
     if !p.secrets.contains(&account) { return Err(trc_v("err.call", p.name)); }
-    if t.is_empty() {
-        Command::new("/usr/bin/security").args(["delete-generic-password", "-s", &service(p), "-a", account]).output().map_err(|e| e.to_string())?;
+    if t.len() > 200 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') { return Err(trc("err.token_chars")); }
+    keychain_set(&service(p), account, t)
+}
+
+/// A generic password from the macOS keychain (the plugins keep theirs under their own service, see plugins.rs).
+pub fn keychain_get(service: &str, account: &str) -> Option<String> {
+    let o = Command::new("/usr/bin/security").args(["find-generic-password", "-s", service, "-a", account, "-w"]).output().ok()?;
+    let t = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    (o.status.success() && !t.is_empty()).then_some(t)
+}
+/// Save a generic password, or remove it when empty. The value goes to `security -i` over stdin, never as an argument
+/// (visible in the process list), quoted so spaces and quotes survive. Printable ASCII only: `security -w` prints
+/// anything else as hex, so it would not read back.
+pub fn keychain_set(service: &str, account: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        Command::new("/usr/bin/security").args(["delete-generic-password", "-s", service, "-a", account]).output().map_err(|e| e.to_string())?;
         return Ok(());
     }
-    if t.len() > 200 || !t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
-        return Err(trc("err.token_chars"));
-    }
+    if value.len() > 500 || !value.chars().all(|c| (' '..='~').contains(&c)) { return Err(trc("err.secret_chars")); }
     let mut ch = Command::new("/usr/bin/security").arg("-i").stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map_err(|e| e.to_string())?;
-    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s {} -a {account} -w {t}", service(p)).map_err(|e| e.to_string())?;
+    writeln!(ch.stdin.take().unwrap(), "add-generic-password -U -s {} -a {} -w {}", curl_quote(service), curl_quote(account), curl_quote(value)).map_err(|e| e.to_string())?;
     ch.wait().map_err(|e| e.to_string())?;
     // `security -i` exits 0 even when the command inside failed, so read it back
-    if secret(p, account).as_deref() == Some(t) { Ok(()) } else { Err(trc("err.keychain")) }
+    if keychain_get(service, account).as_deref() == Some(value) { Ok(()) } else { Err(trc("err.keychain")) }
 }
 
 // ---------- one call
