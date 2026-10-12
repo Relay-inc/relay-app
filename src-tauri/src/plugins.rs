@@ -23,7 +23,8 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
-use crate::providers::{keychain_get, keychain_set};
+pub use crate::providers::keychain_get;
+use crate::providers::keychain_set;
 use crate::{fs, home, trc, trc_v, vault, App};
 
 /// The MCP revision we speak to servers: the last one with the initialize handshake that servers in use implement
@@ -78,8 +79,12 @@ struct Server {
 }
 
 impl Server {
-    fn spawn(key: String, command: &str, args: &[String], env: &HashMap<String, String>, path: &str) -> Result<Arc<Server>, String> {
-        let mut child = Command::new(command).args(args).env("PATH", path).envs(env)
+    fn spawn(key: String, command: &str, args: &[String], env: &HashMap<String, String>, path: &str, cwd: Option<&std::path::Path>) -> Result<Arc<Server>, String> {
+        let mut cmd = Command::new(command);
+        cmd.args(args).env("PATH", path).envs(env);
+        // a plugin installed from GitHub runs in its own folder, as its README expects
+        if let Some(cwd) = cwd { cmd.current_dir(cwd); }
+        let mut child = cmd
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped())
             .process_group(0) // its own group, so stopping it also stops what it started
             .spawn().map_err(|e| trc_v("err.plugin_start", &format!("{command}: {e}")))?;
@@ -221,9 +226,9 @@ pub fn csp(meta: &Value) -> String {
 
 // ---------- the entries in settings.json
 
-fn valid_id(s: &str) -> bool { (1..=40).contains(&s.len()) && s.starts_with(|c: char| c.is_ascii_alphanumeric()) && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') }
-fn valid_env_name(s: &str) -> bool { (1..=60).contains(&s.len()) && !s.starts_with(|c: char| c.is_ascii_digit()) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') }
-fn strings(v: &Value, max: usize, len: usize) -> Option<Vec<&str>> {
+pub fn valid_id(s: &str) -> bool { (1..=40).contains(&s.len()) && s.starts_with(|c: char| c.is_ascii_alphanumeric()) && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') }
+pub fn valid_env_name(s: &str) -> bool { (1..=60).contains(&s.len()) && !s.starts_with(|c: char| c.is_ascii_digit()) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') }
+pub fn strings(v: &Value, max: usize, len: usize) -> Option<Vec<&str>> {
     let a = v.as_array()?;
     let out: Vec<&str> = a.iter().filter_map(|x| x.as_str().filter(|s| s.len() <= len && !s.contains('\0'))).collect();
     (a.len() <= max && out.len() == a.len()).then_some(out)
@@ -232,17 +237,22 @@ fn strings(v: &Value, max: usize, len: usize) -> Option<Vec<&str>> {
 /// ones the last test found (`{uri, name}`, shown as tabs), which is what puts the plugin in the sidebar without starting
 /// it. `toolViews` maps a tool to the view its result renders in (the same test), which tells a conversation what to show
 /// under a call to that tool without starting the server. `mcp` is the name Claude Code knows the server by (a call
-/// there is `mcp__<name>__<tool>`), the plugin's id when absent.
+/// there is `mcp__<name>__<tool>`), the plugin's id when absent. `source` is `{repo, ref, sha}` for a plugin installed from
+/// GitHub (its folder is `plugins/<id>/`), `sync` whether the server is also registered in Claude Code.
 pub fn valid(p: &Value) -> bool {
     let (Some(_), Some(secrets), Some(_)) = (strings(&p["args"], 50, 2000), strings(&p["secrets"], 20, 60), strings(&p["allowed"], 200, 200)) else { return false };
     let env_ok = p["env"].as_object().is_some_and(|e| e.len() <= 50 && e.iter().all(|(k, v)| valid_env_name(k) && v.as_str().is_some_and(|v| v.len() <= 2000 && !v.contains('\0'))));
     let views_ok = p["views"].as_array().is_some_and(|a| a.len() <= 20 && a.iter().all(|v| v["uri"].as_str().is_some_and(|u| u.starts_with("ui://") && u.len() <= 500) && v["name"].as_str().is_some_and(|n| n.len() <= 100)));
     let tool_views_ok = p["toolViews"].is_null() || p["toolViews"].as_object().is_some_and(|m| m.len() <= 200 && m.iter().all(|(k, v)| k.len() <= 200 && v.as_str().is_some_and(|u| u.starts_with("ui://") && u.len() <= 500)));
+    // where a plugin from GitHub came from (plugin_repo.rs): the repo, the ref asked for (null: the default branch) and the commit
+    let source_ok = p["source"].is_null() || (p["source"]["repo"].as_str().is_some_and(|r| (1..=200).contains(&r.len())) && (p["source"]["ref"].is_null() || p["source"]["ref"].as_str().is_some_and(|r| r.len() <= 200))
+        && p["source"]["sha"].as_str().is_some_and(|s| s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())));
+    let sync_ok = p["sync"].is_null() || p["sync"].is_boolean();
     let mcp_ok = p["mcp"].is_null() || p["mcp"].as_str().is_some_and(|n| (1..=100).contains(&n.len()) && !n.contains('\0'));
     p["id"].as_str().is_some_and(valid_id)
         && p["name"].as_str().is_some_and(|n| (1..=60).contains(&n.chars().count()))
         && p["command"].as_str().is_some_and(|c| (1..=500).contains(&c.len()) && !c.contains('\0'))
-        && p["on"].is_boolean() && env_ok && views_ok && tool_views_ok && mcp_ok
+        && p["on"].is_boolean() && env_ok && views_ok && tool_views_ok && mcp_ok && source_ok && sync_ok
         && secrets.iter().all(|s| valid_env_name(s) && p["env"].get(*s).is_none())
 }
 pub fn norm(v: &mut Value) { if !v["plugins"].is_array() { v["plugins"] = json!([]); } }
@@ -262,11 +272,11 @@ pub fn slug(name: &str) -> String {
     if s.is_empty() { "plugin".into() } else { s.trim_end_matches('-').into() }
 }
 
-fn service(id: &str) -> String { format!("vault-app.plugin.{id}") }
-fn entry(state: &App, id: &str) -> Result<Value, String> {
+pub fn service(id: &str) -> String { format!("vault-app.plugin.{id}") }
+pub fn entry(state: &App, id: &str) -> Result<Value, String> {
     state.settings.lock().unwrap()["plugins"].as_array().and_then(|l| l.iter().find(|p| p["id"] == id)).cloned().ok_or_else(|| trc_v("err.plugin_unknown", id))
 }
-fn string_list(v: &Value) -> Vec<String> { v.as_array().into_iter().flatten().filter_map(|s| s.as_str().map(String::from)).collect() }
+pub fn string_list(v: &Value) -> Vec<String> { v.as_array().into_iter().flatten().filter_map(|s| s.as_str().map(String::from)).collect() }
 
 // ---------- the servers
 
@@ -301,7 +311,7 @@ fn keep(views: &mut Served, path: String, page: (String, String)) {
         views.remove(&oldest);
     }
 }
-fn stop(app: &AppHandle, id: &str) {
+pub fn stop(app: &AppHandle, id: &str) {
     let plugins = app.state::<Plugins>();
     plugins.servers.lock().unwrap().remove(id);
     plugins.views.lock().unwrap().retain(|path, _| of(path) != id);
@@ -320,7 +330,8 @@ fn ensure(app: &AppHandle, id: &str, need_on: bool) -> Result<(Arc<Server>, Valu
     stop(app, id);
     let mut env: HashMap<String, String> = cfg["env"].as_object().into_iter().flatten().filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string()))).collect();
     for name in string_list(&cfg["secrets"]) { if let Some(v) = keychain_get(&service(id), &name) { env.insert(name, v); } }
-    let server = Server::spawn(key, cfg["command"].as_str().unwrap(), &string_list(&cfg["args"]), &env, &state.path)?;
+    let cwd = cfg["source"].is_object().then(|| crate::plugin_repo::dir(app).join(id));
+    let server = Server::spawn(key, cfg["command"].as_str().unwrap(), &string_list(&cfg["args"]), &env, &state.path, cwd.as_deref())?;
     server.handshake()?; // an error drops the server, which stops the process
     plugins.servers.lock().unwrap().insert(id.to_string(), server.clone());
     Ok((server, cfg))
@@ -350,13 +361,14 @@ pub fn plugin_secret(app: AppHandle, state: tauri::State<App>, id: String, name:
     Ok(())
 }
 
-/// Before a plugin is removed from the settings: stop its server and delete its secrets from the keychain.
+/// Before a plugin is removed from the settings: stop its server, delete its secrets from the keychain, and for one from
+/// GitHub its folder and its server in Claude Code.
 #[tauri::command]
 pub fn plugin_forget(app: AppHandle, state: tauri::State<App>, id: String) -> Result<(), String> {
     let cfg = entry(&state, &id)?;
     for name in string_list(&cfg["secrets"]) { keychain_set(&service(&id), &name, "")?; }
     stop(&app, &id);
-    Ok(())
+    crate::plugin_repo::remove(&app, &cfg)
 }
 
 /// The Test button: a fresh start, then what the server offers: its tools (with whether the model and an app may call
@@ -561,6 +573,10 @@ mod tests {
         assert!(valid(&with("toolViews", json!({"roll": "ui://x/y"}))) && valid(&with("mcp", json!("my-server"))) && valid(&with("mcp", Value::Null)));
         assert!(!valid(&with("toolViews", json!({"roll": "https://x"}))) && !valid(&with("toolViews", json!(["a"]))));
         assert!(!valid(&with("mcp", json!(""))) && !valid(&with("mcp", json!(3))));
+        // where a plugin from GitHub came from, and whether Claude Code has it too
+        let sha = "0123456789abcdef0123456789abcdef01234567";
+        assert!(valid(&with("source", json!({"repo": "a/b", "ref": null, "sha": sha}))) && valid(&with("source", json!({"repo": "a/b", "ref": "v1", "sha": sha}))) && valid(&with("sync", json!(true))));
+        assert!(!valid(&with("source", json!({"repo": "a/b", "sha": "abc"}))) && !valid(&with("source", json!("a/b"))) && !valid(&with("sync", json!("yes"))));
         let mut s = json!({"plugins": [ok.clone(), ok]});
         assert!(check(&s).is_err(), "the same id twice");
         s["plugins"].as_array_mut().unwrap().pop();
@@ -586,7 +602,7 @@ mod tests {
 
     #[test]
     fn a_server_answers_and_dies_with_its_group() {
-        let s = Server::spawn("k".into(), "/bin/sh", &["-c".into(), ECHO.into()], &HashMap::new(), "/usr/bin:/bin").unwrap();
+        let s = Server::spawn("k".into(), "/bin/sh", &["-c".into(), ECHO.into()], &HashMap::new(), "/usr/bin:/bin", None).unwrap();
         s.handshake().unwrap();
         assert_eq!(s.info.lock().unwrap()["name"], "fake");
         assert_eq!(s.tools().unwrap()[0]["name"], "a");
@@ -597,10 +613,10 @@ mod tests {
 
     #[test]
     fn a_server_that_exits_answers_with_its_last_stderr_line() {
-        let s = Server::spawn("k".into(), "/bin/sh", &["-c".into(), "echo missing token >&2; exit 1".into()], &HashMap::new(), "/usr/bin:/bin").unwrap();
+        let s = Server::spawn("k".into(), "/bin/sh", &["-c".into(), "echo missing token >&2; exit 1".into()], &HashMap::new(), "/usr/bin:/bin", None).unwrap();
         let e = s.handshake().unwrap_err();
         assert!(e.contains("missing token") || !e.is_empty());
-        assert!(Server::spawn("k".into(), "/nonexistent/x", &[], &HashMap::new(), "/bin").is_err());
+        assert!(Server::spawn("k".into(), "/nonexistent/x", &[], &HashMap::new(), "/bin", None).is_err());
     }
 
     /// The real thing end to end: the host's side against packages/plugin-example (skipped without node).
@@ -609,7 +625,7 @@ mod tests {
         let Ok(node) = Command::new("which").arg("node").output().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()) else { return };
         if node.is_empty() { return; }
         let script = format!("{}/../packages/plugin-example/server.mjs", env!("CARGO_MANIFEST_DIR"));
-        let s = Server::spawn("k".into(), &node, &[script], &HashMap::new(), "/usr/bin:/bin").unwrap();
+        let s = Server::spawn("k".into(), &node, &[script], &HashMap::new(), "/usr/bin:/bin", None).unwrap();
         s.handshake().unwrap();
         let tools = s.tools().unwrap();
         let found = views(&tools, &s.resources());
