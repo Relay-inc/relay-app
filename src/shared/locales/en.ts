@@ -177,6 +177,9 @@ const en = {
     "Not picked up: the ticket has no description, comments or files to build from. Add what is needed and move it back to {column}.",
   "pl.unclear":
     "Not picked up: an agent would have to guess here. Answer these on the ticket, then move it back to {column}.\n\n{questions}",
+  "pl.usedUp": "{project}: the Claude plan is used up, the pipeline takes no tickets until it has room again.",
+  "pl.stalled":
+    "{project}: the last three agent runs ended without a PR, so the pipeline takes no new tickets. Look at the tickets in the input column; moving one back or starting one yourself gets it going again.",
   "pl.picked": "Picked up by Relay: an agent is building this on branch {branch}.",
   "pl.resumed": "Picked up again by Relay: the agent continues with what is new on the ticket.",
   "pl.startFailed": "Relay could not start an agent on this ticket: {error}",

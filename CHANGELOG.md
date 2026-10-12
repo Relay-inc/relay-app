@@ -29,6 +29,7 @@ a PR. Versions follow
 - **Board pipeline: the review forms its own view first**: the reviewing agent reads the ticket and the diff before the agent's own account of what it did, and treats that account as a claim to check. It also lists what it checked and found right; that list goes in the PR under the review's notes, so you know what you need not check again (#196)
 - **Board pipeline: agents settle small choices themselves**: when a ticket leaves something open, the agent follows the ticket, then how the repo already does it, then the smaller change that is easiest to undo, and lists those choices under Decisions in the PR. It only stops with questions when done is unclear or the change would touch auth, money, data or something others rely on (#197)
 - **Board pipeline: unclear tickets go back before an agent starts**: before Relay gives a ticket from the pick column to an agent, one quick check without tools asks whether an agent could build it without guessing. When not, the ticket moves to the input column with up to three questions on it, instead of costing a whole run. Skipped in plan mode and for tickets you start yourself (#198)
+- **Board pipeline: stops taking tickets when it should**: a pipeline takes no new tickets while the Claude plan is used up, and stops after three agent runs in a row ended without a PR (blocked, failed or nothing to push), with one message saying why. Tickets moved back and tickets you start yourself still run, and the next PR lifts the stop (#199)
 
 ## [0.0.21] - 2026-10-12
 

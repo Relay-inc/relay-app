@@ -1,5 +1,7 @@
 import type { BoardRef, Card, CardView } from "../board/types";
 import type { Worker } from "../orchestrator/types";
+import type { Limits } from "../agents/types";
+import type { ProvLimits } from "../usage/types";
 import type { Pipeline, PrStatus, Step, Ticket } from "./types";
 
 export const EMPTY_PIPELINE: Pipeline = {
@@ -171,4 +173,30 @@ export function preflightOf(answer: string): { clear: true } | { clear: false; q
   } catch {
     return null;
   }
+}
+
+/** Ended runs in a row without a PR (blocked, failed, silent, done with nothing to push) after which the pipeline stops
+ *  taking new tickets. A plan sent for approval and a run you stopped are not misses. */
+export const MISSES = 3;
+const missed = (w: Worker) =>
+  w.state === "done" ? !w.pr : w.state !== "stopped" && !w.report?.questions?.startsWith("Plan for approval:");
+
+/** The pipeline's last MISSES ended runs all missed: something is off (the tickets, the repo, the checks) and new
+ *  tickets would only fail the same way. A run that opens a PR, a ticket moved back or one you start yourself goes on. */
+export function stalled(workers: Worker[]) {
+  const last = workers
+    .filter(w => w.state !== "running" && w.ended && w.state !== "stopped")
+    .sort((a, b) => (b.ended ?? 0) - (a.ended ?? 0))
+    .slice(0, MISSES);
+  return last.length === MISSES && last.every(missed);
+}
+
+const spent = (l: Limits) => l.ok && l.windows.some(w => !w.name && w.pct >= 100);
+/** The provider's plan has no room for a new run: its limits (or, with several accounts, every account's) have a
+ *  window at 100% that applies to every model. Limits that could not be read do not stop anything. */
+export function usedUp(limits: ProvLimits[], provider: string) {
+  const p = limits.find(l => l.provider === provider);
+  if (!p) return false;
+  // ponytail: all accounts spent, not the one a run would get; a spent active account with auto-switch off still claims
+  return p.accounts?.length ? p.accounts.every(a => spent(a.limits)) : spent(p.limits);
 }

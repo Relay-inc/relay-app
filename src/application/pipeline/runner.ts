@@ -13,7 +13,9 @@ import {
   preflightOf,
   ready,
   review,
+  stalled,
   step,
+  usedUp,
   ticketOf,
   workersOf,
 } from "../../domain/pipeline/rules";
@@ -41,6 +43,12 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 };
 let queued = false;
 const lastError: Record<string, string> = {};
+// why a pipeline takes no new tickets right now, so it is said once and not every five minutes
+const holding: Record<string, string> = {};
+function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
+  if (why && holding[project] !== why) toast(t(why, { project }));
+  holding[project] = why;
+}
 
 /** One pass over every pipeline. Calls while one waits to start make no second one. */
 export function runPipelines() {
@@ -158,10 +166,16 @@ async function runOne(project: string, p: Pipeline) {
   const mine = workersOf(allWorkers(), project);
   const { fresh, resume: back } = picks(cards, card => colOf(prov, { group }, card), p, mine);
   let room = Math.max(1, p.parallel) - mine.filter(w => w.state === "running").length;
+  if (room <= 0 || (!fresh.length && !back.length)) return;
+  // a run on a spent plan would only stall: wait until the limits read again
+  if (usedUp(await backend.usageLimits().catch(() => []), "claude")) return hold(project, "pl.usedUp");
   for (const { card, worker } of back) {
     if (room-- <= 0) return;
     await resume(b, card.id, worker, "The ticket was moved back to the pick column on the board.");
   }
+  // runs keep ending without a PR: tickets moved back still go on (a person looked at them), new ones wait
+  if (stalled(workersOf(allWorkers(), project))) return hold(project, "pl.stalled");
+  hold(project, "");
   for (const card of fresh) {
     if (room-- <= 0) return;
     await claim(b, project, card);
