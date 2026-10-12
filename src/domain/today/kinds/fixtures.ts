@@ -46,7 +46,6 @@ export const snap = (over: Partial<Snapshot> = {}): Snapshot => ({
   mailProject: {},
   timeMin: 0,
   timeFromSessions: false,
-  captures: [],
   ...over,
 });
 

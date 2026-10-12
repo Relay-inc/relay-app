@@ -451,7 +451,7 @@ async function hide(key: string) {
     delete draft.taken[key];
   });
   saveChats();
-  // what it leaves for the vault, proposed on Today (application/today/capture)
+  // what it leaves for the vault, written straight in (application/today/capture)
   captureOnClose(key);
   return worktrees;
 }
