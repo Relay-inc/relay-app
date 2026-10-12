@@ -91,6 +91,28 @@ export async function installCommonwealth() {
   });
   await loadBrainStatus();
 }
+/** Clone a team brain and route its projects' orgs to it, then reload which project uses which brain. */
+export async function joinTeamBrain(remote: string) {
+  set(draft => {
+    draft.joining = true;
+    draft.joined = "";
+    draft.joinErr = "";
+  });
+  try {
+    const out = await backend.commonwealthJoin(remote.trim());
+    set(draft => {
+      draft.joined = out;
+    });
+  } catch (e) {
+    set(draft => {
+      draft.joinErr = String(e);
+    });
+  }
+  set(draft => {
+    draft.joining = false;
+  });
+  await loadBrainStatus();
+}
 
 // ---------- browse and graph: the vault, and each brain when Commonwealth is on
 

@@ -1505,7 +1505,7 @@ export default {
   "bar.brainReview": "{n} zu prüfen",
   "bar.brainNotes": "{n} Notizen",
   "cw.help":
-    "Das Team-Brain: Claude Code liest es und legt, was es lernt, zur Prüfung bereit, in dem Brain, zu dem deine eigenen Commonwealth-Regeln die Repositories eines Projekts leiten. Hier gibt es nichts einzustellen.",
+    "Das Team-Brain: Claude Code liest es und legt, was es lernt, zur Prüfung bereit, in dem Brain, zu dem deine eigenen Commonwealth-Regeln die Repositories eines Projekts leiten.",
   "cw.plugin": "Claude-Code-Plugin",
   "cw.installed": "Installiert",
   "cw.missing": "Nicht installiert",
@@ -1515,6 +1515,11 @@ export default {
   "cw.cliFound": "Gefunden unter {path}",
   "cw.cliMissing": "Nicht gefunden. Installiere sie mit <code>{hint}</code>.",
   "cw.projects": "Brain pro Projekt",
+  "cw.team": "Team-Brain",
+  "cw.teamHelp":
+    "Füge das Repository des Brains deines Teams ein, um es zu klonen und die Repositories seiner Projekte dorthin zu leiten.",
+  "cw.join": "Beitreten",
+  "cw.joining": "Trete bei…",
   "cw.noProjects":
     "Kein Projekt hat ein Repository, das eine Commonwealth-Regel weiterleitet, also nutzt keine Unterhaltung ein Brain.",
 } satisfies Record<Key, string>;

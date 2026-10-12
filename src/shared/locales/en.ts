@@ -1486,7 +1486,7 @@ const en = {
   "bar.brainReview": "{n} to review",
   "bar.brainNotes": "{n} notes",
   "cw.help":
-    "The team brain: Claude Code reads it and stages what it learns for review, in the brain a project's repositories are routed to by your own Commonwealth rules. Nothing to configure here.",
+    "The team brain: Claude Code reads it and stages what it learns for review, in the brain a project's repositories are routed to by your own Commonwealth rules.",
   "cw.plugin": "Claude Code plugin",
   "cw.installed": "Installed",
   "cw.missing": "Not installed",
@@ -1496,6 +1496,10 @@ const en = {
   "cw.cliFound": "Found at {path}",
   "cw.cliMissing": "Not found. Install it with <code>{hint}</code>.",
   "cw.projects": "Brain per project",
+  "cw.team": "Team brain",
+  "cw.teamHelp": "Paste your team's brain repository to clone it and route its projects' repositories to it.",
+  "cw.join": "Join",
+  "cw.joining": "Joining…",
   "cw.noProjects": "No project has a repository that a Commonwealth rule routes, so no conversation uses a brain.",
 };
 export type Key = keyof typeof en;
