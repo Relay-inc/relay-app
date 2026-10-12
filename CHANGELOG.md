@@ -13,18 +13,19 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.22] - 2026-10-12
+
 ### Added
 
 - **Plugins (MCP Apps)**: Settings › Plugins adds MCP servers that Relay starts on your Mac, by hand or imported from Claude Code's MCP config. A plugin that brings a view (an MCP Apps `ui://` resource) gets a row in the sidebar as soon as it is saved and opens in the main pane (a tab per view when it brings several), in a sandbox that cannot reach Relay and has no network unless the plugin declares it; it can only call the tools you switch on for it. Secrets go to the keychain. `packages/plugin-example` is a small one to start from (#189)
-
 - **Settings › Updates**: a new page with Relay's update and the coding agents. It lists every release since your version with its notes (a skipped version's too), Check now looks again, and Install and restart shows the download's progress. The agents section shows each installed agent against npm's latest version, with a Changelog link and an Update button that runs npm, Homebrew or the agent's own updater, whichever installed it (#188)
 
 ### Changed
 
 - **Reminders in the menu bar**: the icon is the Relay mark in one colour, which follows a light or dark menu bar, with one number for what is overdue or due today, red while something is overdue. It replaces the alarm clock emoji and the two numbers (#184)
 - **Updates check quietly, twice a day**: Relay looks for an update at start and every 12 hours instead of once a day, and no longer pops a dialog. A dot on the settings button in the sidebar says there is one, and the button then opens Settings › Updates; so does Relay › Check for Updates (#188)
-- **Forgotten projects show as Quiet**: in a vault Relay set up, a project marked Active with no work (`last`) for 30 days shows as Quiet in the project index, and Active again once work is logged. Relay rebuilds the index at start with its own copy of `build-index.py`, so vaults made by an older Relay get this too
-- **Vault updates on close are written, not proposed**: closing a conversation has Claude write what belongs in the vault straight in, with the vault's own rules and hooks. Nothing lands on Today and nothing is asked; the vault's git history is the review. Settings › General still turns it off
+- **Forgotten projects show as Quiet**: in a vault Relay set up, a project marked Active with no work (`last`) for 30 days shows as Quiet in the project index, and Active again once work is logged. Relay rebuilds the index at start with its own copy of `build-index.py`, so vaults made by an older Relay get this too (#194)
+- **Vault updates on close are written, not proposed**: closing a conversation has Claude write what belongs in the vault straight in, with the vault's own rules and hooks. Nothing lands on Today and nothing is asked; the vault's git history is the review. Settings › General still turns it off (#193)
 - **Board pipeline: the review remembers its last round**: when Relay's review sends an agent's work back, the next round first checks each of those findings against the new code (fixed, or "Not fixed:" and blocking again) before it reviews the rest, instead of starting from scratch every round (#195)
 - **Board pipeline: the review forms its own view first**: the reviewing agent reads the ticket and the diff before the agent's own account of what it did, and treats that account as a claim to check. It also lists what it checked and found right; that list goes in the PR under the review's notes, so you know what you need not check again (#196)
 - **Board pipeline: agents settle small choices themselves**: when a ticket leaves something open, the agent follows the ticket, then how the repo already does it, then the smaller change that is easiest to undo, and lists those choices under Decisions in the PR. It only stops with questions when done is unclear or the change would touch auth, money, data or something others rely on (#197)
@@ -445,7 +446,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...HEAD
+[0.0.22]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/Relay-inc/relay-app/compare/v0.0.18...v0.0.19
