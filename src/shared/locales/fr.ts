@@ -1510,7 +1510,7 @@ export default {
   "bar.brainReview": "{n} à relire",
   "bar.brainNotes": "{n} notes",
   "cw.help":
-    "Le cerveau d'équipe : Claude Code le lit et met ce qu'il apprend en attente de revue, dans le cerveau vers lequel tes propres règles Commonwealth routent les dépôts d'un projet. Rien à régler ici.",
+    "Le cerveau d'équipe : Claude Code le lit et met ce qu'il apprend en attente de revue, dans le cerveau vers lequel tes propres règles Commonwealth routent les dépôts d'un projet.",
   "cw.plugin": "Plugin Claude Code",
   "cw.installed": "Installé",
   "cw.missing": "Non installé",
@@ -1520,6 +1520,10 @@ export default {
   "cw.cliFound": "Trouvée dans {path}",
   "cw.cliMissing": "Introuvable. Installe-la avec <code>{hint}</code>.",
   "cw.projects": "Cerveau par projet",
+  "cw.team": "Cerveau d'équipe",
+  "cw.teamHelp": "Colle le dépôt du cerveau de ton équipe pour le cloner et y router les dépôts de ses projets.",
+  "cw.join": "Rejoindre",
+  "cw.joining": "Connexion…",
   "cw.noProjects":
     "Aucun projet n'a de dépôt qu'une règle Commonwealth route, donc aucune conversation n'utilise de cerveau.",
 } satisfies Record<Key, string>;

@@ -243,6 +243,7 @@ export const githubStatus = () => invoke<string>("github_status");
 // ---------- Commonwealth, the team brain
 export const commonwealthStatus = () => invoke<BrainStatus>("commonwealth_status");
 export const commonwealthInstall = () => invoke<void>("commonwealth_install");
+export const commonwealthJoin = (remote: string) => invoke<string>("commonwealth_join", { remote });
 export const commonwealthNotes = () => invoke<BrainNote[]>("commonwealth_notes");
 export const commonwealthAct = (brain: string, verb: "promote" | "reject", ids: string[]) =>
   invoke<void>("commonwealth_act", { brain, verb, ids });

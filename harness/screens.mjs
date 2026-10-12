@@ -652,6 +652,14 @@ const VIEWS = {
   ),
   "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
+  // Commonwealth's page with a team brain to join, then after Join: the report of `commonwealth join` (PR team-brain-join)
+  "settings-integration-commonwealth": () => settingsPage("Integrations", "Commonwealth", "brain"),
+  "settings-commonwealth-joined": async () => {
+    await settingsPage("Integrations", "Commonwealth", "brain");
+    await page.fill("#cwremote", "git@github.com:northwind/brain.git");
+    await click("Join");
+    await settle(page);
+  },
   // Claude Code's row folded open: no extra accounts yet, then two with the work one active
   "settings-agent-claude": async () => {
     await settingsPage("Agents");

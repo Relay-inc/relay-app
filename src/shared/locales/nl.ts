@@ -1491,7 +1491,7 @@ export default {
   "bar.brainReview": "{n} te beoordelen",
   "bar.brainNotes": "{n} notities",
   "cw.help":
-    "Het teambrein: Claude Code leest het en zet wat het leert klaar voor review, in het brein waarnaar jouw eigen Commonwealth-regels de repositories van een project sturen. Hier valt niets in te stellen.",
+    "Het teambrein: Claude Code leest het en zet wat het leert klaar voor review, in het brein waarnaar jouw eigen Commonwealth-regels de repositories van een project sturen.",
   "cw.plugin": "Claude Code-plugin",
   "cw.installed": "Geïnstalleerd",
   "cw.missing": "Niet geïnstalleerd",
@@ -1501,6 +1501,11 @@ export default {
   "cw.cliFound": "Gevonden op {path}",
   "cw.cliMissing": "Niet gevonden. Installeer het met <code>{hint}</code>.",
   "cw.projects": "Brein per project",
+  "cw.team": "Teambrein",
+  "cw.teamHelp":
+    "Plak de repository van het brein van je team om het te klonen en de repositories van zijn projecten ernaartoe te sturen.",
+  "cw.join": "Aansluiten",
+  "cw.joining": "Bezig met aansluiten…",
   "cw.noProjects":
     "Geen enkel project heeft een repository die een Commonwealth-regel doorstuurt, dus geen gesprek gebruikt een brein.",
 } satisfies Record<Key, string>;

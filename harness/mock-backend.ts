@@ -482,6 +482,12 @@ function handle(cmd: string, a: Args): unknown {
         : [];
     case "commonwealth_act":
       return null;
+    case "commonwealth_join":
+      return [
+        `Brain: /Users/you/.commonwealth/brains/${String(a.remote).replace(/^.*[:/]([^/]+)\/([^/]+?)(\.git)?$/, "$1-$2")} (cloned)`,
+        "  org:northwind/*  → this brain",
+        "Next: install the plugin (`claude plugin install commonwealth@commonwealth`) and start a new session.",
+      ].join("\n");
 
     // the Brain view: the vault, and the team brain in fixture "brain"
     case "brain_roots":
