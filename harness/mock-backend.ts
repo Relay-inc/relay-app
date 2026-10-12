@@ -72,6 +72,25 @@ const diceTools = [
     app: true,
   },
 ];
+// more tools than the filter threshold, so Settings shows the filter and All / None (the server itself has only roll)
+const moreTools = [
+  "roll_many",
+  "flip_coin",
+  "shuffle",
+  "pick_one",
+  "draw_card",
+  "spin",
+  "coin_streak",
+  "d100",
+  "stats",
+  "history",
+  "reset",
+].map(name => ({
+  name,
+  description: `A pretend ${name.replace(/_/g, " ")} tool for the harness.`,
+  view: null,
+  app: true,
+}));
 const githubCard = (ref: string | null, update: boolean) => ({
   stage: "1760000000000000000",
   repo: "kristoffeys/relay-plugin-garmin",
@@ -791,7 +810,11 @@ function handle(cmd: string, a: Args): unknown {
       pluginSecrets.delete(a.id);
       return null;
     case "plugin_test":
-      return { server: { name: "relay-example", version: "0.1.0" }, tools: diceTools, views: diceViews };
+      return {
+        server: { name: "relay-example", version: "0.1.0" },
+        tools: [...diceTools, ...moreTools],
+        views: diceViews,
+      };
     case "plugin_view":
       return {
         url: URL.createObjectURL(new Blob([diceView], { type: "text/html" })),

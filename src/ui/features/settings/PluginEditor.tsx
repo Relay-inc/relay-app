@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../../application/settings/store";
-import { allowTool, claudeHas, savePlugin, testPlugin } from "../../../application/settings/plugins";
+import { allowTool, claudeHas, savePlugin, setAllowed, testPlugin } from "../../../application/settings/plugins";
 import { formatEnv, parseArgs, parseEnv, pluginId } from "../../../domain/plugins/rules";
 import type { Plugin, PluginTool } from "../../../domain/plugins/types";
 import { Html } from "../../components/Html";
@@ -13,6 +13,8 @@ import { StatusLine } from "./StatusLine";
 import { Switch } from "./Switch";
 
 const NO_PLUGINS: Plugin[] = [];
+// past this many tools the list gets a filter field (Garmin has over a hundred)
+const TOOL_FILTER_FROM = 10;
 const NO_SECRETS: Record<string, boolean> = {};
 type SecretRow = { name: string; value: string };
 
@@ -27,6 +29,14 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
   // what is typed, kept until Save
   const [name, setName] = useState(plugin?.name ?? "");
   const [mcp, setMcp] = useState(plugin?.mcp ?? "");
+  const [filter, setFilter] = useState("");
+  // the full tool list is only known from a test in this session: read it when the page opens, so every tool can be
+  // switched on without saving again first
+  const tested = !!test;
+  useEffect(() => {
+    if (plugin && !tested) void testPlugin(plugin.id);
+  }, [plugin, tested]);
+
   const [command, setCommand] = useState(plugin?.command ?? "");
   const [args, setArgs] = useState((plugin?.args ?? []).join("\n"));
   const [env, setEnv] = useState(formatEnv(plugin?.env ?? {}));
@@ -102,6 +112,12 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
   // the tools of this session's test, else the allowed ones by name (nothing is known of the rest until a test)
   const tools: PluginTool[] =
     test?.result?.tools ?? (plugin?.allowed ?? []).map(tool => ({ name: tool, view: null, app: true }));
+  // the tools a view may call (the others are listed, without a switch), and those matching the filter
+  const callable = tools.filter(tool => tool.app).map(tool => tool.name);
+  const needle = filter.trim().toLowerCase();
+  const shown = needle
+    ? tools.filter(tool => `${tool.name} ${tool.description ?? ""}`.toLowerCase().includes(needle))
+    : tools;
   return (
     <>
       <Section title={t("plug.serverH")} rows>
@@ -224,14 +240,42 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
         )}
       </Section>
       {plugin && (
-        <Section title={t("plug.toolsH")} desc={t("plug.toolsHelp")} rows={tools.length > 0}>
+        <Section
+          title={t("plug.toolsH")}
+          desc={t("plug.toolsHelp")}
+          rows={tools.length > 0}
+          action={
+            callable.length > 1 && (
+              <span className="flex gap-2">
+                <button className={buttonClass()} onClick={() => setAllowed(plugin.id, callable)}>
+                  {t("plug.allowAll")}
+                </button>
+                <button className={buttonClass()} onClick={() => setAllowed(plugin.id, [])}>
+                  {t("plug.allowNone")}
+                </button>
+              </span>
+            )
+          }
+        >
+          {tools.length > TOOL_FILTER_FROM && !test?.busy && (
+            <div className={FOOTER_IN_ROW}>
+              <input
+                className={FIELD}
+                type="search"
+                value={filter}
+                placeholder={t("plug.filterTools")}
+                aria-label={t("plug.filterTools")}
+                onChange={e => setFilter(e.target.value)}
+              />
+            </div>
+          )}
           {test?.busy ? (
             <div className={FOOTER_IN_ROW}>
               <span className="spinner"></span>
               <span className="text-xs text-s-muted">{t("plug.testing")}</span>
             </div>
           ) : tools.length ? (
-            tools.map(tool => (
+            shown.map(tool => (
               <Field
                 key={tool.name}
                 label={<span className="font-mono text-xs">{tool.name}</span>}

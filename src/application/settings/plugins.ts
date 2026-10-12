@@ -96,14 +96,33 @@ const update = async (id: string, edit: (plugin: Plugin) => Plugin) => {
     say(id, fail(error));
   }
 };
+// A save rewrites every setting through the backend (vault check, .relay/config.json, tray), which is too slow to wait
+// on for each switch: the switches change the store at once and one save follows when they stop changing.
+const SAVE_AFTER_MS = 400;
+let pendingAllowed: ReturnType<typeof setTimeout> | undefined;
+/** The tools the plugin's view may call, as a whole list: shown at once, saved shortly after. A failed save puts the
+ *  saved settings back and says why. */
+export function setAllowed(id: string, allowed: string[]) {
+  useSettingsStore.setState(draft => {
+    const plugin = draft.settings.plugins?.find(other => other.id === id);
+    if (plugin) plugin.allowed = allowed;
+  });
+  clearTimeout(pendingAllowed);
+  pendingAllowed = setTimeout(async () => {
+    try {
+      await put(plugins());
+      say(id, null);
+    } catch (error) {
+      say(id, fail(error));
+      commit(await backend.getSettings());
+    }
+  }, SAVE_AFTER_MS);
+}
 /** A tool the plugin's view may call, or no longer. */
-export const allowTool = (id: string, tool: string, on: boolean) =>
-  update(id, plugin => ({
-    ...plugin,
-    allowed: on
-      ? [...plugin.allowed.filter(name => name !== tool), tool]
-      : plugin.allowed.filter(name => name !== tool),
-  }));
+export const allowTool = (id: string, tool: string, on: boolean) => {
+  const allowed = plugins().find(plugin => plugin.id === id)?.allowed ?? [];
+  setAllowed(id, on ? [...allowed.filter(name => name !== tool), tool] : allowed.filter(name => name !== tool));
+};
 /** The plugin in the sidebar and running, or off. */
 export const switchPlugin = (id: string, on: boolean) => update(id, plugin => ({ ...plugin, on }));
 
