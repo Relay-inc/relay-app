@@ -181,6 +181,9 @@ export default {
     "Niet opgepikt: het ticket heeft geen beschrijving, reacties of bestanden om van te vertrekken. Vul aan wat nodig is en zet het terug in {column}.",
   "pl.unclear":
     "Niet opgepikt: een agent zou hier moeten gokken. Beantwoord dit op het ticket en zet het dan terug in {column}.\n\n{questions}",
+  "pl.usedUp": "{project}: het Claude-abonnement is op, de pipeline neemt geen tickets tot er weer ruimte is.",
+  "pl.stalled":
+    "{project}: de laatste drie agent-runs eindigden zonder PR, dus de pipeline neemt geen nieuwe tickets. Bekijk de tickets in de inputkolom; er een terugzetten of er zelf een starten zet het weer in gang.",
   "pl.picked": "Opgepikt door Relay: een agent bouwt dit op branch {branch}.",
   "pl.resumed": "Opnieuw opgepikt door Relay: de agent gaat verder met wat nieuw is op het ticket.",
   "pl.startFailed": "Relay kon geen agent starten op dit ticket: {error}",

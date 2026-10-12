@@ -186,6 +186,10 @@ export default {
     "Pas pris : le ticket n'a ni description, ni commentaires, ni fichiers. Ajoutez ce qu'il faut et remettez-le dans {column}.",
   "pl.unclear":
     "Pas pris : un agent devrait deviner ici. Répondez à ces questions sur le ticket, puis remettez-le dans {column}.\n\n{questions}",
+  "pl.usedUp":
+    "{project} : le forfait Claude est épuisé, le pipeline ne prend plus de tickets jusqu'à ce qu'il ait de la place.",
+  "pl.stalled":
+    "{project} : les trois derniers passages d'agent se sont terminés sans PR, le pipeline ne prend plus de nouveaux tickets. Regardez les tickets de la colonne d'entrée ; en remettre un ou en lancer un vous-même relance le pipeline.",
   "pl.picked": "Pris par Relay : un agent construit ceci sur la branche {branch}.",
   "pl.resumed": "Repris par Relay : l'agent continue avec ce qui est nouveau sur le ticket.",
   "pl.startFailed": "Relay n'a pas pu démarrer d'agent sur ce ticket : {error}",
