@@ -23,6 +23,13 @@ export const lastTurnIs = (items: Item[] | undefined, text: string) =>
 /** The board: newest first, without the workers whose conversation was closed (reopening it brings the worker back). */
 export const boardOrder = (workers: Iterable<Worker>, chats: Record<string, Chat> = {}) =>
   [...workers].filter(worker => !chats[worker.key]?.closed).sort((newer, older) => older.at - newer.at);
+/** A worker's crab (ui/features/orchestrator/Crab): a board pipeline's worker is the engineer, else its model's. */
+export type Costume = "fable" | "opus" | "sonnet" | "haiku" | "pipeline" | "plain";
+export const costumeOf = (model: string | undefined, pipeline: boolean): Costume => {
+  if (pipeline) return "pipeline";
+  const name = (model ?? "").toLowerCase();
+  return (["fable", "opus", "sonnet", "haiku"] as const).find(family => name.includes(family)) ?? "plain";
+};
 export const runningCount = (workers: Iterable<Worker>) =>
   [...workers].filter(worker => worker.state === "running").length;
 

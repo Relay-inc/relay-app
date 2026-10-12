@@ -35,7 +35,7 @@ pub const RELAY_TOOL: &str = "Bash(relay *)";
 
 /// The relay-orch tools of the orchestrator's coordinator and of its workers, without a card (src-tauri orch.rs).
 pub const ORCH_COORD_TOOLS: [&str; 4] = ["mcp__relay-orch__dispatch", "mcp__relay-orch__workers", "mcp__relay-orch__message", "mcp__relay-orch__stop"];
-pub const ORCH_WORKER_TOOLS: [&str; 1] = ["mcp__relay-orch__report"];
+pub const ORCH_WORKER_TOOLS: [&str; 2] = ["mcp__relay-orch__step", "mcp__relay-orch__report"];
 
 /// The Commonwealth plugin's read tools run without a card in a session the app routed to a brain (opts.commonwealth_brain).
 /// `remember` keeps its card: it stages into a brain the team shares, and a session can take in a mail's text after it

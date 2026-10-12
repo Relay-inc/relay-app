@@ -22,6 +22,9 @@ export type Worker = {
   at: number; // started, ms
   ended: number | null;
   report: OrchReport | null;
+  model?: string; // what dispatch asked for (fable, opus, sonnet, haiku), "" for the CLI default
+  /** its own progress from its `step` tool, while it works: steps done of its plan, the one it is on */
+  step?: { done: number; total: number; note: string | null } | null;
   /** a board pipeline's worker: its ticket (domain/pipeline Ticket), the branch its PR goes to, the PR or why there is
    *  none, and what the pipeline last did on the board for it */
   ticket?: unknown;

@@ -31,6 +31,7 @@ export default {
   "orch.state.failed": "Échoué",
   "orch.state.stopped": "Arrêté",
   "orch.state.silent": "Terminé sans rapport",
+  "orch.steps": "{done} étapes sur {total}",
   "orch.open": "Ouvrir",
   "orch.stop": "Arrêter",
   "orch.details": "Détails",
@@ -793,6 +794,9 @@ export default {
   "set.captureOnClose": "Mettre à jour le coffre à la fermeture d'une conversation",
   "set.captureOnCloseHelp":
     "Quand vous fermez une conversation, Claude la relit et écrit directement dans le coffre ce qui y a sa place : décisions, état des projets, suivis. Rien n'est affiché ni demandé ; l'historique git du coffre sert de contrôle. Les questions rapides (moins de 3 messages) sont ignorées.",
+  "set.workerCrabs": "Des crabes pour les workers de l'orchestrateur",
+  "set.workerCrabsHelp":
+    "Chaque worker de la liste de l'Orchestrateur reçoit un crabe en pixels, costumé selon son modèle, qui marche pendant qu'il travaille. Désactivé : un simple indicateur d'état.",
   "retry.at": "Limite d'utilisation atteinte. Nouvel essai à {time}.",
   "retry.check": "Limite d'utilisation atteinte. Nouvelle vérification à {time}.",
   "retry.cancel": "Annuler",

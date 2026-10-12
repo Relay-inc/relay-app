@@ -45,6 +45,8 @@ document.head.append(material);
 
 // ---------- mutable backend state
 let settings = vault.settings(fixture);
+// orch-plain: the orchestrator with the workers' crabs switched off (Settings › General)
+if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 let reminders = [...vault.reminders];
@@ -52,7 +54,7 @@ let added = 0;
 let actionConfig = integ.actionConfig();
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
-const orchOn = fixture === "orch";
+const orchOn = fixture === "orch" || fixture === "orch-plain";
 // Commonwealth installed, with one brain (the Brain view's tabs)
 const brainOn = fixture === "brain";
 // plugins (fixture "plugins"): the secrets in the keychain, per plugin id; the tools the example server has

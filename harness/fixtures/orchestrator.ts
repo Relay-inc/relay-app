@@ -16,6 +16,8 @@ export type Worker = {
   at: number;
   ended: number | null;
   report: Report | null;
+  model?: string;
+  step?: { done: number; total: number; note: string | null } | null;
 };
 
 export const ORCH = "c:orch";
@@ -36,6 +38,8 @@ const running: Worker = {
   at: NOW - 6 * MIN,
   ended: null,
   report: null,
+  model: "opus",
+  step: { done: 2, total: 5, note: "Writing the redirect test" },
 };
 const done: Worker = {
   key: "c:orch-w-b2",
@@ -46,6 +50,7 @@ const done: Worker = {
   worktree: "/Users/demo/code/beacon-relay-b2",
   branch: "relay/patch-the-balance-sync-b2",
   state: "done",
+  model: "sonnet",
   at: NOW - 48 * MIN,
   ended: NOW - 21 * MIN,
   report: {
@@ -66,6 +71,7 @@ const silent: Worker = {
   worktree: null,
   branch: null,
   state: "silent",
+  model: "haiku",
   at: NOW - 95 * MIN,
   ended: NOW - 80 * MIN,
   report: null,

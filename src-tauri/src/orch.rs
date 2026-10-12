@@ -43,6 +43,10 @@ impl Shared {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct Report { pub status: String, pub summary: String, pub questions: Option<String>, pub diff: Option<String>, pub flags: Vec<String> }
 
+/// A worker's own progress on its task, from its `step` tool: steps done of its plan, and the one it is on.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Step { pub done: u32, pub total: u32, pub note: Option<String> }
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct Worker {
     pub key: String,
@@ -57,6 +61,9 @@ pub struct Worker {
     pub at: i64,
     pub ended: Option<i64>,
     pub report: Option<Report>,
+    /// its last `step`, cleared when a message starts it on a new round
+    #[serde(default)]
+    pub step: Option<Step>,
     /// what the protected branches and shared files were at the start, to flag what moved
     #[serde(default)]
     pub base: HashMap<String, String>,
@@ -155,6 +162,7 @@ Rules:
 
 const WORKER_PROMPT: &str = "You are a worker of Relay's orchestrator. Your task is in the first message, from the coordinator. The user can read along and may write to you directly.
 Rules:
+- Right after reading the task, call `step` with your plan's number of steps as total and done 0, and call it again as each step finishes, with a few words on the next one. The user watches that bar.
 - Do the task completely, then call `report` exactly once with status done, blocked (you need a decision from the user: put the question in questions) or failed. Then end your turn.
 - Keep your project's own notes up to date the way the vault's instructions say, but do not edit or regenerate the vault-wide files ({shared}): the coordinator does that. Put what they need in your report.
 - In a repo, work only in the worktree from your brief and commit on its branch. Never check out, commit on or push to main, master, develop or dev. Push or open a PR only when the task asks for it.
@@ -178,7 +186,11 @@ fn tool(name: &str, desc: &str, props: Value, req: &[&str]) -> Value {
 pub fn tool_list(coord: bool) -> Value {
     let worker = json!({"type": "string", "description": "The worker's key, from dispatch or workers"});
     if !coord {
-        return json!({"tools": [tool("report", "Report the end of your task to the coordinator. Call it once, at the end, then end your turn.",
+        return json!({"tools": [tool("step", "Show your progress on the task in Relay's workers list. Right after reading the brief, call it with total (your plan in 3-8 steps) and done 0; call it again each time a step is finished. Silent and cheap: it only draws a bar.",
+            json!({"done": {"type": "integer", "minimum": 0, "description": "Steps finished so far"},
+                   "total": {"type": "integer", "minimum": 1, "description": "Steps planned; may change when the plan does"},
+                   "note": {"type": "string", "maxLength": 80, "description": "The step in progress, a few words"}}), &["done"]),
+            tool("report", "Report the end of your task to the coordinator. Call it once, at the end, then end your turn.",
             json!({"status": {"type": "string", "enum": ["done", "blocked", "failed"]},
                    "summary": {"type": "string", "maxLength": 4000, "description": "What changed, where, what is left"},
                    "questions": {"type": "string", "maxLength": 2000, "description": "For blocked: what the user has to decide"}}), &["status", "summary"])]});
@@ -229,13 +241,14 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
         (true, "workers") => text(serde_json::to_string_pretty(&load(app).iter().map(summary).collect::<Vec<_>>()).unwrap_or_default()),
         (true, "message") => message(app, &s("worker").unwrap_or_default(), &s("text").unwrap_or_default()).unwrap_or_else(fail),
         (true, "stop") => { let w = s("worker").unwrap_or_default(); if stop(app, &w) { text(format!("{w} stopped")) } else { fail(format!("no worker {w}")) } }
+        (false, "step") => step(app, key, a["done"].as_u64(), a["total"].as_u64(), s("note")).unwrap_or_else(fail),
         (false, "report") => report(app, key, s("status"), s("summary"), s("questions")).unwrap_or_else(fail),
         _ => fail(format!("unknown tool {name}")),
     }
 }
 
 fn summary(w: &Worker) -> Value {
-    json!({"key": w.key, "project": w.project, "title": w.title, "state": w.state, "repo": w.repo, "worktree": w.worktree, "branch": w.branch,
+    json!({"key": w.key, "project": w.project, "title": w.title, "state": w.state, "repo": w.repo, "worktree": w.worktree, "branch": w.branch, "step": w.step,
            "report": w.report.as_ref().map(|r| json!({"status": r.status, "summary": r.summary, "questions": r.questions, "flags": r.flags}))})
 }
 
@@ -656,7 +669,7 @@ fn send_to(app: &AppHandle, worker: &str, full: &str, t: &str) -> Result<(), Str
     if let Some(h) = holder(&all, Some(worker), w.repo.as_deref(), w.project.as_deref()).filter(|_| w.ticket.is_none()) {
         return Err(format!("{} is working in {} now: message {worker} after its report", h.key, w.repo.as_deref().or(w.project.as_deref()).unwrap_or("")));
     }
-    if let Some(x) = all.iter_mut().find(|x| x.key == worker) { x.state = "running".into(); x.ended = None; x.reported = false; }
+    if let Some(x) = all.iter_mut().find(|x| x.key == worker) { x.state = "running".into(); x.ended = None; x.reported = false; x.step = None; }
     save(app, &all);
     drop(guard);
     if let Some(x) = all.iter().find(|x| x.key == worker) { app.emit("orch", json!({"type": "worker", "worker": x})).ok(); }
@@ -667,6 +680,16 @@ pub fn stop(app: &AppHandle, worker: &str) -> bool {
     if !is_worker(worker) { return false; }
     if let Some(mut p) = app.state::<App>().procs.lock().unwrap().remove(worker) { p.child.kill().ok(); }
     update(app, worker, |w| { if w.state == "running" { w.state = "stopped".into(); w.ended = Some(now()); } }).is_some()
+}
+
+/// A worker's `step`: its progress, kept on the worker for the board. `total` left out keeps the last one.
+fn step(app: &AppHandle, key: &str, done: Option<u64>, total: Option<u64>, note: Option<String>) -> Result<Value, String> {
+    let done = done.ok_or("done is required")? as u32;
+    update(app, key, |w| {
+        let total = total.map(|t| t as u32).or(w.step.as_ref().map(|s| s.total)).unwrap_or(0);
+        w.step = Some(Step { done: if total > 0 { done.min(total) } else { done }, total, note });
+    }).ok_or("this conversation is no worker of the orchestrator")?;
+    Ok(text("ok"))
 }
 
 fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<String>, questions: Option<String>) -> Result<Value, String> {
@@ -810,7 +833,7 @@ mod tests {
     fn tools_per_role() {
         let names = |c| tool_list(c)["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap().to_string()).collect::<Vec<_>>();
         assert_eq!(names(true), ["dispatch", "workers", "message", "stop"]);
-        assert_eq!(names(false), ["report"]);
+        assert_eq!(names(false), ["step", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
     }
 

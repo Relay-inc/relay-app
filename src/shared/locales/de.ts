@@ -31,6 +31,7 @@ export default {
   "orch.state.failed": "Fehlgeschlagen",
   "orch.state.stopped": "Gestoppt",
   "orch.state.silent": "Ohne Bericht beendet",
+  "orch.steps": "{done} von {total} Schritten",
   "orch.open": "Öffnen",
   "orch.stop": "Stoppen",
   "orch.details": "Details",
@@ -789,6 +790,9 @@ export default {
   "set.captureOnClose": "Vault aktualisieren, wenn eine Unterhaltung schließt",
   "set.captureOnCloseHelp":
     "Wenn du eine Unterhaltung schließt, liest Claude sie noch einmal und schreibt, was in den Vault gehört, direkt hinein: Entscheidungen, Projektstand, Folgeaufgaben. Nichts wird angezeigt oder gefragt; die Git-Historie des Vaults ist die Kontrolle. Kurze Fragen (weniger als 3 Nachrichten) werden übersprungen.",
+  "set.workerCrabs": "Krabben für die Worker des Orchestrators",
+  "set.workerCrabsHelp":
+    "Jeder Worker in der Liste des Orchestrators bekommt eine Pixelkrabbe im Kostüm seines Modells, die läuft, solange er arbeitet. Aus: eine einfache Statusmarke.",
   "retry.at": "Nutzungslimit erreicht. Neuer Versuch um {time}.",
   "retry.check": "Nutzungslimit erreicht. Erneute Prüfung um {time}.",
   "retry.cancel": "Abbrechen",

@@ -616,6 +616,15 @@ const VIEWS = {
     await waitText("Draft the depot import ticket");
     await settle(page, 300);
   },
+  // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
+  "orchestrator-plain": async () => {
+    await open(page, server.url, { fixture: "orch-plain", sel: keys.orch });
+    await waitText("From Relay");
+  },
+  "settings-crabs": async () => {
+    await settingsPage("General");
+    await intoView("Crabs for the orchestrator's workers");
+  },
   "orchestrator-worker": async () => {
     await open(page, server.url, { fixture: "orch", sel: keys.orchWorker });
     await waitText("From Relay");
