@@ -27,6 +27,7 @@ a PR. Versions follow
 - **Vault updates on close are written, not proposed**: closing a conversation has Claude write what belongs in the vault straight in, with the vault's own rules and hooks. Nothing lands on Today and nothing is asked; the vault's git history is the review. Settings › General still turns it off
 - **Board pipeline: the review remembers its last round**: when Relay's review sends an agent's work back, the next round first checks each of those findings against the new code (fixed, or "Not fixed:" and blocking again) before it reviews the rest, instead of starting from scratch every round (#195)
 - **Board pipeline: the review forms its own view first**: the reviewing agent reads the ticket and the diff before the agent's own account of what it did, and treats that account as a claim to check. It also lists what it checked and found right; that list goes in the PR under the review's notes, so you know what you need not check again (#196)
+- **Board pipeline: agents settle small choices themselves**: when a ticket leaves something open, the agent follows the ticket, then how the repo already does it, then the smaller change that is easiest to undo, and lists those choices under Decisions in the PR. It only stops with questions when done is unclear or the change would touch auth, money, data or something others rely on (#197)
 
 ## [0.0.21] - 2026-10-12
 
