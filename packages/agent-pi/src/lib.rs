@@ -58,6 +58,7 @@ impl AgentProvider for Pi {
         Caps { persistent: true, images: true, thinking: true, permissions: false, questions: false, subagents: false, fork: true,
             terminal: true, background: true, effort: true, limits: false, title: false, accounts: false, ..Caps::default() }
     }
+    fn npm_package(&self) -> Option<&'static str> { Some("@earendil-works/pi-coding-agent") }
     fn default_bin(&self, home: &str) -> String {
         let c = [format!("{home}/.npm-global/bin/pi"), "/opt/homebrew/bin/pi".into(), "/usr/local/bin/pi".into(), format!("{home}/.local/bin/pi"), format!("{home}/.bun/bin/pi")];
         c.iter().find(|p| Path::new(p).is_file()).unwrap_or(&c[0]).clone()

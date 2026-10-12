@@ -14,6 +14,7 @@ type NavigationState = {
   quickAsk: boolean; // Cmd-K
   quickText: string; // what Cmd-K opens with typed (a relay://ask link), "" for an empty field
   lastProject: string | null; // the vault project last shown, so its linked board opens with the board view
+  update: string; // the Relay version the last update check found, "" for none: a dot on the settings button
   // The details: a vault note ("note:…") in the right drawer. A PR and a mail open next to their list, a card in the
   // ticket window over the board.
   panel: {
@@ -48,6 +49,7 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
   quickAsk: false,
   quickText: "",
   lastProject: null,
+  update: "",
   panel: {
     open: "",
     modal: "",

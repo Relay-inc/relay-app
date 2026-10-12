@@ -13,6 +13,14 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Settings › Updates**: a new page with Relay's update and the coding agents. It lists every release since your version with its notes (a skipped version's too), Check now looks again, and Install and restart shows the download's progress. The agents section shows each installed agent against npm's latest version, with a Changelog link and an Update button that runs npm, Homebrew or the agent's own updater, whichever installed it
+
+### Changed
+
+- **Updates check quietly, twice a day**: Relay looks for an update at start and every 12 hours instead of once a day, and no longer pops a dialog. A dot on the settings button in the sidebar says there is one, and the button then opens Settings › Updates; so does Relay › Check for Updates
+
 ## [0.0.21] - 2026-10-12
 
 ### Added

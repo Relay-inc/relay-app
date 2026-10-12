@@ -7,6 +7,7 @@ import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { Proposal } from "../domain/today/capture";
 import type { RepoChanges } from "../domain/conversations/changes";
+import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../domain/settings/updates";
 import type {
   AgentSession,
   Pending,
@@ -70,7 +71,15 @@ export const setSettings = (settings: Settings) => invoke<Settings>("set_setting
 export const uiLang = () => invoke<string>("ui_lang");
 /** The macOS locale in the UI language (nl-BE for nl), for dates and sorting. */
 export const uiLocale = () => invoke<string>("ui_locale");
-export const openSettingsWindow = () => invoke("open_settings_window");
+export const openSettingsWindow = (tab?: string) => invoke("open_settings_window", tab ? { tab } : {});
+/** Relay's updates (src-tauri/src/updater.rs): the last check's answer, a new check, and installing what it found
+ *  (restarts the app). */
+export const updatesStatus = () => invoke<UpdatesStatus>("updates_status");
+export const updatesCheck = () => invoke<UpdatesStatus>("updates_check");
+export const updatesInstall = () => invoke("updates_install");
+/** The agent CLIs' installed and latest versions, and updating one. */
+export const agentUpdates = () => invoke<AgentUpdate[]>("agent_updates");
+export const agentUpdate = (id: string) => invoke("agent_update", { id });
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openUrl = (url: string) => invoke("plugin:opener|open_url", { url });
 /** A banner; a click opens `key` (src-tauri/src/notify.rs). A newer banner replaces the one in its `slot`, the key
@@ -424,6 +433,13 @@ export const onMailLink = (handler: (url: string) => void) => listen<string>("ma
 /** The settings window saved. */
 export const onSettingsChanged = (handler: (settings: Settings) => void) =>
   listen<Settings>("settings-changed", e => handler(e.payload));
+/** A check for Relay updates finished (the daily one too). */
+export const onUpdates = (handler: (status: UpdatesStatus) => void) =>
+  listen<UpdatesStatus>("updates", e => handler(e.payload));
+export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
+  listen<UpdateProgress>("update-progress", e => handler(e.payload));
+/** The open settings window is asked to show a page (Relay › Check for Updates). */
+export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
 /** An item of the app menu (new-general, new-project, close-chat). */
 export const onMenu = (handler: (item: string) => void) => listen<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());

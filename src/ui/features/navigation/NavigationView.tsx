@@ -61,6 +61,7 @@ export function NavigationView({ className }: { className: string }) {
   const more = useDerived(() => moreOn());
   const dark = useDerived(() => isDark());
   const selected = useNavigationStore(s => s.selected);
+  const update = useNavigationStore(s => s.update);
   const find = useNavigationStore(s => s.sidebar.find);
   const root = useRef<HTMLDivElement>(null);
   const menuElement = useRef<HTMLDivElement>(null);
@@ -338,6 +339,7 @@ export function NavigationView({ className }: { className: string }) {
         onUsage={() => select(USAGE)}
         onTheme={toggleTheme}
         onSettings={openSettings}
+        update={update}
       />
       {menu ? (
         <SidebarMenu ref={menuElement} x={menu.x} y={menu.y} items={menuItems(menu)} onPick={id => pick(menu, id)} />

@@ -18,11 +18,12 @@ import {
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
 import type { AgentsStatus } from "../../domain/agents/types";
+import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
-export type SettingsTab = "general" | "projects" | "agents" | "integrations" | "machines" | "voice";
+export type SettingsTab = "general" | "projects" | "agents" | "integrations" | "machines" | "voice" | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
@@ -36,6 +37,15 @@ export type SettingsState = {
   tab: SettingsTab;
   message: Message | null; // the last save's result on General and Projects
   agentsPage: { detected: AgentsStatus | null; message: Message | null };
+  updatesPage: {
+    status: UpdatesStatus | null; // null until read
+    checking: boolean;
+    progress: UpdateProgress | null; // the download, null when not installing
+    message: Message | null; // why installing failed
+    agents: AgentUpdate[] | null; // null until checked
+    updating: string; // the agent being updated, "" for none
+    agentMessages: Record<string, Message | null>; // per agent: why its update failed, or that it worked
+  };
   projectsPage: {
     icons: Record<string, ProjectIcon> | null; // null until the page first shows
     loading: boolean; // the first load started
@@ -103,6 +113,15 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   tab: "general",
   message: null,
   agentsPage: { detected: null, message: null },
+  updatesPage: {
+    status: null,
+    checking: false,
+    progress: null,
+    message: null,
+    agents: null,
+    updating: "",
+    agentMessages: {},
+  },
   projectsPage: { icons: null, loading: false, names: [], projects: [], repos: {}, message: null, finding: false },
   machinesPage: {
     checked: false,

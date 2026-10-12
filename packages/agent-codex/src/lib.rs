@@ -70,6 +70,7 @@ impl AgentProvider for Codex {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: false, subagents: false, fork: false,
             terminal: true, background: true, effort: true, limits: true, title: false, write: true, accounts: false, ..Caps::default() }
     }
+    fn npm_package(&self) -> Option<&'static str> { Some("@openai/codex") }
     fn default_bin(&self, home: &str) -> String {
         let c = ["/opt/homebrew/bin/codex".to_string(), "/usr/local/bin/codex".into(), format!("{home}/.local/bin/codex"), format!("{home}/.npm-global/bin/codex")];
         c.iter().find(|p| Path::new(p).is_file()).unwrap_or(&c[0]).clone()
