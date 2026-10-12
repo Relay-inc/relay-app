@@ -97,8 +97,9 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         let info = state.machines.info(&m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))))?;
         bind.cwd = machines::cwd_or_vault(bind.cwd, &info);
         let mut eb = env_of(app, state, p);
-        // that machine's paths and its claude; no mail tools there
+        // that machine's paths and its claude; no mail tools there, and the mode comes with the mirrored settings
         eb.opts["mail"] = json!(false);
+        eb.opts["machine"] = json!(true);
         let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
         let mut cmd = p.command(&eb.env(), &l)?;
         cmd.current_dir(&bind.cwd).env("PATH", &info.path);

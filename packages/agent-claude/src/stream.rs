@@ -108,6 +108,9 @@ fn parse(ev: &Value) -> Vec<Event> {
             let resets_at = ev["rate_limit_info"]["resetsAt"].as_i64().map(|s| if s < 1_000_000_000_000 { s * 1000 } else { s });
             out.push(Event::Limited { resets_at });
         }
+        // a tool call or a question that needs the user: a card, its answer goes back over stdin (permission.rs). The
+        // parser knows no conversation, so the card's id rests on the request id alone and the sink sets the conversation
+        "control_request" if ev["request"]["subtype"] == "can_use_tool" => out.extend(crate::permission::card("", ev).map(|request| Event::Permission { request })),
         // the pipe: the app's in-process MCP servers (relay-mail, relay-orch), and what its own requests got back
         "control_request" => {
             let req = &ev["request"];
@@ -252,8 +255,12 @@ mod tests {
         let mcp = json!({"type": "control_request", "request_id": "r1", "request": {"subtype": "mcp_message", "server_name": "relay-mail", "message": {"method": "tools/list"}}});
         assert_eq!(parse_all(&[mcp]), [Event::Control { id: json!("r1"), server: Some("relay-mail".into()), message: json!({"method": "tools/list"}) }]);
         // any other request is still the app's to answer, as unsupported
-        let other = json!({"type": "control_request", "request_id": "r2", "request": {"subtype": "can_use_tool", "tool_name": "Bash"}});
+        let other = json!({"type": "control_request", "request_id": "r2", "request": {"subtype": "hook_callback"}});
         assert!(matches!(&parse_all(&[other])[..], [Event::Control { server: None, .. }]));
+        // a tool call that needs the user is a card, never answered as unsupported
+        let ask = json!({"type": "control_request", "request_id": "r3", "request": {"subtype": "can_use_tool", "tool_name": "Write", "input": {"file_path": "/v/a.md"}, "tool_use_id": "toolu_1"}});
+        let [Event::Permission { request: r }] = &parse_all(&[ask])[..] else { panic!("no card") };
+        assert_eq!((r.kind.as_str(), r.tool_name.as_str(), r.request_id.as_deref(), r.tool_use_id.as_deref()), ("tool", "Write", Some("r3"), Some("toolu_1")));
         let init = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "init", "response": {"commands": [{"name": "/compact"}]}}});
         assert_eq!(parse_all(&[init]), [Event::Commands { commands: json!([{"name": "/compact"}]) }]);
         let err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});

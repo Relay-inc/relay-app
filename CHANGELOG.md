@@ -15,6 +15,11 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Permission cards for Claude**: a tool call or question that needs the user shows its card again and waits for the answer. The desktop answered every request as unsupported, so a vault without allow rules or auto mode had every edit refused, on this Mac and on a work machine
+- **Auto mode by default**: a conversation whose Claude Code settings set no `defaultMode` starts in auto, as a terminal window does, instead of `-p`'s manual mode that asks for every edit. A mode set in the user's or the vault's settings stays, and a work machine gets auto when this Mac sets none
+
+### Fixed
+
 - **Old Claude Code**: a conversation on a Claude Code older than 2.1.294 now stops with "run `claude update`" instead of failing every turn on `unknown option '--thinking-display'`
 
 ## [0.0.20] - 2026-10-12

@@ -68,12 +68,12 @@ pub fn plugins() -> Vec<(String, PathBuf)> {
 pub fn permissions() -> Value {
     rules(&std::fs::read_to_string(format!("{}/.claude/settings.json", home())).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null))
 }
-/// And the mode a window here starts in (defaultMode, auto for most): without it every tool call outside the rules
-/// asks there, over a pipe that has no card for it.
+/// And the mode a window here starts in (defaultMode, auto when none is set, as a terminal window starts): the
+/// machine's `claude -p` would otherwise start in manual and ask for every edit.
 fn rules(s: &Value) -> Value {
     let p = &s["permissions"];
     let mut r = json!({"allow": p["allow"].as_array().cloned().unwrap_or_default(), "deny": p["deny"].as_array().cloned().unwrap_or_default(), "ask": p["ask"].as_array().cloned().unwrap_or_default()});
-    if let Some(m) = p["defaultMode"].as_str() { r["defaultMode"] = json!(m); }
+    r["defaultMode"] = json!(p["defaultMode"].as_str().unwrap_or("auto"));
     r
 }
 
@@ -213,7 +213,7 @@ mod tests {
     fn a_machine_session_starts_in_the_mode_of_a_window_here() {
         let r = rules(&json!({"permissions": {"defaultMode": "auto", "allow": ["Read"], "additionalDirectories": ["/x"]}}));
         assert_eq!(r, json!({"allow": ["Read"], "deny": [], "ask": [], "defaultMode": "auto"}));
-        assert!(rules(&json!({"permissions": {"allow": ["Read"]}})).get("defaultMode").is_none());
-        assert_eq!(rules(&Value::Null), json!({"allow": [], "deny": [], "ask": []}));
+        assert_eq!(rules(&json!({"permissions": {"allow": ["Read"]}}))["defaultMode"], "auto");
+        assert_eq!(rules(&Value::Null), json!({"allow": [], "deny": [], "ask": [], "defaultMode": "auto"}));
     }
 }
