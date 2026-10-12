@@ -350,6 +350,8 @@ export function settings(fixture: string) {
             secrets: ["API_KEY"],
             on: true,
             allowed: ["roll"],
+            toolViews: { roll: "ui://relay-example/dice" },
+            mcp: null,
             views: [
               { uri: "ui://relay-example/dice", name: "Dice" },
               { uri: "ui://relay-example/history", name: "History" },

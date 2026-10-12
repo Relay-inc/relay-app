@@ -183,7 +183,7 @@ impl State {
                             out.push(Event::ToolCall { id: id.into(), name, input });
                         }
                         if matches!(status, "completed" | "error") && self.done.insert(id.into()) {
-                            out.push(Event::ToolResult { id: id.into(), error: status == "error" });
+                            out.push(Event::ToolResult { id: id.into(), error: status == "error", output: None });
                         }
                     }
                     _ => {}
@@ -231,7 +231,7 @@ mod tests {
         assert!(ev.iter().any(|e| matches!(e, Event::Text { text, delta: false } if text == "I'll")));
         let call = ev.iter().find_map(|e| if let Event::ToolCall { name, input, id } = e { Some((name, input, id)) } else { None }).unwrap();
         assert_eq!((call.0.as_str(), call.1["command"].as_str()), ("Bash", Some("echo hi")));
-        assert!(ev.contains(&Event::ToolResult { id: call.2.clone(), error: false }));
+        assert!(ev.contains(&Event::ToolResult { id: call.2.clone(), error: false, output: None }));
         let Some(Event::Permission { request }) = ev.iter().find(|e| matches!(e, Event::Permission { .. })) else { panic!() };
         assert_eq!((request.kind.as_str(), request.tool_name.as_str(), request.input["command"].as_str()), ("tool", "Bash", Some("echo hi")));
         assert_eq!(request.tool_use_id.as_deref(), Some("per_0f3a473f7001rRwTVGWNzWv0wd"));
@@ -255,7 +255,7 @@ mod tests {
         assert!(request.input["diff"].as_str().unwrap().contains("+hi"));
         let write = ev.iter().find_map(|e| if let Event::ToolCall { name, input, id } = e { Some((name, input, id)) } else { None }).unwrap();
         assert_eq!((write.0.as_str(), write.1["file_path"].as_str()), ("Write", Some("/private/tmp/oc-probe/work/hello.txt")));
-        assert!(ev.contains(&Event::ToolResult { id: write.2.clone(), error: true }));
+        assert!(ev.contains(&Event::ToolResult { id: write.2.clone(), error: true, output: None }));
         assert!(matches!(ev.last(), Some(Event::TurnEnd { ok: true, .. })));
     }
 

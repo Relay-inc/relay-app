@@ -23,6 +23,10 @@
   button { cursor: default; color: var(--color-text-info); }
   button:disabled { opacity: 0.5; }
   #result { margin-top: 24px; font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  /* inline in a conversation (the host gives a maxHeight, not a fixed height): the page sizes itself */
+  .inline body { padding: 16px 20px; }
+  .inline p { display: none; }
+  .inline #result { margin-top: 12px; font-size: 40px; }
   #note { color: var(--color-text-secondary); font-size: 13px; }
 </style>
 </head>
@@ -48,6 +52,7 @@ const request = (method, params) => new Promise((resolve, reject) => {
 
 // the host's theme: colour scheme and the standardised CSS variables
 function applyContext(context = {}) {
+  document.documentElement.classList.toggle("inline", "maxHeight" in (context.containerDimensions ?? {}));
   if (context.theme) document.documentElement.style.colorScheme = context.theme;
   for (const [name, value] of Object.entries(context.styles?.variables ?? {})) if (value) document.documentElement.style.setProperty(name, value);
 }
@@ -60,6 +65,9 @@ addEventListener("message", async ({ data }) => {
     if (data.error) call?.reject(new Error(data.error.message));
     else call?.resolve(data.result);
   } else if (data.method === "ui/notifications/host-context-changed") applyContext(data.params);
+  // inline under the agent's call: its arguments, then what the tool answered
+  else if (data.method === "ui/notifications/tool-input") { if (data.params?.arguments?.sides) document.getElementById("sides").value = data.params.arguments.sides; }
+  else if (data.method === "ui/notifications/tool-result") show(data.params);
   else if (data.method === "ui/resource-teardown") post({ id: data.id, result: {} }); // nothing to save
 });
 
@@ -92,7 +100,15 @@ document.getElementById("roll").addEventListener("click", async () => {
   document.getElementById("roll").disabled = false;
   document.getElementById("note").textContent = "Ready (" + (init.hostInfo?.name ?? "host") + ")";
   // tell the host how tall the page is, and again when it changes
-  new ResizeObserver(() => post({ method: "ui/notifications/size-changed", params: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight } })).observe(document.body);
+  // the height of the content, not of the frame: measured with the page's height unset, as the official SDK does
+  const size = () => {
+    const root = document.documentElement, before = root.style.height;
+    root.style.height = "max-content";
+    const height = Math.ceil(root.getBoundingClientRect().height);
+    root.style.height = before;
+    post({ method: "ui/notifications/size-changed", params: { width: root.scrollWidth, height } });
+  };
+  new ResizeObserver(size).observe(document.body);
 })().catch(error => { document.getElementById("note").textContent = error.message; });
 </script>
 </body>

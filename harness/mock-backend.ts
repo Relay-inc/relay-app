@@ -800,6 +800,7 @@ function handle(cmd: string, a: Args): unknown {
         on: true,
         allowed: [],
         views: [],
+        mcp: a.name,
       };
     case "integration_status":
     case "integration_has_token":
@@ -930,6 +931,7 @@ const harness = {
     permission: conv.PERMISSION_KEY,
     question: conv.QUESTION_KEY,
     action: conv.ACTION_KEY,
+    roll: conv.ROLL_KEY,
     orch: orch.ORCH,
     orchWorker: orch.workers[1].key,
     terminal: `t:${vault.terminalSessions[0].sessionId}`,
@@ -940,6 +942,7 @@ const harness = {
     permission: conv.PERMISSION_TITLE,
     question: conv.QUESTION_TITLE,
     action: conv.ACTION_TITLE,
+    roll: conv.ROLL_TITLE,
   },
   markers: {
     longEnd: conv.LONG_END,

@@ -47,6 +47,12 @@ export const SWITCH_KEY = chats.filter(c => c.project === "Northwind Portal")[1]
 chats.filter(c => c.project === "Northwind Portal")[1].title = "Invoice export columns";
 export const QUESTION_KEY = special("Harbor CRM", "Contact sync strategy", 8);
 export const ACTION_KEY = special("Atlas Logistics", "Plan the depot import", 11);
+// a general conversation where the agent rolled a die through the example plugin (its view shows under the call)
+const rollChat = chats.filter(c => c.project === null)[2];
+rollChat.title = "Roll for the quiz night";
+rollChat.at = NOW - 9 * 60000;
+export const ROLL_KEY = rollChat.key;
+export const ROLL_TITLE = rollChat.title;
 export const LONG_TITLE = "Billing sync double balances";
 export const SWITCH_TITLE = "Invoice export columns";
 export const PERMISSION_TITLE = "Push the portal fix";
@@ -150,6 +156,18 @@ export function history(key: string): Ev[] {
       user("And the car lease?"),
       ai("Nothing about the car lease in the vault."),
     ];
+  // a transcript keeps the text of an MCP result only: for a tool with structured content that text is its JSON
+  if (key === ROLL_KEY) {
+    const call = tool("mcp__example__roll", { sides: 20 });
+    return [
+      time(NOW - 11 * 60000),
+      user("Roll a twenty-sided die for the quiz night."),
+      time(NOW - 10 * 60000),
+      call,
+      { type: "tool_result", id: call.id, error: false, output: { text: JSON.stringify({ value: 17, sides: 20 }) } },
+      ai("You rolled a **17**."),
+    ];
+  }
   const index = chats.findIndex(c => c.key === key);
   if (index < 0) return [];
   const base = shortHistory(chats[index], index);

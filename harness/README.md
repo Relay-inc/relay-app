@@ -106,7 +106,7 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-86 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+89 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
@@ -116,7 +116,7 @@ board, card-detail (the ticket window), board-list, board-filters, board-presets
 Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, usage-details (Details folded open), cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
 deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Orchestrator: orchestrator (the coordinator with the worker board in the drawer), orchestrator-open (the report and a worker's details unfolded), orchestrator-live (a worker starts, another reports), orchestrator-worker (a worker under its project). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
-settings-interface (appearance, accent, terminal), settings-sidebar, settings-permissions (Settings › General › Permissions, Full Disk Access missing), settings-plugins (Settings › Plugins, empty), settings-plugins-list and settings-plugin (the example plugin set up: its row, its page and its tools), plugin-view and plugin-view-dark (its view in the middle column after a roll through the bridge), settings-integration-productive,
+settings-interface (appearance, accent, terminal), settings-sidebar, settings-permissions (Settings › General › Permissions, Full Disk Access missing), settings-plugins (Settings › Plugins, empty), settings-plugins-list and settings-plugin (the example plugin set up: its row, its page and its tools), plugin-view and plugin-view-dark (its view in the middle column after a roll through the bridge), plugin-inline, plugin-inline-dark and plugin-inline-live (the view under the agent's `mcp__example__roll` call: from a transcript, and a live call whose result carries structured content), settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
 settings-integration-calendar, settings-integration-commonwealth, settings-commonwealth-joined (Commonwealth's page, then the report after Join), settings-agent-access, settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding (the starter vault offered), onboarding-own (a vault of one's own), onboarding-setup (Start offers the setup interview or Skip), onboarding-setup-started (the setup conversation sent), dark-waiting,

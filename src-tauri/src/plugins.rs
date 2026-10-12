@@ -228,16 +228,21 @@ fn strings(v: &Value, max: usize, len: usize) -> Option<Vec<&str>> {
     let out: Vec<&str> = a.iter().filter_map(|x| x.as_str().filter(|s| s.len() <= len && !s.contains('\0'))).collect();
     (a.len() <= max && out.len() == a.len()).then_some(out)
 }
-/// One entry of `plugins`: `{id, name, command, args, env, secrets, on, allowed, views}`. `views` are the ones the last
-/// test found (`{uri, name}`, shown as tabs), which is what puts the plugin in the sidebar without starting it.
+/// One entry of `plugins`: `{id, name, command, args, env, secrets, on, allowed, views, toolViews, mcp}`. `views` are the
+/// ones the last test found (`{uri, name}`, shown as tabs), which is what puts the plugin in the sidebar without starting
+/// it. `toolViews` maps a tool to the view its result renders in (the same test), which tells a conversation what to show
+/// under a call to that tool without starting the server. `mcp` is the name Claude Code knows the server by (a call
+/// there is `mcp__<name>__<tool>`), the plugin's id when absent.
 pub fn valid(p: &Value) -> bool {
     let (Some(_), Some(secrets), Some(_)) = (strings(&p["args"], 50, 2000), strings(&p["secrets"], 20, 60), strings(&p["allowed"], 200, 200)) else { return false };
     let env_ok = p["env"].as_object().is_some_and(|e| e.len() <= 50 && e.iter().all(|(k, v)| valid_env_name(k) && v.as_str().is_some_and(|v| v.len() <= 2000 && !v.contains('\0'))));
     let views_ok = p["views"].as_array().is_some_and(|a| a.len() <= 20 && a.iter().all(|v| v["uri"].as_str().is_some_and(|u| u.starts_with("ui://") && u.len() <= 500) && v["name"].as_str().is_some_and(|n| n.len() <= 100)));
+    let tool_views_ok = p["toolViews"].is_null() || p["toolViews"].as_object().is_some_and(|m| m.len() <= 200 && m.iter().all(|(k, v)| k.len() <= 200 && v.as_str().is_some_and(|u| u.starts_with("ui://") && u.len() <= 500)));
+    let mcp_ok = p["mcp"].is_null() || p["mcp"].as_str().is_some_and(|n| (1..=100).contains(&n.len()) && !n.contains('\0'));
     p["id"].as_str().is_some_and(valid_id)
         && p["name"].as_str().is_some_and(|n| (1..=60).contains(&n.chars().count()))
         && p["command"].as_str().is_some_and(|c| (1..=500).contains(&c.len()) && !c.contains('\0'))
-        && p["on"].is_boolean() && env_ok && views_ok
+        && p["on"].is_boolean() && env_ok && views_ok && tool_views_ok && mcp_ok
         && secrets.iter().all(|s| valid_env_name(s) && p["env"].get(*s).is_none())
 }
 pub fn norm(v: &mut Value) { if !v["plugins"].is_array() { v["plugins"] = json!([]); } }
@@ -268,7 +273,9 @@ fn string_list(v: &Value) -> Vec<String> { v.as_array().into_iter().flatten().fi
 #[derive(Default)]
 pub struct Plugins {
     servers: Mutex<HashMap<String, Arc<Server>>>,
-    views: Mutex<HashMap<String, (String, String)>>, // plugin id -> the HTML its view serves, and its CSP
+    /// `<plugin id>/<n>` (the path of the served URL) -> the HTML its view serves, and its CSP. One per frame: views of the
+    /// same plugin load side by side (a conversation can have several), and a frame must get the page it asked for.
+    views: Mutex<Served>,
     n: AtomicU64,
 }
 
@@ -280,12 +287,24 @@ pub fn sync(app: &AppHandle) {
     let live = |id: &str| settings["plugins"].as_array().is_some_and(|l| l.iter().any(|p| p["id"] == id && p["on"] == true));
     let plugins = app.state::<Plugins>();
     plugins.servers.lock().unwrap().retain(|id, _| live(id));
-    plugins.views.lock().unwrap().retain(|id, _| live(id));
+    plugins.views.lock().unwrap().retain(|path, _| live(of(path)));
+}
+/// The plugin a served path (`<id>/<n>`) belongs to.
+fn of(path: &str) -> &str { path.split('/').next().unwrap_or("") }
+/// How many served pages are kept: past it the oldest goes (a frame reads its page as it loads, right after `plugin_view`).
+const KEPT_VIEWS: usize = 24;
+type Served = HashMap<String, (String, String)>;
+fn keep(views: &mut Served, path: String, page: (String, String)) {
+    views.insert(path, page);
+    while views.len() > KEPT_VIEWS {
+        let oldest = views.keys().min_by_key(|k| k.rsplit('/').next().and_then(|n| n.parse::<u64>().ok())).cloned().unwrap();
+        views.remove(&oldest);
+    }
 }
 fn stop(app: &AppHandle, id: &str) {
     let plugins = app.state::<Plugins>();
     plugins.servers.lock().unwrap().remove(id);
-    plugins.views.lock().unwrap().remove(id);
+    plugins.views.lock().unwrap().retain(|path, _| of(path) != id);
 }
 
 /// The plugin's server, started when it is not running (or runs for an older entry). `need_on`: a view or a call only
@@ -385,8 +404,8 @@ pub async fn plugin_view(app: AppHandle, id: String, uri: Option<String>) -> Res
         // the declaration may sit on the content or on the listed resource
         let meta = if content["_meta"]["ui"].is_object() { content["_meta"]["ui"].clone() } else { resources.iter().find(|r| r["uri"] == uri).map_or(Value::Null, |r| r["_meta"]["ui"].clone()) };
         let plugins = app.state::<Plugins>();
-        plugins.views.lock().unwrap().insert(id.clone(), (html, csp(&meta)));
         let n = plugins.n.fetch_add(1, Ordering::SeqCst);
+        keep(&mut plugins.views.lock().unwrap(), format!("{id}/{n}"), (html, csp(&meta)));
         // what the host tells the view it enforces: the declared domains that passed the check
         let applied: serde_json::Map<String, Value> = ["connectDomains", "resourceDomains", "frameDomains", "baseUriDomains"].iter()
             .map(|k| (k.to_string(), Value::Array(meta["csp"][*k].as_array().into_iter().flatten().filter(|s| s.as_str().is_some_and(source_ok)).cloned().collect())))
@@ -406,10 +425,9 @@ pub async fn plugin_call(app: AppHandle, id: String, tool: String, args: Value) 
     }).await.map_err(|e| e.to_string())?
 }
 
-/// The `relay-plugin://localhost/<id>/<n>` scheme: the HTML of the view read last for that plugin, with its policy.
+/// The `relay-plugin://localhost/<id>/<n>` scheme: the HTML of the view read for that `plugin_view` call, with its policy.
 pub fn serve(app: &AppHandle, path: &str) -> tauri::http::Response<Vec<u8>> {
-    let id = path.trim_start_matches('/').split('/').next().unwrap_or("");
-    let view = app.state::<Plugins>().views.lock().unwrap().get(id).cloned();
+    let view = app.state::<Plugins>().views.lock().unwrap().get(path.trim_matches('/')).cloned();
     let builder = tauri::http::Response::builder();
     match view {
         Some((html, csp)) => builder.header("Content-Type", "text/html; charset=utf-8").header("Content-Security-Policy", csp)
@@ -458,7 +476,7 @@ pub fn plugin_import(state: tauri::State<App>, name: String) -> Result<Value, St
         let Some(v) = v.as_str() else { continue };
         if secret_name(k) { keychain_set(&service(&id), k, v)?; secrets.push(json!(k)); } else { env.insert(k.clone(), json!(v)); }
     }
-    let p = json!({"id": id, "name": name, "command": s["command"], "args": string_list(&s["args"]), "env": env, "secrets": secrets, "on": true, "allowed": [], "views": []});
+    let p = json!({"id": id, "name": name, "command": s["command"], "args": string_list(&s["args"]), "env": env, "secrets": secrets, "on": true, "allowed": [], "views": [], "mcp": name});
     if valid(&p) { Ok(p) } else { Err(trc_v("err.plugin_bad", &name)) }
 }
 
@@ -519,6 +537,15 @@ mod tests {
     }
 
     #[test]
+    fn served_pages_are_kept_per_frame_and_the_oldest_goes() {
+        let mut views = Served::new();
+        for n in 0..(KEPT_VIEWS as u64 + 3) { keep(&mut views, format!("a/{n}"), (n.to_string(), String::new())); }
+        assert_eq!(views.len(), KEPT_VIEWS);
+        assert!(!views.contains_key("a/0") && views.contains_key("a/3") && views.contains_key(&format!("a/{}", KEPT_VIEWS + 2)));
+        assert_eq!(of("a/3"), "a");
+    }
+
+    #[test]
     fn entries_in_settings() {
         let ok = json!({"id": "garmin", "name": "Garmin", "command": "uvx", "args": ["a"], "env": {"X": "1"}, "secrets": ["PASSWORD"], "on": true, "allowed": ["t"], "views": []});
         assert!(valid(&ok));
@@ -530,6 +557,10 @@ mod tests {
         assert!(!valid(&with("views", json!([{"uri": "https://x", "name": "n"}]))));
         assert!(!valid(&with("views", Value::Null)));
         assert!(valid(&with("views", json!([{"uri": "ui://x/y", "name": "n"}, {"uri": "ui://x/z", "name": "m"}]))));
+        // the tool-to-view map and the Claude Code name are optional (an entry from before has neither)
+        assert!(valid(&with("toolViews", json!({"roll": "ui://x/y"}))) && valid(&with("mcp", json!("my-server"))) && valid(&with("mcp", Value::Null)));
+        assert!(!valid(&with("toolViews", json!({"roll": "https://x"}))) && !valid(&with("toolViews", json!(["a"]))));
+        assert!(!valid(&with("mcp", json!(""))) && !valid(&with("mcp", json!(3))));
         let mut s = json!({"plugins": [ok.clone(), ok]});
         assert!(check(&s).is_err(), "the same id twice");
         s["plugins"].as_array_mut().unwrap().pop();

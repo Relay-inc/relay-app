@@ -1561,6 +1561,9 @@ export default {
   "plug.allowed_other": "{n} Tools erlaubt",
   "plug.serverH": "Server",
   "plug.name": "Name",
+  "plug.mcp": "MCP-Name",
+  "plug.mcpHint":
+    "Der Name, unter dem Claude Code diesen Server kennt: Seine Tools heißen dort <code>mcp__name__tool</code>. Leer gilt die ID des Plugins. Ruft der Agent ein Tool mit einer Ansicht auf, erscheint sie in der Unterhaltung.",
   "plug.command": "Befehl",
   "plug.commandHint": "Das Programm, das den Server startet, zum Beispiel <code>npx</code> oder <code>uvx</code>.",
   "plug.args": "Argumente",

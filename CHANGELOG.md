@@ -15,6 +15,8 @@ a PR. Versions follow
 
 ### Added
 
+- **Plugin views in conversations**: when the agent calls a tool of one of your plugins that has a view, the view shows right under the call, with the call's input and result, instead of only a line of text. Settings › Plugins has a new "MCP name" field (Import fills it in) that says which Claude Code server the plugin is (#190)
+
 - **Plugins (MCP Apps)**: Settings › Plugins adds MCP servers that Relay starts on your Mac, by hand or imported from Claude Code's MCP config. A plugin that brings a view (an MCP Apps `ui://` resource) gets a row in the sidebar as soon as it is saved and opens in the main pane (a tab per view when it brings several), in a sandbox that cannot reach Relay and has no network unless the plugin declares it; it can only call the tools you switch on for it. Secrets go to the keychain. `packages/plugin-example` is a small one to start from (#189)
 
 - **Settings › Updates**: a new page with Relay's update and the coding agents. It lists every release since your version with its notes (a skipped version's too), Check now looks again, and Install and restart shows the download's progress. The agents section shows each installed agent against npm's latest version, with a Changelog link and an Update button that runs npm, Homebrew or the agent's own updater, whichever installed it (#188)

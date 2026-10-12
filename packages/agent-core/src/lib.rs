@@ -147,7 +147,9 @@ pub enum Event {
     Text { text: String, delta: bool },
     Thinking { text: String, delta: bool },
     ToolCall { id: String, name: String, input: Value },
-    ToolResult { id: String, error: bool },
+    /// A tool call's result. `output` is what an MCP tool answered, for the view a plugin shows under the call (Claude
+    /// Code only, and only for `mcp__` tools: the output of Read or Bash would only weigh on every event).
+    ToolResult { id: String, error: bool, #[serde(skip_serializing_if = "Option::is_none")] output: Option<ToolOutput> },
     /// The change a file tool made, as unified-diff hunks with line numbers, when the provider reports it.
     Patch { id: String, hunks: Vec<Hunk> },
     /// A permission request or question raised in the provider's own protocol. The app writes it to the
@@ -188,6 +190,11 @@ pub enum Event {
     /// `resolved` with which of the two the conversation left to the CLI, so the composer can name the defaults.
     Resolved { model: String, effort: Option<String> },
 }
+
+/// What an MCP tool answered: its text, and its `structuredContent` when the provider hands it over (Claude Code's
+/// stream does, its transcript keeps only the text).
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
+pub struct ToolOutput { pub text: String, #[serde(skip_serializing_if = "Option::is_none")] pub structured: Option<Value> }
 
 /// One hunk of a change: where it starts in the old and the new file, and its lines prefixed " ", "-" or "+".
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

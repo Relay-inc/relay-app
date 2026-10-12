@@ -20,8 +20,9 @@ export type Reply =
 export type HostContext = {
   theme: "light" | "dark";
   styles: { variables: Record<string, string> };
-  /** The frame has the size of the pane: the view fills it (spec: a fixed container, so no `size-changed` is needed). */
-  containerDimensions: { width: number; height: number };
+  /** A view in the middle column fills the pane (fixed width and height); inline in a conversation it has the column's
+   *  width and sizes its own height up to `maxHeight`, which it reports with `ui/notifications/size-changed`. */
+  containerDimensions: { width: number } & ({ height: number } | { maxHeight: number });
   displayMode: "inline";
   availableDisplayModes: ["inline"];
   locale: string;

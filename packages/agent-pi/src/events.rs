@@ -164,7 +164,7 @@ impl State {
                     }
                 }
             }
-            "tool_execution_end" => out.push(Event::ToolResult { id: m["toolCallId"].as_str().unwrap_or("").into(), error: m["isError"] == true }),
+            "tool_execution_end" => out.push(Event::ToolResult { id: m["toolCallId"].as_str().unwrap_or("").into(), error: m["isError"] == true, output: None }),
             "agent_settled" => { self.running = false; self.end(&mut out); },
             _ => {}
         }
@@ -224,7 +224,7 @@ mod tests {
         assert_eq!(text(&ev), "done");
         let c = calls(&ev);
         assert_eq!((c[0].0, c[0].1["command"].as_str()), ("Bash", Some("echo hi")));
-        assert!(ev.contains(&Event::ToolResult { id: c[0].2.into(), error: false }));
+        assert!(ev.contains(&Event::ToolResult { id: c[0].2.into(), error: false, output: None }));
         // one turn end, the two model calls' tokens summed, priced by pi
         let ends: Vec<&Event> = ev.iter().filter(|e| matches!(e, Event::TurnEnd { .. })).collect();
         assert_eq!(ends.len(), 1);
@@ -247,7 +247,7 @@ mod tests {
         assert_eq!(c.iter().map(|c| c.0).collect::<Vec<_>>(), ["Write", "Edit", "Read"]);
         assert_eq!((c[0].1["file_path"].as_str(), c[0].1["content"].as_str()), (Some("note.txt"), Some("hello")));
         assert_eq!(c[1].1["edits"][0]["newText"], "world");
-        assert!(c.iter().all(|c| ev.contains(&Event::ToolResult { id: c.2.into(), error: false })));
+        assert!(c.iter().all(|c| ev.contains(&Event::ToolResult { id: c.2.into(), error: false, output: None })));
         assert_eq!(text(&ev), "world");
         assert_eq!(ev.iter().filter(|e| matches!(e, Event::TurnEnd { .. })).count(), 1);
     }

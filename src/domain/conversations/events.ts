@@ -123,6 +123,7 @@ export function applyAgentEvent(
       if (item) {
         item.state = event.error ? "err" : "ok";
         if (item.at) item.end = env.now;
+        if (event.output) item.output = event.output;
       }
       return [];
     }
@@ -262,7 +263,11 @@ export function toItems(
     } else if (entry.type === "compacted") items.push({ kind: "compact", text: compactedText(entry, t), state: "ok" });
     else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok", at));
-    else if (entry.type === "patch") {
+    else if (entry.type === "tool_result") {
+      // a transcript gives a result an event only when it has an output to show
+      const tool = items.find(x => x.id === entry.id);
+      if (tool && entry.output) tool.output = entry.output;
+    } else if (entry.type === "patch") {
       // ponytail: a followed transcript read in pieces loses the patch whose call was in an earlier piece (it shows without line numbers)
       const tool = items.find(x => x.id === entry.id);
       if (tool) tool.hunks = entry.hunks;

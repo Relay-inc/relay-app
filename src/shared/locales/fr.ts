@@ -1565,6 +1565,9 @@ export default {
   "plug.allowed_other": "{n} outils autorisés",
   "plug.serverH": "Serveur",
   "plug.name": "Nom",
+  "plug.mcp": "Nom MCP",
+  "plug.mcpHint":
+    "Le nom sous lequel Claude Code connaît ce serveur : ses outils s'y appellent <code>mcp__nom__outil</code>. Vide, c'est l'id du plugin. Quand l'agent appelle un outil qui a une vue, la vue s'affiche dans la conversation.",
   "plug.command": "Commande",
   "plug.commandHint": "Le programme qui démarre le serveur, par exemple <code>npx</code> ou <code>uvx</code>.",
   "plug.args": "Arguments",

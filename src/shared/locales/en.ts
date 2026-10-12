@@ -1538,6 +1538,9 @@ const en = {
   "plug.allowed_other": "{n} tools allowed",
   "plug.serverH": "Server",
   "plug.name": "Name",
+  "plug.mcp": "MCP name",
+  "plug.mcpHint":
+    "The name Claude Code knows this server by: its tools are <code>mcp__name__tool</code> there. Left empty, the plugin's id. When the agent calls a tool that has a view, the view shows in the conversation.",
   "plug.command": "Command",
   "plug.commandHint": "The program that starts the server, for example <code>npx</code> or <code>uvx</code>.",
   "plug.args": "Arguments",
