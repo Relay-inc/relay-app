@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Old Claude Code**: a conversation on a Claude Code older than 2.1.294 now stops with "run `claude update`" instead of failing every turn on `unknown option '--thinking-display'`
+
 ## [0.0.20] - 2026-10-12
 
 ### Changed

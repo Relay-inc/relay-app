@@ -45,6 +45,15 @@ pub const COMMONWEALTH_TOOLS: [&str; 5] = ["mcp__plugin_commonwealth_commonwealt
 pub struct Claude;
 pub static PROVIDER: Claude = Claude;
 
+/// The oldest Claude Code seen taking every flag `command` passes (`--thinking-display` is not in its changelog, so
+/// this is the oldest build checked, not the release that added it). An older one stops each turn on "unknown option".
+const MIN_VERSION: [u32; 3] = [2, 1, 294];
+/// `claude --version` ("2.1.296 (Claude Code)") older than MIN_VERSION. Unreadable counts as new enough.
+fn too_old(version: &str) -> bool {
+    let v: Vec<u32> = version.split_whitespace().next().unwrap_or("").split('.').map_while(|n| n.parse().ok()).collect();
+    v.len() == 3 && v[..] < MIN_VERSION[..]
+}
+
 /// Claude Code's transcript folder for a vault: the path with every non-alphanumeric char as `-`.
 pub fn slug(vault: &str) -> String { vault.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '-' }).collect() }
 /// The account this call is for, set by the app: a config folder (CLAUDE_CONFIG_DIR), "" for ~/.claude.
@@ -94,7 +103,8 @@ impl AgentProvider for Claude {
         let installed = Path::new(env.bin).is_file();
         let version = if installed { agent_core::version(env.bin, env.path) } else { None };
         let logged_in = usage_log::credentials(env.home, account(env)).is_some();
-        let note = if !installed { Some("curl -fsSL https://claude.ai/install.sh | bash".into()) } else if !logged_in { Some("claude /login".into()) } else { None };
+        let note = if !installed { Some("curl -fsSL https://claude.ai/install.sh | bash".into()) }
+            else if version.as_deref().is_some_and(too_old) { Some("claude update".into()) } else if !logged_in { Some("claude /login".into()) } else { None };
         Detect { installed, bin: env.bin.into(), version, logged_in: Some(logged_in), note }
     }
     fn models(&self) -> Vec<Choice> {
@@ -117,6 +127,12 @@ impl AgentProvider for Claude {
     }
 
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
+        // ponytail: runs this Mac's `--version`, so for a work machine (machines.rs) it reads a path that is usually
+        // missing here and lets it through. Check there too once proto::Info carries the machine's claude version.
+        if let Some(v) = agent_core::version(env.bin, env.path).filter(|v| too_old(v)) {
+            let [a, b, c] = MIN_VERSION;
+            return Err(format!("claude: Claude Code {v} is too old for Relay, it needs {a}.{b}.{c} or newer. Run `claude update` and start the conversation again."));
+        }
         let mut mcp = json!({"mcpServers": {}});
         // opts.mail, set by the app: the relay-mail tools, answered by the app over this pipe
         if env.opts["mail"] == true { mcp["mcpServers"]["relay-mail"] = json!({"type": "sdk", "name": "relay-mail"}); }
@@ -270,6 +286,23 @@ impl AgentProvider for Claude {
 mod tests {
     use super::*;
     fn env<'a>(p: &'a Path) -> Env<'a> { Env { home: "/Users/me", vault: "/Users/me/my vault", path: "/usr/bin", bin: "/Users/me/.local/bin/claude", pending: p, opts: &Value::Null } }
+    #[test]
+    fn too_old_reads_the_version_line() {
+        assert!(too_old("2.1.200 (Claude Code)") && too_old("1.9.999"));
+        assert!(!too_old("2.1.294 (Claude Code)") && !too_old("2.2.0") && !too_old("3.0.1 (Claude Code)"));
+        assert!(!too_old("") && !too_old("Claude Code") && !too_old("2.1"));
+        // an old claude on disk: no process, the update hint instead
+        let dir = std::env::temp_dir().join(format!("relay-old-claude-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let bin = dir.join("claude");
+        std::fs::write(&bin, "#!/bin/sh\necho '2.1.200 (Claude Code)'\n").unwrap();
+        std::fs::set_permissions(&bin, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+        let p = PathBuf::from("/tmp/pending");
+        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
+        let err = PROVIDER.command(&Env { bin: bin.to_str().unwrap(), ..env(&p) }, &l).err().unwrap();
+        assert!(err.contains("2.1.200") && err.contains("claude update"), "{err}");
+        std::fs::remove_dir_all(&dir).ok();
+    }
     #[test]
     fn spawn_args_stay_as_before() {
         let p = PathBuf::from("/tmp/pending");
