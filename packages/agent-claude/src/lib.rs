@@ -169,9 +169,13 @@ impl AgentProvider for Claude {
             .arg("--replay-user-messages");
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
         if !brain.is_empty() { cmd.env("COMMONWEALTH_BRAIN_DIR", brain); }
-        // and the repo its notes file under: Commonwealth stamps `source` from the cwd, which is the vault
+        // and which project its notes belong to: Commonwealth stamps `source` from the cwd, which is the vault. The
+        // project name is matched against the brain's registry (Commonwealth 0.7, ADR-0047); the repo is the fallback
+        // when the name matches no project there
         let source = env.opt("commonwealth_source");
         if !brain.is_empty() && !source.is_empty() { cmd.env("COMMONWEALTH_SOURCE", source); }
+        let project = env.opt("commonwealth_project");
+        if !brain.is_empty() && !project.is_empty() { cmd.env("COMMONWEALTH_PROJECT", project); }
         let ask = strs("ask");
         if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
         // no mode set: auto, as a terminal window starts; `-p` would start in manual and ask for every edit. A work
@@ -379,10 +383,12 @@ mod tests {
         assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_BRAIN_DIR"));
         assert!(!none.get_args().any(|a| a.to_string_lossy().contains("mcp__plugin_commonwealth")));
         assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_SOURCE"));
-        let opts = json!({"commonwealth_brain": "/b/antenna", "commonwealth_source": "acme/web"});
+        assert!(!none.get_envs().any(|(k, _)| k == "COMMONWEALTH_PROJECT"));
+        let opts = json!({"commonwealth_brain": "/b/antenna", "commonwealth_source": "acme/web", "commonwealth_project": "Acme (Web)"});
         let cmd = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap();
         assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_BRAIN_DIR" && v.is_some_and(|v| v == "/b/antenna")));
         assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_SOURCE" && v.is_some_and(|v| v == "acme/web")));
+        assert!(cmd.get_envs().any(|(k, v)| k == "COMMONWEALTH_PROJECT" && v.is_some_and(|v| v == "Acme (Web)")));
         let args: Vec<String> = cmd.get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         let (allowed, denied) = (args.iter().position(|a| a == "--allowedTools").unwrap(), args.iter().position(|a| a == "--disallowedTools").unwrap());
         assert!(args[allowed..denied].contains(&"mcp__plugin_commonwealth_commonwealth__search".to_string()));

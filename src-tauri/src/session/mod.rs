@@ -116,9 +116,12 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
         // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
         if caps.brain && !from_mail && cw_on(state) {
-            if let Some((b, repo)) = about.and_then(|a| commonwealth::session(&home(), &repo_projects(&dir), a)) {
-                eb.opts["commonwealth_brain"] = json!(b);
-                eb.opts["commonwealth_source"] = json!(repo);
+            if let Some(a) = about {
+                if let Some((b, repo)) = commonwealth::session(&home(), &repo_projects(&dir), a) {
+                    eb.opts["commonwealth_brain"] = json!(b);
+                    eb.opts["commonwealth_source"] = json!(repo);
+                    eb.opts["commonwealth_project"] = json!(a);
+                }
             }
         }
         let mut cmd = p.command(&eb.env(), &l)?;
