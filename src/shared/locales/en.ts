@@ -1560,6 +1560,9 @@ const en = {
   "plug.connected": "Connected to {name}",
   "plug.toolsH": "Tools",
   "plug.toolsHelp": "Switch on the tools the plugin's view may call. It can call nothing else.",
+  "plug.allowAll": "All",
+  "plug.allowNone": "None",
+  "plug.filterTools": "Filter tools",
   "plug.noTools": "Save the plugin to list its tools.",
   "plug.toolsNone": "This plugin has no tools.",
   "plug.toolHidden": "Only for the agent: the server does not let a view call it",
@@ -1567,6 +1570,42 @@ const en = {
   "plug.removeHelp": "Stops the plugin and deletes its secrets from the keychain.",
   "plug.starting": "Starting {name}…",
   "plug.retry": "Try again",
+  "plug.github": "Add from GitHub",
+  "plug.githubH": "Add from GitHub",
+  "plug.githubHelp":
+    "A repository with a relay-plugin.json in its root. Nothing runs until you have seen what it would run and confirmed.",
+  "plug.githubField": "Repository",
+  "plug.githubHint":
+    "<code>owner/repo</code> or a github.com link, optionally with <code>@tag</code>, <code>@branch</code> or <code>@commit</code>. A private repo works with your gh login.",
+  "plug.githubFetch": "Download and read",
+  "plug.fetching": "Downloading…",
+  "plug.cardInstallH": "Install {name}",
+  "plug.cardUpdateH": "Update {name}",
+  "plug.cardRepo": "Repository",
+  "plug.cardCommit": "Commit",
+  "plug.cardRuns": "Runs",
+  "plug.cardRunsHint": "Started as a program whenever the plugin is used.",
+  "plug.cardInstall": "Install command",
+  "plug.cardInstallHint": "Run once in the plugin's folder after the download, and again after every update.",
+  "plug.cardClaude": "Also add to Claude Code",
+  "plug.cardClaudeHint":
+    "The agent then uses the same server, and its views match. Claude Code starts it through Relay, so no secret is stored in Claude Code's config. Registered there as <code>{name}</code>.",
+  "plug.cardClaudeExists": "Claude Code already has a server called {name}: this replaces it.",
+  "plug.cardWarn":
+    "This plugin runs as a program on this Mac with your user's rights: it can read your files and use the network. Install only what you trust.",
+  "plug.cardInstallBtn": "Install",
+  "plug.cardUpdateBtn": "Update",
+  "plug.cardChanged": "Changed in this version: {what}",
+  "plug.installing": "Installing…",
+  "plug.cancel": "Cancel",
+  "plug.updatesH": "Updates",
+  "plug.updatesHelp": "Installed from {repo} at {sha}. Relay never updates a plugin by itself.",
+  "plug.updatesCheck": "Check for updates",
+  "plug.checking": "Checking…",
+  "plug.updatesUpToDate": "Up to date.",
+  "plug.updatesFound": "A newer commit is available.",
+  "plug.removeHelpRepo":
+    "Stops the plugin, deletes its secrets from the keychain and its folder from this Mac. A plugin that was added to Claude Code is removed there too.",
 };
 export type Key = keyof typeof en;
 export default en;

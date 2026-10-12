@@ -334,7 +334,7 @@ export function settings(fixture: string) {
         ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
         : { on: false, feeds: [] },
     language: "en",
-    theme: fixture === "dark" || fixture === "plugins-dark" ? "dark" : "light",
+    theme: fixture === "dark" || fixture.endsWith("-dark") ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
@@ -357,6 +357,26 @@ export function settings(fixture: string) {
               { uri: "ui://relay-example/history", name: "History" },
             ],
           },
+          // a plugin installed from GitHub (fixture plugins-repo): its page has the Updates section
+          ...(fixture.startsWith("plugins-repo")
+            ? [
+                {
+                  id: "garmin",
+                  name: "Garmin",
+                  command: "node",
+                  args: ["/Users/demo/Library/Application Support/be.antenna.relay/plugins/garmin/server.mjs"],
+                  env: {},
+                  secrets: ["GARMIN_EMAIL", "GARMIN_PASSWORD"],
+                  on: true,
+                  allowed: [],
+                  toolViews: {},
+                  mcp: "garmin",
+                  sync: true,
+                  source: { repo: "kristoffeys/relay-plugin-garmin", ref: "v1.0.0", sha: "3f9c2a1d7be84c5e0a6f1b2c9d8e7f6a5b4c3d2e" },
+                  views: [],
+                },
+              ]
+            : []),
         ]
       : [],
     favicons: { on: false, last: "", tried: {} },

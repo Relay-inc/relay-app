@@ -195,6 +195,52 @@ the text, and a JSON object in it as `structuredContent`.
 
 `packages/plugin-example` is a server and view without dependencies to start from.
 
+### Installing from GitHub
+
+Settings › Plugins › Add from GitHub takes `owner/repo`, `github.com/owner/repo` or a link, optionally `@tag`, `@branch` or
+`@commit` (the default branch without). Relay resolves the ref to a commit, downloads that commit's tarball with the gh
+login (`gh api`, so a private repo works; curl without a login for a public one), checks the listing (an entry that is
+absolute, climbs out with `..` or is a link refuses the whole download) and unpacks it into a staging folder under the app
+data folder (`plugins/.staging`). Nothing has run yet: the confirmation card shows the repo, the commit, the exact command
+and arguments, the install command, the secrets and a switch for Claude Code. Only Install (`plugin_install`, in
+`src-tauri/src/plugin_repo.rs`) moves the folder to `plugins/<id>/`, runs the `install` command there (`sh -c`, at most 10
+minutes, its last lines shown when it fails; a failed install puts the previous folder back), and saves the entry with
+`source: {repo, ref, sha}`. The server runs with that folder as its working directory. Check for updates on the plugin's
+page compares the ref's commit with `source.sha`; a newer one is another card (what changed in command, arguments,
+environment, secrets and install is marked), and an update is the same swap. Nothing updates by itself.
+
+With the Claude Code switch on (on the card, and on every plugin's page, hand-added ones too), the server is also
+registered with `claude mcp add-json --scope user <name>` (a server of that name is replaced, the card says when there is
+one), so the agent calls the same server and the inline views match. What Claude Code is given is a launcher, `relay
+--plugin-run <id>` (this binary, `plugin_repo::run`): when Claude Code starts it, it reads the plugin's entry from
+`settings.json` and its secrets from the keychain, and execs the server with stdio passed through. It needs no socket, so
+the Relay app need not be running, and Claude Code's config holds no secret: only a change of the plugin's MCP name or the
+switch touches it. It stops with a message on stderr when the plugin is unknown, off or a secret is not filled in. Removing a plugin
+deletes its folder (only one inside `plugins/`, symlinks resolved), its secrets, its settings entry and the Claude Code
+registration.
+
+The repo's root holds `relay-plugin.json`:
+
+```json
+{
+  "name": "Garmin",
+  "description": "Read-only Garmin Connect tools with a training dashboard.",
+  "command": "node",
+  "args": ["server.mjs", "--region", "${pluginDir}/region.json"],
+  "env": { "GARMIN_REGION": "eu" },
+  "secrets": ["GARMIN_EMAIL", "GARMIN_PASSWORD"],
+  "install": "npm ci --omit=dev",
+  "mcp": "garmin"
+}
+```
+
+`name` and `command` are required. `args` is a list of strings: `${pluginDir}` is the install folder, and an argument that
+is a file of the repo (`server.mjs`) becomes its absolute path. `env` holds plain variables, `secrets` the names of
+variables the user fills in (keychain, a name is one or the other), `install` a shell command run in the folder after the
+download and again after an update, `mcp` the name Claude Code knows the server by (letters, digits, `-` and `_`; the
+plugin's id when absent), `description` a line for the card. A field of the wrong type is an error that names it; fields
+it does not know are ignored.
+
 ## Agent providers
 
 The conversations run on a coding-agent CLI: Claude Code, Codex, OpenCode or Pi. Each is one package `packages/agent-<id>/` (Rust + TypeScript + strings + tests) implementing the contract in

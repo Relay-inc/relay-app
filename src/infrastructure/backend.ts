@@ -41,7 +41,7 @@ import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
-import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
+import type { Plugin, PluginCard, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -339,6 +339,19 @@ export const pluginCall = (id: string, tool: string, args: Record<string, unknow
 /** The names of Claude Code's MCP servers that can become plugins, and importing one. */
 export const pluginImportList = () => invoke<string[]>("plugin_import_list");
 export const pluginImport = (name: string) => invoke<Plugin>("plugin_import", { name });
+/** From GitHub: downloads `owner/repo[@ref]` and reads its manifest, running nothing (the card). */
+export const pluginGithubFetch = (spec: string) => invoke<PluginCard>("plugin_github_fetch", { spec });
+/** The card for a newer commit of a plugin's ref, null when it is up to date. */
+export const pluginGithubCheck = (id: string) => invoke<PluginCard | null>("plugin_github_check", { id });
+/** The download of a card nobody confirmed goes. */
+export const pluginGithubCancel = (stage: string) => invoke("plugin_github_cancel", { stage });
+/** After the user confirmed: puts the download in place, runs its install command, answers with the entry to save. */
+export const pluginInstall = (stage: string, sync: boolean) => invoke<Plugin>("plugin_install", { stage, sync });
+/** Takes a server out of Claude Code's user config, and whether it has one of that name. */
+export const pluginClaudeRemove = (name: string) => invoke("plugin_claude_remove", { name });
+export const pluginClaudeHas = (name: string) => invoke<boolean>("plugin_claude_has", { name });
+/** Registers the plugin in Claude Code; `previous` is the name it had there before an edit. */
+export const pluginClaudeSync = (id: string, previous?: string) => invoke("plugin_claude_sync", { id, previous });
 
 // ---------- agent access to extensions (the vault's .relay/config.json)
 export const actionConfig = () => invoke<ActionConfig>("action_config");

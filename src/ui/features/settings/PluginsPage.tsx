@@ -8,6 +8,8 @@ import { useT } from "../../hooks/useT";
 import { BUTTON_GLYPH, buttonClass, TILE } from "./blocks";
 import { Footer } from "./Footer";
 import { PluginEditor } from "./PluginEditor";
+import { PluginGithub } from "./PluginGithub";
+import { PluginUpdate } from "./PluginUpdate";
 import { Section } from "./Section";
 import { SettingsFold } from "./SettingsFold";
 import { StatusLine } from "./StatusLine";
@@ -22,7 +24,7 @@ export function PluginsPage({ active }: { active: boolean }) {
   const imports = useSettingsStore(s => s.pluginsPage.imports);
   const message = useSettingsStore(s => s.pluginsPage.messages[""]);
   const loaded = useSettingsStore(s => s.pluginsPage.loaded);
-  // the plugin whose page is open, "new" for a plugin being added, or null for the list
+  // the plugin whose page is open, "new" for a plugin being added, "github" for one added from a repo, or null for the list
   const [detail, setDetail] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   useEffect(() => {
@@ -31,6 +33,19 @@ export function PluginsPage({ active }: { active: boolean }) {
   if (!loaded) return null;
 
   const open = plugins.find(plugin => plugin.id === detail);
+  if (detail === "github")
+    return (
+      <>
+        <header className="grid gap-3">
+          <button className={`${buttonClass("ghost")} -ml-2 justify-self-start`} onClick={() => setDetail(null)}>
+            <Icon name="left" className={BUTTON_GLYPH} />
+            {t("set.tab.plugins")}
+          </button>
+          <h1 className="text-base font-semibold text-s-fg">{t("plug.github")}</h1>
+        </header>
+        <PluginGithub onInstalled={setDetail} />
+      </>
+    );
   if (detail === "new" || open)
     return (
       <>
@@ -42,10 +57,11 @@ export function PluginsPage({ active }: { active: boolean }) {
           <h1 className="text-base font-semibold text-s-fg">{open?.name ?? t("plug.add")}</h1>
         </header>
         <PluginEditor key={detail} plugin={open ?? null} onSaved={setDetail} />
+        {open?.source && <PluginUpdate plugin={open} />}
         {open && (
           <Section
             title={t("plug.removeH", { name: open.name })}
-            desc={t("plug.removeHelp")}
+            desc={t(open.source ? "plug.removeHelpRepo" : "plug.removeHelp")}
             action={
               <button
                 className={buttonClass("danger")}
@@ -84,6 +100,9 @@ export function PluginsPage({ active }: { active: boolean }) {
               {t("plug.import")}
             </button>
           )}
+          <button className={buttonClass()} onClick={() => setDetail("github")}>
+            {t("plug.github")}
+          </button>
           <button className={buttonClass()} onClick={() => setDetail("new")}>
             {t("plug.add")}
           </button>

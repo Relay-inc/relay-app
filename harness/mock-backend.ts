@@ -72,6 +72,45 @@ const diceTools = [
     app: true,
   },
 ];
+// more tools than the filter threshold, so Settings shows the filter and All / None (the server itself has only roll)
+const moreTools = [
+  "roll_many",
+  "flip_coin",
+  "shuffle",
+  "pick_one",
+  "draw_card",
+  "spin",
+  "coin_streak",
+  "d100",
+  "stats",
+  "history",
+  "reset",
+].map(name => ({
+  name,
+  description: `A pretend ${name.replace(/_/g, " ")} tool for the harness.`,
+  view: null,
+  app: true,
+}));
+const githubCard = (ref: string | null, update: boolean) => ({
+  stage: "1760000000000000000",
+  repo: "kristoffeys/relay-plugin-garmin",
+  owner: "kristoffeys",
+  ref,
+  sha: update ? "b81d4e7a02c95f3d6e18a47c0b9d5e2f1a3c6d80" : "7a1e5c9d3b2f4a6081c7d9e0f1a2b3c4d5e6f708",
+  date: "2026-10-09T14:12:00Z",
+  message: update ? "Read sleep from the new endpoint" : "Add the sleep and HRV tools",
+  id: "garmin",
+  name: "Garmin",
+  description: "Sleep, HRV and training load from Garmin Connect, with a dashboard view.",
+  command: "node",
+  args: ["/Users/demo/Library/Application Support/be.antenna.relay/plugins/garmin/server.mjs"],
+  env: { GARMIN_REGION: "eu" },
+  secrets: ["GARMIN_EMAIL", "GARMIN_PASSWORD"],
+  install: "npm ci --omit=dev",
+  claude: "garmin",
+  claudeExists: true,
+  changed: update ? ["args", "install"] : [],
+});
 let workers = orchOn ? structuredClone(orch.workers) : [];
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
@@ -771,7 +810,11 @@ function handle(cmd: string, a: Args): unknown {
       pluginSecrets.delete(a.id);
       return null;
     case "plugin_test":
-      return { server: { name: "relay-example", version: "0.1.0" }, tools: diceTools, views: diceViews };
+      return {
+        server: { name: "relay-example", version: "0.1.0" },
+        tools: [...diceTools, ...moreTools],
+        views: diceViews,
+      };
     case "plugin_view":
       return {
         url: URL.createObjectURL(new Blob([diceView], { type: "text/html" })),
@@ -787,6 +830,34 @@ function handle(cmd: string, a: Args): unknown {
         structuredContent: { value: 4, sides: a.args?.sides ?? 6 },
       };
     }
+    // from GitHub (src-tauri/src/plugin_repo.rs): one repo with an install command and two secrets, an update of it that
+    // changes the install command, and a Claude Code that already has a server of that name
+    case "plugin_github_fetch":
+      return githubCard(a.spec.includes("@") ? a.spec.split("@")[1] : null, false);
+    case "plugin_github_check":
+      return githubCard("v1.1.0", true);
+    case "plugin_github_cancel":
+      return null;
+    case "plugin_install":
+      return {
+        id: "garmin",
+        name: "Garmin",
+        command: "node",
+        args: ["/Users/demo/Library/Application Support/be.antenna.relay/plugins/garmin/server.mjs"],
+        env: {},
+        secrets: ["GARMIN_EMAIL", "GARMIN_PASSWORD"],
+        on: true,
+        allowed: [],
+        views: [],
+        mcp: "garmin",
+        sync: a.sync,
+        source: { repo: "kristoffeys/relay-plugin-garmin", ref: null, sha: "7a1e5c9d3b2f4a6081c7d9e0f1a2b3c4d5e6f708" },
+      };
+    case "plugin_claude_sync":
+    case "plugin_claude_remove":
+      return null;
+    case "plugin_claude_has":
+      return a.name === "garmin";
     case "plugin_import_list":
       return fixture.startsWith("plugins") ? ["garmin"] : [];
     case "plugin_import":

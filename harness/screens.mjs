@@ -702,10 +702,60 @@ const VIEWS = {
     await settingsPage("Plugins", "Dice", "plugins");
   },
   // the same, scrolled to the tools: the allowed one is listed by name until a test lists them all
+  // the tools of a plugin with many: the filter narrows the list, All / None switch every callable tool at once
+  "settings-plugin-tools-filter": async () => {
+    await settingsPage("Plugins", "Dice", "plugins");
+    await intoView("Switch on the tools");
+    await page.getByRole("button", { name: "All", exact: true }).click();
+    await page.getByRole("searchbox", { name: "Filter tools" }).fill("coin");
+    await settle(page);
+  },
   "settings-plugin-tools": async () => {
     await settingsPage("Plugins", "Dice", "plugins");
     await intoView("Switch on the tools");
   },
+  // Add from GitHub: the repo field, then the confirmation card (command, install command, secrets, the Claude Code switch
+  // with its "already has a server" note, the warning)
+  ...Object.fromEntries(
+    ["", "-dark"].flatMap(dark => [
+      [
+        `settings-plugin-github${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Add from GitHub", `plugins${dark}`);
+        },
+      ],
+      [
+        `settings-plugin-github-card${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Add from GitHub", `plugins${dark}`);
+          await page.locator("#plugrepo").fill("kristoffeys/relay-plugin-garmin");
+          await click("Download and read");
+          await waitText("Install Garmin");
+          await intoView("This plugin runs as a program");
+        },
+      ],
+      // a hand-added plugin's page: the Claude Code switch on, for a name Claude Code already has
+      [
+        `settings-plugin-sync${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Dice", `plugins${dark}`);
+          await page.locator("#plugmcp").fill("garmin");
+          await page.locator("#plugsync").click();
+          await waitText("already has a server called garmin");
+          await intoView("already has a server called garmin");
+        },
+      ],
+      [
+        `settings-plugin-update${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Garmin", `plugins-repo${dark}`);
+          await click("Check for updates");
+          await waitText("Update Garmin");
+          await intoView("Changed in this version");
+        },
+      ],
+    ]),
+  ),
   // the example plugin's view in the middle column: the frame is up (ui/initialize done) and a roll went through the
   // bridge to the server's tool
   "plugin-view": async () => {
@@ -728,7 +778,10 @@ const VIEWS = {
   "plugin-view-tabs": async () => {
     await open(page, server.url, { fixture: "plugins", sel: "__plugin:example" });
     await page.getByRole("radio", { name: "History" }).click();
-    await page.frameLocator("iframe[title=History]").getByText(/^Ready/).waitFor();
+    await page
+      .frameLocator("iframe[title=History]")
+      .getByText(/^Ready/)
+      .waitFor();
     await settle(page);
   },
   // the agent rolled a die through the example plugin: its view under the call, fed with the call's input and result. A
@@ -750,13 +803,23 @@ const VIEWS = {
     await page.evaluate(() => {
       const h = window.__harness;
       h.emitAgent(h.keys.roll, { type: "working" });
-      h.emitAgent(h.keys.roll, { type: "tool_call", id: "toolu_roll_live", name: "mcp__example__roll", input: { sides: 6 } });
+      h.emitAgent(h.keys.roll, {
+        type: "tool_call",
+        id: "toolu_roll_live",
+        name: "mcp__example__roll",
+        input: { sides: 6 },
+      });
     });
     const live = page.frameLocator("iframe[title=Dice]").nth(1);
     await live.getByText(/^Ready/).waitFor();
     await page.evaluate(() => {
       const h = window.__harness;
-      h.emitAgent(h.keys.roll, { type: "tool_result", id: "toolu_roll_live", error: false, output: { text: "{}", structured: { value: 5, sides: 6 } } });
+      h.emitAgent(h.keys.roll, {
+        type: "tool_result",
+        id: "toolu_roll_live",
+        error: false,
+        output: { text: "{}", structured: { value: 5, sides: 6 } },
+      });
     });
     await live.locator("#result").getByText("5", { exact: true }).waitFor();
     await scrollMain("bottom");
