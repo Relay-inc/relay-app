@@ -282,8 +282,8 @@ function NotePane({
   );
 }
 
-const SLOT = ["bg-viz-1", "bg-viz-2", "bg-viz-3"];
-const SLOT_FILL = ["fill-viz-1", "fill-viz-2", "fill-viz-3"];
+const SLOT = ["bg-viz-1", "bg-viz-2", "bg-viz-3", "bg-viz-4", "bg-viz-5", "bg-viz-6"];
+const SLOT_FILL = ["fill-viz-1", "fill-viz-2", "fill-viz-3", "fill-viz-4", "fill-viz-5", "fill-viz-6"];
 export function KindDot({ kind, kinds }: { kind: string; kinds: string[] }) {
   const slot = kinds.indexOf(kind);
   return <span className={`size-2 rounded-full flex-none ${slot >= 0 ? SLOT[slot] : "bg-tertiary"}`} />;

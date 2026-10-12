@@ -61,12 +61,10 @@ test("adjacency goes both ways", () => {
   assert.deepEqual(adjacency({ nodes: [node("a"), node("b"), node("c")], edges: [0, 1, 1, 2] }), [[1], [0, 2], [1]]);
 });
 
-test("three kinds get a colour, hubs do not count", () => {
-  const nodes = [..."mmmmddddpppii"].map((k, i) =>
-    node(`${i}`, { m: "memory", d: "decision", p: "person", i: "index" }[k]),
-  );
-  nodes.push(node("h1", "index", true), node("h2", "index", true));
-  assert.deepEqual(topKinds(nodes), ["decision", "memory", "person"]);
+test("six kinds get a colour, hubs do not count", () => {
+  const nodes = [..."aaaaabbbbccccdddeeffgi"].map((k, i) => node(`${i}`, `kind-${k}`));
+  nodes.push(node("h1", "kind-i", true), node("h2", "kind-i", true), node("h3", "kind-i", true));
+  assert.deepEqual(topKinds(nodes), ["kind-a", "kind-b", "kind-c", "kind-d", "kind-e", "kind-f"]);
 });
 
 test("glow keeps the last touch, any write, and the conversations", () => {
