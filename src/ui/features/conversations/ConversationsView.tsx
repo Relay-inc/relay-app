@@ -38,7 +38,7 @@ import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
 import { WorkersToggle } from "../orchestrator/WorkersToggle";
-import { column } from "./layout";
+import { chatWidth, column } from "./layout";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
@@ -163,7 +163,7 @@ export function ConversationsView({ className }: { className: string }) {
         <div
           ref={msgs}
           id="msgs"
-          className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : selected === USAGE ? "w-full max-w-245 px-7" : "max-w-170 px-8"}`}
+          className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : selected === USAGE ? "w-full max-w-245 px-7" : `w-full ${chatWidth} px-8`}`}
         >
           <SelectedView />
           {/* on Reminders the chip sticks to the bottom of the scroller */}

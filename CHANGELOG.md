@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **Conversations**: the chat column grows with the window, from the old 680px up to 1200px, so a wide window no longer leaves the messages in a narrow strip
 - **Pairing a phone starts with the camera**: Scan the code is the main button on the phone, pasting the line sits behind Paste the line instead. While it connects the button shows a spinner, and a failed pairing says why (#174)
 - **Add phone keeps its code fresh**: a pairing works for 10 minutes, so the QR code and line in Settings › Machines are replaced by new ones every 9 minutes while they show (#174)
  
