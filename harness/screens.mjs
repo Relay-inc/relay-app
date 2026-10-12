@@ -94,6 +94,12 @@ const VIEWS = {
     await page.locator("button:has(span.font-semibold)").nth(1).click(); // the row that needs you
     await waitText("Always allow"); // the card, with the next pending poll
   },
+  // Settings › Updates, Install and restart pressed: the download's progress
+  "settings-updates-install": async () => {
+    await settingsPage("Updates");
+    await click("Install and restart");
+    await waitText("55%");
+  },
   // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
     await settingsPage("Machines", null, "phone");
@@ -615,7 +621,7 @@ const VIEWS = {
     await waitText("From Relay");
   },
   ...Object.fromEntries(
-    ["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [
+    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Updates"].map(tab => [
       `settings-${tab.toLowerCase()}`,
       () => settingsPage(tab),
     ]),
@@ -652,6 +658,14 @@ const VIEWS = {
   ),
   "settings-integration-mail-experimental": () => settingsPage("Integrations", "Mail", "mailexp"),
   "settings-integration-calendar": () => settingsPage("Integrations", "Calendar", "calendar"),
+  // Commonwealth's page with a team brain to join, then after Join: the report of `commonwealth join` (PR team-brain-join)
+  "settings-integration-commonwealth": () => settingsPage("Integrations", "Commonwealth", "brain"),
+  "settings-commonwealth-joined": async () => {
+    await settingsPage("Integrations", "Commonwealth", "brain");
+    await page.fill("#cwremote", "git@github.com:northwind/brain.git");
+    await click("Join");
+    await settle(page);
+  },
   // Claude Code's row folded open: no extra accounts yet, then two with the work one active
   "settings-agent-claude": async () => {
     await settingsPage("Agents");
@@ -680,6 +694,42 @@ const VIEWS = {
     await settingsPage("Projects");
     await unfold("Northwind Portal");
     await intoView("Rounds");
+  },
+  // Settings › Plugins with the example plugin (its view found, one tool allowed), and its own page: how the server starts,
+  // the secrets (one stored in the keychain) and the tools
+  "settings-plugins-list": () => settingsPage("Plugins", undefined, "plugins"),
+  "settings-plugin": async () => {
+    await settingsPage("Plugins", "Dice", "plugins");
+  },
+  // the same, scrolled to the tools: the allowed one is listed by name until a test lists them all
+  "settings-plugin-tools": async () => {
+    await settingsPage("Plugins", "Dice", "plugins");
+    await intoView("Switch on the tools");
+  },
+  // the example plugin's view in the middle column: the frame is up (ui/initialize done) and a roll went through the
+  // bridge to the server's tool
+  "plugin-view": async () => {
+    await open(page, server.url, { fixture: "plugins", sel: "__plugin:example" });
+    const view = page.frameLocator("iframe[title=Dice]");
+    await view.getByText(/^Ready/).waitFor();
+    await view.getByRole("button", { name: "Roll" }).click();
+    await view.getByText("Rolled 4 on a d6").waitFor();
+    await settle(page);
+  },
+  "plugin-view-dark": async () => {
+    await open(page, server.url, { fixture: "plugins-dark", sel: "__plugin:example" });
+    const view = page.frameLocator("iframe[title=Dice]");
+    await view.getByText(/^Ready/).waitFor();
+    await view.getByRole("button", { name: "Roll" }).click();
+    await view.getByText("Rolled 4 on a d6").waitFor();
+    await settle(page);
+  },
+  // a plugin with two views shows a tab per view; picking the second one loads that view in the frame (#189)
+  "plugin-view-tabs": async () => {
+    await open(page, server.url, { fixture: "plugins", sel: "__plugin:example" });
+    await page.getByRole("radio", { name: "History" }).click();
+    await page.frameLocator("iframe[title=History]").getByText(/^Ready/).waitFor();
+    await settle(page);
   },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");

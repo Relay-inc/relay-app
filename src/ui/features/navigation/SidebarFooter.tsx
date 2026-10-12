@@ -8,7 +8,7 @@ const BTN =
 const GLYPH = "glyph size-4 flex-none";
 const DOT = { "": "bg-ok", soon: "bg-soon", late: "bg-late" };
 
-/** The footer bar: what Relay records when it does (RecordingRow), the Relay mark, the usage button with its status dot, the light/dark toggle and the settings button. */
+/** The footer bar: what Relay records when it does (RecordingRow), the Relay mark, the usage button with its status dot, the light/dark toggle and the settings button, with a dot when there is a Relay update. */
 export function SidebarFooter({
   selected,
   dark,
@@ -17,11 +17,13 @@ export function SidebarFooter({
   onUsage,
   onTheme,
   onSettings,
+  update,
 }: {
   selected: boolean; // the usage view is open
   dark: boolean; // the page is dark: the toggle offers light
   tip: string; // the usage button's tooltip
   level: "" | "soon" | "late"; // "" shows no dot
+  update: string; // a newer Relay version: a dot on the settings button, "" for none
   onUsage: () => void;
   onTheme: () => void;
   onSettings: () => void;
@@ -50,11 +52,14 @@ export function SidebarFooter({
         </button>
         <button
           className={BTN}
-          title={t("nav.settingsTooltip")}
+          title={update ? t("nav.updateTooltip", { version: update }) : t("nav.settingsTooltip")}
           aria-label={t("nav.settingsLabel")}
           onClick={onSettings}
         >
           <Icon name="gear" className={GLYPH} />
+          <span
+            className={`absolute bottom-1.25 right-1.25 size-1.5 rounded-full bg-accent ring-[1.5px] ring-sidebar ${update ? "opacity-100" : "opacity-0"}`}
+          />
         </button>
       </div>
     </div>

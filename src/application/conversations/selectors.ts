@@ -3,7 +3,7 @@ import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
-import { WAIT, REM, PRS, MAIL, BRAIN, USAGE, isView, reviewOf } from "../../domain/navigation/views";
+import { WAIT, REM, PRS, MAIL, BRAIN, USAGE, isView, pluginIdOf, reviewOf } from "../../domain/navigation/views";
 import { useWorkspaceStore } from "../workspace/store";
 import { useNavigationStore } from "../navigation/store";
 import { ghOn, settings } from "../settings/settings";
@@ -129,13 +129,16 @@ export function chatBar(key: string) {
   };
   // a review of Today's work in progress: named by its PR, under its project
   const review = reviewOf(key) ? useReviewStore.getState().reviews[reviewOf(key)] : undefined;
+  const pluginId = pluginIdOf(key);
   const viewName = board
     ? board.name
-    : VIEW_NAMES[key]
-      ? t(VIEW_NAMES[key])
-      : review
-        ? `${t("today.kind.review")} ${review.title}`
-        : "";
+    : pluginId !== undefined
+      ? (settings().plugins?.find(plugin => plugin.id === pluginId)?.name ?? "")
+      : VIEW_NAMES[key]
+        ? t(VIEW_NAMES[key])
+        : review
+          ? `${t("today.kind.review")} ${review.title}`
+          : "";
   const linkedRef = toolProject ? settings().boards?.[toolProject] : undefined;
   const linked = linkedRef && provider(linkedRef.provider);
   return {
@@ -145,7 +148,7 @@ export function chatBar(key: string) {
     projectName,
     img: toolProject ? (useWorkspaceStore.getState().icons[toolProject]?.img ?? "") : "",
     tint: context ? contextTint(context) : ("" as const),
-    icon: tool ? "" : (VIEW_ICONS[key] ?? ""),
+    icon: tool ? "" : pluginId !== undefined ? "puzzle" : (VIEW_ICONS[key] ?? ""),
     title: session ? session.title : label(key),
     renamable: !!conversation,
     // the orchestrator's coordinator reads like a view: its name and what runs, no title, no project to move it to

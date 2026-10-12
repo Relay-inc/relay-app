@@ -7,7 +7,8 @@ import {
   isTerminal,
   boardKey,
 } from "../domain/navigation/keys";
-import { WAIT, PRS, MAIL, BRAIN, isView } from "../domain/navigation/views";
+import { WAIT, PRS, MAIL, BRAIN, isView, pluginIdOf } from "../domain/navigation/views";
+import { shownPlugins } from "../domain/plugins/rules";
 import type { Settings } from "../domain/settings/types";
 import * as backend from "../infrastructure/backend";
 import { storage } from "../infrastructure/storage";
@@ -27,7 +28,7 @@ import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./c
 import { closeChat } from "./conversations/actions";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
-import { select, newHere } from "./navigation/navigation";
+import { select, newHere, watchUpdate } from "./navigation/navigation";
 import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
@@ -49,6 +50,11 @@ import { loadRetries, onRetryEvent } from "./conversations/retry";
 const selected = () => useNavigationStore.getState().selected;
 const cs = () => useConversationsStore.getState();
 
+// a plugin view the sidebar no longer shows: the plugin was switched off, removed, or has no view
+const pluginDown = (key: string) => {
+  const id = pluginIdOf(key);
+  return id !== undefined && !shownPlugins(settings().plugins).some(plugin => plugin.id === id);
+};
 // a board the sidebar no longer shows: its integration was switched off or lost its token
 const boardDown = (key: string) => {
   const view = opened(key);
@@ -82,6 +88,7 @@ async function settingsChanged(next: Settings) {
     loadMails();
   }
   if (calendarChanged) loadMeetings();
+  if (pluginDown(selected())) select(WAIT);
   checkBoards().then(() => {
     if (boardDown(selected())) select(WAIT);
     loadSnapshot();
@@ -111,6 +118,7 @@ function listenToBackend() {
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
   backend.onMenu(onMenu);
+  watchUpdate();
   backend.onOrch(event => {
     onOrchEvent(event);
     if (event.type === "worker") onPipelineWorker(event.worker);
@@ -202,6 +210,7 @@ const selectedIsGone = () => {
   return (
     (!isView(key) && !cs().chats[key] && !terminalOf(key)) ||
     boardDown(key) ||
+    pluginDown(key) ||
     (key === PRS && !ghOn()) ||
     (key === MAIL && !mailOn())
   );

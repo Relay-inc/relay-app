@@ -54,8 +54,9 @@ fn hit(reg: &Registry, repo: &str) -> Option<Hit> {
 pub fn resolve(reg: &Registry, repos: &[String]) -> Option<String> { route(reg, repos).map(|(b, _)| b) }
 /// The brain and the repo that routed to it. That repo is the session's COMMONWEALTH_SOURCE: a vault session runs in the
 /// vault, and without it Commonwealth files every note under "vault".
-// ponytail: a project with several routed repos (o2o) files under the first one, sorted. Upgrade: a per-project
-// source in .relay/config.json, if one repo is the wrong home.
+// ponytail: a project with several routed repos (o2o) gets the first one, sorted, as its source. Since Commonwealth 0.7
+// the session also passes the project name (COMMONWEALTH_PROJECT), which files the notes when the brain's registry
+// knows that name; the repo only decides when it doesn't.
 fn route(reg: &Registry, repos: &[String]) -> Option<(String, String)> {
     let hits: Vec<(&String, Hit)> = repos.iter().filter_map(|r| Some((r, hit(reg, r)?))).collect();
     if hits.iter().any(|(_, h)| matches!(h, Hit::Deny)) { return None; }
@@ -144,9 +145,30 @@ pub fn act(cli: &str, path: &str, brain: &str, verb: &str, ids: &[String]) -> Re
     Err(format!("commonwealth {verb}: {}", format!("{}\n{}", String::from_utf8_lossy(&o.stderr).trim(), String::from_utf8_lossy(&o.stdout).trim()).trim()))
 }
 
+/// `commonwealth join <remote>`: clone a team brain and route the orgs its project list names to it (Commonwealth 0.8).
+/// Its report on success, its failure text otherwise. A remote that could pass as a flag is refused.
+pub fn join(cli: &str, path: &str, remote: &str) -> Result<String, String> {
+    let remote = remote.trim();
+    if remote.is_empty() || remote.starts_with('-') || remote.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err("not a git remote".into());
+    }
+    let o = Command::new(cli).args(["join", remote]).env("PATH", path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
+    let out = String::from_utf8_lossy(&o.stdout).trim().to_string();
+    if o.status.success() { return Ok(out); }
+    Err(format!("commonwealth join: {}", format!("{}\n{out}", String::from_utf8_lossy(&o.stderr).trim()).trim()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn join_refuses_what_is_not_a_remote() {
+        for bad in ["", "  ", "--brain=/x", "git@host:a/b.git extra", "a\nb"] {
+            assert_eq!(join("/nonexistent/commonwealth", "", bad), Err("not a git remote".into()), "{bad:?}");
+        }
+        // a real-looking remote gets past the check (and fails on the missing binary instead)
+        assert_ne!(join("/nonexistent/commonwealth", "", "git@github.com:acme/brain.git"), Err("not a git remote".into()));
+    }
     fn reg(v: Value) -> Registry {
         static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
         let dir = std::env::temp_dir().join(format!("cw-test-{}-{}", std::process::id(), N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)));

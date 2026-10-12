@@ -15,6 +15,7 @@ const VIEWS: readonly string[] = Object.values(VIEW);
 /** The one board before the providers: an old selection is read as Productive's board. */
 export const LEGACY_BOARD = "__board";
 const BOARD_PREFIX = "__board:";
+const PLUGIN_PREFIX = "__plugin:";
 const TERM_PREFIX = "t:";
 const WORK_PREFIX = "work:";
 /** What Today has in progress, shown in the sidebar under its project (domain/today/work.ts). */
@@ -22,6 +23,8 @@ export type WorkKind = "review" | "mail" | "meeting";
 
 /** A provider's board: `__board:<provider id>`. */
 export const boardKey = (provider: string) => `${BOARD_PREFIX}${provider}`;
+/** A plugin's view: `__plugin:<plugin id>`. */
+export const pluginKey = (id: string) => `${PLUGIN_PREFIX}${id}`;
 /** A session open in the terminal, not started by the app: `t:<session id>`. */
 export const termKey = (sid: string) => `${TERM_PREFIX}${sid}`;
 /** Work in progress on Today: `work:<kind>:<id>` (a review's item, a mail's key, a meeting's id). */
@@ -38,6 +41,7 @@ export const isLegacyGeneral = (key: string) => key.startsWith("general:");
 type Opened =
   | { kind: "view"; view: ViewKey }
   | { kind: "board"; provider: string }
+  | { kind: "plugin"; id: string }
   | { kind: "term"; sid: string }
   | { kind: "work"; work: WorkKind; id: string }
   | { kind: "chat"; key: string };
@@ -45,6 +49,7 @@ type Opened =
 export function opened(key: string): Opened {
   if (VIEWS.includes(key)) return { kind: "view", view: key as ViewKey };
   if (key.startsWith(BOARD_PREFIX)) return { kind: "board", provider: key.slice(BOARD_PREFIX.length) };
+  if (key.startsWith(PLUGIN_PREFIX)) return { kind: "plugin", id: key.slice(PLUGIN_PREFIX.length) };
   if (key.startsWith(TERM_PREFIX)) return { kind: "term", sid: key.slice(TERM_PREFIX.length) };
   const work = /^work:(review|mail|meeting):(.+)$/.exec(key);
   if (work) return { kind: "work", work: work[1] as WorkKind, id: work[2] };

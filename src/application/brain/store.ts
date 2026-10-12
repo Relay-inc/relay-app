@@ -11,6 +11,9 @@ type BrainState = {
   acting: boolean; // a promote or reject is running
   installing: boolean; // the plugin install in Settings is running
   installErr: string;
+  joining: boolean; // `commonwealth join` in Settings is running
+  joined: string; // its report, "" until it ran
+  joinErr: string;
   // ---------- browse and graph
   roots: BrainRoot[] | null; // the vault first, then the brains (when Commonwealth is on)
   tab: string; // the root shown, "" for the first
@@ -36,6 +39,9 @@ export const useBrainStore = makeStore<BrainState>(() => ({
   acting: false,
   installing: false,
   installErr: "",
+  joining: false,
+  joined: "",
+  joinErr: "",
   roots: null,
   tab: "",
   mode: "browse",

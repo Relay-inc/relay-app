@@ -38,9 +38,9 @@ the installed Google Chrome.
 
 ## The mock
 
-URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|orch` (orch: `orch_workers` gives three workers (running, done with a diff, silent), `c:orch` has a folded `[Relay]` report, `__harness.orchLive()` emits the live `orch` events; dark: settings theme dark; graphite: the graphite accent;
+URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|orch|plugins|plugins-dark` (orch: `orch_workers` gives three workers (running, done with a diff, silent), `c:orch` has a folded `[Relay]` report, `__harness.orchLive()` emits the live `orch` events; dark: settings theme dark; graphite: the graphite accent;
 icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; accounts: Claude Code
-on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split), `?sel=<key>` the view or
+on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split; plugins(-dark): the example plugin (packages/plugin-example) set up, so its view is in the sidebar and `?sel=__plugin:example` opens it), `?sel=<key>` the view or
 conversation the window opens on, `?link=<relay:// url>` the deep link the app was launched with (`plugin:deep-link|get_current`). On every load the mock resets localStorage to the fixture:
 the conversation list (`chats`), `sel`, and the Productive board choice (`pvProject`, `pvBoard`). The window is
 transparent over the macOS sidebar material in Tauri; the mock gives `html` the `--sidebar` token as its stand-in.
@@ -78,7 +78,7 @@ the settings but emits no `settings-changed`. `set_action_config` keeps the exte
 the actions and the entries. `drop_worktrees` removes one worktree for the switch-to conversation, none for the others.
 `mail_list` answers per `account`, every row with `other` (true for the machine-sent senders, only with the experimental
 flag). `mail_move` refuses with the flag off, as the backend does, and otherwise drops the mails from later `mail_list` pages. `calendar_meetings` gives five meetings around `NOW` (three under Waiting, the one in 4 minutes due a banner) while the calendar is on, `calendar_connect` refuses an address that is not a Google secret iCal one and counts 3 meetings otherwise. `agent_commands` per provider. `integration_thumb` returns a PNG for the fixture's
-thumb URL. `integration_call` serves Productive only (Trello and Linear throw); writes (move, status, comment, labels) patch the
+thumb URL. `plugins_list`, `plugin_*`: the one example plugin, its view served from a blob (the app uses the `relay-plugin://` scheme, which a browser cannot load), `plugin_call` rolls a fixed 4 and refuses a tool the settings do not allow. `integration_call` serves Productive only (Trello and Linear throw); writes (move, status, comment, labels) patch the
 in-memory tasks loosely, and a new task (`POST /tasks`) is added to them.
 
 ## Screenshots for a pull request
@@ -106,7 +106,7 @@ new Tauri command (`generate_handler!` in `src-tauri/src/lib.rs`) gets its answe
 
 ## Views (`screens.mjs`)
 
-80 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
+86 views. Conversation: waiting, waiting-calendar (meetings about to start and a calendar that failed), conversation-long-top, conversation-long-bottom (after `liveTail`),
 conversation-permission, conversation-action (an agent action's card), conversation-code (a code block and its header),
 conversation-steps (a tool group unfolded), composer-slash (`/` completion), composer-resolved (the pickers name the CLI's
 defaults), composer-files (a picture and two file chips waiting), conversation-files (a sent message with chips), conversation-unread (a message sent mid-turn, waiting for Claude), conversation-question, new-general-draft (the menu event `new-general`, Cmd-T), terminal. Mail and PRs:
@@ -116,9 +116,9 @@ board, card-detail (the ticket window), board-list, board-filters, board-presets
 Reminders: reminders, reminders-datepicker, reminders-form, reminders-undo. Navigation: usage, usage-details (Details folded open), cmd-k, cmd-k-project, cmd-k-file (a dropped file chip in Cmd-K),
 deep-link-ask, deep-link-open, sidebar-menu, closed-toast, project-tools (a project conversation's title bar), drawer-terminal, drawer-notes, tool-board, tool-prs (the project's board and PRs). Orchestrator: orchestrator (the coordinator with the worker board in the drawer), orchestrator-open (the report and a worker's details unfolded), orchestrator-live (a worker starts, another reports), orchestrator-worker (a worker under its project). Settings
 (settings.html at 900x700): settings-general, settings-projects, settings-agents, settings-integrations,
-settings-interface (appearance, accent, terminal), settings-sidebar, settings-permissions (Settings › General › Permissions, Full Disk Access missing), settings-integration-productive,
+settings-interface (appearance, accent, terminal), settings-sidebar, settings-permissions (Settings › General › Permissions, Full Disk Access missing), settings-plugins (Settings › Plugins, empty), settings-plugins-list and settings-plugin (the example plugin set up: its row, its page and its tools), plugin-view and plugin-view-dark (its view in the middle column after a roll through the bridge), settings-integration-productive,
 settings-integration-github, settings-integration-mail, settings-integration-mail-experimental (the switch on),
-settings-integration-calendar, settings-agent-access, settings-agent-claude (Claude Code's row
+settings-integration-calendar, settings-integration-commonwealth, settings-commonwealth-joined (Commonwealth's page, then the report after Join), settings-agent-access, settings-agent-claude (Claude Code's row
 folded open, no extra account), settings-agent-accounts (two accounts, the account picker and auto-switch). Other: onboarding (the starter vault offered), onboarding-own (a vault of one's own), onboarding-setup (Start offers the setup interview or Skip), onboarding-setup-started (the setup conversation sent), dark-waiting,
 dark-conversation, graphite-waiting, sidebar-icons, dark-board, dark-mail, dark-usage. Recording: recording-meeting (the bar in Waiting
 for you and the sidebar's row), recording-dictation (dictation in a conversation, the row seen from Reminders).

@@ -192,6 +192,8 @@ importers:
         specifier: workspace:*
         version: link:../board-core
 
+  packages/plugin-example: {}
+
 packages:
 
   '@babel/code-frame@7.29.7':

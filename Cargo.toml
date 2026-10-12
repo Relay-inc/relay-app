@@ -1,11 +1,13 @@
 # The app (src-tauri) and the packages (packages/*: board-core and one crate per tracker, agent-core and one crate per agent).
 [workspace]
 members = ["src-tauri", "mobile/src-tauri", "packages/*"]
+# a Node package, not a crate (packages/*  would otherwise ask for its Cargo.toml)
+exclude = ["packages/plugin-example"]
 resolver = "2"
 
 # Relay's version, for the app and relay-server alike (a machine reports it), the same as package.json
 [workspace.package]
-version = "0.0.20"
+version = "0.0.21"
 
 [workspace.dependencies]
 serde_json = "1"

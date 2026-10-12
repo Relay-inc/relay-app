@@ -58,7 +58,7 @@ pub struct Caps {
     pub picked: bool,
     /// Can run on a work machine (Settings › Machines) and be moved there.
     pub remote: bool,
-    /// Takes the Commonwealth brain of a project (`opts.commonwealth_brain`, `opts.commonwealth_source`).
+    /// Takes the Commonwealth brain of a project (`opts.commonwealth_brain`, `opts.commonwealth_source`, `opts.commonwealth_project`).
     pub brain: bool,
 }
 
@@ -212,6 +212,10 @@ pub trait AgentProvider: Sync {
     /// Where the CLI is when the settings do not say.
     fn default_bin(&self, home: &str) -> String;
     fn detect(&self, env: &Env) -> Detect;
+    /// The npm package the CLI is published as, for its latest version (Settings › Updates).
+    fn npm_package(&self) -> Option<&'static str> { None }
+    /// The CLI's own update command, for an install outside npm and Homebrew (the native installer).
+    fn self_update(&self) -> &'static [&'static str] { &[] }
     fn models(&self) -> Vec<Choice>;
     /// Executable slash commands/skills in this vault, without starting a conversation.
     fn commands(&self, _env: &Env) -> Value { serde_json::json!([]) }

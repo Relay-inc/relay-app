@@ -7,6 +7,7 @@ import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { Proposal } from "../domain/today/capture";
 import type { RepoChanges } from "../domain/conversations/changes";
+import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../domain/settings/updates";
 import type {
   AgentSession,
   Pending,
@@ -40,6 +41,7 @@ import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
+import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -70,7 +72,15 @@ export const setSettings = (settings: Settings) => invoke<Settings>("set_setting
 export const uiLang = () => invoke<string>("ui_lang");
 /** The macOS locale in the UI language (nl-BE for nl), for dates and sorting. */
 export const uiLocale = () => invoke<string>("ui_locale");
-export const openSettingsWindow = () => invoke("open_settings_window");
+export const openSettingsWindow = (tab?: string) => invoke("open_settings_window", tab ? { tab } : {});
+/** Relay's updates (src-tauri/src/updater.rs): the last check's answer, a new check, and installing what it found
+ *  (restarts the app). */
+export const updatesStatus = () => invoke<UpdatesStatus>("updates_status");
+export const updatesCheck = () => invoke<UpdatesStatus>("updates_check");
+export const updatesInstall = () => invoke("updates_install");
+/** The agent CLIs' installed and latest versions, and updating one. */
+export const agentUpdates = () => invoke<AgentUpdate[]>("agent_updates");
+export const agentUpdate = (id: string) => invoke("agent_update", { id });
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openUrl = (url: string) => invoke("plugin:opener|open_url", { url });
 /** A banner; a click opens `key` (src-tauri/src/notify.rs). A newer banner replaces the one in its `slot`, the key
@@ -243,6 +253,7 @@ export const githubStatus = () => invoke<string>("github_status");
 // ---------- Commonwealth, the team brain
 export const commonwealthStatus = () => invoke<BrainStatus>("commonwealth_status");
 export const commonwealthInstall = () => invoke<void>("commonwealth_install");
+export const commonwealthJoin = (remote: string) => invoke<string>("commonwealth_join", { remote });
 export const commonwealthNotes = () => invoke<BrainNote[]>("commonwealth_notes");
 export const commonwealthAct = (brain: string, verb: "promote" | "reject", ids: string[]) =>
   invoke<void>("commonwealth_act", { brain, verb, ids });
@@ -309,6 +320,25 @@ export const integrationToken = (provider: string, token: string, account?: stri
   invoke("integration_token", account === undefined ? { provider, token } : { provider, token, account });
 export const integrationImport = (provider: string) =>
   invoke<Record<string, string>>("integration_import", { provider });
+
+// ---------- plugins: MCP servers and their views (src-tauri/src/plugins.rs)
+/** Which of each plugin's secrets are in the keychain: `{ id: { NAME: true } }`. */
+export const pluginsList = () => invoke<Record<string, Record<string, boolean>>>("plugins_list");
+/** A secret of a plugin into the keychain; "" removes it. */
+export const pluginSecret = (id: string, name: string, value: string) => invoke("plugin_secret", { id, name, value });
+/** Before a plugin leaves the settings: stops its server and deletes its secrets. */
+export const pluginForget = (id: string) => invoke("plugin_forget", { id });
+/** Starts the plugin afresh and lists what it offers. */
+export const pluginTest = (id: string) => invoke<PluginTest>("plugin_test", { id });
+/** Reads the plugin's view and has it served: the URL for the sandboxed frame. */
+export const pluginView = (id: string, uri?: string) =>
+  invoke<PluginViewInfo>("plugin_view", uri ? { id, uri } : { id });
+/** A tool call from the plugin's view; the backend refuses a tool that is not allowed. */
+export const pluginCall = (id: string, tool: string, args: Record<string, unknown>) =>
+  invoke<ToolResult>("plugin_call", { id, tool, args });
+/** The names of Claude Code's MCP servers that can become plugins, and importing one. */
+export const pluginImportList = () => invoke<string[]>("plugin_import_list");
+export const pluginImport = (name: string) => invoke<Plugin>("plugin_import", { name });
 
 // ---------- agent access to extensions (the vault's .relay/config.json)
 export const actionConfig = () => invoke<ActionConfig>("action_config");
@@ -423,6 +453,13 @@ export const onMailLink = (handler: (url: string) => void) => listen<string>("ma
 /** The settings window saved. */
 export const onSettingsChanged = (handler: (settings: Settings) => void) =>
   listen<Settings>("settings-changed", e => handler(e.payload));
+/** A check for Relay updates finished (the daily one too). */
+export const onUpdates = (handler: (status: UpdatesStatus) => void) =>
+  listen<UpdatesStatus>("updates", e => handler(e.payload));
+export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
+  listen<UpdateProgress>("update-progress", e => handler(e.payload));
+/** The open settings window is asked to show a page (Relay › Check for Updates). */
+export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
 /** An item of the app menu (new-general, new-project, close-chat). */
 export const onMenu = (handler: (item: string) => void) => listen<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());

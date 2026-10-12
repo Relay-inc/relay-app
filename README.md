@@ -78,7 +78,7 @@ key and what the backend lets through is in each package's README.
 
 Each tracker is one self-contained package in a pnpm workspace (`pnpm-workspace.yaml`) and a Cargo workspace
 (the root `Cargo.toml`, with `src-tauri` as a member). The app depends on them and registers them at compile
-time, no plugin loading.
+time, no plugin loading (plugins, below, are a separate thing).
 
 ```
 packages/
@@ -169,6 +169,22 @@ Settings from before the providers (a top-level `productive: { org, user }`) mov
 4. A README: how to get the key or token, what the allowlist permits.
 5. Register it: a dependency line and a `PROVIDERS` entry on each side, `src-tauri/Cargo.toml` +
    `src-tauri/src/providers.rs` and `package.json` + `src/shared/plugins.ts`, then `pnpm install`.
+
+## Plugins (MCP Apps)
+
+A plugin is an MCP server that Relay starts on this Mac and hosts the views of ([MCP Apps](https://github.com/modelcontextprotocol/ext-apps),
+spec revision 2026-01-26). Add one under Settings › Plugins (a command, arguments, environment and secrets) or import it
+from Claude Code's MCP config; saving it starts the server and lists its tools and views. Secrets live in the keychain
+(`vault-app.plugin.<id>`, one entry per name), never in `settings.json` (`plugins`) or the webview.
+
+A plugin with a `ui://` resource (`_meta.ui.resourceUri` on a tool, or a listed resource) shows in the sidebar, with a tab per view when it has more than one. Its HTML is
+served from the `relay-plugin://` scheme with the Content-Security-Policy its `_meta.ui.csp` declares (default: nothing
+but inline script and style, no network) and shown in an iframe with `sandbox="allow-scripts"`: an opaque origin, so no
+Tauri IPC and no access to the app. The view talks to Relay over postMessage (`ui/initialize`, `tools/call`,
+`ui/open-link`; `src/domain/plugins/bridge.ts`), and the backend (`src-tauri/src/plugins.rs`) runs only tools the plugin
+allows and whose `_meta.ui.visibility` includes `app`. The agent is not involved: it reaches MCP servers through Claude
+Code. Not yet: views inside conversations, display modes, model context and permissions requests (camera, microphone).
+`packages/plugin-example` is a server and view without dependencies to start from.
 
 ## Agent providers
 

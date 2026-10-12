@@ -8,10 +8,20 @@ export const boardIdOf = (key: string) => {
   const view = opened(key);
   return view.kind === "board" ? view.provider : undefined;
 };
-/** A view, a board, or a review of Today's work in progress: no conversation, no composer. */
+/** A view, a board, a plugin's view, or a review of Today's work in progress: no conversation, no composer. */
 export const isView = (key: string) => {
   const target = opened(key);
-  return target.kind === "view" || target.kind === "board" || (target.kind === "work" && target.work === "review");
+  return (
+    target.kind === "view" ||
+    target.kind === "board" ||
+    target.kind === "plugin" ||
+    (target.kind === "work" && target.work === "review")
+  );
+};
+/** The id of the plugin whose view a selection key opens, undefined for any other key. */
+export const pluginIdOf = (key: string) => {
+  const view = opened(key);
+  return view.kind === "plugin" ? view.id : undefined;
 };
 /** The Today item a review view is about, "" for any other key. */
 export const reviewOf = (key: string) => {

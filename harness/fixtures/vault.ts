@@ -295,9 +295,23 @@ export function settings(fixture: string) {
     boards: { "Northwind Portal": { provider: "productive", project: "p1", board: "f1" } },
     // off: a running pipeline would move the board's cards in every view
     pipelines: {
-      "Northwind Portal": { on: fixture.startsWith("pipeline"), mode: fixture === "pipeline-manual" ? "manual" : "auto", repo: "/Users/demo/code/northwind", base: "develop", group: "list", pick: "tl2", busy: "tl3",
-        review: "tl4", input: "tl1", merged: "tl5", label: fixture === "pipeline" ? "" : "agent", parallel: 1,
-        checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit", reviewer: "codex", rounds: 3 },
+      "Northwind Portal": {
+        on: fixture.startsWith("pipeline"),
+        mode: fixture === "pipeline-manual" ? "manual" : "auto",
+        repo: "/Users/demo/code/northwind",
+        base: "develop",
+        group: "list",
+        pick: "tl2",
+        busy: "tl3",
+        review: "tl4",
+        input: "tl1",
+        merged: "tl5",
+        label: fixture === "pipeline" ? "" : "agent",
+        parallel: 1,
+        checks: "composer install -q && vendor/bin/phpstan && vendor/bin/phpunit",
+        reviewer: "codex",
+        rounds: 3,
+      },
     },
     github: { on: true, owners: "acme" },
     mail: {
@@ -320,10 +334,29 @@ export function settings(fixture: string) {
         ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
         : { on: false, feeds: [] },
     language: "en",
-    theme: fixture === "dark" ? "dark" : "light",
+    theme: fixture === "dark" || fixture === "plugins-dark" ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
+    // the example plugin (packages/plugin-example), tested: its view is in the sidebar and its tool is allowed
+    plugins: fixture.startsWith("plugins")
+      ? [
+          {
+            id: "example",
+            name: "Dice",
+            command: "node",
+            args: ["/Users/demo/code/relay/packages/plugin-example/server.mjs"],
+            env: {},
+            secrets: ["API_KEY"],
+            on: true,
+            allowed: ["roll"],
+            views: [
+              { uri: "ui://relay-example/dice", name: "Dice" },
+              { uri: "ui://relay-example/history", name: "History" },
+            ],
+          },
+        ]
+      : [],
     favicons: { on: false, last: "", tried: {} },
     agents: {
       default: "claude",
