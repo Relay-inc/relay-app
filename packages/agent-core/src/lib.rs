@@ -58,7 +58,7 @@ pub struct Caps {
     pub picked: bool,
     /// Can run on a work machine (Settings › Machines) and be moved there.
     pub remote: bool,
-    /// Takes the Commonwealth brain of a project (`opts.commonwealth_brain`, `opts.commonwealth_source`).
+    /// Takes the Commonwealth brain of a project (`opts.commonwealth_brain`, `opts.commonwealth_source`, `opts.commonwealth_project`).
     pub brain: bool,
 }
 

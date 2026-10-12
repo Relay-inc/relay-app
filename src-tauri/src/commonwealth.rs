@@ -54,8 +54,9 @@ fn hit(reg: &Registry, repo: &str) -> Option<Hit> {
 pub fn resolve(reg: &Registry, repos: &[String]) -> Option<String> { route(reg, repos).map(|(b, _)| b) }
 /// The brain and the repo that routed to it. That repo is the session's COMMONWEALTH_SOURCE: a vault session runs in the
 /// vault, and without it Commonwealth files every note under "vault".
-// ponytail: a project with several routed repos (o2o) files under the first one, sorted. Upgrade: a per-project
-// source in .relay/config.json, if one repo is the wrong home.
+// ponytail: a project with several routed repos (o2o) gets the first one, sorted, as its source. Since Commonwealth 0.7
+// the session also passes the project name (COMMONWEALTH_PROJECT), which files the notes when the brain's registry
+// knows that name; the repo only decides when it doesn't.
 fn route(reg: &Registry, repos: &[String]) -> Option<(String, String)> {
     let hits: Vec<(&String, Hit)> = repos.iter().filter_map(|r| Some((r, hit(reg, r)?))).collect();
     if hits.iter().any(|(_, h)| matches!(h, Hit::Deny)) { return None; }
