@@ -1586,7 +1586,7 @@ const en = {
   "plug.cardInstallHint": "Run once in the plugin's folder after the download, and again after every update.",
   "plug.cardClaude": "Also add to Claude Code",
   "plug.cardClaudeHint":
-    "The agent then uses the same server, and its views match. The plugin's secrets are copied into Claude Code's own config. Registered there as <code>{name}</code>.",
+    "The agent then uses the same server, and its views match. Claude Code starts it through Relay, so no secret is stored in Claude Code's config. Registered there as <code>{name}</code>.",
   "plug.cardClaudeExists": "Claude Code already has a server called {name}: this replaces it.",
   "plug.cardWarn":
     "This plugin runs as a program on this Mac with your user's rights: it can read your files and use the network. Install only what you trust.",

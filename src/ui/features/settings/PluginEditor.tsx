@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSettingsStore } from "../../../application/settings/store";
-import { allowTool, savePlugin, testPlugin } from "../../../application/settings/plugins";
+import { allowTool, claudeHas, savePlugin, testPlugin } from "../../../application/settings/plugins";
 import { formatEnv, parseArgs, parseEnv, pluginId } from "../../../domain/plugins/rules";
 import type { Plugin, PluginTool } from "../../../domain/plugins/types";
 import { Html } from "../../components/Html";
@@ -9,6 +9,7 @@ import { AREA, buttonClass, FIELD, FIELD_CHIP, FOOTER_IN_ROW, HINT_IN_ROW } from
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { Section } from "./Section";
+import { StatusLine } from "./StatusLine";
 import { Switch } from "./Switch";
 
 const NO_PLUGINS: Plugin[] = [];
@@ -32,7 +33,26 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
   const [secrets, setSecrets] = useState<SecretRow[]>(
     (plugin?.secrets ?? []).map(secret => ({ name: secret, value: "" })),
   );
+  const [sync, setSync] = useState(plugin?.sync ?? false);
+  const [taken, setTaken] = useState(false);
   const [busy, setBusy] = useState(false);
+  // switching it on for a name Claude Code already has replaces that server: say so
+  const claudeName =
+    mcp.trim() ||
+    plugin?.id ||
+    pluginId(
+      name.trim(),
+      plugins.map(other => other.id),
+    );
+  const wasSynced = !!plugin?.sync && claudeName === (plugin.mcp ?? plugin.id);
+  useEffect(() => {
+    if (!sync || wasSynced) return;
+    let current = true;
+    void claudeHas(claudeName).then(has => current && setTaken(has));
+    return () => {
+      current = false;
+    };
+  }, [sync, wasSynced, claudeName]);
 
   const setRow = (index: number, patch: Partial<SecretRow>) =>
     setSecrets(secrets.map((row, at) => (at === index ? { ...row, ...patch } : row)));
@@ -61,6 +81,8 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
       views: plugin?.views ?? [],
       toolViews: plugin?.toolViews ?? {},
       mcp: mcp.trim() || null,
+      ...(plugin?.source ? { source: plugin.source } : {}),
+      sync,
     };
     const values = Object.fromEntries(secrets.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]));
     const ok = await savePlugin(
@@ -131,6 +153,24 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
             onChange={e => setEnv(e.target.value)}
             spellCheck={false}
           />
+        </Field>
+      </Section>
+      <Section title={t("plug.cardClaude")} rows>
+        <Field
+          label={t("plug.cardClaude")}
+          id="plugsync"
+          hint={
+            <>
+              <Html html={th("plug.cardClaudeHint", { name: claudeName })} />
+              {sync && !wasSynced && taken && (
+                <span className="mt-1 block">
+                  <StatusLine level="warn">{t("plug.cardClaudeExists", { name: claudeName })}</StatusLine>
+                </span>
+              )}
+            </>
+          }
+        >
+          <Switch id="plugsync" on={sync} onToggle={setSync} />
         </Field>
       </Section>
       <Section

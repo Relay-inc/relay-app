@@ -8,8 +8,10 @@
 // until the new one installed. Removing deletes the folder (never one outside `plugins/`).
 //
 // Claude Code can be given the same server (`claude mcp add-json --scope user`), so the agent calls the plugin's tools
-// and the inline views match. That copies the plugin's secrets into Claude Code's own config, which the user chose on the
-// confirmation card, so a save of a synced plugin writes it again (`plugin_claude_sync`).
+// and the inline views match. What it is given is not the server but a launcher, this binary as `relay --plugin-run <id>`
+// (`run` below): it reads the plugin's entry from Relay's settings and its secrets from the keychain when Claude Code
+// starts it, and runs the server with stdio passed through, so Claude Code's config holds no secret and a change of the
+// command, arguments, environment or secrets needs no new registration (the Relay app need not be running either).
 
 use serde_json::{json, Value};
 use std::os::unix::process::CommandExt;
@@ -20,6 +22,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 use crate::plugins::{entry, keychain_get, service, slug, string_list, strings, valid_env_name};
+use std::collections::HashMap;
 use crate::{fs, home, in_path, trc, trc_v, App};
 
 const MANIFEST: &str = "relay-plugin.json";
@@ -182,7 +185,7 @@ fn download(app: &AppHandle, repo: &str, rf: Option<&str>, update: Option<&str>)
         };
         let (command, args) = resolve(&work.join("tree"), &dir(app).join(&id), m["command"].as_str().unwrap(), &string_list(&m["args"]));
         let claude = m["mcp"].as_str().unwrap_or(&id).to_string();
-        let exists = fs::read_to_string(format!("{}/.claude.json", home())).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).is_some_and(|c| c["mcpServers"].get(&claude).is_some());
+        let exists = claude_has(&claude);
         fs::write(work.join("meta.json"), json!({"repo": repo, "ref": rf, "sha": sha, "id": id}).to_string()).map_err(|e| e.to_string())?;
         // what an update changes in what runs, against the manifest that sits in the installed folder
         let changed: Vec<&str> = update.and_then(|id| fs::read_to_string(dir(app).join(id).join(MANIFEST)).ok()).and_then(|t| manifest(&t).ok())
@@ -277,14 +280,39 @@ pub async fn plugin_install(app: AppHandle, stage: String, sync: bool) -> Result
 
 // ---------- Claude Code
 
-/// What Claude Code is given for the plugin: `claude mcp add-json`'s stdio server, the secrets from the keychain in its env.
-fn claude_json(cfg: &Value, id: &str) -> Value {
-    let mut env = cfg["env"].as_object().cloned().unwrap_or_default();
-    for name in string_list(&cfg["secrets"]) { if let Some(v) = keychain_get(&service(id), &name) { env.insert(name, json!(v)); } }
-    json!({"type": "stdio", "command": cfg["command"], "args": cfg["args"], "env": env})
-}
+/// What Claude Code is given for the plugin: the launcher, with no secret and no environment of its own.
+fn launcher_json(exe: &str, id: &str) -> Value { json!({"type": "stdio", "command": exe, "args": ["--plugin-run", id], "env": {}}) }
 /// The name Claude Code knows the plugin by.
 pub fn claude_name(cfg: &Value) -> String { cfg["mcp"].as_str().or(cfg["id"].as_str()).unwrap_or_default().to_string() }
+
+/// What `relay --plugin-run <id>` starts: the command, its arguments, the environment (plain variables and the secrets
+/// from `secret`) and the folder to run in. An error says what is wrong with the plugin, for stderr.
+pub fn launch_plan(settings: &Value, plugins: &Path, id: &str, secret: &dyn Fn(&str, &str) -> Option<String>) -> Result<(String, Vec<String>, HashMap<String, String>, Option<PathBuf>), String> {
+    let cfg = settings["plugins"].as_array().and_then(|l| l.iter().find(|p| p["id"] == id)).ok_or_else(|| format!("unknown plugin '{id}'"))?;
+    if cfg["on"] != true { return Err(format!("plugin '{id}' is switched off in Relay")); }
+    let mut env: HashMap<String, String> = cfg["env"].as_object().into_iter().flatten().filter_map(|(k, v)| v.as_str().map(|v| (k.clone(), v.to_string()))).collect();
+    for name in string_list(&cfg["secrets"]) {
+        let v = secret(&service(id), &name).ok_or_else(|| format!("the secret {name} of plugin '{id}' is not set: fill it in under Relay › Settings › Plugins"))?;
+        env.insert(name, v);
+    }
+    let cwd = cfg["source"].is_object().then(|| plugins.join(id));
+    Ok((cfg["command"].as_str().unwrap_or_default().to_string(), string_list(&cfg["args"]), env, cwd))
+}
+
+/// `relay --plugin-run <id>`: replace this process with the plugin's server, stdio untouched. Only returns on failure.
+pub fn run(id: &str) -> i32 {
+    let data = PathBuf::from(home()).join("Library/Application Support/be.laurentmeersman.relay");
+    let settings = fs::read_to_string(data.join("settings.json")).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null);
+    let plan = launch_plan(&settings, &data.join("plugins"), id, &|s, a| keychain_get(s, a));
+    let (command, args, env, cwd) = match plan { Ok(p) => p, Err(e) => { eprintln!("relay: {e}"); return 1; } };
+    let mut c = Command::new(&command);
+    c.args(&args).envs(&env);
+    if let Some(cwd) = cwd { c.current_dir(cwd); }
+    // exec only returns when the program could not be started
+    let e = c.exec();
+    eprintln!("relay: could not start {command}: {e}");
+    1
+}
 
 fn claude(bin: &str, path: &str, args: &[&str]) -> Result<(), String> {
     let o = Command::new(bin).args(args).env("PATH", path).stdin(Stdio::null()).output().map_err(|e| e.to_string())?;
@@ -299,16 +327,32 @@ pub fn claude_put(bin: &str, path: &str, name: &str, previous: Option<&str>, jso
     claude(bin, path, &["mcp", "add-json", "--scope", "user", name, &json.to_string()])
 }
 
-/// Register the plugin in Claude Code (replacing a server of that name), after it is saved. `previous` is the name it had
-/// before an edit changed it.
+/// Register the plugin's launcher in Claude Code (replacing a server of that name), after it is saved. `previous` is the
+/// name it had before an edit changed it.
 #[tauri::command]
 pub async fn plugin_claude_sync(app: AppHandle, id: String, previous: Option<String>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<App>();
         let cfg = entry(&state, &id)?;
-        claude_put(&crate::claude_bin(&app, &state), &state.path, &claude_name(&cfg), previous.as_deref(), &claude_json(&cfg, &id))
+        claude_put(&crate::claude_bin(&app, &state), &state.path, &claude_name(&cfg), previous.as_deref(), &launcher_json(&std::env::current_exe().map_err(|e| e.to_string())?.to_string_lossy(), &id))
     }).await.map_err(|e| e.to_string())?
 }
+
+/// Take a plugin's server out of Claude Code's user config (the sync switched off), by the name it had there.
+#[tauri::command]
+pub async fn plugin_claude_remove(app: AppHandle, name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<App>();
+        claude(&crate::claude_bin(&app, &state), &state.path, &["mcp", "remove", "--scope", "user", &name])
+    }).await.map_err(|e| e.to_string())?
+}
+
+/// Whether Claude Code's user config already has a server of that name (read from `~/.claude.json`).
+fn claude_has(name: &str) -> bool {
+    fs::read_to_string(format!("{}/.claude.json", home())).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).is_some_and(|c| c["mcpServers"].get(name).is_some())
+}
+#[tauri::command]
+pub fn plugin_claude_has(name: String) -> bool { claude_has(&name) }
 
 /// Everything a removed plugin leaves on disk: its server in Claude Code when it was synced (best effort: the user may
 /// have removed it there already) and its folder. Only a folder that is inside the plugins folder is deleted.
@@ -435,19 +479,49 @@ mod tests {
     }
 
     #[test]
-    fn claude_code_gets_the_server_and_a_rename_removes_the_old_name() {
+    fn claude_code_gets_a_launcher_and_a_rename_removes_the_old_name() {
         let d = tmp("claude");
         // a stand-in for `claude` that writes down what it was asked, so no real Claude Code config is touched
         let (bin, log) = (d.join("claude"), d.join("log"));
         fs::write(&bin, format!("#!/bin/sh\necho \"$@\" >> {}\n", log.display())).unwrap();
         fs::set_permissions(&bin, fs::Permissions::from_mode(0o755)).unwrap();
-        let cfg = json!({"id": "garmin", "mcp": "garmin-2", "command": "node", "args": ["/p/server.mjs"], "env": {"REGION": "eu"}, "secrets": []});
-        claude_put(bin.to_str().unwrap(), "/usr/bin:/bin", &claude_name(&cfg), Some("garmin"), &claude_json(&cfg, "garmin")).unwrap();
+        let cfg = json!({"id": "garmin", "mcp": "garmin-2", "command": "node", "args": ["/p/server.mjs"], "env": {"REGION": "eu"}, "secrets": ["PASSWORD"]});
+        claude_put(bin.to_str().unwrap(), "/usr/bin:/bin", &claude_name(&cfg), Some("garmin"), &launcher_json("/Apps/Relay", "garmin")).unwrap();
         let lines: Vec<String> = fs::read_to_string(&log).unwrap().lines().map(String::from).collect();
         assert_eq!(lines[0], "mcp remove --scope user garmin");
         assert_eq!(lines[1], "mcp remove --scope user garmin-2", "replace what is there");
-        assert!(lines[2].starts_with("mcp add-json --scope user garmin-2 {") && lines[2].contains("\"command\":\"node\"") && lines[2].contains("\"REGION\":\"eu\""));
+        assert_eq!(lines[2], r#"mcp add-json --scope user garmin-2 {"args":["--plugin-run","garmin"],"command":"/Apps/Relay","env":{},"type":"stdio"}"#);
+        assert!(!lines.join("\n").contains("eu") && !lines.join("\n").contains("server.mjs"), "no environment, nothing of the plugin's own");
         assert_eq!(claude_name(&json!({"id": "x"})), "x");
+        fs::remove_dir_all(&d).ok();
+    }
+
+    #[test]
+    fn the_launcher_reads_settings_and_the_keychain() {
+        let settings = json!({"plugins": [
+            {"id": "garmin", "on": true, "command": "node", "args": ["/p/server.mjs"], "env": {"REGION": "eu"}, "secrets": ["PASSWORD"], "source": {"repo": "a/b", "ref": null, "sha": "x"}},
+            {"id": "hand", "on": true, "command": "uvx", "args": [], "env": {}, "secrets": []},
+            {"id": "off", "on": false, "command": "x", "args": [], "env": {}, "secrets": []},
+        ]});
+        let keys = |s: &str, a: &str| (s == "vault-app.plugin.garmin" && a == "PASSWORD").then(|| "hunter2".to_string());
+        let plugins = Path::new("/data/plugins");
+        let (c, a, env, cwd) = launch_plan(&settings, plugins, "garmin", &keys).unwrap();
+        assert_eq!((c.as_str(), a, env.get("PASSWORD").map(String::as_str), env.get("REGION").map(String::as_str), cwd), ("node", vec!["/p/server.mjs".to_string()], Some("hunter2"), Some("eu"), Some(plugins.join("garmin"))));
+        assert_eq!(launch_plan(&settings, plugins, "hand", &keys).unwrap().3, None, "a hand-added plugin has no folder");
+        assert!(launch_plan(&settings, plugins, "nope", &keys).unwrap_err().contains("unknown"));
+        assert!(launch_plan(&settings, plugins, "off", &keys).unwrap_err().contains("switched off"));
+        assert!(launch_plan(&settings, plugins, "garmin", &|_, _| None).unwrap_err().contains("PASSWORD"));
+    }
+
+    #[test]
+    fn the_launcher_execs_the_server_with_its_environment() {
+        // the real binary path needs the app, so run the plan through a shell the way `run` does
+        let d = tmp("launch");
+        let plan = launch_plan(&json!({"plugins": [{"id": "p", "on": true, "command": "/bin/sh", "args": ["-c", "echo $REGION$PASSWORD > out"], "env": {"REGION": "eu"}, "secrets": ["PASSWORD"], "source": {"repo": "a/b", "ref": null, "sha": "x"}}]}),
+            d.parent().unwrap(), "p", &|_, _| Some("pw".into())).unwrap();
+        let cwd = d.clone();
+        assert!(Command::new(&plan.0).args(&plan.1).envs(&plan.2).current_dir(&cwd).status().unwrap().success());
+        assert_eq!(fs::read_to_string(d.join("out")).unwrap().trim(), "eupw");
         fs::remove_dir_all(&d).ok();
     }
 }

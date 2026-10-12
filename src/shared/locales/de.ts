@@ -1609,7 +1609,7 @@ export default {
   "plug.cardInstallHint": "Einmal im Ordner des Plugins nach dem Download ausgeführt und erneut nach jedem Update.",
   "plug.cardClaude": "Auch zu Claude Code hinzufügen",
   "plug.cardClaudeHint":
-    "Der Agent nutzt dann denselben Server und die Ansichten passen zusammen. Die Geheimnisse des Plugins werden in die eigene Konfiguration von Claude Code kopiert. Dort registriert als <code>{name}</code>.",
+    "Der Agent nutzt dann denselben Server und die Ansichten passen zusammen. Claude Code startet ihn über Relay, daher steht kein Geheimnis in der Konfiguration von Claude Code. Dort registriert als <code>{name}</code>.",
   "plug.cardClaudeExists": "Claude Code hat bereits einen Server namens {name}: das ersetzt ihn.",
   "plug.cardWarn":
     "Dieses Plugin läuft als Programm auf diesem Mac mit den Rechten deines Benutzers: Es kann deine Dateien lesen und das Netzwerk nutzen. Installiere nur, was du vertraust.",

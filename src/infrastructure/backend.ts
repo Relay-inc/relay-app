@@ -347,6 +347,9 @@ export const pluginGithubCheck = (id: string) => invoke<PluginCard | null>("plug
 export const pluginGithubCancel = (stage: string) => invoke("plugin_github_cancel", { stage });
 /** After the user confirmed: puts the download in place, runs its install command, answers with the entry to save. */
 export const pluginInstall = (stage: string, sync: boolean) => invoke<Plugin>("plugin_install", { stage, sync });
+/** Takes a server out of Claude Code's user config, and whether it has one of that name. */
+export const pluginClaudeRemove = (name: string) => invoke("plugin_claude_remove", { name });
+export const pluginClaudeHas = (name: string) => invoke<boolean>("plugin_claude_has", { name });
 /** Registers the plugin in Claude Code; `previous` is the name it had there before an edit. */
 export const pluginClaudeSync = (id: string, previous?: string) => invoke("plugin_claude_sync", { id, previous });
 

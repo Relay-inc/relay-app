@@ -49,13 +49,17 @@ export async function savePlugin(plugin: Plugin, values: Record<string, string>,
     await put(known ? plugins().map(other => (other.id === plugin.id ? plugin : other)) : [...plugins(), plugin]);
     for (const [name, value] of Object.entries(values)) if (value) await backend.pluginSecret(plugin.id, name, value);
     await readSecrets();
-    // a plugin Claude Code has too is written there again, with the secrets just saved and under a changed name
+    // Claude Code gets a launcher that reads the plugin's entry and secrets itself, so a save only matters to it when the
+    // switch changed or the name it knows the plugin by did
     let synced: Message | null = null;
-    if (plugin.sync) {
-      const was = before ? (before.mcp ?? before.id) : undefined;
-      await backend.pluginClaudeSync(plugin.id, was !== (plugin.mcp ?? plugin.id) ? was : undefined).catch(error => {
-        synced = fail(error);
-      });
+    const was = before ? (before.mcp ?? before.id) : undefined;
+    const now = plugin.mcp ?? plugin.id;
+    try {
+      if (plugin.sync && (!before?.sync || was !== now))
+        await backend.pluginClaudeSync(plugin.id, before?.sync && was !== now ? was : undefined);
+      else if (!plugin.sync && before?.sync && was) await backend.pluginClaudeRemove(was);
+    } catch (error) {
+      synced = fail(error);
     }
     say(plugin.id, synced ?? { text: t("plug.saved"), ok: true });
     return true;
@@ -192,3 +196,6 @@ export async function updatePlugin(card: PluginCard) {
     return false;
   }
 }
+
+/** Whether Claude Code already has a server of that name (switching the sync on then replaces it). */
+export const claudeHas = (name: string) => backend.pluginClaudeHas(name).catch(() => false);

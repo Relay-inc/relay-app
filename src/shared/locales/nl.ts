@@ -1593,7 +1593,7 @@ export default {
   "plug.cardInstallHint": "Eenmalig uitgevoerd in de map van de plug-in na het downloaden, en opnieuw na elke update.",
   "plug.cardClaude": "Ook toevoegen aan Claude Code",
   "plug.cardClaudeHint":
-    "De agent gebruikt dan dezelfde server en de weergaven komen overeen. De geheimen van de plug-in worden gekopieerd naar de eigen config van Claude Code. Daar geregistreerd als <code>{name}</code>.",
+    "De agent gebruikt dan dezelfde server en de weergaven komen overeen. Claude Code start hem via Relay, dus er staat geen geheim in de config van Claude Code. Daar geregistreerd als <code>{name}</code>.",
   "plug.cardClaudeExists": "Claude Code heeft al een server met de naam {name}: dit vervangt die.",
   "plug.cardWarn":
     "Deze plug-in draait als programma op deze Mac met de rechten van je gebruiker: hij kan je bestanden lezen en het netwerk gebruiken. Installeer enkel wat je vertrouwt.",
