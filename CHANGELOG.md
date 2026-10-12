@@ -13,22 +13,21 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.21] - 2026-10-12
+
 ### Added
 
-- **Join a team brain from Settings**: Settings › Integrations › Commonwealth has a Team brain field. Paste the brain's repository and Join runs `commonwealth join`, which clones it and routes the repositories of its projects to it; the report shows under the field. Needs Commonwealth 0.8
+- **Join a team brain from Settings**: Settings › Integrations › Commonwealth has a Team brain field. Paste the brain's repository and Join runs `commonwealth join`, which clones it and routes the repositories of its projects to it; the report shows under the field. Needs Commonwealth 0.8 (#186)
 - **Vault setup**: after Start, Relay offers to set up the new vault with Claude (or Skip). A first conversation interviews you about yourself, your contexts, people, projects and how Claude should think along, and writes the answers into the vault; Productive projects can become project notes. Run it again from Conversation › Set Up Vault (#182)
 
 ### Changed
 
-- **Commonwealth notes file under the conversation's project**: a conversation about a project that routes to a brain also passes the project's name (`COMMONWEALTH_PROJECT`). Commonwealth 0.7 matches it against the brain's project list, so notes from a vault conversation about o2o land in `o2o/` instead of under the first o2o repo, and a name the brain doesn't know falls back to the repo as before
+- **Commonwealth notes file under the conversation's project**: a conversation about a project that routes to a brain also passes the project's name (`COMMONWEALTH_PROJECT`). Commonwealth 0.7 matches it against the brain's project list, so notes from a vault conversation about o2o land in `o2o/` instead of under the first o2o repo, and a name the brain doesn't know falls back to the repo as before (#185)
 
 ### Fixed
 
 - **Permission cards for Claude**: a tool call or question that needs the user shows its card again and waits for the answer. The desktop answered every request as unsupported, so a vault without allow rules or auto mode had every edit refused, on this Mac and on a work machine
 - **Auto mode by default**: a conversation whose Claude Code settings set no `defaultMode` starts in auto, as a terminal window does, instead of `-p`'s manual mode that asks for every edit. A mode set in the user's or the vault's settings stays, and a work machine gets auto when this Mac sets none
-
-### Fixed
-
 - **Old Claude Code**: a conversation on a Claude Code older than 2.1.294 now stops with "run `claude update`" instead of failing every turn on `unknown option '--thinking-display'`
 
 ## [0.0.20] - 2026-10-12
@@ -428,7 +427,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...HEAD
+[0.0.21]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/Relay-inc/relay-app/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/Relay-inc/relay-app/compare/v0.0.17...v0.0.18
