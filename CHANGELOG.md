@@ -15,6 +15,10 @@ a PR. Versions follow
 
 ## [0.0.23] - 2026-10-12
 
+### Added
+
+- **Arrows in a long conversation**: scrolled up from the end, an arrow above the composer takes you down to the latest and follows the stream again, with a dot when output came in while you read back. A screen away from the top, an arrow beside the messages takes you back to the first one (#183)
+
 ### Fixed
 
 - **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back (#201)
@@ -44,7 +48,6 @@ a PR. Versions follow
 
 - **Join a team brain from Settings**: Settings › Integrations › Commonwealth has a Team brain field. Paste the brain's repository and Join runs `commonwealth join`, which clones it and routes the repositories of its projects to it; the report shows under the field. Needs Commonwealth 0.8 (#186)
 - **Vault setup**: after Start, Relay offers to set up the new vault with Claude (or Skip). A first conversation interviews you about yourself, your contexts, people, projects and how Claude should think along, and writes the answers into the vault; Productive projects can become project notes. Run it again from Conversation › Set Up Vault (#182)
-- **Arrows in a long conversation**: scrolled up from the end, an arrow above the composer takes you down to the latest and follows the stream again, with a dot when output came in while you read back. A screen away from the top, an arrow beside the messages takes you back to the first one
 
 ### Fixed
 
