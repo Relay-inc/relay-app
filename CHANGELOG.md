@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **Brain graph**: the six most common kinds get a colour instead of three, and links within one kind take its colour. Hovering a note fades the rest back, lights its links in its colour and names it on a pill, with the note's card in the corner instead of under the pointer. Dots stay solid when faded, so links no longer show through them, and the hovered note is drawn on top in its colour. Names fade in as you zoom, a dot can be dragged and the graph follows, a fresh layout grows in and Fit glides there
 - **Conversations**: the chat column grows with the window, from the old 680px up to 1200px, so a wide window no longer leaves the messages in a narrow strip
 - **Pairing a phone starts with the camera**: Scan the code is the main button on the phone, pasting the line sits behind Paste the line instead. While it connects the button shows a spinner, and a failed pairing says why (#174)
 - **Add phone keeps its code fresh**: a pairing works for 10 minutes, so the QR code and line in Settings › Machines are replaced by new ones every 9 minutes while they show (#174)

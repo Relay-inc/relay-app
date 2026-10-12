@@ -46,10 +46,13 @@
   --card-edge-hover: rgba(0, 0, 0, 0.16);
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 6px rgba(0, 0, 0, 0.04);
   --card-shadow-hover: 0 2px 4px rgba(0, 0, 0, 0.06), 0 8px 20px rgba(0, 0, 0, 0.07);
-  /* the Brain graph's kinds, in this order (validated for colour-blind readers, 3 at most in a scatter of dots) */
+  /* the Brain graph's kinds, in this order: the six most common kinds, the rest grey */
   --viz-1: #2a78d6;
   --viz-2: #eb6834;
   --viz-3: #1baf7a;
+  --viz-4: #8f5bd8;
+  --viz-5: #d4488e;
+  --viz-6: #c28a00;
   --r: 8px;
   --ease: ease-out;
   --d: 150ms;
@@ -105,6 +108,9 @@
     --viz-1: #3987e5;
     --viz-2: #d95926;
     --viz-3: #199e70;
+    --viz-4: #a07ae8;
+    --viz-5: #e0609f;
+    --viz-6: #d9a21b;
     --card-edge: rgba(255, 255, 255, 0.08);
     --card-edge-hover: rgba(255, 255, 255, 0.16);
     --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
@@ -160,6 +166,9 @@
   --viz-1: #3987e5;
   --viz-2: #d95926;
   --viz-3: #199e70;
+  --viz-4: #a07ae8;
+  --viz-5: #e0609f;
+  --viz-6: #d9a21b;
   --card-edge: rgba(255, 255, 255, 0.08);
   --card-edge-hover: rgba(255, 255, 255, 0.16);
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);

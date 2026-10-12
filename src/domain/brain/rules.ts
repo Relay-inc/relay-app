@@ -48,14 +48,13 @@ export function adjacency(graph: BrainGraph): number[][] {
   return out;
 }
 
-/** The kinds that get a colour: the three most common, hubs left out. A fourth colour fails colour-blind readers in a
- *  scatter of dots, so everything else is "other" (grey). */
+/** The kinds that get a colour: the six most common, hubs left out. Everything else is "other" (grey). */
 export function topKinds(nodes: GraphNode[]): string[] {
   const count = new Map<string, number>();
   for (const node of nodes) if (!node.h && node.k) count.set(node.k, (count.get(node.k) ?? 0) + 1);
   return [...count]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 3)
+    .slice(0, 6)
     .map(([kind]) => kind);
 }
 
