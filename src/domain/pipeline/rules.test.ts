@@ -11,6 +11,7 @@ import {
   inReview,
   picks,
   pipelineAt,
+  preflightOf,
   ready,
   review,
   step,
@@ -214,4 +215,15 @@ test("bare: a ticket with nothing but a title", () => {
   assert.equal(bare(v("", [note("<p>see the screenshot</p>")])), false);
   assert.equal(bare(v("", [], [{ id: "1", name: "a.png", size: 1, url: "u" }])), false);
   assert.equal(bare(v("", [note("", [{ id: "1", name: "a.png", size: 1, url: "u" }])])), false);
+});
+
+test("preflight: clear, unclear with its questions, or no verdict", () => {
+  assert.deepEqual(preflightOf('```json\n{"clear": true}\n```'), { clear: true });
+  assert.deepEqual(preflightOf('{"clear": false, "questions": [" Which page? ", "", 3, "b", "c", "d"]}'), {
+    clear: false,
+    questions: ["Which page?", "b", "c"],
+  });
+  assert.equal(preflightOf('{"clear": false, "questions": []}'), null, "unclear without a question holds nothing");
+  assert.equal(preflightOf("looks fine"), null);
+  assert.equal(preflightOf('{"clear": "yes"}'), null);
 });

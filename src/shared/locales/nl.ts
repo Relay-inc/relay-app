@@ -179,6 +179,8 @@ export default {
   "pl.noColumn": "een kolom van de pipeline staat niet meer op het bord, kijk Instellingen › Projecten na",
   "pl.notReady":
     "Niet opgepikt: het ticket heeft geen beschrijving, reacties of bestanden om van te vertrekken. Vul aan wat nodig is en zet het terug in {column}.",
+  "pl.unclear":
+    "Niet opgepikt: een agent zou hier moeten gokken. Beantwoord dit op het ticket en zet het dan terug in {column}.\n\n{questions}",
   "pl.picked": "Opgepikt door Relay: een agent bouwt dit op branch {branch}.",
   "pl.resumed": "Opnieuw opgepikt door Relay: de agent gaat verder met wat nieuw is op het ticket.",
   "pl.startFailed": "Relay kon geen agent starten op dit ticket: {error}",

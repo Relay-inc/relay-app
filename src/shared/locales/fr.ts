@@ -184,6 +184,8 @@ export default {
   "pl.noColumn": "une colonne de la pipeline n'est plus sur le tableau, vérifiez Réglages › Projets",
   "pl.notReady":
     "Pas pris : le ticket n'a ni description, ni commentaires, ni fichiers. Ajoutez ce qu'il faut et remettez-le dans {column}.",
+  "pl.unclear":
+    "Pas pris : un agent devrait deviner ici. Répondez à ces questions sur le ticket, puis remettez-le dans {column}.\n\n{questions}",
   "pl.picked": "Pris par Relay : un agent construit ceci sur la branche {branch}.",
   "pl.resumed": "Repris par Relay : l'agent continue avec ce qui est nouveau sur le ticket.",
   "pl.startFailed": "Relay n'a pas pu démarrer d'agent sur ce ticket : {error}",

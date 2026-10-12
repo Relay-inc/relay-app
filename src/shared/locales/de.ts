@@ -180,6 +180,8 @@ export default {
   "pl.noColumn": "eine Spalte der Pipeline ist nicht mehr auf dem Board, prüfe Einstellungen › Projekte",
   "pl.notReady":
     "Nicht übernommen: das Ticket hat keine Beschreibung, keine Kommentare und keine Dateien. Ergänze, was fehlt, und verschiebe es zurück nach {column}.",
+  "pl.unclear":
+    "Nicht übernommen: ein Agent müsste hier raten. Beantworte diese Fragen im Ticket und verschiebe es dann zurück nach {column}.\n\n{questions}",
   "pl.picked": "Von Relay abgeholt: ein Agent baut das auf Branch {branch}.",
   "pl.resumed": "Von Relay erneut abgeholt: der Agent macht mit dem Neuen im Ticket weiter.",
   "pl.startFailed": "Relay konnte keinen Agent für dieses Ticket starten: {error}",
