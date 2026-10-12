@@ -21,6 +21,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **Reminders in the menu bar**: the icon is the Relay mark in one colour, which follows a light or dark menu bar, with one number for what is overdue or due today, red while something is overdue. It replaces the alarm clock emoji and the two numbers (#184)
 - **Updates check quietly, twice a day**: Relay looks for an update at start and every 12 hours instead of once a day, and no longer pops a dialog. A dot on the settings button in the sidebar says there is one, and the button then opens Settings › Updates; so does Relay › Check for Updates (#188)
 
 ## [0.0.21] - 2026-10-12
@@ -30,7 +31,7 @@ a PR. Versions follow
 - **Join a team brain from Settings**: Settings › Integrations › Commonwealth has a Team brain field. Paste the brain's repository and Join runs `commonwealth join`, which clones it and routes the repositories of its projects to it; the report shows under the field. Needs Commonwealth 0.8 (#186)
 - **Vault setup**: after Start, Relay offers to set up the new vault with Claude (or Skip). A first conversation interviews you about yourself, your contexts, people, projects and how Claude should think along, and writes the answers into the vault; Productive projects can become project notes. Run it again from Conversation › Set Up Vault (#182)
 
-### Changed
+### Fixed
 
 - **Commonwealth notes file under the conversation's project**: a conversation about a project that routes to a brain also passes the project's name (`COMMONWEALTH_PROJECT`). Commonwealth 0.7 matches it against the brain's project list, so notes from a vault conversation about o2o land in `o2o/` instead of under the first o2o repo, and a name the brain doesn't know falls back to the repo as before (#185)
 
