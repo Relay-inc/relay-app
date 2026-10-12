@@ -83,6 +83,15 @@ test("a tool starts running and ends ok or with an error", () => {
   assert.equal(done.messages["c:1"][0].hunks?.[0].oldStart, 3);
 });
 
+test("an MCP tool's output stays on its item, live and from a transcript", () => {
+  const call = { type: "tool_call", id: "r1", name: "mcp__example__roll", input: { sides: 20 } } as const;
+  const output = { text: '{"value":7}', structured: { value: 7 } };
+  const { next } = run(fresh(), call, { type: "tool_result", id: "r1", error: false, output });
+  assert.deepEqual(next.messages["c:1"][0].output, output);
+  const items = toItems([call, { type: "tool_result", id: "r1", error: false, output: { text: "x" } }], () => "", t);
+  assert.deepEqual(items[0].output, { text: "x" });
+});
+
 test("a mail tool marks the conversation as touching mail, once", () => {
   const { next, effects } = run(fresh(), { type: "tool_call", id: "m", name: "mcp__relay-mail__read", input: {} });
   assert.equal(next.chats["c:1"].fromMail, true);

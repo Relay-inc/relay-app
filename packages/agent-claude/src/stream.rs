@@ -1,7 +1,7 @@
 //! Claude Code's stream-json, in and out, and its transcripts, as the contract's events.
 
 use agent_core::envelope::strip;
-use agent_core::{Event, Hunk, Image, Turn, TurnUsage, IMAGE_TYPES};
+use agent_core::{Event, Hunk, Image, ToolOutput, Turn, TurnUsage, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::path::Path;
@@ -19,11 +19,42 @@ fn user_text(c: &Value) -> String {
     c.as_str().map(String::from).unwrap_or_else(|| c.as_array().into_iter().flatten().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n\n"))
 }
 
-/// The blocks of an assistant message: text (not blank, unless it streamed already) and tool calls.
-fn assistant(content: &Value, streamed: bool, out: &mut Vec<Event>) {
+/// The blocks of an assistant message: text (not blank, unless it streamed already) and tool calls. `mcp` collects the
+/// ids of the calls to an MCP tool, the ones whose result is passed on whole.
+fn assistant(content: &Value, streamed: bool, mcp: &mut HashSet<String>, out: &mut Vec<Event>) {
     for c in content.as_array().into_iter().flatten() {
         if c["type"] == "text" && !streamed { if let Some(t) = c["text"].as_str().filter(|t| !t.trim().is_empty()) { out.push(Event::Text { text: t.into(), delta: false }); } }
-        if c["type"] == "tool_use" { out.push(Event::ToolCall { id: c["id"].as_str().unwrap_or("").into(), name: c["name"].as_str().unwrap_or("").into(), input: c["input"].clone() }); }
+        if c["type"] == "tool_use" {
+            if c["name"].as_str().is_some_and(|n| n.starts_with("mcp__")) { mcp.insert(c["id"].as_str().unwrap_or("").into()); }
+            out.push(Event::ToolCall { id: c["id"].as_str().unwrap_or("").into(), name: c["name"].as_str().unwrap_or("").into(), input: c["input"].clone() });
+        }
+    }
+}
+
+/// The most of an MCP result's text or structured content that is passed on, so one huge result cannot weigh on every event.
+const OUTPUT_MAX: usize = 1_000_000;
+
+/// What the MCP tool behind a `tool_result` block answered: its text, and `structuredContent` from the result Claude Code
+/// keeps next to it (stream-json only, and only for a message with one tool result, the one it belongs to). A part
+/// over the cap is left out, nothing at all when both are.
+fn output(block: &Value, result: &Value, alone: bool) -> Option<ToolOutput> {
+    let text = match &block["content"] {
+        Value::String(s) => s.clone(),
+        Value::Array(a) => a.iter().filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join("\n"),
+        _ => String::new(),
+    };
+    let text = if text.len() > OUTPUT_MAX { String::new() } else { text };
+    let structured = alone.then(|| result["structuredContent"].clone()).filter(|v| !v.is_null() && v.to_string().len() <= OUTPUT_MAX);
+    (!text.is_empty() || structured.is_some()).then_some(ToolOutput { text, structured })
+}
+
+/// The results of a user message as events: a call to an MCP tool brings its output.
+fn tool_results(content: &Value, result: &Value, mcp: &HashSet<String>, out: &mut Vec<Event>) {
+    let blocks: Vec<&Value> = content.as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result").collect();
+    for c in &blocks {
+        let id = c["tool_use_id"].as_str().unwrap_or("");
+        let output = mcp.contains(id).then(|| output(c, result, blocks.len() == 1)).flatten();
+        out.push(Event::ToolResult { id: id.into(), error: c["is_error"] == true, output });
     }
 }
 
@@ -46,6 +77,8 @@ pub struct State {
     streamed: HashSet<String>,
     /// a text or thinking block began and has no piece yet
     fresh: bool,
+    /// the ids of the calls to an MCP tool
+    mcp: HashSet<String>,
 }
 
 impl State {
@@ -86,16 +119,16 @@ impl State {
             }
             "assistant" => {
                 let streamed = ev["message"]["id"].as_str().is_some_and(|id| self.streamed.contains(id));
-                assistant(&ev["message"]["content"], streamed, &mut out);
+                assistant(&ev["message"]["content"], streamed, &mut self.mcp, &mut out);
                 if ev["parent_tool_use_id"].is_null() { out.extend(context(&ev["message"]["usage"])); }
             }
-            _ => out.extend(parse(&ev)),
+            _ => out.extend(parse(&ev, &self.mcp)),
         }
         out
     }
 }
 
-fn parse(ev: &Value) -> Vec<Event> {
+fn parse(ev: &Value, mcp: &HashSet<String>) -> Vec<Event> {
     let mut out = vec![];
     match ev["type"].as_str().unwrap_or("") {
         "system" if ev["subtype"] == "init" => {
@@ -126,9 +159,7 @@ fn parse(ev: &Value) -> Vec<Event> {
         "system" if ev["subtype"] == "status" && ev["status"] == "compacting" => out.push(Event::Compacting),
         "system" if ev["subtype"] == "compact_boundary" => out.push(compacted(&ev["compact_metadata"], "pre_tokens", "post_tokens")),
         "user" => {
-            for c in ev["message"]["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
-                out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
-            }
+            tool_results(&ev["message"]["content"], &ev["tool_use_result"], mcp, &mut out);
             patch(&ev["message"]["content"], &ev["tool_use_result"], &mut out);
         }
         "result" => {
@@ -165,14 +196,20 @@ fn compacted(m: &Value, pre: &str, post: &str) -> Event {
 fn harness(t: &str) -> bool { t.starts_with('<') || t.starts_with("Another Claude session sent a message") }
 
 /// One transcript line as history: the user's messages (not the harness's ones), Claude's blocks and the diffs of its edits.
-pub fn history_line(e: &Value, out: &mut Vec<Event>) {
+/// `mcp` holds the ids of the MCP calls seen so far: what a result brings is its text only (the transcript keeps no
+/// `structuredContent`), and only for a call in the same piece of the transcript as its result.
+pub fn history_line(e: &Value, mcp: &mut HashSet<String>, out: &mut Vec<Event>) {
     if e["type"] == "system" && e["subtype"] == "compact_boundary" { return out.push(compacted(&e["compactMetadata"], "preTokens", "postTokens")); }
     if e["isCompactSummary"] == true { return; } // the summary Claude wrote for itself, not something the user said
     if (e["type"] != "user" && e["type"] != "assistant") || e["isSidechain"] == true || e["isMeta"] == true { return; }
     if let Some(at) = e["timestamp"].as_str() { out.push(Event::Time { at: at.into() }); }
     let c = &e["message"]["content"];
-    if e["type"] == "assistant" { assistant(c, false, out); out.extend(context(&e["message"]["usage"])); return; }
+    if e["type"] == "assistant" { assistant(c, false, mcp, out); out.extend(context(&e["message"]["usage"])); return; }
     patch(c, &e["toolUseResult"], out);
+    // a result gives an event of its own only when it has an output to show
+    let mut results = vec![];
+    tool_results(c, &e["toolUseResult"], mcp, &mut results);
+    out.extend(results.into_iter().filter(|r| matches!(r, Event::ToolResult { output: Some(_), .. })));
     if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
     let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).map(strip).filter(|t| !harness(t)).collect();
@@ -190,7 +227,7 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
 pub fn user_times(text: &str) -> Vec<String> {
     text.lines().filter_map(|l| serde_json::from_str::<Value>(l).ok()).filter_map(|v| {
         let mut ev = vec![];
-        history_line(&v, &mut ev);
+        history_line(&v, &mut HashSet::new(), &mut ev);
         ev.iter().any(|e| matches!(e, Event::User { .. })).then(|| v["timestamp"].as_str().map(String::from)).flatten()
     }).collect()
 }
@@ -203,8 +240,8 @@ pub fn history(path: &Path, from: u64) -> (Vec<Event>, u64) {
     let mut buf = Vec::new();
     f.read_to_end(&mut buf).ok();
     let end = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0);
-    let mut out = vec![];
-    for l in String::from_utf8_lossy(&buf[..end]).lines() { if let Ok(v) = serde_json::from_str::<Value>(l) { history_line(&v, &mut out); } }
+    let (mut out, mut mcp) = (vec![], HashSet::new());
+    for l in String::from_utf8_lossy(&buf[..end]).lines() { if let Ok(v) = serde_json::from_str::<Value>(l) { history_line(&v, &mut mcp, &mut out); } }
     (out, from + end as u64)
 }
 
@@ -287,7 +324,7 @@ mod tests {
         assert_eq!(st.parse(&echo(json!("sub"), json!("toolu_1"))), vec![]); // a subagent's prompt
         // a tool result is no message of the user's
         let result = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}).to_string();
-        assert_eq!(st.parse(&result), vec![Event::ToolResult { id: "t1".into(), error: false }]);
+        assert_eq!(st.parse(&result), vec![Event::ToolResult { id: "t1".into(), error: false, output: None }]);
     }
 
     #[test]
@@ -298,12 +335,12 @@ mod tests {
         assert_eq!(ev.remove(1), Event::Resolved { model: "claude-opus-5-5".into(), effort: None });
         assert_eq!(ev[1], Event::Text { text: "Ik kijk even.".into(), delta: false });
         assert!(matches!(&ev[2], Event::ToolCall { id, name, input } if id == "toolu_1" && name == "Read" && input["file_path"] == "/v/a.md"));
-        assert_eq!(ev[3], Event::ToolResult { id: "toolu_1".into(), error: false });
-        assert_eq!(ev[4], Event::ToolResult { id: "toolu_2".into(), error: true });
+        assert_eq!(ev[3], Event::ToolResult { id: "toolu_1".into(), error: false, output: None });
+        assert_eq!(ev[4], Event::ToolResult { id: "toolu_2".into(), error: true, output: None });
         assert_eq!(ev[5], Event::Reset);
         assert!(matches!(&ev[6], Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(4200) } if u.input == 12 && u.cache_read == 300 && u.cost == Some(0.25)));
         assert_eq!(ev[7], Event::TurnEnd { ok: false, error: Some("error_max_turns".into()), usage: None, duration_ms: None });
-        assert_eq!(ev[8], Event::ToolResult { id: "toolu_3".into(), error: false });
+        assert_eq!(ev[8], Event::ToolResult { id: "toolu_3".into(), error: false, output: None });
         let lines = [" line one", " line two", "-line three", "+line 3", " line four", " line five"].map(String::from).to_vec();
         assert_eq!(ev[9], Event::Patch { id: "toolu_3".into(), hunks: vec![Hunk { old_start: 1, new_start: 1, lines }] });
         assert_eq!(ev.len(), 10); // blank text, rate-limit and unknown lines give nothing, a Read's result no patch
@@ -359,11 +396,49 @@ mod tests {
             json!({"type": "system", "subtype": "compact_boundary", "compactMetadata": {"trigger": "auto", "preTokens": 170000, "postTokens": 9000}}),
             json!({"type": "user", "isCompactSummary": true, "message": {"content": "This session is being continued from a previous conversation"}}),
             json!({"type": "assistant", "message": {"content": [], "usage": {"input_tokens": 5, "cache_read_input_tokens": 9000, "output_tokens": 20}}}),
-        ] { history_line(&l, &mut out); }
+        ] { history_line(&l, &mut HashSet::new(), &mut out); }
         assert_eq!(out, vec![
             Event::Compacted { trigger: Some("auto".into()), pre_tokens: Some(170000), post_tokens: Some(9000) },
             Event::Context { used: Some(9025), window: None },
         ]);
+    }
+
+    // what Claude Code writes for an MCP tool (checked against `claude -p` 2026-10-12): the result block holds the
+    // structured content as text, `tool_use_result` (stream-json) has it as well, the transcript's `toolUseResult` only the text
+    const ROLL: &str = r#"{"value":7,"sides":20}"#;
+    fn mcp_call(name: &str) -> Value { json!({"type": "assistant", "message": {"id": "m1", "content": [{"type": "tool_use", "id": "t1", "name": name, "input": {"sides": 20}}]}}) }
+    fn mcp_result(extra: Value) -> Value {
+        let mut line = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": ROLL}]}});
+        line.as_object_mut().unwrap().extend(extra.as_object().unwrap().clone());
+        line
+    }
+
+    #[test]
+    fn an_mcp_result_in_the_stream_brings_its_text_and_structured_content() {
+        let result = mcp_result(json!({"tool_use_result": {"content": ROLL, "structuredContent": {"value": 7, "sides": 20}}}));
+        let ev = parse_all(&[mcp_call("mcp__example__roll"), result.clone()]);
+        let want = ToolOutput { text: ROLL.into(), structured: Some(json!({"value": 7, "sides": 20})) };
+        assert_eq!(ev[1], Event::ToolResult { id: "t1".into(), error: false, output: Some(want) });
+        // not for any other tool, and what the event serialises to leaves out what is not there
+        assert_eq!(parse_all(&[mcp_call("Bash"), result])[1], Event::ToolResult { id: "t1".into(), error: false, output: None });
+        let plain = serde_json::to_value(Event::ToolResult { id: "t1".into(), error: false, output: None }).unwrap();
+        assert_eq!(plain, json!({"type": "tool_result", "id": "t1", "error": false}));
+    }
+
+    #[test]
+    fn structured_content_over_the_cap_is_left_out() {
+        let big = json!({"x": "a".repeat(OUTPUT_MAX)});
+        let ev = parse_all(&[mcp_call("mcp__example__roll"), mcp_result(json!({"tool_use_result": {"structuredContent": big}}))]);
+        assert_eq!(ev[1], Event::ToolResult { id: "t1".into(), error: false, output: Some(ToolOutput { text: ROLL.into(), structured: None }) });
+    }
+
+    #[test]
+    fn an_mcp_result_in_a_transcript_has_the_text_only() {
+        let (mut mcp, mut out) = (HashSet::new(), vec![]);
+        history_line(&mcp_call("mcp__example__roll"), &mut mcp, &mut out);
+        history_line(&mcp_result(json!({"toolUseResult": ROLL})), &mut mcp, &mut out);
+        assert_eq!(out[1], Event::ToolResult { id: "t1".into(), error: false, output: Some(ToolOutput { text: ROLL.into(), structured: None }) });
+        assert_eq!(out.len(), 2);
     }
 
     #[test]
@@ -379,7 +454,7 @@ mod tests {
     fn the_project_line_is_not_the_message() {
         let line = json!({"type": "user", "message": {"content": [{"type": "text", "text": agent_core::envelope::wrap("Relay", "", "waarom?")}]}});
         let mut out = vec![];
-        history_line(&line, &mut out);
+        history_line(&line, &mut HashSet::new(), &mut out);
         assert_eq!(out, vec![Event::User { text: "waarom?".into(), images: vec![] }]);
     }
 

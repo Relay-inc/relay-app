@@ -1,4 +1,5 @@
 import type { Hunk } from "../agents/types";
+import type { ToolOutput } from "../plugins/types";
 
 // The conversations: the app's own (with their messages, state and drafts), the terminal sessions next to them, and
 // what is waiting for the user (permission cards, questions, background sessions that block).
@@ -49,6 +50,8 @@ export type Item = {
   end?: number;
   /** the change a file tool made, with line numbers, when the provider reports it (Claude Code) */
   hunks?: Hunk[];
+  /** a call to an MCP tool: what it answered, for the plugin view shown under the call (Claude Code only) */
+  output?: ToolOutput;
 };
 export type Chat = {
   key: string;

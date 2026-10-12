@@ -50,7 +50,7 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
             }
             if m["stopReason"] == "error" { ev.push(Event::Error { text: m["errorMessage"].as_str().unwrap_or("pi error").into() }); }
         }
-        "toolResult" => ev.push(Event::ToolResult { id: m["toolCallId"].as_str().unwrap_or("").into(), error: m["isError"] == true }),
+        "toolResult" => ev.push(Event::ToolResult { id: m["toolCallId"].as_str().unwrap_or("").into(), error: m["isError"] == true, output: None }),
         _ => {}
     }
     if ev.is_empty() { return; }

@@ -75,7 +75,7 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
         "function_call_output" | "custom_tool_call_output" => {
             let o = args(&p["output"]);
             let code = o["metadata"]["exit_code"].as_i64().or(o["exit_code"].as_i64());
-            ev.push(Event::ToolResult { id: p["call_id"].as_str().unwrap_or("").into(), error: code.is_some_and(|c| c != 0) || o["success"] == false });
+            ev.push(Event::ToolResult { id: p["call_id"].as_str().unwrap_or("").into(), error: code.is_some_and(|c| c != 0) || o["success"] == false, output: None });
         }
         _ => {}
     }
@@ -243,11 +243,11 @@ mod tests {
         let ev: Vec<Event> = all.into_iter().filter(|e| !matches!(e, Event::Time { .. })).collect();
         assert_eq!(ev[0], Event::User { text: "Wat staat er open?".into(), images: vec![Some(Image { media_type: "image/png".into(), data: "AA==".into() })] });
         assert_eq!(ev[1], Event::ToolCall { id: "call_1".into(), name: "Bash".into(), input: json!({"command": "ls -la"}) });
-        assert_eq!(ev[2], Event::ToolResult { id: "call_1".into(), error: false });
+        assert_eq!(ev[2], Event::ToolResult { id: "call_1".into(), error: false, output: None });
         assert_eq!(ev[3], Event::ToolCall { id: "call_2".into(), name: "Bash".into(), input: json!({"command": "rg todo"}) });
-        assert_eq!(ev[4], Event::ToolResult { id: "call_2".into(), error: true });
+        assert_eq!(ev[4], Event::ToolResult { id: "call_2".into(), error: true, output: None });
         assert!(matches!(&ev[5], Event::ToolCall { id, name, input } if id == "call_3" && name == "Edit" && input["file_path"] == "/v/Inbox.md"));
-        assert_eq!(ev[6], Event::ToolResult { id: "call_3".into(), error: false });
+        assert_eq!(ev[6], Event::ToolResult { id: "call_3".into(), error: false, output: None });
         assert_eq!(ev[7], Event::Text { text: "Drie dingen.".into(), delta: false });
         assert_eq!(ev.len(), 8); // no environment context, reasoning, event_msg copies or other types
         assert_eq!(history(&p, next).0.len(), 0);

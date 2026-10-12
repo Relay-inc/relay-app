@@ -32,7 +32,7 @@ export type AgentEvent =
   | { type: "text"; text: string; delta: boolean }
   | { type: "thinking"; text: string; delta: boolean }
   | { type: "tool_call"; id: string; name: string; input: any }
-  | { type: "tool_result"; id: string; error: boolean }
+  | { type: "tool_result"; id: string; error: boolean; output?: { text: string; structured?: any } } // output: what an MCP tool answered (Claude Code only)
   | { type: "patch"; id: string; hunks: Hunk[] } // the change a file tool made, when the provider reports it
   | { type: "permission"; request: PermissionRequest }
   | { type: "turn_end"; ok: boolean; error?: string | null; usage?: TurnUsage | null; duration_ms?: number | null }

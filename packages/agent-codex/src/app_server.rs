@@ -139,7 +139,7 @@ impl State {
                         let s: Vec<&str> = it["summary"].as_array().into_iter().flatten().filter_map(|x| x.as_str()).collect();
                         out.extend(self.piece(id, &s.join("\n\n"), true));
                     }
-                    _ if tool_call(it).is_some() => { self.changes.remove(id); out.push(Event::ToolResult { id: id.into(), error: failed(it) }); }
+                    _ if tool_call(it).is_some() => { self.changes.remove(id); out.push(Event::ToolResult { id: id.into(), error: failed(it), output: None }); }
                     _ => {}
                 }
             }
@@ -220,15 +220,15 @@ mod tests {
         let Some(Event::Permission { request: r }) = it.next() else { panic!() };
         assert_eq!((r.kind.as_str(), r.tool_name.as_str(), r.relay, r.tool_use_id.as_deref()), ("tool", "Bash", true, Some("v2:7")));
         assert_eq!(r.input["command"], "ls -la");
-        assert_eq!(it.next(), Some(&Event::ToolResult { id: "call_1".into(), error: false }));
+        assert_eq!(it.next(), Some(&Event::ToolResult { id: "call_1".into(), error: false, output: None }));
         assert!(matches!(it.next(), Some(Event::ToolCall { name, input, .. }) if name == "Edit" && input["file_path"] == "/v/Inbox.md"));
         let Some(Event::Permission { request: r }) = it.next() else { panic!() };
         assert_eq!((r.tool_name.as_str(), r.tool_use_id.as_deref()), ("Edit", Some("v2:\"req-8\"")));
         assert_eq!(r.input["file_path"], "/v/Inbox.md"); // from the item that started before the request
         assert!(r.input["diff"].as_str().unwrap().contains("+- [ ] bel Jelle"));
-        assert_eq!(it.next(), Some(&Event::ToolResult { id: "patch_1".into(), error: true })); // declined
+        assert_eq!(it.next(), Some(&Event::ToolResult { id: "patch_1".into(), error: true, output: None })); // declined
         assert!(matches!(it.next(), Some(Event::ToolCall { name, .. }) if name == "mcp__linear__list_issues"));
-        assert_eq!(it.next(), Some(&Event::ToolResult { id: "mcp_1".into(), error: false }));
+        assert_eq!(it.next(), Some(&Event::ToolResult { id: "mcp_1".into(), error: false, output: None }));
         assert_eq!(it.next(), Some(&Event::Text { text: "Twee".into(), delta: false }));
         assert_eq!(it.next(), Some(&Event::Text { text: " dingen.".into(), delta: true }));
         let Some(Event::TurnEnd { ok: true, error: None, usage: Some(u), duration_ms: Some(5100) }) = it.next() else { panic!() };

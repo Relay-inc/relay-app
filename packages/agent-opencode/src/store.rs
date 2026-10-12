@@ -111,7 +111,7 @@ pub fn history(rows: &[Value], from: u64) -> (Vec<Event>, u64) {
                         let (name, input) = crate::events::tool(p["tool"].as_str().unwrap_or(""), &p["state"]["input"]);
                         out.push(Event::ToolCall { id: id.clone(), name, input });
                         let st = p["state"]["status"].as_str().unwrap_or("");
-                        if matches!(st, "completed" | "error") { out.push(Event::ToolResult { id, error: st == "error" }); }
+                        if matches!(st, "completed" | "error") { out.push(Event::ToolResult { id, error: st == "error", output: None }); }
                     }
                     _ => {}
                 }
