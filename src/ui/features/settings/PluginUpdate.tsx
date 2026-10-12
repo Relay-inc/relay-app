@@ -32,13 +32,14 @@ export function PluginUpdate({ plugin }: { plugin: Plugin }) {
   const check = async () => {
     setBusy("check");
     setNote(null);
-    try {
-      const found = await checkUpdate(plugin.id);
-      setCard(found);
-      setNote(found ? { text: t("plug.updatesFound"), ok: true } : { text: t("plug.updatesUpToDate"), ok: true });
-    } catch (e) {
-      setNote({ text: String(e), ok: false });
-    }
+    // a promise chain, not try/catch: the React compiler bails out on a conditional inside a try block
+    await checkUpdate(plugin.id).then(
+      found => {
+        setCard(found);
+        setNote({ text: t(found ? "plug.updatesFound" : "plug.updatesUpToDate"), ok: true });
+      },
+      e => setNote({ text: String(e), ok: false }),
+    );
     setBusy(null);
   };
   const apply = async () => {
