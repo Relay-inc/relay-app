@@ -18,6 +18,36 @@ export type Plugin = {
   views: PluginViewRef[];
   toolViews?: Record<string, string>;
   mcp?: string | null;
+  /** For a plugin installed from GitHub: where it came from. Its folder is the backend's `plugins/<id>/`. */
+  source?: PluginSource | null;
+  /** Whether the server is also registered in Claude Code (kept in step when the plugin is saved, removed with it). */
+  sync?: boolean;
+};
+/** The repo, the ref the user asked for (null: the default branch) and the commit that was installed. */
+export type PluginSource = { repo: string; ref: string | null; sha: string };
+/** What the confirmation card shows before anything runs: a download the backend unpacked and read (an install or an
+ *  update). `command` and `args` are what will run, `install` the command run once in the plugin's folder, `claude` the
+ *  name the server would have in Claude Code and `claudeExists` whether it is taken there. `changed` (an update) names
+ *  what the new manifest changed in command, args, env, secrets and install. */
+export type PluginCard = {
+  stage: string;
+  repo: string;
+  owner: string;
+  ref: string | null;
+  sha: string;
+  date: string | null;
+  message: string;
+  id: string;
+  name: string;
+  description: string | null;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  secrets: string[];
+  install: string | null;
+  claude: string;
+  claudeExists: boolean;
+  changed: string[];
 };
 /** A tool as the test lists it: `view` is the `ui://` resource it renders in, `app` whether a view may call it. */
 export type PluginTool = { name: string; description?: string; view: string | null; app: boolean };

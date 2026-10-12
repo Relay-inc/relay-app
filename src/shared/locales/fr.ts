@@ -1594,4 +1594,41 @@ export default {
   "plug.removeHelp": "Arrête le plugin et supprime ses secrets du trousseau.",
   "plug.starting": "Démarrage de {name}…",
   "plug.retry": "Réessayer",
+  "plug.github": "Ajouter depuis GitHub",
+  "plug.githubH": "Ajouter depuis GitHub",
+  "plug.githubHelp":
+    "Un dépôt avec un relay-plugin.json à sa racine. Rien ne s'exécute avant que vous ayez vu ce qui serait lancé et confirmé.",
+  "plug.githubField": "Dépôt",
+  "plug.githubHint":
+    "<code>owner/repo</code> ou un lien github.com, avec éventuellement <code>@tag</code>, <code>@branche</code> ou <code>@commit</code>. Un dépôt privé fonctionne avec votre connexion gh.",
+  "plug.githubFetch": "Télécharger et lire",
+  "plug.fetching": "Téléchargement…",
+  "plug.cardInstallH": "Installer {name}",
+  "plug.cardUpdateH": "Mettre à jour {name}",
+  "plug.cardRepo": "Dépôt",
+  "plug.cardCommit": "Commit",
+  "plug.cardRuns": "Exécute",
+  "plug.cardRunsHint": "Lancé comme programme chaque fois que le plugin est utilisé.",
+  "plug.cardInstall": "Commande d'installation",
+  "plug.cardInstallHint":
+    "Exécutée une fois dans le dossier du plugin après le téléchargement, puis après chaque mise à jour.",
+  "plug.cardClaude": "Ajouter aussi à Claude Code",
+  "plug.cardClaudeHint":
+    "L'agent utilise alors le même serveur et les vues correspondent. Les secrets du plugin sont copiés dans la config propre de Claude Code. Enregistré là sous le nom <code>{name}</code>.",
+  "plug.cardClaudeExists": "Claude Code a déjà un serveur nommé {name} : ceci le remplace.",
+  "plug.cardWarn":
+    "Ce plugin s'exécute comme un programme sur ce Mac avec les droits de votre utilisateur : il peut lire vos fichiers et utiliser le réseau. N'installez que ce en quoi vous avez confiance.",
+  "plug.cardInstallBtn": "Installer",
+  "plug.cardUpdateBtn": "Mettre à jour",
+  "plug.cardChanged": "Modifié dans cette version : {what}",
+  "plug.installing": "Installation…",
+  "plug.cancel": "Annuler",
+  "plug.updatesH": "Mises à jour",
+  "plug.updatesHelp": "Installé depuis {repo} au commit {sha}. Relay ne met jamais un plugin à jour tout seul.",
+  "plug.updatesCheck": "Rechercher des mises à jour",
+  "plug.checking": "Vérification…",
+  "plug.updatesUpToDate": "À jour.",
+  "plug.updatesFound": "Un commit plus récent est disponible.",
+  "plug.removeHelpRepo":
+    "Arrête le plugin, supprime ses secrets du trousseau et son dossier de ce Mac. Un plugin ajouté à Claude Code y est aussi retiré.",
 } satisfies Record<Key, string>;
