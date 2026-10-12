@@ -26,6 +26,7 @@ a PR. Versions follow
 - **Forgotten projects show as Quiet**: in a vault Relay set up, a project marked Active with no work (`last`) for 30 days shows as Quiet in the project index, and Active again once work is logged. Relay rebuilds the index at start with its own copy of `build-index.py`, so vaults made by an older Relay get this too
 - **Vault updates on close are written, not proposed**: closing a conversation has Claude write what belongs in the vault straight in, with the vault's own rules and hooks. Nothing lands on Today and nothing is asked; the vault's git history is the review. Settings › General still turns it off
 - **Board pipeline: the review remembers its last round**: when Relay's review sends an agent's work back, the next round first checks each of those findings against the new code (fixed, or "Not fixed:" and blocking again) before it reviews the rest, instead of starting from scratch every round (#195)
+- **Board pipeline: the review forms its own view first**: the reviewing agent reads the ticket and the diff before the agent's own account of what it did, and treats that account as a claim to check. It also lists what it checked and found right; that list goes in the PR under the review's notes, so you know what you need not check again (#196)
 
 ## [0.0.21] - 2026-10-12
 
