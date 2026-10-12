@@ -74,6 +74,5 @@ export function snapshot(): Snapshot {
     mailProject: Object.fromEntries(mails.filter(waitsOnYou).map(mail => [mailKey(mail), mailProject(mail)])),
     timeMin: today.timeMin,
     timeFromSessions: timeFromSessionsOn(),
-    captures: Object.values(today.captures),
   };
 }
