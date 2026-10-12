@@ -13,13 +13,15 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.20] - 2026-10-12
+
 ### Changed
 
-- **Brain graph**: the six most common kinds get a colour instead of three, and links within one kind take its colour. Hovering a note fades the rest back, lights its links in its colour and names it on a pill, with the note's card in the corner instead of under the pointer. Dots stay solid when faded, so links no longer show through them, and the hovered note is drawn on top in its colour. Names fade in as you zoom, a dot can be dragged and the graph follows, a fresh layout grows in and Fit glides there
-- **Conversations**: the chat column grows with the window, from the old 680px up to 1200px, so a wide window no longer leaves the messages in a narrow strip
+- **Brain graph**: the six most common kinds get a colour instead of three, and links within one kind take its colour. Hovering a note fades the rest back, lights its links in its colour and names it on a pill, with the note's card in the corner instead of under the pointer. Dots stay solid when faded, so links no longer show through them, and the hovered note is drawn on top in its colour. Names fade in as you zoom, a dot can be dragged and the graph follows, a fresh layout grows in and Fit glides there (#178)
+- **Conversations**: the chat column grows with the window, from the old 680px up to 1200px, so a wide window no longer leaves the messages in a narrow strip (#177)
 - **Pairing a phone starts with the camera**: Scan the code is the main button on the phone, pasting the line sits behind Paste the line instead. While it connects the button shows a spinner, and a failed pairing says why (#174)
 - **Add phone keeps its code fresh**: a pairing works for 10 minutes, so the QR code and line in Settings › Machines are replaced by new ones every 9 minutes while they show (#174)
- 
+
 ### Fixed
 
 - **Scanning the pairing code crashed the Android app**: the release build stripped what the barcode scanner needs to start (#174)
@@ -28,8 +30,8 @@ a PR. Versions follow
 - **The phone app has Relay's icon** instead of Tauri's (#174)
 - **Conversations the phone starts show on this Mac too**: Relay looks for them on each machine every 5 seconds and adds them to the list, with their history and live replies, and you can carry on in them from here. While this Mac follows one, the phone gets no notification for it (#175)
 - **A Mac that runs conversations for other devices no longer shows them as open in the terminal**: those belong to the other device (its laptop or phone) and stay hidden on the machine itself (#175)
-- **Conversations on a machine could not edit or run anything**: they started in Claude Code's default mode, so every tool call outside the allow rules asked for a permission the machine could not show. They now start in the same mode as a window on this Mac (`defaultMode` in `~/.claude/settings.json`, auto for most)
- - **Reviewing your own PRs together**: Review together on your own PRs of a ticket still opened "This pull request no longer waits on you" when nobody else had a PR on that ticket. Today now knows the ticket of your own PRs too
+- **Conversations on a machine could not edit or run anything**: they started in Claude Code's default mode, so every tool call outside the allow rules asked for a permission the machine could not show. They now start in the same mode as a window on this Mac (`defaultMode` in `~/.claude/settings.json`, auto for most) (#176)
+- **Reviewing your own PRs together**: Review together on your own PRs of a ticket still opened "This pull request no longer waits on you" when nobody else had a PR on that ticket. Today now knows the ticket of your own PRs too
 
 ## [0.0.19] - 2026-10-09
 
@@ -408,7 +410,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...HEAD
+[0.0.20]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...v0.0.20
 [0.0.19]: https://github.com/Relay-inc/relay-app/compare/v0.0.18...v0.0.19
 [0.0.18]: https://github.com/Relay-inc/relay-app/compare/v0.0.17...v0.0.18
 [0.0.17]: https://github.com/Relay-inc/relay-app/compare/v0.0.16...v0.0.17
