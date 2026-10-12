@@ -837,6 +837,15 @@ const en = {
     "Relay starts with an empty vault in ~/Relay: the notes, rules and skills that give Claude a memory of your projects. Already have a vault? Choose that one instead.",
   "vault.start": "Start",
   "vault.haveOwn": "I have a vault",
+  "vault.setupTitle": "Set up your vault",
+  "vault.setupIntro":
+    "Claude asks you a few questions in a first conversation: who you are, how you split your work, the people and projects you deal with, and how it should think along. About ten minutes, every part can be skipped, and you can run it again later from Conversation › Set Up Vault.",
+  "vault.setupStart": "Set up with Claude",
+  "vault.setupSkip": "Skip",
+  "setup.title": "Set up your vault",
+  "setup.note":
+    'Setup: Claude interviews you and writes your profile, contexts, people and projects into the vault. Say "skip" to skip a part, or stop whenever you like.',
+  "setup.prompt": "Run the setup skill.",
   "vault.back": "Back",
   "vault.none": "No folder chosen",
   "vault.choose": "Choose vault folder…",

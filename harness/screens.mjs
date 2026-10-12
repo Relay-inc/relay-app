@@ -692,6 +692,19 @@ const VIEWS = {
     await open(page, server.url, { fixture: "onboarding" });
     await button("I have a vault").click();
   },
+  // Start offers the setup interview (Set up with Claude) or Skip
+  "onboarding-setup": async () => {
+    await open(page, server.url, { fixture: "onboarding" });
+    await button("Start").click();
+    await waitText("Set up with Claude");
+  },
+  // Set up with Claude: the starter vault is saved and a general conversation runs the setup skill
+  "onboarding-setup-started": async () => {
+    await open(page, server.url, { fixture: "onboarding" });
+    await button("Start").click();
+    await button("Set up with Claude").click();
+    await waitText("Run the setup skill.");
+  },
   "dark-waiting": async () => {
     await open(page, server.url, { fixture: "dark" });
     await waitText(titles.permission);

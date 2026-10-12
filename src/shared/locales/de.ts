@@ -847,6 +847,15 @@ export default {
     "Relay startet mit einem leeren Vault in ~/Relay: die Notizen, Regeln und Skills, die Claude ein Gedächtnis deiner Projekte geben. Schon einen Vault? Dann wähle ihn.",
   "vault.start": "Starten",
   "vault.haveOwn": "Ich habe einen Vault",
+  "vault.setupTitle": "Vault einrichten",
+  "vault.setupIntro":
+    "Claude stellt dir in einem ersten Gespräch ein paar Fragen: wer du bist, wie du deine Arbeit aufteilst, mit welchen Menschen und Projekten du arbeitest und wie es mitdenken soll. Etwa zehn Minuten, jeder Teil lässt sich überspringen, und du kannst es später über Gespräch › Vault einrichten erneut starten.",
+  "vault.setupStart": "Mit Claude einrichten",
+  "vault.setupSkip": "Überspringen",
+  "setup.title": "Vault einrichten",
+  "setup.note":
+    "Einrichtung: Claude befragt dich und schreibt dein Profil, deine Kontexte, Menschen und Projekte in die Vault. Sag „überspringen“, um einen Teil auszulassen, oder hör auf, wann du willst.",
+  "setup.prompt": "Führe den Setup-Skill aus.",
   "vault.back": "Zurück",
   "vault.none": "Kein Ordner gewählt",
   "vault.choose": "Vault-Ordner wählen…",
