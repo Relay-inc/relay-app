@@ -26,6 +26,7 @@ a PR. Versions follow
 - **The phone app has Relay's icon** instead of Tauri's (#174)
 - **Conversations the phone starts show on this Mac too**: Relay looks for them on each machine every 5 seconds and adds them to the list, with their history and live replies, and you can carry on in them from here. While this Mac follows one, the phone gets no notification for it (#175)
 - **A Mac that runs conversations for other devices no longer shows them as open in the terminal**: those belong to the other device (its laptop or phone) and stay hidden on the machine itself (#175)
+- **Conversations on a machine could not edit or run anything**: they started in Claude Code's default mode, so every tool call outside the allow rules asked for a permission the machine could not show. They now start in the same mode as a window on this Mac (`defaultMode` in `~/.claude/settings.json`, auto for most)
  - **Reviewing your own PRs together**: Review together on your own PRs of a ticket still opened "This pull request no longer waits on you" when nobody else had a PR on that ticket. Today now knows the ticket of your own PRs too
 
 ## [0.0.19] - 2026-10-09

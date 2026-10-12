@@ -66,9 +66,15 @@ pub fn plugins() -> Vec<(String, PathBuf)> {
 }
 /// The permission rules here (allow, deny, ask from ~/.claude/settings.json), for the machine's sessions.
 pub fn permissions() -> Value {
-    let s: Value = std::fs::read_to_string(format!("{}/.claude/settings.json", home())).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
+    rules(&std::fs::read_to_string(format!("{}/.claude/settings.json", home())).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null))
+}
+/// And the mode a window here starts in (defaultMode, auto for most): without it every tool call outside the rules
+/// asks there, over a pipe that has no card for it.
+fn rules(s: &Value) -> Value {
     let p = &s["permissions"];
-    json!({"allow": p["allow"].as_array().cloned().unwrap_or_default(), "deny": p["deny"].as_array().cloned().unwrap_or_default(), "ask": p["ask"].as_array().cloned().unwrap_or_default()})
+    let mut r = json!({"allow": p["allow"].as_array().cloned().unwrap_or_default(), "deny": p["deny"].as_array().cloned().unwrap_or_default(), "ask": p["ask"].as_array().cloned().unwrap_or_default()});
+    if let Some(m) = p["defaultMode"].as_str() { r["defaultMode"] = json!(m); }
+    r
 }
 
 /// The local side of a root. Context and plugins are assembled as a folder of symlinks in the app data (the walker
@@ -202,5 +208,12 @@ mod tests {
         assert_eq!(env[0].0, "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD");
         let (args, _) = session_args(&info, "/home/relay/repos/x");
         assert!(serde_json::from_str::<Value>(args.last().unwrap()).unwrap()["autoMemoryDirectory"].is_null(), "memory only for the vault");
+    }
+    #[test]
+    fn a_machine_session_starts_in_the_mode_of_a_window_here() {
+        let r = rules(&json!({"permissions": {"defaultMode": "auto", "allow": ["Read"], "additionalDirectories": ["/x"]}}));
+        assert_eq!(r, json!({"allow": ["Read"], "deny": [], "ask": [], "defaultMode": "auto"}));
+        assert!(rules(&json!({"permissions": {"allow": ["Read"]}})).get("defaultMode").is_none());
+        assert_eq!(rules(&Value::Null), json!({"allow": [], "deny": [], "ask": []}));
     }
 }

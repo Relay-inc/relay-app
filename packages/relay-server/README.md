@@ -19,8 +19,9 @@ going while your laptop is closed. Relay connects to it over the LAN, or over yo
   shares its conversations, cards and mirror, but may only work with conversations: no mirror files, no moving
   sessions, no updating the server, no pairing further devices. Revoking a device revokes the devices linked to it.
 
-What it does not change: an agent here runs with the same rights as on your laptop, and the permission cards still
-come to Relay. Mail never runs here (Relay answers the mail tools itself). The vault comes as an encrypted mirror (below).
+What it does not change: an agent here runs with the same rights and in the same permission mode as on your laptop
+(Relay sends the allow, deny and ask rules and `defaultMode` of `~/.claude/settings.json` with every start), and the
+permission cards still come to Relay. Mail never runs here (Relay answers the mail tools itself). The vault comes as an encrypted mirror (below).
 
 ## On a Mac, with the Relay app
 
