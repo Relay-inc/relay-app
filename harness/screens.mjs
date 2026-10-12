@@ -726,6 +726,17 @@ const VIEWS = {
           await intoView("This plugin runs as a program");
         },
       ],
+      // a hand-added plugin's page: the Claude Code switch on, for a name Claude Code already has
+      [
+        `settings-plugin-sync${dark}`,
+        async () => {
+          await settingsPage("Plugins", "Dice", `plugins${dark}`);
+          await page.locator("#plugmcp").fill("garmin");
+          await page.locator("#plugsync").click();
+          await waitText("already has a server called garmin");
+          await intoView("already has a server called garmin");
+        },
+      ],
       [
         `settings-plugin-update${dark}`,
         async () => {

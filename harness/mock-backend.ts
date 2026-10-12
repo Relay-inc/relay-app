@@ -831,7 +831,10 @@ function handle(cmd: string, a: Args): unknown {
         source: { repo: "kristoffeys/relay-plugin-garmin", ref: null, sha: "7a1e5c9d3b2f4a6081c7d9e0f1a2b3c4d5e6f708" },
       };
     case "plugin_claude_sync":
+    case "plugin_claude_remove":
       return null;
+    case "plugin_claude_has":
+      return a.name === "garmin";
     case "plugin_import_list":
       return fixture.startsWith("plugins") ? ["garmin"] : [];
     case "plugin_import":

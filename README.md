@@ -209,9 +209,13 @@ minutes, its last lines shown when it fails; a failed install puts the previous 
 page compares the ref's commit with `source.sha`; a newer one is another card (what changed in command, arguments,
 environment, secrets and install is marked), and an update is the same swap. Nothing updates by itself.
 
-With the Claude Code switch on, the server is also registered with `claude mcp add-json --scope user <name>` (a server of
-that name is replaced, the card says when there is one), so the agent calls the same server and the inline views match. Its
-secrets are copied into Claude Code's own config for that, and every save of the plugin writes it again. Removing a plugin
+With the Claude Code switch on (on the card, and on every plugin's page, hand-added ones too), the server is also
+registered with `claude mcp add-json --scope user <name>` (a server of that name is replaced, the card says when there is
+one), so the agent calls the same server and the inline views match. What Claude Code is given is a launcher, `relay
+--plugin-run <id>` (this binary, `plugin_repo::run`): when Claude Code starts it, it reads the plugin's entry from
+`settings.json` and its secrets from the keychain, and execs the server with stdio passed through. It needs no socket, so
+the Relay app need not be running, and Claude Code's config holds no secret: only a change of the plugin's MCP name or the
+switch touches it. It stops with a message on stderr when the plugin is unknown, off or a secret is not filled in. Removing a plugin
 deletes its folder (only one inside `plugins/`, symlinks resolved), its secrets, its settings entry and the Claude Code
 registration.
 
