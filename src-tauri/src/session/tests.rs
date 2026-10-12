@@ -202,9 +202,13 @@ fn pipe_traffic_stays_off_the_webview() {
     let request = json!({"type": "control_request", "request_id": "r1", "request": {"subtype": "mcp_message", "server_name": "relay-mail", "message": {"method": "tools/list"}}});
     let init_ok = json!({"type": "control_response", "response": {"subtype": "success", "request_id": "init", "response": {"commands": [{"name": "/compact"}]}}});
     let model_err = json!({"type": "control_response", "response": {"subtype": "error", "request_id": "model", "error": "nope"}});
-    run(&f, &[o(request.clone()), o(init_ok), o(model_err)], 0);
+    // a tool call that needs the user: a card, never answered over the pipe as unsupported
+    let ask = json!({"type": "control_request", "request_id": "r2", "request": {"subtype": "can_use_tool", "tool_name": "Write", "input": {"file_path": "/v/a.md", "content": "x"}, "tool_use_id": "toolu_w"}});
+    run(&f, &[o(request.clone()), o(init_ok), o(model_err), o(ask)], 0);
     assert_eq!(*f.pipes.lock().unwrap(), [json!({"id": "r1", "server": "relay-mail", "message": {"method": "tools/list"}})]);
-    assert_eq!(f.types(), ["commands", "stderr"]);
+    let cards = f.cards.lock().unwrap();
+    assert_eq!((cards.len(), cards[0].tool_name.as_str(), cards[0].request_id.as_deref()), (1, "Write", Some("r2")));
+    assert_eq!(f.types(), ["commands", "stderr", "permission"], "the card reaches the webview, the rest of the pipe does not");
     assert_eq!(f.count(), 0, "pipe traffic is no work");
 }
 

@@ -68,6 +68,15 @@ fn transcripts_in(dir: &str, vault: &str) -> String {
     if vault.is_empty() { return String::new(); } // no vault: never fall back to <config>/projects itself
     format!("{dir}/projects/{}", slug(vault))
 }
+/// A defaultMode Claude Code takes: in the account's settings, or in the vault's (.claude/settings.json and
+/// settings.local.json), where it ignores auto and bypassPermissions.
+fn mode_set(env: &Env) -> bool {
+    let mode = |f: String| std::fs::read_to_string(f).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| v["permissions"]["defaultMode"].as_str().map(String::from));
+    mode(format!("{}/settings.json", config_dir(env.home, account(env)))).is_some()
+        || ["settings.json", "settings.local.json"].iter().filter_map(|f| mode(format!("{}/.claude/{f}", env.vault)))
+            .any(|m| m != "auto" && m != "bypassPermissions")
+}
 /// The vault's transcript folder on the env's account.
 pub fn transcripts(env: &Env) -> String { transcripts_in(&config_dir(env.home, account(env)), env.vault) }
 /// The config folder a session lives in: of the accounts that have its transcript, the one written last (a
@@ -165,6 +174,9 @@ impl AgentProvider for Claude {
         if !brain.is_empty() && !source.is_empty() { cmd.env("COMMONWEALTH_SOURCE", source); }
         let ask = strs("ask");
         if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
+        // no mode set: auto, as a terminal window starts; `-p` would start in manual and ask for every edit. A work
+        // machine (opts.machine) gets the mode with this Mac's mirrored settings (src-tauri mirror.rs)
+        if env.opts["machine"] != true && !mode_set(env) { cmd.args(["--permission-mode", "auto"]); }
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }
@@ -305,6 +317,30 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
     #[test]
+    fn auto_mode_only_when_no_mode_is_set() {
+        let d = std::env::temp_dir().join(format!("relay-mode-{}", std::process::id()));
+        let (home, vault) = (d.join("home"), d.join("vault"));
+        std::fs::create_dir_all(home.join(".claude")).unwrap();
+        std::fs::create_dir_all(vault.join(".claude")).unwrap();
+        let p = PathBuf::from("/tmp/pending");
+        let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
+        let auto = |opts: &Value| {
+            let e = Env { home: home.to_str().unwrap(), vault: vault.to_str().unwrap(), opts, ..env(&p) };
+            PROVIDER.command(&e, &l).unwrap().get_args().any(|a| a == "--permission-mode")
+        };
+        let mode = |f: &Path, m: &str| std::fs::write(f, json!({"permissions": {"defaultMode": m}}).to_string()).unwrap();
+        assert!(auto(&Value::Null), "nothing set: auto");
+        assert!(!auto(&json!({"machine": true})), "a work machine takes the mirrored mode");
+        mode(&vault.join(".claude/settings.json"), "auto");
+        assert!(auto(&Value::Null), "the CLI ignores auto in a project's settings");
+        mode(&vault.join(".claude/settings.local.json"), "acceptEdits");
+        assert!(!auto(&Value::Null), "the vault's own mode stays");
+        std::fs::remove_file(vault.join(".claude/settings.local.json")).unwrap();
+        mode(&home.join(".claude/settings.json"), "manual");
+        assert!(!auto(&Value::Null), "the user's own mode stays");
+        std::fs::remove_dir_all(&d).ok();
+    }
+    #[test]
     fn spawn_args_stay_as_before() {
         let p = PathBuf::from("/tmp/pending");
         let l = Launch { key: "c:1", name: "Algemeen: x", model: "opus", effort: "high", resume: Some("abc-1"), fork: Some("def"), turn: None };
@@ -315,13 +351,13 @@ mod tests {
         assert!(!args.contains(&"--mcp-config".to_string()) && !args.iter().any(|a| a.contains("vaultperm")));
         assert_eq!(args[11], "--allowedTools");
         assert_eq!((args[17].as_str(), args[18].as_str(), args[22].as_str()), (RELAY_TOOL, "--disallowedTools", "--append-system-prompt"));
-        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--permission-mode", "auto", "--model", "opus", "--effort", "high", "--resume", "abc-1"]);
         assert!(cmd.get_envs().any(|(k, v)| k == "ANTHROPIC_API_KEY" && v.is_none()));
         assert!(cmd.get_envs().any(|(k, v)| k == "CLAUDE_CONFIG_DIR" && v.is_none()));
         assert!(!cmd.get_envs().any(|(k, _)| k == "MCP_TOOL_TIMEOUT"));
         let l = Launch { resume: None, model: "", effort: "", ..l };
         let args: Vec<String> = PROVIDER.command(&env(&p), &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
-        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--resume", "def", "--fork-session"]);
+        assert_eq!(&args[24..], ["-n", "Algemeen: x", "--replay-user-messages", "--permission-mode", "auto", "--resume", "def", "--fork-session"]);
         let at = |args: &[String], f: &str| args.iter().position(|a| a == f).unwrap();
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
