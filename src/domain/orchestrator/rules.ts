@@ -30,6 +30,62 @@ export const costumeOf = (model: string | undefined, pipeline: boolean): Costume
   const name = (model ?? "").toLowerCase();
   return (["fable", "opus", "sonnet", "haiku"] as const).find(family => name.includes(family)) ?? "plain";
 };
+const NAMES = [
+  "Pinchy",
+  "Sheldon",
+  "Snappy",
+  "Bubbles",
+  "Coral",
+  "Barnacle",
+  "Kelp",
+  "Scuttle",
+  "Nipper",
+  "Krill",
+  "Shelly",
+  "Pebble",
+  "Sandy",
+  "Marina",
+  "Gill",
+  "Finn",
+  "Pearl",
+  "Wade",
+  "Reef",
+  "Tide",
+  "Crusty",
+  "Hermie",
+  "Bisque",
+  "Paddle",
+  "Dune",
+  "Moss",
+  "Skipper",
+  "Rocky",
+  "Salty",
+  "Squirt",
+  "Mussel",
+  "Cove",
+  "Drift",
+  "Ripple",
+  "Pip",
+  "Sprocket",
+  "Clem",
+  "Nemo",
+  "Brine",
+  "Wavelet",
+  "Limpet",
+  "Urchin",
+  "Captain",
+  "Dory",
+  "Spindle",
+  "Taffy",
+  "Pickles",
+  "Bramble",
+];
+/** A worker's name, picked by its key (its random part), so it is the same everywhere and after a restart. */
+export function workerName(key: string) {
+  let hash = 2166136261; // FNV-1a
+  for (let i = 0; i < key.length; i++) hash = Math.imul(hash ^ key.charCodeAt(i), 16777619);
+  return NAMES[(hash >>> 0) % NAMES.length];
+}
 export const runningCount = (workers: Iterable<Worker>) =>
   [...workers].filter(worker => worker.state === "running").length;
 

@@ -4,7 +4,7 @@ import type { Worker, WorkerState } from "../../../domain/orchestrator/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
-import { costumeOf } from "../../../domain/orchestrator/rules";
+import { costumeOf, workerName } from "../../../domain/orchestrator/rules";
 import { Crab } from "./Crab";
 
 const STATE: Record<WorkerState, Key> = {
@@ -80,7 +80,7 @@ export function WorkerRow({
           <span className="flex-none text-xs text-tertiary tabular-nums">{when}</span>
         </div>
         <span className="text-xs text-secondary truncate">
-          {project} ·{" "}
+          <span className="font-medium text-label">{workerName(worker.key)}</span> · {project} ·{" "}
           {worker.phase ? t(worker.phase === "review" ? "orch.reviewing" : "orch.checking") : t(STATE[worker.state])}
         </span>
         {step ? (

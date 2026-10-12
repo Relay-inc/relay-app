@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Crabs for the orchestrator's workers**: each worker in the list next to the Orchestrator is a pixel crab dressed for its model (astronaut for Fable, detective for Opus, chef for Sonnet, racer for Haiku, a hard hat for a board pipeline's worker), walking while it works. A finished one carries its state mark. Settings › General › Crabs for the orchestrator's workers switches them off; reduced motion keeps them still
+- **Crabs for the orchestrator's workers**: each worker in the list next to the Orchestrator is a pixel crab dressed for its model (astronaut for Fable, detective for Opus, chef for Sonnet, racer for Haiku, a hard hat for a board pipeline's worker), walking while it works, and a name of its own (Pinchy, Barnacle, ...) that stays with it. A finished one carries its state mark. Settings › General › Crabs for the orchestrator's workers switches them off; reduced motion keeps them still
 - **Worker progress**: workers get a `step` tool and report their plan's steps as they go; the workers list shows a bar with "2/5" and the step they are on, and the coordinator sees it in `workers`
 
 ### Fixed
