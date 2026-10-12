@@ -1911,6 +1911,9 @@ fn open_settings_window(app: AppHandle, tab: Option<String>) { open_settings(&ap
 /// vite server. Any other localhost port is a local service a mail link must not reach without asking.
 fn nav_internal(url: &tauri::Url) -> bool {
     matches!(url.scheme(), "tauri" | "ipc" | "about")
+        // a plugin's view loads in its sandboxed frame from the scheme plugins.rs serves (without this the navigation is
+        // dropped and the frame stays an empty page)
+        || (url.scheme() == "relay-plugin" && url.host_str() == Some("localhost"))
         || (cfg!(debug_assertions) && url.scheme() == "http" && url.host_str() == Some("localhost") && url.port() == Some(1420))
 }
 
@@ -2139,9 +2142,9 @@ mod mail_tests {
     #[test]
     fn only_the_apps_own_pages_navigate() {
         let ok = |u: &str| super::nav_internal(&u.parse().unwrap());
-        for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x"] { assert!(ok(u), "{u}"); }
+        for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x", "relay-plugin://localhost/garmin/3"] { assert!(ok(u), "{u}"); }
         for u in ["https://example.com/", "http://localhost.evil.com/", "http://localhost:1420@evil.com/", "http://localhost:4600/", "http://127.0.0.1:1420/",
-                  "asset://localhost/x", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c"] { assert!(!ok(u), "{u}"); }
+                  "asset://localhost/x", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c", "relay-plugin://evil.com/x"] { assert!(!ok(u), "{u}"); }
     }
     #[test]
     fn old_mail_settings_heal_and_bad_ones_fail() {
