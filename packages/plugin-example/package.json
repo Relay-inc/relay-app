@@ -1,0 +1,10 @@
+{
+  "name": "@relay/plugin-example",
+  "private": true,
+  "version": "0.1.0",
+  "description": "An example plugin: a stdio MCP server with one tool and one MCP Apps view, no dependencies and no build",
+  "type": "module",
+  "scripts": {
+    "test": "node --test --experimental-strip-types tests/*.test.ts"
+  }
+}

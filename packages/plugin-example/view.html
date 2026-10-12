@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dice</title>
+<style>
+  /* the host's theme variables (MCP Apps: styles.variables) with a fallback for hosts that send none */
+  :root {
+    --color-background-primary: light-dark(#ffffff, #1c1c1e);
+    --color-background-secondary: light-dark(#f6f6f5, #2a2a2d);
+    --color-text-primary: light-dark(#1c1c1e, #f2f2f4);
+    --color-text-secondary: light-dark(#636369, #a1a1a8);
+    --color-border-primary: light-dark(#e4e4e2, #3a3a3e);
+    --color-text-info: light-dark(#2d4fe0, #8ea2ff);
+    --font-sans: system-ui, sans-serif;
+  }
+  body { margin: 0; padding: 32px; font: 14px/1.5 var(--font-sans); color: var(--color-text-primary); background: var(--color-background-primary); }
+  h1 { margin: 0 0 4px; font-size: 18px; }
+  p { margin: 0 0 20px; color: var(--color-text-secondary); }
+  .row { display: flex; gap: 8px; align-items: center; }
+  select, button { font: inherit; padding: 6px 12px; color: inherit; background: var(--color-background-secondary); border: 1px solid var(--color-border-primary); border-radius: 8px; }
+  button { cursor: default; color: var(--color-text-info); }
+  button:disabled { opacity: 0.5; }
+  #result { margin-top: 24px; font-size: 56px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #note { color: var(--color-text-secondary); font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Dice</h1>
+<p>A plugin view: this page calls the plugin's <code>roll</code> tool through Relay.</p>
+<div class="row">
+  <select id="sides"><option>6</option><option>12</option><option>20</option></select>
+  <button id="roll" disabled>Roll</button>
+</div>
+<div id="result">–</div>
+<div id="note">Waiting for the host…</div>
+<script>
+// The view side of MCP Apps (spec 2026-01-26) by hand: JSON-RPC 2.0 over postMessage with the host, no SDK.
+let nextId = 1;
+const waiting = new Map();
+const post = message => parent.postMessage({ jsonrpc: "2.0", ...message }, "*");
+const request = (method, params) => new Promise((resolve, reject) => {
+  const id = nextId++;
+  waiting.set(id, { resolve, reject });
+  post({ id, method, params });
+});
+
+// the host's theme: colour scheme and the standardised CSS variables
+function applyContext(context = {}) {
+  if (context.theme) document.documentElement.style.colorScheme = context.theme;
+  for (const [name, value] of Object.entries(context.styles?.variables ?? {})) if (value) document.documentElement.style.setProperty(name, value);
+}
+
+addEventListener("message", async ({ data }) => {
+  if (!data || data.jsonrpc !== "2.0") return;
+  if (data.method === undefined) {
+    const call = waiting.get(data.id);
+    waiting.delete(data.id);
+    if (data.error) call?.reject(new Error(data.error.message));
+    else call?.resolve(data.result);
+  } else if (data.method === "ui/notifications/host-context-changed") applyContext(data.params);
+  else if (data.method === "ui/resource-teardown") post({ id: data.id, result: {} }); // nothing to save
+});
+
+const show = result => {
+  document.getElementById("result").textContent = result.structuredContent?.value ?? "–";
+  document.getElementById("note").textContent = result.content?.[0]?.text ?? "";
+};
+
+document.getElementById("roll").addEventListener("click", async () => {
+  const button = document.getElementById("roll");
+  button.disabled = true;
+  try {
+    const sides = Number(document.getElementById("sides").value);
+    show(await request("tools/call", { name: "roll", arguments: { sides } }));
+  } catch (error) {
+    document.getElementById("note").textContent = error.message;
+  }
+  button.disabled = false;
+});
+
+// the handshake: ui/initialize, then ui/notifications/initialized; after that the host may send notifications
+(async () => {
+  const init = await request("ui/initialize", {
+    appInfo: { name: "relay-example-dice", version: "0.1.0" },
+    appCapabilities: {},
+    protocolVersion: "2026-01-26",
+  });
+  applyContext(init.hostContext);
+  post({ method: "ui/notifications/initialized" });
+  document.getElementById("roll").disabled = false;
+  document.getElementById("note").textContent = "Ready (" + (init.hostInfo?.name ?? "host") + ")";
+  // tell the host how tall the page is, and again when it changes
+  new ResizeObserver(() => post({ method: "ui/notifications/size-changed", params: { width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight } })).observe(document.body);
+})().catch(error => { document.getElementById("note").textContent = error.message; });
+</script>
+</body>
+</html>

@@ -19,6 +19,7 @@ import { ORCH } from "../../domain/orchestrator/rules";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
 import type { SidebarCfg } from "../../domain/settings/types";
 import { viewItems } from "../../domain/navigation/sidebar-views";
+import { shownPlugins } from "../../domain/plugins/rules";
 import { WAIT, REM, PRS, MAIL, BRAIN } from "../../domain/navigation/views";
 import type { Chat, TerminalSession } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
@@ -250,7 +251,8 @@ export const sidebarCfg = (): SidebarCfg => settings().sidebar ?? {};
 export const viewsLayout = () => sidebarCfg().layout ?? "icons";
 export const moreOn = () => sidebarCfg().more !== false;
 /** Every view there is now, in the user's order, the switched-off ones included. */
-const allViews = () => arranged(viewItems(readyBoards(), ghOn(), mailOn(), t), sidebarCfg());
+const allViews = () =>
+  arranged(viewItems(readyBoards(), ghOn(), mailOn(), t, shownPlugins(settings().plugins)), sidebarCfg());
 export const hiddenViews = () => allViews().filter(view => isHidden(view.key, sidebarCfg()));
 const viewRows = (): ViewRow[] =>
   allViews()

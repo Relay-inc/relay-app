@@ -36,6 +36,7 @@ mod meeting;
 pub mod notify;
 mod permissions;
 mod orch;
+mod plugins;
 mod providers;
 mod pty;
 mod related;
@@ -99,6 +100,7 @@ fn norm(mut v: Value) -> Value {
     for k in ["projects", "overrides", "vaults", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
     providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
     agents::migrate(&mut v);    // agents.default and agents.providers.<id>: on, bin
+    plugins::norm(&mut v);      // plugins: the MCP servers (plugins.rs), checked in set_settings
     calendar::norm(&mut v);     // calendar.on and calendar.feeds[].email, the addresses are in the keychain
     if !v["github"]["on"].is_boolean() { v["github"]["on"] = json!(false); }
     if !v["github"]["owners"].is_string() { v["github"]["owners"] = json!(""); }
@@ -204,6 +206,16 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.override", ["Invalid override '{v}'", "Ongeldige override '{v}'", "Remplacement '{v}' invalide", "Ungültige Zuordnung '{v}'"]),
     ("err.empty", ["empty message", "leeg bericht", "message vide", "leere Nachricht"]),
     ("err.gh_owners", ["GitHub: at most 10 owners, only letters, digits and -", "GitHub: hoogstens 10 owners, enkel letters, cijfers en -", "GitHub : 10 propriétaires au plus, uniquement lettres, chiffres et -", "GitHub: höchstens 10 Owner, nur Buchstaben, Ziffern und -"]),
+    ("err.secret_chars", ["A secret may only contain printable ASCII characters", "Een geheim mag enkel afdrukbare ASCII-tekens bevatten", "Un secret ne peut contenir que des caractères ASCII imprimables", "Ein Geheimnis darf nur druckbare ASCII-Zeichen enthalten"]),
+    ("err.plugin_start", ["Could not start the plugin: {v}", "Kon de plug-in niet starten: {v}", "Impossible de démarrer le plugin : {v}", "Das Plugin konnte nicht gestartet werden: {v}"]),
+    ("err.plugin_exit", ["The plugin stopped", "De plug-in is gestopt", "Le plugin s'est arrêté", "Das Plugin wurde beendet"]),
+    ("err.plugin_timeout", ["The plugin did not answer in time", "De plug-in antwoordde niet op tijd", "Le plugin n'a pas répondu à temps", "Das Plugin hat nicht rechtzeitig geantwortet"]),
+    ("err.plugin_not_mcp", ["This program does not answer as an MCP server", "Dit programma antwoordt niet als MCP-server", "Ce programme ne répond pas comme un serveur MCP", "Dieses Programm antwortet nicht als MCP-Server"]),
+    ("err.plugin_unknown", ["Unknown plugin '{v}'", "Onbekende plug-in '{v}'", "Plugin inconnu '{v}'", "Unbekanntes Plugin '{v}'"]),
+    ("err.plugin_off", ["{v} is switched off", "{v} staat uit", "{v} est désactivé", "{v} ist ausgeschaltet"]),
+    ("err.plugin_bad", ["The plugin '{v}' is not set up correctly", "De plug-in '{v}' is niet juist ingesteld", "Le plugin « {v} » n'est pas configuré correctement", "Das Plugin „{v}“ ist nicht richtig eingerichtet"]),
+    ("err.plugin_tool", ["The tool '{v}' is not allowed for this plugin", "De tool '{v}' is niet toegelaten voor deze plug-in", "L'outil « {v} » n'est pas autorisé pour ce plugin", "Das Tool „{v}“ ist für dieses Plugin nicht erlaubt"]),
+    ("err.plugin_view", ["'{v}' is not a view this plugin can show", "'{v}' is geen weergave die deze plug-in kan tonen", "« {v} » n'est pas une vue que ce plugin peut afficher", "„{v}“ ist keine Ansicht, die dieses Plugin zeigen kann"]),
     ("err.token_chars", ["The token may only contain letters, digits, - and _", "Het token mag enkel letters, cijfers, - en _ bevatten", "Le jeton ne peut contenir que des lettres, des chiffres, - et _", "Das Token darf nur Buchstaben, Ziffern, - und _ enthalten"]),
     ("err.keychain", ["Could not save the token in the keychain", "Kon het token niet in de sleutelhanger bewaren", "Impossible d'enregistrer le jeton dans le trousseau", "Das Token konnte nicht im Schlüsselbund gespeichert werden"]),
     ("err.claude_json", ["~/.claude.json not found or unreadable", "~/.claude.json niet gevonden of onleesbaar", "~/.claude.json introuvable ou illisible", "~/.claude.json nicht gefunden oder nicht lesbar"]),
@@ -1179,7 +1191,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     // the provider checks answer in the language being saved
     let was = ui_lang_of(&state.settings.lock().unwrap());
     set_cur_lang(lang);
-    if let Err(e) = providers::check(&s).and_then(|_| agents::check(&s)) { set_cur_lang(was); return Err(e); }
+    if let Err(e) = providers::check(&s).and_then(|_| agents::check(&s)).and_then(|_| plugins::check(&s)) { set_cur_lang(was); return Err(e); }
     let owners: Vec<&str> = s["github"]["owners"].as_str().unwrap().split([' ', ',']).filter(|o| !o.is_empty()).collect();
     if owners.len() > 10 || !owners.iter().all(|o| o.len() <= 39 && o.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')) {
         return Err(tr(lang, "err.gh_owners"));
@@ -1189,6 +1201,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     *state.settings.lock().unwrap() = s.clone();
+    plugins::sync(&app); // a plugin switched off or removed stops
     anywhere::apply(&app); // the shortcut follows Settings › Voice
     set_cur_lang(lang);
     tray::refresh(&app); // another vault or language
@@ -1898,6 +1911,9 @@ fn open_settings_window(app: AppHandle, tab: Option<String>) { open_settings(&ap
 /// vite server. Any other localhost port is a local service a mail link must not reach without asking.
 fn nav_internal(url: &tauri::Url) -> bool {
     matches!(url.scheme(), "tauri" | "ipc" | "about")
+        // a plugin's view loads in its sandboxed frame from the scheme plugins.rs serves (without this the navigation is
+        // dropped and the frame stays an empty page)
+        || (url.scheme() == "relay-plugin" && url.host_str() == Some("localhost"))
         || (cfg!(debug_assertions) && url.scheme() == "http" && url.host_str() == Some("localhost") && url.port() == Some(1420))
 }
 
@@ -1925,6 +1941,8 @@ pub fn run() {
             if matches!(url.scheme(), "http" | "https" | "mailto") { w.emit("mail-link", url.as_str()).ok(); }
             false
         }).build())
+        // the HTML of a plugin's view, with the policy it declares (plugins.rs)
+        .register_uri_scheme_protocol("relay-plugin", |ctx, req| plugins::serve(ctx.app_handle(), req.uri().path()))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
@@ -1948,6 +1966,7 @@ pub fn run() {
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
             app.manage(pty::Ptys::default());
+            app.manage(plugins::Plugins::default());
             app.manage(dictation::Dictation::default());
             app.manage(meeting::MeetingRec::default());
             anywhere::apply(app.handle());
@@ -2002,13 +2021,13 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
         .run(|app, e| match e {
             tauri::RunEvent::Reopen { .. } => tray::show_main(app),
-            tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); }
+            tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); plugins::kill_all(app); }
             _ => {}
         });
 }
@@ -2123,9 +2142,9 @@ mod mail_tests {
     #[test]
     fn only_the_apps_own_pages_navigate() {
         let ok = |u: &str| super::nav_internal(&u.parse().unwrap());
-        for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x"] { assert!(ok(u), "{u}"); }
+        for u in ["tauri://localhost/index.html", "http://localhost:1420/", "about:srcdoc", "about:blank", "ipc://localhost/x", "relay-plugin://localhost/garmin/3"] { assert!(ok(u), "{u}"); }
         for u in ["https://example.com/", "http://localhost.evil.com/", "http://localhost:1420@evil.com/", "http://localhost:4600/", "http://127.0.0.1:1420/",
-                  "asset://localhost/x", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c"] { assert!(!ok(u), "{u}"); }
+                  "asset://localhost/x", "data:text/html,<b>x</b>", "file:///etc/passwd", "javascript:alert(1)", "mailto:a@b.c", "relay-plugin://evil.com/x"] { assert!(!ok(u), "{u}"); }
     }
     #[test]
     fn old_mail_settings_heal_and_bad_ones_fail() {

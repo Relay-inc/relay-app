@@ -4,6 +4,7 @@ import {
   opened,
   panelItem,
   boardKey,
+  pluginKey,
   termKey,
   prKey,
   mailKey,
@@ -17,6 +18,7 @@ import {
 test("selection keys", () => {
   assert.deepEqual(opened(VIEW.reminders), { kind: "view", view: "__rem" });
   assert.deepEqual(opened(boardKey("trello")), { kind: "board", provider: "trello" });
+  assert.deepEqual(opened(pluginKey("garmin")), { kind: "plugin", id: "garmin" });
   assert.deepEqual(opened(termKey("abc-1")), { kind: "term", sid: "abc-1" });
   assert.deepEqual(opened("c:mupqjmxc"), { kind: "chat", key: "c:mupqjmxc" });
   assert.deepEqual(opened("Spardex"), { kind: "chat", key: "Spardex" }); // a conversation from before the app keys

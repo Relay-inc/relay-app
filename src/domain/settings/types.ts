@@ -2,6 +2,7 @@ import type { BoardRef } from "../board/types";
 import type { VoiceCfg } from "./voice";
 import type { VaultMap } from "../workspace/types";
 import type { Pipeline } from "../pipeline/types";
+import type { Plugin } from "../plugins/types";
 
 // The app's settings as the backend keeps them (settings.json): the main window reads them, the settings window edits them.
 /** One integration's settings.integrations.<id>: whether it is on, and its provider's own fields (strings, a checkbox). */
@@ -102,6 +103,7 @@ export type Settings = {
   captureOnClose?: boolean; // propose vault updates when a conversation closes (application/today/capture), on unless false
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };
   agents: { default: string; providers: Record<string, AgentCfg> };
+  plugins?: Plugin[]; // the MCP servers (domain/plugins), their secrets are in the keychain
   sidebar?: SidebarCfg;
   machines?: Machine[];
   machines_default?: string; // where new conversations run without a pick: "" this Mac, or a machine id
