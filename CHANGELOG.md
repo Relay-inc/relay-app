@@ -25,6 +25,7 @@ a PR. Versions follow
 - **Updates check quietly, twice a day**: Relay looks for an update at start and every 12 hours instead of once a day, and no longer pops a dialog. A dot on the settings button in the sidebar says there is one, and the button then opens Settings › Updates; so does Relay › Check for Updates (#188)
 - **Forgotten projects show as Quiet**: in a vault Relay set up, a project marked Active with no work (`last`) for 30 days shows as Quiet in the project index, and Active again once work is logged. Relay rebuilds the index at start with its own copy of `build-index.py`, so vaults made by an older Relay get this too
 - **Vault updates on close are written, not proposed**: closing a conversation has Claude write what belongs in the vault straight in, with the vault's own rules and hooks. Nothing lands on Today and nothing is asked; the vault's git history is the review. Settings › General still turns it off
+- **Board pipeline: the review remembers its last round**: when Relay's review sends an agent's work back, the next round first checks each of those findings against the new code (fixed, or "Not fixed:" and blocking again) before it reviews the rest, instead of starting from scratch every round (#195)
 
 ## [0.0.21] - 2026-10-12
 
