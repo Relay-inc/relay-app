@@ -92,6 +92,16 @@ pub struct Worker {
     /// the review's findings that did not block, for the PR
     #[serde(default)]
     pub review_notes: Option<String>,
+    /// the last review round that sent the work back: the next round checks its findings first
+    #[serde(default)]
+    pub last_review: Option<LastReview>,
+}
+
+/// A review round that blocked: the commit it saw and its blocking findings ("- file:line: text").
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct LastReview {
+    pub head: String,
+    pub blocking: Vec<String>,
 }
 
 /// A pipeline's validation of a done: a shell command run in the worktree (lint, static analysis, tests: what the repo
@@ -332,7 +342,11 @@ fn validate(app: &AppHandle, key: &str) {
         update(app, key, |w| w.phase = Some("review".into()));
         match review(app, &w, &dir, &v.review) {
             Ok((blocking, minor)) => {
-                if !blocking.is_empty() { return retry(app, &w, &v, &format!("A review of your diff found what must be fixed first:\n\n{}\n\nFix it, commit, and report done again.", blocking.join("\n"))); }
+                if !blocking.is_empty() {
+                    let last = LastReview { head: git(&dir, &["rev-parse", "HEAD"]).unwrap_or_default(), blocking: blocking.clone() };
+                    update(app, key, |w| w.last_review = Some(last));
+                    return retry(app, &w, &v, &format!("A review of your diff found what must be fixed first:\n\n{}\n\nFix it, commit, and report done again.", blocking.join("\n")));
+                }
                 notes = minor;
             }
             // the checks passed: a review that could not run is said in the PR, not a reason to hold the work
@@ -348,7 +362,7 @@ fn finish(app: &AppHandle, w: &Worker, notes: Vec<String>) {
     let w = Worker { review_notes: notes.clone(), ..w.clone() };
     let r = w.report.clone().unwrap_or(Report { status: "done".into(), summary: String::new(), questions: None, diff: None, flags: vec![] });
     let (pr, err) = publish(app, &w, &r);
-    update(app, &w.key, |x| { x.state = "done".into(); x.ended = Some(now()); x.phase = None; x.pr = pr; x.pr_error = err; x.review_notes = notes; x.rounds = 0; });
+    update(app, &w.key, |x| { x.state = "done".into(); x.ended = Some(now()); x.phase = None; x.pr = pr; x.pr_error = err; x.review_notes = notes; x.rounds = 0; x.last_review = None; });
 }
 /// A failed validation: back to the worker, or after the last round to a person with what failed.
 fn retry(app: &AppHandle, w: &Worker, v: &Validate, what: &str) {
@@ -401,10 +415,7 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<(Vec
     let start = w.base.get("start").ok_or("no start commit")?.clone();
     let diff = git(dir, &["diff", &start, "HEAD"]).unwrap_or_default();
     if diff.trim().is_empty() { return Ok((vec![], vec![])); }
-    let t = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
-    // the ticket as the worker got it: the review judges the change against what was asked, not only as code
-    let head = format!("Ticket: {} {}\n\nThe ticket as the agent got it:\n{}\n\nWhat the agent says it did: {}\nThe change is `git diff {start} HEAD` in this worktree.\n\n",
-        t("number"), t("title"), head_cut(&w.task, TICKET_MAX), w.report.as_ref().map(|r| r.summary.as_str()).unwrap_or(""));
+    let head = review_head(w, &start);
     let big = diff.chars().count() > REVIEW_MAX;
     let text = if big {
         format!("{head}The diff is too large to show here: its stat is below, read each file's diff with `git diff {start} HEAD -- <file>`.\n\n{}", git(dir, &["diff", "--stat", &start, "HEAD"]).unwrap_or_default())
@@ -430,6 +441,20 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<(Vec
     if cut { minor.push(format!("The reviewing agent could not open the worktree and the diff is larger than it takes ({WRITE_MAX} characters): only its start was reviewed.")); }
     Ok((blocking, minor))
 }
+/// The start of the review's brief: the ticket as the worker got it (the review judges the change against what was
+/// asked, not only as code), what the agent says it did, and the findings of the round that sent it back, to check
+/// first so a later round does not judge a moving target from scratch.
+fn review_head(w: &Worker, start: &str) -> String {
+    let t = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
+    let mut head = format!("Ticket: {} {}\n\nThe ticket as the agent got it:\n{}\n\nWhat the agent says it did: {}\nThe change is `git diff {start} HEAD` in this worktree.\n\n",
+        t("number"), t("title"), head_cut(&w.task, TICKET_MAX), w.report.as_ref().map(|r| r.summary.as_str()).unwrap_or(""));
+    if let Some(last) = w.last_review.as_ref().filter(|l| !l.blocking.is_empty()) {
+        let since = if last.head.is_empty() { String::new() } else { format!(" What it changed since: `git diff {} HEAD`.", last.head) };
+        head += &format!("An earlier review round sent the work back with these blocking findings:\n{}\nThe agent has worked on them.{since} First check each one against the code as it is now. One that is not fixed is a blocking finding again, with its text starting \"Not fixed:\". One that is fixed or no longer applies is not a finding. Then review the rest of the change as usual.\n\n", last.blocking.join("\n"));
+    }
+    head
+}
+
 /// The review's JSON answer (also inside a ``` block or with text around it) as (blocking, the others).
 fn findings(answer: &str) -> Result<(Vec<String>, Vec<String>), String> {
     let (a, b) = (answer.find('{').ok_or("the review gave no JSON")?, answer.rfind('}').ok_or("the review gave no JSON")?);
@@ -807,6 +832,16 @@ mod tests {
         let e = checks(&path, &d, "echo lint: 2 problems; echo oops >&2; exit 1", t).unwrap_err();
         assert!(e.contains("lint: 2 problems") && e.contains("oops"), "stdout and stderr both: {e}");
         assert!(checks(&path, &d, "sleep 5", std::time::Duration::from_secs(1)).unwrap_err().starts_with("still running"));
+    }
+
+    #[test]
+    fn review_checks_the_last_round_first() {
+        let mut w = Worker { task: "Fix the cart total".into(), ticket: Some(json!({"number": "12", "title": "Cart"})), ..Default::default() };
+        let first = review_head(&w, "abc");
+        assert!(first.contains("Fix the cart total") && first.contains("git diff abc HEAD") && !first.contains("earlier review"));
+        w.last_review = Some(LastReview { head: "def".into(), blocking: vec!["- cart.ts:3: total ignores discounts".into()] });
+        let again = review_head(&w, "abc");
+        assert!(again.contains("- cart.ts:3: total ignores discounts") && again.contains("git diff def HEAD") && again.contains("Not fixed:"), "{again}");
     }
 
     #[test]
