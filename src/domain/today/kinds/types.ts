@@ -5,7 +5,6 @@ import type { Meeting } from "../../calendar/types";
 import type { Mail } from "../../mail/types";
 import type { PR, PRs } from "../../pull-requests/types";
 import type { Reminder } from "../../reminders/types";
-import type { Capture } from "../capture";
 import type { Item, Kind, Status } from "../plan";
 import type { TodayCard } from "../rules";
 
@@ -25,8 +24,7 @@ export type Subject =
   | { type: "pr"; pr: PR; prs?: PR[] }
   | { type: "mail"; key: string; mail: Mail }
   | { type: "chat"; key: string }
-  | { type: "time"; date: string; minutes: number }
-  | { type: "capture"; capture: Capture };
+  | { type: "time"; date: string; minutes: number };
 export type SubjectType = Subject["type"];
 /** An item as Today shows it: the queue's item, what it says and where it belongs. `tone` colours why it is here. */
 export type Entry = Item & {
@@ -75,7 +73,6 @@ export type Snapshot = Pick<Flags, "trackers"> & {
   mailProject: Record<string, string | null>; // per mail key, of the mails that wait on the user
   timeMin: number; // minutes of the day's conversations
   timeFromSessions: boolean; // the setting
-  captures: Capture[];
 };
 
 /** What the rules that write text need: the translations and the clock as the user reads it. */

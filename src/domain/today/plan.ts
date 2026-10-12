@@ -13,8 +13,7 @@ export type Kind =
   | "review" // a pull request asks the user's review
   | "fix" // the user's own pull request: changes requested or checks red
   | "time" // the day's time to book, from the user's own activity in conversations
-  | "finished" // a conversation finished while the user was elsewhere
-  | "capture"; // a closed conversation proposes updates to the vault
+  | "finished"; // a conversation finished while the user was elsewhere
 
 /** An item in the queue. `rank` orders it (lower first), `by` is when it must be done (a meeting's prep: its start). */
 export type Item = { id: string; kind: Kind; rank: number; at: number; est: number; by?: number };

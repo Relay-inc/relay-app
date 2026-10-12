@@ -488,34 +488,32 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
     Ok(Value::Object(json.into_iter().filter(|(n, _)| names.contains(&n.as_str()))
         .filter_map(|(n, d)| Some((n, json!(relay_config::site_of(d.as_str()?)?)))).collect()))
 }
-/// What a closed conversation leaves for the vault: one Sonnet call that resumes a fork of its session (not kept),
-/// in the vault with its CLAUDE.md and rules but no MCP, and only reads, so it changes nothing. Returns
-/// [{title, file, change}], empty when there is nothing; the user applies them from Today. Only a Claude session of
-/// this Mac: a work machine's transcript is not here.
+/// What a closed conversation leaves for the vault, written straight in: one Sonnet call that resumes a fork of its
+/// session (not kept), in the vault with its CLAUDE.md, rules and hooks but no MCP, allowed to read, edit and write.
+/// Nothing is shown or asked; the vault's git history is the review. Only a Claude session of this Mac: a work
+/// machine's transcript is not here.
 /// ponytail: no timeout on the run; a hung one holds the queue (application/capture) until Relay quits
 #[tauri::command]
-async fn capture_proposals(app: AppHandle, state: State<'_, App>, key: String) -> Result<Vec<Value>, String> {
+async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Result<(), String> {
     let sid = state.sids.lock().unwrap().get(&key).filter(|s| s.provider == "claude").map(|s| s.sid.clone());
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude");
-    let (Some(sid), Some(p)) = (sid, p) else { return Ok(vec![]) };
-    if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(vec![]); }
+    let (Some(sid), Some(p)) = (sid, p) else { return Ok(()) };
+    if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(()); }
     let eb = env_of(&app, &state, p);
-    if eb.vault.is_empty() { return Ok(vec![]); }
+    if eb.vault.is_empty() { return Ok(()); }
     // on the account the session was recorded on, its transcript is there
     let account = account_of(&state, p, &key, "sonnet");
     let prompt = "This conversation is closed. Before it goes: is there anything in it that belongs in this vault and is \
         not there yet? Think of decisions and why, project state and where it was left, people, open threads, follow-ups \
         with a date. Follow this vault's own rules and conventions for where things go and how they are written (its \
-        CLAUDE.md, its rules, its templates), and read the notes you would change to check what is already in them. \
-        Propose only what the conversation itself says; never add interpretation or facts it does not contain. Small talk, \
-        a quick question, or work that already saved itself to the vault: propose nothing. Do not change any file. \
-        Answer with only a JSON object {\"proposals\": [{\"title\": \"<what, in a few words>\", \"file\": \"<path in the vault, \
-        an existing note or a new one>\", \"change\": \"<exactly what to add or change, in that note's language and style>\"}]}, \
-        and {\"proposals\": []} when there is nothing.";
+        CLAUDE.md, its rules, its templates). Read each note before you change it; when it already says something, keep \
+        what is there and only add what is missing. Write only what the conversation itself says; never add \
+        interpretation or facts it does not contain. Small talk, a quick question, or work that already saved itself to \
+        the vault: change nothing. Nobody reviews this, so make the changes yourself and do not ask.";
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
         let mut c = Command::new(&eb.bin);
         c.args(["-p", "--resume", &sid, "--fork-session", "--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
-                "--tools", "Read,Glob,Grep", "--allowedTools", "Read,Glob,Grep"])
+                "--tools", "Read,Glob,Grep,Edit,Write", "--allowedTools", "Read,Glob,Grep,Edit,Write"])
             .current_dir(&eb.vault).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
@@ -524,14 +522,21 @@ async fn capture_proposals(app: AppHandle, state: State<'_, App>, key: String) -
         c.wait_with_output()
     }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
-    Ok(proposals_of(&String::from_utf8_lossy(&out.stdout)))
+    Ok(())
 }
-/// The proposals in Claude's answer: the JSON object in it, each with a title, a file and a change.
-fn proposals_of(text: &str) -> Vec<Value> {
-    let json = text.find('{').zip(text.rfind('}')).and_then(|(a, b)| serde_json::from_str::<Value>(&text[a..=b]).ok()).unwrap_or_default();
-    json["proposals"].as_array().cloned().unwrap_or_default().into_iter()
-        .filter(|x| ["title", "file", "change"].iter().all(|f| x[f].as_str().is_some_and(|s| !s.trim().is_empty())))
-        .map(|x| json!({"title": x["title"], "file": x["file"], "change": x["change"]})).collect()
+/// The project index of a vault in the starter layout (System/scripts/build-index.py), rebuilt at start with the app's
+/// own copy of the script, so a vault an older Relay made follows today's rules too (an Active project untouched for
+/// 30 days shows as Quiet). A vault in another layout keeps its own way. Errors are logged.
+fn refresh_index(app: &AppHandle) {
+    let vault = app.state::<App>().settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    if vault.is_empty() || !PathBuf::from(&vault).join("System/scripts/build-index.py").is_file() { return; }
+    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
+    let path = app.state::<App>().path.clone();
+    std::thread::spawn(move || match Command::new("python3").arg(&script).env("VAULT", &vault).env("PATH", &path).output() {
+        Ok(o) if o.status.success() => {}
+        Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
+        Err(e) => eprintln!("build-index: {e}"),
+    });
 }
 /// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
 #[tauri::command]
@@ -1977,6 +1982,7 @@ pub fn run() {
             awake::start(app.handle());
             retry::start(app.handle());
             updater::start(app.handle());
+            refresh_index(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines),
@@ -2021,7 +2027,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_proposals, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -2077,18 +2083,6 @@ mod machine_tests {
         assert!(!runs_for_server(&json!({"cwd": "/Users/k/vault"}), work));
         assert!(!runs_for_server(&json!({"cwd": "/Users/k/Library/Application Support/relay-server/workshop"}), work));
         assert!(!runs_for_server(&json!({}), work));
-    }
-}
-
-#[cfg(test)]
-mod capture_tests {
-    use super::*;
-    #[test]
-    fn proposals_from_claudes_answer() {
-        let text = r#"Here you go: {"proposals": [{"title": "Rate", "file": "a.md", "change": "€700"}, {"title": "", "file": "b.md", "change": "x"}, {"title": "No file", "change": "y"}]}"#;
-        assert_eq!(proposals_of(text), vec![json!({"title": "Rate", "file": "a.md", "change": "€700"})]);
-        assert!(proposals_of(r#"{"proposals": []}"#).is_empty());
-        assert!(proposals_of("nothing to save").is_empty());
     }
 }
 

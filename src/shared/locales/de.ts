@@ -180,6 +180,11 @@ export default {
   "pl.noColumn": "eine Spalte der Pipeline ist nicht mehr auf dem Board, prüfe Einstellungen › Projekte",
   "pl.notReady":
     "Nicht übernommen: das Ticket hat keine Beschreibung, keine Kommentare und keine Dateien. Ergänze, was fehlt, und verschiebe es zurück nach {column}.",
+  "pl.unclear":
+    "Nicht übernommen: ein Agent müsste hier raten. Beantworte diese Fragen im Ticket und verschiebe es dann zurück nach {column}.\n\n{questions}",
+  "pl.usedUp": "{project}: das Claude-Abo ist aufgebraucht, die Pipeline nimmt keine Tickets, bis wieder Platz ist.",
+  "pl.stalled":
+    "{project}: die letzten drei Agent-Läufe endeten ohne PR, daher nimmt die Pipeline keine neuen Tickets. Sieh dir die Tickets in der Eingabespalte an; eines zurückschieben oder selbst starten bringt sie wieder in Gang.",
   "pl.picked": "Von Relay abgeholt: ein Agent baut das auf Branch {branch}.",
   "pl.resumed": "Von Relay erneut abgeholt: der Agent macht mit dem Neuen im Ticket weiter.",
   "pl.startFailed": "Relay konnte keinen Agent für dieses Ticket starten: {error}",
@@ -594,7 +599,6 @@ export default {
   "today.kind.review": "Review",
   "today.kind.fix": "Dein PR",
   "today.kind.finished": "Fertig",
-  "today.kind.capture": "Vault-Update",
   "today.fact.from": "Von",
   "today.fact.to": "An",
   "today.fact.date": "Datum",
@@ -632,7 +636,6 @@ export default {
   "today.doneIn.review": "Erledigt nur unter Heute: auf GitHub passiert nichts",
   "today.doneIn.fix": "Erledigt nur unter Heute: auf GitHub passiert nichts",
   "today.doneIn.finished": "Erledigt markiert es als gelesen",
-  "today.doneIn.capture": "Erledigt überspringt es, nichts kommt in den Vault",
   "note.meetingStarted": "Zum Meeting: {title}",
   "cal.banner": "Meeting um {time}",
   "cal.prepTitle": "Vorbereitung: ",
@@ -783,18 +786,9 @@ export default {
   "set.timeFromSessions": "Die Tageszeit aus Gesprächen vorschlagen",
   "set.timeFromSessionsHelp":
     "Ab 16:00 schlägt Today die <b>Productive</b>-Zeiteinträge des Tages vor, danach, wann du in deinen Gesprächen geschrieben hast (Claude Code). Nichts wird ohne deine Zustimmung gebucht. Aus: Relay liest die Transkripte dafür nicht.",
-  "set.captureOnClose": "Vault-Updates vorschlagen, wenn eine Unterhaltung schließt",
+  "set.captureOnClose": "Vault aktualisieren, wenn eine Unterhaltung schließt",
   "set.captureOnCloseHelp":
-    "Wenn du eine Unterhaltung schließt, liest Claude sie noch einmal auf das, was in den Vault gehört: Entscheidungen, Projektstand, Folgeaufgaben. Es wird nichts geschrieben: Die Vorschläge landen in <b>Heute</b>, und Übernehmen setzt sie in einer neuen Unterhaltung um, in der du jede Änderung erlaubst. Kurze Fragen (weniger als 3 Nachrichten) werden übersprungen.",
-  "capture.why_one": "{n} Änderung für den Vault",
-  "capture.why_other": "{n} Änderungen für den Vault",
-  "capture.toast": "Vault-Updates vorgeschlagen aus „{title}“",
-  "capture.review": "Ansehen",
-  "capture.apply": "Übernehmen",
-  "capture.skip": "Überspringen",
-  "capture.leaveOut": "Weglassen",
-  "capture.chatTitle": "Vault: {title}",
-  "capture.chatNote": "Übernimmt die Vault-Updates, die aus „{title}“ vorgeschlagen wurden.",
+    "Wenn du eine Unterhaltung schließt, liest Claude sie noch einmal und schreibt, was in den Vault gehört, direkt hinein: Entscheidungen, Projektstand, Folgeaufgaben. Nichts wird angezeigt oder gefragt; die Git-Historie des Vaults ist die Kontrolle. Kurze Fragen (weniger als 3 Nachrichten) werden übersprungen.",
   "retry.at": "Nutzungslimit erreicht. Neuer Versuch um {time}.",
   "retry.check": "Nutzungslimit erreicht. Erneute Prüfung um {time}.",
   "retry.cancel": "Abbrechen",

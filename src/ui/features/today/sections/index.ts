@@ -1,7 +1,6 @@
 import type { Entry, SubjectType } from "../../../../domain/today/kinds/types";
 import { AskSection } from "./AskSection";
 import { BlockedSection } from "./BlockedSection";
-import { CaptureSection } from "./CaptureSection";
 import { CardSection, cardFacts, cardLoad } from "./CardSection";
 import { ChatSection } from "./ChatSection";
 import { MailSection, mailFacts, mailLoad } from "./MailSection";
@@ -22,7 +21,6 @@ export const SECTIONS: { [T in SubjectType]: SectionDef<T> } = {
   mail: { Body: MailSection, facts: mailFacts, load: mailLoad },
   chat: { Body: ChatSection },
   time: { Body: TimeSection },
-  capture: { Body: CaptureSection },
 };
 /** The section of an entry. */
 export const sectionOf = (entry: Entry) => SECTIONS[entry.subject.type] as unknown as SectionDef<SubjectType>;

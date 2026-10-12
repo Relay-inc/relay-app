@@ -9,9 +9,13 @@ import {
   manual,
   picks,
   pipelineAt,
+  PREFLIGHT_PROMPT,
+  preflightOf,
   ready,
   review,
+  stalled,
   step,
+  usedUp,
   ticketOf,
   workersOf,
 } from "../../domain/pipeline/rules";
@@ -39,6 +43,12 @@ const serial = <T>(fn: () => Promise<T>): Promise<T> => {
 };
 let queued = false;
 const lastError: Record<string, string> = {};
+// why a pipeline takes no new tickets right now, so it is said once and not every five minutes
+const holding: Record<string, string> = {};
+function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
+  if (why && holding[project] !== why) toast(t(why, { project }));
+  holding[project] = why;
+}
 
 /** One pass over every pipeline. Calls while one waits to start make no second one. */
 export function runPipelines() {
@@ -156,10 +166,16 @@ async function runOne(project: string, p: Pipeline) {
   const mine = workersOf(allWorkers(), project);
   const { fresh, resume: back } = picks(cards, card => colOf(prov, { group }, card), p, mine);
   let room = Math.max(1, p.parallel) - mine.filter(w => w.state === "running").length;
+  if (room <= 0 || (!fresh.length && !back.length)) return;
+  // a run on a spent plan would only stall: wait until the limits read again
+  if (usedUp(await backend.usageLimits().catch(() => []), "claude")) return hold(project, "pl.usedUp");
   for (const { card, worker } of back) {
     if (room-- <= 0) return;
     await resume(b, card.id, worker, "The ticket was moved back to the pick column on the board.");
   }
+  // runs keep ending without a PR: tickets moved back still go on (a person looked at them), new ones wait
+  if (stalled(workersOf(allWorkers(), project))) return hold(project, "pl.stalled");
+  hold(project, "");
   for (const card of fresh) {
     if (room-- <= 0) return;
     await claim(b, project, card);
@@ -176,7 +192,8 @@ async function resume(b: Board, id: string, worker: Worker, why: string) {
 }
 
 /** A new ticket: moved to busy first (the claim), then a worker with the ticket as its brief. A ticket from the pick
- *  column with nothing in it goes to a person instead; one you start yourself (`hand`) is your call. */
+ *  column with nothing in it, or that the pre-flight finds unclear, goes to a person instead; one you start yourself
+ *  (`hand`) is your call. */
 async function claim(b: Board, project: string, card: Card, hand = false) {
   const ctx = ctxOf(b.prov);
   await move(b, card.id, b.p.busy);
@@ -185,6 +202,15 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     if (!hand && view && bare(view)) {
       await move(b, card.id, b.p.input);
       return await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
+    }
+    // plan mode asks its questions with the plan, and a ticket you start yourself is your call
+    if (!hand && view && !b.p.plan) {
+      const verdict = preflightOf(await backend.aiWrite(PREFLIGHT_PROMPT, briefOf(view)).catch(() => ""));
+      if (verdict && !verdict.clear) {
+        await move(b, card.id, b.p.input);
+        const questions = verdict.questions.map(q => `- ${q}`).join("\n");
+        return await comment(b, card.id, t("pl.unclear", { questions, column: nameOf(b, b.p.pick) }));
+      }
     }
     const url = view?.url || (await b.prov.url(ctx, b.ref, card.id));
     const ticket: Ticket = {

@@ -4,7 +4,8 @@
 Reads every card under Contexts/<context>/Projects/ and writes
   - System/rules/core/work-state.md  (one row per project: | [[Name]] | status | last | index |)
   - System/index/repos.json          ({repo path prefix: project note}, ~ expanded)
-A context is a folder under Contexts/. Cards with `status: Closed` are skipped. No dependencies.
+A context is a folder under Contexts/. Cards with `status: Closed` are skipped. An Active card whose `last` is
+QUIET_DAYS or more before today shows as Quiet; it is Active again once `last` moves. No dependencies.
 
 Usage: build-index.py [--check] [--selftest]
   --check     print what would change (unified diff), write nothing, exit 1 when out of date
@@ -20,6 +21,7 @@ import sys
 VAULT = os.environ.get("VAULT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 SKIP_DIRS = {"Documents", "Communication", "_archive"}
 MAX_INDEX = 160
+QUIET_DAYS = 30  # session-protocol.md: 30 days without activity flips Active to Quiet
 
 HEADER = """# Work State
 
@@ -129,13 +131,19 @@ def load_cards(vault):
     return cards, warnings
 
 
+def shown_status(c, today):
+    """Active with no work for QUIET_DAYS reads as Quiet, so a forgotten project doesn't look current."""
+    days = (dt.date.fromisoformat(today) - dt.date.fromisoformat(c["last"])).days
+    return "Quiet" if c["status"] == "Active" and days >= QUIET_DAYS else c["status"]
+
+
 def render_worklist(cards, today, ctxs):
     out = HEADER.format(today=today)
     for ctx in ctxs:
         rows = sorted((c for c in cards if c["ctx"] == ctx), key=lambda c: (-int(c["last"].replace("-", "")), c["name"]))
         out += f"\n### {ctx}\n\n" + TABLE_HEAD
         for c in rows:
-            out += f"| [[{c['name']}]] | {c['status']} | {c['last']} | {c['index']} |\n"
+            out += f"| [[{c['name']}]] | {shown_status(c, today)} | {c['last']} | {c['index']} |\n"
     return out
 
 
@@ -174,15 +182,20 @@ def selftest():
         w("Contexts/Work/Projects/A/Log.md", "---\ncontext: x\n---\n")
         w("Contexts/Work/Projects/A/Documents/Doc.md", "---\nstatus: Active\n---\n")
         w("Contexts/Personal/Projects/North/North.md", '---\ncontext: "[[Personal]]"\nstatus: Active\nindex: Star.\nlast: 2026-09-05\n---\n')
+        w("Contexts/Personal/Projects/Old/Old.md", '---\ncontext: "[[Personal]]"\nstatus: Active\nindex: Old.\nlast: 2026-08-31\n---\n')
+        w("Contexts/Work/Projects/W/W.md", '---\ncontext: "[[Work]]"\nstatus: Blocked\nindex: Wait.\nlast: 2026-08-01\n---\n')
         w("Contexts/Personal/Projects/L/L.md", '---\ncontext:\n  - "[[Personal]]"\nstatus: Active\nindex: List.\nlast: 2026-09-02\n---\n')
         files, warns, cards = build(v, "2026-09-30")
         assert warns == ["Contexts/Personal/Projects/L/L.md: context is a list, using the first item"], warns
         warns.clear()
         ws = files[os.path.join(v, "System/rules/core/work-state.md")]
-        assert [c["name"] for c in cards] == ["L", "North", "A", "B"], cards
+        assert [c["name"] for c in cards] == ["L", "North", "Old", "A", "B", "W"], cards
         assert ws.index("### Personal") < ws.index("### Work")
         assert ws.index("[[B]]") < ws.index("[[A]]"), "newest first"
         assert "| [[North]] | Active | 2026-09-05 | Star. |" in ws
+        assert "| [[A]] | Active | 2026-09-01 |" in ws, "29 days: still Active"
+        assert "| [[Old]] | Quiet | 2026-08-31 |" in ws, "30 days: Quiet"
+        assert "| [[W]] | Blocked | 2026-08-01 |" in ws, "only Active turns Quiet"
         assert "[[C]]" not in ws and not warns
         repos = json.loads(files[os.path.join(v, "System/index/repos.json")])
         assert repos[os.path.expanduser("~/code/x/b")] == "Contexts/Work/Projects/B/B.md", repos

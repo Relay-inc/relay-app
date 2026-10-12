@@ -175,6 +175,11 @@ const en = {
   "pl.noColumn": "a column of the pipeline is no longer on the board, check Settings › Projects",
   "pl.notReady":
     "Not picked up: the ticket has no description, comments or files to build from. Add what is needed and move it back to {column}.",
+  "pl.unclear":
+    "Not picked up: an agent would have to guess here. Answer these on the ticket, then move it back to {column}.\n\n{questions}",
+  "pl.usedUp": "{project}: the Claude plan is used up, the pipeline takes no tickets until it has room again.",
+  "pl.stalled":
+    "{project}: the last three agent runs ended without a PR, so the pipeline takes no new tickets. Look at the tickets in the input column; moving one back or starting one yourself gets it going again.",
   "pl.picked": "Picked up by Relay: an agent is building this on branch {branch}.",
   "pl.resumed": "Picked up again by Relay: the agent continues with what is new on the ticket.",
   "pl.startFailed": "Relay could not start an agent on this ticket: {error}",
@@ -586,7 +591,6 @@ const en = {
   "today.kind.review": "Review",
   "today.kind.fix": "Your PR",
   "today.kind.finished": "Finished",
-  "today.kind.capture": "Vault update",
   "today.fact.from": "From",
   "today.fact.to": "To",
   "today.fact.date": "Date",
@@ -624,7 +628,6 @@ const en = {
   "today.doneIn.review": "Done on Today only: nothing happens on GitHub",
   "today.doneIn.fix": "Done on Today only: nothing happens on GitHub",
   "today.doneIn.finished": "Done marks it read",
-  "today.doneIn.capture": "Done skips it, nothing goes in the vault",
   "note.meetingStarted": "About the meeting: {title}",
   "cal.banner": "Meeting at {time}",
   "cal.prepTitle": "Prep: ",
@@ -775,18 +778,9 @@ const en = {
   "set.timeFromSessions": "Propose the day's time from conversations",
   "set.timeFromSessionsHelp":
     "From 16:00, Today proposes the day's <b>Productive</b> time entries from when you wrote in your conversations (Claude Code). Nothing is booked without your approval. Off: Relay doesn't read the transcripts for this.",
-  "set.captureOnClose": "Propose vault updates when a conversation closes",
+  "set.captureOnClose": "Write vault updates when a conversation closes",
   "set.captureOnCloseHelp":
-    "When you close a conversation, Claude reads it once more for what belongs in the vault: decisions, project state, follow-ups. Nothing is written: the proposals land on <b>Today</b>, and Apply makes them in a new conversation where you allow each edit. Skips quick questions (fewer than 3 messages).",
-  "capture.why_one": "{n} change for the vault",
-  "capture.why_other": "{n} changes for the vault",
-  "capture.toast": "Vault updates proposed from “{title}”",
-  "capture.review": "Review",
-  "capture.apply": "Apply",
-  "capture.skip": "Skip",
-  "capture.leaveOut": "Leave this out",
-  "capture.chatTitle": "Vault: {title}",
-  "capture.chatNote": "Applies the vault updates proposed from “{title}”.",
+    "When you close a conversation, Claude reads it once more and writes what belongs in the vault straight in: decisions, project state, follow-ups. Nothing is shown or asked; the vault's git history is the review. Skips quick questions (fewer than 3 messages).",
   "retry.at": "Usage limit reached. Retrying at {time}.",
   "retry.check": "Usage limit reached. Checking again at {time}.",
   "retry.cancel": "Cancel",

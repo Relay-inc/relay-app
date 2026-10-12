@@ -11,9 +11,12 @@ import {
   inReview,
   picks,
   pipelineAt,
+  preflightOf,
   ready,
   review,
+  stalled,
   step,
+  usedUp,
 } from "./rules.ts";
 import type { PrStatus } from "./types.ts";
 
@@ -214,4 +217,61 @@ test("bare: a ticket with nothing but a title", () => {
   assert.equal(bare(v("", [note("<p>see the screenshot</p>")])), false);
   assert.equal(bare(v("", [], [{ id: "1", name: "a.png", size: 1, url: "u" }])), false);
   assert.equal(bare(v("", [note("", [{ id: "1", name: "a.png", size: 1, url: "u" }])])), false);
+});
+
+test("preflight: clear, unclear with its questions, or no verdict", () => {
+  assert.deepEqual(preflightOf('```json\n{"clear": true}\n```'), { clear: true });
+  assert.deepEqual(preflightOf('{"clear": false, "questions": [" Which page? ", "", 3, "b", "c", "d"]}'), {
+    clear: false,
+    questions: ["Which page?", "b", "c"],
+  });
+  assert.equal(preflightOf('{"clear": false, "questions": []}'), null, "unclear without a question holds nothing");
+  assert.equal(preflightOf("looks fine"), null);
+  assert.equal(preflightOf('{"clear": "yes"}'), null);
+});
+
+test("stalled: the last three ended runs all without a PR", () => {
+  const at = (w: Worker, ended: number) => ({ ...w, ended });
+  const miss = [at(worker("a", "failed"), 1), at(worker("b", "blocked"), 2), at(worker("c", "done"), 3)];
+  assert.equal(stalled(miss), true, "a done without a PR is a miss too");
+  assert.equal(stalled(miss.slice(1)), false, "fewer than three runs");
+  assert.equal(stalled([...miss, at(worker("d", "done", { pr: "https://x/1" }), 4)]), false, "a PR goes on");
+  assert.equal(
+    stalled([at(worker("d", "done", { pr: "https://x/1" }), 0), ...miss]),
+    true,
+    "only the last three count",
+  );
+  const plan = at(
+    worker("e", "blocked", {
+      report: { status: "blocked", summary: "", questions: "Plan for approval: x" } as Worker["report"],
+    }),
+    5,
+  );
+  assert.equal(stalled([...miss, plan]), false, "a plan sent for approval is no miss");
+  assert.equal(stalled([...miss, at(worker("f", "stopped"), 6)]), true, "a run you stopped does not count either way");
+  assert.equal(stalled([...miss, worker("g", "running")]), true);
+});
+
+test("usedUp: a general window at 100%, on every account", () => {
+  const w = (pct: number, name: string | null = null) => ({ id: "x", label: "x", name, pct, resets: null });
+  const lim = (...windows: ReturnType<typeof w>[]) => ({ ok: true as const, windows });
+  assert.equal(usedUp([{ provider: "claude", limits: lim(w(100)) }], "claude"), true);
+  assert.equal(
+    usedUp([{ provider: "claude", limits: lim(w(100, "opus"), w(40)) }], "claude"),
+    false,
+    "one model's window",
+  );
+  assert.equal(usedUp([{ provider: "claude", limits: { ok: false, reason: "no-login" } }], "claude"), false, "unread");
+  assert.equal(usedUp([{ provider: "codex", limits: lim(w(100)) }], "claude"), false);
+  const accounts = [
+    { dir: "", limits: lim(w(100)) },
+    { dir: "/b", limits: lim(w(20)) },
+  ];
+  assert.equal(
+    usedUp([{ provider: "claude", limits: lim(w(100)), accounts }], "claude"),
+    false,
+    "another account has room",
+  );
+  accounts[1].limits = lim(w(100));
+  assert.equal(usedUp([{ provider: "claude", limits: lim(w(100)), accounts }], "claude"), true);
 });

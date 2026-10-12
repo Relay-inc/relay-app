@@ -2,7 +2,6 @@ import type { Key } from "../../../shared/i18n";
 import { doingFirst, ordered, statusOf, type Kind } from "../plan.ts";
 import { ask } from "./ask.ts";
 import { blocked } from "./blocked.ts";
-import { capture } from "./capture.ts";
 import { card } from "./card.ts";
 import { chat } from "./chat.ts";
 import { mail } from "./mail.ts";
@@ -37,7 +36,6 @@ export const SUBJECTS: { [T in SubjectType]: SubjectDef<T> } = {
   mail,
   chat,
   time,
-  capture,
 };
 type Def = SubjectDef<SubjectType>;
 const defs = Object.entries(SUBJECTS) as [SubjectType, Def][];

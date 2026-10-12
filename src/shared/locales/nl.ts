@@ -179,6 +179,11 @@ export default {
   "pl.noColumn": "een kolom van de pipeline staat niet meer op het bord, kijk Instellingen › Projecten na",
   "pl.notReady":
     "Niet opgepikt: het ticket heeft geen beschrijving, reacties of bestanden om van te vertrekken. Vul aan wat nodig is en zet het terug in {column}.",
+  "pl.unclear":
+    "Niet opgepikt: een agent zou hier moeten gokken. Beantwoord dit op het ticket en zet het dan terug in {column}.\n\n{questions}",
+  "pl.usedUp": "{project}: het Claude-abonnement is op, de pipeline neemt geen tickets tot er weer ruimte is.",
+  "pl.stalled":
+    "{project}: de laatste drie agent-runs eindigden zonder PR, dus de pipeline neemt geen nieuwe tickets. Bekijk de tickets in de inputkolom; er een terugzetten of er zelf een starten zet het weer in gang.",
   "pl.picked": "Opgepikt door Relay: een agent bouwt dit op branch {branch}.",
   "pl.resumed": "Opnieuw opgepikt door Relay: de agent gaat verder met wat nieuw is op het ticket.",
   "pl.startFailed": "Relay kon geen agent starten op dit ticket: {error}",
@@ -592,7 +597,6 @@ export default {
   "today.kind.review": "Review",
   "today.kind.fix": "Jouw PR",
   "today.kind.finished": "Klaar",
-  "today.kind.capture": "Vault-update",
   "today.fact.from": "Van",
   "today.fact.to": "Aan",
   "today.fact.date": "Datum",
@@ -630,7 +634,6 @@ export default {
   "today.doneIn.review": "Klaar enkel op Vandaag: op GitHub gebeurt niets",
   "today.doneIn.fix": "Klaar enkel op Vandaag: op GitHub gebeurt niets",
   "today.doneIn.finished": "Klaar markeert het als gelezen",
-  "today.doneIn.capture": "Klaar slaat het over, er gaat niets naar de vault",
   "note.meetingStarted": "Over de meeting: {title}",
   "cal.banner": "Meeting om {time}",
   "cal.prepTitle": "Voorbereiding: ",
@@ -780,18 +783,9 @@ export default {
   "set.timeFromSessions": "De dagtijd voorstellen uit gesprekken",
   "set.timeFromSessionsHelp":
     "Vanaf 16:00 stelt Today de <b>Productive</b>-tijdsregistraties van de dag voor, op basis van wanneer je in je gesprekken schreef (Claude Code). Niets wordt geboekt zonder jouw akkoord. Uit: Relay leest de transcripten hiervoor niet.",
-  "set.captureOnClose": "Vault-updates voorstellen als een gesprek sluit",
+  "set.captureOnClose": "Vault bijwerken als een gesprek sluit",
   "set.captureOnCloseHelp":
-    "Sluit je een gesprek, dan leest Claude het nog één keer op wat in de vault hoort: beslissingen, projectstatus, opvolging. Er wordt niets geschreven: de voorstellen komen op <b>Vandaag</b>, en Toepassen maakt ze in een nieuw gesprek waarin je elke wijziging toestaat. Korte vragen (minder dan 3 berichten) worden overgeslagen.",
-  "capture.why_one": "{n} wijziging voor de vault",
-  "capture.why_other": "{n} wijzigingen voor de vault",
-  "capture.toast": "Vault-updates voorgesteld uit “{title}”",
-  "capture.review": "Bekijken",
-  "capture.apply": "Toepassen",
-  "capture.skip": "Overslaan",
-  "capture.leaveOut": "Dit weglaten",
-  "capture.chatTitle": "Vault: {title}",
-  "capture.chatNote": "Past de vault-updates toe die uit “{title}” voorgesteld zijn.",
+    "Als je een gesprek sluit, leest Claude het nog eens en schrijft wat in de vault hoort er meteen in: beslissingen, projectstatus, opvolging. Er wordt niets getoond of gevraagd; de git-geschiedenis van de vault is de controle. Korte vragen (minder dan 3 berichten) worden overgeslagen.",
   "retry.at": "Gebruikslimiet bereikt. Opnieuw om {time}.",
   "retry.check": "Gebruikslimiet bereikt. Opnieuw kijken om {time}.",
   "retry.cancel": "Annuleren",

@@ -184,6 +184,12 @@ export default {
   "pl.noColumn": "une colonne de la pipeline n'est plus sur le tableau, vérifiez Réglages › Projets",
   "pl.notReady":
     "Pas pris : le ticket n'a ni description, ni commentaires, ni fichiers. Ajoutez ce qu'il faut et remettez-le dans {column}.",
+  "pl.unclear":
+    "Pas pris : un agent devrait deviner ici. Répondez à ces questions sur le ticket, puis remettez-le dans {column}.\n\n{questions}",
+  "pl.usedUp":
+    "{project} : le forfait Claude est épuisé, le pipeline ne prend plus de tickets jusqu'à ce qu'il ait de la place.",
+  "pl.stalled":
+    "{project} : les trois derniers passages d'agent se sont terminés sans PR, le pipeline ne prend plus de nouveaux tickets. Regardez les tickets de la colonne d'entrée ; en remettre un ou en lancer un vous-même relance le pipeline.",
   "pl.picked": "Pris par Relay : un agent construit ceci sur la branche {branch}.",
   "pl.resumed": "Repris par Relay : l'agent continue avec ce qui est nouveau sur le ticket.",
   "pl.startFailed": "Relay n'a pas pu démarrer d'agent sur ce ticket : {error}",
@@ -598,7 +604,6 @@ export default {
   "today.kind.review": "Revue",
   "today.kind.fix": "Votre PR",
   "today.kind.finished": "Terminé",
-  "today.kind.capture": "Mise à jour du coffre",
   "today.fact.from": "De",
   "today.fact.to": "À",
   "today.fact.date": "Date",
@@ -636,7 +641,6 @@ export default {
   "today.doneIn.review": "Fait seulement dans Aujourd'hui : rien ne se passe sur GitHub",
   "today.doneIn.fix": "Fait seulement dans Aujourd'hui : rien ne se passe sur GitHub",
   "today.doneIn.finished": "Fait le marque comme lu",
-  "today.doneIn.capture": "Fait l'ignore, rien ne va dans le coffre",
   "note.meetingStarted": "À propos de la réunion : {title}",
   "cal.banner": "Réunion à {time}",
   "cal.prepTitle": "Préparation : ",
@@ -786,18 +790,9 @@ export default {
   "set.timeFromSessions": "Proposer le temps de la journée à partir des conversations",
   "set.timeFromSessionsHelp":
     "À partir de 16:00, Today propose les saisies de temps <b>Productive</b> de la journée selon les moments où vous avez écrit dans vos conversations (Claude Code). Rien n'est saisi sans votre accord. Désactivé : Relay ne lit pas les transcriptions pour cela.",
-  "set.captureOnClose": "Proposer des mises à jour du coffre à la fermeture d'une conversation",
+  "set.captureOnClose": "Mettre à jour le coffre à la fermeture d'une conversation",
   "set.captureOnCloseHelp":
-    "Quand vous fermez une conversation, Claude la relit pour ce qui a sa place dans le coffre : décisions, état des projets, suivis. Rien n'est écrit : les propositions arrivent dans <b>Aujourd'hui</b>, et Appliquer les fait dans une nouvelle conversation où vous autorisez chaque modification. Les questions rapides (moins de 3 messages) sont ignorées.",
-  "capture.why_one": "{n} modification pour le coffre",
-  "capture.why_other": "{n} modifications pour le coffre",
-  "capture.toast": "Mises à jour du coffre proposées depuis « {title} »",
-  "capture.review": "Voir",
-  "capture.apply": "Appliquer",
-  "capture.skip": "Ignorer",
-  "capture.leaveOut": "Laisser de côté",
-  "capture.chatTitle": "Coffre : {title}",
-  "capture.chatNote": "Applique les mises à jour du coffre proposées depuis « {title} ».",
+    "Quand vous fermez une conversation, Claude la relit et écrit directement dans le coffre ce qui y a sa place : décisions, état des projets, suivis. Rien n'est affiché ni demandé ; l'historique git du coffre sert de contrôle. Les questions rapides (moins de 3 messages) sont ignorées.",
   "retry.at": "Limite d'utilisation atteinte. Nouvel essai à {time}.",
   "retry.check": "Limite d'utilisation atteinte. Nouvelle vérification à {time}.",
   "retry.cancel": "Annuler",
