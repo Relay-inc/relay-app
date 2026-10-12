@@ -20,8 +20,9 @@ export const relayText = (text: string) => (isRelayTurn(text) ? text.slice(RELAY
 export const lastTurnIs = (items: Item[] | undefined, text: string) =>
   [...(items || [])].reverse().find(item => item.kind === "me")?.text === text;
 
-/** The board: newest first. */
-export const boardOrder = (workers: Iterable<Worker>) => [...workers].sort((newer, older) => older.at - newer.at);
+/** The board: newest first, without the workers whose conversation was closed (reopening it brings the worker back). */
+export const boardOrder = (workers: Iterable<Worker>, chats: Record<string, Chat> = {}) =>
+  [...workers].filter(worker => !chats[worker.key]?.closed).sort((newer, older) => older.at - newer.at);
 export const runningCount = (workers: Iterable<Worker>) =>
   [...workers].filter(worker => worker.state === "running").length;
 

@@ -88,6 +88,12 @@ test("board: newest first, running counted", () => {
   assert.equal(list[0].key, "a"); // the input stays as it was
   assert.equal(runningCount(list), 1);
   assert.equal(runningCount([]), 0);
+  // a worker whose conversation was closed leaves the board
+  const chats = { b: { key: "b", project: null, title: "b", at: 3, closed: 5 } } as Record<string, Chat>;
+  assert.deepEqual(
+    boardOrder(list, chats).map(w => w.key),
+    ["c", "a"],
+  );
 });
 
 test("the orchestrator's keys", () => {

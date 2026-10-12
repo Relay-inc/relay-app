@@ -3,6 +3,7 @@ import type { OrchEvent, Worker } from "../../domain/orchestrator/types";
 import * as backend from "../../infrastructure/backend";
 import { adoptWorkers, ensureCoordinatorChat } from "../conversations/chats";
 import { relayWrote } from "../conversations/history";
+import { useConversationsStore } from "../conversations/store";
 import { useOrchestratorStore } from "./store";
 
 // The orchestrator's workers as the backend reports them: the list at start, the `orch` events after it, and stopping
@@ -31,6 +32,6 @@ export function onOrchEvent(event: OrchEvent) {
 export const stopWorker = (key: string) => backend.orchStop(key).catch(() => false);
 
 const workers = () => Object.values(useOrchestratorStore.getState().workers);
-/** The workers as the board shows them, newest first. */
-export const workerBoard = () => boardOrder(workers());
+/** The workers as the board shows them, newest first, the closed ones left out. */
+export const workerBoard = () => boardOrder(workers(), useConversationsStore.getState().chats);
 export const runningWorkers = () => runningCount(workers());

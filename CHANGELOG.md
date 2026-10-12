@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back
+
 ## [0.0.22] - 2026-10-12
 
 ### Added
