@@ -17,6 +17,10 @@ a PR. Versions follow
 
 - **Vault setup**: after Start, Relay offers to set up the new vault with Claude (or Skip). A first conversation interviews you about yourself, your contexts, people, projects and how Claude should think along, and writes the answers into the vault; Productive projects can become project notes. Run it again from Conversation › Set Up Vault (#182)
 
+### Changed
+
+- **Reminders in the menu bar**: the icon is the Relay mark in one colour, which follows a light or dark menu bar, with one number for what is overdue or due today, red while something is overdue. It replaces the alarm clock emoji and the two numbers
+
 ### Fixed
 
 - **Permission cards for Claude**: a tool call or question that needs the user shows its card again and waits for the answer. The desktop answered every request as unsupported, so a vault without allow rules or auto mode had every edit refused, on this Mac and on a work machine

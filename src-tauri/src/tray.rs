@@ -13,7 +13,8 @@ const ID: &str = "reminders";
 static SHOWN: Mutex<String> = Mutex::new(String::new());
 
 pub fn init(app: &AppHandle) -> tauri::Result<()> {
-    TrayIconBuilder::with_id(ID).title("⏰").show_menu_on_left_click(true)
+    TrayIconBuilder::with_id(ID).icon(tauri::include_image!("icons/tray-template.png")).icon_as_template(true)
+        .show_menu_on_left_click(true)
         .on_menu_event(|app, e| { on_menu(app, e.id().as_ref()); }).build(app)?;
     refresh(app);
     let h = app.clone();
@@ -52,7 +53,7 @@ pub fn refresh(app: &AppHandle) {
     { let mut shown = SHOWN.lock().unwrap(); if *shown == key { return; } *shown = key; }
     let n = |f: fn(i64) -> bool| rows.iter().filter(|r| f(days(r))).count();
     let (late, now) = (n(|d| d < 0), n(|d| d == 0));
-    let title = if late + now > 0 { format!("⏰ {late}·{now}") } else { "⏰".into() };
+    let title = if late + now > 0 { (late + now).to_string() } else { String::new() };
     tray.set_title(Some(&title)).ok();
     #[cfg(target_os = "macos")]
     if late > 0 { tray.with_inner_tray_icon(move |t| red_title(t.ns_status_item(), &title)).ok(); }
