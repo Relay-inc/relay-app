@@ -533,6 +533,20 @@ fn proposals_of(text: &str) -> Vec<Value> {
         .filter(|x| ["title", "file", "change"].iter().all(|f| x[f].as_str().is_some_and(|s| !s.trim().is_empty())))
         .map(|x| json!({"title": x["title"], "file": x["file"], "change": x["change"]})).collect()
 }
+/// The project index of a vault in the starter layout (System/scripts/build-index.py), rebuilt at start with the app's
+/// own copy of the script, so a vault an older Relay made follows today's rules too (an Active project untouched for
+/// 30 days shows as Quiet). A vault in another layout keeps its own way. Errors are logged.
+fn refresh_index(app: &AppHandle) {
+    let vault = app.state::<App>().settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    if vault.is_empty() || !PathBuf::from(&vault).join("System/scripts/build-index.py").is_file() { return; }
+    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
+    let path = app.state::<App>().path.clone();
+    std::thread::spawn(move || match Command::new("python3").arg(&script).env("VAULT", &vault).env("PATH", &path).output() {
+        Ok(o) if o.status.success() => {}
+        Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
+        Err(e) => eprintln!("build-index: {e}"),
+    });
+}
 /// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
 #[tauri::command]
 fn project_repos(state: State<App>) -> Value {
@@ -1977,6 +1991,7 @@ pub fn run() {
             awake::start(app.handle());
             retry::start(app.handle());
             updater::start(app.handle());
+            refresh_index(app.handle());
             #[cfg(feature = "selftest")]
             selftest::start(app.handle());
             // the work machines: their conversations back, then their cards every second (only when there are machines),

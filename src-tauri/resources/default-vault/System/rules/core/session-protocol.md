@@ -32,7 +32,7 @@ Test before writing to Status: "does a future session need this to know where th
 ### 2. Card and index
 - On the card: `last` today, `index` rewritten (one line, max 160 characters), `status`, `next` and `phase` when they changed. A new repo goes into `repos:`.
 - Then run `python3 System/scripts/build-index.py`.
-- 30 days without activity flips Active to Quiet. Closed projects move with their folder to `Archive/<year>/` after a last Status (what is still open and where it goes), with `status: Closed` and `closed:` on the card.
+- 30 days without activity (`last`) shows an Active project as Quiet in the index; `build-index.py` does that, leave the card on Active. Closed projects move with their folder to `Archive/<year>/` after a last Status (what is still open and where it goes), with `status: Closed` and `closed:` on the card.
 - New project: create `Projects/<Project>/<Project>.md` from the template with a full card first.
 
 ### 3. Reminders (only when something changed)
