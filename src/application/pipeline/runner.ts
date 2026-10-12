@@ -9,6 +9,8 @@ import {
   manual,
   picks,
   pipelineAt,
+  PREFLIGHT_PROMPT,
+  preflightOf,
   ready,
   review,
   step,
@@ -176,7 +178,8 @@ async function resume(b: Board, id: string, worker: Worker, why: string) {
 }
 
 /** A new ticket: moved to busy first (the claim), then a worker with the ticket as its brief. A ticket from the pick
- *  column with nothing in it goes to a person instead; one you start yourself (`hand`) is your call. */
+ *  column with nothing in it, or that the pre-flight finds unclear, goes to a person instead; one you start yourself
+ *  (`hand`) is your call. */
 async function claim(b: Board, project: string, card: Card, hand = false) {
   const ctx = ctxOf(b.prov);
   await move(b, card.id, b.p.busy);
@@ -185,6 +188,15 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     if (!hand && view && bare(view)) {
       await move(b, card.id, b.p.input);
       return await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
+    }
+    // plan mode asks its questions with the plan, and a ticket you start yourself is your call
+    if (!hand && view && !b.p.plan) {
+      const verdict = preflightOf(await backend.aiWrite(PREFLIGHT_PROMPT, briefOf(view)).catch(() => ""));
+      if (verdict && !verdict.clear) {
+        await move(b, card.id, b.p.input);
+        const questions = verdict.questions.map(q => `- ${q}`).join("\n");
+        return await comment(b, card.id, t("pl.unclear", { questions, column: nameOf(b, b.p.pick) }));
+      }
     }
     const url = view?.url || (await b.prov.url(ctx, b.ref, card.id));
     const ticket: Ticket = {

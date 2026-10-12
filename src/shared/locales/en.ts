@@ -175,6 +175,8 @@ const en = {
   "pl.noColumn": "a column of the pipeline is no longer on the board, check Settings › Projects",
   "pl.notReady":
     "Not picked up: the ticket has no description, comments or files to build from. Add what is needed and move it back to {column}.",
+  "pl.unclear":
+    "Not picked up: an agent would have to guess here. Answer these on the ticket, then move it back to {column}.\n\n{questions}",
   "pl.picked": "Picked up by Relay: an agent is building this on branch {branch}.",
   "pl.resumed": "Picked up again by Relay: the agent continues with what is new on the ticket.",
   "pl.startFailed": "Relay could not start an agent on this ticket: {error}",
