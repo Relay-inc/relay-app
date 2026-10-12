@@ -41,6 +41,7 @@ import type { OrchEvent, Worker } from "../domain/orchestrator/types";
 import type { PrStatus, Ticket } from "../domain/pipeline/types";
 import type { SpeechModelInfo } from "../domain/settings/voice";
 import type { Recording } from "../domain/calendar/rules";
+import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/plugins/types";
 
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
@@ -319,6 +320,25 @@ export const integrationToken = (provider: string, token: string, account?: stri
   invoke("integration_token", account === undefined ? { provider, token } : { provider, token, account });
 export const integrationImport = (provider: string) =>
   invoke<Record<string, string>>("integration_import", { provider });
+
+// ---------- plugins: MCP servers and their views (src-tauri/src/plugins.rs)
+/** Which of each plugin's secrets are in the keychain: `{ id: { NAME: true } }`. */
+export const pluginsList = () => invoke<Record<string, Record<string, boolean>>>("plugins_list");
+/** A secret of a plugin into the keychain; "" removes it. */
+export const pluginSecret = (id: string, name: string, value: string) => invoke("plugin_secret", { id, name, value });
+/** Before a plugin leaves the settings: stops its server and deletes its secrets. */
+export const pluginForget = (id: string) => invoke("plugin_forget", { id });
+/** Starts the plugin afresh and lists what it offers. */
+export const pluginTest = (id: string) => invoke<PluginTest>("plugin_test", { id });
+/** Reads the plugin's view and has it served: the URL for the sandboxed frame. */
+export const pluginView = (id: string, uri?: string) =>
+  invoke<PluginViewInfo>("plugin_view", uri ? { id, uri } : { id });
+/** A tool call from the plugin's view; the backend refuses a tool that is not allowed. */
+export const pluginCall = (id: string, tool: string, args: Record<string, unknown>) =>
+  invoke<ToolResult>("plugin_call", { id, tool, args });
+/** The names of Claude Code's MCP servers that can become plugins, and importing one. */
+export const pluginImportList = () => invoke<string[]>("plugin_import_list");
+export const pluginImport = (name: string) => invoke<Plugin>("plugin_import", { name });
 
 // ---------- agent access to extensions (the vault's .relay/config.json)
 export const actionConfig = () => invoke<ActionConfig>("action_config");

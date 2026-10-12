@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { isView, BRAIN, MAIL, PRS, REM, USAGE, WAIT, reviewOf } from "../../../domain/navigation/views";
+import { isView, pluginIdOf, BRAIN, MAIL, PRS, REM, USAGE, WAIT, reviewOf } from "../../../domain/navigation/views";
 import { boardOf } from "../../../application/navigation/navigation";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -23,6 +23,7 @@ import { BrainView } from "../brain/BrainView";
 import { MailView } from "../mail/MailView";
 import { TodayView } from "../today/TodayView";
 import { ReviewView } from "../today/ReviewView";
+import { PluginView } from "../plugins/PluginView";
 import { ChatBar } from "./ChatBar";
 import { ProjectPanel } from "./ProjectPanel";
 import { Subagents } from "./Subagents";
@@ -61,7 +62,15 @@ export function ConversationsView({ className }: { className: string }) {
   const stick = useRef(true);
   // the Pull requests and Mail views scroll their list and the open item apart, so they fill the pane instead of the log
   const review = reviewOf(selected);
-  const ownScroll = selected === PRS || selected === MAIL || selected === BRAIN || selected === WAIT || !!review;
+  // a plugin's view is a page of its own in a frame, which scrolls itself
+  const plugin = pluginIdOf(selected);
+  const ownScroll =
+    selected === PRS ||
+    selected === MAIL ||
+    selected === BRAIN ||
+    selected === WAIT ||
+    !!review ||
+    plugin !== undefined;
   useEffect(() => {
     if (ownScroll) return;
     const logEl = log.current!;
@@ -145,6 +154,8 @@ export function ConversationsView({ className }: { className: string }) {
           <TodayView className="flex-1" />
         ) : review ? (
           <ReviewView className="flex-1" />
+        ) : plugin !== undefined ? (
+          <PluginView key={plugin} id={plugin} className="flex-1" />
         ) : (
           <MailView className="flex-1" />
         )}

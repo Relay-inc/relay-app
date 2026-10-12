@@ -41,6 +41,8 @@ const FIELD_BASE =
 export const FIELD = `${FIELD_BASE} h-8 w-65 text-sm`;
 export const FIELD_ICON = `${FIELD_BASE} h-8 w-42 text-sm`;
 export const FIELD_CHIP = `${FIELD_BASE} h-6 w-38 text-xs`;
+/** A textarea of a few lines for a list typed one item per line (arguments, environment). */
+export const AREA = `${FIELD_BASE} min-h-16 w-65 resize-y py-1.5 font-mono text-xs`;
 export const SELECT =
   " h-7 w-50 max-w-full appearance-none overflow-hidden rounded-md border border-s-input bg-transparent bg-[url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2714%27%20height=%2714%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27%23888%27%20stroke-width=%272%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27m6%209%206%206%206-6%27/%3E%3C/svg%3E)] bg-position-[right_--spacing(2)_center] bg-no-repeat pr-6 pl-2 text-xs text-ellipsis whitespace-nowrap text-s-fg focus-visible:ring-1 ring-s-primary focus-visible:outline-none";
 

@@ -4,6 +4,7 @@ import type { Accent, SidebarCfg, TerminalApp, Theme } from "../../domain/settin
 import type { MapKey, VaultMap, VaultStatus } from "../../domain/workspace/types";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
 import { viewItems } from "../../domain/navigation/sidebar-views";
+import { shownPlugins } from "../../domain/plugins/rules";
 import { applyTheme } from "../../infrastructure/window";
 import { pickVault, pickMapped, checkMapping } from "../workspace/vault-setup";
 import { initLanguage } from "./settings";
@@ -70,7 +71,8 @@ export function sidebarViews() {
   const settings = current();
   const cfg = settings.sidebar ?? {};
   const boards = PROVIDERS.filter(board => settings.integrations[board.id]?.on);
-  return arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on, t), cfg).map(item => ({
+  const plugins = shownPlugins(settings.plugins);
+  return arranged(viewItems(boards, !!settings.github?.on, !!settings.mail?.on, t, plugins), cfg).map(item => ({
     ...item,
     shown: !isHidden(item.key, cfg),
   }));

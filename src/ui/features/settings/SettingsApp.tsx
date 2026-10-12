@@ -6,6 +6,7 @@ import { AgentsPage } from "./AgentsPage";
 import { GeneralPage } from "./GeneralPage";
 import { IntegrationsPage } from "./IntegrationsPage";
 import { MachinesPage } from "./MachinesPage";
+import { PluginsPage } from "./PluginsPage";
 import { ProjectsPage } from "./ProjectsPage";
 import { UpdatesPage } from "./UpdatesPage";
 import { VoicePage } from "./VoicePage";
@@ -58,6 +59,9 @@ export function SettingsApp() {
           </div>
           <div className={page("integrations")}>
             <IntegrationsPage active={tab === "integrations"} />
+          </div>
+          <div className={page("plugins")}>
+            <PluginsPage active={tab === "plugins"} />
           </div>
           <div className={page("machines")}>
             <MachinesPage active={tab === "machines"} />

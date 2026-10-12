@@ -320,10 +320,26 @@ export function settings(fixture: string) {
         ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
         : { on: false, feeds: [] },
     language: "en",
-    theme: fixture === "dark" ? "dark" : "light",
+    theme: fixture === "dark" || fixture === "plugins-dark" ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),
+    // the example plugin (packages/plugin-example), tested: its view is in the sidebar and its tool is allowed
+    plugins: fixture.startsWith("plugins")
+      ? [
+          {
+            id: "example",
+            name: "Dice",
+            command: "node",
+            args: ["/Users/demo/code/relay/packages/plugin-example/server.mjs"],
+            env: {},
+            secrets: ["API_KEY"],
+            on: true,
+            allowed: ["roll"],
+            view: { uri: "ui://relay-example/dice", name: "Dice" },
+          },
+        ]
+      : [],
     favicons: { on: false, last: "", tried: {} },
     agents: {
       default: "claude",

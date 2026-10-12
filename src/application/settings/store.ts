@@ -20,10 +20,12 @@ import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machine
 import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
+import type { PluginTest } from "../../domain/plugins/types";
 import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
-export type SettingsTab = "general" | "projects" | "agents" | "integrations" | "machines" | "voice" | "updates";
+export type SettingsTab =
+  "general" | "projects" | "agents" | "integrations" | "plugins" | "machines" | "voice" | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
@@ -77,6 +79,13 @@ export type SettingsState = {
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
   actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
+  pluginsPage: {
+    loaded: boolean; // the secrets are known
+    secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
+    imports: string[]; // Claude Code's MCP servers that can become plugins
+    messages: Record<string, Message | null>; // per plugin: what the last save or test said ("" is the list's)
+    tests: Record<string, { busy: boolean; result: PluginTest | null }>; // per plugin: the last test of this session
+  };
   integrations: {
     loaded: boolean; // the tokens are known
     listMessage: Message | null;
@@ -143,6 +152,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     phone: {},
   },
   actions: { list: [], entries: {}, errors: {} },
+  pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,
     listMessage: null,
