@@ -129,7 +129,8 @@ impl AgentProvider for Claude {
     fn command(&self, env: &Env, l: &Launch) -> Result<Command, String> {
         // ponytail: runs this Mac's `--version`, so for a work machine (machines.rs) it reads a path that is usually
         // missing here and lets it through. Check there too once proto::Info carries the machine's claude version.
-        if let Some(v) = agent_core::version(env.bin, env.path).filter(|v| too_old(v)) {
+        if let Some(line) = agent_core::version(env.bin, env.path).filter(|v| too_old(v)) {
+            let v = line.split_whitespace().next().unwrap_or_default();
             let [a, b, c] = MIN_VERSION;
             return Err(format!("claude: Claude Code {v} is too old for Relay, it needs {a}.{b}.{c} or newer. Run `claude update` and start the conversation again."));
         }
@@ -300,7 +301,7 @@ mod tests {
         let p = PathBuf::from("/tmp/pending");
         let l = Launch { key: "c:1", name: "x", model: "", effort: "", resume: None, fork: None, turn: None };
         let err = PROVIDER.command(&Env { bin: bin.to_str().unwrap(), ..env(&p) }, &l).err().unwrap();
-        assert!(err.contains("2.1.200") && err.contains("claude update"), "{err}");
+        assert_eq!(err, "claude: Claude Code 2.1.200 is too old for Relay, it needs 2.1.294 or newer. Run `claude update` and start the conversation again.");
         std::fs::remove_dir_all(&dir).ok();
     }
     #[test]
