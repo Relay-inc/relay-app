@@ -13,9 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.23] - 2026-10-12
+
 ### Fixed
 
-- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back
+- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back (#201)
 
 ## [0.0.22] - 2026-10-12
 
@@ -450,7 +452,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...HEAD
+[0.0.23]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...v0.0.20
