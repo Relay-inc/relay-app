@@ -731,6 +731,37 @@ const VIEWS = {
     await page.frameLocator("iframe[title=History]").getByText(/^Ready/).waitFor();
     await settle(page);
   },
+  // the agent rolled a die through the example plugin: its view under the call, fed with the call's input and result. A
+  // reopened conversation has the text of the result only, the view gets the JSON in it as its structured content
+  "plugin-inline": async () => {
+    await open(page, server.url, { fixture: "plugins", sel: keys.roll });
+    await page.frameLocator("iframe[title=Dice]").locator("#result").getByText("17", { exact: true }).waitFor();
+    await settle(page);
+  },
+  "plugin-inline-dark": async () => {
+    await open(page, server.url, { fixture: "plugins-dark", sel: keys.roll });
+    await page.frameLocator("iframe[title=Dice]").locator("#result").getByText("17", { exact: true }).waitFor();
+    await settle(page);
+  },
+  // a live call: the frame starts with the call, the result comes after it with `structuredContent` (what the stream gives)
+  "plugin-inline-live": async () => {
+    await open(page, server.url, { fixture: "plugins", sel: keys.roll });
+    await page.frameLocator("iframe[title=Dice]").locator("#result").getByText("17", { exact: true }).waitFor();
+    await page.evaluate(() => {
+      const h = window.__harness;
+      h.emitAgent(h.keys.roll, { type: "working" });
+      h.emitAgent(h.keys.roll, { type: "tool_call", id: "toolu_roll_live", name: "mcp__example__roll", input: { sides: 6 } });
+    });
+    const live = page.frameLocator("iframe[title=Dice]").nth(1);
+    await live.getByText(/^Ready/).waitFor();
+    await page.evaluate(() => {
+      const h = window.__harness;
+      h.emitAgent(h.keys.roll, { type: "tool_result", id: "toolu_roll_live", error: false, output: { text: "{}", structured: { value: 5, sides: 6 } } });
+    });
+    await live.locator("#result").getByText("5", { exact: true }).waitFor();
+    await scrollMain("bottom");
+    await settle(page);
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");

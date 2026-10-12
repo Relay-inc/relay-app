@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import type { PluginViewInfo } from "../../../domain/plugins/types";
-import { startHost } from "../../../application/plugins/host";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { toolResult } from "../../../domain/plugins/rules";
+import type { PluginViewInfo, ToolOutput } from "../../../domain/plugins/types";
+import { startHost, type Call, type Hosted } from "../../../application/plugins/host";
 import { loadPluginView } from "../../../application/plugins/plugins";
 import { useSettingsStore } from "../../../application/settings/store";
 import { useT } from "../../hooks/useT";
@@ -44,15 +45,25 @@ export function PluginView({ id, className = "" }: { id: string; className?: str
   );
 }
 
-function PluginFrame({
+/** The call a view is shown under, when it is inline in a conversation: what the host tells it of the call. `output` is
+ *  what the tool answered (none yet for a call that runs, or when the agent gave none), `error` whether it failed. */
+export type InlineCall = Call & { output?: ToolOutput; error: boolean };
+
+/** The frame of one view: the page served by the backend, the bridge to the plugin, and what stands in for them while
+ *  the server starts or when it fails. Both the middle column and a conversation use it; `inline` is the latter. */
+export function PluginFrame({
   id,
   uri,
   className,
+  style,
+  inline,
   retry,
 }: {
   id: string;
   uri?: string;
   className: string;
+  style?: CSSProperties;
+  inline?: InlineCall;
   retry: () => void;
 }) {
   const { t } = useT();
@@ -70,7 +81,27 @@ function PluginFrame({
     };
   }, [id, uri]);
   const ready = loaded.status === "ready";
-  useEffect(() => (ready && frame.current ? startHost(frame.current, id) : undefined), [ready, id]);
+  const hosted = useRef<Hosted>(undefined);
+  // the callbacks and the input of the call are read as the host starts: they do not restart the frame
+  const call = useRef(inline);
+  useEffect(() => {
+    call.current = inline;
+  });
+  useEffect(() => {
+    if (!ready || !frame.current) return;
+    const live = call.current;
+    hosted.current = startHost(
+      frame.current,
+      id,
+      live && { input: live.input, onHeight: height => call.current?.onHeight(height) },
+    );
+    return () => {
+      hosted.current?.stop();
+      hosted.current = undefined;
+    };
+  }, [ready, id]);
+  const result = useMemo(() => toolResult(inline?.output, !!inline?.error), [inline?.output, inline?.error]);
+  useEffect(() => hosted.current?.result(result), [ready, result]);
 
   if (loaded.status === "ready")
     return (
@@ -80,10 +111,11 @@ function PluginFrame({
         sandbox="allow-scripts"
         title={loaded.info.name}
         className={`${className} min-h-0 w-full border-0`}
+        style={style}
       />
     );
   return (
-    <div className={`${className} grid place-content-center justify-items-center gap-3 px-8 text-center`}>
+    <div className={`${className} grid place-content-center justify-items-center gap-3 px-8 text-center`} style={style}>
       {loaded.status === "loading" ? (
         <>
           <span className="spinner"></span>

@@ -3,7 +3,9 @@
 export type PluginViewRef = { uri: string; name: string };
 /** One entry of settings.json `plugins`. `secrets` are names of environment variables whose values sit in the keychain;
  *  `allowed` the tools the plugin's views may call; `views` what the last test found (shown as tabs), which is what puts
- *  the plugin in the sidebar without starting it. */
+ *  the plugin in the sidebar without starting it. `toolViews` is the same test's tool to view (`ui://` uri) mapping: what
+ *  a conversation shows under a call to the tool. `mcp` is the name Claude Code knows the server by (its tools are
+ *  `mcp__<mcp>__<tool>` there), the plugin's id when null. Both are absent on an entry saved before they existed. */
 export type Plugin = {
   id: string;
   name: string;
@@ -14,6 +16,8 @@ export type Plugin = {
   on: boolean;
   allowed: string[];
   views: PluginViewRef[];
+  toolViews?: Record<string, string>;
+  mcp?: string | null;
 };
 /** A tool as the test lists it: `view` is the `ui://` resource it renders in, `app` whether a view may call it. */
 export type PluginTool = { name: string; description?: string; view: string | null; app: boolean };
@@ -33,3 +37,6 @@ export type PluginViewInfo = {
 };
 /** A tool call's result as MCP gives it. */
 export type ToolResult = { content?: unknown[]; structuredContent?: unknown; isError?: boolean };
+/** What an MCP tool answered in a conversation (the agent's `tool_result` event): its text and, when the agent hands it
+ *  over (Claude Code's live stream, not its transcript), `structuredContent`. */
+export type ToolOutput = { text: string; structured?: unknown };

@@ -1545,6 +1545,9 @@ export default {
   "plug.allowed_other": "{n} tools toegelaten",
   "plug.serverH": "Server",
   "plug.name": "Naam",
+  "plug.mcp": "MCP-naam",
+  "plug.mcpHint":
+    "De naam waaronder Claude Code deze server kent: zijn tools heten daar <code>mcp__naam__tool</code>. Leeg is het id van de plugin. Roept de agent een tool met een view aan, dan staat die view in het gesprek.",
   "plug.command": "Commando",
   "plug.commandHint": "Het programma dat de server start, bijvoorbeeld <code>npx</code> of <code>uvx</code>.",
   "plug.args": "Argumenten",

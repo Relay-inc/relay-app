@@ -184,6 +184,15 @@ Tauri IPC and no access to the app. The view talks to Relay over postMessage (`u
 `ui/open-link`; `src/domain/plugins/bridge.ts`), and the backend (`src-tauri/src/plugins.rs`) runs only tools the plugin
 allows and whose `_meta.ui.visibility` includes `app`. The agent is not involved: it reaches MCP servers through Claude
 Code. Not yet: views inside conversations, display modes, model context and permissions requests (camera, microphone).
+A view also shows inline, under the agent's call to one of the plugin's tools: Claude Code names it `mcp__<server>__<tool>`,
+and `<server>` is the plugin's "MCP name" (its id when empty; Import fills in Claude Code's name). The test (Save) records
+which tool renders in which view (`toolViews`), so a conversation knows without starting the server. The frame
+(`src/ui/features/plugins/ToolView.tsx`) starts when it comes near the screen, takes the column's width and the height the
+view reports with `ui/notifications/size-changed` (at most 480 px), and gets the call's `tool-input` and `tool-result`.
+The result comes with the `tool_result` event (`output`, Claude Code only, MCP tools only, at most 1 MB per part): the live
+stream carries `structuredContent`, Claude Code's transcript keeps only the text, so a reopened conversation gives the view
+the text, and a JSON object in it as `structuredContent`.
+
 `packages/plugin-example` is a server and view without dependencies to start from.
 
 ## Agent providers

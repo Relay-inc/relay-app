@@ -10,6 +10,7 @@ import { UserMessage } from "./UserMessage";
 import { Answer } from "./Answer";
 import { Thinking } from "./Thinking";
 import { ToolStep } from "./ToolStep";
+import { ToolView } from "../plugins/ToolView";
 import { NoteLine } from "./NoteLine";
 import { RelayTurn } from "./RelayTurn";
 
@@ -26,7 +27,12 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
     case "thinking":
       return <Thinking text={item.text} />;
     case "tool":
-      return <ToolStep item={item} />;
+      return (
+        <>
+          <ToolStep item={item} />
+          <ToolView item={item} />
+        </>
+      );
     case "allowed":
     case "denied": {
       // what was answered on a permission card, where the card stood

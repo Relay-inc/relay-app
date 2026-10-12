@@ -25,6 +25,7 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
   const test = useSettingsStore(s => (plugin ? s.pluginsPage.tests[plugin.id] : undefined));
   // what is typed, kept until Save
   const [name, setName] = useState(plugin?.name ?? "");
+  const [mcp, setMcp] = useState(plugin?.mcp ?? "");
   const [command, setCommand] = useState(plugin?.command ?? "");
   const [args, setArgs] = useState((plugin?.args ?? []).join("\n"));
   const [env, setEnv] = useState(formatEnv(plugin?.env ?? {}));
@@ -58,6 +59,8 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
       on: plugin?.on ?? true,
       allowed: plugin?.allowed ?? [],
       views: plugin?.views ?? [],
+      toolViews: plugin?.toolViews ?? {},
+      mcp: mcp.trim() || null,
     };
     const values = Object.fromEntries(secrets.filter(row => row.name.trim()).map(row => [row.name.trim(), row.value]));
     const ok = await savePlugin(
@@ -87,6 +90,17 @@ export function PluginEditor({ plugin, onSaved }: { plugin: Plugin | null; onSav
             value={name}
             onChange={e => setName(e.target.value)}
             spellCheck={false}
+          />
+        </Field>
+        <Field label={t("plug.mcp")} id="plugmcp" hint={<Html html={th("plug.mcpHint")} />}>
+          <input
+            className={`${FIELD} font-mono text-xs`}
+            id="plugmcp"
+            value={mcp}
+            onChange={e => setMcp(e.target.value)}
+            placeholder={plugin?.id ?? ""}
+            spellCheck={false}
+            autoComplete="off"
           />
         </Field>
         <Field label={t("plug.command")} id="plugcommand" hint={<Html html={th("plug.commandHint")} />}>
