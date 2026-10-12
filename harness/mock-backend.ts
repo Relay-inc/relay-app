@@ -144,6 +144,40 @@ function handle(cmd: string, a: Args): unknown {
     case "plugin:deep-link|get_current":
       return query.get("link") ? [query.get("link")] : null;
 
+    // Relay's updates and the agent CLIs (Settings › Updates): 0.0.21 installed, 0.0.23 out, 0.0.22 skipped
+    case "updates_status":
+    case "updates_check":
+      return {
+        version: "0.0.21",
+        checked: Date.parse("2026-10-12T09:41:00Z"),
+        latest: "0.0.23",
+        error: null,
+        releases: [
+          {
+            version: "0.0.23",
+            date: "2026-10-12T08:00:00Z",
+            notes: "### Added\n\n- **Updates in Settings**: Settings › Updates shows the releases since your version and installs the newest, and updates the coding agents (#190)\n\n### Fixed\n\n- **Cmd-K**: a search for a ticket number finds it on every board",
+          },
+          {
+            version: "0.0.22",
+            date: "2026-10-10T08:00:00Z",
+            notes: "### Changed\n\n- **Permission cards** wait for `Always allow` answers per tool",
+          },
+          { version: "0.0.21", date: "2026-10-08T08:00:00Z", notes: "### Added\n\n- an older release, not shown" },
+        ],
+      };
+    case "updates_install":
+      [0.2, 0.55, 1].forEach((f, i) => setTimeout(() => emit("update-progress", { done: f * 24e6, total: 24e6 }), 300 * (i + 1)));
+      return new Promise(() => {}); // the app restarts
+    case "agent_updates":
+      return [
+        { id: "claude", name: "Claude Code", on: true, installed: "2.1.289", latest: "2.1.296", command: "/Users/me/.npm-global/bin/npm install -g --prefix /Users/me/.npm-global @anthropic-ai/claude-code@latest" },
+        { id: "codex", name: "Codex", on: true, installed: "0.162.1", latest: "0.162.1", command: "/opt/homebrew/bin/brew upgrade codex" },
+        { id: "opencode", name: "OpenCode", on: false, installed: "1.1.6", latest: "1.19.0", command: null },
+        { id: "pi", name: "Pi", on: false, installed: null, latest: null, command: null },
+      ];
+    case "agent_update":
+      return new Promise(resolve => setTimeout(() => resolve(null), 400));
     // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
     case "machine_status":
       if (fixture === "phone") return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };

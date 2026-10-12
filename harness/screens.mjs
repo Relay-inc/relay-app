@@ -94,6 +94,12 @@ const VIEWS = {
     await page.locator("button:has(span.font-semibold)").nth(1).click(); // the row that needs you
     await waitText("Always allow"); // the card, with the next pending poll
   },
+  // Settings › Updates, Install and restart pressed: the download's progress
+  "settings-updates-install": async () => {
+    await settingsPage("Updates");
+    await click("Install and restart");
+    await waitText("55%");
+  },
   // Settings › Machines, a machine online, Add phone pressed: the QR and the line for the phone
   "settings-machines-phone": async () => {
     await settingsPage("Machines", null, "phone");
@@ -615,7 +621,7 @@ const VIEWS = {
     await waitText("From Relay");
   },
   ...Object.fromEntries(
-    ["General", "Projects", "Agents", "Integrations", "Voice"].map(tab => [
+    ["General", "Projects", "Agents", "Integrations", "Voice", "Updates"].map(tab => [
       `settings-${tab.toLowerCase()}`,
       () => settingsPage(tab),
     ]),

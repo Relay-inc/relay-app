@@ -27,7 +27,7 @@ import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./c
 import { closeChat } from "./conversations/actions";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
-import { select, newHere } from "./navigation/navigation";
+import { select, newHere, watchUpdate } from "./navigation/navigation";
 import { closeDrawer } from "./navigation/panel";
 import { useBoardStore } from "./board/store";
 import { checkBoards, resetBoard } from "./board/board";
@@ -111,6 +111,7 @@ function listenToBackend() {
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
   backend.onMenu(onMenu);
+  watchUpdate();
   backend.onOrch(event => {
     onOrchEvent(event);
     if (event.type === "worker") onPipelineWorker(event.worker);

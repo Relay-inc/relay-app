@@ -107,6 +107,8 @@ impl AgentProvider for Claude {
             terminal: true, background: true, effort: true, limits: true, title: true, write: true, accounts: true,
             live_model: true, control: true, picked: true, remote: true, brain: true }
     }
+    fn npm_package(&self) -> Option<&'static str> { Some("@anthropic-ai/claude-code") }
+    fn self_update(&self) -> &'static [&'static str] { &["update"] }
     fn default_bin(&self, home: &str) -> String { format!("{home}/.local/bin/claude") }
     fn detect(&self, env: &Env) -> Detect {
         let installed = Path::new(env.bin).is_file();

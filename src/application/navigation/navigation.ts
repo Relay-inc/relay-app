@@ -151,7 +151,17 @@ export const quickProjects = (typed: string) =>
   ).map(project => ({ name: project.name, label: projectLabel(project.name), context: project.context }));
 /** A web or mail link in the default browser or mail app: a webview window cannot open them itself. */
 export const openExternal = (url: string) => backend.openUrl(url);
-export const openSettings = () => backend.openSettingsWindow();
+/** The settings window, on Updates while there is one. */
+export const openSettings = () => backend.openSettingsWindow(nav().update ? "updates" : undefined);
+/** Whether there is a Relay update, from the last check (the backend checks at start and every 12 hours). */
+export function watchUpdate() {
+  const show = ({ latest }: { latest: string | null }) =>
+    set(draft => {
+      draft.update = latest ?? "";
+    });
+  void backend.updatesStatus().then(show);
+  void backend.onUpdates(show);
+}
 /** The provider whose board a selection key opens. */
 export const boardOf = (key: string) => {
   const id = boardIdOf(key);

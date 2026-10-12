@@ -211,7 +211,7 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
 
     // Settings › Machines, through the page itself: paste the line, Pair
     std::thread::sleep(Duration::from_secs(2));
-    open_settings(app);
+    open_settings(app, None);
     std::thread::sleep(Duration::from_secs(3));
     let js = include_str!("selftest-ui.js").replace("__LINE__", &line);
     let ran = app.get_webview_window("settings").ok_or("no settings window".to_string()).and_then(|w| w.eval(&js).map_err(|e| e.to_string()));
@@ -227,7 +227,7 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     // Settings › Machines: new conversations run on the machine (a project's too); a new general conversation's pick
     // then shows it
     let ui_ok = |s: String| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) };
-    open_settings(app);
+    open_settings(app, None);
     std::thread::sleep(Duration::from_secs(3));
     let js = include_str!("selftest-default.js").replace("__MACHINE__", "docker");
     let ran = app.get_webview_window("settings").ok_or("no settings window".to_string()).and_then(|w| w.eval(js.replace("__STEP__", "settings")).map_err(|e| e.to_string()));
@@ -396,7 +396,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
 fn forget_ui(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     let line = std::env::var("RELAY_SELFTEST_LINE").unwrap_or_default().replace(":47800#", &format!(":{PROXY}#"));
     std::thread::sleep(Duration::from_secs(2));
-    open_settings(app);
+    open_settings(app, None);
     std::thread::sleep(Duration::from_secs(3));
     let w = app.get_webview_window("settings").unwrap();
     let js = include_str!("selftest-ui.js").replace("__LINE__", &line);

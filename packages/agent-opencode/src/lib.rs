@@ -56,6 +56,8 @@ impl AgentProvider for OpenCode {
         Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: false, fork: true,
             terminal: true, background: true, effort: true, limits: false, title: false, accounts: false, ..Caps::default() }
     }
+    fn npm_package(&self) -> Option<&'static str> { Some("opencode-ai") }
+    fn self_update(&self) -> &'static [&'static str] { &["upgrade"] }
     fn default_bin(&self, home: &str) -> String {
         let c = [format!("{home}/.opencode/bin/opencode"), "/opt/homebrew/bin/opencode".into(), "/usr/local/bin/opencode".into(),
             format!("{home}/.local/bin/opencode"), format!("{home}/.npm-global/bin/opencode"), format!("{home}/.bun/bin/opencode")];
