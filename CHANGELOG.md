@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Changed
 
 - **Reminders in the menu bar**: each reminder shows its title with the project underneath and the project's icon (a folder when it has none), the date sits on the right. Later shows the next three, the rest is under More, so the menu stays short
+- **Reminder actions run without a card**: `relay reminders.add`, `done` and `push` default to Runs, like a mail draft. The reminders are the vault's own file, every change is in its history. A choice in Settings › General › Agent access still wins
 
 ### Fixed
 
