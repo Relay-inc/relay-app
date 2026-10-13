@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from (#203)
+
 ### Fixed
 
 - **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer

@@ -54,7 +54,9 @@ let added = 0;
 let actionConfig = integ.actionConfig();
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
-const orchOn = fixture === "orch" || fixture === "orch-plain";
+const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty";
+// orch-empty: the orchestrator before its first task, no workers and an empty conversation
+const orchEmpty = fixture === "orch-empty";
 // Commonwealth installed, with one brain (the Brain view's tabs)
 const brainOn = fixture === "brain";
 // plugins (fixture "plugins"): the secrets in the keychain, per plugin id; the tools the example server has
@@ -74,7 +76,7 @@ const diceTools = [
     app: true,
   },
 ];
-let workers = orchOn ? structuredClone(orch.workers) : [];
+let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -377,6 +379,7 @@ function handle(cmd: string, a: Args): unknown {
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
+      if (orchEmpty && a.project === orch.ORCH) return [];
       return (orchOn && orch.history(a.project)) || conv.history(a.project);
     // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
     case "orch_workers":
@@ -417,6 +420,33 @@ function handle(cmd: string, a: Args): unknown {
       if (worker) Object.assign(worker, { state: "running", ended: null });
       if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return null;
+    }
+    // a question answered (kept on the worker), a silent worker asked for its report, one started again
+    case "orch_answer": {
+      const worker = workers.find(w => w.key === a.key);
+      if (worker) worker.answer = a.answer;
+      if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return worker ? structuredClone(worker) : null;
+    }
+    case "orch_ask_report": {
+      const worker = workers.find(w => w.key === a.key);
+      if (worker) Object.assign(worker, { state: "running", ended: null });
+      if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return null;
+    }
+    case "orch_restart": {
+      const old = workers.find(w => w.key === a.key)!;
+      const worker = {
+        ...structuredClone(old),
+        key: `${old.key}r`,
+        state: "running",
+        at: Date.now(),
+        ended: null,
+        report: null,
+      };
+      workers.push(worker);
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return structuredClone(worker);
     }
     case "orch_pr":
       return structuredClone(prStatus);

@@ -112,7 +112,17 @@ const rects = (px: Px[]) =>
   px.map(([x, y, w, h, fill], i) => <rect key={i} x={x} y={y} width={w} height={h} fill={fill} />);
 
 /** A worker's crab; `running` walks it, `dim` greys it out (stopped, or ended without a report). */
-export function Crab({ costume, running, dim }: { costume: Costume; running: boolean; dim?: boolean }) {
+export function Crab({
+  costume,
+  running,
+  dim,
+  size = 28,
+}: {
+  costume: Costume;
+  running: boolean;
+  dim?: boolean;
+  size?: number; // its width in px, the height follows
+}) {
   const parts = body();
   COSTUMES[costume](parts);
   const { bd, la, lb, ...props } = parts;
@@ -120,8 +130,8 @@ export function Crab({ costume, running, dim }: { costume: Costume; running: boo
     <svg
       className={`crab crab-${costume} ${running ? "run" : ""} ${dim ? "opacity-45" : ""}`}
       viewBox="0 0 24 22"
-      width={28}
-      height={26}
+      width={size}
+      height={Math.round((size * 26) / 28)}
       shapeRendering="crispEdges"
       aria-hidden="true"
     >
