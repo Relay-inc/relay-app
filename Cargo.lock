@@ -4150,6 +4150,7 @@ dependencies = [
  "integration-trello",
  "mac-notification-sys",
  "mail-parser",
+ "muda",
  "objc2",
  "objc2-app-kit",
  "objc2-core-audio",

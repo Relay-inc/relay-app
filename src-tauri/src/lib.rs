@@ -189,6 +189,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("tray.tomorrow", ["Tomorrow", "Morgen", "Demain", "Morgen"]),
     ("tray.week", ["This week", "Deze week", "Cette semaine", "Diese Woche"]),
     ("tray.later", ["Later", "Later", "Plus tard", "Später"]),
+    ("tray.more", ["More", "Meer", "Plus", "Mehr"]),
     ("tray.none", ["No reminders", "Geen reminders", "Aucun rappel", "Keine Erinnerungen"]),
     ("tray.done", ["✓ Done", "✓ Klaar", "✓ Fait", "✓ Erledigt"]),
     ("tray.to_tomorrow", ["→ Tomorrow", "→ Morgen", "→ Demain", "→ Morgen"]),

@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **Reminders in the menu bar**: each reminder shows its title with the project underneath and the project's icon (a folder when it has none), the date sits on the right. Later shows the next three, the rest is under More, so the menu stays short
+
 ### Fixed
 
 - **Project index of an own vault**: Relay no longer empties `work-state.md` at start in a vault with its own `build-index.py` (other card fields than the starter's `last`). Such a vault now runs its own script at start, a starter vault keeps getting the app's copy
