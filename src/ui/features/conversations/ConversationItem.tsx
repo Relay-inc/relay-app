@@ -2,7 +2,7 @@ import { memo } from "react";
 import type { Item } from "../../../domain/conversations/types";
 import { esc } from "../../../shared/html";
 import { raw } from "../../../shared/i18n";
-import { isRelayTurn } from "../../../domain/orchestrator/rules";
+import { isRelayTurn, reportKey } from "../../../domain/orchestrator/rules";
 import { useT } from "../../hooks/useT";
 import { Html } from "../../components/Html";
 import { Icon } from "../../components/Icon";
@@ -12,6 +12,7 @@ import { Thinking } from "./Thinking";
 import { ToolStep } from "./ToolStep";
 import { NoteLine } from "./NoteLine";
 import { RelayTurn } from "./RelayTurn";
+import { ReportCard } from "../orchestrator/ReportCard";
 
 /** One line of the conversation. Memoised on the item: Immer keeps untouched items identical, so a stream delta
  *  redraws only the item it changed (the compiler does not skip a list child whose props did not change). */
@@ -19,7 +20,9 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
   const { th } = useT();
   switch (item.kind) {
     case "me":
-      if (isRelayTurn(item.text)) return <RelayTurn text={item.text} />;
+      // a worker's report into the coordinator shows as that worker
+      if (isRelayTurn(item.text))
+        return reportKey(item.text) ? <ReportCard item={item} /> : <RelayTurn text={item.text} />;
       return <UserMessage text={item.text} imgs={item.imgs} files={item.files} />;
     case "ai":
       return <Answer text={item.text} />;

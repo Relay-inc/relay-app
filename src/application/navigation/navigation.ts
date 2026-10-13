@@ -37,7 +37,8 @@ export async function select(key: string, tool: Tool | null = null) {
       draft.drawer = "";
       draft.panel.open = "";
     }
-    // the coordinator opens with its workers next to it, anything else closes them
+    // the coordinator opens with its workers next to it, anything else closes them (openWorker keeps them)
+    draft.orchDetail = false;
     if (key === ORCH) draft.drawer = "workers";
     else if (draft.drawer === "workers") draft.drawer = "";
     draft.selected = key;
@@ -61,6 +62,15 @@ export async function select(key: string, tool: Tool | null = null) {
   if (key === BRAIN) loadBrain();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");
+}
+/** A worker as its page in the orchestrator: the workers stay on the right, the composer talks to the worker, Esc
+ *  goes back to the coordinator. */
+export async function openWorker(key: string) {
+  await select(key);
+  set(draft => {
+    draft.orchDetail = true;
+    draft.drawer = "workers";
+  });
 }
 /** Only open a conversation and scroll to its end, without what `select` loads for the desktop's views (the phone). */
 export function show(key: string) {

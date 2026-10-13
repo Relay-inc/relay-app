@@ -3,7 +3,15 @@
 import { NOW, iso } from "./util";
 
 type Ev = Record<string, unknown> & { type: string };
-type Report = { status: string; summary: string; questions: string | null; diff: string | null; flags: string[] };
+type Report = {
+  status: string;
+  summary: string;
+  questions: string | null;
+  diff: string | null;
+  flags: string[];
+  options?: string[];
+  files?: [string, number, number][];
+};
 export type Worker = {
   key: string;
   project: string | null;
@@ -18,6 +26,7 @@ export type Worker = {
   report: Report | null;
   model?: string;
   step?: { done: number; total: number; note: string | null } | null;
+  answer?: string | null;
 };
 
 export const ORCH = "c:orch";
@@ -35,7 +44,7 @@ const running: Worker = {
   worktree: "/Users/demo/code/northwind-relay-a1",
   branch: "relay/fix-the-login-redirect-a1",
   state: "running",
-  at: NOW - 6 * MIN,
+  at: NOW - 100 * MIN,
   ended: null,
   report: null,
   model: "opus",
@@ -51,7 +60,7 @@ const done: Worker = {
   branch: "relay/patch-the-balance-sync-b2",
   state: "done",
   model: "sonnet",
-  at: NOW - 48 * MIN,
+  at: NOW - 100 * MIN,
   ended: NOW - 21 * MIN,
   report: {
     status: "done",
@@ -60,6 +69,11 @@ const done: Worker = {
     questions: "- Deploy to staging tonight, or wait for the client's go?",
     diff: " src/Billing/BalanceSync.php       |  3 ++-\n tests/Billing/BalanceSyncTest.php | 14 +++++++++++---\n 2 files changed, 13 insertions(+), 4 deletions(-)",
     flags: ["branch main moved"],
+    options: ["Deploy tonight", "Wait for the client"],
+    files: [
+      ["src/Billing/BalanceSync.php", 2, 1],
+      ["tests/Billing/BalanceSyncTest.php", 11, 3],
+    ],
   },
 };
 const silent: Worker = {
@@ -72,7 +86,7 @@ const silent: Worker = {
   branch: null,
   state: "silent",
   model: "haiku",
-  at: NOW - 95 * MIN,
+  at: NOW - 100 * MIN,
   ended: NOW - 80 * MIN,
   report: null,
 };
@@ -81,21 +95,35 @@ const ticketed: Worker = {
   key: "c:orch-w-d4",
   project: "Northwind Portal",
   title: "Export invoices as CSV",
-  task: "Ticket #412 \"Export invoices as CSV\"",
+  task: 'Ticket #412 "Export invoices as CSV"',
   repo: "/Users/demo/code/northwind",
   worktree: "/Users/demo/code/northwind-relay-d4",
   branch: "relay/export-invoices-as-csv-d4",
   state: "done",
-  at: NOW - 70 * MIN,
+  at: NOW - 130 * MIN,
   ended: NOW - 35 * MIN,
   report: {
     status: "done",
-    summary: "Invoices export as CSV from the list's menu, one row per invoice line. Tests for the empty list and for amounts in another currency.",
+    summary:
+      "Invoices export as CSV from the list's menu, one row per invoice line. Tests for the empty list and for amounts in another currency.",
     questions: null,
     diff: " src/Invoice/CsvExport.php | 61 ++++++++++\n tests/Invoice/CsvExportTest.php | 48 +++++++++\n 2 files changed, 109 insertions(+)",
     flags: [],
+    files: [
+      ["src/Invoice/CsvExport.php", 61, 0],
+      ["tests/Invoice/CsvExportTest.php", 48, 0],
+    ],
   },
-  ticket: { pipeline: "Northwind Portal", provider: "productive", project: "p1", board: "f1", card: "t12", number: "412", title: "Export invoices as CSV", url: "https://app.productive.io/40001/tasks/t12" },
+  ticket: {
+    pipeline: "Northwind Portal",
+    provider: "productive",
+    project: "p1",
+    board: "f1",
+    card: "t12",
+    number: "412",
+    title: "Export invoices as CSV",
+    url: "https://app.productive.io/40001/tasks/t12",
+  },
   base_branch: "develop",
   pr: "https://github.com/acme/northwind/pull/88",
   board: `done:${NOW - 35 * MIN}`,
@@ -159,9 +187,10 @@ export function live(): Ev[] {
   const report: Report = {
     status: "blocked",
     summary: "The loop comes from the SSO callback URL on staging, it still points at the old domain.",
-    questions: "- Can I change the callback URL in the staging IdP, or does the client do that?",
+    questions: "Can I change the callback URL in the staging IdP, or does the client do that?",
     diff: null,
     flags: [],
+    options: ["Change it yourself", "Ask the client", "I'll do it"],
   };
   return [
     { type: "worker", worker: started },
