@@ -1,0 +1,1 @@
+Bereid me voor op deze meeting: zoek in de vault wat er over de deelnemers en het onderwerp staat (vorige meetings, open punten, threads, beslissingen) en geef een korte briefing. Schrijf niets in de vault.

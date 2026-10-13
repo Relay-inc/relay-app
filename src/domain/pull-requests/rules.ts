@@ -1,19 +1,15 @@
 import type { GhActor, GhCheck, PrDetail, PRs } from "./types";
 import type { Chat } from "../conversations/types";
+import { fill, prompts } from "../../shared/prompts.ts";
 
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
 // posting on GitHub is something others see, so it waits for the user (decided 29/9)
 export const reviewPrompt = (pr: PrDetail, repo: string) =>
-  `Review PR ${pr.url} (${repo} #${pr.number}: ${pr.title}). Haal de diff en context op met gh, en lees de projectnote als die er is. ` +
-  "Plaats niets op GitHub: geen review, comment of approve. Geef je bevindingen hier, meest ernstige eerst, met bestand en regel. " +
-  "Wil ik iets posten, dan vraag ik het je daarna.";
+  fill(prompts.pullRequests.review, { url: pr.url, repo, number: pr.number, title: pr.title });
 /** A second agent on a finished review: it reads the PR itself and answers the first one. The review is the first
  *  agent's own text, quoted as such. */
 export const secondOpinionPrompt = (pr: PrDetail, repo: string, first: string, review: string) =>
-  `Geef een second opinion op PR ${pr.url} (${repo} #${pr.number}: ${pr.title}). ${first} reviewde hem al, die review staat hieronder. ` +
-  "Haal de diff en context zelf op met gh, en lees de projectnote als die er is. Zeg waar je het eens bent, waar niet en waarom, " +
-  "en wat er gemist werd, met bestand en regel. Plaats niets op GitHub: geen review, comment of approve.\n\n" +
-  `--- review van ${first} ---\n${review}`;
+  fill(prompts.pullRequests.secondOpinion, { url: pr.url, repo, number: pr.number, title: pr.title, first, review });
 /** The conversations that reviewed a PR, oldest first. */
 export const reviewsOf = (chats: Record<string, Chat>, url: string) =>
   Object.values(chats)

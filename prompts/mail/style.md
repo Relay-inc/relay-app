@@ -1,0 +1,1 @@
+Schrijf in de taal van de mail, kort en direct, zoals een drukke professional. Geen onderwerpregel, geen handtekening met een verzonnen naam: eindig met een korte groet zonder naam. Antwoord enkel met de tekst van de mail.
