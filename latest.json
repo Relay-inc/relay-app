@@ -1,11 +1,11 @@
 {
-  "version": "0.0.23",
-  "notes": "### Added\n\n- **Arrows in a long conversation**: scrolled up from the end, an arrow above the composer takes you down to the latest and follows the stream again, with a dot when output came in while you read back. A screen away from the top, an arrow beside the messages takes you back to the first one (#183)\n\n### Fixed\n\n- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back (#201)",
-  "pub_date": "2026-10-12T20:58:30.129Z",
+  "version": "0.0.24",
+  "notes": "### Added\n\n- **Crabs for the orchestrator's workers**: each worker in the list next to the Orchestrator is a pixel crab dressed for its model (astronaut for Fable, detective for Opus, chef for Sonnet, racer for Haiku, a hard hat for a board pipeline's worker), walking while it works, and a name of its own (Pinchy, Barnacle, ...) that stays with it. A finished one carries its state mark. Settings › General › Crabs for the orchestrator's workers switches them off; reduced motion keeps them still (#202)\n- **Worker progress**: workers get a `step` tool and report their plan's steps as they go; the workers list shows a bar with \"2/5\" and the step they are on, and the coordinator sees it in `workers` (#202)",
+  "pub_date": "2026-10-13T07:28:37.418Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmovWi9sRkJSNUd6anNIRkFxMFhsUG9TcngwUGwzanVSN0ptbEovb1ZiVDVnMHJXQWZ3YnpoYnRyWnhlWnBJUmJ3bU1LOTJNSHBWYTM4NG1BRXJXNVFFPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODM4NjYzCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4yMwpUdEFVLzlWemRpdUpWUjdrSno1bzVJVUsxbUJydU82c29CbW0wMkl6R25FN3E2amtsZWIxK3E2dTA4ZkhWMEJRcFhZVkZWOVlpV2lPaXo4UG1WSjJEUT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/634972974"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnVHVHREWHgza0VYMUp5aE5yM2tmcUY5dytRTGh1M1Z3QW9BT3BhZk03aTFUbVBsY0NDdHprYzNsL1ZXbmFZYnI3MEt3dW10TFgrQm84SnhaZC9YMVFJPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkxODc2NDEzCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4yNApzcDVINGtVZFRsYlJkc2R3ajhFTm0rQUlyV2NEbitKbzJoTVJLQytUR3dCVXR2MlNSSG1oNVlscFU4ajdjWk5CY0E5QkpIZFdOaWRjdWdIcFVvY3pEUT09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/636255071"
     }
   }
 }
