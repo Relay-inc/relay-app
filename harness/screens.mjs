@@ -766,6 +766,11 @@ const VIEWS = {
       .waitFor();
     await settle(page);
   },
+  // Settings › General › Reminders' agent access: add, done and push default to Runs (#PR)
+  "settings-reminders-access": async () => {
+    await settingsPage("General");
+    await intoView("reminders.push");
+  },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
     await intoView("Agent access");

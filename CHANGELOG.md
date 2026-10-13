@@ -17,8 +17,14 @@ a PR. Versions follow
 
 - **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from (#203)
 
+### Changed
+
+- **Reminders in the menu bar**: each reminder shows its title with the project underneath and the project's icon (a folder when it has none), the date sits on the right. Later shows the next three, the rest is under More, so the menu stays short
+- **Reminder actions run without a card**: `relay reminders.add`, `done` and `push` default to Runs, like a mail draft. The reminders are the vault's own file, every change is in its history. A choice in Settings › General › Agent access still wins
+
 ### Fixed
 
+- **Project index of an own vault**: Relay no longer empties `work-state.md` at start in a vault with its own `build-index.py` (other card fields than the starter's `last`). Such a vault now runs its own script at start, a starter vault keeps getting the app's copy
 - **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer
 
 ## [0.0.24] - 2026-10-13

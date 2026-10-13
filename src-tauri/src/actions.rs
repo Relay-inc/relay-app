@@ -50,8 +50,9 @@ fn items() -> Vec<Item> {
         Item { ext: p.id, id: a.id, about: a.about, args: a.args, write: a.write, default: a.default, run: Run::Board(p, a) })).collect();
     // a draft only lands in Drafts: it runs without a card, as relay-mail's save_draft does
     out.extend(MAIL.iter().map(|(id, about, args, write)| Item { ext: "mail", id, about, args, write: *write, default: Policy::Auto, run: Run::Mail }));
+    // the vault's own file, every change is in its git history: runs without a card, like a mail draft
     out.extend(REMINDERS.iter().map(|(id, about, args)| Item { ext: "reminders", id, about, args, write: *id != "list",
-        default: if *id == "list" { Policy::Auto } else { Policy::Ask }, run: Run::Reminders }));
+        default: Policy::Auto, run: Run::Reminders }));
     out.push(Item { ext: "calendar", id: "meetings", about: "Meetings on the user's calendars from an hour ago to 12 hours ahead, or of one whole day, with errors per calendar.", args: &[("date?", "YYYY-MM-DD, a whole local day")], write: false, default: Policy::Auto, run: Run::Calendar });
     out
 }

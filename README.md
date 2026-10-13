@@ -314,7 +314,7 @@ the socket the app listens on and the CLI side.
   set-up extensions are listed.
 - Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
   `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
-  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft to `auto`. Both are set in each
+  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft and the reminders to `auto`. Both are set in each
   extension's Agent access section in Settings (Integrations › the extension; reminders under General) and kept in
   the vault's `.relay/config.json`, read on every call, so a hand edit applies at once:
 

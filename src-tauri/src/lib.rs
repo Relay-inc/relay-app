@@ -189,6 +189,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("tray.tomorrow", ["Tomorrow", "Morgen", "Demain", "Morgen"]),
     ("tray.week", ["This week", "Deze week", "Cette semaine", "Diese Woche"]),
     ("tray.later", ["Later", "Later", "Plus tard", "Später"]),
+    ("tray.more", ["More", "Meer", "Plus", "Mehr"]),
     ("tray.none", ["No reminders", "Geen reminders", "Aucun rappel", "Keine Erinnerungen"]),
     ("tray.done", ["✓ Done", "✓ Klaar", "✓ Fait", "✓ Erledigt"]),
     ("tray.to_tomorrow", ["→ Tomorrow", "→ Morgen", "→ Demain", "→ Morgen"]),
@@ -524,19 +525,26 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
     Ok(())
 }
-/// The project index of a vault in the starter layout (System/scripts/build-index.py), rebuilt at start with the app's
-/// own copy of the script, so a vault an older Relay made follows today's rules too (an Active project untouched for
-/// 30 days shows as Quiet). A vault in another layout keeps its own way. Errors are logged.
+/// The project index of a vault with a System/scripts/build-index.py, rebuilt at start. Errors are logged.
 fn refresh_index(app: &AppHandle) {
     let vault = app.state::<App>().settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
-    if vault.is_empty() || !PathBuf::from(&vault).join("System/scripts/build-index.py").is_file() { return; }
-    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
+    if vault.is_empty() { return; }
+    let bundled = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource).ok();
+    let Some(script) = index_script(PathBuf::from(&vault).join("System/scripts/build-index.py"), bundled) else { return };
     let path = app.state::<App>().path.clone();
     std::thread::spawn(move || match Command::new("python3").arg(&script).env("VAULT", &vault).env("PATH", &path).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index: {e}"),
     });
+}
+/// Which build-index.py rebuilds a vault's index. A copy of the starter script gets the app's own copy, so a vault an
+/// older Relay made follows today's rules too (an Active project untouched for 30 days shows as Quiet). Every starter
+/// version reads the card field `last`. A vault with a script of its own (other card fields) runs that one: ours would
+/// find none of its cards and write an empty index.
+fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<PathBuf> {
+    let src = std::fs::read_to_string(&own).ok()?;
+    if src.contains("scalar(fm, \"last\"") { bundled } else { Some(own) }
 }
 /// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
 #[tauri::command]
@@ -2069,6 +2077,23 @@ mod lang_tests {
     }
 }
 
+
+#[cfg(test)]
+mod index_tests {
+    use super::*;
+    #[test]
+    fn a_vault_with_its_own_index_script_runs_that_one() {
+        let dir = std::env::temp_dir().join(format!("relay-index-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (own, bundled) = (dir.join("build-index.py"), PathBuf::from("/app/build-index.py"));
+        assert_eq!(index_script(own.clone(), Some(bundled.clone())), None, "no script, nothing runs");
+        std::fs::write(&own, include_str!("../resources/default-vault/System/scripts/build-index.py")).unwrap();
+        assert_eq!(index_script(own.clone(), Some(bundled.clone())), Some(bundled.clone()), "a starter copy gets the app's");
+        std::fs::write(&own, "laatst = scalar(fm, \"laatst\", rel, warnings)\n").unwrap();
+        assert_eq!(index_script(own.clone(), Some(bundled)), Some(own), "an own script runs as is");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
 
 #[cfg(test)]
 mod machine_tests {

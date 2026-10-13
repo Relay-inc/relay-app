@@ -149,6 +149,14 @@ fn icon_data(vault: &str, rel: &str) -> Option<String> {
     let mime = match p.extension()?.to_str()?.to_lowercase().as_str() { "png" => "image/png", "jpg" | "jpeg" => "image/jpeg", "gif" => "image/gif", "webp" => "image/webp", "svg" => "image/svg+xml", "ico" => "image/x-icon", _ => return None };
     Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(fs::read(p).ok()?)))
 }
+/// Project to the image file of its icon, for the tray menu. Emoji and site entries have none.
+pub fn icon_files(vault: &str) -> std::collections::BTreeMap<String, PathBuf> {
+    let Some(c) = load(vault) else { return Default::default() };
+    c["icons"].as_object().into_iter().flatten().filter_map(|(n, v)| match icon_kind(v.as_str()?) {
+        Icon::File(f) if !f.contains("..") => Some((n.clone(), path(vault).with_file_name(f))),
+        _ => None,
+    }).collect()
+}
 /// Every project with an entry: its raw value, and what to show (`img` a data url, or `icon` an emoji).
 pub fn icons(vault: &str) -> Map<String, Value> {
     let Some(c) = load(vault) else { return Map::new() };
@@ -314,6 +322,10 @@ mod tests {
         assert_eq!(i["Lemahieu"]["icon"], "🛒");
         let f = i["BE Plastics (TradeHub)"]["value"].as_str().unwrap().to_string();
         assert!(f.starts_with("icons/be-plastics-tradehub-") && i["BE Plastics (TradeHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        // the tray only gets image files, never an emoji or a site
+        let files = icon_files(&vs);
+        assert_eq!(files.keys().collect::<Vec<_>>(), ["BE Plastics (TradeHub)"]);
+        assert!(files["BE Plastics (TradeHub)"].exists());
         assert!(load(&vs).unwrap().get("sites").is_none(), "sites became icons");
         assert!(migrate_icons(&vs, &projects).is_none(), "only once");
         set_icon(&vs, "BE Plastics (TradeHub)", "site", "https://www.be-plastics.com/nl").unwrap();
