@@ -289,7 +289,7 @@ impl AgentProvider for Claude {
     }
     /// Like `title`: one call outside the vault without settings, tools, MCP or a transcript, here on Sonnet.
     fn write(&self, env: &Env, system: &str, text: &str) -> Result<String, String> {
-        let text: String = text.chars().take(20_000).collect();
+        let text: String = text.chars().take(agent_core::WRITE_MAX).collect();
         let mut cmd = Command::new(env.bin);
         on_account(&mut cmd, account(env));
         let out = cmd

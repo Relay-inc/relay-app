@@ -19,6 +19,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Long reviews no longer drop their end unseen**: a pull request review sent up to 60,000 characters to a provider that takes 20,000, so later files were cut while the review still counted them as read; the text is now sized to what the provider takes (one `WRITE_MAX` in agent-core). The orchestrator's fallback review (a provider that cannot open the worktree) now puts the agent's claims, including the earlier blocking findings, before the diff and cuts the diff to what is left, so a big diff no longer cuts the claims
 - **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer
 
 ## [0.0.24] - 2026-10-13

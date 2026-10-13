@@ -329,7 +329,6 @@ const REVIEW_CHECKED: &str = prompt::text(include_str!("../../prompts/pipeline/r
 const REVIEW_MAX: usize = 40_000;
 /// The ticket's text in the review prompt, its start.
 const TICKET_MAX: usize = 8_000;
-const WRITE_MAX: usize = 16_000;
 const REVIEW_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 const CHECKS_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20 * 60);
 
@@ -430,6 +429,7 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<Find
     let text = if big {
         format!("{head}The diff is too large to show here: its stat is below, read each file's diff with `git diff {start} HEAD -- <file>`.\n\n{}\n\n{claims}", git(dir, &["diff", "--stat", &start, "HEAD"]).unwrap_or_default())
     } else { format!("{head}The diff:\n{diff}\n\n{claims}") };
+    let fallback = write_text(&head, &claims, &diff);
     let (app2, dir2, prov) = (app.clone(), dir.to_string(), provider.to_string());
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
@@ -438,9 +438,8 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<Find
         let answer = match super::review_blocking(&app2, p, &dir2, REVIEW_PROMPT, &text) {
             // a provider that cannot work in the worktree: the diff as text, cut to what its write takes
             Err(e) if e == "unsupported" => {
-                cut = diff.chars().count() > WRITE_MAX;
-                let shown: String = diff.chars().take(WRITE_MAX).collect();
-                super::write_blocking(&app2, p, REVIEW_PROMPT, &format!("{head}The diff{}:\n{shown}\n\n{claims}", if cut { " (cut: only its start fits)" } else { "" }))
+                cut = fallback.1;
+                super::write_blocking(&app2, p, REVIEW_PROMPT, &fallback.0)
             }
             other => other,
         };
@@ -448,8 +447,18 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<Find
     });
     let (answer, cut) = rx.recv_timeout(REVIEW_TIMEOUT).map_err(|_| format!("no answer within {} minutes", REVIEW_TIMEOUT.as_secs() / 60))?;
     let mut f = findings(&answer?)?;
-    if cut { f.minor.push(format!("The reviewing agent could not open the worktree and the diff is larger than it takes ({WRITE_MAX} characters): only its start was reviewed.")); }
+    if cut { f.minor.push(format!("The reviewing agent could not open the worktree and the diff is larger than it takes ({} characters): only its start was reviewed.", agent_core::WRITE_MAX)); }
     Ok(f)
+}
+/// The review as text for a provider that cannot read the worktree: the head, then the claims (earlier blocking findings
+/// and the "Not fixed:" rule must survive), then the diff, cut to what is left of `agent_core::WRITE_MAX`. The diff
+/// goes last so the provider's own cut, a safety net, only ever eats its tail. True when the diff was cut.
+fn write_text(head: &str, claims: &str, diff: &str) -> (String, bool) {
+    let label = "The diff (cut: only its start fits):\n";
+    let room = agent_core::WRITE_MAX.saturating_sub(head.chars().count() + claims.chars().count() + 4 + label.chars().count());
+    let cut = diff.chars().count() > room;
+    let shown: String = diff.chars().take(room).collect();
+    (format!("{head}{claims}\n\nThe diff{}:\n{shown}", if cut { " (cut: only its start fits)" } else { "" }), cut)
 }
 /// The review's brief around the diff. Before it: the ticket as the worker got it (the review judges the change
 /// against what was asked, not only as code). After it, so the reviewer forms its own view first: what the agent says
@@ -805,6 +814,15 @@ fn radix36(mut n: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_huge_diff_does_not_cut_the_claims() {
+        let (head, claims) = ("ticket\n\n", "Not fixed: rule\n\n- x:1: earlier blocking");
+        let (text, cut) = write_text(head, claims, &"+x\n".repeat(30_000));
+        assert!(cut && text.chars().count() <= agent_core::WRITE_MAX && text.contains(claims));
+        let (text, cut) = write_text(head, claims, "+x");
+        assert!(!cut && text.ends_with("The diff:\n+x"));
+    }
 
     #[test]
     fn keys_and_flags() {

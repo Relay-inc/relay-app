@@ -11,6 +11,9 @@ use serde_json::Value;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
+/// The most characters of text a provider's `write` takes: it cuts the rest (the instruction does not count).
+/// Callers budget from this so what matters is not what gets cut. Same value as `WRITE_MAX` in limits.ts.
+pub const WRITE_MAX: usize = 20_000;
 pub mod discover;
 pub use discover::{discover_commands, http_get, Probe};
 pub mod envelope;
