@@ -19,9 +19,15 @@ a PR. Versions follow
 - **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from
 - **Worker progress**: workers get a `step` tool and report their plan's steps as they go; the workers list shows a bar with "2/5" and the step they are on, and the coordinator sees it in `workers`
 
+## [0.0.23] - 2026-10-12
+
+### Added
+
+- **Arrows in a long conversation**: scrolled up from the end, an arrow above the composer takes you down to the latest and follows the stream again, with a dot when output came in while you read back. A screen away from the top, an arrow beside the messages takes you back to the first one (#183)
+
 ### Fixed
 
-- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back
+- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back (#201)
 
 ## [0.0.22] - 2026-10-12
 
@@ -456,7 +462,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...HEAD
+[0.0.23]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...v0.0.20
