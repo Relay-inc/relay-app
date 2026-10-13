@@ -16,7 +16,7 @@ import { isShortcut, shortcutCode, shortcutLabel, voiceOf } from "../../../domai
 import { useSettingsStore } from "../../../application/settings/store";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
-import { chatBar, commandsOf, machineChoice } from "../../../application/conversations/selectors";
+import { chatBar, commandsOf, machineChoice, machineRepo } from "../../../application/conversations/selectors";
 import {
   attach,
   attachPaths,
@@ -191,6 +191,8 @@ export function Composer({ className }: { className: string }) {
   // where the conversation runs or is to start: the machines are asked every few seconds while it shows
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
+  // the repo the agent gets on that machine, next to the pick
+  const repoThere = useDerived(() => machineRepo(selected));
   const [moving, setMoving] = useState(false);
   useEffect(() => {
     if (!hasChat) return;
@@ -294,6 +296,15 @@ export function Composer({ className }: { className: string }) {
       <Icon name="down" className="glyph size-2.75 stroke-2" />
     </span>
   );
+  // "<repo> · on <machine>": no click, the agent works in that repo there
+  const repoChip = repoThere ? (
+    <span
+      className="ml-1 px-1.5 py-0.5 rounded-md bg-fill-2 text-xs text-secondary whitespace-nowrap"
+      title={t("composer.repoChipHelp", { repo: repoThere.slug })}
+    >
+      {t("composer.repoChip", { repo: repoThere.repo, name: repoThere.machine })}
+    </span>
+  ) : null;
   const agent = view.agent;
   const showEffort = !agent || (agent.caps.effort && agent.efforts.length > 0);
   const placeholder = view.terminal
@@ -449,6 +460,7 @@ export function Composer({ className }: { className: string }) {
                   setMoving(false);
                 }}
               />
+              {repoChip}
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : machine ? (
@@ -456,6 +468,7 @@ export function Composer({ className }: { className: string }) {
               <span className="px-1.5 text-xs text-secondary whitespace-nowrap" title={t("composer.onMachineHelp")}>
                 {t("composer.onMachine", { name: machine })}
               </span>
+              {repoChip}
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}

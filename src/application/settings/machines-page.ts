@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import type { Machine } from "../../domain/settings/types";
+import type { DeviceCode, Machine, MachineGithub } from "../../domain/settings/types";
 import { excludePath, SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
 import { checkAgents } from "./agents-page";
@@ -106,6 +106,7 @@ export async function checkMachine(id: string) {
   change(draft => {
     draft.status[id] = status;
   });
+  if (hasRepos(id)) readMachineGit(id);
 }
 export const checkAll = () => machines().forEach(machine => checkMachine(machine.id));
 
@@ -236,3 +237,115 @@ export const setSetupFolder = (folder: string) =>
   change(draft => {
     draft.setupFolder = folder;
   });
+
+// GitHub and the repos on a machine that has them (relay-server's github.rs): read for the online machines with the
+// page's slow poll and after each action. Connecting asks GitHub's code, then where it stands every few seconds.
+const hasRepos = (id: string) => {
+  const status = st().machinesPage.status[id];
+  return !!status && status !== "checking" && status.ok && !!status.repos;
+};
+/** Reads GitHub and the repos of one machine; a failing read keeps what was there. */
+export async function readMachineGit(id: string) {
+  const [github, repos] = await Promise.all([
+    backend.machineGithub(id).catch(() => undefined),
+    backend.machineRepos(id).catch(() => undefined),
+  ]);
+  change(draft => {
+    if (github !== undefined) draft.github[id] = github;
+    if (repos !== undefined) draft.repos[id] = repos;
+  });
+}
+export async function pollMachineGit() {
+  for (const machine of machines()) if (hasRepos(machine.id)) await readMachineGit(machine.id);
+}
+const githubMessage = (id: string, text: string) =>
+  change(draft => {
+    draft.githubMessages[id] = text ? { text, ok: false } : null;
+  });
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** Asks GitHub for a code to type there and waits for it in the background; the code, or null when it failed. */
+export async function connectGithub(id: string): Promise<DeviceCode | null> {
+  githubMessage(id, "");
+  try {
+    const code = await backend.machineGithubConnect(id);
+    change(draft => {
+      draft.device[id] = code;
+    });
+    waitForGithub(id, code);
+    return code;
+  } catch (error) {
+    githubMessage(id, String(error));
+    return null;
+  }
+}
+// every `interval` seconds until the code is typed, refused or expired; a new code replaces this wait
+async function waitForGithub(id: string, code: DeviceCode) {
+  const until = Date.now() + code.expires_in * 1000;
+  const current = () => st().machinesPage.device[id]?.user_code === code.user_code;
+  let github: MachineGithub;
+  for (;;) {
+    await sleep(Math.max(1, code.interval) * 1000);
+    if (!current()) return;
+    try {
+      github = await backend.machineGithubPoll(id);
+    } catch (error) {
+      if (!current()) return;
+      github = { state: "error", login: "", since: "", name: "", email: "", error: String(error) };
+    }
+    if (!current()) return;
+    if (github.state !== "pending" || Date.now() > until) break;
+  }
+  const problem: Record<string, string> = {
+    pending: t("mc.ghExpired"),
+    expired: t("mc.ghExpired"),
+    denied: t("mc.ghDenied"),
+    error: t("mc.ghError", { error: github.error }),
+  };
+  change(draft => {
+    draft.device[id] = null;
+    if (github.state !== "pending" && github.state !== "error") draft.github[id] = github;
+  });
+  githubMessage(id, problem[github.state] ?? "");
+  readMachineGit(id);
+}
+export async function disconnectGithub(id: string) {
+  githubMessage(id, "");
+  try {
+    await backend.machineGithubDisconnect(id);
+  } catch (error) {
+    githubMessage(id, String(error));
+  }
+  readMachineGit(id);
+}
+// one action per machine at a time: its buttons wait, the result shows under the repo
+async function repoAction(id: string, name: string, run: () => Promise<string>) {
+  const at = `${id}/${name}`;
+  change(draft => {
+    draft.repoBusy[id] = name;
+    draft.repoMessages[at] = null;
+  });
+  try {
+    const text = await run();
+    change(draft => {
+      draft.repoMessages[at] = { text, ok: true };
+    });
+  } catch (error) {
+    change(draft => {
+      draft.repoMessages[at] = { text: String(error), ok: false };
+    });
+  } finally {
+    change(draft => {
+      draft.repoBusy[id] = "";
+    });
+    readMachineGit(id);
+  }
+}
+/** Pushes the branch checked out in a repo there. */
+export const pushMachineRepo = (id: string, name: string) =>
+  repoAction(id, name, async () => {
+    await backend.machineRepoPush(id, name);
+    return t("mc.repoPushed");
+  });
+/** The work in a repo there to this Mac's checkout of it, on `relay/<machine>`. */
+export const machineRepoToMac = (id: string, name: string) =>
+  repoAction(id, name, async () => t("mc.repoOnMac", await backend.machineRepoToMac(id, name)));
