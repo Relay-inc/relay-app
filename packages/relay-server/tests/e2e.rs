@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
 
-struct Server { child: Child, data: PathBuf, agents: PathBuf }
+struct Server { child: Child, data: PathBuf, agents: PathBuf, env: Vec<(String, String)> }
 impl Drop for Server {
     fn drop(&mut self) {
         self.child.kill().ok();
@@ -26,7 +26,9 @@ fn bin() -> Command {
 }
 fn start(tag: &str) -> Server { start_on(tag, 0) }
 /// On `port`: 0 is any free one, a restart of the process then takes another.
-fn start_on(tag: &str, port: u16) -> Server {
+fn start_on(tag: &str, port: u16) -> Server { start_env(tag, port, vec![]) }
+/// With `env` on the server's process, kept for a restart.
+fn start_env(tag: &str, port: u16, env: Vec<(String, String)>) -> Server {
     let data = std::env::temp_dir().join(format!("relay-e2e-{tag}-{}", std::process::id()));
     // short: a socket path has a 104-byte limit on macOS
     let agents = PathBuf::from(format!("/tmp/rse-{tag}-{}", std::process::id()));
@@ -38,10 +40,10 @@ fn start_on(tag: &str, port: u16) -> Server {
     // a stand-in for claude that says how it was started (start_builds_claude_from_the_laptops_profile)
     if tag == "start" || tag == "notify" { cmd.env("RELAY_CLAUDE", data.join("fake-claude")); }
     let child = cmd.args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &data).env("RELAY_AGENTS_DIR", &agents)
-        .stderr(Stdio::null()).spawn().unwrap();
+        .envs(env.iter().cloned()).stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
     while !data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10), "server did not start"); std::thread::sleep(Duration::from_millis(50)); }
-    Server { child, data, agents }
+    Server { child, data, agents, env }
 }
 fn pair_line(s: &Server) -> String {
     let out = bin().args(["pair", "--host", "127.0.0.1"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
@@ -233,24 +235,28 @@ fn start_builds_claude_from_the_laptops_profile() {
     assert_eq!(laptop.list().unwrap().iter().map(|m| m.key.as_str()).collect::<Vec<_>>(), ["p:1"]);
 }
 
+/// One HTTP request off a connection: its head and its body.
+fn read_http(c: &mut std::net::TcpStream) -> (String, String) {
+    use std::io::Read;
+    let mut buf = Vec::new();
+    let mut chunk = [0u8; 4096];
+    loop {
+        let n = c.read(&mut chunk).unwrap_or(0);
+        if n == 0 { return (String::new(), String::new()); }
+        buf.extend_from_slice(&chunk[..n]);
+        let text = String::from_utf8_lossy(&buf).to_string();
+        let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
+        let len = head.lines().find_map(|h| h.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
+        if body.len() >= len { return (head.to_string(), body[..len].to_string()); }
+    }
+}
 /// A stand-in ntfy server: the headers and the body of each POST it gets.
 fn fake_ntfy() -> (String, std::sync::mpsc::Receiver<(String, String)>) {
-    use std::io::Read;
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/relay-topic", l.local_addr().unwrap());
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || for mut c in l.incoming().map_while(Result::ok) {
-        let mut buf = Vec::new();
-        let mut chunk = [0u8; 4096];
-        let got = loop {
-            let n = c.read(&mut chunk).unwrap_or(0);
-            if n == 0 { break (String::new(), String::new()); }
-            buf.extend_from_slice(&chunk[..n]);
-            let text = String::from_utf8_lossy(&buf).to_string();
-            let Some((head, body)) = text.split_once("\r\n\r\n") else { continue };
-            let len = head.lines().find_map(|h| h.to_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse::<usize>().unwrap_or(0))).unwrap_or(0);
-            if body.len() >= len { break (head.to_string(), body[..len].to_string()); }
-        };
+        let got = read_http(&mut c);
         c.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n").ok();
         tx.send(got).ok();
     });
@@ -525,9 +531,209 @@ fn restart(mut s: Server) -> Server {
     std::fs::remove_dir_all(s.data.join("work")).ok();
     std::fs::remove_file(s.data.join("serve.json")).ok();
     s.child = bin().args(["serve", "--port", &port.to_string(), "--bind", "127.0.0.1"]).env("RELAY_SERVER_DATA", &s.data).env("RELAY_AGENTS_DIR", &s.agents)
-        .env("CLAUDE_CONFIG_DIR", s.data.join("claude"))
+        .env("CLAUDE_CONFIG_DIR", s.data.join("claude")).envs(s.env.iter().cloned())
         .stderr(Stdio::null()).spawn().unwrap();
     let t = Instant::now();
     while !s.data.join("serve.json").exists() { assert!(t.elapsed() < Duration::from_secs(10)); std::thread::sleep(Duration::from_millis(50)); }
     s
+}
+
+/// A stand-in GitHub: the device flow (one `authorization_pending`, then the token) and `/user` for that token.
+fn fake_github(token: &'static str) -> String {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    std::thread::spawn(move || {
+        let mut polls = 0;
+        for mut c in l.incoming().map_while(Result::ok) {
+            let (head, body) = read_http(&mut c);
+            let path = head.split_whitespace().nth(1).unwrap_or("").to_string();
+            let answer = match path.as_str() {
+                "/login/device/code" if body.contains("client_id=test-client") => serde_json::json!({"device_code": "dc-1", "user_code": "WDJB-MJHT",
+                    "verification_uri": "https://github.com/login/device", "expires_in": 900, "interval": 1}),
+                "/login/oauth/access_token" if body.contains("device_code=dc-1") => {
+                    polls += 1;
+                    if polls == 1 { serde_json::json!({"error": "authorization_pending"}) } else { serde_json::json!({"access_token": token, "token_type": "bearer", "scope": "repo,read:user"}) }
+                }
+                "/user" if head.lines().any(|h| h == format!("Authorization: Bearer {token}")) => serde_json::json!({"login": "octo-test"}),
+                _ => serde_json::json!({"error": "not_found", "path": path}),
+            }.to_string();
+            write!(c, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}", answer.len()).ok();
+        }
+    });
+    url
+}
+/// A git config of the test's own for the server (none of this Mac's helpers or settings), with `extra` in it.
+fn git_config(dir: &std::path::Path, extra: &str) -> Vec<(String, String)> {
+    std::fs::create_dir_all(dir).unwrap();
+    let f = dir.join("gitconfig");
+    std::fs::write(&f, format!("[init]\n\tdefaultBranch = main\n[user]\n\tname = Test\n\temail = test@example.com\n{extra}")).unwrap();
+    vec![("GIT_CONFIG_GLOBAL".into(), f.to_string_lossy().into()), ("GIT_CONFIG_NOSYSTEM".into(), "1".into())]
+}
+
+/// GitHub there: the device flow against a stand-in, the token sealed (not readable in the data folder), locked after
+/// a restart and back after the unlock, an agent that gets the helper and the identity but not the token, a logout,
+/// and a phone that may do none of it.
+#[test]
+fn github_device_flow_sealed_token_and_agent_git() {
+    const TOKEN: &str = "gho_e2eTokenValue0123456789abcdef";
+    let tmp = std::env::temp_dir().join(format!("relay-e2e-ghcfg-{}", std::process::id()));
+    std::fs::remove_dir_all(&tmp).ok();
+    let mut env = git_config(&tmp, "");
+    let gh = fake_github(TOKEN);
+    env.extend([("RELAY_GITHUB_URL".into(), gh.clone()), ("RELAY_GITHUB_API".into(), gh), ("RELAY_GITHUB_CLIENT_ID".into(), "test-client".into())]);
+    let s = start_env("github", 0, env);
+    let c = paired(&s, "laptop");
+
+    assert_eq!(c.github().unwrap().state, "off");
+    assert_eq!(c.github_login().unwrap_err(), "locked: opens when Relay on the laptop connects");
+    let key = relay_remote::tls::random_key();
+    c.unlock(&key).unwrap();
+    let dc = c.github_login().unwrap();
+    assert_eq!((dc.user_code.as_str(), dc.interval), ("WDJB-MJHT", 1));
+    assert_eq!(c.github_poll().unwrap().state, "pending");
+    let t = Instant::now();
+    let on = loop {
+        let g = c.github_poll().unwrap();
+        if g.state != "pending" { break g; }
+        assert!(t.elapsed() < Duration::from_secs(10), "no token after {:?}", t.elapsed());
+        std::thread::sleep(Duration::from_millis(200));
+    };
+    assert_eq!((on.state.as_str(), on.login.as_str(), on.email.as_str()), ("on", "octo-test", "octo-test@users.noreply.github.com"), "{on:?}");
+    assert!(on.name.starts_with("Relay (") && on.since.len() == 10, "{on:?}");
+    assert_eq!(c.github().unwrap(), on);
+
+    // on the data volume the token is nowhere readable; the working copy (a RAM disk on a real machine) has the copy
+    // for the helper
+    let in_ram = s.data.join("work");
+    for f in walk(&s.data).into_iter().filter(|f| !f.starts_with(&in_ram)) {
+        assert!(!std::fs::read(&f).unwrap().windows(TOKEN.len()).any(|w| w == TOKEN.as_bytes()), "the token in plaintext in {}", f.display());
+    }
+
+    // an agent of this device: the helper and the identity in its git, the token in no variable
+    let sp = Spec { program: "/bin/sh".into(), args: vec!["-c".into(),
+        "read -r l; env; echo \"name $(git config user.name)\"; printf 'protocol=https\\nhost=github.com\\n\\n' | git credential fill; echo end".into()],
+        env: vec![], cwd: Some(std::env::temp_dir().to_string_lossy().into()) };
+    let mut conn = c.launch(&meta("gh:1"), &sp).unwrap();
+    writeln!(conn.stdin, "go").unwrap();
+    conn.stdin.flush().unwrap();
+    let mut out = vec![];
+    loop { let l = next(&mut conn.frames); if l == "end" || l == "exit" { break; } out.push(l); }
+    let name_at = out.iter().position(|l| l.starts_with("name ")).expect("git config ran");
+    assert_eq!(out[name_at], format!("name {}", on.name));
+    assert!(out[..name_at].iter().all(|l| !l.contains(TOKEN)), "the token in the agent's environment");
+    assert!(out[..name_at].iter().any(|l| l.starts_with("GIT_CONFIG_VALUE_1=!") && l.contains("git-credential")), "{out:?}");
+    assert!(out[name_at..].iter().any(|l| l == &format!("password={TOKEN}")), "the helper did not answer: {out:?}");
+
+    // a restart (the RAM disk goes too): locked until the laptop's key comes, then on again
+    drop(conn);
+    let _s = restart(s);
+    assert_eq!(c.github().unwrap().state, "locked");
+    assert!(!PathBuf::from(c.info().unwrap().work).join(".github").exists());
+    c.unlock(&key).unwrap();
+    assert_eq!(c.github().unwrap(), on);
+    assert!(PathBuf::from(c.info().unwrap().work).join(".github").exists(), "the helper's copy is back after the unlock");
+
+    // a phone of the laptop may do none of it
+    let phone = linked(&c, "phone");
+    for e in [phone.github().err(), phone.github_login().err(), phone.github_logout().err(), phone.repos().err(), phone.repo_ensure("acme/shop").err(),
+              phone.repo_push("shop").err(), phone.repo_snapshot("shop", "relay/x").err()] {
+        assert!(e.unwrap().contains("not allowed from a linked device"));
+    }
+
+    c.github_logout().unwrap();
+    assert_eq!(c.github().unwrap().state, "off");
+    assert_eq!(c.github_poll().unwrap().state, "off");
+    std::fs::remove_dir_all(&tmp).ok();
+}
+
+/// The repos folder: a clone from "GitHub" (a local bare repo behind url.insteadOf), its state with a change, a new
+/// file and a commit not pushed, a snapshot that leaves the working tree and index alone, a push, and the walls.
+#[test]
+fn repos_clone_snapshot_and_push() {
+    let tmp = std::env::temp_dir().join(format!("relay-e2e-git-{}", std::process::id()));
+    std::fs::remove_dir_all(&tmp).ok();
+    let origin = tmp.join("origin");
+    let env = git_config(&tmp, &format!("[url \"file://{}/\"]\n\tinsteadOf = https://github.com/\n", origin.display()));
+    let git = |dir: &std::path::Path, args: &[&str]| -> String {
+        let o = Command::new("git").args(args).current_dir(dir).envs(env.iter().cloned()).output().unwrap();
+        assert!(o.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&o.stderr));
+        String::from_utf8_lossy(&o.stdout).into_owned()
+    };
+    // acme/shop with one commit, acme/empty without any
+    std::fs::create_dir_all(origin.join("acme")).unwrap();
+    git(&origin.join("acme"), &["init", "-q", "--bare", "shop.git"]);
+    git(&origin.join("acme"), &["init", "-q", "--bare", "empty.git"]);
+    let seed = tmp.join("seed");
+    git(&tmp, &["clone", "-q", "https://github.com/acme/shop.git", "seed"]);
+    std::fs::write(seed.join("a.txt"), "one\n").unwrap();
+    std::fs::write(seed.join(".gitignore"), "secret.env\n").unwrap();
+    git(&seed, &["add", "-A"]);
+    git(&seed, &["commit", "-qm", "first"]);
+    git(&seed, &["push", "-q", "origin", "main"]);
+
+    let repos = tmp.join("repos");
+    let mut env2 = env.clone();
+    env2.push(("RELAY_SERVER_REPOS".into(), repos.to_string_lossy().into()));
+    let s = start_env("repos", 0, env2);
+    let c = paired(&s, "laptop");
+    assert_eq!(c.info().unwrap().repos, repos.to_string_lossy());
+    assert!(c.repos().unwrap().is_empty(), "no folder yet");
+    c.unlock(&relay_remote::tls::random_key()).unwrap();
+    assert!(c.github_login().unwrap_err().contains("RELAY_GITHUB_CLIENT_ID"));
+
+    let shop = c.repo_ensure("acme/shop").unwrap();
+    assert_eq!((shop.name.as_str(), shop.repo.as_str(), shop.branch.as_str(), shop.dirty, shop.unpushed), ("shop", "acme/shop", "main", false, 0), "{shop:?}");
+    assert_eq!(c.repo_ensure("acme/shop").unwrap(), shop, "a second time is a fetch");
+    let clone = repos.join("shop");
+
+    // the walls: names, branches, a folder with another origin, a repo GitHub does not have
+    for bad in ["../x", "acme/.hidden", "acme", "acme/a/b"] { assert!(c.repo_ensure(bad).unwrap_err().contains("not a GitHub repo"), "{bad}"); }
+    assert!(c.repo_push("../shop").is_err() && c.repo_push("nope").is_err());
+    for b in ["main", "relay/bad..name", "relay/x y", "refs/heads/relay/x"] { assert!(c.repo_snapshot("shop", b).unwrap_err().contains("not a snapshot branch"), "{b}"); }
+    git(&tmp, &["init", "-q", "repos/other"]);
+    git(&repos.join("other"), &["remote", "add", "origin", "https://github.com/acme/else.git"]);
+    assert!(c.repo_ensure("acme/other").unwrap_err().contains("another origin (acme/else)"));
+    assert!(c.repo_ensure("acme/missing").unwrap_err().contains("connect this machine to GitHub first"));
+
+    // a commit not pushed, a change, a new file and an ignored one
+    std::fs::write(clone.join("b.txt"), "two\n").unwrap();
+    git(&clone, &["add", "b.txt"]);
+    git(&clone, &["commit", "-qm", "second"]);
+    std::fs::write(clone.join("a.txt"), "one, changed\n").unwrap();
+    std::fs::write(clone.join("new.txt"), "new\n").unwrap();
+    std::fs::write(clone.join("secret.env"), "KEY=1\n").unwrap();
+    let list = c.repos().unwrap();
+    assert_eq!(list.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["other", "shop"]);
+    assert!(list[1].dirty && list[1].unpushed == 1, "{:?}", list[1]);
+
+    let before = (git(&clone, &["status", "--porcelain"]), git(&clone, &["ls-files", "-s"]));
+    let snap = c.repo_snapshot("shop", "relay/test").unwrap();
+    assert_eq!(before, (git(&clone, &["status", "--porcelain"]), git(&clone, &["ls-files", "-s"])), "the working tree or index changed");
+    let bare = origin.join("acme/shop.git");
+    assert_eq!(git(&bare, &["rev-parse", "relay/test"]).trim(), snap.commit);
+    assert_eq!(git(&bare, &["show", "relay/test:a.txt"]), "one, changed\n");
+    assert_eq!(git(&bare, &["show", "relay/test:new.txt"]), "new\n");
+    assert_eq!(git(&bare, &["show", "relay/test:b.txt"]), "two\n");
+    assert!(!git(&bare, &["ls-tree", "--name-only", "relay/test"]).contains("secret.env"), "an ignored file went along");
+    assert_eq!(git(&bare, &["rev-parse", "relay/test^"]).trim(), git(&clone, &["rev-parse", "HEAD"]).trim());
+    assert!(git(&bare, &["log", "-1", "--format=%s", "relay/test"]).starts_with("Relay snapshot "));
+    // the snapshot branch does not count as pushed
+    assert_eq!(c.repos().unwrap()[1].unpushed, 1);
+    let pushed = c.repo_push("shop").unwrap();
+    assert_eq!((pushed.unpushed, pushed.dirty), (0, true));
+    assert_eq!(git(&bare, &["rev-parse", "main"]), git(&clone, &["rev-parse", "HEAD"]));
+
+    // a repo without commits: a snapshot without a parent, and a push that sets the upstream
+    let empty = c.repo_ensure("acme/empty").unwrap();
+    assert_eq!((empty.branch.as_str(), empty.unpushed, empty.dirty), ("main", 0, false), "{empty:?}");
+    std::fs::write(repos.join("empty/first.txt"), "hi\n").unwrap();
+    let snap = c.repo_snapshot("empty", "relay/test").unwrap();
+    let bare = origin.join("acme/empty.git");
+    assert_eq!(git(&bare, &["rev-list", "--count", "relay/test"]).trim(), "1");
+    assert_eq!(git(&bare, &["rev-parse", "relay/test"]).trim(), snap.commit);
+    git(&repos.join("empty"), &["add", "-A"]);
+    git(&repos.join("empty"), &["commit", "-qm", "first"]);
+    assert_eq!(c.repo_push("empty").unwrap().unpushed, 0);
+    assert!(git(&repos.join("empty"), &["rev-parse", "--abbrev-ref", "@{u}"]).trim() == "origin/main");
+    std::fs::remove_dir_all(&tmp).ok();
 }
