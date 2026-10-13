@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Project index of an own vault**: Relay no longer empties `work-state.md` at start in a vault with its own `build-index.py` (other card fields than the starter's `last`). Such a vault now runs its own script at start, a starter vault keeps getting the app's copy
 - **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer
 
 ## [0.0.24] - 2026-10-13
