@@ -40,6 +40,7 @@ import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
 import { WorkersToggle } from "../orchestrator/WorkersToggle";
 import { chatWidth, column } from "./layout";
+import { ToLatest, ToStart } from "./ScrollArrows";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
@@ -171,6 +172,16 @@ export function ConversationsView({ className }: { className: string }) {
         className={`flex-1 overflow-y-auto pb-3 ${selected === REM ? "pt-6" : "pt-7"}`}
         onScroll={onScroll}
       >
+        {onView ? null : (
+          <ToStart
+            log={log}
+            selected={selected}
+            go={() => {
+              stick.current = false;
+              log.current?.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+        )}
         <div
           ref={msgs}
           id="msgs"
@@ -184,6 +195,17 @@ export function ConversationsView({ className }: { className: string }) {
             </div>
           ) : null}
         </div>
+        {onView ? null : (
+          <ToLatest
+            log={log}
+            selected={selected}
+            following={() => stick.current}
+            go={() => {
+              stick.current = true;
+              log.current?.scrollTo({ top: log.current.scrollHeight, behavior: "smooth" });
+            }}
+          />
+        )}
       </div>
       {hasSubagents ? <Subagents className={`${column} mb-1.5`} /> : null}
       {onView ? null : <Todos className={`${column} mb-1.5`} />}

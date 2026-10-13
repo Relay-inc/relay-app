@@ -18,9 +18,15 @@ a PR. Versions follow
 - **Crabs for the orchestrator's workers**: each worker in the list next to the Orchestrator is a pixel crab dressed for its model (astronaut for Fable, detective for Opus, chef for Sonnet, racer for Haiku, a hard hat for a board pipeline's worker), walking while it works, and a name of its own (Pinchy, Barnacle, ...) that stays with it. A finished one carries its state mark. Settings › General › Crabs for the orchestrator's workers switches them off; reduced motion keeps them still
 - **Worker progress**: workers get a `step` tool and report their plan's steps as they go; the workers list shows a bar with "2/5" and the step they are on, and the coordinator sees it in `workers`
 
+## [0.0.23] - 2026-10-12
+
+### Added
+
+- **Arrows in a long conversation**: scrolled up from the end, an arrow above the composer takes you down to the latest and follows the stream again, with a dot when output came in while you read back. A screen away from the top, an arrow beside the messages takes you back to the first one (#183)
+
 ### Fixed
 
-- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back
+- **Orchestrator**: a worker whose conversation you closed no longer stays in the workers list next to the Orchestrator; reopening the conversation brings it back (#201)
 
 ## [0.0.22] - 2026-10-12
 
@@ -455,7 +461,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...HEAD
+[0.0.23]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...v0.0.22
 [0.0.21]: https://github.com/Relay-inc/relay-app/compare/v0.0.20...v0.0.21
 [0.0.20]: https://github.com/Relay-inc/relay-app/compare/v0.0.19...v0.0.20
