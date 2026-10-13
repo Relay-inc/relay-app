@@ -6,7 +6,9 @@ import { forgetMachine, pairPhone, updateMachine } from "../../../application/se
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, PILL } from "./blocks";
+import { MachineGithub } from "./MachineGithub";
 import { MachineMirror } from "./MachineMirror";
+import { MachineRepos } from "./MachineRepos";
 import { CommandBlock } from "./MachineSetup";
 import { StatusLine } from "./StatusLine";
 
@@ -116,6 +118,12 @@ export function MachineRow({ machine }: { machine: Machine }) {
       ) : null}
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
       <MachineMirror machine={machine} />
+      {status && status !== "checking" && status.ok ? (
+        <>
+          <MachineGithub machine={machine} hasRepos={!!status.repos} />
+          {status.repos ? <MachineRepos machine={machine} /> : null}
+        </>
+      ) : null}
     </div>
   );
 }

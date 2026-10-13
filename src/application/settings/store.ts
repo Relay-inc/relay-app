@@ -7,6 +7,9 @@ import {
   type BoardForm,
   type MailCfg,
   type MailNew,
+  type DeviceCode,
+  type MachineGithub,
+  type MachineRepo,
   type MachineStatus,
   type MirrorProgress,
   type MirrorStatus,
@@ -75,6 +78,13 @@ export type SettingsState = {
     hostError: string;
     phone: Record<string, PhonePairing | null>; // per machine: the pairing made for a phone, until closed
     setupFolder: string; // where the machine keeps relay-server's folders, as typed in the setup section
+    // GitHub and the repos on each machine, read with the page's slow poll and after each action
+    github: Record<string, MachineGithub | null>;
+    device: Record<string, DeviceCode | null>; // per machine: the code to type on GitHub while connecting
+    githubMessages: Record<string, Message | null>; // per machine: why connecting or disconnecting failed
+    repos: Record<string, MachineRepo[] | null>;
+    repoBusy: Record<string, string>; // per machine: the repo folder a Push or To Mac runs on, "" none
+    repoMessages: Record<string, Message | null>; // per "<machine>/<repo folder>": what the last action said
   };
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
@@ -150,6 +160,12 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     hostLine: "",
     hostError: "",
     phone: {},
+    github: {},
+    device: {},
+    githubMessages: {},
+    repos: {},
+    repoBusy: {},
+    repoMessages: {},
   },
   actions: { list: [], entries: {}, errors: {} },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },

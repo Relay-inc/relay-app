@@ -19,8 +19,11 @@ import type {
 import type {
   ActionConfig,
   ActionEntry,
+  DeviceCode,
   Machine,
   MachineChoice,
+  MachineGithub,
+  MachineRepo,
   MachineStatus,
   MirrorProgress,
   MirrorStatus,
@@ -197,9 +200,16 @@ export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("o
 // ---------- work machines (relay-server in the LAN)
 /** The machine each conversation runs on, by conversation key. */
 export const chatMachines = () => invoke<Record<string, { machine: string; id: string; cwd: string }>>("chat_machines");
-/** Moves a conversation, between two turns, to another place: "" this Mac, or a machine id. */
-export const moveConversation = (key: string, to: string, mail: boolean) =>
-  invoke("move_conversation", { key, to, mail });
+/** Moves a conversation, between two turns, to another place: "" this Mac, or a machine id. Back to this Mac, a repo
+ *  of the project it is `about` with work not pushed on the machine refuses it (an error starting with "repo-work:"),
+ *  until `choice` says to push that work first ("push") or to move anyway ("move"). */
+export const moveConversation = (
+  key: string,
+  to: string,
+  mail: boolean,
+  about: string | null,
+  choice: "push" | "move" | null = null,
+) => invoke("move_conversation", { key, to, mail, about, choice });
 /** Every paired machine as the backend last heard it, no network: for the composer's pick. */
 export const machinesList = () => invoke<MachineChoice[]>("machines_list");
 /** Pairs with the line `relay-server pair` printed; the backend saves the machine and emits settings-changed. */
@@ -225,6 +235,23 @@ export const setMachineMirror = (id: string, exclude: string[]) => invoke("set_m
 export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
 /** Where the running round of a machine's mirror is, null between rounds. */
 export const mirrorProgress = (id: string) => invoke<MirrorProgress | null>("mirror_progress", { id });
+/** GitHub on a machine: connected or not, and as whom. */
+export const machineGithub = (id: string) => invoke<MachineGithub>("machine_github", { id });
+/** Starts connecting a machine to GitHub: the code to type there. */
+export const machineGithubConnect = (id: string) => invoke<DeviceCode>("machine_github_connect", { id });
+/** Where connecting stands: `pending` until the code is typed. */
+export const machineGithubPoll = (id: string) => invoke<MachineGithub>("machine_github_poll", { id });
+export const machineGithubDisconnect = (id: string) => invoke("machine_github_disconnect", { id });
+/** The repos on a machine with what is not pushed. */
+export const machineRepos = (id: string) => invoke<MachineRepo[]>("machine_repos", { id });
+export const machineRepoPush = (id: string, name: string) => invoke<MachineRepo>("machine_repo_push", { id, name });
+/** The work in a repo there on `relay/<machine>`, fetched into this Mac's checkout of it: that branch and folder. */
+export const machineRepoToMac = (id: string, name: string) =>
+  invoke<{ branch: string; dir: string }>("machine_repo_to_mac", { id, name });
+/** Before a conversation's first start on a machine: its project's repo cloned or fetched there (may take minutes).
+ *  Null on a machine from before repos there. */
+export const machineRepoEnsure = (id: string, key: string, repo: string) =>
+  invoke<MachineRepo | null>("machine_repo_ensure", { id, key, repo });
 
 // ---------- usage
 export const usageLimits = () => invoke<ProvLimits[]>("usage_limits");
