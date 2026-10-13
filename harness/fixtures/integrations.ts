@@ -292,9 +292,9 @@ export const actions = [
   act("mail", "attachment", "Save one attachment into ~/Downloads/Relay-mail, returns its path.", false, "auto"),
   act("mail", "save_draft", "Save a full RFC 5322 message as a Gmail draft. Never sent.", true, "auto"),
   act("reminders", "list", "The vault's open reminders, with their ids.", false, "auto"),
-  act("reminders", "add", "Add a reminder to the vault.", true, "ask"),
-  act("reminders", "done", "Mark a reminder done (a repeating one moves on).", true, "ask"),
-  act("reminders", "push", "Move a reminder to another date.", true, "ask"),
+  act("reminders", "add", "Add a reminder to the vault.", true, "auto"),
+  act("reminders", "done", "Mark a reminder done (a repeating one moves on).", true, "auto"),
+  act("reminders", "push", "Move a reminder to another date.", true, "auto"),
 ];
 export const actionConfig = (): Record<string, unknown> => ({ productive: { "*": "ask", add_time: "auto" } });
 
