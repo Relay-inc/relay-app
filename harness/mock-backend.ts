@@ -113,6 +113,9 @@ const voiceModels = [
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
+// the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
+let github = structuredClone(vault.machineGit.github);
+const machineRepos = structuredClone(vault.machineGit.repos);
 
 // ---------- commands
 const thumb = `data:image/png;base64,${pngBase64(100, 100, "#dfe7f7", "#2f6fdb")}`;
@@ -221,6 +224,8 @@ function handle(cmd: string, a: Args): unknown {
     // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
     case "machine_status":
       if (fixture === "phone") return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
+      if (fixture === "github")
+        return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
       return {
         ok: false,
         outdated: "server",
@@ -239,8 +244,37 @@ function handle(cmd: string, a: Args): unknown {
     case "mirror_status":
     case "mirror_progress":
       return null;
+    // GitHub and the repos on the machine (fixture "github"): Disconnect, then Connect shows the code, typed 5 s later
+    case "machine_github":
+      return structuredClone(github);
+    case "machine_github_connect":
+      return structuredClone(vault.machineGit.device);
+    case "machine_github_poll":
+      github = structuredClone(vault.machineGit.github);
+      return structuredClone(github);
+    case "machine_github_disconnect":
+      github = { ...github, state: "off", login: "", since: "", name: "", email: "" };
+      return null;
+    case "machine_repos":
+      return structuredClone(machineRepos);
+    case "machine_repo_push":
+    case "machine_repo_ensure": {
+      const repo = machineRepos.find(r => r.name === a.name || r.repo === a.repo) ?? null;
+      if (repo && cmd === "machine_repo_push") repo.unpushed = 0;
+      return structuredClone(repo);
+    }
+    // back to this Mac from the machine (fixture "github"): harbor-crm has work there, until pushed or moved anyway
+    case "move_conversation":
+      if (fixture !== "github" || a.to !== "" || a.choice) return null;
+      return Promise.reject(
+        `repo-work:${JSON.stringify({ repo: "acme/harbor-crm", name: "harbor-crm", branch: "relay/server", machine: "Server" })}`,
+      );
+    case "machine_repo_to_mac":
+      return new Promise(resolve =>
+        setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
+      );
     case "machines_list":
-      return [];
+      return fixture === "github" ? [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }] : [];
     case "chat_machines":
       return {};
 

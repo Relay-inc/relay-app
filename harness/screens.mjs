@@ -107,6 +107,25 @@ const VIEWS = {
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
+  // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
+  // not committed
+  "settings-machines-github": async () => {
+    await settingsPage("Machines", null, "github");
+    await waitText("Connected as octo-demo");
+    await waitText("2 commits not pushed");
+    await intoView("Repos on Server");
+  },
+  // the same after Disconnect and Connect GitHub: the code to type on GitHub, waiting for it
+  "settings-machines-github-code": async () => {
+    await settingsPage("Machines", null, "github");
+    await waitText("Connected as octo-demo");
+    await button("Disconnect").click();
+    await button("Disconnect").click();
+    await waitText("Not connected");
+    await button("Connect GitHub").click();
+    await waitText("ABCD-1234");
+    await intoView("Waiting for GitHub…");
+  },
   waiting: async () => {
     await open(page, server.url);
     await waitText(titles.permission);
