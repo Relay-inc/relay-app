@@ -1,6 +1,6 @@
 import type { Chat, Item } from "../conversations/types";
 import type { Meeting } from "./types";
-import { fill, prompts } from "../../shared/prompts.ts";
+import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts.ts";
 
 // The timing of the meetings under Waiting and their banner, and the prompts of a conversation about one. The clock
 // is an argument (`now`, epoch ms), so the rules hold at any moment. Times are instants (RFC 3339 with an offset): the
@@ -52,8 +52,6 @@ const PROMPTS: Record<Exclude<MeetingChat, "transcript">, string> = {
   note: prompts.meetings.note,
   prep: prompts.meetings.prep,
 };
-// the quotes around invite text stay closed: a « or » inside it is dropped
-const quoted = (text: string) => `«${text.replace(/[«»]/g, "")}»`;
 /** The meeting's day as YYYY-MM-DD in `timeZone` (undefined: the machine's), so a meeting just after midnight is on
  *  the next day. */
 export const meetingDay = (iso: string, timeZone?: string) => new Date(iso).toLocaleDateString("sv-SE", { timeZone });
@@ -69,17 +67,16 @@ export function meetingPrompt(
 ) {
   const people = meeting.people.map(person => (person.name ? `${person.name} <${person.email}>` : person.email));
   const details = [
-    prompts.meetings.detailsUntrusted,
-    `Titel: ${quoted(meeting.title)}`,
+    `Titel: ${meeting.title}`,
     `Wanneer: ${meetingDay(meeting.start, timeZone)} ${time(meeting.start)}–${time(meeting.end)}`,
-    meeting.location && `Locatie: ${quoted(meeting.location)}`,
+    meeting.location && `Locatie: ${meeting.location}`,
     meeting.organizer && `Organisator: ${meeting.organizer}`,
     people.length && `Deelnemers: ${people.join(", ")}`,
   ]
     .filter(Boolean)
     .join("\n");
   const ask = how === "transcript" && recording ? transcriptPrompt(recording) : PROMPTS[how as keyof typeof PROMPTS];
-  return `${ask}\n\n${details}`;
+  return `${ask}\n\n${untrustedNote("nl", ["meeting"])}\n${untrusted("meeting", details)}`;
 }
 
 /** The ask after a recording: the note around its files, then the summary. What people said is text of third parties,

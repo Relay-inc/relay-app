@@ -19,8 +19,6 @@ import mailTweakDutch from "../../prompts/mail/tweak-dutch.md?raw";
 import mailTweakEnglish from "../../prompts/mail/tweak-english.md?raw";
 import mailTweakFormal from "../../prompts/mail/tweak-formal.md?raw";
 import mailTweakShorter from "../../prompts/mail/tweak-shorter.md?raw";
-import mailUntrusted from "../../prompts/mail/untrusted.md?raw";
-import meetingsDetailsUntrusted from "../../prompts/meetings/details-untrusted.md?raw";
 import meetingsNote from "../../prompts/meetings/note.md?raw";
 import meetingsPrep from "../../prompts/meetings/prep.md?raw";
 import meetingsTranscript from "../../prompts/meetings/transcript.md?raw";
@@ -32,7 +30,8 @@ import pullRequestsReview from "../../prompts/pull-requests/review.md?raw";
 import pullRequestsReviewExplain from "../../prompts/pull-requests/review-explain.md?raw";
 import pullRequestsReviewFindings from "../../prompts/pull-requests/review-findings.md?raw";
 import pullRequestsSecondOpinion from "../../prompts/pull-requests/second-opinion.md?raw";
-import pullRequestsUntrusted from "../../prompts/pull-requests/untrusted.md?raw";
+import sharedUntrusted from "../../prompts/shared/untrusted.md?raw";
+import sharedUntrustedNl from "../../prompts/shared/untrusted-nl.md?raw";
 import timeBooking from "../../prompts/time/booking.md?raw";
 import timeIntro from "../../prompts/time/intro.md?raw";
 import timeIntroEmpty from "../../prompts/time/intro-empty.md?raw";
@@ -62,10 +61,8 @@ export const prompts = {
     tweakEnglish: text(mailTweakEnglish),
     tweakFormal: text(mailTweakFormal),
     tweakShorter: text(mailTweakShorter),
-    untrusted: text(mailUntrusted),
   },
   meetings: {
-    detailsUntrusted: text(meetingsDetailsUntrusted),
     note: text(meetingsNote),
     prep: text(meetingsPrep),
     transcript: text(meetingsTranscript),
@@ -81,7 +78,10 @@ export const prompts = {
     reviewExplain: text(pullRequestsReviewExplain),
     reviewFindings: text(pullRequestsReviewFindings),
     secondOpinion: text(pullRequestsSecondOpinion),
-    untrusted: text(pullRequestsUntrusted),
+  },
+  shared: {
+    untrusted: text(sharedUntrusted),
+    untrustedNl: text(sharedUntrustedNl),
   },
   time: {
     booking: text(timeBooking),
@@ -104,3 +104,16 @@ export function fill(template: string, vars: Record<string, string | number> = {
   if (unused.length) throw new Error(`prompt has no placeholder for ${unused.join(", ")}`);
   return out;
 }
+
+/** Third-party text for a prompt: inside <tag>, with a closing </tag> in it made harmless so the text cannot end the
+ *  block early. `attrs` become attributes of the opening tag (<mail from="…">). Say what the block is with
+ *  `untrustedNote`. (src-tauri: agent_core::prompt::untrusted.) */
+export function untrusted(tag: string, text: string, attrs: Record<string, string> = {}) {
+  const open = Object.entries(attrs).map(([k, v]) => ` ${k}="${v.replace(/\s+/g, " ").replace(/"/g, "'")}"`);
+  return `<${tag}${open.join("")}>\n${text.replace(new RegExp(`</${tag}`, "gi"), `<\\/${tag}`)}\n</${tag}>`;
+}
+/** The one sentence that tells the model what the blocks made by `untrusted` are: `lang` of the prompt it goes in. */
+export const untrustedNote = (lang: "en" | "nl", tags: string[]) =>
+  fill(lang === "nl" ? prompts.shared.untrustedNl : prompts.shared.untrusted, {
+    tags: tags.map(t => `<${t}>`).join(", "),
+  });

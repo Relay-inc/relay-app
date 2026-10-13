@@ -1,5 +1,5 @@
 import { provider } from "../../shared/plugins";
-import { prompts } from "../../shared/prompts";
+import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts";
 import { byNumber, byTitle, type Candidate } from "../../domain/today/link";
 import type { PR } from "../../domain/pull-requests/types";
 import * as backend from "../../infrastructure/backend";
@@ -89,8 +89,8 @@ async function askClaude(pr: PR, cards: Candidate[]): Promise<Candidate | null> 
   if (!list) return null;
   try {
     const answer = await backend.aiWrite(
-      prompts.pullRequests.linkTicket,
-      `Pull request: ${pr.title}\nBranch: ${pr.branch ?? ""}\nRepo: ${pr.repo}\n\nTickets:\n${list}`,
+      fill(prompts.pullRequests.linkTicket, { untrusted: untrustedNote("nl", ["pull_request", "tickets"]) }),
+      `${untrusted("pull_request", `Titel: ${pr.title}\nBranch: ${pr.branch ?? ""}\nRepo: ${pr.repo}`)}\n\n${untrusted("tickets", list)}`,
     );
     const said = answer.trim().replace(/^#/, "").split(/\s/)[0].toLowerCase();
     return cards.find(card => card.number.replace(/^#/, "").toLowerCase() === said) ?? null;

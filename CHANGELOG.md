@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **Prompts follow Anthropic's guidance**: text from third parties (mail, tickets, diffs, invites, the agent's own claims, a first review) now goes into the prompts inside its own tag (`<mail from=...>`, `<ticket>`, `<diff>`, `<agent_claims>`, `<meeting>`, `<review agent=...>`), with a closing tag inside it made harmless, and every prompt says so with the same sentence instead of its own warning. The time booking fetches its sources in parallel, the orchestrator is told to dispatch independent workers in one turn, the worker's step count matches the `step` tool (3-8), the mail-to-ticket prompt says one task without subtasks, and the vault capture uses today's date
 - **Prompts in markdown**: every prompt Relay sends to a model (mail, meetings, pull request reviews, time booking, the orchestrator and the board pipeline, the vault capture, the title) is now a file in `prompts/` instead of a string in the code, so it can be read and edited in one place. The text sent does not change.
 
 ### Fixed

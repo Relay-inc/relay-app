@@ -30,5 +30,5 @@ test("a second opinion quotes the first review under its agent's name", () => {
   const pr = { url: "https://github.com/acme/web/pull/7", number: 7, title: "Fix" } as PrDetail;
   const text = secondOpinionPrompt(pr, "acme/web", "Claude Code", "Line 4 is wrong.");
   assert.ok(text.includes("acme/web #7"));
-  assert.ok(text.endsWith("--- review van Claude Code ---\nLine 4 is wrong."));
+  assert.ok(text.endsWith('<review agent="Claude Code">\nLine 4 is wrong.\n</review>'));
 });

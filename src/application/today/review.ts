@@ -1,6 +1,6 @@
 import { WRITE_MAX } from "@relay/agent-core";
 import { t } from "../../shared/i18n";
-import { fill, prompts } from "../../shared/prompts";
+import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts";
 import type { PR } from "../../domain/pull-requests/types";
 import type { PrGroup } from "../../domain/pull-requests/group";
 import { groupTitle, reviewIdOf } from "../../domain/today/kinds/pr";
@@ -209,14 +209,14 @@ export const setBody = (id: string, text: string) => change(id, r => void (r.bod
 export const setVerdict = (id: string, verdict: Verdict) => change(id, r => void (r.verdict = verdict));
 export const askConfirm = (id: string, on: boolean) => change(id, r => void (r.confirm = on));
 
-const UNTRUSTED = prompts.pullRequests.untrusted;
+const WRAP = untrusted("pull_requests", "").length;
 /** An agent reads the diffs (of every PR of the review, as one change) and lists what it would comment on; a finding
  *  not on a line of a diff is dropped. Its earlier findings make way, the other agents' stay. */
 export async function findings(id: string, descriptions: string[] = [], agent = reviewWriter()) {
   const prs = review(id).prs;
   const files = review(id).files;
   if (!files || review(id).running) return;
-  const sent = reviewText(prs, descriptions, files, WRITE_MAX);
+  const sent = reviewText(prs, descriptions, files, WRITE_MAX - WRAP - 20);
   change(id, r => {
     r.running = true;
     r.reading = agent;
@@ -225,8 +225,8 @@ export async function findings(id: string, descriptions: string[] = [], agent = 
   });
   try {
     const text = await backend.aiWrite(
-      fill(prompts.pullRequests.reviewFindings, { untrusted: UNTRUSTED }),
-      sent.text,
+      fill(prompts.pullRequests.reviewFindings, { untrusted: untrustedNote("nl", ["pull_requests"]) }),
+      untrusted("pull_requests", sent.text),
       agent,
     );
     const json = text.slice(text.indexOf("["), text.lastIndexOf("]") + 1);
@@ -325,8 +325,8 @@ export async function askLine(id: string) {
   });
   try {
     const text = await backend.aiWrite(
-      fill(prompts.pullRequests.reviewExplain, { untrusted: UNTRUSTED }),
-      `Bestand: ${path}\n${around.map(l => (l === file.lines[at] ? ">> " : "   ") + (l.kind === "hunk" ? l.text : l.text)).join("\n")}\n\nVraag: ${question}`,
+      fill(prompts.pullRequests.reviewExplain, { untrusted: untrustedNote("nl", ["diff"]) }),
+      `Bestand: ${path}\n${untrusted("diff", around.map(l => (l === file.lines[at] ? ">> " : "   ") + (l.kind === "hunk" ? l.text : l.text)).join("\n"))}\n\nVraag: ${question}`,
     );
     change(id, x => {
       x.findings.unshift({

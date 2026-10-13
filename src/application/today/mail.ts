@@ -1,5 +1,5 @@
 import { t } from "../../shared/i18n";
-import { fill, prompts } from "../../shared/prompts";
+import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts";
 import { panelItem } from "../../domain/navigation/keys";
 import {
   draftMessage,
@@ -83,10 +83,13 @@ async function original(key: string): Promise<Original> {
 }
 
 // what Claude is told: the mail is someone else's text, it writes and does nothing else (ai_write has no tools)
-const UNTRUSTED = prompts.mail.untrusted;
+const UNTRUSTED = untrustedNote("nl", ["mail"]);
 const STYLE = prompts.mail.style;
 const about = (mail: Original) =>
-  `Van: ${mail.from.map(a => a.name || a.email).join(", ")}\nOnderwerp: ${mail.subject}\n\n${mail.text.slice(0, 12000)}`;
+  untrusted("mail", mail.text.slice(0, 12000), {
+    from: mail.from.map(a => a.name || a.email).join(", "),
+    subject: mail.subject,
+  });
 
 /** Two or three short ways to answer, for the chips under the mail; once per mail, quietly nothing when it fails. */
 export async function loadQuickReplies(key: string) {
@@ -196,7 +199,10 @@ export async function tweakCompose(tweak: keyof typeof TWEAKS & string) {
     c.err = "";
   });
   try {
-    const text = await backend.aiWrite(fill(prompts.mail.tweak, { tweak: TWEAKS[tweak] }), compose.text);
+    const text = await backend.aiWrite(
+      fill(prompts.mail.tweak, { tweak: TWEAKS[tweak] }),
+      untrusted("concept", compose.text),
+    );
     changeCompose(c => {
       c.text = text;
       c.busy = "";
