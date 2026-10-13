@@ -248,8 +248,8 @@ pub trait AgentProvider: Sync {
     fn sessions(&self, _env: &Env) -> Vec<Value> { vec![] }
     /// The subagents of a session: `{id, description, agentType?, model?, running, started_at, last_at, tool?, input?, text?}`.
     fn subagents(&self, _env: &Env, _sid: &str) -> Vec<Value> { vec![] }
-    /// The last few texts a subagent wrote.
-    fn agent_log(&self, _env: &Env, _sid: &str, _id: &str) -> Vec<String> { vec![] }
+    /// A subagent's messages from byte offset `from` of its transcript, and the offset to continue from.
+    fn agent_history(&self, _env: &Env, _sid: &str, _id: &str, _from: u64) -> (Vec<Event>, u64) { (vec![], 0) }
     /// The shell command for the terminal, None when the provider has none.
     fn terminal(&self, _env: &Env, _t: Terminal) -> Option<String> { None }
     /// Stop a background session, keeping its conversation.

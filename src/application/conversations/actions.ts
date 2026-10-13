@@ -635,19 +635,6 @@ export async function saveProjectPanel(project: string | null, fields?: ProjectF
 }
 
 // ---------- the agents of the open conversation, above the composer
-/** A click on an agent unfolds its last messages, a second click folds them. */
-export async function toggleSubLog(id: string) {
-  if (cs().subLog[id]) {
-    set(draft => {
-      delete draft.subLog[id];
-    });
-    return;
-  }
-  const log = await backend.agentLog(selected(), id);
-  set(draft => {
-    draft.subLog[id] = log;
-  });
-}
 /** The finished agents of the open conversation, folded away or shown. */
 export function toggleSubsDone() {
   const key = selected();

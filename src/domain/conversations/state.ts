@@ -41,7 +41,6 @@ export type ConversationsState = {
   termOffset: Record<string, number>;
   subs: Record<string, Sub[]>; // per conversation key, polled every 2 s
   subsOpen: Set<string>; // conversations whose finished agents are unfolded
-  subLog: Record<string, string[]>; // agent id: its last messages, while unfolded
   // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
   commands: Record<string, SlashCommand[]>;
   retries: Record<string, Retry>; // conversations waiting for a limit to reset, by key (retry.rs)
@@ -79,7 +78,6 @@ export const initialConversations = (stored: {
   termOffset: {},
   subs: {},
   subsOpen: new Set(),
-  subLog: {},
   retries: {},
 });
 

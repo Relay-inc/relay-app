@@ -12,11 +12,11 @@ const RESULTS = `${HERE}results`;
 
 // ---------- classification of the calls
 // polls and plumbing: left out entirely, their timing is not behaviour
-const IGNORED = new Set(["pending", "subagents", "history_sid", "agents", "app_sids", "app_sessions", "running", "plugin:window|is_focused", "plugin:window|set_title"]);
+const IGNORED = new Set(["pending", "subagents", "agent_history", "history_sid", "agents", "app_sids", "app_sessions", "running", "plugin:window|is_focused", "plugin:window|set_title"]);
 // reads: counted per command (integration GETs per path), order and count are informational
 const READS = new Set([
   "get_settings", "ui_lang", "ui_locale", "vault_status", "snapshot", "vault_notes", "read_note", "project_icons", "project_repos",
-  "agents_status", "agent_commands", "action_config", "integration_thumb", "plugin:deep-link|get_current", "chats", "chat_providers", "history", "agent_log", "usage_limits", "usage_tokens",
+  "agents_status", "agent_commands", "action_config", "integration_thumb", "plugin:deep-link|get_current", "chats", "chat_providers", "history", "usage_limits", "usage_tokens",
   "github_status", "github_prs", "github_pr", "mail_list", "mail_read", "calendar_meetings", "integration_status", "integration_has_token",
   "integration_mcp", "favicons", "find_icon_sites", "detect_vault", "check_vault", "plugin:window|theme",
 ]);
