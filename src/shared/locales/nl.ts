@@ -31,6 +31,7 @@ export default {
   "orch.state.failed": "Mislukt",
   "orch.state.stopped": "Gestopt",
   "orch.state.silent": "Gestopt zonder rapport",
+  "orch.steps": "{done} van {total} stappen",
   "orch.open": "Openen",
   "orch.stop": "Stoppen",
   "orch.details": "Details",
@@ -789,6 +790,9 @@ export default {
   "set.captureOnClose": "Vault bijwerken als een gesprek sluit",
   "set.captureOnCloseHelp":
     "Als je een gesprek sluit, leest Claude het nog eens en schrijft wat in de vault hoort er meteen in: beslissingen, projectstatus, opvolging. Er wordt niets getoond of gevraagd; de git-geschiedenis van de vault is de controle. Korte vragen (minder dan 3 berichten) worden overgeslagen.",
+  "set.workerCrabs": "Krabben voor de workers van de orchestrator",
+  "set.workerCrabsHelp":
+    "Elke worker in de lijst van de Orchestrator krijgt een pixelkrab, verkleed volgens zijn model, die loopt zolang hij werkt. Uit: een gewone statusmarkering.",
   "retry.at": "Gebruikslimiet bereikt. Opnieuw om {time}.",
   "retry.check": "Gebruikslimiet bereikt. Opnieuw kijken om {time}.",
   "retry.cancel": "Annuleren",

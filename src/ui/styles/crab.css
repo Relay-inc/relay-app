@@ -1,0 +1,118 @@
+/* The workers' crabs (ui/features/orchestrator/Crab): only CSS moves them, nothing redraws. Every running crab walks
+   (the leg pairs step in turn, the body bobs), its costume's prop adds its own motion. */
+.crab g {
+  transform-box: fill-box;
+}
+.crab.run .la {
+  animation: crab-step 0.5s steps(1) infinite;
+}
+.crab.run .lb {
+  animation: crab-step 0.5s steps(1) infinite -0.25s;
+}
+.crab.run .bd {
+  animation: crab-bob 0.5s steps(1) infinite -0.125s;
+}
+@keyframes crab-step {
+  50% {
+    transform: translateY(-1px);
+  }
+}
+@keyframes crab-bob {
+  50% {
+    transform: translateY(1px);
+  }
+}
+@keyframes crab-blink {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+/* fable floats instead of walking, its aerial blinks */
+.crab-fable.run {
+  animation: crab-float 1s ease-in-out infinite;
+}
+.crab-fable.run .la,
+.crab-fable.run .lb,
+.crab-fable.run .bd {
+  animation: none;
+}
+.crab-fable.run .tip {
+  animation: crab-blink 1s steps(1) infinite;
+}
+@keyframes crab-float {
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+/* opus sweeps the magnifier */
+.crab-opus.run .prop {
+  animation: crab-scan 1s steps(1) infinite;
+}
+@keyframes crab-scan {
+  25%,
+  75% {
+    transform: translate(-1px, 1px);
+  }
+  50% {
+    transform: translate(-2px, 2px);
+  }
+}
+
+/* sonnet tilts the pan and flips the egg */
+.crab-sonnet.run .pan {
+  transform-origin: 0 50%;
+  animation: crab-tilt 1s ease-in-out infinite;
+}
+.crab-sonnet.run .egg {
+  animation: crab-flip 1s ease-in-out infinite;
+}
+@keyframes crab-tilt {
+  20%,
+  40% {
+    transform: rotate(-12deg);
+  }
+}
+@keyframes crab-flip {
+  30% {
+    transform: translateY(-5px) scaleY(-1);
+  }
+  60% {
+    transform: translateY(0);
+  }
+}
+
+/* haiku runs at twice the pace, its speed lines flicker */
+.crab-haiku.run .la {
+  animation-duration: 0.25s;
+}
+.crab-haiku.run .lb {
+  animation-duration: 0.25s;
+  animation-delay: -0.125s;
+}
+.crab-haiku .zip {
+  opacity: 0;
+}
+.crab-haiku.run .zip {
+  animation: crab-blink 0.25s steps(1) infinite;
+  opacity: 1;
+}
+
+/* the pipeline's engineer turns the wrench */
+.crab-pipeline.run .prop {
+  transform-origin: 50% 100%;
+  animation: crab-twist 0.5s ease-in-out infinite;
+}
+@keyframes crab-twist {
+  50% {
+    transform: rotate(-30deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crab.run,
+  .crab.run g {
+    animation: none !important;
+  }
+}

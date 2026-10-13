@@ -5,6 +5,7 @@ import { workerBoard, stopWorker } from "../../../application/orchestrator/orche
 import { select } from "../../../application/navigation/navigation";
 import { projectLabel } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
+import { useSettingsStore } from "../../../application/settings/store";
 import { useT } from "../../hooks/useT";
 import { WorkerRow } from "./WorkerRow";
 import { openPipelineLink } from "../../../application/pipeline/runner";
@@ -12,6 +13,7 @@ import { openPipelineLink } from "../../../application/pipeline/runner";
 /** The orchestrator's workers in the drawer next to the coordinator, newest first. */
 export function WorkerBoard() {
   const { t, locale } = useT();
+  const crabs = useSettingsStore(s => s.settings.workerCrabs !== false);
   const rows = useDerived(() => workerBoard().map(worker => ({ worker, project: projectLabel(worker.project) })));
   // a clock for "5 min ago"
   const [clock, setClock] = useState(Date.now);
@@ -36,6 +38,7 @@ export function WorkerBoard() {
           onOpen={() => select(worker.key)}
           onStop={() => stopWorker(worker.key)}
           onLink={openPipelineLink}
+          crabs={crabs}
         />
       ))}
     </ul>

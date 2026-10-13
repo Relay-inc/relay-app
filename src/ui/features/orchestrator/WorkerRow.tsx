@@ -4,6 +4,8 @@ import type { Worker, WorkerState } from "../../../domain/orchestrator/types";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
 import { Markdown } from "../../components/Markdown";
+import { costumeOf, workerName } from "../../../domain/orchestrator/rules";
+import { Crab } from "./Crab";
 
 const STATE: Record<WorkerState, Key> = {
   running: "orch.state.running",
@@ -32,6 +34,7 @@ export function WorkerRow({
   onOpen,
   onStop,
   onLink,
+  crabs,
 }: {
   worker: Worker;
   project: string; // the project's label as the sidebar shows it, or Algemeen
@@ -39,18 +42,36 @@ export function WorkerRow({
   onOpen: () => void;
   onStop: () => void;
   onLink: (url: string) => void;
+  crabs: boolean; // the worker as a crab (Settings › General), else the plain state mark
 }) {
   const { t } = useT();
   const [open, setOpen] = useState(false);
   const report = worker.report;
+  const step = worker.state === "running" && worker.step?.total ? worker.step : null;
   // a board pipeline's worker: its ticket and its PR, or why it has none
   const ticket = worker.ticket as { number?: string; url?: string } | undefined;
   const more = !!report && (!!report.questions || !!report.diff || report.flags.length > 0);
   return (
     <li className="flex items-start gap-2.5 py-3 border-b border-separator last:border-b-0">
-      <span className="h-5 w-3.5 flex-none grid place-items-center">
-        <StateMark state={worker.state} />
-      </span>
+      {crabs ? (
+        // the walking crab says it runs; an ended one carries its state mark
+        <span className="relative flex-none -mt-0.5">
+          <Crab
+            costume={costumeOf(worker.model, !!worker.ticket)}
+            running={worker.state === "running"}
+            dim={worker.state === "stopped" || worker.state === "silent"}
+          />
+          {worker.state === "running" ? null : (
+            <span className="absolute -right-2 -bottom-1 size-3.5 rounded-full bg-raised grid place-items-center [&_svg]:size-3 [&>span]:size-1.5">
+              <StateMark state={worker.state} />
+            </span>
+          )}
+        </span>
+      ) : (
+        <span className="h-5 w-3.5 flex-none grid place-items-center">
+          <StateMark state={worker.state} />
+        </span>
+      )}
       <div className="min-w-0 flex-1 flex flex-col gap-1">
         <div className="flex items-baseline gap-2 text-[13px]">
           <span className="flex-1 min-w-0 truncate font-medium" title={worker.task}>
@@ -59,9 +80,24 @@ export function WorkerRow({
           <span className="flex-none text-xs text-tertiary tabular-nums">{when}</span>
         </div>
         <span className="text-xs text-secondary truncate">
-          {project} ·{" "}
+          <span className="font-medium text-label">{workerName(worker.key)}</span> · {project} ·{" "}
           {worker.phase ? t(worker.phase === "review" ? "orch.reviewing" : "orch.checking") : t(STATE[worker.state])}
         </span>
+        {step ? (
+          // its own progress, from its step tool, while it works
+          <div
+            className="flex items-center gap-2 text-xs text-tertiary"
+            title={t("orch.steps", { done: step.done, total: step.total })}
+          >
+            <span className="h-1 w-16 flex-none rounded-full bg-fill overflow-hidden">
+              <span className="block h-full bg-accent" style={{ width: `${(100 * step.done) / step.total}%` }} />
+            </span>
+            <span className="tabular-nums">
+              {step.done}/{step.total}
+            </span>
+            {step.note ? <span className="min-w-0 truncate">{step.note}</span> : null}
+          </div>
+        ) : null}
         {ticket ? (
           <span className="flex flex-wrap items-baseline gap-x-2 text-xs">
             <button

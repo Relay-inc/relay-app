@@ -30,6 +30,7 @@ const en = {
   "orch.state.failed": "Failed",
   "orch.state.stopped": "Stopped",
   "orch.state.silent": "Ended without a report",
+  "orch.steps": "{done} of {total} steps",
   "orch.open": "Open",
   "orch.stop": "Stop",
   "orch.details": "Details",
@@ -784,6 +785,9 @@ const en = {
   "set.captureOnClose": "Write vault updates when a conversation closes",
   "set.captureOnCloseHelp":
     "When you close a conversation, Claude reads it once more and writes what belongs in the vault straight in: decisions, project state, follow-ups. Nothing is shown or asked; the vault's git history is the review. Skips quick questions (fewer than 3 messages).",
+  "set.workerCrabs": "Crabs for the orchestrator's workers",
+  "set.workerCrabsHelp":
+    "Each worker in the Orchestrator's list gets a pixel crab dressed for its model, walking while it works. Off: a plain status mark.",
   "retry.at": "Usage limit reached. Retrying at {time}.",
   "retry.check": "Usage limit reached. Checking again at {time}.",
   "retry.cancel": "Cancel",

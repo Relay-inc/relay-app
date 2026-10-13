@@ -5,6 +5,8 @@ import type { Worker } from "./types";
 import {
   ORCH,
   boardOrder,
+  costumeOf,
+  workerName,
   ensureCoordinator,
   ensureWorkerChat,
   isOrchKey,
@@ -119,4 +121,18 @@ test("a turn the transcript already holds is not added twice", () => {
   assert.equal(lastTurnIs(items, "[Relay] Report"), true);
   assert.equal(lastTurnIs(items, "[Relay] Another"), false);
   assert.equal(lastTurnIs(undefined, "x"), false);
+});
+
+test("crab: the pipeline's engineer, else the model's costume, else plain", () => {
+  assert.equal(costumeOf("opus", true), "pipeline");
+  assert.equal(costumeOf("sonnet", false), "sonnet");
+  assert.equal(costumeOf("claude-haiku-5-5", false), "haiku");
+  assert.equal(costumeOf("", false), "plain");
+  assert.equal(costumeOf(undefined, false), "plain");
+});
+
+test("worker name: the same for a key, spread over the names", () => {
+  assert.equal(workerName("c:orch-w-a1"), workerName("c:orch-w-a1"));
+  const names = new Set(Array.from({ length: 200 }, (_, i) => workerName(`c:orch-w-${i.toString(36)}`)));
+  assert.ok(names.size > 30);
 });

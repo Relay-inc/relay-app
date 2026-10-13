@@ -15,6 +15,7 @@ import {
   saveAutoRetry,
   saveTimeFromSessions,
   saveCaptureOnClose,
+  saveWorkerCrabs,
   saveFolders,
   saveSidebar,
   saveTerminal,
@@ -59,6 +60,7 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const autoRetry = useSettingsStore(s => s.settings.autoRetry === true);
   const timeFromSessions = useSettingsStore(s => s.settings.timeFromSessions !== false);
   const captureOnClose = useSettingsStore(s => s.settings.captureOnClose !== false);
+  const workerCrabs = useSettingsStore(s => s.settings.workerCrabs !== false);
   const message = useSettingsStore(s => s.message);
   // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
   const [map, setMap] = useState(vaultStatus.map);
@@ -204,6 +206,9 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
         </Field>
         <Field label={t("set.captureOnClose")} id="capture" hint={<Html html={th("set.captureOnCloseHelp")} />}>
           <Switch id="capture" on={captureOnClose} onToggle={saveCaptureOnClose} />
+        </Field>
+        <Field label={t("set.workerCrabs")} id="crabs" hint={<Html html={th("set.workerCrabsHelp")} />}>
+          <Switch id="crabs" on={workerCrabs} onToggle={saveWorkerCrabs} />
         </Field>
       </Section>
       <Section title={t("set.sec.sidebar")} rows>
