@@ -13,6 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Stuck workers show up**: once a minute Relay checks the orchestrator's running workers. One that waits more than 10 minutes on a permission card, or whose turn runs 20 minutes without output, shows "Looks stuck" in the workers column and the reason on its page, and the coordinator hears about it once so it can tell you or stop it. The mark goes as soon as the worker moves again
+- **The coordinator finds its way back after a compaction**: `workers` now gives each worker's brief (its first 400 characters), your answer to it and whether it looks stuck, and lists the newest 30, and the coordinator is told to call it after its conversation was compacted. The orchestrator selftest (`scripts/orch-selftest.sh`) now also checks that workers call `step`, that a worker needing a decision reports blocked with options, and that none is left marked stuck
+
 ## [0.0.26] - 2026-10-14
 
 ### Added

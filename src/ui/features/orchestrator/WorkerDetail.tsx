@@ -68,6 +68,9 @@ function Page({ worker }: { worker: Worker }) {
             · {workerName(worker.key)} · {model}
           </span>
         </span>
+        {worker.state === "running" && worker.stalled ? (
+          <span className="text-[13px] text-soon">{worker.stalled}</span>
+        ) : null}
         {step ? (
           <span className="flex items-center gap-2.5 mt-1 text-[13px] text-secondary">
             <span className="h-1 w-30 flex-none rounded-full bg-fill-2 overflow-hidden">

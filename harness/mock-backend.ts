@@ -1075,6 +1075,13 @@ const harness = {
     emit("orch", { type: "worker", worker: structuredClone(worker) });
     return true;
   },
+  /** the backend's stall watch marks the running worker (fixture "orch"): a card nobody answered */
+  orchStuck: () => {
+    const worker = workers.find(w => w.state === "running");
+    if (!worker) return;
+    Object.assign(worker, { stalled: "waits on a permission card for Bash since 09:12" });
+    emit("orch", { type: "worker", worker: structuredClone(worker) });
+  },
   /** the orchestrator's live events (fixture "orch"): a worker starts, another reports into the coordinator, one task each */
   orchLive: async () => {
     for (const event of orch.live()) {

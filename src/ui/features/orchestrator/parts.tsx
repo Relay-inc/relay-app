@@ -21,11 +21,13 @@ const STATE: Record<WorkerState, { short: Key; long: Key; color: string }> = {
   silent: { short: "orch.state.noReport", long: "orch.state.silent", color: "text-soon" },
 };
 /** A worker's state: the short word for a row, the longer one for its page, the colour; a pipeline's check or review
- *  while it validates. */
+ *  while it validates; "looks stuck" while the backend marks it stalled. */
 export function useStateText(worker: Worker) {
   const { t } = useT();
   const state = STATE[worker.state] ?? STATE.stopped;
   const phase = worker.phase ? t(worker.phase === "review" ? "orch.reviewing" : "orch.checking") : "";
+  if (worker.state === "running" && worker.stalled)
+    return { short: t("orch.stuck"), long: t("orch.stuck"), color: "text-soon" };
   return { short: phase || t(state.short), long: phase || t(state.long), color: state.color };
 }
 

@@ -42,6 +42,8 @@ export type Worker = {
   phase?: string | null;
   rounds?: number;
   review_notes?: string | null;
+  /** why a running worker looks stuck (a card nobody answered, no output for a long while), from the backend */
+  stalled?: string | null;
 };
 /** The backend's `orch` event: a worker made or changed, or a user turn Relay wrote into a conversation itself. */
 export type OrchEvent = { type: "worker"; worker: Worker } | { type: "sent"; key: string; text: string };

@@ -69,6 +69,7 @@ export default {
   "orch.diff": "Modifications",
   "orch.flags": "Signalements",
   "orch.checking": "Vérifications en cours",
+  "orch.stuck": "Semble bloqué",
   "orch.reviewing": "Revue en cours",
   "orch.ticket": "Ticket #{number}",
   "orch.pr": "Pull request",

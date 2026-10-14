@@ -138,6 +138,7 @@ pub fn start(app: &AppHandle) {
 const ORCH_ASK: &str = "Selftest. 1) Start a worker in project Alpha: read its project note and report in one sentence which apple trees still have to be planted, change nothing. \
 2) Start a worker in project Beta with repo {repo}: add a.txt with the text a and commit it on its branch. Right after, try to start a second worker in the same repo that adds b.txt, and once the first has reported start it again if it was refused. \
 3) Start a worker in project Alpha with the task: answer in one sentence how many apple trees are already there, and do NOT call report, this tests what Relay does without a report. \
+4) Start a worker without a project with the task: pick a colour for the garden shed. You do not know what the user likes, so do not pick one: report blocked with that question and two or three colours as options. Do not answer it yourself. \
 Do not update any shared vault files, this is a test. End with a two-line summary.";
 
 fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
@@ -159,13 +160,22 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
             crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
         }
         let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns.busy());
-        let idle = ws.len() >= 3 && !ws.iter().any(|w| w.state == "running") && !busy;
+        let idle = ws.len() >= 4 &&!ws.iter().any(|w| w.state == "running") && !busy;
         if !idle { quiet_since = None } else if quiet_since.get_or_insert_with(Instant::now).elapsed() > Duration::from_secs(20) { break; }
         std::thread::sleep(Duration::from_secs(2));
     }
     let ws = orch::load(app);
     let list = || ws.iter().map(|w| format!("{} {} {}", w.project.as_deref().unwrap_or("-"), w.title, w.state)).collect::<Vec<_>>().join(" | ");
-    r.step("workers started", if ws.len() >= 3 { Ok(list()) } else { Err(list()) });
+    r.step("workers started", if ws.len() >= 4 { Ok(list()) } else { Err(list()) });
+    // what the worker prompt asks for, as a real model does it: a plan on the bar first, a report with options when it needs a decision
+    let reported: Vec<_> = ws.iter().filter(|w| w.report.is_some()).collect();
+    let no_step: Vec<_> = reported.iter().filter(|w| !w.step.as_ref().is_some_and(|s| s.total > 0)).map(|w| w.title.as_str()).collect();
+    r.step("reporting workers called step", if !reported.is_empty() && no_step.is_empty() { Ok(format!("{} workers", reported.len())) } else { Err(format!("no plan on the bar: {no_step:?}")) });
+    r.step("a worker that needs a decision reports blocked with options", match ws.iter().find(|w| w.state == "blocked").and_then(|w| w.report.as_ref()) {
+        Some(rep) if rep.options.len() >= 2 && rep.questions.is_some() => Ok(rep.options.join(" / ")),
+        x => Err(format!("{x:?}")),
+    });
+    r.step("no worker left marked stuck", if ws.iter().all(|w| w.stalled.is_none()) { Ok("none".into()) } else { Err(list()) });
     let read = ws.iter().find(|w| w.project.as_deref() == Some("Alpha") && w.state == "done");
     r.step("read worker reports the note", match read.and_then(|w| w.report.as_ref()) {
         Some(rep) if rep.summary.contains("Jonagold") || rep.summary.contains("Elstar") => Ok(rep.summary.chars().take(120).collect()),
