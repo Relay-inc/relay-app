@@ -736,9 +736,9 @@ fn orch_stop(app: AppHandle, key: String) -> bool { orch::stop(&app, &key) }
 /// note what it did on the board. Off the main thread: git fetch, push and gh go over the network.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
-async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, project: String, repo: String, base: Option<String>, model: Option<String>, ticket: Value, validate: Option<orch::Validate>, plan: Option<bool>) -> Result<orch::Worker, String> {
+async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, project: String, repo: String, base: Option<String>, model: Option<String>, ticket: Value, validate: Option<orch::Validate>, plan: Option<bool>, skill: Option<String>) -> Result<orch::Worker, String> {
     let base = base.map(|b| b.trim().to_string()).filter(|b| !b.is_empty());
-    tauri::async_runtime::spawn_blocking(move || orch::dispatch_ticket(&app, title, task, project, repo, model, orch::Pipe { base, ticket, validate: validate.unwrap_or_default(), plan: plan.unwrap_or(false) })).await.map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || orch::dispatch_ticket(&app, title, task, project, repo, model, orch::Pipe { base, ticket, validate: validate.unwrap_or_default(), plan: plan.unwrap_or(false), skill: skill.unwrap_or_default() })).await.map_err(|e| e.to_string())?
 }
 #[tauri::command]
 fn orch_message(app: AppHandle, key: String, text: String) -> Result<(), String> { orch::pipe_message(&app, &key, &text) }

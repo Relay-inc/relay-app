@@ -147,6 +147,9 @@ export default {
   "pl.none": "Dort lassen",
   "pl.label": "Nur mit Label",
   "pl.labelHelp": "Leer: jedes Ticket in der Spalte.",
+  "pl.skill": "Skill",
+  "pl.skillHelp":
+    "Ein Claude-Code-Skill, dem der Agent pro Ticket folgt, z. B. ticket-flow:develop. Relay pusht weiter, öffnet den PR und kommentiert; der Skill beurteilt, ob ein Ticket klar ist. Leer: Relays eigener Ablauf.",
   "pl.plan": "Zuerst ein Plan",
   "pl.planHelp":
     "Der Agent stellt seinen Plan ins Ticket, bevor er Code schreibt, und das Ticket geht an eine Person. Kommentiere bei Bedarf und schick es zurück (die Spalte „Abholen aus“ oder Mit Agent weitermachen), damit es gebaut wird.",
