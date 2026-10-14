@@ -13,20 +13,22 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.26] - 2026-10-14
+
 ### Added
 
-- **A skill for the board pipeline**: Settings › Projects › pipeline › Skill names a Claude Code skill (for example `ticket-flow:develop` from Antenna's tools) that the agent follows for every ticket. Relay still pushes, opens the PR and moves and comments on the ticket; where the skill would ask a person or post on the ticket, the agent reports it and Relay puts it on the ticket. With a skill set, the skill judges whether a ticket is clear and whether it needs a plan approved (so Relay's pre-flight and Plan first drop out), and with Relay's review on, the skill skips its own review: one review per diff. Relay's checks and review stay the gate before the PR. Empty keeps Relay's own flow
+- **A skill for the board pipeline**: Settings › Projects › pipeline › Skill names a Claude Code skill (for example `ticket-flow:develop` from Antenna's tools) that the agent follows for every ticket. Relay still pushes, opens the PR and moves and comments on the ticket; where the skill would ask a person or post on the ticket, the agent reports it and Relay puts it on the ticket. With a skill set, the skill judges whether a ticket is clear and whether it needs a plan approved (so Relay's pre-flight and Plan first drop out), and with Relay's review on, the skill skips its own review: one review per diff. Relay's checks and review stay the gate before the PR. Empty keeps Relay's own flow (#218)
 - **Follow Claude Code's agents**: when Claude Code starts agents in a conversation, an Agents button in its title bar opens their column next to it (crab, what it was asked, the step it is on, how long), running ones first. An agent opens as its own page with the whole transcript (its brief, the tools it ran, what it wrote), followed live while it runs; Esc goes back to the conversation. A click on an agent above the composer opens the same page, instead of its last three messages (#210)
 - **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from (#203)
 
 ### Changed
 
-- **Prompts follow Anthropic's guidance**: text from third parties (mail, tickets, diffs, invites, the agent's own claims, a first review) now goes into the prompts inside its own tag (`<mail from=...>`, `<ticket>`, `<diff>`, `<agent_claims>`, `<meeting>`, `<review agent=...>`), with a closing tag inside it made harmless, and every prompt says so with the same sentence instead of its own warning. The time booking fetches its sources in parallel, the orchestrator is told to dispatch independent workers in one turn, the worker's step count matches the `step` tool (3-8), the mail-to-ticket prompt says one task without subtasks, and the vault capture uses today's date
-- **Prompts in markdown**: every prompt Relay sends to a model (mail, meetings, pull request reviews, time booking, the orchestrator and the board pipeline, the vault capture, the title) is now a file in `prompts/` instead of a string in the code, so it can be read and edited in one place. The text sent does not change.
+- **Prompts follow Anthropic's guidance**: text from third parties (mail, tickets, diffs, invites, the agent's own claims, a first review) now goes into the prompts inside its own tag (`<mail from=...>`, `<ticket>`, `<diff>`, `<agent_claims>`, `<meeting>`, `<review agent=...>`), with a closing tag inside it made harmless, and every prompt says so with the same sentence instead of its own warning. The time booking fetches its sources in parallel, the orchestrator is told to dispatch independent workers in one turn, the worker's step count matches the `step` tool (3-8), the mail-to-ticket prompt says one task without subtasks, and the vault capture uses today's date (#220)
+- **Prompts in markdown**: every prompt Relay sends to a model (mail, meetings, pull request reviews, time booking, the orchestrator and the board pipeline, the vault capture, the title) is now a file in `prompts/` instead of a string in the code, so it can be read and edited in one place. The text sent does not change (#212)
 
 ### Fixed
 
-- **Long reviews no longer drop their end unseen**: a pull request review sent up to 60,000 characters to a provider that takes 20,000, so later files were cut while the review still counted them as read; the text is now sized to what the provider takes (one `WRITE_MAX` in agent-core). The orchestrator's fallback review (a provider that cannot open the worktree) now puts the agent's claims, including the earlier blocking findings, before the diff and cuts the diff to what is left, so a big diff no longer cuts the claims
+- **Long reviews no longer drop their end unseen**: a pull request review sent up to 60,000 characters to a provider that takes 20,000, so later files were cut while the review still counted them as read; the text is now sized to what the provider takes (one `WRITE_MAX` in agent-core). The orchestrator's fallback review (a provider that cannot open the worktree) now puts the agent's claims, including the earlier blocking findings, before the diff and cuts the diff to what is left, so a big diff no longer cuts the claims (#221)
 
 ## [0.0.25] - 2026-10-14
 
@@ -495,7 +497,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...HEAD
+[0.0.26]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/Relay-inc/relay-app/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...v0.0.24
 [0.0.23]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...v0.0.23
