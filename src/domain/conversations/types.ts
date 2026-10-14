@@ -44,7 +44,8 @@ export type Item = {
   imgs?: string[];
   files?: string[]; // a user message's attached paths
   tool?: { name: string; input: ToolInput };
-  /** a tool call: when it started and when its result came (ms), for the duration of a group of steps */
+  /** a tool call: when it started and when its result came (ms), for the duration of a group of steps; a message of
+   *  the user's: when it was sent; the end of a turn: when it ended */
   at?: number;
   end?: number;
   /** the change a file tool made, with line numbers, when the provider reports it (Claude Code) */

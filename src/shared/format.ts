@@ -19,6 +19,12 @@ export function dayMonth(iso: string, locale: string, now = new Date()) {
   const otherYear = date.getFullYear() !== now.getFullYear();
   return dateFormat(locale, { day: "numeric", month: "short", ...(otherYear ? { year: "numeric" } : {}) }).format(date);
 }
+/** When something happened in a conversation: the clock time today, the day and the time before ("14 okt. 09:12"). */
+export function sentAt(ms: number, locale: string, now = new Date()) {
+  const date = new Date(ms);
+  const time = dateFormat(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+  return date.toDateString() === now.toDateString() ? time : `${dayMonth(date.toISOString(), locale, now)} ${time}`;
+}
 /** A clock time: hours and minutes, always on the 24-hour clock ("17:53", never "05:53 PM"). */
 export const clockTime = (iso: string, locale: string) =>
   dateFormat(locale, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(iso));

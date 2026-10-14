@@ -201,7 +201,11 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
   finishTurnInQueue(state, key);
   if (!end.ok) push(state, key, { kind: "err", text: end.error || t("err.unknown") });
   else if (!state.queued[key])
-    push(state, key, { kind: "done", text: doneText(end.duration_ms ? end.duration_ms / 1000 : 0, t) });
+    push(state, key, {
+      kind: "done",
+      text: doneText(end.duration_ms ? end.duration_ms / 1000 : 0, t),
+      at: env.now,
+    });
   if (!state.queued[key])
     effects.push({
       kind: "notify",
@@ -258,7 +262,13 @@ export function toItems(
         image && IMG_OK.includes(image.media_type) ? imageUrl(image.media_type, image.data) : "",
       );
       const { text, files } = splitFiles(entry.text);
-      items.push({ kind: "me", text, ...(imgs.length ? { imgs } : {}), ...(files.length ? { files } : {}) });
+      items.push({
+        kind: "me",
+        text,
+        ...(at ? { at } : {}),
+        ...(imgs.length ? { imgs } : {}),
+        ...(files.length ? { files } : {}),
+      });
     } else if (entry.type === "compacted") items.push({ kind: "compact", text: compactedText(entry, t), state: "ok" });
     else if (entry.type === "text") pushText(items, entry.text, entry.delta);
     else if (entry.type === "tool_call") items.push(toolItem(entry.id, entry.name, entry.input, "ok", at));
