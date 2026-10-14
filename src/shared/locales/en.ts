@@ -172,6 +172,9 @@ const en = {
   "pl.none": "Leave it where it is",
   "pl.label": "Only with label",
   "pl.labelHelp": "Empty: every ticket in the column.",
+  "pl.skill": "Skill",
+  "pl.skillHelp":
+    "A Claude Code skill the agent follows per ticket, e.g. ticket-flow:develop. It decides when a plan needs approval, instead of Plan first; Relay's checks and review below stay. Empty: Relay's own flow.",
   "pl.plan": "Plan first",
   "pl.planHelp":
     "The agent puts its plan on the ticket before it writes code, and the ticket goes to a person. Comment if needed and send it back (the Pick up from column, or Continue with agent) to have it built.",

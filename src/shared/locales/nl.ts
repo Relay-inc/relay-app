@@ -176,6 +176,9 @@ export default {
   "pl.none": "Laat het staan",
   "pl.label": "Enkel met label",
   "pl.labelHelp": "Leeg: elk ticket in de kolom.",
+  "pl.skill": "Skill",
+  "pl.skillHelp":
+    "Een Claude Code-skill die de agent per ticket volgt, bv. ticket-flow:develop. Die beslist wanneer een plan goedkeuring nodig heeft, in plaats van Eerst een plan; Relays checks en review hieronder blijven. Leeg: Relays eigen werkwijze.",
   "pl.plan": "Eerst een plan",
   "pl.planHelp":
     "De agent zet zijn plan op het ticket voor hij code schrijft, en het ticket gaat naar een persoon. Reageer indien nodig en stuur het terug (de kolom Oppikken uit, of Verder met agent) om het te laten bouwen.",

@@ -180,6 +180,9 @@ export default {
   "pl.none": "Le laisser où il est",
   "pl.label": "Seulement avec le libellé",
   "pl.labelHelp": "Vide : chaque ticket de la colonne.",
+  "pl.skill": "Skill",
+  "pl.skillHelp":
+    "Un skill Claude Code que l'agent suit par ticket, p. ex. ticket-flow:develop. Il décide quand un plan doit être approuvé, à la place de D'abord un plan ; les vérifications et la revue de Relay ci-dessous restent. Vide : le fonctionnement de Relay.",
   "pl.plan": "D'abord un plan",
   "pl.planHelp":
     "L'agent met son plan sur le ticket avant d'écrire du code, et le ticket va à une personne. Commentez si besoin et renvoyez-le (la colonne Prendre dans, ou Continuer avec l'agent) pour qu'il soit construit.",

@@ -193,6 +193,7 @@ export const orchDispatchTicket = (a: {
   ticket: Ticket;
   validate: { checks: string; review: string; rounds: number };
   plan: boolean;
+  skill: string;
 }) => invoke<Worker>("orch_dispatch_ticket", a);
 export const orchMessage = (key: string, text: string) => invoke<void>("orch_message", { key, text });
 export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>("orch_answer", { key, answer });

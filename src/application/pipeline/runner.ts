@@ -201,8 +201,9 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       await move(b, card.id, b.p.input);
       return await comment(b, card.id, t("pl.notReady", { column: nameOf(b, b.p.pick) }));
     }
-    // plan mode asks its questions with the plan, and a ticket you start yourself is your call
-    if (!hand && view && !b.p.plan) {
+    // plan mode asks its questions with the plan, a skill judges the ticket itself, and a ticket you start yourself
+    // is your call
+    if (!hand && view && !b.p.plan && !b.p.skill?.trim()) {
       const verdict = preflightOf(await backend.aiWrite(PREFLIGHT_PROMPT, briefOf(view)).catch(() => ""));
       if (verdict && !verdict.clear) {
         await move(b, card.id, b.p.input);
@@ -230,7 +231,9 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       base: b.p.base,
       ticket,
       validate: { checks: b.p.checks ?? "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
-      plan: !!b.p.plan,
+      // with a skill, the skill decides per ticket whether a plan needs approval
+      plan: !!b.p.plan && !b.p.skill?.trim(),
+      skill: b.p.skill?.trim() ?? "",
     });
     adopt(w);
     await comment(b, card.id, t("pl.picked", { branch: w.branch ?? "" }));

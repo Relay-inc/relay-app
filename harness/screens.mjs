@@ -782,6 +782,22 @@ const VIEWS = {
     await unfold("Northwind Portal");
     await intoView("Board pipeline");
   },
+  // the same: the skill the agent follows per ticket, above plan first
+  "settings-pipeline-skill": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Plan first");
+  },
+  // the same with a skill filled in: Plan first is gone, the skill decides that per ticket
+  "settings-pipeline-skill-set": async () => {
+    await settingsPage("Projects");
+    await unfold("Northwind Portal");
+    await intoView("Skill");
+    const field = page.getByPlaceholder("ticket-flow:develop");
+    await field.fill("ticket-flow:develop");
+    await field.press("Enter");
+    await intoView("Checks");
+  },
   // the same: the validation before a PR (checks, review, rounds)
   "settings-pipeline-validation": async () => {
     await settingsPage("Projects");

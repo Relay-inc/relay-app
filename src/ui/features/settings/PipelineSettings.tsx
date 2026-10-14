@@ -105,9 +105,21 @@ export function PipelineSettings({ name }: { name: string }) {
           />
         </Field>
       )}
-      <Field label={t("pl.plan")} hint={t("pl.planHelp")}>
-        <Switch id={`pl-plan-${name}`} on={!!p.plan} onToggle={plan => set({ plan })} />
+      <Field label={t("pl.skill")} hint={t("pl.skillHelp")}>
+        <ChangeInput
+          className={`${FIELD} font-mono text-xs`}
+          value={p.skill ?? ""}
+          placeholder="ticket-flow:develop"
+          spellCheck={false}
+          onCommit={v => set({ skill: v.trim().replace(/^\//, "") })}
+        />
       </Field>
+      {/* with a skill, the skill decides per ticket whether a plan needs approval */}
+      {!p.skill && (
+        <Field label={t("pl.plan")} hint={t("pl.planHelp")}>
+          <Switch id={`pl-plan-${name}`} on={!!p.plan} onToggle={plan => set({ plan })} />
+        </Field>
+      )}
       <Field label={t("pl.checks")} hint={t("pl.checksHelp")}>
         <ChangeInput
           className={`${FIELD} font-mono text-xs`}
