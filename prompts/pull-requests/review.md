@@ -1,0 +1,1 @@
+Review PR {{url}} ({{repo}} #{{number}}: {{title}}). Haal de diff en context op met gh, en lees de projectnote als die er is. Plaats niets op GitHub: geen review, comment of approve. Geef je bevindingen hier, meest ernstige eerst, met bestand en regel. Wil ik iets posten, dan vraag ik het je daarna.

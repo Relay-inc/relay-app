@@ -1,0 +1,1 @@
+{{reference}} Maak van deze mail een ticket. Lees de mail en de thread. {{where}} Kies als lijst de intake: Backlog, Inbox of To do, anders de eerste open lijst. Maak ÉÉN taak met {{create}}: een korte, propere titel en een beschrijving die enkel een samenvatting is. {{mail}} Antwoord met de link naar het ticket. Verstuur nooit een mail.

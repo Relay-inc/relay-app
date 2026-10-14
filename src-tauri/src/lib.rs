@@ -494,6 +494,7 @@ async fn find_icon_sites(app: AppHandle, state: State<'_, App>, projects: Vec<Va
     Ok(Value::Object(json.into_iter().filter(|(n, _)| names.contains(&n.as_str()))
         .filter_map(|(n, d)| Some((n, json!(relay_config::site_of(d.as_str()?)?)))).collect()))
 }
+const CAPTURE_PROMPT: &str = agent_core::prompt::text(include_str!("../../prompts/conversation/vault-capture.md"));
 /// What a closed conversation leaves for the vault, written straight in: one Sonnet call that resumes a fork of its
 /// session (not kept), in the vault with its CLAUDE.md, rules and hooks but no MCP, allowed to read, edit and write.
 /// Nothing is shown or asked; the vault's git history is the review. Only a Claude session of this Mac: a work
@@ -509,13 +510,7 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     if eb.vault.is_empty() { return Ok(()); }
     // on the account the session was recorded on, its transcript is there
     let account = account_of(&state, p, &key, "sonnet");
-    let prompt = "This conversation is closed. Before it goes: is there anything in it that belongs in this vault and is \
-        not there yet? Think of decisions and why, project state and where it was left, people, open threads, follow-ups \
-        with a date. Follow this vault's own rules and conventions for where things go and how they are written (its \
-        CLAUDE.md, its rules, its templates). Read each note before you change it; when it already says something, keep \
-        what is there and only add what is missing. Write only what the conversation itself says; never add \
-        interpretation or facts it does not contain. Small talk, a quick question, or work that already saved itself to \
-        the vault: change nothing. Nobody reviews this, so make the changes yourself and do not ask.";
+    let prompt = CAPTURE_PROMPT;
     let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
         let mut c = Command::new(&eb.bin);
         c.args(["-p", "--resume", &sid, "--fork-session", "--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",

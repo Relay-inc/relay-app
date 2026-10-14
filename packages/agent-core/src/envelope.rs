@@ -4,7 +4,8 @@
 //! filtering of what its CLI put in the user's turn.
 
 /// The `relay` command (src-tauri/src/actions.rs) on the agent's PATH, whatever provider runs it.
-pub const HINT: &str = "The Relay app gives you its extensions as a shell command: `relay help` lists the actions available in this conversation (creating tickets in Productive, Trello or Linear, booking time in Productive, vault reminders, mail drafts), `relay <action> key=value ...` runs one. Use it instead of other tools for these when an action fits. Some actions ask the user first; a denied one stays denied, do not work around it.";
+pub const HINT: &str = crate::prompt::text(include_str!("../../../prompts/conversation/relay-actions-hint.md"));
+const PROJECT_LINE: &str = include_str!("../../../prompts/conversation/project-line.md");
 
 const OPEN: &str = "<relay-project>";
 const CLOSE: &str = "</relay-project>";
@@ -12,7 +13,7 @@ const CLOSE: &str = "</relay-project>";
 /// `text` with the project line in front: the agent only hears the project through the message.
 pub fn wrap(project: &str, context: &str, text: &str) -> String {
     let context = if context.is_empty() { String::new() } else { format!(" (context {context})") };
-    format!("{OPEN}This conversation is about the vault project \"{project}\"{context}. Read its project note before answering.{CLOSE}\n\n{text}")
+    format!("{OPEN}{}{CLOSE}\n\n{text}", crate::prompt::fill(crate::prompt::text(PROJECT_LINE), &[("project", project), ("context", &context)]))
 }
 
 /// A user text from a transcript without the project line [`wrap`] put in front of it: what the user typed.

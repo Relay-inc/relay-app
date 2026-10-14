@@ -15,6 +15,7 @@ pub mod discover;
 pub use discover::{discover_commands, http_get, Probe};
 pub mod envelope;
 pub mod pending;
+pub mod prompt;
 pub mod usage;
 
 /// What a provider can do. The webview hides what is false (the effort pick, the terminal button, the
