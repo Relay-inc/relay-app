@@ -229,9 +229,9 @@ impl AgentProvider for Claude {
         let mut c = SUBS.lock().unwrap();
         subagents::subagents_of(&transcripts_of(env, sid), sid, c.get_or_insert_with(Default::default))
     }
-    fn agent_log(&self, env: &Env, sid: &str, id: &str) -> Vec<String> {
-        if !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return vec![]; }
-        subagents::agent_log(&PathBuf::from(format!("{}/{sid}/subagents/agent-{id}.jsonl", transcripts_of(env, sid))))
+    fn agent_history(&self, env: &Env, sid: &str, id: &str, from: u64) -> (Vec<Event>, u64) {
+        if !agent_core::safe_id(sid) || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return (vec![], 0); }
+        stream::agent_history(&PathBuf::from(format!("{}/{sid}/subagents/agent-{id}.jsonl", transcripts_of(env, sid))), from)
     }
     fn terminal(&self, env: &Env, t: Terminal) -> Option<String> {
         let q = |s: &str| format!("'{}'", s.replace('\'', "'\\''"));

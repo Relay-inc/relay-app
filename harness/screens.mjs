@@ -186,6 +186,28 @@ const VIEWS = {
     await waitText("DossierSync.php");
     await settle(page);
   },
+  // the agents Claude Code spawned in a conversation (PR: subagents column): the column next to the conversation, a
+  // running agent's page followed from its transcript, a finished one's page
+  "agents-column": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await waitText("Check the other sync jobs");
+    await button("Agents").click();
+    await page.locator(".relay-drawer").getByText("Scan the error logs", { exact: true }).waitFor();
+    await settle(page);
+  },
+  "agent-page": async () => {
+    await VIEWS["agents-column"]();
+    await page.locator(".relay-drawer").getByText("Check the other sync jobs", { exact: true }).click();
+    await waitText("The other three set the balance.");
+    await settle(page);
+  },
+  "agent-page-done": async () => {
+    await VIEWS["agents-column"]();
+    await page.locator(".relay-drawer").getByText("Verify the totals", { exact: true }).click();
+    await waitText("Totals match for 38 of 38 dossiers.");
+    await settle(page);
+  },
   "changes-diff": async () => {
     await VIEWS["changes-list"]();
     await click("DossierSync.php");

@@ -39,9 +39,15 @@ export function StateMark({ state }: { state: WorkerState }) {
   return <span className={`size-1.5 rounded-full ${dot}`} />;
 }
 
-/** A worker as its crab, with its state as a ringed badge once it ended; with the crabs switched off (Settings ›
- *  General) the plain state mark. */
-export function WorkerAvatar({ worker, size = 28 }: { worker: Worker; size?: number }) {
+/** A worker (or a conversation's subagent) as its crab, with its state as a ringed badge once it ended; with the crabs
+ *  switched off (Settings › General) the plain state mark. */
+export function WorkerAvatar({
+  worker,
+  size = 28,
+}: {
+  worker: Pick<Worker, "state" | "model" | "ticket">;
+  size?: number;
+}) {
   const crabs = useSettingsStore(s => s.settings.workerCrabs !== false);
   if (!crabs)
     return (

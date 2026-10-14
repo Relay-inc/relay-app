@@ -6,7 +6,14 @@ import { useNavigationStore } from "../../application/navigation/store";
 import { useConversationsStore } from "../../application/conversations/store";
 import { useWorkspaceStore } from "../../application/workspace/store";
 import { escStop, ctrlC } from "../../application/conversations/actions";
-import { closeTool, toggleQuickAsk, zoom, openExternal, select } from "../../application/navigation/navigation";
+import {
+  closeTool,
+  toggleQuickAsk,
+  zoom,
+  openExternal,
+  select,
+  closeAgent,
+} from "../../application/navigation/navigation";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
@@ -61,6 +68,12 @@ function onEscape(e: KeyboardEvent) {
   }
   // Esc in a terminal or a note is theirs (vim, a shell prompt): it neither closes the drawer nor stops the turn
   if (inField(e) && e.composedPath().some(node => node instanceof HTMLElement && node.matches(".relay-drawer"))) return;
+  // a subagent's page: back to its conversation, the agents column stays
+  if (useNavigationStore.getState().agentPage && !e.defaultPrevented) {
+    e.preventDefault();
+    closeAgent();
+    return;
+  }
   // the orchestrator's column stays: Esc on a worker's page goes back to the coordinator, on the coordinator it
   // stops a running turn
   if (drawer === "workers" && !projectPanel) {

@@ -44,6 +44,9 @@ import { useOrchestratorStore } from "../../../application/orchestrator/store";
 import { WorkerDetail } from "../orchestrator/WorkerDetail";
 import { OrchestratorEmpty } from "../orchestrator/OrchestratorEmpty";
 import { OrchestratorBack } from "../orchestrator/OrchestratorBack";
+import { AgentsToggle } from "../agents/AgentsToggle";
+import { AgentPage } from "../agents/AgentPage";
+import { AgentBack } from "../agents/AgentBack";
 import { chatWidth, column } from "./layout";
 import { useT } from "../../hooks/useT";
 import { ToLatest, ToStart } from "./ScrollArrows";
@@ -64,6 +67,8 @@ export function ConversationsView({ className }: { className: string }) {
   const bar = useDerived(() => chatBar(selected));
   // a worker shown as its page next to the orchestrator's column, and the orchestrator before its first task
   const workerPage = useNavigationStore(s => s.orchDetail);
+  // a subagent Claude Code spawned here, shown as its page next to the agents column
+  const agentPage = useNavigationStore(s => s.agentPage);
   const noWorkers = useOrchestratorStore(s => !Object.keys(s.workers).length);
   const orchEmpty = useConversationsStore(s => selected === ORCH && !s.messages[ORCH]?.length) && noWorkers;
   const orchHint = selected === ORCH ? "orch.hint.coord" : workerPage ? "orch.hint.worker" : null;
@@ -141,6 +146,8 @@ export function ConversationsView({ className }: { className: string }) {
           <TodayReload />
         ) : selected === MAIL ? (
           <MailReload />
+        ) : hasSubagents ? (
+          <AgentsToggle />
         ) : null
       }
       onEditProject={bar.tools?.back ? closeTool : openProjectPanel}
@@ -174,7 +181,7 @@ export function ConversationsView({ className }: { className: string }) {
     );
   return (
     <div className={`${className} flex flex-col relative bg-bg`}>
-      {workerPage ? <OrchestratorBack /> : chatBarEl}
+      {agentPage ? <AgentBack /> : workerPage ? <OrchestratorBack /> : chatBarEl}
       {projectPanel ? <ProjectPanel /> : null}
       <div
         id="log"
@@ -197,7 +204,15 @@ export function ConversationsView({ className }: { className: string }) {
           id="msgs"
           className={`mx-auto flex flex-col gap-5 ${board ? "px-5" : selected === REM ? "max-w-180 px-8" : selected === USAGE ? "w-full max-w-245 px-7" : `w-full ${chatWidth} px-8`}`}
         >
-          {workerPage ? <WorkerDetail workerKey={selected} /> : orchEmpty ? <OrchestratorEmpty /> : <SelectedView />}
+          {agentPage ? (
+            <AgentPage key={agentPage} id={agentPage} />
+          ) : workerPage ? (
+            <WorkerDetail workerKey={selected} />
+          ) : orchEmpty ? (
+            <OrchestratorEmpty />
+          ) : (
+            <SelectedView />
+          )}
           {/* on Reminders the chip sticks to the bottom of the scroller */}
           {toast && selected === REM ? (
             <div className="sticky bottom-3 pt-2 pb-1">
@@ -217,8 +232,8 @@ export function ConversationsView({ className }: { className: string }) {
           />
         )}
       </div>
-      {hasSubagents && !workerPage ? <Subagents className={`${column} mb-1.5`} /> : null}
-      {onView || workerPage ? null : <Todos className={`${column} mb-1.5`} />}
+      {hasSubagents && !workerPage && !agentPage ? <Subagents className={`${column} mb-1.5`} /> : null}
+      {onView || workerPage || agentPage ? null : <Todos className={`${column} mb-1.5`} />}
       {toast && selected !== REM ? (
         <div className={`${column} mb-2`}>
           <Toast toast={toast} />
@@ -228,7 +243,7 @@ export function ConversationsView({ className }: { className: string }) {
       <RepoWorkBar className={column} />
       <RetryBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
-      {onView ? null : <Composer className={`${column} mt-2 ${orchHint ? "mb-1.5" : "mb-4.5"}`} />}
+      {onView || agentPage ? null : <Composer className={`${column} mt-2 ${orchHint ? "mb-1.5" : "mb-4.5"}`} />}
       {/* who the composer talks to in the orchestrator: the coordinator, or the open worker */}
       {orchHint ? <span className={`${column} mb-4 pl-9 text-[11px] text-tertiary`}>{t(orchHint)}</span> : null}
     </div>

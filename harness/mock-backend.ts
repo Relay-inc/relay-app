@@ -505,8 +505,10 @@ function handle(cmd: string, a: Args): unknown {
           .filter(k => k in conv.subagents)
           .map(k => [k, conv.subagents[k as keyof typeof conv.subagents]]),
       );
-    case "agent_log":
-      return conv.agentLog(a.id);
+    case "agent_history": {
+      const items = conv.agentHistory(a.id);
+      return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
+    }
     case "pending":
       return pending;
     case "answer":

@@ -196,7 +196,12 @@ pub fn user_times(text: &str) -> Vec<String> {
 }
 
 /// A transcript from byte offset `from`, up to its last whole line, and where to continue: transcripts only grow at the end.
-pub fn history(path: &Path, from: u64) -> (Vec<Event>, u64) {
+pub fn history(path: &Path, from: u64) -> (Vec<Event>, u64) { read(path, from, false) }
+
+/// A subagent's own transcript: every line in it is a sidechain, which a session's history leaves out.
+pub fn agent_history(path: &Path, from: u64) -> (Vec<Event>, u64) { read(path, from, true) }
+
+fn read(path: &Path, from: u64, sidechain: bool) -> (Vec<Event>, u64) {
     use std::io::{Read, Seek, SeekFrom};
     let Ok(mut f) = std::fs::File::open(path) else { return (vec![], 0) };
     if f.seek(SeekFrom::Start(from)).is_err() { return (vec![], from); }
@@ -204,7 +209,10 @@ pub fn history(path: &Path, from: u64) -> (Vec<Event>, u64) {
     f.read_to_end(&mut buf).ok();
     let end = buf.iter().rposition(|&b| b == b'\n').map(|i| i + 1).unwrap_or(0);
     let mut out = vec![];
-    for l in String::from_utf8_lossy(&buf[..end]).lines() { if let Ok(v) = serde_json::from_str::<Value>(l) { history_line(&v, &mut out); } }
+    for l in String::from_utf8_lossy(&buf[..end]).lines() { if let Ok(mut v) = serde_json::from_str::<Value>(l) {
+        if sidechain { v["isSidechain"] = Value::Bool(false); }
+        history_line(&v, &mut out);
+    } }
     (out, from + end as u64)
 }
 
@@ -215,6 +223,23 @@ mod tests {
     const TRANSCRIPT: &str = include_str!("../tests/fixtures/transcript.jsonl");
 
     fn parse_all(lines: &[Value]) -> Vec<Event> { let mut st = State::default(); lines.iter().flat_map(|l| st.parse(&l.to_string())).collect() }
+
+    #[test]
+    fn a_subagent_transcript_reads_its_sidechain_lines_a_session_history_skips_them() {
+        let lines = [
+            json!({"isSidechain": true, "type": "user", "timestamp": "2026-10-13T10:00:00Z", "message": {"role": "user", "content": "Scan the logs"}}),
+            json!({"isSidechain": true, "type": "assistant", "timestamp": "2026-10-13T10:00:05Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "Found 3 errors"}]}}),
+        ];
+        let path = std::env::temp_dir().join(format!("relay-agent-{}.jsonl", std::process::id()));
+        std::fs::write(&path, lines.iter().map(|l| format!("{l}\n")).collect::<String>()).unwrap();
+        let (items, next) = agent_history(&path, 0);
+        assert!(items.iter().any(|e| matches!(e, Event::User { text, .. } if text == "Scan the logs")), "{items:?}");
+        assert!(items.iter().any(|e| matches!(e, Event::Text { text, .. } if text == "Found 3 errors")), "{items:?}");
+        assert!(history(&path, 0).0.is_empty());
+        // read again from where it stopped: nothing new
+        assert!(agent_history(&path, next).0.is_empty());
+        std::fs::remove_file(&path).ok();
+    }
 
     #[test]
     fn a_rejected_rate_limit_is_a_limited_event_with_its_reset_in_ms() {

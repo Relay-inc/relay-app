@@ -30,7 +30,7 @@ export const reviewOf = (key: string) => {
 };
 /** What the right drawer shows, "" while it is closed: a note's detail, one of the project's tools, the open
  *  conversation's changes, or the orchestrator's workers. */
-export type Drawer = "" | "detail" | "terminal" | "notes" | "workers" | "changes";
+export type Drawer = "" | "detail" | "terminal" | "notes" | "workers" | "changes" | "agents";
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 export type Toast = { text: string; undo?: () => void; btn?: string };

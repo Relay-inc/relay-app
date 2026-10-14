@@ -114,15 +114,6 @@ pub fn subagents_of(dir: &str, sid: &str, cache: &mut SubCache) -> Vec<Value> {
     rows
 }
 
-/// The last few things a subagent wrote, read-only, from the tail of its transcript.
-pub fn agent_log(path: &std::path::Path) -> Vec<String> {
-    let (ev, _) = tail_lines(path, 512 << 10);
-    let texts: Vec<String> = ev.iter().filter(|e| e["type"] == "assistant")
-        .flat_map(|e| e["message"]["content"].as_array().cloned().unwrap_or_default())
-        .filter_map(|c| c["text"].as_str().map(|t| t.trim().chars().take(2000).collect::<String>())).filter(|t| !t.is_empty()).collect();
-    texts[texts.len().saturating_sub(3)..].to_vec()
-}
-
 /// `claude agents` keeps a session busy while a background shell of it still runs, also after the turn
 /// ended. The transcript closes every turn with a `turn_duration` line: when that comes after the last
 /// prompt (typed, or a notification that starts a new turn), Claude is done.

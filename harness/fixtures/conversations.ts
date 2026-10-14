@@ -391,12 +391,21 @@ export const subagents = {
     },
   ],
 };
-export const agentLog = (id: string) => [
-  `Agent ${id} started.`,
-  "Read 4 files in src/Billing.",
-  "Two jobs use add() on balances: InvoiceSync and CreditSync.",
-  "Writing the summary.",
-];
+/** A subagent's own transcript (agent_history): its brief, the tools it ran, what it found. */
+export function agentHistory(id: string): Ev[] {
+  const agent = subagents[LONG_KEY].find(sub => sub.id === id);
+  if (!agent) return [];
+  return [
+    time(Date.parse(agent.started_at)),
+    user(`${agent.description}. Look at every job under src/Billing that writes a balance and report which ones add instead of set.`),
+    tool("Glob", { pattern: "src/Billing/**/*Sync.php" }),
+    tool("Read", { file_path: "/Users/demo/code/beacon/src/Billing/InvoiceSync.php" }),
+    tool("Read", { file_path: "/Users/demo/code/beacon/src/Billing/CreditSync.php" }),
+    ai("Two jobs use `add()` on balances: **InvoiceSync** and **CreditSync**. The other three set the balance."),
+    tool(agent.tool ?? "Grep", agent.input ?? { pattern: "->add\\(" }),
+    ...(agent.running ? [] : [ai(agent.text ?? "Done.")]),
+  ];
+}
 
 // ---------- the terminal session's transcript (history_sid)
 export function terminalHistory(sid: string): Ev[] {

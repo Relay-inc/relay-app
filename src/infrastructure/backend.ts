@@ -157,7 +157,8 @@ export const backgroundSession = (action: "stop" | "attach", id: string) => invo
 export const openTerminal = (project: string, session: string | null, name: string) =>
   invoke("open_terminal", { project, session, name });
 export const aiTitle = (text: string, provider: string) => invoke<string>("ai_title", { text, provider });
-export const agentLog = (key: string, id: string) => invoke<string[]>("agent_log", { key, id });
+export const agentHistory = (key: string, id: string, from: number) =>
+  invoke<Transcript<AgentEvent>>("agent_history", { key, id, from });
 export const history = (project: string) => invoke<AgentEvent[]>("history", { project });
 /** A transcript by session id from an offset; `provider` for an app conversation's session, none for a terminal one. */
 export const historySid = (sid: string, from: number, provider?: string) =>

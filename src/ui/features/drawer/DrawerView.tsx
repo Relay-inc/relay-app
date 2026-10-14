@@ -10,6 +10,7 @@ import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { ScratchPanel } from "../scratch/ScratchPanel";
 import { WorkersColumn } from "../orchestrator/WorkersColumn";
 import { ChangesPanel } from "../changes/ChangesPanel";
+import { AgentsColumn } from "../agents/AgentsColumn";
 import "../../styles/navigation.css";
 
 const TITLES = {
@@ -18,6 +19,7 @@ const TITLES = {
   notes: "drawer.notes",
   workers: "nav.orch",
   changes: "drawer.changes",
+  agents: "agents.column",
 } as const;
 
 /** The right drawer, open on demand: a note's detail, one of the project's tools (terminals, notes), the
@@ -46,13 +48,14 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           )}
         </div>
         <div
-          className={`min-w-(--drawer-w) ${drawer === "workers" ? "overflow-y-auto pt-2.5 px-3 pb-4" : drawer === "detail" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
+          className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : drawer === "detail" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}
           {drawer === "detail" ? <PanelDetail /> : null}
           {drawer === "workers" ? <WorkersColumn /> : null}
           {drawer === "changes" ? <ChangesPanel /> : null}
+          {drawer === "agents" ? <AgentsColumn /> : null}
         </div>
       </div>
     </aside>
