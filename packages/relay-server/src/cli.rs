@@ -13,6 +13,8 @@ const USAGE: &str = "relay-server: runs Relay conversations on this machine
   relay-server service                                  a service file that keeps `serve` running
   relay-server info                                     this server's fingerprint and data folder
   relay-server version                                  this binary's version (Relay's)
+  relay-server git-credential <token file> <get|store|erase>
+                                                        git's credential helper for github.com, set by the server
 
 The data folder is RELAY_SERVER_DATA, else the platform's application data folder. --ram-disk (Mac) keeps the
 mirror's working copy on a RAM disk, as a tmpfs does on Linux.";
@@ -61,6 +63,12 @@ pub fn run(a: &[String]) {
             println!("fingerprint {}\ndata {}", id.fingerprint(), data.display());
         }
         Some("version") => println!("{}", crate::upgrade::VERSION),
+        Some("git-credential") => {
+            let (Some(file), Some(op)) = (a.get(2), a.get(3)) else { fail("git-credential <token file> <get|store|erase>") };
+            let mut input = String::new();
+            std::io::Read::read_to_string(&mut std::io::stdin(), &mut input).ok();
+            print!("{}", crate::github::credential(std::path::Path::new(file), op, &input));
+        }
         Some("service") => print!("{}", crate::service_file()),
         _ => { println!("{USAGE}"); }
     }

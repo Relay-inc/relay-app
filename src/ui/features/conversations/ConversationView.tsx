@@ -17,7 +17,7 @@ import { ToolGroup } from "./ToolGroup";
 import { Working } from "./Working";
 
 // the tool calls between two messages fold into one group, keyed by the index of its first step
-function groupSteps(items: Item[]) {
+export function groupSteps(items: Item[]) {
   const out: { at: number; item: Item; steps?: Item[] }[] = [];
   items.forEach((item, at) => {
     const last = out[out.length - 1];

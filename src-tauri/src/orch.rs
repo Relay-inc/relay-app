@@ -41,8 +41,16 @@ impl Shared {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-pub struct Report { pub status: String, pub summary: String, pub questions: Option<String>, pub diff: Option<String>, pub flags: Vec<String> }
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct Report {
+    pub status: String, pub summary: String, pub questions: Option<String>, pub diff: Option<String>, pub flags: Vec<String>,
+    /// for blocked: the answers the worker offers, shown as buttons (the user can still write their own)
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// what Relay read from git per file: path, lines added, lines removed
+    #[serde(default)]
+    pub files: Vec<(String, u32, u32)>,
+}
 
 /// A worker's own progress on its task, from its `step` tool: steps done of its plan, and the one it is on.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -62,6 +70,9 @@ pub struct Worker {
     pub at: i64,
     pub ended: Option<i64>,
     pub report: Option<Report>,
+    /// the user's answer to its blocked report (one of its options or their own words), cleared by its next report
+    #[serde(default)]
+    pub answer: Option<String>,
     /// its last `step`, cleared when a message starts it on a new round
     #[serde(default)]
     pub step: Option<Step>,
@@ -181,7 +192,8 @@ pub fn tool_list(coord: bool) -> Value {
             tool("report", "Report the end of your task to the coordinator. Call it once, at the end, then end your turn.",
             json!({"status": {"type": "string", "enum": ["done", "blocked", "failed"]},
                    "summary": {"type": "string", "maxLength": 4000, "description": "What changed, where, what is left"},
-                   "questions": {"type": "string", "maxLength": 2000, "description": "For blocked: what the user has to decide"}}), &["status", "summary"])]});
+                   "questions": {"type": "string", "maxLength": 2000, "description": "For blocked (or done with a decision left): what the user has to decide"},
+                   "options": {"type": "array", "maxItems": 4, "items": {"type": "string", "maxLength": 60}, "description": "With questions: the answers you would accept, a few words each, best first. The user picks one or writes their own."}}), &["status", "summary"])]});
     }
     json!({"tools": [
         tool("dispatch", "Start a worker: a new conversation in the vault that does one task and reports back. Returns its key.",
@@ -230,7 +242,10 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
         (true, "message") => message(app, &s("worker").unwrap_or_default(), &s("text").unwrap_or_default()).unwrap_or_else(fail),
         (true, "stop") => { let w = s("worker").unwrap_or_default(); if stop(app, &w) { text(format!("{w} stopped")) } else { fail(format!("no worker {w}")) } }
         (false, "step") => step(app, key, a["done"].as_u64(), a["total"].as_u64(), s("note")).unwrap_or_else(fail),
-        (false, "report") => report(app, key, s("status"), s("summary"), s("questions")).unwrap_or_else(fail),
+        (false, "report") => {
+            let options = a["options"].as_array().map(|o| o.iter().filter_map(|v| v.as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from)).take(4).collect()).unwrap_or_default();
+            report(app, key, s("status"), s("summary"), s("questions"), options).unwrap_or_else(fail)
+        }
         _ => fail(format!("unknown tool {name}")),
     }
 }
@@ -282,6 +297,16 @@ fn diff_of(worktree: &str, base: &str) -> Option<String> {
     let open = git(worktree, &["status", "--short"]).unwrap_or_default();
     let s = [committed, if open.is_empty() { String::new() } else { format!("not committed:\n{open}") }].into_iter().filter(|s| !s.is_empty()).collect::<Vec<_>>().join("\n");
     (!s.is_empty()).then_some(s)
+}
+/// Per file what the worktree changed against its base commit, committed or not: path, lines added, lines removed
+/// (a binary file counts 0).
+fn files_of(worktree: &str, base: &str) -> Vec<(String, u32, u32)> { numstat(&git(worktree, &["diff", "--numstat", base]).unwrap_or_default()) }
+fn numstat(out: &str) -> Vec<(String, u32, u32)> {
+    out.lines().filter_map(|l| {
+        let mut p = l.splitn(3, '\t');
+        let (plus, minus, path) = (p.next()?, p.next()?, p.next()?);
+        Some((path.to_string(), plus.parse().unwrap_or(0), minus.parse().unwrap_or(0)))
+    }).collect()
 }
 /// The branch new work starts from: the remote's default branch when known, else what is checked out.
 fn base_ref(repo: &str) -> String {
@@ -370,7 +395,7 @@ fn finish(app: &AppHandle, w: &Worker, notes: Vec<String>) {
     if !still_running(app, &w.key) { return; }
     let notes = (!notes.is_empty()).then(|| notes.join("\n\n"));
     let w = Worker { review_notes: notes.clone(), ..w.clone() };
-    let r = w.report.clone().unwrap_or(Report { status: "done".into(), summary: String::new(), questions: None, diff: None, flags: vec![] });
+    let r = w.report.clone().unwrap_or(Report { status: "done".into(), ..Default::default() });
     let (pr, err) = publish(app, &w, &r);
     update(app, &w.key, |x| { x.state = "done".into(); x.ended = Some(now()); x.phase = None; x.pr = pr; x.pr_error = err; x.review_notes = notes; x.rounds = 0; x.last_review = None; });
 }
@@ -650,6 +675,18 @@ fn message(app: &AppHandle, worker: &str, t: &str) -> Result<Value, String> {
     send_to(app, worker, &format!("{PREFIX}Message from the coordinator:\n\n{t}"), t)?;
     Ok(text(format!("Sent to {worker}")))
 }
+/// The user's answer to a blocked worker, kept on it so the question shows as answered (the answer itself goes to
+/// the coordinator as the user's own message).
+pub fn set_answer(app: &AppHandle, key: &str, answer: String) -> Option<Worker> { update(app, key, |w| w.answer = Some(answer)) }
+/// A worker that ended without a report: asked to report what it has.
+pub fn ask_report(app: &AppHandle, worker: &str) -> Result<(), String> {
+    send_to(app, worker, &format!("{PREFIX}From Relay:\n\nYour turn ended without a report. Call report now with what you have: done, blocked with your questions, or failed."), "report")
+}
+/// A worker started again with the same brief, project, repo and model: a new worker, the old one stays as it ended.
+pub fn restart(app: &AppHandle, worker: &str) -> Result<Worker, String> {
+    let w = load(app).into_iter().find(|w| w.key == worker).ok_or_else(|| format!("no worker {worker}"))?;
+    start(app, Some(w.title), Some(w.task), w.project, w.repo, Some(w.model).filter(|m| !m.is_empty()), None)
+}
 /// The pipeline's follow-up for one of its workers (moved back on the board, review comments on its PR).
 pub fn pipe_message(app: &AppHandle, worker: &str, t: &str) -> Result<(), String> {
     send_to(app, worker, &format!("{PREFIX}From Relay's board pipeline:\n\n{t}"), t)
@@ -687,7 +724,8 @@ fn step(app: &AppHandle, key: &str, done: Option<u64>, total: Option<u64>, note:
     Ok(text("ok"))
 }
 
-fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<String>, questions: Option<String>) -> Result<Value, String> {
+fn asks(q: &Option<String>) -> bool { q.as_deref().is_some_and(|q| !q.trim().is_empty()) }
+fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<String>, questions: Option<String>, options: Vec<String>) -> Result<Value, String> {
     let status = status.filter(|s| ["done", "blocked", "failed"].contains(&s.as_str())).ok_or("status must be done, blocked or failed")?;
     let summary = summary.ok_or("summary is required")?;
     let st = app.state::<App>();
@@ -695,23 +733,25 @@ fn report(app: &AppHandle, key: &str, status: Option<String>, summary: Option<St
     let w = load(app).into_iter().find(|w| w.key == key).ok_or("this conversation is no worker of the orchestrator")?;
     // Relay reads the diff itself, the worker's word for it is not the record
     let diff = w.worktree.as_deref().zip(w.base.get("start")).and_then(|(d, b)| diff_of(d, b));
+    let files = w.worktree.as_deref().zip(w.base.get("start")).map(|(d, b)| files_of(d, b)).unwrap_or_default();
+    let options = if asks(&questions) { options } else { vec![] };
     let mut after = snapshot(&vault, &shared(app, &vault).files, w.repo.as_deref());
     if let Some(s) = w.base.get("start") { after.insert("start".into(), s.clone()); }
     let flags = flags_of(&w.base, &after);
-    let r = Report { status: status.clone(), summary, questions, diff, flags };
+    let r = Report { status: status.clone(), summary, questions, diff, flags, options, files };
     if w.ticket.is_some() {
         // the pipeline's worker: a done is validated first (it stays running meanwhile), then Relay pushes and opens
         // the PR; the webview moves the ticket when it sees the new state
         if status == "done" {
-            update(app, key, |w| { w.report = Some(r.clone()); w.reported = true; w.phase = Some("checks".into()); }).ok_or("worker gone")?;
+            update(app, key, |w| { w.report = Some(r.clone()); w.reported = true; w.answer = None; w.phase = Some("checks".into()); }).ok_or("worker gone")?;
             let (app, key) = (app.clone(), key.to_string());
             std::thread::spawn(move || validate(&app, &key));
             return Ok(text("Report received: Relay now runs the checks and a review. If anything fails it comes back to you as the next message. End your turn now."));
         }
-        update(app, key, |w| { w.state = status.clone(); w.ended = Some(now()); w.report = Some(r.clone()); w.reported = true; }).ok_or("worker gone")?;
+        update(app, key, |w| { w.state = status.clone(); w.ended = Some(now()); w.report = Some(r.clone()); w.reported = true; w.answer = None; }).ok_or("worker gone")?;
         return Ok(text("Report received. End your turn now."));
     }
-    let w = update(app, key, |w| { w.state = status.clone(); w.ended = Some(now()); w.report = Some(r.clone()); w.reported = true; }).ok_or("worker gone")?;
+    let w = update(app, key, |w| { w.state = status.clone(); w.ended = Some(now()); w.report = Some(r.clone()); w.reported = true; w.answer = None; }).ok_or("worker gone")?;
     let tainted = tainted(app, key);
     let mut t = format!("{PREFIX}Report from worker {} ({}, \"{}\"): {}\n\n{}", w.key, w.project.as_deref().unwrap_or("Algemeen"), w.title, r.status, r.summary);
     if let Some(q) = &r.questions { t += &format!("\n\nQuestions for the user:\n{q}"); }
@@ -833,6 +873,12 @@ mod tests {
     }
 
     #[test]
+    fn numstat_per_file() {
+        assert_eq!(numstat("2\t1\tsrc/A.php\n-\t-\tlogo.png\n11\t3\ttests/A Test.php"),
+            [("src/A.php".to_string(), 2, 1), ("logo.png".to_string(), 0, 0), ("tests/A Test.php".to_string(), 11, 3)]);
+    }
+
+    #[test]
     fn flags_what_moved() {
         let before: HashMap<String, String> = [("branch:main", "a"), ("file:reminders.md", "1"), ("checkout", "")].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
         let mut after = before.clone();
@@ -869,7 +915,7 @@ mod tests {
     #[test]
     fn review_checks_the_last_round_first() {
         let mut w = Worker { task: "Fix the cart total".into(), ticket: Some(json!({"number": "12", "title": "Cart"})),
-            report: Some(Report { status: "done".into(), summary: "Totals now include discounts".into(), questions: None, diff: None, flags: vec![] }), ..Default::default() };
+            report: Some(Report { status: "done".into(), summary: "Totals now include discounts".into(), ..Default::default() }), ..Default::default() };
         let (head, claims) = review_head(&w, "abc");
         assert!(head.contains("Fix the cart total") && head.contains("git diff abc HEAD"));
         assert!(!head.contains("Totals now include discounts") && claims.contains("Totals now include discounts"), "the agent's account comes after the diff");

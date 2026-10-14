@@ -1,5 +1,6 @@
 import type { Key } from "../../shared/i18n";
 import type { MachineChoice } from "../settings/types";
+import type { RepoWork } from "../settings/machines";
 import type { SlashCommand } from "./commands";
 import type { AgentSession, Chat, ContextUse, Img, Item, Pending, Retry, RouteChoice, SessionOf, Sub } from "./types";
 
@@ -30,6 +31,8 @@ export type ConversationsState = {
   sidOf: SessionOf; // app conversation key: its provider and session id
   machines: Record<string, { machine: string; id: string; cwd: string }>; // conversation key: the machine it runs on (`chat_machines`)
   machineList: MachineChoice[]; // the composer's machine pick, `machines_list`
+  // a move back to this Mac that would leave repo work on the machine: where it was going, asked under the log
+  repoWork: Record<string, RepoWork & { to: string; busy?: boolean }>;
   // app conversations whose turn runs in a process this page gets no events from (it outlived an app restart):
   // the transcript offset read so far. The page follows the transcript until the provider's sessions say the turn ended
   outside: Record<string, number>;
@@ -38,7 +41,6 @@ export type ConversationsState = {
   termOffset: Record<string, number>;
   subs: Record<string, Sub[]>; // per conversation key, polled every 2 s
   subsOpen: Set<string>; // conversations whose finished agents are unfolded
-  subLog: Record<string, string[]>; // agent id: its last messages, while unfolded
   // the slash commands and skills per provider, for the current vault: asked at the start, updated when an agent starts
   commands: Record<string, SlashCommand[]>;
   retries: Record<string, Retry>; // conversations waiting for a limit to reset, by key (retry.rs)
@@ -70,12 +72,12 @@ export const initialConversations = (stored: {
   sidOf: {},
   machines: {},
   machineList: [],
+  repoWork: {},
   outside: {},
   outsideAt: {},
   termOffset: {},
   subs: {},
   subsOpen: new Set(),
-  subLog: {},
   retries: {},
 });
 

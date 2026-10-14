@@ -7,15 +7,36 @@ type Ev = Record<string, unknown> & { type: string };
 type Chat = { key: string; project: string | null; title: string; at: number; provider: string; meeting?: string };
 
 const TITLES = [
-  "Review the open PR", "Plan the sprint demo", "Draft a status mail", "Estimate the export feature",
-  "Debug the staging deploy", "Summarise the last meeting", "Check the invoice totals", "Write the release notes",
-  "Map the API endpoints", "Clean up the backlog", "Compare hosting options", "Prepare the client call",
-  "Fix the login redirect", "Update the project note", "Analyse the error logs", "Price the maintenance plan",
+  "Review the open PR",
+  "Plan the sprint demo",
+  "Draft a status mail",
+  "Estimate the export feature",
+  "Debug the staging deploy",
+  "Summarise the last meeting",
+  "Check the invoice totals",
+  "Write the release notes",
+  "Map the API endpoints",
+  "Clean up the backlog",
+  "Compare hosting options",
+  "Prepare the client call",
+  "Fix the login redirect",
+  "Update the project note",
+  "Analyse the error logs",
+  "Price the maintenance plan",
 ];
 const GENERAL_TITLES = [
-  "What is on today", "Weekly overview", "Find the contract template", "Tax questions for Q3",
-  "Compare two laptops", "Plan the weekend trip", "Rewrite my bio", "Reading list for October",
-  "Garden irrigation timer", "Summarise this article", "Inbox triage", "Ideas for the side business",
+  "What is on today",
+  "Weekly overview",
+  "Find the contract template",
+  "Tax questions for Q3",
+  "Compare two laptops",
+  "Plan the weekend trip",
+  "Rewrite my bio",
+  "Reading list for October",
+  "Garden irrigation timer",
+  "Summarise this article",
+  "Inbox triage",
+  "Ideas for the side business",
 ];
 
 const keyAt = (ms: number) => `c:${ms.toString(36)}`;
@@ -23,7 +44,13 @@ const chats: Chat[] = [];
 let n = 0;
 for (const project of projectNames)
   for (let i = 0; i < 4; i++, n++)
-    chats.push({ key: keyAt(NOW - (n + 1) * 37 * 60000), project, title: TITLES[(n * 7) % TITLES.length], at: NOW - (n + 1) * 37 * 60000, provider: n % 9 === 4 ? "codex" : "claude" });
+    chats.push({
+      key: keyAt(NOW - (n + 1) * 37 * 60000),
+      project,
+      title: TITLES[(n * 7) % TITLES.length],
+      at: NOW - (n + 1) * 37 * 60000,
+      provider: n % 9 === 4 ? "codex" : "claude",
+    });
 GENERAL_TITLES.forEach((title, i) => {
   n++;
   chats.push({ key: keyAt(NOW - n * 41 * 60000), project: null, title, at: NOW - n * 41 * 60000, provider: "claude" });
@@ -62,9 +89,18 @@ export const LONG_END = "That is the full reconciliation for October.";
 const projectNote = (project: string | null) =>
   project ? `${VAULT}/Contexts/Agency/Projects/${project}/${project}.md` : `${VAULT}/Calendar/2026-10-01.md`;
 let toolN = 0;
-const tool = (name: string, input: Record<string, unknown>): Ev => ({ type: "tool_call", id: `toolu_${String(++toolN).padStart(5, "0")}`, name, input });
+const tool = (name: string, input: Record<string, unknown>): Ev => ({
+  type: "tool_call",
+  id: `toolu_${String(++toolN).padStart(5, "0")}`,
+  name,
+  input,
+});
 const time = (ms: number): Ev => ({ type: "time", at: iso(ms) });
-const user = (text: string, images: { media_type: string; data: string }[] = []): Ev => ({ type: "user", text, images });
+const user = (text: string, images: { media_type: string; data: string }[] = []): Ev => ({
+  type: "user",
+  text,
+  images,
+});
 const ai = (text: string): Ev => ({ type: "text", text, delta: false });
 
 function shortHistory(chat: Chat, index: number): Ev[] {
@@ -76,26 +112,43 @@ function shortHistory(chat: Chat, index: number): Ev[] {
     time(chat.at - 19 * 60000),
     tool("Read", { file_path: projectNote(project) }),
     tool(r.pick(["Grep", "Glob"]), { pattern: r.pick(["invoice", "TODO", "**/*.md", "export"]) }),
-    ai(`Here is where it stands${project ? ` for [[${project}]]` : ""}:\n\n- The last change was ${r.int(1, 9)} days ago\n- ${r.int(2, 6)} open items, the oldest since last week\n- Next step: confirm with the client\n\n${endMarker(chat.key)}`),
+    ai(
+      `Here is where it stands${project ? ` for [[${project}]]` : ""}:\n\n- The last change was ${r.int(1, 9)} days ago\n- ${r.int(2, 6)} open items, the oldest since last week\n- Next step: confirm with the client\n\n${endMarker(chat.key)}`,
+    ),
   ];
 }
 
 // the long one: rounds of a question, tool calls of every kind, and a markdown answer, until 300 items
 const MD = [
-  (i: number) => `## Findings, round ${i}\n\nThe sync writes a **second balance** when a credit note arrives before its invoice. See [[Billing Spec]] and [[Beacon Billing]].\n\n1. Read the invoice table\n2. Match credit notes by reference\n3. Recompute the balance\n   - only for open dossiers\n   - skip archived ones`,
-  (i: number) => `| Dossier | Invoice | Credit | Balance |\n|---|---:|---:|---:|\n| D-${1000 + i} | €1.240,00 | €240,00 | €1.000,00 |\n| D-${1001 + i} | €860,50 | €0,00 | €860,50 |\n| D-${1002 + i} | €2.100,00 | €2.100,00 | €0,00 |\n\nThree dossiers checked, one with a stale balance.`,
-  (i: number) => `The fix is small. In \`src/Billing/BalanceSync.php\`:\n\n\`\`\`php\npublic function sync(Dossier $dossier): void\n{\n    $credits = $this->credits->forDossier($dossier->id());\n    $balance = $dossier->total()->minus($credits->sum());\n    $this->balances->replace($dossier->id(), $balance); // was: add()\n}\n\`\`\`\n\nRound ${i}: the test covers both orders of arrival.`,
-  (i: number) => `### Plan\n\n- [x] Reproduce on a dump\n- [x] Write the failing test\n- [ ] Patch \`replace()\` instead of \`add()\`\n- [ ] Re-run the nightly sync on staging\n\n> The client sees the balance on the portal, so the fix goes out before Friday.\n\nNotes in \`Contexts/Agency/Projects/Beacon Billing/Log.md\`, step ${i}.`,
-  (i: number) => `Short answer: yes. The query returned ${40 + i} rows, all with a credit note dated before the invoice. Nothing else matches the pattern, so the scope stays at the sync job.`,
+  (i: number) =>
+    `## Findings, round ${i}\n\nThe sync writes a **second balance** when a credit note arrives before its invoice. See [[Billing Spec]] and [[Beacon Billing]].\n\n1. Read the invoice table\n2. Match credit notes by reference\n3. Recompute the balance\n   - only for open dossiers\n   - skip archived ones`,
+  (i: number) =>
+    `| Dossier | Invoice | Credit | Balance |\n|---|---:|---:|---:|\n| D-${1000 + i} | €1.240,00 | €240,00 | €1.000,00 |\n| D-${1001 + i} | €860,50 | €0,00 | €860,50 |\n| D-${1002 + i} | €2.100,00 | €2.100,00 | €0,00 |\n\nThree dossiers checked, one with a stale balance.`,
+  (i: number) =>
+    `The fix is small. In \`src/Billing/BalanceSync.php\`:\n\n\`\`\`php\npublic function sync(Dossier $dossier): void\n{\n    $credits = $this->credits->forDossier($dossier->id());\n    $balance = $dossier->total()->minus($credits->sum());\n    $this->balances->replace($dossier->id(), $balance); // was: add()\n}\n\`\`\`\n\nRound ${i}: the test covers both orders of arrival.`,
+  (i: number) =>
+    `### Plan\n\n- [x] Reproduce on a dump\n- [x] Write the failing test\n- [ ] Patch \`replace()\` instead of \`add()\`\n- [ ] Re-run the nightly sync on staging\n\n> The client sees the balance on the portal, so the fix goes out before Friday.\n\nNotes in \`Contexts/Agency/Projects/Beacon Billing/Log.md\`, step ${i}.`,
+  (i: number) =>
+    `Short answer: yes. The query returned ${40 + i} rows, all with a credit note dated before the invoice. Nothing else matches the pattern, so the scope stays at the sync job.`,
 ];
 const TOOLS: [string, (i: number) => Record<string, unknown>][] = [
   ["Read", () => ({ file_path: `${VAULT}/Contexts/Agency/Projects/Beacon Billing/Beacon Billing.md` })],
   ["Grep", i => ({ pattern: i % 2 ? "BalanceSync" : "creditNote" })],
-  ["Bash", i => ({ command: i % 2 ? "php bin/phpunit tests/Billing/BalanceSyncTest.php" : "git log --oneline -5 -- src/Billing" })],
+  [
+    "Bash",
+    i => ({
+      command: i % 2 ? "php bin/phpunit tests/Billing/BalanceSyncTest.php" : "git log --oneline -5 -- src/Billing",
+    }),
+  ],
   ["Edit", () => ({ file_path: "/Users/demo/code/beacon/src/Billing/BalanceSync.php" })],
   ["Glob", () => ({ pattern: "src/Billing/**/*.php" })],
   ["WebSearch", () => ({ query: "doctrine replace vs merge entity balance" })],
-  ["WebFetch", () => ({ url: "https://www.doctrine-project.org/projects/doctrine-orm/en/latest/reference/working-with-objects.html" })],
+  [
+    "WebFetch",
+    () => ({
+      url: "https://www.doctrine-project.org/projects/doctrine-orm/en/latest/reference/working-with-objects.html",
+    }),
+  ],
   ["Agent", () => ({ description: "Check the other sync jobs", subagent_type: "code-explorer" })],
   ["Skill", () => ({ skill: "code-review" })],
   ["TodoWrite", () => ({ todos: [{ content: "Patch", status: "in_progress" }] })],
@@ -106,10 +159,45 @@ const TOOLS: [string, (i: number) => Record<string, unknown>][] = [
 ];
 // what Claude Code reports with an edit's result (toolUseResult.structuredPatch): line numbers and context
 const PATCHES: Record<string, { oldStart: number; newStart: number; lines: string[] }[]> = {
-  Edit: [{ oldStart: 39, newStart: 39, lines: ["         $credits = $this->credits->forDossier($dossier->id());", "         $balance = $dossier->total()->minus($credits->sum());", "-        $this->balances->add($dossier->id(), $balance);", "+        $this->balances->replace($dossier->id(), $balance);", "+        $this->log->info('balance replaced', ['dossier' => $dossier->id()]);", "     }", " ", "     public function syncAll(): void"] }],
+  Edit: [
+    {
+      oldStart: 39,
+      newStart: 39,
+      lines: [
+        "         $credits = $this->credits->forDossier($dossier->id());",
+        "         $balance = $dossier->total()->minus($credits->sum());",
+        "-        $this->balances->add($dossier->id(), $balance);",
+        "+        $this->balances->replace($dossier->id(), $balance);",
+        "+        $this->log->info('balance replaced', ['dossier' => $dossier->id()]);",
+        "     }",
+        " ",
+        "     public function syncAll(): void",
+      ],
+    },
+  ],
   MultiEdit: [
-    { oldStart: 12, newStart: 12, lines: ["     public function testCreditBeforeInvoice(): void", "     {", "-        $this->markTestIncomplete();", "+        $this->arrive('credit', 'invoice');", "+        $this->assertBalance(1000);", "     }"] },
-    { oldStart: 58, newStart: 59, lines: ["     {", "-        $this->assertSame(2, $this->balances->count());", "+        $this->assertSame(1, $this->balances->count());", "     }"] },
+    {
+      oldStart: 12,
+      newStart: 12,
+      lines: [
+        "     public function testCreditBeforeInvoice(): void",
+        "     {",
+        "-        $this->markTestIncomplete();",
+        "+        $this->arrive('credit', 'invoice');",
+        "+        $this->assertBalance(1000);",
+        "     }",
+      ],
+    },
+    {
+      oldStart: 58,
+      newStart: 59,
+      lines: [
+        "     {",
+        "-        $this->assertSame(2, $this->balances->count());",
+        "+        $this->assertSame(1, $this->balances->count());",
+        "     }",
+      ],
+    },
   ],
 };
 let longCache: Ev[] | null = null;
@@ -125,7 +213,14 @@ export function longHistory(): Ev[] {
   let t = NOW - 6 * HOUR;
   for (let round = 0; items < 299; round++) {
     add(time((t += 60000)));
-    add(user(round === 0 ? "The billing sync shows double balances for some dossiers. Find out why." : `Round ${round}: ${["check the next batch", "what about archived dossiers?", "run the tests again", "show me the diff", "is the client affected?"][round % 5]}`, round % 4 === 1 ? [img] : []));
+    add(
+      user(
+        round === 0
+          ? "The billing sync shows double balances for some dossiers. Find out why."
+          : `Round ${round}: ${["check the next batch", "what about archived dossiers?", "run the tests again", "show me the diff", "is the client affected?"][round % 5]}`,
+        round % 4 === 1 ? [img] : [],
+      ),
+    );
     for (let k = 0; k < 1 + (round % 3) && items < 299; k++) {
       const [name, input] = TOOLS[(round * 3 + k) % TOOLS.length];
       const call = tool(name, input(round));
@@ -146,22 +241,39 @@ export function history(key: string): Ev[] {
       user("Prepare me for this meeting: what the vault says about the people and the subject."),
       tool("Read", { file_path: `${VAULT}/Calendar/2026-10-01.md` }),
       ai("Reading the last notes first."),
-      ai("**Next action:** bring the Q3 VAT numbers.\n\n## Open points\n1. The Q3 VAT return is due 20 October\n2. Two invoices from September still unpaid\n\n**Next:** export the Q3 report before lunch."),
+      ai(
+        "**Next action:** bring the Q3 VAT numbers.\n\n## Open points\n1. The Q3 VAT return is due 20 October\n2. Two invoices from September still unpaid\n\n**Next:** export the Q3 report before lunch.",
+      ),
       user("And the car lease?"),
       ai("Nothing about the car lease in the vault."),
     ];
   const index = chats.findIndex(c => c.key === key);
   if (index < 0) return [];
   const base = shortHistory(chats[index], index);
-  if (key === PERMISSION_KEY) base.push(user("Push it so the client can test."), tool("Bash", { command: "git status" }), ai("The branch is clean. I need your go to push."));
+  if (key === PERMISSION_KEY)
+    base.push(
+      user("Push it so the client can test."),
+      tool("Bash", { command: "git status" }),
+      ai("The branch is clean. I need your go to push."),
+    );
   if (key === QUESTION_KEY) base.push(user("Which sync should we use?"), ai("Two options, I asked you below."));
-  if (key === ACTION_KEY) base.push(user("Make a ticket for the depot import."), tool("Bash", { command: "relay productive.create_task title='Depot import script' list='To do'" }), ai("I asked to create the ticket, it waits for your go."));
+  if (key === ACTION_KEY)
+    base.push(
+      user("Make a ticket for the depot import."),
+      tool("Bash", { command: "relay productive.create_task title='Depot import script' list='To do'" }),
+      ai("I asked to create the ticket, it waits for your go."),
+    );
   return base;
 }
 
 /** Live events after the long conversation opened: a running tool, a failed one, a draft note and an error. */
 export const liveTail = (): Ev[] => [
-  { type: "tool_call", id: "toolu_live_ok", name: "Read", input: { file_path: "/Users/demo/code/beacon/src/Billing/Invoice.php" } },
+  {
+    type: "tool_call",
+    id: "toolu_live_ok",
+    name: "Read",
+    input: { file_path: "/Users/demo/code/beacon/src/Billing/Invoice.php" },
+  },
   { type: "tool_result", id: "toolu_live_ok", error: false },
   { type: "tool_call", id: "toolu_live_err", name: "Bash", input: { command: "php bin/console app:sync --dry-run" } },
   { type: "tool_result", id: "toolu_live_err", error: true },
@@ -172,18 +284,61 @@ export const liveTail = (): Ev[] => [
 
 // ---------- the pending card and question (pending/<id>.json), and an agent action (`relay`, actions.rs) that asks
 export const pending = [
-  { id: "act-0001", project: ACTION_KEY, provider: "claude", kind: "tool", tool_name: "relay productive.create_task", input: { title: "Depot import script", list: "To do" }, tool_use_id: null, relay: true, at: NOW - 2 * 60000 },
-  { id: "perm-0001", project: PERMISSION_KEY, provider: "claude", kind: "tool", tool_name: "Bash", input: { command: "git push origin fix/portal-redirect", description: "Push the fix branch to GitHub" }, tool_use_id: "toolu_perm", request_id: "req-perm", suggestions: [{ type: "addRules", rules: [{ toolName: "Bash", ruleContent: "git push origin fix/portal-redirect" }], behavior: "allow", destination: "localSettings" }], relay: true, at: NOW - 4 * 60000 },
   {
-    id: "ask-0001", project: QUESTION_KEY, provider: "claude", kind: "question", tool_name: "AskUserQuestion", tool_use_id: "toolu_ask", at: NOW - 7 * 60000,
+    id: "act-0001",
+    project: ACTION_KEY,
+    provider: "claude",
+    kind: "tool",
+    tool_name: "relay productive.create_task",
+    input: { title: "Depot import script", list: "To do" },
+    tool_use_id: null,
+    relay: true,
+    at: NOW - 2 * 60000,
+  },
+  {
+    id: "perm-0001",
+    project: PERMISSION_KEY,
+    provider: "claude",
+    kind: "tool",
+    tool_name: "Bash",
+    input: { command: "git push origin fix/portal-redirect", description: "Push the fix branch to GitHub" },
+    tool_use_id: "toolu_perm",
+    request_id: "req-perm",
+    suggestions: [
+      {
+        type: "addRules",
+        rules: [{ toolName: "Bash", ruleContent: "git push origin fix/portal-redirect" }],
+        behavior: "allow",
+        destination: "localSettings",
+      },
+    ],
+    relay: true,
+    at: NOW - 4 * 60000,
+  },
+  {
+    id: "ask-0001",
+    project: QUESTION_KEY,
+    provider: "claude",
+    kind: "question",
+    tool_name: "AskUserQuestion",
+    tool_use_id: "toolu_ask",
+    at: NOW - 7 * 60000,
     input: {
       questions: [
-        { question: "Which sync strategy should the contact import use?", multiSelect: false, options: [
-          { label: "Full resync", description: "Rebuild every contact nightly, simple but slow (40 min)" },
-          { label: "Incremental", description: "Only changed contacts via the updated_at cursor" },
-          { label: "Webhooks", description: "Push from the CRM, needs their admin to enable it" },
-        ] },
-        { question: "Who should get the change summary?", multiSelect: true, options: [{ label: "Client PM" }, { label: "Dev team" }, { label: "Nobody" }] },
+        {
+          question: "Which sync strategy should the contact import use?",
+          multiSelect: false,
+          options: [
+            { label: "Full resync", description: "Rebuild every contact nightly, simple but slow (40 min)" },
+            { label: "Incremental", description: "Only changed contacts via the updated_at cursor" },
+            { label: "Webhooks", description: "Push from the CRM, needs their admin to enable it" },
+          ],
+        },
+        {
+          question: "Who should get the change summary?",
+          multiSelect: true,
+          options: [{ label: "Client PM" }, { label: "Dev team" }, { label: "Nobody" }],
+        },
       ],
     },
   },
@@ -192,13 +347,65 @@ export const pending = [
 // ---------- subagents of the long conversation, and their logs
 export const subagents = {
   [LONG_KEY]: [
-    { id: "a1b2c3d4e5", description: "Check the other sync jobs", agentType: "code-explorer", model: "sonnet", running: true, started_at: iso(NOW - 4 * 60000), last_at: iso(NOW - 20000), tool: "Grep", input: { pattern: "->add\\(" } },
-    { id: "b2c3d4e5f6", description: "Scan the error logs", agentType: "general-purpose", model: "haiku", running: true, started_at: iso(NOW - 3 * 60000), last_at: iso(NOW - 5000), tool: "Bash", input: { command: "gcloud logging read 'severity>=ERROR' --limit 50" } },
-    { id: "c3d4e5f6a7", description: "Draft the client mail", agentType: "general-purpose", model: "sonnet", running: false, started_at: iso(NOW - 30 * 60000), last_at: iso(NOW - 22 * 60000), text: "Draft saved in Drafts." },
-    { id: "d4e5f6a7b8", description: "Verify the totals", agentType: "verifier", model: "sonnet", running: false, started_at: iso(NOW - 50 * 60000), last_at: iso(NOW - 41 * 60000), text: "Totals match for 38 of 38 dossiers." },
+    {
+      id: "a1b2c3d4e5",
+      description: "Check the other sync jobs",
+      agentType: "code-explorer",
+      model: "sonnet",
+      running: true,
+      started_at: iso(NOW - 4 * 60000),
+      last_at: iso(NOW - 20000),
+      tool: "Grep",
+      input: { pattern: "->add\\(" },
+    },
+    {
+      id: "b2c3d4e5f6",
+      description: "Scan the error logs",
+      agentType: "general-purpose",
+      model: "haiku",
+      running: true,
+      started_at: iso(NOW - 3 * 60000),
+      last_at: iso(NOW - 5000),
+      tool: "Bash",
+      input: { command: "gcloud logging read 'severity>=ERROR' --limit 50" },
+    },
+    {
+      id: "c3d4e5f6a7",
+      description: "Draft the client mail",
+      agentType: "general-purpose",
+      model: "sonnet",
+      running: false,
+      started_at: iso(NOW - 30 * 60000),
+      last_at: iso(NOW - 22 * 60000),
+      text: "Draft saved in Drafts.",
+    },
+    {
+      id: "d4e5f6a7b8",
+      description: "Verify the totals",
+      agentType: "verifier",
+      model: "sonnet",
+      running: false,
+      started_at: iso(NOW - 50 * 60000),
+      last_at: iso(NOW - 41 * 60000),
+      text: "Totals match for 38 of 38 dossiers.",
+    },
   ],
 };
-export const agentLog = (id: string) => [`Agent ${id} started.`, "Read 4 files in src/Billing.", "Two jobs use add() on balances: InvoiceSync and CreditSync.", "Writing the summary."];
+/** A subagent's own transcript (agent_history): its brief, the tools it ran, what it found. */
+export function agentHistory(id: string): Ev[] {
+  const agent = subagents[LONG_KEY].find(sub => sub.id === id);
+  if (!agent) return [];
+  return [
+    time(Date.parse(agent.started_at)),
+    user(`${agent.description}. Look at every job under src/Billing that writes a balance and report which ones add instead of set.`),
+    tool("Glob", { pattern: "src/Billing/**/*Sync.php" }),
+    tool("Read", { file_path: "/Users/demo/code/beacon/src/Billing/InvoiceSync.php" }),
+    tool("Read", { file_path: "/Users/demo/code/beacon/src/Billing/CreditSync.php" }),
+    ai("Two jobs use `add()` on balances: **InvoiceSync** and **CreditSync**. The other three set the balance."),
+    tool(agent.tool ?? "Grep", agent.input ?? { pattern: "->add\\(" }),
+    ...(agent.running ? [] : [ai(agent.text ?? "Done.")]),
+  ];
+}
 
 // ---------- the terminal session's transcript (history_sid)
 export function terminalHistory(sid: string): Ev[] {
@@ -209,14 +416,36 @@ export function terminalHistory(sid: string): Ev[] {
     user(session.last_user),
     tool("Bash", { command: "pnpm exec playwright test --project=staging" }),
     tool("Read", { file_path: "/Users/demo/code/northwind/test-results/report.json" }),
-    ai("## E2E on staging\n\n**41 passed, 3 failed.**\n\n| Spec | Failure |\n|---|---|\n| login.spec.ts | redirect loop after SSO |\n| invoices.spec.ts | export button hidden for viewers |\n| profile.spec.ts | timeout on avatar upload |\n\nThe redirect loop is the one from [[Northwind Portal]]."),
+    ai(
+      "## E2E on staging\n\n**41 passed, 3 failed.**\n\n| Spec | Failure |\n|---|---|\n| login.spec.ts | redirect loop after SSO |\n| invoices.spec.ts | export button hidden for viewers |\n| profile.spec.ts | timeout on avatar upload |\n\nThe redirect loop is the one from [[Northwind Portal]].",
+    ),
   ];
 }
 
 /** A reply streamed after a `send`: what __harness.stream emits by default. */
 export function replyText(words: number): string[] {
   const r = rng(words);
-  const vocab = ["the", "sync", "balance", "invoice", "client", "staging", "fix", "test", "dossier", "credit", "note", "job", "query", "report", "export", "portal", "**now**", "`replace()`", "[[Billing Spec]]"];
+  const vocab = [
+    "the",
+    "sync",
+    "balance",
+    "invoice",
+    "client",
+    "staging",
+    "fix",
+    "test",
+    "dossier",
+    "credit",
+    "note",
+    "job",
+    "query",
+    "report",
+    "export",
+    "portal",
+    "**now**",
+    "`replace()`",
+    "[[Billing Spec]]",
+  ];
   const out: string[] = [];
   for (let i = 0; i < words; i++) {
     let w = r.pick(vocab);

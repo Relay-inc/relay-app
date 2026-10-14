@@ -86,6 +86,35 @@ export function workerName(key: string) {
   for (let i = 0; i < key.length; i++) hash = Math.imul(hash ^ key.charCodeAt(i), 16777619);
   return NAMES[(hash >>> 0) % NAMES.length];
 }
+/** What a worker waits on the user for: the question of its blocked or done report (until answered), or a turn that
+ *  ended without a report (ask for it, or start it again). */
+export type Need = { kind: "ask"; question: string; options: string[] } | { kind: "silent" };
+export function needOf(worker: Worker): Need | null {
+  if (worker.state === "silent") return { kind: "silent" };
+  const question = worker.report?.questions?.trim();
+  if ((worker.state !== "blocked" && worker.state !== "done") || worker.answer || !question) return null;
+  return { kind: "ask", question, options: worker.report?.options ?? [] };
+}
+/** The title bar's summary: what runs, what waits on the user, what is done. */
+export function boardCounts(workers: Worker[]) {
+  return {
+    running: workers.filter(worker => worker.state === "running").length,
+    need: workers.filter(worker => needOf(worker)).length,
+    done: workers.filter(worker => worker.state === "done").length,
+  };
+}
+// ponytail: a run is a burst of dispatches (each worker started within RUN_GAP of the one after it), not the
+// coordinator turn that started them; mark workers with their turn in the backend if bursts start to merge
+const RUN_GAP = 20 * 60_000;
+/** The workers list: the latest run (newest first, and when it started) and the earlier workers. */
+export function splitRuns(workers: Iterable<Worker>) {
+  const sorted = boardOrder(workers);
+  let n = sorted.length ? 1 : 0;
+  while (n < sorted.length && sorted[n - 1].at - sorted[n].at <= RUN_GAP) n++;
+  return { run: sorted.slice(0, n), since: sorted[n - 1]?.at ?? 0, earlier: sorted.slice(n) };
+}
+/** The worker a report Relay wrote into the coordinator is from ("Report from worker c:orch-w-…"). */
+export const reportKey = (text: string) => /Report from worker (c:orch-w-[a-z0-9]+)/.exec(text)?.[1] ?? null;
 export const runningCount = (workers: Iterable<Worker>) =>
   [...workers].filter(worker => worker.state === "running").length;
 

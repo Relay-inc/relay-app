@@ -37,7 +37,11 @@ export async function select(key: string, tool: Tool | null = null) {
       draft.drawer = "";
       draft.panel.open = "";
     }
-    // the coordinator opens with its workers next to it, anything else closes them
+    // the coordinator opens with its workers next to it, anything else closes them (openWorker keeps them)
+    draft.orchDetail = false;
+    // a conversation's agents column and agent page belong to that conversation
+    draft.agentPage = "";
+    if (draft.selected !== key && draft.drawer === "agents") draft.drawer = "";
     if (key === ORCH) draft.drawer = "workers";
     else if (draft.drawer === "workers") draft.drawer = "";
     draft.selected = key;
@@ -61,6 +65,29 @@ export async function select(key: string, tool: Tool | null = null) {
   if (key === BRAIN) loadBrain();
   request(isView(key) ? "scroll-top" : "scroll-bottom");
   if (!isView(key)) request("focus-composer");
+}
+/** A worker as its page in the orchestrator: the workers stay on the right, the composer talks to the worker, Esc
+ *  goes back to the coordinator. */
+export async function openWorker(key: string) {
+  await select(key);
+  set(draft => {
+    draft.orchDetail = true;
+    draft.drawer = "workers";
+  });
+}
+/** A subagent of the open conversation as a read-only page, its agents column next to it; Esc goes back. */
+export function openAgent(id: string) {
+  set(draft => {
+    draft.agentPage = id;
+    draft.drawer = "agents";
+  });
+  request("scroll-bottom");
+}
+export function closeAgent() {
+  set(draft => {
+    draft.agentPage = "";
+  });
+  request("scroll-bottom");
 }
 /** Only open a conversation and scroll to its end, without what `select` loads for the desktop's views (the phone). */
 export function show(key: string) {
@@ -114,7 +141,7 @@ export function closeTool() {
   else openProject(tool.project);
 }
 /** A drawer tool's button: opens it, or closes it when it is the one shown. */
-export const toggleDrawer = (tool: "terminal" | "notes" | "workers" | "changes") =>
+export const toggleDrawer = (tool: "terminal" | "notes" | "workers" | "changes" | "agents") =>
   set(draft => {
     draft.drawer = draft.drawer === tool ? "" : tool;
     draft.panel.open = "";

@@ -1,4 +1,4 @@
-import { t, tn, type Key } from "../../shared/i18n";
+import { t, type Key } from "../../shared/i18n";
 import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
@@ -18,7 +18,7 @@ import { projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
-import { runningWorkers } from "../orchestrator/orchestrator";
+import { workerCounts } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
@@ -97,8 +97,8 @@ function viewSummary(key: string) {
     return pending ? t("bar.brainReview", { n: pending }) : n ? t("bar.brainNotes", { n: n.toLocaleString() }) : "";
   }
   if (key === ORCH) {
-    const n = runningWorkers();
-    return n ? tn("nav.orchRunning", n) : t("bar.orchIdle");
+    const counts = workerCounts();
+    return counts.running + counts.need + counts.done ? t("orch.counts", counts) : t("bar.orchIdle");
   }
   return "";
 }
@@ -170,6 +170,19 @@ export function chatBar(key: string) {
         }
       : null,
   };
+}
+/** The repo a conversation works in on a machine: its project's first repo, while it runs or is to start on a
+ *  machine (`id`, named `machine`). Null on this Mac or for a project without repos. */
+export function machineRepo(key: string) {
+  const project = cs().chats[key]?.project;
+  const slug = project ? usePullRequestsStore.getState().repos[project]?.[0] : undefined;
+  if (!slug) return null;
+  const where = machineChoice(key);
+  const bound = cs().machines[key];
+  const id = where.started ? bound?.id : where.value;
+  if (!id) return null;
+  const machine = (where.started ? bound?.machine : where.list.find(choice => choice.id === id)?.name) ?? id;
+  return { slug, repo: slug.split("/").pop()!, id, machine, started: where.started };
 }
 /** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
  *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after

@@ -269,9 +269,10 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
  * archive, delete, Inbox/Other) */
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
-  // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online
+  // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
+  // online, connected to GitHub, with three repos (machineGit)
   const machines =
-    fixture === "machines" || fixture === "phone"
+    fixture === "machines" || fixture === "phone" || fixture === "github"
       ? {
           machines: [
             {
@@ -390,4 +391,23 @@ export const projectRepos = {
   "Northwind Portal": ["acme/northwind-portal", "acme/northwind-api"],
   "Beacon Billing": ["acme/beacon-billing"],
   "Harbor CRM": ["acme/harbor-crm"],
+};
+
+/** GitHub on the machine of the "github" fixture, its repos (one clean, one with 2 commits not pushed, one with work
+ *  not committed) and the code a Connect gets. */
+export const machineGit = {
+  github: {
+    state: "on",
+    login: "octo-demo",
+    since: "2026-09-30",
+    name: "Relay (Server)",
+    email: "octo-demo@users.noreply.github.com",
+    error: "",
+  },
+  repos: [
+    { name: "northwind-portal", repo: "acme/northwind-portal", branch: "main", dirty: false, unpushed: 0 },
+    { name: "beacon-billing", repo: "acme/beacon-billing", branch: "main", dirty: false, unpushed: 2 },
+    { name: "harbor-crm", repo: "acme/harbor-crm", branch: "feature/export", dirty: true, unpushed: 0 },
+  ].map(r => ({ ...r, path: `/home/relay/repos/${r.name}` })),
+  device: { user_code: "ABCD-1234", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 },
 };

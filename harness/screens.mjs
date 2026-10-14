@@ -107,6 +107,45 @@ const VIEWS = {
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
+  // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
+  // not committed
+  "settings-machines-github": async () => {
+    await settingsPage("Machines", null, "github");
+    await waitText("Connected as octo-demo");
+    await waitText("2 commits not pushed");
+    await intoView("Repos on Server");
+  },
+  // the same after Disconnect and Connect GitHub: the code to type on GitHub, waiting for it
+  "settings-machines-github-code": async () => {
+    await settingsPage("Machines", null, "github");
+    await waitText("Connected as octo-demo");
+    await button("Disconnect").click();
+    await button("Disconnect").click();
+    await waitText("Not connected");
+    await button("Connect GitHub").click();
+    await waitText("ABCD-1234");
+    await intoView("Waiting for GitHub…");
+  },
+  // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
+  // "harbor-crm · on Server" next to the control (PR #217)
+  "composer-repo-chip": async () => {
+    await open(page, server.url, { fixture: "github" });
+    await byText(page, "Harbor CRM").hover();
+    await page.getByRole("button", { name: "New conversation about Harbor CRM", exact: true }).click();
+    await settle(page);
+    await page.getByRole("button", { name: "Runs on" }).locator("visible=true").first().click();
+    await click("Server");
+    await waitText("harbor-crm · on Server");
+  },
+  // a started Harbor CRM conversation that runs on Server, moved to This Mac while harbor-crm has work there that is
+  // not pushed: the bar with Push and Move anyway (PR #217)
+  "conversation-repo-work": async () => {
+    await open(page, server.url, { fixture: "github", sel: keys.question });
+    await waitText(titles.question);
+    await page.getByRole("button", { name: "Runs on" }).locator("visible=true").first().click();
+    await click("This Mac");
+    await waitText("has work on Server that is not pushed");
+  },
   waiting: async () => {
     await open(page, server.url);
     await waitText(titles.permission);
@@ -145,6 +184,28 @@ const VIEWS = {
     await waitText(markers.longEnd);
     await button("Changes").click();
     await waitText("DossierSync.php");
+    await settle(page);
+  },
+  // the agents Claude Code spawned in a conversation (PR: subagents column): the column next to the conversation, a
+  // running agent's page followed from its transcript, a finished one's page
+  "agents-column": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await waitText("Check the other sync jobs");
+    await button("Agents").click();
+    await page.locator(".relay-drawer").getByText("Scan the error logs", { exact: true }).waitFor();
+    await settle(page);
+  },
+  "agent-page": async () => {
+    await VIEWS["agents-column"]();
+    await page.locator(".relay-drawer").getByText("Check the other sync jobs", { exact: true }).click();
+    await waitText("The other three set the balance.");
+    await settle(page);
+  },
+  "agent-page-done": async () => {
+    await VIEWS["agents-column"]();
+    await page.locator(".relay-drawer").getByText("Verify the totals", { exact: true }).click();
+    await waitText("Totals match for 38 of 38 dossiers.");
     await settle(page);
   },
   "changes-diff": async () => {
@@ -616,10 +677,33 @@ const VIEWS = {
     await waitText("Draft the depot import ticket");
     await settle(page, 300);
   },
+  // Turn 8: a worker's page next to the column (done, with its question, changes and flags), answered from there
+  "orchestrator-worker-page": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Patch the balance sync", { exact: true }).click();
+    await waitText("read from git by Relay");
+  },
+  "orchestrator-answered": async () => {
+    await VIEWS["orchestrator-worker-page"]();
+    await click("Deploy tonight");
+    await waitText("sent to the orchestrator");
+    await settle(page, 300);
+  },
+  // a blocked worker's page after the live events, with the options it offered
+  "orchestrator-blocked-page": async () => {
+    await VIEWS["orchestrator-live"]();
+    await page.locator(".relay-drawer").getByText("Fix the login redirect", { exact: true }).click();
+    await waitText("Ask the client");
+  },
+  // the orchestrator before its first task
+  "orchestrator-empty": async () => {
+    await open(page, server.url, { fixture: "orch-empty", sel: keys.orch });
+    await waitText("Give it a task across projects");
+  },
   // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
   "orchestrator-plain": async () => {
     await open(page, server.url, { fixture: "orch-plain", sel: keys.orch });
-    await waitText("From Relay");
+    await waitText("Open worker");
   },
   "settings-crabs": async () => {
     await settingsPage("General");
@@ -737,8 +821,16 @@ const VIEWS = {
   "plugin-view-tabs": async () => {
     await open(page, server.url, { fixture: "plugins", sel: "__plugin:example" });
     await page.getByRole("radio", { name: "History" }).click();
-    await page.frameLocator("iframe[title=History]").getByText(/^Ready/).waitFor();
+    await page
+      .frameLocator("iframe[title=History]")
+      .getByText(/^Ready/)
+      .waitFor();
     await settle(page);
+  },
+  // Settings › General › Reminders' agent access: add, done and push default to Runs (#PR)
+  "settings-reminders-access": async () => {
+    await settingsPage("General");
+    await intoView("reminders.push");
   },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");

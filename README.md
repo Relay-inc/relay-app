@@ -56,6 +56,7 @@ resolved. Only `workState` is required; a missing `reminders` file is created by
 | `src-tauri/src/providers.rs` | The backend registry of the integrations: token in the keychain, the curl call, settings migration. |
 | `packages/` | The integrations and the agent providers, one package each (TypeScript + Rust + strings + tests), and `board-core` and `agent-core`, their contracts. |
 | `src-tauri/src/vault.rs`, `src/application/workspace/vault-setup.ts`, `src/ui/features/workspace/` | The per-vault mapping: detection, found / missing, the first-launch screen and the mapping rows in Settings. |
+| `src-tauri/src/machines.rs`, `mirror.rs`, `machine_git.rs` | Work machines (relay-server in the LAN, `packages/relay-server`): pairing, where a conversation runs, the vault's mirror there. Settings › Machines connects a machine to GitHub with a code typed on github.com (the token stays on the machine, sealed like the mirror) and lists its repos with Push and To Mac (a snapshot on `relay/<machine>`, fetched into this Mac's checkout without checking it out). A conversation about a project with a repo gets that repo at its first start there, cloned or fetched, as an extra folder next to the mirrored vault it runs in. Moving it back to this Mac with work not pushed in that repo asks first. |
 | `src/settings.tsx`, `src/application/settings/`, `src/ui/features/settings/` | Settings window: vault folder, per-project icon and label, Integrations (board providers, GitHub), Agents, language. |
 
 State lives in `~/Library/Application Support/be.laurentmeersman.relay/`: `settings.json`,
@@ -314,7 +315,7 @@ the socket the app listens on and the CLI side.
   set-up extensions are listed.
 - Per extension, **agent access** on or off (off: not listed, every call refused), and per action a policy:
   `auto` runs, `ask` shows a card in the conversation (the pending folder, like a permission; the command waits for
-  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft to `auto`. Both are set in each
+  it), `deny` refuses. Reads default to `auto`, writes to `ask`, a mail draft and the reminders to `auto`. Both are set in each
   extension's Agent access section in Settings (Integrations › the extension; reminders under General) and kept in
   the vault's `.relay/config.json`, read on every call, so a hand edit applies at once:
 
