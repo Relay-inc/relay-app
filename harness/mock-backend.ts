@@ -273,10 +273,15 @@ function handle(cmd: string, a: Args): unknown {
       return new Promise(resolve =>
         setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
       );
+    case "host_status": // fixture "github": a development build, This Mac cannot be a machine
+      return fixture === "github" ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] } : null;
     case "machines_list":
       return fixture === "github" ? [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }] : [];
+    // fixture "github": the Harbor CRM conversation that asks a question runs on Server
     case "chat_machines":
-      return {};
+      return fixture === "github"
+        ? { [conv.QUESTION_KEY]: { machine: "Server", id: "a1b2c3d4e5f6", cwd: "/home/relay/vault" } }
+        : {};
 
     // settings, language, vault
     case "get_settings":
