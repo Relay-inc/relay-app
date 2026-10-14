@@ -28,6 +28,7 @@ mod commits;
 mod dictation;
 mod files;
 mod host;
+mod machine_git;
 mod machines;
 mod mirror;
 mod favicon;
@@ -189,6 +190,7 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("tray.tomorrow", ["Tomorrow", "Morgen", "Demain", "Morgen"]),
     ("tray.week", ["This week", "Deze week", "Cette semaine", "Diese Woche"]),
     ("tray.later", ["Later", "Later", "Plus tard", "Später"]),
+    ("tray.more", ["More", "Meer", "Plus", "Mehr"]),
     ("tray.none", ["No reminders", "Geen reminders", "Aucun rappel", "Keine Erinnerungen"]),
     ("tray.done", ["✓ Done", "✓ Klaar", "✓ Fait", "✓ Erledigt"]),
     ("tray.to_tomorrow", ["→ Tomorrow", "→ Morgen", "→ Demain", "→ Morgen"]),
@@ -259,6 +261,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.machine", ["Invalid work machine in the settings", "Ongeldige werkmachine in de instellingen", "Machine de travail invalide dans les réglages", "Ungültige Arbeitsmaschine in den Einstellungen"]),
     ("err.machine_folder", ["{v}: a folder needs a vault project and an absolute path on the machine", "{v}: een map heeft een vaultproject en een absoluut pad op de machine nodig",
         "{v} : un dossier a besoin d'un projet du coffre et d'un chemin absolu sur la machine", "{v}: ein Ordner braucht ein Vault-Projekt und einen absoluten Pfad auf der Maschine"]),
+    ("err.machine_no_github", ["Update the machine to use GitHub", "Werk de machine bij om GitHub te gebruiken", "Mettez la machine à jour pour utiliser GitHub", "Aktualisiere die Maschine, um GitHub zu nutzen"]),
+    ("err.repo_unknown", ["No repo {v} on the machine", "Geen repo {v} op de machine", "Aucun dépôt {v} sur la machine", "Kein Repo {v} auf der Maschine"]),
+    ("err.repo_no_checkout", ["No local checkout of {v} found on this Mac", "Geen lokale checkout van {v} gevonden op deze Mac", "Aucune copie locale de {v} trouvée sur ce Mac", "Kein lokaler Checkout von {v} auf diesem Mac gefunden"]),
+    ("err.repo_branch_out", ["{v} is checked out on this Mac: switch to another branch there first", "{v} is uitgecheckt op deze Mac: wissel daar eerst naar een andere branch", "{v} est extraite sur ce Mac : passez d'abord à une autre branche", "{v} ist auf diesem Mac ausgecheckt: wechsle dort zuerst auf einen anderen Branch"]),
     ("err.no_machine", ["No such work machine", "Onbekende werkmachine", "Machine de travail inconnue", "Unbekannte Arbeitsmaschine"]),
     ("err.cal_email", ["Calendar: enter the calendar's email address", "Agenda: vul het e-mailadres van de agenda in", "Agenda : saisissez l'adresse e-mail de l'agenda", "Kalender: Gib die E-Mail-Adresse des Kalenders ein"]),
     ("err.cal_url", ["That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.", "Dat is geen geheim iCal-adres. In Google Agenda: Instellingen › je agenda › Agenda integreren › Geheim adres in iCal-indeling.", "Ce n'est pas une adresse iCal secrète. Dans Google Agenda : Paramètres › votre agenda › Intégrer l'agenda › Adresse secrète au format iCal.", "Das ist keine geheime iCal-Adresse. In Google Kalender: Einstellungen › dein Kalender › Kalender integrieren › Geheime Adresse im iCal-Format."]),
@@ -519,19 +525,26 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
     Ok(())
 }
-/// The project index of a vault in the starter layout (System/scripts/build-index.py), rebuilt at start with the app's
-/// own copy of the script, so a vault an older Relay made follows today's rules too (an Active project untouched for
-/// 30 days shows as Quiet). A vault in another layout keeps its own way. Errors are logged.
+/// The project index of a vault with a System/scripts/build-index.py, rebuilt at start. Errors are logged.
 fn refresh_index(app: &AppHandle) {
     let vault = app.state::<App>().settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
-    if vault.is_empty() || !PathBuf::from(&vault).join("System/scripts/build-index.py").is_file() { return; }
-    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
+    if vault.is_empty() { return; }
+    let bundled = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource).ok();
+    let Some(script) = index_script(PathBuf::from(&vault).join("System/scripts/build-index.py"), bundled) else { return };
     let path = app.state::<App>().path.clone();
     std::thread::spawn(move || match Command::new("python3").arg(&script).env("VAULT", &vault).env("PATH", &path).output() {
         Ok(o) if o.status.success() => {}
         Ok(o) => eprintln!("build-index: {}", String::from_utf8_lossy(&o.stderr).trim()),
         Err(e) => eprintln!("build-index: {e}"),
     });
+}
+/// Which build-index.py rebuilds a vault's index. A copy of the starter script gets the app's own copy, so a vault an
+/// older Relay made follows today's rules too (an Active project untouched for 30 days shows as Quiet). Every starter
+/// version reads the card field `last`. A vault with a script of its own (other card fields) runs that one: ours would
+/// find none of its cards and write an empty index.
+fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<PathBuf> {
+    let src = std::fs::read_to_string(&own).ok()?;
+    if src.contains("scalar(fm, \"last\"") { bundled } else { Some(own) }
 }
 /// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
 #[tauri::command]
@@ -725,6 +738,16 @@ async fn orch_dispatch_ticket(app: AppHandle, title: String, task: String, proje
 #[tauri::command]
 fn orch_message(app: AppHandle, key: String, text: String) -> Result<(), String> { orch::pipe_message(&app, &key, &text) }
 #[tauri::command]
+fn orch_answer(app: AppHandle, key: String, answer: String) -> Option<orch::Worker> { orch::set_answer(&app, &key, answer) }
+#[tauri::command]
+async fn orch_ask_report(app: AppHandle, key: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || orch::ask_report(&app, &key)).await.map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn orch_restart(app: AppHandle, key: String) -> Result<orch::Worker, String> {
+    tauri::async_runtime::spawn_blocking(move || orch::restart(&app, &key)).await.map_err(|e| e.to_string())?
+}
+#[tauri::command]
 async fn orch_pr(app: AppHandle, key: String) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || orch::pr_status(&app, &key)).await.map_err(|e| e.to_string())?
 }
@@ -850,12 +873,13 @@ fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Res
 /// Moves a conversation between this Mac and a work machine (`to`: "" this Mac, else a machine id), between two turns:
 /// its agent stops, its transcript goes along with the vault's paths rewritten (machines::rewrite), and the next
 /// message resumes the session there. A conversation that read mail stays on this Mac. What is only on one side (work
-/// not committed in a repo there) does not move.
+/// not committed in a repo there) does not move: back to this Mac, a repo there of the project it is `about` with work
+/// not pushed is refused first (machine_git::before_move), until `choice` says to push it or to move anyway.
 #[tauri::command]
-async fn move_conversation(app: AppHandle, key: String, to: String, mail: bool) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || move_to(&app, &key, &to, mail)).await.map_err(|e| e.to_string())?
+async fn move_conversation(app: AppHandle, key: String, to: String, mail: bool, about: Option<String>, choice: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || move_to(&app, &key, &to, mail, about.as_deref(), choice.as_deref())).await.map_err(|e| e.to_string())?
 }
-fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), String> {
+fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool, about: Option<&str>, choice: Option<&str>) -> Result<(), String> {
     let state = app.state::<App>();
     let sess = state.sids.lock().unwrap().get(key).cloned().ok_or_else(|| trc("err.move_no_session"))?;
     if !agents::get(&sess.provider).is_ok_and(|p| p.caps().remote) { return Err(trc("err.move_only_claude")); }
@@ -876,6 +900,11 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool) -> Result<(), Strin
     // this Mac's transcript folder for the session, on the account it was recorded on
     let here = || { let mut eb = env_of(app, &state, p); eb.opts["account"] = json!(sess.account); eb };
     let mac = [vault.clone(), format!("{}/.claude/projects/{}/memory", home(), agent_claude::slug(&vault))];
+    // work in a repo there stays there: asked about (or pushed) while the agent still runs, so nothing changed yet
+    if let (Some(b), true, Some(a)) = (&from, to.is_empty(), about) {
+        let m = find(&b.machine)?;
+        machine_git::before_move(&state.machines.client(&m), &m, &up(&m)?, &machine_git::project_repos(&vault, a), choice)?;
+    }
     // the agent stops first, so the transcript is complete; a failed move leaves the conversation where it was
     if let Some(mut x) = state.procs.lock().unwrap().remove(key) { x.child.kill().ok(); }
     let (data, roots) = match &from {
@@ -964,11 +993,12 @@ fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
     Value::Object(out)
 }
 
-/// The last few things a subagent wrote, read-only, from the tail of its transcript.
+/// A subagent's transcript from byte offset `from`, read-only: `{items, next}` like `history_sid`.
 #[tauri::command]
-fn agent_log(app: AppHandle, state: State<App>, key: String, id: String) -> Vec<String> {
-    let Some((p, sid)) = sid_of(&state, &key) else { return vec![] };
-    p.agent_log(&env_of(&app, &state, p).env(), &sid, &id)
+fn agent_history(app: AppHandle, state: State<App>, key: String, id: String, from: Option<u64>) -> Value {
+    let Some((p, sid)) = sid_of(&state, &key) else { return json!({"items": [], "next": 0}) };
+    let (items, next) = p.agent_history(&env_of(&app, &state, p).env(), &sid, &id, from.unwrap_or(0));
+    json!({"items": items, "next": next})
 }
 
 #[tauri::command]
@@ -1355,23 +1385,29 @@ fn repo_projects(vault: &str) -> HashMap<String, String> {
     out.retain(|_, p| !p.is_empty()); // "" in the config: unlinked on purpose
     out
 }
-/// repo -> note name, from the brain's index/repos.json. An entry is a checkout or a folder of checkouts,
-/// a checkout listed by itself wins over the same one found inside a listed folder.
-fn repo_index(vault: &str) -> HashMap<String, String> {
-    let mut out = HashMap::new();
+/// repo -> note name, from the brain's index/repos.json.
+fn repo_index(vault: &str) -> HashMap<String, String> { repo_checkouts(vault).into_iter().map(|(r, (_, n))| (r, n)).collect() }
+/// repo -> its checkout on this Mac and the note it belongs to, from the brain's index/repos.json.
+fn repo_checkouts(vault: &str) -> HashMap<String, (String, String)> {
     let Some(idx) = brain(vault).and_then(|b| fs::read_to_string(format!("{b}/index/repos.json")).ok())
-        .and_then(|s| serde_json::from_str::<serde_json::Map<String, Value>>(&s).ok()) else { return out };
+        .and_then(|s| serde_json::from_str::<serde_json::Map<String, Value>>(&s).ok()) else { return HashMap::new() };
     let named: Vec<(String, String)> = idx.iter().filter_map(|(d, n)| Some((d.clone(), n.as_str()?.rsplit('/').next()?.trim_end_matches(".md").to_string()))).collect();
-    for (d, n) in &named { if let Some(r) = gh_repo(d) { out.insert(r, n.clone()); } }
+    checkouts_in(&named)
+}
+/// An entry is a checkout or a folder of checkouts, a checkout listed by itself wins over the same one found inside a
+/// listed folder.
+fn checkouts_in(named: &[(String, String)]) -> HashMap<String, (String, String)> {
+    let mut out = HashMap::new();
+    for (d, n) in named { if let Some(r) = gh_repo(d) { out.insert(r, (d.clone(), n.clone())); } }
     // two levels down, not into a checkout: web-projecten keeps its sites in repos/<site>
-    fn scan(d: &str, depth: u8, n: &str, out: &mut HashMap<String, String>) {
-        if let Some(r) = gh_repo(d) { out.entry(r).or_insert_with(|| n.to_string()); return; }
+    fn scan(d: &str, depth: u8, n: &str, out: &mut HashMap<String, (String, String)>) {
+        if let Some(r) = gh_repo(d) { out.entry(r).or_insert_with(|| (d.to_string(), n.to_string())); return; }
         if depth == 0 { return; }
         for e in fs::read_dir(d).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())) {
             scan(&e.path().to_string_lossy(), depth - 1, n, out);
         }
     }
-    for (d, n) in &named { if gh_repo(d).is_none() { scan(d, 2, n, &mut out); } }
+    for (d, n) in named { if gh_repo(d).is_none() { scan(d, 2, n, &mut out); } }
     out
 }
 
@@ -1749,7 +1785,7 @@ async fn machine_status(state: State<'_, App>, id: String) -> Result<Value, Stri
     let r = tauri::async_runtime::spawn_blocking(move || c.info_any()).await.map_err(|e| e.to_string())?;
     let proto = relay_remote::proto::PROTO;
     Ok(match r {
-        Ok(i) if i.proto == proto => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os, "update": i.update}),
+        Ok(i) if i.proto == proto => json!({"ok": true, "host": i.host, "version": i.version, "os": i.os, "update": i.update, "repos": !i.repos.is_empty()}),
         // it answers but speaks another protocol: the page says which side to update, with the commands
         Ok(i) => json!({"ok": false, "outdated": if i.proto < proto { "server" } else { "app" }, "version": i.version, "update": i.update,
             "error": format!("relay-server {} speaks protocol {}, this Relay {proto}", i.version, i.proto)}),
@@ -2022,7 +2058,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_log, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import])
+        .invoke_handler(tauri::generate_handler![snapshot, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back
@@ -2054,6 +2090,23 @@ mod lang_tests {
     }
 }
 
+
+#[cfg(test)]
+mod index_tests {
+    use super::*;
+    #[test]
+    fn a_vault_with_its_own_index_script_runs_that_one() {
+        let dir = std::env::temp_dir().join(format!("relay-index-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (own, bundled) = (dir.join("build-index.py"), PathBuf::from("/app/build-index.py"));
+        assert_eq!(index_script(own.clone(), Some(bundled.clone())), None, "no script, nothing runs");
+        std::fs::write(&own, include_str!("../resources/default-vault/System/scripts/build-index.py")).unwrap();
+        assert_eq!(index_script(own.clone(), Some(bundled.clone())), Some(bundled.clone()), "a starter copy gets the app's");
+        std::fs::write(&own, "laatst = scalar(fm, \"laatst\", rel, warnings)\n").unwrap();
+        assert_eq!(index_script(own.clone(), Some(bundled)), Some(own), "an own script runs as is");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
 
 #[cfg(test)]
 mod machine_tests {
@@ -2107,6 +2160,23 @@ mod curl_tests {
 
 #[cfg(test)]
 mod github_tests {
+    #[test]
+    fn checkouts_are_found_by_their_origin() {
+        let d = std::env::temp_dir().join(format!("relay-checkouts-{}", std::process::id()));
+        let repo = |p: &str, url: &str| {
+            std::fs::create_dir_all(d.join(p).join(".git")).unwrap();
+            std::fs::write(d.join(p).join(".git/config"), format!("[core]\n\tbare = false\n[remote \"origin\"]\n\turl = {url}\n")).unwrap();
+        };
+        repo("shop", "git@github.com:Acme/Shop.git");
+        repo("sites/repos/blog", "https://github.com/acme/blog");
+        repo("sites/repos/shop-copy", "https://github.com/acme/shop");
+        let s = |p: &str| d.join(p).to_string_lossy().into_owned();
+        let found = super::checkouts_in(&[(s("sites"), "Sites".into()), (s("shop"), "Shop".into())]);
+        assert_eq!(found["acme/shop"], (s("shop"), "Shop".to_string()), "a checkout listed by itself wins");
+        assert_eq!(found["acme/blog"], (s("sites/repos/blog"), "Sites".to_string()), "two levels into a folder");
+        assert_eq!(found.len(), 2);
+        std::fs::remove_dir_all(d).ok();
+    }
     #[test]
     fn gh_slug_reads_every_remote_form() {
         assert_eq!(super::gh_slug("git@github.com:weareantenna/Weemaes-Backend.git").as_deref(), Some("weareantenna/weemaes-backend"));

@@ -186,6 +186,25 @@ impl Mirror {
         if let Some(s) = o.sealed.get_mut(root) { s.remove(rel); }
         Ok(())
     }
+    /// A small secret of a device (its GitHub token), sealed with its key like the blobs, in `<store>/<name>.secret`
+    /// with associated data of its own, so no root's blob opens as one. Reading or writing one needs the mirror open,
+    /// knowing that there is one does not.
+    fn secret_path(&self, ns: &str, name: &str) -> PathBuf { self.store(ns).join(format!("{name}.secret")) }
+    pub fn has_secret(&self, ns: &str, name: &str) -> bool { self.secret_path(ns, name).is_file() }
+    pub fn put_secret(&self, ns: &str, name: &str, data: &[u8]) -> Result<(), String> {
+        let g = self.open.lock().unwrap();
+        let o = g.get(ns).ok_or("mirror locked")?;
+        sync::write_atomic(&self.secret_path(ns, name), &seal(&o.key, format!("secret\0{name}").as_bytes(), data)?, None).map_err(|e| e.to_string())
+    }
+    /// None when there is none, an error when the mirror is locked or the secret does not open with this key.
+    pub fn get_secret(&self, ns: &str, name: &str) -> Result<Option<Vec<u8>>, String> {
+        let g = self.open.lock().unwrap();
+        let o = g.get(ns).ok_or("mirror locked")?;
+        let Ok(b) = fs::read(self.secret_path(ns, name)) else { return Ok(None) };
+        open(&o.key, format!("secret\0{name}").as_bytes(), &b).map(Some).ok_or_else(|| format!("{name}: unreadable"))
+    }
+    pub fn remove_secret(&self, ns: &str, name: &str) { fs::remove_file(self.secret_path(ns, name)).ok(); }
+
     /// Forget everything of a device here: store, working copy, key.
     pub fn wipe(&self, ns: &str) {
         self.open.lock().unwrap().remove(ns);
@@ -445,6 +464,29 @@ mod tests {
 
         m.wipe("dev");
         assert!(fs::symlink_metadata(&old).is_err(), "forget removes the link");
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn a_secret_is_sealed_needs_the_key_and_goes_with_a_wipe() {
+        let m = mirror("secret");
+        let token = b"gho_secretvalue0123456789";
+        assert!(m.put_secret("dev", "github", token).unwrap_err().contains("locked"));
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        assert_eq!(m.get_secret("dev", "github").unwrap(), None);
+        m.put_secret("dev", "github", token).unwrap();
+        assert!(m.has_secret("dev", "github"));
+        let on_disk = fs::read(m.store("dev").join("github.secret")).unwrap();
+        assert!(!on_disk.windows(token.len()).any(|w| w == token), "the token in plaintext on disk");
+        assert_eq!(m.get_secret("dev", "github").unwrap().as_deref(), Some(&token[..]));
+        // locked again (a restart): it is there, but does not open
+        m.open.lock().unwrap().clear();
+        assert!(m.has_secret("dev", "github"));
+        assert!(m.get_secret("dev", "github").unwrap_err().contains("locked"));
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        assert_eq!(m.get_secret("dev", "github").unwrap().as_deref(), Some(&token[..]));
+        m.wipe("dev");
+        assert!(!m.has_secret("dev", "github"));
         fs::remove_dir_all(m.data.parent().unwrap()).ok();
     }
 

@@ -14,7 +14,7 @@ mod tests;
 pub(crate) use account::{account_of, limit_key};
 pub(crate) use pipe::pipe_reply;
 
-use crate::{actions, agents, broker, commonwealth, cw_on, env_of, home, machines, mirror, need_vault, orch, provider_of, repo_projects, tr, trc, trc_v, ui_lang_of, App, EnvBuf};
+use crate::{actions, agents, broker, commonwealth, cw_on, env_of, home, machine_git, machines, mirror, need_vault, orch, provider_of, repo_projects, tr, trc, trc_v, ui_lang_of, App, EnvBuf};
 use agent_core::{AgentProvider, Image, Launch, Turn, IMAGE_TYPES};
 use plan::{Running, Step};
 use serde_json::{json, Value};
@@ -100,12 +100,17 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         // that machine's paths and its claude; no mail tools there, and the mode comes with the mirrored settings
         eb.opts["mail"] = json!(false);
         eb.opts["machine"] = json!(true);
+        // at its first start, the project's repo the page made ready there (machine_git.rs): the agent gets its folder
+        // and a line saying where it is. The conversation itself stays in the vault, so the vault's rules load
+        let repo = if resume.is_none() { machine_git::ready(project, &bind.machine) } else { None };
+        if let Some(r) = &repo { eb.opts["system"] = json!(machine_git::repo_line(eb.opts["system"].as_str(), r)); }
         let eb = EnvBuf { home: info.home.clone(), vault: bind.cwd.clone(), path: info.path.clone(), bin: info.claude.clone(), pending: PathBuf::from(&info.pending), opts: eb.opts };
         let mut cmd = p.command(&eb.env(), &l)?;
         cmd.current_dir(&bind.cwd).env("PATH", &info.path);
         // the mirror gives the session there what Claude Code here has: context, plugins, permissions, the vault's memory
         let (args, env) = mirror::session_args(&info, &bind.cwd);
         cmd.args(args).envs(env);
+        if let Some(r) = &repo { cmd.arg("--add-dir").arg(&r.path); }
         let c = state.machines.client(&m).launch(&meta, &broker::Spec::of(&cmd)).map_err(|e| format!("{} start ({}): {e}", p.id(), m["name"].as_str().unwrap_or("")))?;
         state.machines.set_bind(project, bind);
         (c, false, true)

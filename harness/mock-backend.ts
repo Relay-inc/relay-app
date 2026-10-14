@@ -54,7 +54,9 @@ let added = 0;
 let actionConfig = integ.actionConfig();
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
-const orchOn = fixture === "orch" || fixture === "orch-plain";
+const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty";
+// orch-empty: the orchestrator before its first task, no workers and an empty conversation
+const orchEmpty = fixture === "orch-empty";
 // Commonwealth installed, with one brain (the Brain view's tabs)
 const brainOn = fixture === "brain";
 // plugins (fixture "plugins"): the secrets in the keychain, per plugin id; the tools the example server has
@@ -74,7 +76,7 @@ const diceTools = [
     app: true,
   },
 ];
-let workers = orchOn ? structuredClone(orch.workers) : [];
+let workers = orchOn && !orchEmpty ? structuredClone(orch.workers) : [];
 
 // ---------- the event plugin: listeners by event, emitted synchronously (a real Tauri event is one task per event)
 const listeners = new Map<string, Set<number>>();
@@ -113,6 +115,9 @@ const voiceModels = [
 const scratch = new Map<string, { id: string; text: string; modified: number }[]>();
 let scratchId = 0;
 const NOW_S = Math.floor(NOW / 1000);
+// the machine's GitHub and repos (fixture "github"), changed by Disconnect, Connect and Push
+let github = structuredClone(vault.machineGit.github);
+const machineRepos = structuredClone(vault.machineGit.repos);
 
 // ---------- commands
 const thumb = `data:image/png;base64,${pngBase64(100, 100, "#dfe7f7", "#2f6fdb")}`;
@@ -221,6 +226,8 @@ function handle(cmd: string, a: Args): unknown {
     // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
     case "machine_status":
       if (fixture === "phone") return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
+      if (fixture === "github")
+        return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
       return {
         ok: false,
         outdated: "server",
@@ -239,10 +246,44 @@ function handle(cmd: string, a: Args): unknown {
     case "mirror_status":
     case "mirror_progress":
       return null;
+    // GitHub and the repos on the machine (fixture "github"): Disconnect, then Connect shows the code, typed 5 s later
+    case "machine_github":
+      return structuredClone(github);
+    case "machine_github_connect":
+      return structuredClone(vault.machineGit.device);
+    case "machine_github_poll":
+      github = structuredClone(vault.machineGit.github);
+      return structuredClone(github);
+    case "machine_github_disconnect":
+      github = { ...github, state: "off", login: "", since: "", name: "", email: "" };
+      return null;
+    case "machine_repos":
+      return structuredClone(machineRepos);
+    case "machine_repo_push":
+    case "machine_repo_ensure": {
+      const repo = machineRepos.find(r => r.name === a.name || r.repo === a.repo) ?? null;
+      if (repo && cmd === "machine_repo_push") repo.unpushed = 0;
+      return structuredClone(repo);
+    }
+    // back to this Mac from the machine (fixture "github"): harbor-crm has work there, until pushed or moved anyway
+    case "move_conversation":
+      if (fixture !== "github" || a.to !== "" || a.choice) return null;
+      return Promise.reject(
+        `repo-work:${JSON.stringify({ repo: "acme/harbor-crm", name: "harbor-crm", branch: "relay/server", machine: "Server" })}`,
+      );
+    case "machine_repo_to_mac":
+      return new Promise(resolve =>
+        setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
+      );
+    case "host_status": // fixture "github": a development build, This Mac cannot be a machine
+      return fixture === "github" ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] } : null;
     case "machines_list":
-      return [];
+      return fixture === "github" ? [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }] : [];
+    // fixture "github": the Harbor CRM conversation that asks a question runs on Server
     case "chat_machines":
-      return {};
+      return fixture === "github"
+        ? { [conv.QUESTION_KEY]: { machine: "Server", id: "a1b2c3d4e5f6", cwd: "/home/relay/vault" } }
+        : {};
 
     // settings, language, vault
     case "get_settings":
@@ -377,6 +418,7 @@ function handle(cmd: string, a: Args): unknown {
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
+      if (orchEmpty && a.project === orch.ORCH) return [];
       return (orchOn && orch.history(a.project)) || conv.history(a.project);
     // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
     case "orch_workers":
@@ -418,6 +460,33 @@ function handle(cmd: string, a: Args): unknown {
       if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
       return null;
     }
+    // a question answered (kept on the worker), a silent worker asked for its report, one started again
+    case "orch_answer": {
+      const worker = workers.find(w => w.key === a.key);
+      if (worker) worker.answer = a.answer;
+      if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return worker ? structuredClone(worker) : null;
+    }
+    case "orch_ask_report": {
+      const worker = workers.find(w => w.key === a.key);
+      if (worker) Object.assign(worker, { state: "running", ended: null });
+      if (worker) setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return null;
+    }
+    case "orch_restart": {
+      const old = workers.find(w => w.key === a.key)!;
+      const worker = {
+        ...structuredClone(old),
+        key: `${old.key}r`,
+        state: "running",
+        at: Date.now(),
+        ended: null,
+        report: null,
+      };
+      workers.push(worker);
+      setTimeout(() => emit("orch", { type: "worker", worker: structuredClone(worker) }), 0);
+      return structuredClone(worker);
+    }
     case "orch_pr":
       return structuredClone(prStatus);
     case "orch_board": {
@@ -436,8 +505,10 @@ function handle(cmd: string, a: Args): unknown {
           .filter(k => k in conv.subagents)
           .map(k => [k, conv.subagents[k as keyof typeof conv.subagents]]),
       );
-    case "agent_log":
-      return conv.agentLog(a.id);
+    case "agent_history": {
+      const items = conv.agentHistory(a.id);
+      return (a.from ?? 0) === 0 ? { items, next: items.length ? 4096 : 0 } : { items: [], next: a.from };
+    }
     case "pending":
       return pending;
     case "answer":

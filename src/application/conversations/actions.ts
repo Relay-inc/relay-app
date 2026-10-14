@@ -8,6 +8,7 @@ import { WAIT } from "../../domain/navigation/views";
 import { isTerminal, termSid } from "../../domain/navigation/keys";
 import { ORCH } from "../../domain/orchestrator/rules";
 import type { Settings } from "../../domain/settings/types";
+import { repoWorkOf } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useNavigationStore } from "../navigation/store";
@@ -25,6 +26,7 @@ import {
   displayTitle,
   label,
   machineChoice,
+  machineRepo,
   projectOf,
   selectedProject,
   terminalOf,
@@ -213,6 +215,7 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       throw new Error("This command does not accept attachments.");
     // ponytail: a machine cannot read this Mac's paths; upload the files over the connection when that is needed
     if (files.length && machineChoice(key).value) throw new Error(t("file.remote"));
+    await readyRepo(key);
     await backend.send({
       project: key,
       // attached files go as their paths after the message: the agent reads them where they are
@@ -246,6 +249,23 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       draft.status[key] = draft.queued[key] ? "busy" : "idle";
     });
   }
+}
+// The first start on a machine of a conversation whose project has a repo: that repo is cloned there, or fetched, before
+// the message goes (a clone may take minutes), and its start gives the agent the folder. Once per conversation and run,
+// a message sent meanwhile waits for the same. A failure only leaves a note: the conversation starts without the repo.
+const readied = new Map<string, Promise<void>>();
+function readyRepo(key: string) {
+  const work = machineRepo(key);
+  if (!work || work.started || cs().chats[key]?.fork) return readied.get(key);
+  if (!readied.has(key))
+    readied.set(
+      key,
+      backend.machineRepoEnsure(work.id, key, work.slug).then(
+        () => {},
+        error => note(key, t("note.repoNotReady", { repo: work.repo, machine: work.machine, error: String(error) })),
+      ),
+    );
+  return readied.get(key);
 }
 // what is typed in the open conversation leaves the composer
 function takeTyped() {
@@ -302,21 +322,42 @@ export function setAgent(id: string) {
   saveChats();
 }
 /** Moves the open conversation, between two turns, to another place: "" this Mac, or a machine id. Its next message
- *  goes on there; a note says where it went, or the error why it did not. */
-export async function moveConversation(to: string) {
+ *  goes on there; a note says where it went, or the error why it did not. Back to this Mac with repo work left on the
+ *  machine, a bar asks first (`answerRepoWork`); `choice` is that answer. */
+export async function moveConversation(to: string, choice: "push" | "move" | null = null) {
   const key = selected();
   const conversation = cs().chats[key];
   if (!conversation) return;
   const place = to ? (cs().machineList.find(machine => machine.id === to)?.name ?? to) : t("composer.thisMac");
   try {
-    await backend.moveConversation(key, to, !!conversation.fromMail);
+    await backend.moveConversation(key, to, !!conversation.fromMail, conversation.project, choice);
     note(key, t("note.movedTo", { name: place }));
   } catch (error) {
+    const work = repoWorkOf(error);
     set(draft => {
-      push(draft, key, { kind: "err", text: String(error) });
+      if (work) draft.repoWork[key] = { ...work, to };
+      else push(draft, key, { kind: "err", text: String(error) });
     });
   }
   await pollAgents();
+}
+/** The bar's answer for the open conversation: push the repo work to its branch and move, move anyway, or (null) stay. */
+export async function answerRepoWork(choice: "push" | "move" | null) {
+  const key = selected();
+  const work = cs().repoWork[key];
+  if (!work || !choice)
+    return set(draft => {
+      delete draft.repoWork[key];
+    });
+  // the bar waits while the work is pushed and the conversation moves
+  set(draft => {
+    draft.repoWork[key].busy = true;
+  });
+  await moveConversation(work.to, choice);
+  // moved, or failed with the error under the log: the bar goes, unless the move was refused again (a new bar)
+  set(draft => {
+    if (draft.repoWork[key]?.busy) delete draft.repoWork[key];
+  });
 }
 /** Where the open conversation is to run, before it starts: "" this Mac, or a machine id. */
 export function setMachine(id: string) {
@@ -594,19 +635,6 @@ export async function saveProjectPanel(project: string | null, fields?: ProjectF
 }
 
 // ---------- the agents of the open conversation, above the composer
-/** A click on an agent unfolds its last messages, a second click folds them. */
-export async function toggleSubLog(id: string) {
-  if (cs().subLog[id]) {
-    set(draft => {
-      delete draft.subLog[id];
-    });
-    return;
-  }
-  const log = await backend.agentLog(selected(), id);
-  set(draft => {
-    draft.subLog[id] = log;
-  });
-}
 /** The finished agents of the open conversation, folded away or shown. */
 export function toggleSubsDone() {
   const key = selected();

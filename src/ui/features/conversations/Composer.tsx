@@ -15,8 +15,10 @@ import { insertDictated } from "../../../domain/conversations/dictation";
 import { isShortcut, shortcutCode, shortcutLabel, voiceOf } from "../../../domain/settings/voice";
 import { useSettingsStore } from "../../../application/settings/store";
 import { useNavigationStore } from "../../../application/navigation/store";
+import { ORCH } from "../../../domain/orchestrator/rules";
+import { projectName as plainProject } from "../../../application/workspace/vault";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
-import { chatBar, commandsOf, machineChoice } from "../../../application/conversations/selectors";
+import { chatBar, commandsOf, machineChoice, machineRepo } from "../../../application/conversations/selectors";
 import {
   attach,
   attachPaths,
@@ -158,6 +160,9 @@ function ContextUse() {
 export function Composer({ className }: { className: string }) {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
+  // in the orchestrator the composer talks to the coordinator or the open worker: their model is set, nothing to pick
+  const workerPage = useNavigationStore(s => s.orchDetail);
+  const inOrchestrator = selected === ORCH || workerPage;
   const typed = useDraftsStore(s => s.typed[selected] ?? "");
   const attached = useDraftsStore(s => s.attached);
   const files = useDraftsStore(s => s.files);
@@ -191,6 +196,8 @@ export function Composer({ className }: { className: string }) {
   // where the conversation runs or is to start: the machines are asked every few seconds while it shows
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
+  // the repo the agent gets on that machine, next to the pick
+  const repoThere = useDerived(() => machineRepo(selected));
   const [moving, setMoving] = useState(false);
   useEffect(() => {
     if (!hasChat) return;
@@ -294,13 +301,26 @@ export function Composer({ className }: { className: string }) {
       <Icon name="down" className="glyph size-2.75 stroke-2" />
     </span>
   );
+  // "<repo> · on <machine>": no click, the agent works in that repo there
+  const repoChip = repoThere ? (
+    <span
+      className="ml-1 px-1.5 py-0.5 rounded-md bg-fill-2 text-xs text-secondary whitespace-nowrap"
+      title={t("composer.repoChipHelp", { repo: repoThere.slug })}
+    >
+      {t("composer.repoChip", { repo: repoThere.repo, name: repoThere.machine })}
+    </span>
+  ) : null;
   const agent = view.agent;
   const showEffort = !agent || (agent.caps.effort && agent.efforts.length > 0);
   const placeholder = view.terminal
     ? t("ph.term")
-    : view.projectName
-      ? t("ph.project", { name: view.projectName })
-      : t("ph.general");
+    : selected === ORCH
+      ? t("orch.ph.coord")
+      : workerPage
+        ? t("orch.ph.worker", { name: plainProject(view.projectName) })
+        : view.projectName
+          ? t("ph.project", { name: view.projectName })
+          : t("ph.general");
   return (
     <div className={`relay-composer flex-none ${className}`}>
       <div
@@ -408,7 +428,7 @@ export function Composer({ className }: { className: string }) {
             <Icon name="add" className="glyph size-4" />
           </button>
           {/* with one agent there is nothing to pick */}
-          {view.agents.length > 1 && !isTerminal(selected) && !agentFixed ? (
+          {view.agents.length > 1 && !isTerminal(selected) && !agentFixed && !inOrchestrator ? (
             <>
               <PickMenu
                 pill
@@ -449,6 +469,7 @@ export function Composer({ className }: { className: string }) {
                   setMoving(false);
                 }}
               />
+              {repoChip}
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : machine ? (
@@ -456,11 +477,12 @@ export function Composer({ className }: { className: string }) {
               <span className="px-1.5 text-xs text-secondary whitespace-nowrap" title={t("composer.onMachineHelp")}>
                 {t("composer.onMachine", { name: machine })}
               </span>
+              {repoChip}
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
-          {pick("model", true)}
-          {pick("effort", showEffort)}
+          {inOrchestrator ? null : pick("model", true)}
+          {inOrchestrator ? null : pick("effort", showEffort)}
           <ContextUse />
           <span className="flex-1"></span>
           {/* dictates, or stops dictating; the ring grows with the voice */}

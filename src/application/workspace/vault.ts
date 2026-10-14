@@ -23,6 +23,8 @@ const ws = () => useWorkspaceStore.getState();
 export const project = (name: string | null) => (name ? ws().snap.projects.find(x => x.name === name) : undefined);
 /** How a project is shown: its own icon and name from the settings, else the note name; "Algemeen" for none. */
 export const projectLabel = (name: string | null) => labelOf(name, settings(), ws().icons, t("general"));
+/** The project's name without its icon, where a crab already marks the row (the orchestrator's workers). */
+export const projectName = (name: string | null) => (name ? settings().projects[name]?.label || name : t("general"));
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>
   ws()

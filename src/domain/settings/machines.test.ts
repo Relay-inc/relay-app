@@ -8,6 +8,9 @@ import {
   setupCommands,
   SETUP_FOLDERS,
   newerVersion,
+  repoState,
+  repoWorkOf,
+  snapshotBranch,
 } from "./machines.ts";
 
 const list = [
@@ -80,4 +83,25 @@ test("versions compare by number, not as text", () => {
   assert.ok(newerVersion("0.0.5", "0.0.4"));
   assert.ok(!newerVersion("0.0.4", "0.0.4"));
   assert.ok(!newerVersion("0.0.4", "0.1.0"));
+});
+
+test("a repo's state: commits not pushed, work not committed, or clean", () => {
+  assert.deepEqual(repoState({ dirty: false, unpushed: 0 }), [{ key: "mc.repoClean" }]);
+  assert.deepEqual(repoState({ dirty: false, unpushed: 2 }), [{ key: "mc.repoUnpushed", n: 2 }]);
+  assert.deepEqual(repoState({ dirty: true, unpushed: 1 }), [
+    { key: "mc.repoUnpushed", n: 1 },
+    { key: "mc.repoDirty" },
+  ]);
+});
+test("a machine's snapshot branch is its name as a slug, as the backend makes it", () => {
+  assert.equal(snapshotBranch("Server", "a1b2"), "relay/server");
+  assert.equal(snapshotBranch("  My Server 2 ", "a1b2"), "relay/my-server-2");
+  assert.equal(snapshotBranch("NAS / Büro", "a1b2"), "relay/nas-b-ro");
+  assert.equal(snapshotBranch("--", "a1b2"), "relay/a1b2");
+});
+test("a refused move names the repo work it would leave behind", () => {
+  const work = { repo: "acme/shop", name: "shop", branch: "relay/server", machine: "Server" };
+  assert.deepEqual(repoWorkOf(`repo-work:${JSON.stringify(work)}`), work);
+  assert.equal(repoWorkOf("Work machine unreachable: timeout"), null);
+  assert.equal(repoWorkOf("repo-work:{broken"), null);
 });

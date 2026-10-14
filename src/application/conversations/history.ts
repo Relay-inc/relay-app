@@ -129,3 +129,9 @@ export async function tailOutside(key: string) {
     if (added.length) draft.messages[key].push(...added);
   });
 }
+
+/** A subagent's transcript from byte offset `from` as items, and where to continue (its page follows it). */
+export async function readAgent(key: string, id: string, from: number) {
+  const transcript = await backend.agentHistory(key, id, from);
+  return { items: toItems(transcript.items, imageUrl, t), next: transcript.next };
+}

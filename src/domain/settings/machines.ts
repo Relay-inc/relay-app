@@ -1,4 +1,4 @@
-import type { MachineChoice } from "./types";
+import type { MachineChoice, MachineRepo } from "./types";
 
 /** Where a new conversation runs, as the composer's pick shows it: "" this Mac, else a machine id. The user's pick
  *  while that machine is still paired, else the default machine, else this Mac; always this Mac when only this Mac
@@ -100,4 +100,38 @@ export function setupCommands(image: string, version: string, folder: string, pl
     pair: `docker exec relay-server relay-server pair --host "${LAN_ADDRESS[platform]}"`,
     update: `docker pull ${image}:${version}\ndocker rm -f relay-server\n${run}`,
   };
+}
+
+/** What a repo on a machine holds that is not on GitHub, as the parts of its label: the commits not pushed (`n`) and
+ *  work not committed, or clean. */
+export function repoState({ dirty, unpushed }: Pick<MachineRepo, "dirty" | "unpushed">) {
+  const parts: ({ key: "mc.repoUnpushed"; n: number } | { key: "mc.repoDirty" | "mc.repoClean" })[] = [];
+  if (unpushed > 0) parts.push({ key: "mc.repoUnpushed", n: unpushed });
+  if (dirty) parts.push({ key: "mc.repoDirty" });
+  return parts.length ? parts : [{ key: "mc.repoClean" as const }];
+}
+
+/** The branch a machine's work goes to on GitHub, as the backend makes it: `relay/` and the machine's name in lowercase,
+ *  every run of other characters one "-". A name without a letter or digit uses the machine's id. */
+export function snapshotBranch(name: string, id: string) {
+  const slug = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return `relay/${slug || id}`;
+}
+
+/** Repo work on a machine that a move back to this Mac would leave behind: the folder there, its owner/repo, the
+ *  machine's name and the branch Push and move puts it on. */
+export type RepoWork = { repo: string; name: string; branch: string; machine: string };
+/** The repo work a refused move names (the backend's "repo-work:" error), or null for any other error. */
+export function repoWorkOf(error: unknown): RepoWork | null {
+  const text = String(error);
+  if (!text.startsWith("repo-work:")) return null;
+  try {
+    const work = JSON.parse(text.slice("repo-work:".length)) as RepoWork;
+    return typeof work.repo === "string" && typeof work.branch === "string" ? work : null;
+  } catch {
+    return null;
+  }
 }

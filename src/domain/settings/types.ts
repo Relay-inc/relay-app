@@ -67,6 +67,23 @@ export type MachineStatus = {
   error?: string;
   outdated?: "server" | "app"; // it answers but speaks another protocol: the side to update
   update?: boolean; // it takes an update from Relay (machine_update), not Relay on a Mac
+  repos?: boolean; // it clones repos and connects to GitHub, false for a relay-server from before that
+};
+/** GitHub on a machine (`machine_github`). `state`: off, pending (a code waits to be typed), on, locked (a token, but
+ *  the mirror's key is not there yet), expired, denied or error (with `error`). `since`: YYYY-MM-DD. `name` and `email`:
+ *  what the machine's commits say. */
+export type MachineGithub = { state: string; login: string; since: string; name: string; email: string; error: string };
+/** Connecting a machine to GitHub: type `user_code` at `verification_uri` before `expires_in` s, asked every `interval` s. */
+export type DeviceCode = { user_code: string; verification_uri: string; expires_in: number; interval: number };
+/** A repo on a machine: its folder `name`, `repo` the owner/repo of its origin, the branch checked out, whether it has
+ *  work not committed and how many commits are not pushed. */
+export type MachineRepo = {
+  name: string;
+  path: string;
+  repo: string;
+  branch: string;
+  dirty: boolean;
+  unpushed: number;
 };
 /** What `server_setup` gives for setting up a machine: this Relay's version and the relay-server image. */
 export type ServerSetup = { version: string; image: string; dev?: boolean }; // dev: a development build, version "latest"
