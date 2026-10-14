@@ -31,6 +31,7 @@ import { Todos } from "./Todos";
 import { MoveBar } from "./MoveBar";
 import { RetryBar } from "./RetryBar";
 import { RepoBar } from "./RepoBar";
+import { RepoWorkBar } from "./RepoWorkBar";
 import { Composer } from "./Composer";
 import { NewReminder } from "./NewReminder";
 import { UsageReload } from "../usage/UsageReload";
@@ -224,6 +225,7 @@ export function ConversationsView({ className }: { className: string }) {
         </div>
       ) : null}
       <RepoBar className={column} />
+      <RepoWorkBar className={column} />
       <RetryBar className={column} />
       <MoveBar className={column} session={bar.session} asked={asked} />
       {onView ? null : <Composer className={`${column} mt-2 ${orchHint ? "mb-1.5" : "mb-4.5"}`} />}

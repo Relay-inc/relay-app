@@ -37,7 +37,8 @@ stops, as a tmpfs does on Linux.
 
 1. Install Claude Code on this machine and log in with your own account: `claude`, then `/login`. Relay never sends
    your login anywhere, this machine has its own.
-2. Optional: clone repos you want Claude to work in here, outside `~/Documents` on a Mac (see below).
+2. Repos live in `~/repos` (or `RELAY_SERVER_REPOS`), outside `~/Documents` on a Mac (see below). Relay clones them
+   there once the machine is connected to GitHub.
 3. Build and run: `cargo build --release -p relay-server`, then `target/release/relay-server serve` (on a Mac with
    `--ram-disk`).
 4. Keep it running: `relay-server service` prints a LaunchAgent (Mac) or a systemd user unit (Linux) with the steps.
@@ -73,9 +74,8 @@ image: the first start installs it with Anthropic's installer into the `.local` 
    `docker logs relay-server` shows Claude Code being installed, then `listening on 0.0.0.0:47800`.
 4. Log in to Claude once: `docker exec -it relay-server claude`, then `/login` (it shows a URL to open on your laptop).
    The login stays in the `claude` folder.
-5. Optional: clone repos into `repos`, e.g. `docker exec relay-server git clone <url> /home/relay/repos/<name>`. Private
-   repos need a deploy key or a token inside the container. A conversation starts in the vault's mirror, Claude can
-   work in a repo there when you point it at the folder.
+5. Repos go in `repos` (`/home/relay/repos`). Relay clones them there once the machine is connected to GitHub (see
+   GitHub below). A repo cloned there by hand shows up as well.
 6. Pair: `docker exec relay-server relay-server pair --host 192.168.1.2` with the server's LAN address. Inside a
    container the server cannot see that address itself.
 
@@ -182,6 +182,28 @@ What moves is the conversation. Files that exist on one side only stay there: wo
 note in a folder the mirror leaves out. A conversation that read mail stays on this Mac. Subagents' transcripts and the
 terminal's history do not move.
 
+## GitHub
+
+Settings › Machines › GitHub connects a machine to GitHub for the laptop that asks: the server starts GitHub's device
+flow, Relay shows the 8-character code, you type it on github.com. Only that code passes through Relay, the token
+(scope `repo read:user`) goes straight from GitHub to the server. The approval page on GitHub names Relay, the OAuth
+app of Relay-inc. `RELAY_GITHUB_CLIENT_ID` points a server at another app.
+
+- **Sealed per laptop.** The token is sealed with that laptop's mirror key, in `data/mirror/<device>/github.secret`.
+  After a restart it is locked like the vault and works again once Relay on the laptop connects. Forget and revoke
+  delete it, Disconnect too (it stays valid on GitHub until you revoke it there).
+- **A credential helper, no variable.** While unlocked a plain copy sits in the working copy (`work/<device>/.github`,
+  in RAM). Every agent of that laptop and the server's own git get `relay-server git-credential <that file>` as the
+  only credential helper for `https://github.com`, and `Relay (<host>)` with `<login>@users.noreply.github.com` as
+  the commit identity, through `GIT_CONFIG_*`. A conversation that was already running gets them at its next start.
+- **The repos folder** is `RELAY_SERVER_REPOS`, else `~/repos` (`/home/relay/repos` in Docker), a folder per repo. Relay
+  clones `https://github.com/<owner>/<repo>` there (a fetch when it is there already, a refusal when the folder holds
+  another origin), lists each repo's branch, changes and commits not pushed, and pushes the branch checked out.
+- **Snapshots.** To bring work to the laptop, the server puts everything in a repo (commits, changes, new files, not
+  what `.gitignore` leaves out) in one commit on top of HEAD, built in an index of its own so the working tree and the
+  index stay as they are, and force-pushes it to `relay/<machine>`.
+- A linked device (a phone) can do none of this.
+
 ## Commands
 
 | Command | What it does |
@@ -193,6 +215,7 @@ terminal's history do not move.
 | `relay-server service` | A service file that keeps `serve` running |
 | `relay-server info` | This server's fingerprint and data folder |
 | `relay-server version` | This binary's version, the same as Relay's |
+| `relay-server git-credential <file> <get\|store\|erase>` | Git's credential helper for github.com, set by the server for its agents |
 
 ## Files
 
@@ -205,6 +228,7 @@ In `~/Library/Application Support/relay-server` (Mac) or `~/.local/share/relay-s
 | `pairing.json` | The open pairing code, while there is one |
 | `serve.json` | The port the running server listens on |
 | `pending/<device>/` | Open permission cards, per device |
+| `mirror/<device>/` | The device's sealed mirror and GitHub token |
 
 The agents' transcripts are Claude Code's own, in `~/.claude/projects/` (sealed for conversations in the vault, see The
 mirror). The brokers' sockets are in

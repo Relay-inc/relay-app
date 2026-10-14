@@ -9,9 +9,10 @@
 //! machine's pending folder, from before that, are listed and answered on request.
 //!
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
-//! port the running server listens on), pending/.
+//! port the running server listens on), pending/, and per device its sealed mirror and GitHub token (mirror/<device>/).
 
 pub mod cli;
+pub mod github;
 pub mod mirror;
 #[cfg(target_os = "macos")]
 pub mod ramdisk;
@@ -101,7 +102,7 @@ fn open_pairing_for(data: &Path, parent: Option<&str>) -> io::Result<String> {
     Ok(secret)
 }
 
-fn write_private(path: &Path, text: &str) -> io::Result<()> {
+pub(crate) fn write_private(path: &Path, text: &str) -> io::Result<()> {
     use std::os::unix::fs::OpenOptionsExt;
     if let Some(d) = path.parent() { fs::create_dir_all(d)?; }
     let tmp = path.with_extension("tmp");
@@ -135,14 +136,14 @@ pub fn info(data: &Path, path: &str) -> Info {
     });
     Info { host: hostname(), os: std::env::consts::OS.into(), version: env!("CARGO_PKG_VERSION").into(), proto: PROTO, home, path: path.into(), claude,
         pending: data.join("pending").to_string_lossy().into(),
-        arch: std::env::consts::ARCH.into(), update: upgrade::CAN, ..Default::default() }
+        arch: std::env::consts::ARCH.into(), update: upgrade::CAN, repos: github::repos_dir().to_string_lossy().into(), ..Default::default() }
 }
 
 // ---------- serving
 
 /// `attached`: per conversation, how many devices follow it now (no notification then); `watching`: the conversations
 /// the server follows itself; `sids`: the Claude session of each, for a device that joins after it started (a phone).
-pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>,
+pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>, github: Arc<github::Hub>,
     attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>>,
     titles: Mutex<HashMap<String, String>> }
 
@@ -151,7 +152,9 @@ impl Server {
         fs::create_dir_all(data.join("pending"))?;
         fs::remove_file(data.join("perm_server.py")).ok(); // the Python tool of before
         let id = identity(data)?;
-        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info: info(data, &login_path()), mirror: mirror::Mirror::new(data),
+        let (info, mirror) = (info(data, &login_path()), mirror::Mirror::new(data));
+        let github = github::Hub::new(mirror.clone(), &info.host);
+        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info, mirror, github,
             attached: Mutex::default(), watching: Mutex::default(),
             sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()),
             titles: Mutex::default() })
@@ -204,7 +207,8 @@ impl Server {
             "pair" => { let res = self.pair(&fp, &req); if res.is_ok() { eprintln!("relay-server: paired {} ({peer})", req["name"]); } reply(&mut w, res) }
             "info" => reply(&mut w, Ok(json!({"info": Info { pending: pending.to_string_lossy().into(), work: self.mirror.work_of(ns).to_string_lossy().into(),
                 mirror_open: self.mirror.is_open(ns), in_ram: self.mirror.in_ram, ..self.info.clone() }}))),
-            "unlock" => reply(&mut w, self.mirror.unlock(ns, req["key"].as_str().unwrap_or("")).map(|_| json!({"in_ram": self.mirror.in_ram}))),
+            // the GitHub token's RAM copy comes back with the rest of the working copy
+            "unlock" => reply(&mut w, self.mirror.unlock(ns, req["key"].as_str().unwrap_or("")).map(|_| { self.github.materialise(ns); json!({"in_ram": self.mirror.in_ram}) })),
             "sync_manifest" => reply(&mut w, self.mirror.manifest(ns, req["root"].as_str().unwrap_or("")).map(|m| json!({"manifest": m}))),
             "sync_get" => match self.mirror.get(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or("")) {
                 Ok(b) => { proto::write_json(&mut w, &json!({"ok": true, "len": b.len()}))?; w.write_all(&b)?; w.shutdown(); Ok(()) }
@@ -243,6 +247,15 @@ impl Server {
                 if ok { let data = self.data.clone(); thread::spawn(move || { thread::sleep(Duration::from_millis(300)); upgrade::restart(&data) }); }
                 Ok(())
             }
+            // GitHub there (github.rs), not from a linked device: the token, and the repos cloned with it
+            "github_status" => reply(&mut w, Ok(json!({"github": self.github.status(ns)}))),
+            "github_login_start" => reply(&mut w, self.github.login_start(ns).map(|d| json!({"device": d}))),
+            "github_login_poll" => reply(&mut w, Ok(json!({"github": self.github.login_poll(ns)}))),
+            "github_logout" => { self.github.logout(ns); reply(&mut w, Ok(json!({}))) }
+            "repos" => reply(&mut w, Ok(json!({"repos": self.github.repos()}))),
+            "repo_ensure" => reply(&mut w, self.github.ensure(ns, req["repo"].as_str().unwrap_or("")).map(|r| json!({"repo": r}))),
+            "repo_push" => reply(&mut w, self.github.push(ns, req["name"].as_str().unwrap_or("")).map(|r| json!({"repo": r}))),
+            "repo_snapshot" => reply(&mut w, self.github.snapshot(ns, req["name"].as_str().unwrap_or(""), req["branch"].as_str().unwrap_or("")).map(|s| json!({"snapshot": s}))),
             "list" => {
                 let metas = metas(ns);
                 let sids = self.sids.lock().unwrap();
@@ -422,6 +435,8 @@ impl Server {
         // the server's own Claude config folder wins: the laptop's (a path there, or removed for ~/.claude) would send
         // Claude here to ~/.claude.json, outside the volume, gone with every new container
         spec.env.retain(|(k, _)| k != "CLAUDE_CONFIG_DIR");
+        // git with this device's GitHub token: the credential helper and the commit identity, never the token itself
+        for (k, v) in self.github.agent_env(ns) { spec.env.retain(|(x, _)| *x != k); spec.env.push((k, Some(v))); }
         if spec.cwd.as_deref().is_some_and(|d| Path::new(d).starts_with(self.mirror.work_of(ns))) && !self.mirror.is_open(ns) {
             return bang(&mut w, &format!("the vault on {} is locked: it opens when Relay on your laptop connects", self.info.host));
         }
@@ -466,7 +481,7 @@ impl Drop for Attached<'_> {
 }
 
 /// A conversation key in a URL path: letters, digits and -._~ as they are, every other byte as %XX.
-fn percent(s: &str) -> String {
+pub(crate) fn percent(s: &str) -> String {
     s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-._~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
 }
 

@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Added
 
 - **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from (#203)
+- **GitHub on a work machine**: Settings › Machines connects a machine to GitHub with a code you type on github.com, and lists its repos with what is not pushed, Push, and To Mac (the work lands on `relay/<machine>` in your checkout here, nothing is checked out). A conversation on a machine about a project with a repo gets that repo there, cloned at its first message, and the composer shows which one. Moving it back to this Mac with work not pushed asks first: push it to `relay/<machine>` and move, or move anyway (#217)
 
 ### Changed
 

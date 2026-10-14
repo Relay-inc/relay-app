@@ -107,6 +107,45 @@ const VIEWS = {
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
+  // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
+  // not committed
+  "settings-machines-github": async () => {
+    await settingsPage("Machines", null, "github");
+    await waitText("Connected as octo-demo");
+    await waitText("2 commits not pushed");
+    await intoView("Repos on Server");
+  },
+  // the same after Disconnect and Connect GitHub: the code to type on GitHub, waiting for it
+  "settings-machines-github-code": async () => {
+    await settingsPage("Machines", null, "github");
+    await waitText("Connected as octo-demo");
+    await button("Disconnect").click();
+    await button("Disconnect").click();
+    await waitText("Not connected");
+    await button("Connect GitHub").click();
+    await waitText("ABCD-1234");
+    await intoView("Waiting for GitHub…");
+  },
+  // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
+  // "harbor-crm · on Server" next to the control (PR #217)
+  "composer-repo-chip": async () => {
+    await open(page, server.url, { fixture: "github" });
+    await byText(page, "Harbor CRM").hover();
+    await page.getByRole("button", { name: "New conversation about Harbor CRM", exact: true }).click();
+    await settle(page);
+    await page.getByRole("button", { name: "Runs on" }).locator("visible=true").first().click();
+    await click("Server");
+    await waitText("harbor-crm · on Server");
+  },
+  // a started Harbor CRM conversation that runs on Server, moved to This Mac while harbor-crm has work there that is
+  // not pushed: the bar with Push and Move anyway (PR #217)
+  "conversation-repo-work": async () => {
+    await open(page, server.url, { fixture: "github", sel: keys.question });
+    await waitText(titles.question);
+    await page.getByRole("button", { name: "Runs on" }).locator("visible=true").first().click();
+    await click("This Mac");
+    await waitText("has work on Server that is not pushed");
+  },
   waiting: async () => {
     await open(page, server.url);
     await waitText(titles.permission);
