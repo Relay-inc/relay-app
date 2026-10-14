@@ -24,3 +24,11 @@ test("one PR names its files by path, several by PR and path", () => {
   assert.equal(nameOf(f, [pr(2)]), "src/a.ts");
   assert.equal(nameOf(f, [pr(1), pr(2)]), "acme/web#2/src/a.ts");
 });
+
+test("the text stays inside the max it is given, so every counted file is sent", () => {
+  const prs = [pr(1), pr(2)];
+  const files = [1, 2, 3, 4, 5, 6].flatMap(i => [file("u1", `a${i}.ts`, 4000), file("u2", `b${i}.ts`, 4000)]);
+  const { text, read } = reviewText(prs, [], files, 20_000);
+  assert.ok(text.length <= 20_000);
+  assert.equal([...text.matchAll(/\n--- /g)].length, read);
+});
