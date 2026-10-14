@@ -171,6 +171,19 @@ export function chatBar(key: string) {
       : null,
   };
 }
+/** The repo a conversation works in on a machine: its project's first repo, while it runs or is to start on a
+ *  machine (`id`, named `machine`). Null on this Mac or for a project without repos. */
+export function machineRepo(key: string) {
+  const project = cs().chats[key]?.project;
+  const slug = project ? usePullRequestsStore.getState().repos[project]?.[0] : undefined;
+  if (!slug) return null;
+  const where = machineChoice(key);
+  const bound = cs().machines[key];
+  const id = where.started ? bound?.id : where.value;
+  if (!id) return null;
+  const machine = (where.started ? bound?.machine : where.list.find(choice => choice.id === id)?.name) ?? id;
+  return { slug, repo: slug.split("/").pop()!, id, machine, started: where.started };
+}
 /** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
  *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
  *  it where it runs: picking another place then moves it (`moveConversation`). */

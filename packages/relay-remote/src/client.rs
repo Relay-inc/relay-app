@@ -3,7 +3,7 @@
 //! a few milliseconds.
 
 use crate::broker::{self, Conn, Meta, Spec, Stop};
-use crate::proto::{self, Info, PairLine, MAX_REPLY, MAX_SESSION, PROTO};
+use crate::proto::{self, DeviceCode, Github, Info, PairLine, RepoStatus, Snapshot, MAX_REPLY, MAX_SESSION, PROTO};
 use crate::sync::{self, Manifest};
 use crate::tls::{self, Identity};
 use serde_json::{json, Value};
@@ -90,6 +90,27 @@ impl Client {
         let req = json!({"op": "update", "version": version, "sha256": crate::sync::sha256_hex(data), "len": data.len()});
         self.call_bin(req, Some(data.to_vec()), None, Duration::from_secs(60)).map(|_| ())
     }
+    // ---------- GitHub there (github.rs on the server): its token is sealed like the mirror, so it works once unlocked
+    pub fn github(&self) -> Result<Github, String> { field(self.call(json!({"op": "github_status"}))?, "github") }
+    /// Start a device flow there: the code for the user to type on GitHub. The server waits for GitHub itself.
+    pub fn github_login(&self) -> Result<DeviceCode, String> { field(self.call(json!({"op": "github_login_start"}))?, "device") }
+    /// Where the device flow stands: `pending` until the code is typed, then `on` (or `expired`, `denied`, `error`).
+    pub fn github_poll(&self) -> Result<Github, String> { field(self.call(json!({"op": "github_login_poll"}))?, "github") }
+    pub fn github_logout(&self) -> Result<(), String> { self.call(json!({"op": "github_logout"})).map(|_| ()) }
+    pub fn repos(&self) -> Result<Vec<RepoStatus>, String> { field(self.call(json!({"op": "repos"}))?, "repos") }
+    /// `owner/repo` cloned there (a fetch when it is there already). A clone may take minutes.
+    pub fn repo_ensure(&self, repo: &str) -> Result<RepoStatus, String> { self.slow(json!({"op": "repo_ensure", "repo": repo}), "repo") }
+    /// Push the branch checked out in the repo folder `name`.
+    pub fn repo_push(&self, name: &str) -> Result<RepoStatus, String> { self.slow(json!({"op": "repo_push", "name": name}), "repo") }
+    /// The work in `name` (commits, changes, new files) as one commit, force-pushed to `branch` (`relay/…`); the
+    /// working tree and index there stay as they are.
+    pub fn repo_snapshot(&self, name: &str, branch: &str) -> Result<Snapshot, String> {
+        self.slow(json!({"op": "repo_snapshot", "name": name, "branch": branch}), "snapshot")
+    }
+    fn slow<T: serde::de::DeserializeOwned>(&self, req: Value, key: &str) -> Result<T, String> {
+        field(self.call_bin(req, None, None, Duration::from_secs(300))?.0, key)
+    }
+
     /// One mirrored folder there, as the other side of a sync round.
     pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
 
@@ -181,3 +202,6 @@ impl sync::Remote for RemoteRoot {
         self.c.call(json!({"op": "sync_delete", "root": self.root, "path": path, "hash": hash})).map(|_| ())
     }
 }
+
+/// A reply's `key`, as T.
+fn field<T: serde::de::DeserializeOwned>(v: Value, key: &str) -> Result<T, String> { serde_json::from_value(v[key].clone()).map_err(|e| format!("{key}: {e}")) }

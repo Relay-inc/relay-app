@@ -9,7 +9,10 @@
 //! (the files' bytes follow one after the other, the reply has `errors` per path), `sync_delete {root,path,hash}`, `wipe`, moving
 //! a conversation's `session_get {sid}` (len and bytes like sync_get) and `session_put {sid,cwd,len}` (bytes follow),
 //! `update {version,sha256,len}` (relay-server's binary follows, the server goes on in it after the reply),
-//! and from a device that is not paired yet only `pair {name,proof}`.
+//! GitHub there (github.rs on the server): `github_status`, `github_login_start` (a device flow: the code to type),
+//! `github_login_poll`, `github_logout`, and its repos: `repos`, `repo_ensure {repo}` (an `owner/repo` on GitHub,
+//! cloned when it is not there yet), `repo_push {name}`, `repo_snapshot {name,branch}` (the work there as one commit on
+//! `relay/…`, pushed), and from a device that is not paired yet only `pair {name,proof}`.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -47,7 +50,33 @@ pub struct Info {
     pub arch: String,
     #[serde(default)]
     pub update: bool,
+    /// Where its repos are cloned; empty for a server from before GitHub there.
+    #[serde(default)]
+    pub repos: String,
 }
+
+/// GitHub on a server for one device. `state`: `off` (no token), `pending` (a device flow waits for the user),
+/// `on`, `locked` (a token, but the mirror's key is not there yet), `expired`, `denied` or `error` (with `error`).
+/// `since` is the day the token came (YYYY-MM-DD); `name` and `email` what the server's commits say.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Github { pub state: String, pub login: String, pub since: String, pub name: String, pub email: String, pub error: String }
+
+/// A device flow under way: type `user_code` at `verification_uri`; it expires after `expires_in` s, ask every `interval` s.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct DeviceCode { pub user_code: String, pub verification_uri: String, pub expires_in: u64, pub interval: u64 }
+
+/// One repo there: its folder `name` under the repos folder, `repo` the `owner/repo` of its origin, the branch checked
+/// out, whether there is work not committed, and how many commits its upstream lacks.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct RepoStatus { pub name: String, pub path: String, pub repo: String, pub branch: String, pub dirty: bool, pub unpushed: u32 }
+
+/// A snapshot pushed: the branch on GitHub and its commit.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Snapshot { pub branch: String, pub commit: String }
 
 /// One JSON line, at most `max` bytes. EOF before any byte is an error too: a request or an answer always comes.
 pub fn read_json<R: BufRead>(r: &mut R, max: u64) -> io::Result<Value> {

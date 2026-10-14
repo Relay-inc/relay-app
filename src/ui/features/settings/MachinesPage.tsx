@@ -4,6 +4,7 @@ import { useSettingsStore } from "../../../application/settings/store";
 import {
   checkAll,
   pairMachine,
+  pollMachineGit,
   pollMirrors,
   setRunDefault,
   showMachinesPage,
@@ -33,13 +34,18 @@ export function MachinesPage({ active }: { active: boolean }) {
   useEffect(() => {
     if (active) showMachinesPage();
   }, [active]);
-  // the mirror status of the machines, every second while the page shows (the progress bar)
+  // the mirror status of the machines, every second while the page shows (the progress bar), GitHub and the repos
+  // there every 10 seconds
   const mirrored = machines.length > 0;
   useEffect(() => {
     if (!active || !mirrored) return;
     pollMirrors();
     const timer = setInterval(pollMirrors, 1000);
-    return () => clearInterval(timer);
+    const slow = setInterval(pollMachineGit, 10_000);
+    return () => {
+      clearInterval(timer);
+      clearInterval(slow);
+    };
   }, [active, mirrored]);
 
   // a machine that paired clears the fields; a failed pairing keeps them to fix
@@ -113,7 +119,7 @@ export function MachinesPage({ active }: { active: boolean }) {
         {machines.length ? (
           machines.map(machine => <MachineRow key={machine.id} machine={machine} />)
         ) : (
-          <div className={EMPTY_LIST}>{t("mc.empty")}</div>
+          <div className={`${EMPTY_LIST} px-3.5`}>{t("mc.empty")}</div>
         )}
       </Section>
     </>

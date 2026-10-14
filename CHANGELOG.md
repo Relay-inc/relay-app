@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **GitHub on a work machine**: Settings › Machines connects a machine to GitHub with a code you type on github.com, and lists its repos with what is not pushed, Push, and To Mac (the work lands on `relay/<machine>` in your checkout here, nothing is checked out). A conversation on a machine about a project with a repo gets that repo there, cloned at its first message, and the composer shows which one. Moving it back to this Mac with work not pushed asks first: push it to `relay/<machine>` and move, or move anyway (#217)
+
 ### Changed
 
 - **Reminders in the menu bar**: each reminder shows its title with the project underneath and the project's icon (a folder when it has none), the date sits on the right. Later shows the next three, the rest is under More, so the menu stays short
