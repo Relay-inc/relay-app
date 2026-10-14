@@ -1,6 +1,6 @@
 import type { GhActor, GhCheck, PrDetail, PRs } from "./types";
 import type { Chat } from "../conversations/types";
-import { fill, prompts } from "../../shared/prompts.ts";
+import { fill, prompts, untrusted, untrustedNote } from "../../shared/prompts.ts";
 
 // "Laat Claude reviewen": a new app conversation under the PR's project. Claude reads and reports here,
 // posting on GitHub is something others see, so it waits for the user (decided 29/9)
@@ -9,7 +9,15 @@ export const reviewPrompt = (pr: PrDetail, repo: string) =>
 /** A second agent on a finished review: it reads the PR itself and answers the first one. The review is the first
  *  agent's own text, quoted as such. */
 export const secondOpinionPrompt = (pr: PrDetail, repo: string, first: string, review: string) =>
-  fill(prompts.pullRequests.secondOpinion, { url: pr.url, repo, number: pr.number, title: pr.title, first, review });
+  fill(prompts.pullRequests.secondOpinion, {
+    url: pr.url,
+    repo,
+    number: pr.number,
+    title: pr.title,
+    first,
+    review: untrusted("review", review, { agent: first }),
+    untrusted: untrustedNote("nl", ["review"]),
+  });
 /** The conversations that reviewed a PR, oldest first. */
 export const reviewsOf = (chats: Record<string, Chat>, url: string) =>
   Object.values(chats)

@@ -3,7 +3,7 @@ import type { Worker } from "../orchestrator/types";
 import type { Limits } from "../agents/types";
 import type { ProvLimits } from "../usage/types";
 import type { Pipeline, PrStatus, Step, Ticket } from "./types";
-import { prompts } from "../../shared/prompts.ts";
+import { fill, prompts, untrustedNote } from "../../shared/prompts.ts";
 
 export const EMPTY_PIPELINE: Pipeline = {
   on: false,
@@ -153,7 +153,7 @@ export function briefOf(v: CardView, since?: number) {
 
 /** Before a ticket from the pick column gets a worker: one call without tools judges whether an agent can build it
  *  without asking anyone, so an unclear ticket goes back with questions instead of costing a whole run. */
-export const PREFLIGHT_PROMPT = prompts.pipeline.preflight;
+export const PREFLIGHT_PROMPT = fill(prompts.pipeline.preflight, { untrusted: untrustedNote("en", ["ticket"]) });
 
 /** The pre-flight's answer: clear, or the questions to put on the ticket. Null when it gave no usable answer: a check
  *  that could not judge does not hold the ticket. */
