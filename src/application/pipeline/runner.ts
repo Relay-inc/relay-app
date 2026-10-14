@@ -233,7 +233,8 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       base: b.p.base,
       ticket,
       validate: { checks: b.p.checks ?? "", review: b.p.reviewer ?? "", rounds: b.p.rounds ?? 3 },
-      plan: !!b.p.plan,
+      // with a skill, the skill decides per ticket whether a plan needs approval
+      plan: !!b.p.plan && !b.p.skill?.trim(),
       skill: b.p.skill?.trim() ?? "",
     });
     adopt(w);

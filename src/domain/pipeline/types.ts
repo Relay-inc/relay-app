@@ -36,7 +36,8 @@ export type Pipeline = {
   /** the agent reports its plan on the ticket first and builds once the ticket comes back to it; absent: off */
   plan?: boolean;
   /** a Claude Code skill the worker follows for the ticket (e.g. ticket-flow:develop), within Relay's own rules; the
-   *  skill then judges whether the ticket is ready, so Relay's pre-flight is skipped. Empty or absent: Relay's flow */
+   *  skill then judges whether the ticket is ready and whether it needs a plan approved, so Relay's pre-flight and
+   *  `plan` are skipped, and with Relay's review on, the skill's own review is skipped. Empty or absent: Relay's flow */
   skill?: string;
   /** Relay's comments on the ticket are internal, kept from the client (Productive); absent: hidden */
   hidden?: boolean;
