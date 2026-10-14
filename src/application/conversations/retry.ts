@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n";
+import { prompts } from "../../shared/prompts";
 import type { Retry, RetryEvent } from "../../domain/conversations/types";
 import * as backend from "../../infrastructure/backend";
 import { useConversationsStore } from "./store";
@@ -9,7 +10,7 @@ import { sendMsg } from "./actions";
 // Auto-retry after a provider limit (src-tauri/src/retry.rs): the backend keeps the waiting conversations and says
 // when one is due, the page sends it like a message typed there, with the conversation's own model and machine.
 
-const RESUME = "The usage limit has reset. Continue where you left off.";
+const RESUME = prompts.conversation.usageLimitResume;
 
 function adopt(retries: Retry[]) {
   useConversationsStore.setState(draft => {

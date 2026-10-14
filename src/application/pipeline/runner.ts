@@ -1,3 +1,4 @@
+import { fill, prompts } from "../../shared/prompts";
 import type { BoardProvider, BoardRef, Card, Column } from "../../domain/board/types";
 import { colOf } from "../../domain/board/rules";
 import type { Worker } from "../../domain/orchestrator/types";
@@ -152,10 +153,7 @@ async function runOne(project: string, p: Pipeline) {
       await comment(b, id, t("pl.closed", { pr: w.pr ?? "" }));
       adopt(await backend.orchBoard(w.key, "closed"));
     } else {
-      await sendWorker(
-        w,
-        `Review comments on your PR ${w.pr}:\n\n${r.text}\n\nWork them in, commit on the same branch and report again: Relay pushes, the PR follows.`,
-      );
+      await sendWorker(w, fill(prompts.pipeline.reviewComments, { pr: String(w.pr), text: r.text }));
       await move(b, id, p.busy);
       await comment(b, id, t("pl.feedback"));
     }
@@ -187,7 +185,7 @@ async function resume(b: Board, id: string, worker: Worker, why: string) {
   await move(b, id, b.p.busy);
   const view = b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
   const news = view ? briefOf(view, worker.ended ?? 0) : "";
-  await sendWorker(worker, `${why}\n\n${news}\n\nContinue from where you are, on the same branch, and report again.`);
+  await sendWorker(worker, fill(prompts.pipeline.resume, { why, news }));
   await comment(b, id, t("pl.resumed"));
 }
 

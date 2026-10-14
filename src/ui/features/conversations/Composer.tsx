@@ -15,6 +15,8 @@ import { insertDictated } from "../../../domain/conversations/dictation";
 import { isShortcut, shortcutCode, shortcutLabel, voiceOf } from "../../../domain/settings/voice";
 import { useSettingsStore } from "../../../application/settings/store";
 import { useNavigationStore } from "../../../application/navigation/store";
+import { ORCH } from "../../../domain/orchestrator/rules";
+import { projectName as plainProject } from "../../../application/workspace/vault";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
 import { chatBar, commandsOf, machineChoice, machineRepo } from "../../../application/conversations/selectors";
 import {
@@ -158,6 +160,9 @@ function ContextUse() {
 export function Composer({ className }: { className: string }) {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
+  // in the orchestrator the composer talks to the coordinator or the open worker: their model is set, nothing to pick
+  const workerPage = useNavigationStore(s => s.orchDetail);
+  const inOrchestrator = selected === ORCH || workerPage;
   const typed = useDraftsStore(s => s.typed[selected] ?? "");
   const attached = useDraftsStore(s => s.attached);
   const files = useDraftsStore(s => s.files);
@@ -309,9 +314,13 @@ export function Composer({ className }: { className: string }) {
   const showEffort = !agent || (agent.caps.effort && agent.efforts.length > 0);
   const placeholder = view.terminal
     ? t("ph.term")
-    : view.projectName
-      ? t("ph.project", { name: view.projectName })
-      : t("ph.general");
+    : selected === ORCH
+      ? t("orch.ph.coord")
+      : workerPage
+        ? t("orch.ph.worker", { name: plainProject(view.projectName) })
+        : view.projectName
+          ? t("ph.project", { name: view.projectName })
+          : t("ph.general");
   return (
     <div className={`relay-composer flex-none ${className}`}>
       <div
@@ -419,7 +428,7 @@ export function Composer({ className }: { className: string }) {
             <Icon name="add" className="glyph size-4" />
           </button>
           {/* with one agent there is nothing to pick */}
-          {view.agents.length > 1 && !isTerminal(selected) && !agentFixed ? (
+          {view.agents.length > 1 && !isTerminal(selected) && !agentFixed && !inOrchestrator ? (
             <>
               <PickMenu
                 pill
@@ -472,8 +481,8 @@ export function Composer({ className }: { className: string }) {
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
-          {pick("model", true)}
-          {pick("effort", showEffort)}
+          {inOrchestrator ? null : pick("model", true)}
+          {inOrchestrator ? null : pick("effort", showEffort)}
           <ContextUse />
           <span className="flex-1"></span>
           {/* dictates, or stops dictating; the ring grows with the voice */}

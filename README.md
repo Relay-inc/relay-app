@@ -330,6 +330,23 @@ the socket the app listens on and the CLI side.
   decides) and learns about it from one `--append-system-prompt` line. The other providers have `relay` on their
   PATH but are not told about it, and their own approval asks for each command.
 
+## Prompts
+
+Every prompt Relay sends to a model is a markdown file in `prompts/`, one folder per area (`mail/`, `meetings/`,
+`pull-requests/`, `time/`, `pipeline/`, `orchestrator/`, `conversation/`). The files hold the text as sent, in the
+language it is sent in (the prompts are not localised), without the trailing newline an editor adds: read that way.
+To change a prompt, edit its file.
+
+- The frontend imports them as text in `src/shared/prompts.ts` (`?raw`; `pnpm test` loads them with
+  `scripts/raw-register.mjs`): `prompts.mail.draft`. Rust reads the same files with `include_str!` and
+  `agent_core::prompt::text`.
+- A prompt with values has `{{name}}` placeholders, filled by `fill(template, { name: value })` in TypeScript and
+  `agent_core::prompt::fill(template, &[("name", value)])` in Rust. A placeholder without a value, or a value without a
+  placeholder, throws (panics), and a value that itself holds `{{x}}` is left alone.
+- What is data stays in the code: a meeting's title and guests, the lines of a ticket, a status. A new prompt is a new
+  file, imported in `src/shared/prompts.ts` or `include_str!`'d where it is used. `src/shared/prompts.test.ts` and the
+  Rust tests render every prompt and check nothing is left unfilled.
+
 ## Other folders
 
 - `design/`: mockups and screenshots per iteration, most of it gitignored.

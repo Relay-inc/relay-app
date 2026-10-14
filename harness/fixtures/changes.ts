@@ -55,7 +55,10 @@ export const changes = [
         add: 24,
         del: 0,
         binary: false,
-        patch: patch(1, Array.from({ length: 24 }, (_, i) => `+${i === 0 ? "<?php" : `    // line ${i + 1} of the new test`}`)),
+        patch: patch(
+          1,
+          Array.from({ length: 24 }, (_, i) => `+${i === 0 ? "<?php" : `    // line ${i + 1} of the new test`}`),
+        ),
       },
       {
         path: "migrations/Version20261007_unique_balance_period.php",
@@ -63,7 +66,10 @@ export const changes = [
         add: 12,
         del: 0,
         binary: false,
-        patch: patch(1, Array.from({ length: 12 }, (_, i) => `+${i === 0 ? "<?php" : `    // migration line ${i + 1}`}`)),
+        patch: patch(
+          1,
+          Array.from({ length: 12 }, (_, i) => `+${i === 0 ? "<?php" : `    // migration line ${i + 1}`}`),
+        ),
       },
       { path: "docs/sync.png", status: "D", add: 0, del: 0, binary: true, patch: "" },
     ],

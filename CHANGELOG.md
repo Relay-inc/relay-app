@@ -16,17 +16,28 @@ a PR. Versions follow
 ### Added
 
 - **A skill for the board pipeline**: Settings › Projects › pipeline › Skill names a Claude Code skill (for example `ticket-flow:develop` from Antenna's tools) that the agent follows for every ticket. Relay still pushes, opens the PR and moves and comments on the ticket; where the skill would ask a person or post on the ticket, the agent reports it and Relay puts it on the ticket. With a skill set, the skill judges whether a ticket is clear and whether it needs a plan approved (so Relay's pre-flight and Plan first drop out), and with Relay's review on, the skill skips its own review: one review per diff. Relay's checks and review stay the gate before the PR. Empty keeps Relay's own flow
+- **Follow Claude Code's agents**: when Claude Code starts agents in a conversation, an Agents button in its title bar opens their column next to it (crab, what it was asked, the step it is on, how long), running ones first. An agent opens as its own page with the whole transcript (its brief, the tools it ran, what it wrote), followed live while it runs; Esc goes back to the conversation. A click on an agent above the composer opens the same page, instead of its last three messages (#210)
+- **Orchestrator redesign**: the workers list is a column next to the Orchestrator, with its conversation first, then the latest run's workers and the earlier ones; a dot marks the ones waiting on you. A worker opens as a page beside the column: its state, step, question, report, the files it changed (+/− per file, read from git) and flags, with the composer talking to that worker and Esc going back. Reports in the conversation show as worker cards. A worker's question comes with buttons for the answers it offers (and a field for your own); answering on the card or the page sends it to the orchestrator and clears both. A worker that ended without a report offers Ask for the report and Restart. The title bar counts what runs, waits on you and is done; the composer drops the agent, model and effort picks here; an empty Orchestrator explains itself with three tasks to start from (#203)
+
+### Changed
+
+- **Prompts in markdown**: every prompt Relay sends to a model (mail, meetings, pull request reviews, time booking, the orchestrator and the board pipeline, the vault capture, the title) is now a file in `prompts/` instead of a string in the code, so it can be read and edited in one place. The text sent does not change.
+
+## [0.0.25] - 2026-10-14
+
+### Added
+
 - **GitHub on a work machine**: Settings › Machines connects a machine to GitHub with a code you type on github.com, and lists its repos with what is not pushed, Push, and To Mac (the work lands on `relay/<machine>` in your checkout here, nothing is checked out). A conversation on a machine about a project with a repo gets that repo there, cloned at its first message, and the composer shows which one. Moving it back to this Mac with work not pushed asks first: push it to `relay/<machine>` and move, or move anyway (#217)
 
 ### Changed
 
-- **Reminders in the menu bar**: each reminder shows its title with the project underneath and the project's icon (a folder when it has none), the date sits on the right. Later shows the next three, the rest is under More, so the menu stays short
-- **Reminder actions run without a card**: `relay reminders.add`, `done` and `push` default to Runs, like a mail draft. The reminders are the vault's own file, every change is in its history. A choice in Settings › General › Agent access still wins
+- **Reminders in the menu bar**: each reminder shows its title with the project underneath and the project's icon (a folder when it has none), the date sits on the right. Later shows the next three, the rest is under More, so the menu stays short (#208)
+- **Reminder actions run without a card**: `relay reminders.add`, `done` and `push` default to Runs, like a mail draft. The reminders are the vault's own file, every change is in its history. A choice in Settings › General › Agent access still wins (#216)
 
 ### Fixed
 
-- **Project index of an own vault**: Relay no longer empties `work-state.md` at start in a vault with its own `build-index.py` (other card fields than the starter's `last`). Such a vault now runs its own script at start, a starter vault keeps getting the app's copy
-- **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer
+- **Project index of an own vault**: Relay no longer empties `work-state.md` at start in a vault with its own `build-index.py` (other card fields than the starter's `last`). Such a vault now runs its own script at start, a starter vault keeps getting the app's copy (#215)
+- **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer (#207)
 
 ## [0.0.24] - 2026-10-13
 
@@ -478,7 +489,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.24...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...HEAD
+[0.0.25]: https://github.com/Relay-inc/relay-app/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...v0.0.24
 [0.0.23]: https://github.com/Relay-inc/relay-app/compare/v0.0.22...v0.0.23
 [0.0.22]: https://github.com/Relay-inc/relay-app/compare/v0.0.21...v0.0.22
