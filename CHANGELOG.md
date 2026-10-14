@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going
+- **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going (#224)
 
 ## [0.0.26] - 2026-10-14
 
