@@ -1,4 +1,4 @@
-import { fill, prompts } from "../../shared/prompts";
+import { fill, prompts, untrusted } from "../../shared/prompts";
 import type { BoardProvider, BoardRef, Card, Column } from "../../domain/board/types";
 import { colOf } from "../../domain/board/rules";
 import type { Worker } from "../../domain/orchestrator/types";
@@ -185,7 +185,7 @@ async function resume(b: Board, id: string, worker: Worker, why: string) {
   await move(b, id, b.p.busy);
   const view = b.prov.detail ? b.prov.detail.view(await b.prov.detail.fetch(ctxOf(b.prov), b.ref, id)) : null;
   const news = view ? briefOf(view, worker.ended ?? 0) : "";
-  await sendWorker(worker, fill(prompts.pipeline.resume, { why, news }));
+  await sendWorker(worker, fill(prompts.pipeline.resume, { why, news: news && untrusted("ticket", news) }));
   await comment(b, id, t("pl.resumed"));
 }
 
@@ -204,7 +204,9 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
     // plan mode asks its questions with the plan, a skill judges the ticket itself, and a ticket you start yourself
     // is your call
     if (!hand && view && !b.p.plan && !b.p.skill?.trim()) {
-      const verdict = preflightOf(await backend.aiWrite(PREFLIGHT_PROMPT, briefOf(view)).catch(() => ""));
+      const verdict = preflightOf(
+        await backend.aiWrite(PREFLIGHT_PROMPT, untrusted("ticket", briefOf(view))).catch(() => ""),
+      );
       if (verdict && !verdict.clear) {
         await move(b, card.id, b.p.input);
         const questions = verdict.questions.map(q => `- ${q}`).join("\n");

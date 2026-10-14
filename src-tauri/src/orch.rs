@@ -344,6 +344,8 @@ fn flags_of(before: &HashMap<String, String>, after: &HashMap<String, String>) -
 // ---------- the board pipeline's validation and PR
 
 const REVIEW_PROMPT: &str = prompt::text(include_str!("../../prompts/pipeline/review.md"));
+/// The reviewer's instruction, with the sentence on what the ticket, diff and claims blocks are.
+fn review_prompt() -> String { prompt::fill(REVIEW_PROMPT, &[("untrusted", &prompt::untrusted_note(&["ticket", "diff", "agent_claims"]))]) }
 /// The diff put in the review's brief; a bigger one gets its stat and reads the files' diffs itself. A provider
 /// without a review in the worktree (only `write`, no tools) gets the diff cut at this size, and the PR says so.
 const REVIEW_BRIEF: &str = prompt::text(include_str!("../../prompts/pipeline/review-brief.md"));
@@ -452,19 +454,19 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<Find
     let (head, claims) = review_head(w, &start);
     let big = diff.chars().count() > REVIEW_MAX;
     let text = if big {
-        format!("{head}The diff is too large to show here: its stat is below, read each file's diff with `git diff {start} HEAD -- <file>`.\n\n{}\n\n{claims}", git(dir, &["diff", "--stat", &start, "HEAD"]).unwrap_or_default())
-    } else { format!("{head}The diff:\n{diff}\n\n{claims}") };
+        format!("{head}The diff is too large to show here: its stat is below, read each file's diff with `git diff {start} HEAD -- <file>`.\n\n{}\n\n{claims}", prompt::untrusted("diff", &git(dir, &["diff", "--stat", &start, "HEAD"]).unwrap_or_default()))
+    } else { format!("{head}The diff:\n{}\n\n{claims}", prompt::untrusted("diff", &diff)) };
     let fallback = write_text(&head, &claims, &diff);
     let (app2, dir2, prov) = (app.clone(), dir.to_string(), provider.to_string());
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
         let p = Some(prov.as_str()).filter(|p| !p.is_empty());
         let mut cut = false;
-        let answer = match super::review_blocking(&app2, p, &dir2, REVIEW_PROMPT, &text) {
+        let answer = match super::review_blocking(&app2, p, &dir2, &review_prompt(), &text) {
             // a provider that cannot work in the worktree: the diff as text, cut to what its write takes
             Err(e) if e == "unsupported" => {
                 cut = fallback.1;
-                super::write_blocking(&app2, p, REVIEW_PROMPT, &fallback.0)
+                super::write_blocking(&app2, p, &review_prompt(), &fallback.0)
             }
             other => other,
         };
@@ -480,10 +482,11 @@ fn review(app: &AppHandle, w: &Worker, dir: &str, provider: &str) -> Result<Find
 /// goes last so the provider's own cut, a safety net, only ever eats its tail. True when the diff was cut.
 fn write_text(head: &str, claims: &str, diff: &str) -> (String, bool) {
     let label = "The diff (cut: only its start fits):\n";
-    let room = agent_core::WRITE_MAX.saturating_sub(head.chars().count() + claims.chars().count() + 4 + label.chars().count());
+    let wrap = prompt::untrusted("diff", "").chars().count();
+    let room = agent_core::WRITE_MAX.saturating_sub(head.chars().count() + claims.chars().count() + 4 + label.chars().count() + wrap);
     let cut = diff.chars().count() > room;
     let shown: String = diff.chars().take(room).collect();
-    (format!("{head}{claims}\n\nThe diff{}:\n{shown}", if cut { " (cut: only its start fits)" } else { "" }), cut)
+    (format!("{head}{claims}\n\nThe diff{}:\n{}", if cut { " (cut: only its start fits)" } else { "" }, prompt::untrusted("diff", &shown)), cut)
 }
 /// The review's brief around the diff. Before it: the ticket as the worker got it (the review judges the change
 /// against what was asked, not only as code). After it, so the reviewer forms its own view first: what the agent says
@@ -491,8 +494,8 @@ fn write_text(head: &str, claims: &str, diff: &str) -> (String, bool) {
 /// moving target from scratch.
 fn review_head(w: &Worker, start: &str) -> (String, String) {
     let t = |k: &str| w.ticket.as_ref().and_then(|x| x[k].as_str()).unwrap_or("").to_string();
-    let head = format!("{}\n\n", prompt::fill(REVIEW_BRIEF, &[("number", &t("number")), ("title", &t("title")), ("task", &head_cut(&w.task, TICKET_MAX)), ("start", start)]));
-    let mut claims = prompt::fill(REVIEW_CLAIMS, &[("summary", w.report.as_ref().map(|r| r.summary.as_str()).unwrap_or(""))]);
+    let head = format!("{}\n\n", prompt::fill(REVIEW_BRIEF, &[("number", &t("number")), ("title", &t("title")), ("task", &prompt::untrusted("ticket", &head_cut(&w.task, TICKET_MAX))), ("start", start)]));
+    let mut claims = prompt::fill(REVIEW_CLAIMS, &[("summary", &prompt::untrusted("agent_claims", w.report.as_ref().map(|r| r.summary.as_str()).unwrap_or("")))]);
     if let Some(last) = w.last_review.as_ref().filter(|l| !l.blocking.is_empty()) {
         let since = if last.head.is_empty() { String::new() } else { format!(" {}", prompt::fill(REVIEW_SINCE, &[("head", &last.head)])) };
         claims += "\n\n";
@@ -663,15 +666,18 @@ fn start(app: &AppHandle, title: Option<String>, task: Option<String>, project: 
     if let Some(p) = &project { brief += &format!("Project: \"{p}\". Read its project note first.\n"); }
     if let (Some(d), Some(b), Some(r)) = (&worktree, &branch, &repo) { brief += &format!("Repo: {r}. Work only in the worktree {d}, on branch {b}. Commit there, never on main.\n"); }
     if let Some(p) = &pipe { brief += &pipe_brief(p); }
-    brief += &format!("\n{task}");
+    brief += &format!("\n{}", if pipe.is_some() { prompt::untrusted("ticket", &task) } else { task.clone() });
     // a ticket is a stranger's text, like mail: the worker is marked as holding it
     inject(app, &key, &format!("{}: {title}", project.as_deref().unwrap_or("Algemeen")), &brief, model.as_deref().unwrap_or(""), pipe.is_some() || tainted(app, COORD))?;
     Ok(w)
 }
 
+/// The pipeline rules, with the note that the ticket is untrusted input.
+fn pipe_rules() -> String { prompt::fill(PIPE_RULES, &[("untrusted", &prompt::untrusted_note(&["ticket"]))]) }
+
 /// What a pipeline worker is told beyond the coordinator's rules, after its project and worktree.
 fn pipe_brief(p: &Pipe) -> String {
-    let mut brief = format!("{PIPE_RULES}\n");
+    let mut brief = format!("{}\n", pipe_rules());
     let skill = skill_name(&p.skill);
     // with a skill, the skill decides per ticket whether a plan needs approval (by its size and risk)
     if p.plan && skill.is_none() { brief += PLAN_RULE; brief += "\n"; }
@@ -887,7 +893,7 @@ mod tests {
         let (text, cut) = write_text(head, claims, &"+x\n".repeat(30_000));
         assert!(cut && text.chars().count() <= agent_core::WRITE_MAX && text.contains(claims));
         let (text, cut) = write_text(head, claims, "+x");
-        assert!(!cut && text.ends_with("The diff:\n+x"));
+        assert!(!cut && text.ends_with("The diff:\n<diff>\n+x\n</diff>"));
     }
 
     #[test]
@@ -1025,7 +1031,7 @@ mod tests {
     fn pipe_brief_with_a_skill() {
         let pipe = |skill: &str, plan| Pipe { base: None, ticket: json!({}), validate: Validate { review: "off".into(), ..Default::default() }, plan, skill: skill.into() };
         let none = pipe_brief(&pipe("", false));
-        assert!(none.starts_with(PIPE_RULES) && !none.contains("skill"), "no skill: Relay's rules only");
+        assert!(none.starts_with(&pipe_rules()) && !none.contains("skill"), "no skill: Relay's rules only");
         let b = pipe_brief(&pipe(" /ticket-flow:develop ", false));
         assert!(b.contains("Follow the `/ticket-flow:develop` skill") && b.ends_with(&format!("{}\n", prompt::fill(SKILL_RULE, &[("skill", "ticket-flow:develop")]))), "the skill comes after Relay's rules, which win");
         assert!(pipe_brief(&pipe("", true)).contains(PLAN_RULE), "plan first without a skill");
@@ -1054,7 +1060,8 @@ mod tests {
         }
         assert!(heads[2].1.contains("git diff def HEAD") && heads[2].1.contains("- a:1: ok") && !heads[1].1.contains("since"));
         for (head, claims) in heads { assert!(!head.contains("{{") && !claims.contains("{{")); }
-        for fixed in [REVIEW_PROMPT, PLAN_RULE, PIPE_RULES, SKILL_REVIEW_RULE, crate::CAPTURE_PROMPT, agent_core::envelope::HINT] { assert!(!fixed.contains("{{") && !fixed.ends_with('\n')); }
+        assert!(!review_prompt().contains("{{") && prompt::fill(PIPE_RULES, &[("untrusted", "x")]).contains(" x "));
+        for fixed in [PLAN_RULE, SKILL_REVIEW_RULE, crate::CAPTURE_PROMPT, agent_core::envelope::HINT] { assert!(!fixed.contains("{{") && !fixed.ends_with('\n')); }
         assert!(!agent_core::envelope::wrap("P", "C", "x").contains("{{"));
     }
 }
