@@ -21,9 +21,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use std::{fs, thread};
 
-/// The client id of Relay's OAuth app (device flow on). Empty in this build until one is registered:
-/// RELAY_GITHUB_CLIENT_ID gives it.
-const CLIENT_ID: &str = "";
+/// The client id of Relay's OAuth app under Relay-inc (device flow on). Public, like any OAuth client id:
+/// the device flow needs no secret. RELAY_GITHUB_CLIENT_ID overrides it (tests, a fork with its own app).
+const CLIENT_ID: &str = "Ov23livpUlfLVpAd8JEU";
 /// The mirror secret that holds the token.
 const SECRET: &str = "github";
 /// What a device flow or a repo action says when the device's mirror has no key yet.

@@ -186,8 +186,8 @@ terminal's history do not move.
 
 Settings › Machines › GitHub connects a machine to GitHub for the laptop that asks: the server starts GitHub's device
 flow, Relay shows the 8-character code, you type it on github.com. Only that code passes through Relay, the token
-(scope `repo read:user`) goes straight from GitHub to the server. It needs the OAuth app's client id, in
-`RELAY_GITHUB_CLIENT_ID` until a build carries one.
+(scope `repo read:user`) goes straight from GitHub to the server. The approval page on GitHub names Relay, the OAuth
+app of Relay-inc. `RELAY_GITHUB_CLIENT_ID` points a server at another app.
 
 - **Sealed per laptop.** The token is sealed with that laptop's mirror key, in `data/mirror/<device>/github.secret`.
   After a restart it is locked like the vault and works again once Relay on the laptop connects. Forget and revoke
