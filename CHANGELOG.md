@@ -22,6 +22,10 @@ a PR. Versions follow
 
 - **Prompts in markdown**: every prompt Relay sends to a model (mail, meetings, pull request reviews, time booking, the orchestrator and the board pipeline, the vault capture, the title) is now a file in `prompts/` instead of a string in the code, so it can be read and edited in one place. The text sent does not change.
 
+### Fixed
+
+- **Long reviews no longer drop their end unseen**: a pull request review sent up to 60,000 characters to a provider that takes 20,000, so later files were cut while the review still counted them as read; the text is now sized to what the provider takes (one `WRITE_MAX` in agent-core). The orchestrator's fallback review (a provider that cannot open the worktree) now puts the agent's claims, including the earlier blocking findings, before the diff and cuts the diff to what is left, so a big diff no longer cuts the claims
+
 ## [0.0.25] - 2026-10-14
 
 ### Added
@@ -35,6 +39,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer
 - **Project index of an own vault**: Relay no longer empties `work-state.md` at start in a vault with its own `build-index.py` (other card fields than the starter's `last`). Such a vault now runs its own script at start, a starter vault keeps getting the app's copy (#215)
 - **Conversation titles**: the generated title no longer turns into Haiku's answer to the first message ("I can't search online, so..."). The message now goes to Haiku as quoted text to title, not as a question to answer (#207)
 

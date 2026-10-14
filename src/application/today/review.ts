@@ -1,3 +1,4 @@
+import { WRITE_MAX } from "@relay/agent-core";
 import { t } from "../../shared/i18n";
 import { fill, prompts } from "../../shared/prompts";
 import type { PR } from "../../domain/pull-requests/types";
@@ -215,7 +216,7 @@ export async function findings(id: string, descriptions: string[] = [], agent = 
   const prs = review(id).prs;
   const files = review(id).files;
   if (!files || review(id).running) return;
-  const sent = reviewText(prs, descriptions, files);
+  const sent = reviewText(prs, descriptions, files, WRITE_MAX);
   change(id, r => {
     r.running = true;
     r.reading = agent;

@@ -148,7 +148,7 @@ impl AgentProvider for Codex {
     /// (shell, browser, apps and code mode off, read-only sandbox in the temp folder), the answer from `-o`.
     fn write(&self, env: &Env, system: &str, text: &str) -> Result<String, String> {
         use std::io::Write;
-        let text: String = text.chars().take(20_000).collect();
+        let text: String = text.chars().take(agent_core::WRITE_MAX).collect();
         let out_file = std::env::temp_dir().join(format!("relay-codex-write-{}-{}.txt", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0)));
         let mut cmd = Command::new(env.bin);
         cmd.args(["exec", "--ephemeral", "--skip-git-repo-check", "--ignore-user-config", "--ignore-rules", "-s", "read-only", "-c", "web_search=disabled"]);

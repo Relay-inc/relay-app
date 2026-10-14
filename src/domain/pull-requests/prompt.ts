@@ -12,9 +12,11 @@ export const nameOf = (file: File, prs: Pr[]) => {
 };
 
 /** The PRs as Claude reads them: per PR its title, description and every file's patch under its name. Every PR gets
- *  an equal share of `max`, so a big first PR doesn't push the next one out; `read` counts the files that made it in. */
-export function reviewText(prs: Pr[], descriptions: string[], files: File[], max = 60_000) {
-  const share = Math.floor(max / Math.max(1, prs.length));
+ *  an equal share of `max`, so a big first PR doesn't push the next one out; `read` counts the files that made it in.
+ *  `max` is what the provider takes (WRITE_MAX of agent-core): it cuts anything past it, and `read` would still count those files. */
+export function reviewText(prs: Pr[], descriptions: string[], files: File[], max: number) {
+  // the PRs are joined by a blank line: that comes off before the shares are cut
+  const share = Math.floor((max - 2 * Math.max(0, prs.length - 1)) / Math.max(1, prs.length));
   let read = 0;
   const parts = prs.map((pr, i) => {
     let text = `Pull request ${pr.repo}#${pr.number}: ${pr.title}\n${(descriptions[i] ?? "").slice(0, 3000)}`;
