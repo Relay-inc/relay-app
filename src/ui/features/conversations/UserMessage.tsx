@@ -1,9 +1,23 @@
 import { Fragment } from "react";
 import { ImageThumbs } from "../../components/ImageThumbs";
 import { FileChips } from "../../components/FileChips";
+import { useT } from "../../hooks/useT";
+import { sentAt } from "../../../shared/format";
 
-/** What the user sent: its images and files over a bubble with the text. All sit in the conversation's column. */
-export function UserMessage({ text, imgs, files }: { text: string; imgs?: string[]; files?: string[] }) {
+/** What the user sent: its images and files over a bubble with the text, and when it was sent under it. All sit in the
+ *  conversation's column. */
+export function UserMessage({
+  text,
+  imgs,
+  files,
+  at,
+}: {
+  text: string;
+  imgs?: string[];
+  files?: string[];
+  at?: number;
+}) {
+  const { locale } = useT();
   return (
     <>
       {imgs?.length ? <ImageThumbs className="self-end max-w-[78%] -mb-2.5" size="message" urls={imgs} /> : null}
@@ -18,6 +32,7 @@ export function UserMessage({ text, imgs, files }: { text: string; imgs?: string
           ))}
         </div>
       ) : null}
+      {at ? <div className="self-end -mt-3.5 text-[11px] text-tertiary tabular-nums">{sentAt(at, locale)}</div> : null}
     </>
   );
 }

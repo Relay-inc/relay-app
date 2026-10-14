@@ -187,6 +187,7 @@ function queueMessage(key: string, text: string, images: Img[], files: string[])
     const item: Item = {
       kind: "me",
       text,
+      at: Date.now(),
       ...(images.length ? { imgs: images.map(image => image.url) } : {}),
       ...(files.length ? { files } : {}),
     };

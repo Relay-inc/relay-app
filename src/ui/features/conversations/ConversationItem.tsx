@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { Item } from "../../../domain/conversations/types";
 import { esc } from "../../../shared/html";
+import { sentAt } from "../../../shared/format";
 import { raw } from "../../../shared/i18n";
 import { isRelayTurn, reportKey } from "../../../domain/orchestrator/rules";
 import { useT } from "../../hooks/useT";
@@ -17,13 +18,13 @@ import { ReportCard } from "../orchestrator/ReportCard";
 /** One line of the conversation. Memoised on the item: Immer keeps untouched items identical, so a stream delta
  *  redraws only the item it changed (the compiler does not skip a list child whose props did not change). */
 export const ConversationItem = memo(function ConversationItem({ item }: { item: Item }) {
-  const { th } = useT();
+  const { th, locale } = useT();
   switch (item.kind) {
     case "me":
       // a worker's report into the coordinator shows as that worker
       if (isRelayTurn(item.text))
         return reportKey(item.text) ? <ReportCard item={item} /> : <RelayTurn text={item.text} />;
-      return <UserMessage text={item.text} imgs={item.imgs} files={item.files} />;
+      return <UserMessage text={item.text} imgs={item.imgs} files={item.files} at={item.at} />;
     case "ai":
       return <Answer text={item.text} />;
     case "thinking":
@@ -55,7 +56,7 @@ export const ConversationItem = memo(function ConversationItem({ item }: { item:
       return (
         <div className="flex items-center gap-2.5 text-tertiary text-xs">
           <span className="flex-1 h-px bg-separator"></span>
-          {item.text}
+          {item.at ? `${item.text} · ${sentAt(item.at, locale)}` : item.text}
           <span className="flex-1 h-px bg-separator"></span>
         </div>
       );

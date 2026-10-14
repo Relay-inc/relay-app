@@ -55,6 +55,10 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
   });
   const waiting = pendingList.filter(request => request.project === selected);
   const working = t("work.working", { agent: where.agent });
+  // the running turn started with the user's last message, unless a turn ended after it (Claude started this one itself)
+  // ponytail: a transcript has no turn ends, so a turn Claude starts itself after a reload counts from the last message
+  const last = busy ? [...(items || [])].reverse().find(item => item.kind === "me" || item.kind === "done") : undefined;
+  const since = last?.kind === "me" ? last.at : undefined;
   return (
     <div className="flex flex-col gap-5">
       {/* the rest is append-only, so an index is stable; a tool line keeps its call id */}
@@ -82,13 +86,15 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
       {askHits ? <RouteChoice hits={askHits} onRoute={answerAsk} /> : null}
       {cards ? waiting.map(request => <PendingRequest key={request.id} request={request} />) : null}
       {/* every provider shares the same indicator; permission cards take its place while waiting */}
-      {busy && !waiting.length ? <Working label={working} text={outside ? t("work.outside") : working} /> : null}
+      {busy && !waiting.length ? (
+        <Working label={working} text={outside ? t("work.outside") : working} since={since} />
+      ) : null}
       {where.writing ? <Working text={t("term.writing")} /> : null}
       {/* sent, not read by the agent yet: it moves up into the conversation where the agent takes it up */}
       {unread?.length ? (
         <div className="flex flex-col gap-2 opacity-55">
           {unread.map((item, i) => (
-            <UserMessage key={i} text={item.text} imgs={item.imgs} files={item.files} />
+            <UserMessage key={i} text={item.text} imgs={item.imgs} files={item.files} at={item.at} />
           ))}
           <div className="self-end text-xs text-tertiary">{t("work.waiting", { agent: where.agent })}</div>
         </div>
