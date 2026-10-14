@@ -119,7 +119,7 @@ export function MachinesPage({ active }: { active: boolean }) {
         {machines.length ? (
           machines.map(machine => <MachineRow key={machine.id} machine={machine} />)
         ) : (
-          <div className={EMPTY_LIST}>{t("mc.empty")}</div>
+          <div className={`${EMPTY_LIST} px-3.5`}>{t("mc.empty")}</div>
         )}
       </Section>
     </>
