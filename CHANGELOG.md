@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **GitHub on a work machine**: Settings › Machines connects a machine to GitHub with a code you type on github.com, and lists its repos with what is not pushed, Push, and To Mac (the work lands on `relay/<machine>` in your checkout here, nothing is checked out). A conversation on a machine about a project with a repo gets that repo there, cloned at its first message, and the composer shows which one. Moving it back to this Mac with work not pushed asks first: push it to `relay/<machine>` and move, or move anyway (#PR)
+- **GitHub on a work machine**: Settings › Machines connects a machine to GitHub with a code you type on github.com, and lists its repos with what is not pushed, Push, and To Mac (the work lands on `relay/<machine>` in your checkout here, nothing is checked out). A conversation on a machine about a project with a repo gets that repo there, cloned at its first message, and the composer shows which one. Moving it back to this Mac with work not pushed asks first: push it to `relay/<machine>` and move, or move anyway (#217)
 
 ### Changed
 
