@@ -655,10 +655,33 @@ const VIEWS = {
     await waitText("Draft the depot import ticket");
     await settle(page, 300);
   },
+  // Turn 8: a worker's page next to the column (done, with its question, changes and flags), answered from there
+  "orchestrator-worker-page": async () => {
+    await VIEWS.orchestrator();
+    await page.locator(".relay-drawer").getByText("Patch the balance sync", { exact: true }).click();
+    await waitText("read from git by Relay");
+  },
+  "orchestrator-answered": async () => {
+    await VIEWS["orchestrator-worker-page"]();
+    await click("Deploy tonight");
+    await waitText("sent to the orchestrator");
+    await settle(page, 300);
+  },
+  // a blocked worker's page after the live events, with the options it offered
+  "orchestrator-blocked-page": async () => {
+    await VIEWS["orchestrator-live"]();
+    await page.locator(".relay-drawer").getByText("Fix the login redirect", { exact: true }).click();
+    await waitText("Ask the client");
+  },
+  // the orchestrator before its first task
+  "orchestrator-empty": async () => {
+    await open(page, server.url, { fixture: "orch-empty", sel: keys.orch });
+    await waitText("Give it a task across projects");
+  },
   // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
   "orchestrator-plain": async () => {
     await open(page, server.url, { fixture: "orch-plain", sel: keys.orch });
-    await waitText("From Relay");
+    await waitText("Open worker");
   },
   "settings-crabs": async () => {
     await settingsPage("General");
@@ -776,7 +799,10 @@ const VIEWS = {
   "plugin-view-tabs": async () => {
     await open(page, server.url, { fixture: "plugins", sel: "__plugin:example" });
     await page.getByRole("radio", { name: "History" }).click();
-    await page.frameLocator("iframe[title=History]").getByText(/^Ready/).waitFor();
+    await page
+      .frameLocator("iframe[title=History]")
+      .getByText(/^Ready/)
+      .waitFor();
     await settle(page);
   },
   // Settings › General › Reminders' agent access: add, done and push default to Runs (#PR)

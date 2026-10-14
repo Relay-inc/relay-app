@@ -194,6 +194,9 @@ export const orchDispatchTicket = (a: {
   plan: boolean;
 }) => invoke<Worker>("orch_dispatch_ticket", a);
 export const orchMessage = (key: string, text: string) => invoke<void>("orch_message", { key, text });
+export const orchAnswer = (key: string, answer: string) => invoke<Worker | null>("orch_answer", { key, answer });
+export const orchAskReport = (key: string) => invoke<void>("orch_ask_report", { key });
+export const orchRestart = (key: string) => invoke<Worker>("orch_restart", { key });
 export const orchPr = (key: string) => invoke<PrStatus>("orch_pr", { key });
 export const orchBoard = (key: string, mark: string) => invoke<Worker | null>("orch_board", { key, mark });
 

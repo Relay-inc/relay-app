@@ -1,4 +1,4 @@
-import { t, tn, type Key } from "../../shared/i18n";
+import { t, type Key } from "../../shared/i18n";
 import * as rules from "../../domain/conversations/rules";
 import type { Item } from "../../domain/conversations/types";
 import type { Project } from "../../domain/workspace/types";
@@ -18,7 +18,7 @@ import { projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
-import { runningWorkers } from "../orchestrator/orchestrator";
+import { workerCounts } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
@@ -97,8 +97,8 @@ function viewSummary(key: string) {
     return pending ? t("bar.brainReview", { n: pending }) : n ? t("bar.brainNotes", { n: n.toLocaleString() }) : "";
   }
   if (key === ORCH) {
-    const n = runningWorkers();
-    return n ? tn("nav.orchRunning", n) : t("bar.orchIdle");
+    const counts = workerCounts();
+    return counts.running + counts.need + counts.done ? t("orch.counts", counts) : t("bar.orchIdle");
   }
   return "";
 }

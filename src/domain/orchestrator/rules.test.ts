@@ -6,6 +6,10 @@ import {
   ORCH,
   boardOrder,
   costumeOf,
+  needOf,
+  boardCounts,
+  splitRuns,
+  reportKey,
   workerName,
   ensureCoordinator,
   ensureWorkerChat,
@@ -135,4 +139,48 @@ test("worker name: the same for a key, spread over the names", () => {
   assert.equal(workerName("c:orch-w-a1"), workerName("c:orch-w-a1"));
   const names = new Set(Array.from({ length: 200 }, (_, i) => workerName(`c:orch-w-${i.toString(36)}`)));
   assert.ok(names.size > 30);
+});
+
+test("need: a blocked or done question until answered, a silent end, nothing else", () => {
+  const report = {
+    status: "blocked",
+    summary: "",
+    questions: "Deploy tonight?",
+    diff: null,
+    flags: [],
+    options: ["Yes", "No"],
+  };
+  assert.deepEqual(needOf(worker("a", { state: "blocked", report })), {
+    kind: "ask",
+    question: "Deploy tonight?",
+    options: ["Yes", "No"],
+  });
+  assert.equal(needOf(worker("a", { state: "blocked", report, answer: "Yes" })), null);
+  assert.equal(needOf(worker("a", { state: "blocked", report: { ...report, questions: null } })), null);
+  assert.deepEqual(needOf(worker("a", { state: "silent" })), { kind: "silent" });
+  assert.equal(needOf(worker("a", { state: "done", report }))?.kind, "ask");
+  assert.equal(needOf(worker("a", { state: "failed", report })), null);
+  assert.deepEqual(boardCounts([worker("a"), worker("b", { state: "silent" }), worker("c", { state: "done" })]), {
+    running: 1,
+    need: 1,
+    done: 1,
+  });
+});
+
+test("runs: a burst of dispatches is this run, the rest earlier", () => {
+  const MIN = 60_000;
+  const list = [worker("a", { at: 100 * MIN }), worker("b", { at: 95 * MIN }), worker("c", { at: 10 * MIN })];
+  const { run, since, earlier } = splitRuns(list);
+  assert.deepEqual(
+    run.map(w => w.key),
+    ["a", "b"],
+  );
+  assert.equal(since, 95 * MIN);
+  assert.deepEqual(
+    earlier.map(w => w.key),
+    ["c"],
+  );
+  assert.deepEqual(splitRuns([]), { run: [], since: 0, earlier: [] });
+  assert.equal(reportKey('[Relay] Report from worker c:orch-w-b2 (Beacon, "x"): done'), "c:orch-w-b2");
+  assert.equal(reportKey("Message from the coordinator"), null);
 });
