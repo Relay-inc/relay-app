@@ -85,7 +85,7 @@ fn turn_of(ev: &Events, key: &str, timeout: Duration) -> Result<Vec<String>, Str
 }
 /// One message in a general conversation on the machine `id`.
 fn ask(app: &AppHandle, ev: &Events, key: &str, id: &str, text: &str) -> Result<String, String> {
-    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.into()))?;
+    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.into()), None)?;
     Ok(turn_of(ev, key, Duration::from_secs(30))?.join("\n"))
 }
 /// The mirror's next round that has run without errors.
@@ -99,7 +99,7 @@ fn now_s() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_
 const MIRROR_KEY: &str = "c:mirror";
 
 fn say(app: &AppHandle, text: &str) -> Result<(), String> {
-    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, None)
+    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, None, None)
 }
 fn expect(app: &AppHandle, ev: &Events, text: &str, want: &str) -> Result<String, String> {
     say(app, text)?;
@@ -157,7 +157,7 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
         most_in_repo = most_in_repo.max(running_in_repo);
         for p in pending::list(&pending_dir(app)) {
             // whatever a worker asks in this test is allowed, like a click on Allow
-            crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+            crate::answer(app.clone(), app.state::<App>(), p["id"].as_str().unwrap_or("").into(), json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
         }
         let busy = st.procs.lock().unwrap().values().any(|x| orch::is_orch(&x.key) && x.turns.busy());
         let idle = ws.len() >= 4 &&!ws.iter().any(|w| w.state == "running") && !busy;
@@ -194,7 +194,7 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     let ran = app.get_webview_window("main").ok_or("no main window".to_string())
         .and_then(|w| { w.show().ok(); w.eval(include_str!("selftest-orch.js").replace("__TITLES__", &titles)).map_err(|e| e.to_string()) });
     let said = ran.and_then(|_| ui.recv_timeout(Duration::from_secs(20)).map_err(|_| "the page did not report back".to_string()));
-    r.step("main window: board and Relay blocks", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
+    r.step("main window: board and Relay's turns", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
 
     // taint: a coordinator that heard a stranger's text passes it on, the worker it starts runs restricted too
     let before = orch::load(app).len();
@@ -203,7 +203,7 @@ fn orch_run(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     let new = wait(Duration::from_secs(300), || {
         for p in pending::list(&pending_dir(app)) {
             // the restricted coordinator's dispatch asks on a card, allowed here like a click
-            crate::answer_card(app, &st, p["id"].as_str().unwrap_or(""), &json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
+            crate::answer(app.clone(), app.state::<App>(), p["id"].as_str().unwrap_or("").into(), json!({"behavior": "allow", "updatedInput": p["input"]})).ok();
         }
         orch::load(app).into_iter().nth(before)
     });
@@ -323,21 +323,21 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     // moving a conversation: refused mid-turn, then to this Mac (its transcript comes along with this Mac's paths) and
     // back to the machine (the machine's paths again), where it goes on in the same session
     let msid = st.sids.lock().unwrap().get(MIRROR_KEY).map(|s| s.sid.clone()).unwrap_or_default();
-    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.clone())).ok();
+    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.clone()), None).ok();
     std::thread::sleep(Duration::from_millis(800));
-    r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", false) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
+    r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", false, None, None) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
     turn_of(ev, MIRROR_KEY, Duration::from_secs(20)).ok();
     let v = vault.to_string_lossy().to_string();
     let local = PathBuf::from(home()).join(".claude/projects").join(agent_claude::slug(&v)).join(format!("{msid}.jsonl"));
     let m = machines::Machines::find(&st.settings.lock().unwrap(), &id).unwrap_or_default();
     let work = st.machines.info(&m).map(|i| i.work).unwrap_or_default();
-    r.step("moved to this Mac", move_to(app, MIRROR_KEY, "", false).and_then(|_| {
+    r.step("moved to this Mac", move_to(app, MIRROR_KEY, "", false, None, None).and_then(|_| {
         let t = fs::read_to_string(&local).map_err(|e| format!("{}: {e}", local.display()))?;
         // the vault's paths are this Mac's now; the machine's own (its plugins, its permission tool) stay as they were
         let ok = st.machines.bind_of(MIRROR_KEY).is_none() && t.contains("read Notes/Uit de vault.md") && t.contains(&format!("{v}\"")) && !t.contains(&format!("{work}/vault"));
         if ok { Ok(format!("{} bytes, this Mac's paths", t.len())) } else { Err(t) }
     }));
-    r.step("moved back to the machine", move_to(app, MIRROR_KEY, &id, false).and_then(|_| {
+    r.step("moved back to the machine", move_to(app, MIRROR_KEY, &id, false, None, None).and_then(|_| {
         let m = machines::Machines::find(&st.settings.lock().unwrap(), &id).ok_or("no machine")?;
         let t = String::from_utf8(st.machines.client(&m).session_get(&msid)?).map_err(|e| e.to_string())?;
         if t.contains(&format!("{work}/vault\"")) && !t.contains(&format!("{v}\"")) { Ok(format!("{} bytes, the machine's paths", t.len())) } else { Err(t) }
@@ -373,7 +373,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     proxy.cut(Duration::from_secs(8));
     std::thread::sleep(Duration::from_secs(3)); // a poller round or two
     let t = Instant::now();
-    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, None);
+    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, None, None);
     let took = t.elapsed();
     r.step("machine away: refused fast", match res { Err(e) if took < Duration::from_millis(1000) => Ok(format!("{took:?}: {e}")), other => Err(format!("{took:?}: {other:?}")) });
     std::thread::sleep(Duration::from_secs(7)); // back, and the poller sees it again

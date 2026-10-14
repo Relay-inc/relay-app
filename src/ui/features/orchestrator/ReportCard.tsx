@@ -42,6 +42,7 @@ function Card({ workerKey }: { workerKey: string }) {
   const project = useDerived(() => projectName(worker.project));
   return (
     <button
+      data-relay-turn="report"
       className="flex w-full gap-3 px-3.5 py-3 rounded-xl bg-raised border-0 text-left cursor-default shadow-sm ring-1 ring-separator-strong hover:ring-accent"
       onClick={() => openWorker(workerKey)}
     >
