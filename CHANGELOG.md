@@ -17,6 +17,10 @@ a PR. Versions follow
 
 - **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going (#224)
 
+### Fixed
+
+- **Conversations no longer show twice**: Claude Code (2.1.299 at least) lists Relay's own conversations among its sessions, so a new or resumed conversation also showed as a terminal session under General until Relay knew its session id. Relay now recognises its own processes and leaves them out of the terminal sessions
+
 ## [0.0.26] - 2026-10-14
 
 ### Added
