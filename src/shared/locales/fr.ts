@@ -355,6 +355,8 @@ export default {
   "card.deny": "Refuser",
   "card.allow": "Autoriser",
   "card.always": "Toujours autoriser",
+  "card.plan": "Claude propose un plan{where}",
+  "card.planAsk": "Autorisez et Claude quitte le mode plan pour s'y mettre. Refusez et il reste en mode plan.",
   "card.allowed": "Autorisé {c}",
   "card.denied": "Refusé {c}",
   steps_one: "{n} étape",

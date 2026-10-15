@@ -344,6 +344,8 @@ const en = {
   "card.deny": "Deny",
   "card.allow": "Allow",
   "card.always": "Always allow",
+  "card.plan": "Claude has a plan{where}",
+  "card.planAsk": "Allow and Claude leaves plan mode and starts on it. Deny and it stays in plan mode.",
   "card.allowed": "Allowed {c}",
   "card.denied": "Denied {c}",
   steps_one: "{n} step",

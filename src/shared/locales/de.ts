@@ -348,6 +348,8 @@ export default {
   "card.deny": "Ablehnen",
   "card.allow": "Erlauben",
   "card.always": "Immer erlauben",
+  "card.plan": "Claude hat einen Plan{where}",
+  "card.planAsk": "Erlauben, und Claude verlässt den Planmodus und legt los. Ablehnen, und es plant weiter.",
   "card.allowed": "Erlaubt {c}",
   "card.denied": "Abgelehnt {c}",
   steps_one: "{n} Schritt",
