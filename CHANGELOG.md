@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone
+
 ## [0.0.27] - 2026-10-15
 
 ### Added

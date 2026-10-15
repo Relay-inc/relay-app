@@ -149,11 +149,12 @@ fn icon_data(vault: &str, rel: &str) -> Option<String> {
     let mime = match p.extension()?.to_str()?.to_lowercase().as_str() { "png" => "image/png", "jpg" | "jpeg" => "image/jpeg", "gif" => "image/gif", "webp" => "image/webp", "svg" => "image/svg+xml", "ico" => "image/x-icon", _ => return None };
     Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(fs::read(p).ok()?)))
 }
-/// Project to the image file of its icon, for the tray menu. Emoji and site entries have none.
+/// Project to the image file of its icon, for the tray menu: a site's once its favicon is stored. Emoji entries have none.
 pub fn icon_files(vault: &str) -> std::collections::BTreeMap<String, PathBuf> {
     let Some(c) = load(vault) else { return Default::default() };
     c["icons"].as_object().into_iter().flatten().filter_map(|(n, v)| match icon_kind(v.as_str()?) {
         Icon::File(f) if !f.contains("..") => Some((n.clone(), path(vault).with_file_name(f))),
+        Icon::Site(_) => Some((n.clone(), path(vault).with_file_name(icon_file(n)))).filter(|(_, p)| p.exists()),
         _ => None,
     }).collect()
 }
@@ -165,26 +166,30 @@ pub fn icons(vault: &str) -> Map<String, Value> {
         Some((n.clone(), match icon_kind(v) {
             Icon::File(f) => json!({"value": v, "img": icon_data(vault, f)}),
             Icon::Emoji(e) => json!({"value": v, "icon": e}),
-            _ => json!({"value": v}),
+            Icon::Site(_) => json!({"value": v, "img": icon_data(vault, &icon_file(n))}),
+            Icon::None => json!({"value": v}),
         }))
     }).collect()
 }
-/// Set a project's icon. `kind`: "img" (a png data url, stored as a file), "emoji", "site" (fetched by the favicon
-/// run), "none" (no icon, not guessed) or "reset" (no entry: guessed again). A file no project uses any more goes.
+/// Set a project's icon. `kind`: "img" (a png data url, stored as a file), "favicon" (the same, but a website set as
+/// the icon stays the entry: the file is that site's icon, beside it), "emoji", "site" (fetched by the favicon run),
+/// "none" (no icon, not guessed) or "reset" (no entry: guessed again). A file no project shows any more goes.
 pub fn set_icon(vault: &str, project: &str, kind: &str, value: &str) -> Result<(), String> {
     use base64::Engine;
     let mut c = load(vault).ok_or("no .relay/config.json")?;
     if !c["icons"].is_object() { c["icons"] = json!({}); }
+    let f = icon_file(project);
+    let old = c["icons"][project].as_str().map(String::from);
+    let old_site = old.as_deref().is_some_and(|o| matches!(icon_kind(o), Icon::Site(_)));
     let new = match kind {
-        "img" => {
+        "img" | "favicon" => {
             let b64 = value.strip_prefix("data:image/png;base64,").ok_or("not a png")?;
             let bytes = base64::engine::general_purpose::STANDARD.decode(b64).map_err(|e| e.to_string())?;
             if bytes.len() > 512 * 1024 { return Err("image too large".into()); }
-            let f = icon_file(project);
             let p = path(vault).with_file_name(&f);
             fs::create_dir_all(p.parent().unwrap()).map_err(|e| e.to_string())?;
             fs::write(&p, bytes).map_err(|e| e.to_string())?;
-            Some(f)
+            if kind == "favicon" && old_site { old.clone() } else { Some(f.clone()) }
         }
         "emoji" if !value.trim().is_empty() && value.trim().chars().count() <= 8 && !value.contains('.') => Some(value.trim().to_string()),
         "site" => Some(site_of(value).ok_or("not a website")?),
@@ -193,9 +198,10 @@ pub fn set_icon(vault: &str, project: &str, kind: &str, value: &str) -> Result<(
         _ => return Err("bad icon".into()),
     };
     let icons = c["icons"].as_object_mut().unwrap();
-    let old = icons.get(project).and_then(|v| v.as_str()).map(String::from);
     match &new { Some(v) => { icons.insert(project.into(), json!(v)); } None => { icons.remove(project); } }
-    if let Some(o) = old.filter(|o| o.starts_with("icons/") && Some(o) != new.as_ref() && !icons.values().any(|v| v == o.as_str())) {
+    // what the old entry showed: its file, or the stored favicon of its site when the site is not kept
+    let stale = if old_site { (new != old).then_some(f) } else { old.filter(|o| o.starts_with("icons/")) };
+    if let Some(o) = stale.filter(|o| new.as_ref() != Some(o) && !icons.values().any(|v| v == o.as_str())) {
         fs::remove_file(path(vault).with_file_name(o)).ok();
     }
     save(vault, &c)
@@ -331,6 +337,17 @@ mod tests {
         set_icon(&vs, "BE Plastics (TradeHub)", "site", "https://www.be-plastics.com/nl").unwrap();
         assert_eq!(icons(&vs)["BE Plastics (TradeHub)"]["value"], "be-plastics.com");
         assert!(!path(&vs).with_file_name(&f).exists(), "the old file goes");
+        // the site's favicon is stored beside it: the site stays the entry, the tray gets the file
+        set_icon(&vs, "BE Plastics (TradeHub)", "favicon", png).unwrap();
+        let i = icons(&vs);
+        assert_eq!(i["BE Plastics (TradeHub)"]["value"], "be-plastics.com", "a website set by hand stays");
+        assert!(i["BE Plastics (TradeHub)"]["img"].as_str().unwrap().starts_with("data:image/png;base64,"));
+        assert!(icon_files(&vs)["BE Plastics (TradeHub)"].exists());
+        // another site drops the old site's icon, a guess (no entry) becomes the file itself
+        set_icon(&vs, "BE Plastics (TradeHub)", "site", "plastics.be").unwrap();
+        assert!(icons(&vs)["BE Plastics (TradeHub)"]["img"].is_null(), "no icon of the old site");
+        set_icon(&vs, "Guessed", "favicon", png).unwrap();
+        assert!(icons(&vs)["Guessed"]["value"].as_str().unwrap().starts_with("icons/guessed-"));
         set_icon(&vs, "Lemahieu", "reset", "").unwrap();
         assert!(!icons(&vs).contains_key("Lemahieu"));
         assert!(set_icon(&vs, "x", "emoji", "a.b").is_err());
