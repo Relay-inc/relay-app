@@ -17,6 +17,10 @@ a PR. Versions follow
 
 - **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going (#224)
 
+### Fixed
+
+- **A downloaded Relay opens again**: the DMG's app was only signed by the linker, so macOS called it damaged after a download, with no way past it short of `xattr`. The app is now signed (ad-hoc) as a whole: macOS still refuses it the first time because Apple has not notarized it, and System Settings › Privacy & Security › Open Anyway opens it. The release script checks the signature before it publishes
+
 ## [0.0.26] - 2026-10-14
 
 ### Added
