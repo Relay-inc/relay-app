@@ -13,13 +13,15 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.27] - 2026-10-15
+
 ### Added
 
 - **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going (#224)
 
 ### Fixed
 
-- **A downloaded Relay opens again**: the DMG's app was only signed by the linker, so macOS called it damaged after a download, with no way past it short of `xattr`. The app is now signed (ad-hoc) as a whole: macOS still refuses it the first time because Apple has not notarized it, and System Settings › Privacy & Security › Open Anyway opens it. The release script checks the signature before it publishes
+- **A downloaded Relay opens again**: the DMG's app was only signed by the linker, so macOS called it damaged after a download, with no way past it short of `xattr`. The app is now signed (ad-hoc) as a whole: macOS still refuses it the first time because Apple has not notarized it, and System Settings › Privacy & Security › Open Anyway opens it. The release script checks the signature before it publishes (#226)
 
 ## [0.0.26] - 2026-10-14
 
@@ -505,7 +507,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...HEAD
+[0.0.27]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/Relay-inc/relay-app/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...v0.0.24
