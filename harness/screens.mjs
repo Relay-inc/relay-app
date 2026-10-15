@@ -173,7 +173,7 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");
   },
-  // leaving plan mode: the plan as a document on the left, the decision on the right (#PLAN)
+  // leaving plan mode: the plan as a document on the left, the decision on the right (#233)
   "conversation-plan": async () => {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");
@@ -670,7 +670,7 @@ const VIEWS = {
     await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
     await settle(page, 500);
   },
-  // a vault note in the drawer: its frontmatter as properties, a callout, ruled headings, a task list and a table (#PLAN)
+  // a vault note in the drawer: its frontmatter as properties, a callout, ruled headings, a task list and a table (#233)
   "drawer-note": async () => {
     await open(page, server.url, { sel: keys.long });
     await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
