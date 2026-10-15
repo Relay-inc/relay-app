@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.28] - 2026-10-15
+
 ### Changed
 
 - **The terminal button resumes a conversation inside Relay**: it opens in a tab of the project's terminal drawer on the right instead of iTerm or Terminal, and the shell stays after Claude quits. Option-click still opens the external terminal, and so does a conversation without a project (#230)
@@ -20,7 +22,7 @@ a PR. Versions follow
 ### Fixed
 
 - **Switching between light and dark** happens in one frame: the sidebar, the page and the text change together instead of one after the other, and the sidebar keeps its frosted glass during the switch (#231)
-- **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone
+- **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone (#229)
 
 ## [0.0.27] - 2026-10-15
 
@@ -516,7 +518,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...HEAD
+[0.0.28]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...v0.0.28
 [0.0.27]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/Relay-inc/relay-app/compare/v0.0.24...v0.0.25
