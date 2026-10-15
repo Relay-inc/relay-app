@@ -919,6 +919,7 @@ export default {
   "composer.model": "Model",
   "composer.resolvedDefault": "{value} (standaard)",
   "composer.defaultModel": "Standaard model",
+  "composer.filter": "Filteren…",
   "composer.effort": "Effort",
   "composer.context": "{pct}% context",
   "composer.contextHelp": "{used} van {window} tokens van het contextvenster",

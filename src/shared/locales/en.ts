@@ -911,6 +911,7 @@ const en = {
   "composer.model": "Model",
   "composer.resolvedDefault": "{value} (default)",
   "composer.defaultModel": "Default model",
+  "composer.filter": "Filter…",
   "composer.effort": "Effort",
   "composer.context": "{pct}% context",
   "composer.contextHelp": "{used} of {window} tokens of the context window",
