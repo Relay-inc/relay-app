@@ -164,6 +164,7 @@ function handle(cmd: string, a: Args): unknown {
     case "plugin:window|theme":
       return settings.theme === "dark" ? "dark" : "light";
     case "plugin:window|set_theme":
+    case "webview_theme":
     case "plugin:window|set_title":
     case "plugin:opener|open_url":
       return null;
