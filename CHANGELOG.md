@@ -19,7 +19,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **Conversations no longer show twice**: Claude Code (2.1.299 at least) lists Relay's own conversations among its sessions, so a new or resumed conversation also showed as a terminal session under General until Relay knew its session id. Relay now recognises its own processes and leaves them out of the terminal sessions
+- **Conversations no longer show twice**: Claude Code (2.1.299 at least) lists Relay's own conversations among its sessions, so a new or resumed conversation also showed as a terminal session under General until Relay knew its session id. Relay now recognises its own processes and leaves them out of the terminal sessions (#228)
 
 ## [0.0.26] - 2026-10-14
 
