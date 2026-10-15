@@ -26,13 +26,19 @@ fn start_dir(vault: &str, project: &str) -> String {
 fn size(cols: u16, rows: u16) -> PtySize { PtySize { rows: rows.max(1), cols: cols.max(1), pixel_width: 0, pixel_height: 0 } }
 
 /// Start a login shell for a project; its output arrives as raw bytes on `on_data`, the end as a JSON exit code.
+/// With `chat` (a conversation's key) the shell first continues that conversation, as the external terminal does.
 #[tauri::command]
-pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, project: String, cols: u16, rows: u16, on_data: Channel<InvokeResponseBody>) -> Result<u32, String> {
+#[allow(clippy::too_many_arguments)]
+pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, project: String, chat: Option<String>, name: Option<String>, cols: u16, rows: u16, on_data: Channel<InvokeResponseBody>) -> Result<u32, String> {
     let vault = super::need_vault(&state)?;
     if project.trim().is_empty() { return Err("bad project".into()); }
+    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name)).transpose()?;
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
-    let mut cmd = CommandBuilder::new(std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into()));
+    let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
+    let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
+    // the shell stays after the agent quits, as in the external terminal
+    if let Some(run) = run { cmd.args(["-c", &format!("{run}; exec {shell} -l")]); }
     cmd.cwd(start_dir(&vault, &project));
     cmd.env("TERM", "xterm-256color");
     cmd.env("PATH", &state.path);

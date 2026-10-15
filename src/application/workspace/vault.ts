@@ -84,13 +84,20 @@ export async function loadSnapshot() {
 let favBusy = false;
 let favAgain = false;
 type Found = Record<string, { site: string; data: string | null }>;
-// store what the favicon run found: an icon file per project, "none" for a project without one, and the sites tried
+// store what the favicon run found: an icon file per project, "none" for a project without one, and the sites tried.
+// A website set as the icon stays, its favicon goes beside it; an icon changed while the run was busy is left alone.
 async function storeFound(found: Found, tried: Record<string, string>) {
   for (const [name, result] of Object.entries(found)) {
+    const now = ws().icons[name];
+    if (now && now.value !== result.site) continue;
     tried[name] = result.site;
-    const img = result.data ? await iconFromDataUrl(result.data) : null;
-    if (img) await setIcon(name, "img", img);
-    else if (!(name in ws().icons)) await setIcon(name, "none");
+    try {
+      const img = result.data ? await iconFromDataUrl(result.data) : null;
+      if (img) await setIcon(name, "favicon", img);
+      else if (!now) await setIcon(name, "none");
+    } catch (e) {
+      console.error(name, e);
+    }
   }
 }
 export async function checkFavicons() {

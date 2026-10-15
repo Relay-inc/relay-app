@@ -576,7 +576,7 @@ function handle(cmd: string, a: Args): unknown {
       const id = ++ptyId;
       const channel = typeof a.onData === "object" ? a.onData.id : Number(String(a.onData).split(":")[1]);
       ptys.set(id, { channel, index: 0 });
-      setTimeout(() => ptyOut(id, `${PROMPT}`), 20);
+      setTimeout(() => ptyOut(id, a.chat ? `${PROMPT}claude --resume\r\n` : `${PROMPT}`), 20);
       return id;
     }
     case "pty_write":

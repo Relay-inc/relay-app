@@ -30,7 +30,7 @@ export const EMPTY_SNAPSHOT: Snapshot = { projects: [], reminders: [], sessions:
 // .relay/icons/, an emoji, a website whose favicon the app fetches, or "" for none. Shared by both windows.
 /** One project's icon: the raw value from the config, and what to show (`img` a data url, or `icon` an emoji). */
 export type ProjectIcon = { value: string; img?: string | null; icon?: string };
-export type IconKind = "img" | "emoji" | "site" | "none" | "reset";
+export type IconKind = "img" | "favicon" | "emoji" | "site" | "none" | "reset";
 
 // The vault and its mapping: which file or folder the app reads for each piece, relative to the vault.
 // Shared by the first-launch screen and the settings window. The backend detects, checks and saves.

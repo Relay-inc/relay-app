@@ -56,12 +56,12 @@ export function noteKnown(index: NotesIndex, vault: string, target: string) {
   return index.paths.has(path) || (!path.includes("/") && index.names.has(path));
 }
 
-// ---------- favicons: a project without an icon entry, or whose site was not tried yet (or changed since)
+// ---------- favicons: a project without an icon entry, or a site without its icon that was not tried yet (or changed since)
 export const needsFavicon = (
   project: Project,
   icons: Record<string, ProjectIcon>,
   tried: Record<string, string> | undefined,
 ) => {
   const icon = icons[project.name];
-  return !icon || (isSite(icon.value) && tried?.[project.name] !== icon.value);
+  return !icon || (isSite(icon.value) && !icon.img && tried?.[project.name] !== icon.value);
 };

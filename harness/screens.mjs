@@ -636,6 +636,17 @@ const VIEWS = {
     await settle(page, 500);
     await page.waitForFunction(() => document.querySelector(".xterm-rows")?.textContent?.includes("git status"));
   },
+  // the title bar's terminal button resumes the conversation in a drawer tab named after it, next to a shell whose
+  // close button is hovered: it fills the tab's right end (#230)
+  "drawer-terminal-chat": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Resume in terminal (⌥-click: external terminal)" }).click();
+    await page.waitForSelector(".xterm-screen");
+    await page.getByRole("button", { name: "New terminal" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".relay-drawer button[title='Close terminal']").length === 2);
+    await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
+    await settle(page, 500);
+  },
   "drawer-notes": async () => {
     await VIEWS["project-tools"]();
     await page.getByRole("button", { name: "Notes", exact: true, pressed: false }).click();

@@ -62,7 +62,7 @@ export function ChatBar({
   actions?: ReactNode; // a view's own buttons and quiet text, on the right before the project's tools
   onEditProject: () => void;
   onRename: (title: string) => void;
-  onOpenTerminal: () => void;
+  onOpenTerminal: (external: boolean) => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
   onToggleDrawer: (tool: "terminal" | "notes" | "changes") => void;
@@ -154,14 +154,14 @@ export function ChatBar({
               onBlur={onTitleBlur}
             />
           </span>
-          {/* resumes the conversation in iTerm or WezTerm: it belongs to the conversation, so it sits by its title */}
+          {/* resumes the conversation in the terminal drawer, Option-click in iTerm or WezTerm: it belongs to the conversation, so it sits by its title */}
           <button
             className="btn-icon disabled:opacity-40"
             hidden={noTerm}
             disabled={locked}
-            title={t(locked ? "bar.termMail" : "bar.openTerminal")}
-            aria-label={t("bar.openTerminal")}
-            onClick={onOpenTerminal}
+            title={t(locked ? "bar.termMail" : "bar.openTerminalHere")}
+            aria-label={t("bar.openTerminalHere")}
+            onClick={e => onOpenTerminal(e.altKey)}
           >
             <Icon name="term" className="glyph size-4" />
           </button>
