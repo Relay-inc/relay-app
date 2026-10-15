@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Switching between light and dark** happens in one frame: the sidebar, the page and the text change together instead of one after the other, and the sidebar keeps its frosted glass during the switch
+
 ## [0.0.27] - 2026-10-15
 
 ### Added
