@@ -45,23 +45,25 @@ export async function addTerminal(project: string, chat?: { key: string; name: s
     const screen: Screen = { xterm, fit, el, closed: false };
     let id = 0;
     let exited = false;
-    id = await backend.ptySpawn(
-      project,
-      xterm.cols,
-      xterm.rows,
-      bytes => xterm.write(bytes),
-      () => {
-        // the exit of a closed tab arrives after its xterm is disposed
-        if (screen.closed) return;
-        exited = true;
-        xterm.write(`\r\n\x1b[2m${t("term.exited")}\x1b[0m\r\n`);
-        patch(project, id, { exited: true });
-      },
-      chat,
-    ).catch(e => {
-      xterm.dispose();
-      throw e;
-    });
+    id = await backend
+      .ptySpawn(
+        project,
+        xterm.cols,
+        xterm.rows,
+        bytes => xterm.write(bytes),
+        () => {
+          // the exit of a closed tab arrives after its xterm is disposed
+          if (screen.closed) return;
+          exited = true;
+          xterm.write(`\r\n\x1b[2m${t("term.exited")}\x1b[0m\r\n`);
+          patch(project, id, { exited: true });
+        },
+        chat,
+      )
+      .catch(e => {
+        xterm.dispose();
+        throw e;
+      });
     xterm.onData(data => !exited && backend.ptyWrite(id, data));
     xterm.onResize(({ cols, rows }) => !exited && backend.ptyResize(id, cols, rows));
     screens.set(id, screen);
