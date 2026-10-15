@@ -185,7 +185,11 @@
 ::selection {
   background: var(--accent-soft);
 }
-/* the theme switch (applyTheme): the new frame replaces the old one at once, in step with the native sidebar */
+/* the theme switch (applyTheme): the new frame replaces the old one at once. The old frame has an opaque sidebar, the
+   native material flips behind it */
+:root[data-theme-switch] body.main {
+  background: var(--sidebar);
+}
 ::view-transition-group(root),
 ::view-transition-old(root),
 ::view-transition-new(root) {

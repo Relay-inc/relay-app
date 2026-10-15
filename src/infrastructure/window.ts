@@ -5,10 +5,10 @@ import type { Accent, Theme } from "../domain/settings/types";
 
 /** The colour scheme for this window: the native window follows it (the sidebar material, the title bar), and so does
  * the css through data-theme on the page. System leaves both to macOS. The accent is data-accent on the page.
- * A change after the first one goes through a view transition: the page keeps its old frame until the new one is fully
- * painted, then the native window follows in that same moment. Without it the sidebar material, the page and the text
- * each repaint on their own frame. Resolves when the switch is over: save after it, a save blocks the main thread the
- * window draws on. */
+ * A change after the first one goes through a view transition, so everything shows in one frame. The new frame waits
+ * for macOS's appearance to reach the page: WebKit draws text differently in light and dark and repaints it only then.
+ * Meanwhile the old frame covers the sidebar (data-theme-switch), so the native material flips out of sight. Resolves
+ * when the switch is over: save after it, a save blocks the main thread the window draws on. */
 let applied = false;
 export function applyTheme(theme: Theme = "system", accent: Accent = "relay"): Promise<void> {
   const root = document.documentElement;
@@ -29,11 +29,31 @@ export function applyTheme(theme: Theme = "system", accent: Accent = "relay"): P
     void native();
     return Promise.resolve();
   }
-  const transition = document.startViewTransition(apply);
-  // ready: the new frame is painted and about to show
-  void transition.ready.then(native, native);
+  root.dataset.themeSwitch = "";
+  const transition = document.startViewTransition(async () => {
+    try {
+      apply();
+      const flipped = theme !== "system" && prefersDark() !== (theme === "dark") ? schemeChange() : undefined;
+      await native();
+      await flipped;
+    } finally {
+      delete root.dataset.themeSwitch;
+    }
+  });
   return transition.finished.catch(() => {});
 }
+/** The page's prefers-color-scheme flipping, or 300 ms, whichever comes first. */
+const schemeChange = () =>
+  new Promise<void>(resolve => {
+    const media = matchMedia("(prefers-color-scheme: dark)");
+    const done = () => {
+      media.removeEventListener("change", done);
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 300);
+    media.addEventListener("change", done);
+  });
 /** Whether macOS draws dark right now (the "system" theme). */
 export const prefersDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
 export const isFocused = () =>
