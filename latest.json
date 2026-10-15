@@ -1,11 +1,11 @@
 {
-  "version": "0.0.27",
-  "notes": "### Added\n\n- **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going (#224)\n\n### Fixed\n\n- **A downloaded Relay opens again**: the DMG's app was only signed by the linker, so macOS called it damaged after a download, with no way past it short of `xattr`. The app is now signed (ad-hoc) as a whole: macOS still refuses it the first time because Apple has not notarized it, and System Settings › Privacy & Security › Open Anyway opens it. The release script checks the signature before it publishes (#226)",
-  "pub_date": "2026-10-15T09:37:43.378Z",
+  "version": "0.0.28",
+  "notes": "### Changed\n\n- **The terminal button resumes a conversation inside Relay**: it opens in a tab of the project's terminal drawer on the right instead of iTerm or Terminal, and the shell stays after Claude quits. Option-click still opens the external terminal, and so does a conversation without a project (#230)\n\n### Fixed\n\n- **Switching between light and dark** happens in one frame: the sidebar, the page and the text change together instead of one after the other, and the sidebar keeps its frosted glass during the switch (#231)\n- **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone (#229)",
+  "pub_date": "2026-10-15T12:45:56.432Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnZ3RUduWDh4dHhHRzBoWGl1dk1pTGI4NFJmeHV0Y3hzNG1aREc0S05udFRHT3ZyY0szMWNnaDhpd2c5cC9HS3FVbWlXZHptN3ZjWWNPd05yYzZFeWc0PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDU2OTg4CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4yNwpFNEVjdmxmbDhTajJUZnpuUitzUW9ZREsrNG1sanh0bGhJNGFnYW5ZVEJBSk5rbTVOMXNoaUM3eGQzTFZyMDVxM0RHdFBucXRmV3RUVnBITlBCd3lBZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/643388009"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnRNbkR0RUxDS2V1MHF2ZlgwY1dIbVA2dXJuZTFlTVVuYW5SU3hscmx6SXNHVEI5ZGJTQWYxSENOa3RVZ2ZJcU9RMmh2WklRVFlsN01nNzQ4OXk5RVE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyMDY4Mjg5CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4yOApiN3lQOFljcEt2VExoenhnMVYwVzdIOEIrZlVKNEMyeGJOWDFubVRLOG1xN01CeFJHUVZYTzYwR0pYbjZDd2VheUtOeVQ0MTVFaENXU3JJVzVFcmZDdz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/643843855"
     }
   }
 }
