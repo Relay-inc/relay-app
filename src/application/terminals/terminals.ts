@@ -24,10 +24,14 @@ function patch(project: string, id: number, change: { exited: boolean }) {
   });
 }
 
-/** A new shell in the project, shown at once. */
-export async function addTerminal(project: string) {
+// the projects that got their first terminal: closing the last tab leaves a project empty, not a fresh shell
+const opened = new Set<string>();
+
+/** A new shell in the project, shown at once. With `chat` it continues that conversation first, in a tab named after it. */
+export async function addTerminal(project: string, chat?: { key: string; name: string; title: string }) {
   if (starting.has(project)) return;
   starting.add(project);
+  opened.add(project);
   try {
     const xterm = new Terminal({
       fontFamily: "SF Mono, ui-monospace, Menlo, monospace",
@@ -53,13 +57,17 @@ export async function addTerminal(project: string) {
         xterm.write(`\r\n\x1b[2m${t("term.exited")}\x1b[0m\r\n`);
         patch(project, id, { exited: true });
       },
-    );
+      chat,
+    ).catch(e => {
+      xterm.dispose();
+      throw e;
+    });
     xterm.onData(data => !exited && backend.ptyWrite(id, data));
     xterm.onResize(({ cols, rows }) => !exited && backend.ptyResize(id, cols, rows));
     screens.set(id, screen);
     set(draft => {
       const entry = (draft.byProject[project] ??= { tabs: [], active: 0 });
-      entry.tabs.push({ id, title: nextTitle(entry.tabs.map(tab => tab.title)), exited });
+      entry.tabs.push({ id, title: chat?.title ?? nextTitle(entry.tabs.map(tab => tab.title)), exited });
       entry.active = id;
     });
   } finally {
@@ -87,8 +95,6 @@ export function closeTerminal(project: string, id: number) {
   });
 }
 
-// the projects that got their first terminal: closing the last tab leaves a project empty, not a fresh shell
-const opened = new Set<string>();
 /** The first time a project shows its terminals it gets one. */
 export function firstTerminal(project: string) {
   if (!project || opened.has(project)) return;

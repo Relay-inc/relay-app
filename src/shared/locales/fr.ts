@@ -288,6 +288,7 @@ export default {
   "usage.estimate":
     "Montants estimés aux tarifs de l’API : l’abonnement lui-même est forfaitaire. Les tokens incluent le cache. Survolez une ligne pour voir la répartition entrée, sortie et cache.",
   "bar.openTerminal": "Reprendre dans un terminal externe",
+  "bar.openTerminalHere": "Reprendre dans le terminal (⌥-clic : terminal externe)",
   "chat.toTop": "Revenir au début",
   "chat.toEnd": "Aller au plus récent",
   "chat.toEndNew": "Aller au plus récent : nouvelle sortie",

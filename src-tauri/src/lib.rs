@@ -1064,22 +1064,27 @@ fn runs_for_server(agent: &Value, server_work: &std::path::Path) -> bool {
     agent["cwd"].as_str().is_some_and(|cwd| std::path::Path::new(cwd).starts_with(server_work))
 }
 
-/// Continue a conversation in iTerm. The app's own process for it stops first, so two processes never
-/// write the same session.
-#[tauri::command]
-fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
-    if let Some(b) = state.machines.bind_of(&project) {
+/// The shell command that continues a conversation in a terminal, external or embedded (pty.rs). The app's own
+/// process for it stops first, so two processes never write the same session.
+fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<String>, name: Option<String>) -> Result<String, String> {
+    if let Some(b) = state.machines.bind_of(project) {
         let m = machines::Machines::find(&state.settings.lock().unwrap(), &b.machine).map(|m| m["name"].as_str().unwrap_or("").to_string()).unwrap_or_default();
         return Err(trc_v("err.machine_terminal", &m));
     }
-    if let Some(mut p) = state.procs.lock().unwrap().remove(&project) { p.child.kill().ok(); }
-    need_vault(&state)?;
-    let p = provider_of(&state, &project, None);
-    let eb = env_of(&app, &state, p);
-    let sid = session.or_else(|| state.sids.lock().unwrap().get(&project).map(|s| s.sid.clone()));
-    let cmd = sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
-        .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(&project))))
-        .ok_or_else(|| trc_v("err.agent_terminal", p.name()))?;
+    if let Some(mut p) = state.procs.lock().unwrap().remove(project) { p.child.kill().ok(); }
+    need_vault(state)?;
+    let p = provider_of(state, project, None);
+    let eb = env_of(app, state, p);
+    let sid = session.or_else(|| state.sids.lock().unwrap().get(project).map(|s| s.sid.clone()));
+    sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
+        .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(project))))
+        .ok_or_else(|| trc_v("err.agent_terminal", p.name()))
+}
+
+/// Continue a conversation in iTerm.
+#[tauri::command]
+fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
+    let cmd = terminal_cmd(&app, &state, &project, session, name)?;
     in_terminal(&state, &cmd)
 }
 

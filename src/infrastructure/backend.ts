@@ -377,18 +377,19 @@ export const setActionConfig = (ext: string, entry: ActionEntry) =>
   invoke<ActionConfig["config"]>("set_action_config", { ext, entry });
 
 // ---------- the embedded terminals (src-tauri/src/pty.rs) and the scratch notes (scratch.rs)
-/** A shell in the project's vault folder. `onData` gets its output bytes, `onExit` its exit code; resolves with the
- *  shell's id. */
+/** A shell in the project's vault folder, first continuing the conversation `chat` when given. `onData` gets its
+ *  output bytes, `onExit` its exit code; resolves with the shell's id. */
 export const ptySpawn = (
   project: string,
   cols: number,
   rows: number,
   onData: (bytes: Uint8Array) => void,
   onExit: (code: number) => void,
+  chat?: { key: string; name: string },
 ) => {
   const channel = new Channel<ArrayBuffer | number>();
   channel.onmessage = msg => (msg instanceof ArrayBuffer ? onData(new Uint8Array(msg)) : onExit(msg));
-  return invoke<number>("pty_spawn", { project, cols, rows, onData: channel });
+  return invoke<number>("pty_spawn", { project, chat: chat?.key, name: chat?.name, cols, rows, onData: channel });
 };
 export const ptyWrite = (id: number, data: string) => invoke("pty_write", { id, data });
 export const ptyResize = (id: number, cols: number, rows: number) => invoke("pty_resize", { id, cols, rows });
