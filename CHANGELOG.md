@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **The orchestrator's empty state shows again after you close every worker**: the middle showed only the bare "The orchestrator. Give it a task…" line while the workers column was already empty, because closed workers still counted
+
 ## [0.0.29] - 2026-10-16
 
 ### Added
