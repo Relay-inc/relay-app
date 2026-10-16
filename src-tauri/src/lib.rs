@@ -1048,15 +1048,29 @@ fn answer(app: AppHandle, state: State<App>, id: String, decision: Value) -> Res
 fn agents(app: AppHandle, state: State<App>) -> Value {
     let on = agents::enabled(&state.settings.lock().unwrap());
     let server_work = relay_server::data_dir().join("work");
+    let ps = Command::new("/bin/ps").args(["-axo", "pid=,ppid=,command="]).output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+    let ours = under_broker(&ps);
     let mut out = vec![];
     for p in on.into_iter().filter(|p| p.caps().background) {
         for mut a in p.sessions(&env_of(&app, &state, p).env()) {
             if runs_for_server(&a, &server_work) { continue; }
             a["provider"] = json!(p.id());
+            // the app's own process is listed before its session id reaches app_sids: marked, so the sidebar does not
+            // show it as a terminal session meanwhile. It stays in the list, syncBusy reads its busy state after a restart.
+            if a["pid"].as_i64().is_some_and(|pid| ours.contains(&pid)) { a["app"] = json!(true); }
             out.push(a);
         }
     }
     json!(out)
+}
+/// The pids whose parent is a `relay --broker` (the agents the app runs), from `ps -axo pid=,ppid=,command=`.
+fn under_broker(ps: &str) -> std::collections::HashSet<i64> {
+    let rows: Vec<(i64, i64, bool)> = ps.lines().filter_map(|l| {
+        let mut w = l.split_whitespace();
+        Some((w.next()?.parse().ok()?, w.next()?.parse().ok()?, w.any(|x| x == "--broker")))
+    }).collect();
+    let brokers: std::collections::HashSet<i64> = rows.iter().filter(|r| r.2).map(|r| r.0).collect();
+    rows.iter().filter(|r| brokers.contains(&r.1)).map(|r| r.0).collect()
 }
 // ponytail: by cwd, so a server conversation started in a repo outside the mirror still shows; its parent process
 // (`relay --broker`) would catch that too
@@ -2152,6 +2166,12 @@ mod machine_tests {
         assert_eq!(args[..2], ["--add-dir", "/w/abc/context"]);
         assert!(args.iter().any(|a| a.contains("/w/abc/memory"))); // the vault's memory: it runs in the vault there
         assert_eq!(p["env"], json!([["CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD", "1"]]));
+    }
+    #[test]
+    fn an_agent_under_a_broker_is_the_apps_own() {
+        let ps = "  500     1 /Applications/Relay.app/Contents/MacOS/relay\n  501   500 /Applications/Relay.app/Contents/MacOS/relay --broker /tmp/a.sock {\"program\":\"claude\"}\n  502   501 /usr/bin/claude -p --input-format stream-json\n  600   400 /usr/bin/claude\n  601   500 /usr/bin/claude -p\n";
+        assert_eq!(under_broker(ps), [502].into_iter().collect());
+        assert!(under_broker("").is_empty());
     }
     #[test]
     fn a_conversation_this_macs_server_runs_is_no_terminal_session() {

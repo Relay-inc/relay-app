@@ -33,6 +33,7 @@ export type AgentSession = {
   state?: string; // a background session: "blocked" | "done" | …
   name?: string;
   startedAt?: string;
+  app?: boolean; // a process the app runs (under its broker), so never a terminal session
 };
 /** One line of a conversation. A tool line keeps the call, so it is drawn (and translated) when shown. */
 export type Item = {
