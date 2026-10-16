@@ -103,6 +103,9 @@ export const newHere = () => select(newChat(isView(nav().selected) ? null : sele
 
 let toastTimer = 0;
 /** A bar at the bottom of the middle column for `ms`, with an undo (or other) button when `undo` is given. */
+/** Text on the clipboard. */
+export const copy = (text: string) => backend.copyText(text).catch(e => console.error(e));
+
 export function toast(text: string, undo?: () => void, btn = t("toast.undo"), ms = 8000) {
   set(draft => {
     draft.toast = { text, undo, btn };

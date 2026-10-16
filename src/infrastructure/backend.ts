@@ -57,6 +57,8 @@ export const readImage = (path: string) => invoke<[string, string]>("read_image"
 export const openFile = (path: string, reveal: boolean) => invoke("open_file", { path, reveal });
 /** The files copied in Finder, as paths: empty when the clipboard holds none. */
 export const pastedFiles = () => invoke<string[]>("pasted_files");
+/** Text on the clipboard, written by the app (the webview's clipboard API is refused now and then). */
+export const copyText = (text: string) => invoke("copy_text", { text });
 /** Files dragged over the window from Finder: `over` while they hover, then the dropped paths. */
 export const onFileDrop = (handler: (event: { over: boolean; paths?: string[] }) => void) =>
   getCurrentWebview().onDragDropEvent(e => {
