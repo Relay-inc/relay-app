@@ -22,6 +22,8 @@ a PR. Versions follow
 - **The model pick can be searched**: with more than 10 models (OpenCode and Pi list hundreds through OpenRouter) the composer's model menu opens on a filter field. Type part of the name and press Enter to pick the first match. Model and effort are now the same menu as the agent pick instead of a native select (#234)
 - **A vault note in the drawer reads like a document**: its frontmatter is a table of properties (empty ones left out, links clickable), headings step down with a rule under each section, tables get lines, task lists lose their bullets, and an Obsidian callout (`> [!note] Title`) is a tinted box, also in an answer (#233)
 - **Leaving plan mode shows the plan**: the card puts Claude's plan as formatted markdown on the left and Allow and Deny on the right, instead of the plan as raw JSON (#233)
+- **Stuck workers show up**: once a minute Relay checks the orchestrator's running workers. One that waits more than 10 minutes on a permission card, or whose turn runs 20 minutes without output, shows "Looks stuck" in the workers column and the reason on its page, and the coordinator hears about it once so it can tell you or stop it. The mark goes as soon as the worker moves again (#225)
+- **The coordinator finds its way back after a compaction**: `workers` now gives each worker's brief (its first 400 characters), your answer to it and whether it looks stuck, and lists the newest 30, and the coordinator is told to call it after its conversation was compacted. The orchestrator selftest (`scripts/orch-selftest.sh`) now also checks that workers call `step`, that a worker needing a decision reports blocked with options, and that none is left marked stuck (#225)
 
 ### Fixed
 

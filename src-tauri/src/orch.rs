@@ -114,6 +114,9 @@ pub struct Worker {
     /// the last review round that sent the work back: the next round checks its findings first
     #[serde(default)]
     pub last_review: Option<LastReview>,
+    /// why a running worker looks stuck (a card nobody answered, no output for a long while), None when it is not
+    #[serde(default)]
+    pub stalled: Option<String>,
 }
 
 /// A review round that blocked: the commit it saw, its blocking findings ("- file:line: text") and what held.
@@ -238,7 +241,11 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
     let s = |k: &str| a[k].as_str().map(str::trim).filter(|v| !v.is_empty()).map(String::from);
     match (key == COORD, name) {
         (true, "dispatch") => dispatch(app, s("title"), s("task"), s("project"), s("repo"), s("model")).unwrap_or_else(fail),
-        (true, "workers") => text(serde_json::to_string_pretty(&load(app).iter().map(summary).collect::<Vec<_>>()).unwrap_or_default()),
+        (true, "workers") => {
+            // ponytail: the newest WORKERS_LISTED only, so the record stays small in the coordinator's context; older ones are in orch.json
+            let all = load(app);
+            text(serde_json::to_string_pretty(&all[all.len().saturating_sub(WORKERS_LISTED)..].iter().map(summary).collect::<Vec<_>>()).unwrap_or_default())
+        }
         (true, "message") => message(app, &s("worker").unwrap_or_default(), &s("text").unwrap_or_default()).unwrap_or_else(fail),
         (true, "stop") => { let w = s("worker").unwrap_or_default(); if stop(app, &w) { text(format!("{w} stopped")) } else { fail(format!("no worker {w}")) } }
         (false, "step") => step(app, key, a["done"].as_u64(), a["total"].as_u64(), s("note")).unwrap_or_else(fail),
@@ -250,9 +257,14 @@ fn call(app: &AppHandle, key: &str, name: &str, a: &Value) -> Value {
     }
 }
 
+/// Workers `workers` lists (the newest, oldest of those first), and how much of each brief: enough for a coordinator whose conversation was
+/// compacted to know again what each one was asked.
+const WORKERS_LISTED: usize = 30;
+const BRIEF_LISTED: usize = 400;
 fn summary(w: &Worker) -> Value {
-    json!({"key": w.key, "project": w.project, "title": w.title, "state": w.state, "repo": w.repo, "worktree": w.worktree, "branch": w.branch, "step": w.step,
-           "report": w.report.as_ref().map(|r| json!({"status": r.status, "summary": r.summary, "questions": r.questions, "flags": r.flags}))})
+    let brief: String = w.task.chars().take(BRIEF_LISTED).collect();
+    json!({"key": w.key, "project": w.project, "title": w.title, "brief": brief, "state": w.state, "stalled": w.stalled, "repo": w.repo, "worktree": w.worktree, "branch": w.branch, "step": w.step,
+           "report": w.report.as_ref().map(|r| json!({"status": r.status, "summary": r.summary, "questions": r.questions, "flags": r.flags})), "answer": w.answer})
 }
 
 // ---------- git
@@ -825,6 +837,68 @@ pub fn exited(app: &AppHandle, key: &str) {
     update(app, key, |w| { if w.state == "running" { w.state = "silent".into(); w.ended = Some(now()); } });
 }
 
+// ---------- stalled workers: a card nobody answers, or a turn that runs without output
+
+/// A card this old that a running worker waits on makes it stalled, as does a turn that runs this long without output
+/// (longer than Claude Code lets one Bash call run).
+const STALL_CARD_S: f64 = 10.0 * 60.0;
+const STALL_QUIET_S: f64 = 20.0 * 60.0;
+
+/// Each worker's last output, seconds since the epoch: set by its frame loop (session/tauri_sink.rs).
+static OUTPUT: std::sync::Mutex<Option<HashMap<String, f64>>> = std::sync::Mutex::new(None);
+fn epoch_s() -> f64 { now() as f64 / 1000.0 }
+/// A worker wrote something (text, thinking, a tool call): it is not quiet.
+pub fn alive(key: &str) {
+    if is_worker(key) { OUTPUT.lock().unwrap().get_or_insert_with(HashMap::new).insert(key.into(), epoch_s()); }
+}
+fn clock(s: f64) -> String {
+    chrono::DateTime::from_timestamp(s as i64, 0).map(|t| t.with_timezone(&chrono::Local).format("%H:%M").to_string()).unwrap_or_default()
+}
+
+/// Why a running worker is stuck, None when it is not. `card`: the oldest card it waits on (tool, raised at); while it
+/// waits on one, only the card counts. `output`: its last output while its turn runs, None when no turn runs. The text
+/// stays the same while the cause does, so a change of it is news.
+fn stall_reason(now: f64, card: Option<(&str, f64)>, output: Option<f64>) -> Option<String> {
+    if let Some((tool, at)) = card {
+        return (now - at >= STALL_CARD_S).then(|| format!("waits on a permission card for {tool} since {}", clock(at)));
+    }
+    output.filter(|o| now - o >= STALL_QUIET_S).map(|o| format!("has had no output since {} while its turn runs", clock(o)))
+}
+
+/// Every minute: marks the running workers that are stuck, clears the ones that moved again, and tells the
+/// coordinator when one of its workers gets stuck (once per stall). A pipeline's worker only gets the mark.
+pub fn watch(app: &AppHandle) {
+    let app = app.clone();
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        stalls(&app);
+    });
+}
+fn stalls(app: &AppHandle) {
+    let cards = agent_core::pending::list(&super::pending_dir(app));
+    let busy: Vec<String> = app.state::<App>().procs.lock().unwrap().values().filter(|x| x.turns.busy()).map(|x| x.key.clone()).collect();
+    let now = epoch_s();
+    for w in load(app) {
+        // one that ended, or that Relay validates, is not stuck: only its old mark goes
+        if w.state != "running" || w.phase.is_some() {
+            if w.stalled.is_some() { update(app, &w.key, |x| x.stalled = None); }
+            continue;
+        }
+        let card = cards.iter().filter(|c| c["project"] == w.key.as_str())
+            .filter_map(|c| Some((c["tool_name"].as_str()?, c["at"].as_f64().unwrap_or(now))))
+            .min_by(|a, b| a.1.total_cmp(&b.1));
+        // a turn seen running before any output (after a restart): quiet from now on
+        let output = busy.contains(&w.key).then(|| *OUTPUT.lock().unwrap().get_or_insert_with(HashMap::new).entry(w.key.clone()).or_insert(now));
+        let reason = stall_reason(now, card, output);
+        if reason == w.stalled { continue; }
+        update(app, &w.key, |x| x.stalled = reason.clone());
+        let (Some(r), None, None) = (&reason, &w.stalled, &w.ticket) else { continue };
+        let t = format!("{PREFIX}Worker {} ({}, \"{}\") looks stuck: it {r}. Tell the user what it waits on, or stop it.",
+            w.key, w.project.as_deref().unwrap_or("Algemeen"), w.title);
+        inject(app, COORD, "Orchestrator", &t, "", false).ok();
+    }
+}
+
 /// Write a turn into a conversation as Relay, starting its process when needed, and tell the webview so it
 /// shows the message and counts the turn. `taint`: the text may hold a stranger's words.
 pub(crate) fn inject(app: &AppHandle, key: &str, name: &str, t: &str, model: &str, taint: bool) -> Result<(), String> {
@@ -920,6 +994,28 @@ mod tests {
         assert_eq!(names(true), ["dispatch", "workers", "message", "stop"]);
         assert_eq!(names(false), ["step", "report"]);
         assert_eq!(agent_claude::ORCH_COORD_TOOLS.map(|t| t.rsplit("__").next().unwrap()), ["dispatch", "workers", "message", "stop"]);
+    }
+
+    #[test]
+    fn stalled_by_an_old_card_or_a_quiet_turn() {
+        let now = 1_800_000_000.0;
+        assert_eq!(stall_reason(now, None, None), None, "no turn runs, no card: not stuck");
+        assert_eq!(stall_reason(now, Some(("Bash", now - 60.0)), None), None, "a fresh card");
+        let card = stall_reason(now, Some(("Bash", now - STALL_CARD_S)), Some(now)).unwrap();
+        assert!(card.starts_with("waits on a permission card for Bash since "), "{card}");
+        assert_eq!(stall_reason(now, Some(("Bash", now - 60.0)), Some(now - 2.0 * STALL_QUIET_S)), None, "waiting on a card is not quiet");
+        assert_eq!(stall_reason(now, None, Some(now - 60.0)), None, "output a minute ago");
+        let quiet = stall_reason(now, None, Some(now - STALL_QUIET_S)).unwrap();
+        assert!(quiet.starts_with("has had no output since "), "{quiet}");
+        assert_eq!(stall_reason(now + 600.0, None, Some(now - STALL_QUIET_S)), Some(quiet), "the same stall keeps its text, so it is reported once");
+    }
+
+    #[test]
+    fn workers_lists_the_brief_and_stays_small() {
+        let w = Worker { key: "c:orch-w-1".into(), task: "x".repeat(BRIEF_LISTED + 50), stalled: Some("waits".into()), answer: Some("Red".into()), ..Default::default() };
+        let s = summary(&w);
+        assert_eq!(s["brief"].as_str().unwrap().chars().count(), BRIEF_LISTED);
+        assert_eq!((s["stalled"].as_str(), s["answer"].as_str()), (Some("waits"), Some("Red")));
     }
 
     #[test]

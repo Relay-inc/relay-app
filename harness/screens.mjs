@@ -744,6 +744,13 @@ const VIEWS = {
     await page.locator(".relay-drawer").getByText("Fix the login redirect", { exact: true }).click();
     await waitText("Ask the client");
   },
+  // a running worker the backend marks stalled (a card nobody answered): "Looks stuck" in the column and on its page
+  "orchestrator-stuck": async () => {
+    await VIEWS.orchestrator();
+    await page.evaluate(() => window.__harness.orchStuck());
+    await page.locator(".relay-drawer").getByText("Fix the login redirect", { exact: true }).click();
+    await waitText("waits on a permission card for Bash");
+  },
   // the orchestrator before its first task
   "orchestrator-empty": async () => {
     await open(page, server.url, { fixture: "orch-empty", sel: keys.orch });

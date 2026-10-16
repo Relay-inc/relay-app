@@ -67,6 +67,7 @@ const en = {
   "orch.diff": "Changes",
   "orch.flags": "Flags",
   "orch.checking": "Running checks",
+  "orch.stuck": "Looks stuck",
   "orch.reviewing": "Reviewing",
   "orch.ticket": "Ticket #{number}",
   "orch.pr": "Pull request",

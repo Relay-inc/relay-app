@@ -2052,6 +2052,7 @@ pub fn run() {
             reattach(app.handle());
             std::thread::spawn(host::refresh); // a new Relay restarts this Mac's relay-server on its own binary
             orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
+            orch::watch(app.handle()); // workers stuck on a card or without output
             actions::start(app.handle());
             awake::start(app.handle());
             retry::start(app.handle());

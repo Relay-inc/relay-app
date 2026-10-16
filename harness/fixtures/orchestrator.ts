@@ -27,6 +27,7 @@ export type Worker = {
   model?: string;
   step?: { done: number; total: number; note: string | null } | null;
   answer?: string | null;
+  stalled?: string | null;
 };
 
 export const ORCH = "c:orch";

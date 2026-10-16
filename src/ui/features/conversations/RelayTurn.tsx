@@ -13,7 +13,7 @@ export function RelayTurn({ text }: { text: string }) {
   // Relay writes its reports line by line (a diff stat, a branch): every line break stays one
   const lines = body.replace(/\n(?!\n)/g, "  \n");
   return (
-    <div className="rounded-[10px] border border-separator text-[13px]">
+    <div data-relay-turn="text" className="rounded-[10px] border border-separator text-[13px]">
       <button
         className="flex w-full items-center gap-2 h-8 px-3 border-0 bg-transparent text-left cursor-default text-secondary hover:text-label"
         aria-expanded={open}
