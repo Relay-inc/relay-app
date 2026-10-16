@@ -40,7 +40,7 @@ import { PrsReload } from "./PrsReload";
 import { Toast } from "./Toast";
 import { MailReload } from "../mail/MailReload";
 import { ORCH } from "../../../domain/orchestrator/rules";
-import { useOrchestratorStore } from "../../../application/orchestrator/store";
+import { workerRuns } from "../../../application/orchestrator/orchestrator";
 import { WorkerDetail } from "../orchestrator/WorkerDetail";
 import { OrchestratorEmpty } from "../orchestrator/OrchestratorEmpty";
 import { OrchestratorBack } from "../orchestrator/OrchestratorBack";
@@ -69,7 +69,11 @@ export function ConversationsView({ className }: { className: string }) {
   const workerPage = useNavigationStore(s => s.orchDetail);
   // a subagent Claude Code spawned here, shown as its page next to the agents column
   const agentPage = useNavigationStore(s => s.agentPage);
-  const noWorkers = useOrchestratorStore(s => !Object.keys(s.workers).length);
+  // the workers the column lists: a closed worker stays in the store but no longer counts
+  const noWorkers = useDerived(() => {
+    const { run, earlier } = workerRuns();
+    return !run.length && !earlier.length;
+  });
   const orchEmpty = useConversationsStore(s => selected === ORCH && !s.messages[ORCH]?.length) && noWorkers;
   const orchHint = selected === ORCH ? "orch.hint.coord" : workerPage ? "orch.hint.worker" : null;
 

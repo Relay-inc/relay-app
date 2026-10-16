@@ -54,9 +54,11 @@ let added = 0;
 let actionConfig = integ.actionConfig();
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
-const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty";
+const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty" || fixture === "orch-closed";
 // orch-empty: the orchestrator before its first task, no workers and an empty conversation
 const orchEmpty = fixture === "orch-empty";
+// orch-closed: an empty conversation, and workers the backend still reports whose conversations were all closed
+const orchClosed = fixture === "orch-closed";
 // Commonwealth installed, with one brain (the Brain view's tabs)
 const brainOn = fixture === "brain";
 // plugins (fixture "plugins"): the secrets in the keychain, per plugin id; the tools the example server has
@@ -423,10 +425,11 @@ function handle(cmd: string, a: Args): unknown {
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
     case "history":
-      if (orchEmpty && a.project === orch.ORCH) return [];
+      if ((orchEmpty || orchClosed) && a.project === orch.ORCH) return [];
       return (orchOn && orch.history(a.project)) || conv.history(a.project);
     // the orchestrator: its workers, and Stop, which reports the new state as an `orch` event
     case "orch_workers":
+      harness.workersRead = true;
       return structuredClone(workers);
     case "orch_stop": {
       const worker = workers.find(w => w.key === a.key);
@@ -533,8 +536,16 @@ function handle(cmd: string, a: Args): unknown {
     case "retries":
       return [];
     // the UI state file (src/infrastructure/storage.ts): empty, so the app takes over the fixtures' localStorage
-    case "ui_state_get":
-      return {};
+    case "ui_state_get": {
+      if (!orchClosed) return {};
+      // on top of what the harness seeded (the selection), which a non-empty state would otherwise replace
+      const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
+      const closed = workers.map(w => [
+        w.key,
+        { key: w.key, at: w.at, project: w.project, title: w.title, draft: false, provider: "claude", orch: true, closed: w.at + 1 },
+      ]);
+      return { ...seeded, chats: JSON.stringify({ ...JSON.parse(seeded.chats || "{}"), ...Object.fromEntries(closed) }) };
+    }
     case "ui_state_init":
       return a.state;
     case "ui_state_set":
@@ -989,6 +1000,8 @@ async function stream({
 }
 
 const harness = {
+  // the app has asked for the orchestrator's workers (orchestrator-closed-empty waits for it)
+  workersRead: false,
   ready,
   calls,
   unmocked,
