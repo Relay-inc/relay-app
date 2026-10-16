@@ -19,7 +19,7 @@ export function OrchestratorEmpty() {
         {STARTERS.map(key => (
           <button
             key={key}
-            className="flex items-center gap-2.5 min-h-10 px-3.5 rounded-[10px] border border-separator-strong bg-transparent text-[13px] text-label text-left cursor-default hover:bg-fill"
+            className="flex items-center gap-2.5 min-h-10 px-3.5 py-2.5 rounded-[10px] border border-separator-strong bg-transparent text-[13px] text-label text-left cursor-default hover:bg-fill"
             onClick={() => {
               typeInto(ORCH, t(key));
               request("focus-composer");
