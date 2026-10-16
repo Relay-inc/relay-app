@@ -67,6 +67,22 @@ pub fn pasted_files() -> Vec<String> {
     Vec::new()
 }
 
+/// Text on the clipboard. The webview's `navigator.clipboard.writeText` is refused now and then in WKWebView (a copy
+/// button showed its tick and copied nothing), so the app writes the pasteboard itself.
+#[tauri::command]
+pub fn copy_text(text: String) {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
+        use objc2_foundation::NSString;
+        let board = NSPasteboard::generalPasteboard();
+        board.clearContents();
+        board.setString_forType(&NSString::from_str(&text), unsafe { NSPasteboardTypeString });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = text;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

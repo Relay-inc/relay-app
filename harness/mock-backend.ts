@@ -315,6 +315,8 @@ function handle(cmd: string, a: Args): unknown {
       return [...harness.pickFiles];
     case "pasted_files":
       return [...harness.pastedFiles];
+    case "copy_text":
+      return null;
     case "read_image": {
       const type = (
         { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" } as Record<

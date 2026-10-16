@@ -29,6 +29,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **A code block's copy button copies every time**: it showed its tick but sometimes left the clipboard as it was, because the webview's clipboard was refused now and then. The app now puts the text on the clipboard itself, for every copy button
 - **Switching between light and dark** happens in one frame: the sidebar, the page and the text change together instead of one after the other, and the sidebar keeps its frosted glass during the switch (#231)
 - **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone (#229)
 
