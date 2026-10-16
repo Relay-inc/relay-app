@@ -12,6 +12,7 @@ import { repoWorkOf } from "../../domain/settings/machines";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useNavigationStore } from "../navigation/store";
+import { addTerminal } from "../terminals/terminals";
 import { select, toast, hideToast, closeProjectPanel } from "../navigation/navigation";
 import { request } from "../navigation/requests";
 import { chatAgent, chatCaps, chatTextOnly, picks } from "../agents/agents";
@@ -443,8 +444,9 @@ export async function backgroundAction(action: "hide" | "stop" | "attach", id: s
       draft.agentsList = draft.agentsList.filter(agent => agent.id !== id);
     });
 }
-/** The terminal button: a terminal session opens in iTerm, an app conversation resumes there. */
-export function openTerminal() {
+/** The terminal button: a terminal session opens in iTerm. An app conversation resumes in the project's terminal
+ *  drawer, or in iTerm with `external` (Option-click) or without a project (the drawer belongs to a project). */
+export function openTerminal(external = false) {
   const key = selected();
   if (key === WAIT || cs().chats[key]?.fromMail) return;
   if (isTerminal(key)) {
@@ -452,7 +454,15 @@ export function openTerminal() {
     if (session) backend.backgroundSession("attach", session.id);
     return;
   }
-  backend.openTerminal(key, null, `${projectOf(key) || t("general")}: ${label(key)}`);
+  const project = projectOf(key);
+  const name = `${project || t("general")}: ${label(key)}`;
+  if (external || !project) backend.openTerminal(key, null, name);
+  else {
+    useNavigationStore.setState(draft => {
+      draft.drawer = "terminal";
+    });
+    addTerminal(project, { key, name, title: label(key) }).catch(e => toast(String(e)));
+  }
   set(draft => {
     releaseWaiting(draft, key);
     draft.queued[key] = 0;

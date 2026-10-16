@@ -46,6 +46,7 @@ export function showProjectsPage() {
 export function iconHint(project: string) {
   const icon = st().projectsPage.icons?.[project];
   if (!icon) return t("pi.guess");
+  if (isSite(icon.value) && icon.img) return `${t("pi.site")} ${icon.value}`;
   if (icon.img) return t("pi.image");
   if (icon.icon) return t("pi.emoji");
   if (!isSite(icon.value)) return t("pi.noIcon");

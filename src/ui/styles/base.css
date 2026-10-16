@@ -185,6 +185,12 @@
 ::selection {
   background: var(--accent-soft);
 }
+/* the theme switch (applyTheme): the new frame replaces the old one at once, in step with the native sidebar */
+::view-transition-group(root),
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
 @layer base {
   * {
     box-sizing: border-box;

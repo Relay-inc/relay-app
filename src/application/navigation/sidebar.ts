@@ -277,12 +277,12 @@ export const isDark = () => {
   const theme = settings().theme ?? "system";
   return theme === "dark" || (theme === "system" && prefersDark());
 };
-/** The footer's toggle: flips light and dark, shown at once, then saved. */
+/** The footer's toggle: flips light and dark, shown at once, saved once the switch is over. */
 export function toggleTheme() {
   const next = { ...settings(), theme: isDark() ? ("light" as const) : ("dark" as const) };
-  applyTheme(next.theme, next.accent);
+  const shown = applyTheme(next.theme, next.accent);
   setSettingsState(next);
-  void saveMainSettings(next);
+  void shown.then(() => saveMainSettings(next));
 }
 /** The colour of a vault context, the same in the sidebar, the title bar and the reminders. */
 export const contextTint = (context: string) =>

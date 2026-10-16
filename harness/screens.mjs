@@ -348,13 +348,21 @@ const VIEWS = {
     await waitText("Waiting until Claude Code reads it");
     await settle(page, 300);
   },
+  // more than 10 models: the model pick opens on a filter field, "lla" leaves the Llama models (PR: searchable model pick)
+  "composer-model-filter": async () => {
+    await open(page, server.url, { fixture: "models", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("button[aria-label='Model']").click();
+    await page.keyboard.type("lla");
+    await settle(page);
+  },
   "composer-resolved": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
     await page.evaluate(key => window.__harness.resolved(key), keys.switchTo);
-    // the label is the picker's selected option (a native select)
+    // the label is the model pick's button
     await page.waitForFunction(
-      () => window.__dom.all("select").some(s => s.selectedOptions[0]?.textContent.includes("Opus (default)")),
+      () => window.__dom.all("button[aria-label='Model']").some(b => b.textContent.includes("Opus (default)")),
       null,
       { timeout: 5000 },
     );
@@ -635,6 +643,17 @@ const VIEWS = {
     await page.keyboard.type("git status");
     await settle(page, 500);
     await page.waitForFunction(() => document.querySelector(".xterm-rows")?.textContent?.includes("git status"));
+  },
+  // the title bar's terminal button resumes the conversation in a drawer tab named after it, next to a shell whose
+  // close button is hovered: it fills the tab's right end (#230)
+  "drawer-terminal-chat": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Resume in terminal (⌥-click: external terminal)" }).click();
+    await page.waitForSelector(".xterm-screen");
+    await page.getByRole("button", { name: "New terminal" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".relay-drawer button[title='Close terminal']").length === 2);
+    await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
+    await settle(page, 500);
   },
   "drawer-notes": async () => {
     await VIEWS["project-tools"]();

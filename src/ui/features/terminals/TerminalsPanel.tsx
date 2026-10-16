@@ -74,14 +74,14 @@ export function TerminalsPanel({ project }: { project: string }) {
         {entry?.tabs.map(tab => (
           <div
             key={tab.id}
-            className={`group flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-md text-xs cursor-pointer select-none ${
+            className={`group flex items-center gap-1 h-7 pl-2.5 rounded-md text-xs cursor-pointer select-none ${
               tab.id === active ? "bg-fill-2 text-label" : "text-secondary hover:bg-fill"
             } ${tab.exited ? "opacity-60" : ""}`}
             onClick={() => showTerminal(project, tab.id)}
           >
             {tab.title}
             <button
-              className="btn-icon cursor-pointer"
+              className="btn-icon w-6 rounded-l-none rounded-r-md cursor-pointer"
               title={t("term.close")}
               aria-label={t("term.close")}
               onClick={e => {

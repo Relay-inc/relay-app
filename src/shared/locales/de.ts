@@ -281,6 +281,7 @@ export default {
   "usage.estimate":
     "Beträge sind Schätzungen zu API-Listenpreisen: das Abo selbst ist pauschal. Tokens enthalten den Cache. Fahre über eine Zeile für die Aufteilung in Eingabe, Ausgabe und Cache.",
   "bar.openTerminal": "In externem Terminal fortsetzen",
+  "bar.openTerminalHere": "Im Terminal fortsetzen (⌥-Klick: externes Terminal)",
   "chat.toTop": "Zum Anfang",
   "chat.toEnd": "Zum Neuesten",
   "chat.toEndNew": "Zum Neuesten: neue Ausgabe",
@@ -920,6 +921,7 @@ export default {
   "composer.model": "Modell",
   "composer.resolvedDefault": "{value} (Standard)",
   "composer.defaultModel": "Standardmodell",
+  "composer.filter": "Filtern…",
   "composer.effort": "Effort",
   "composer.context": "{pct} % Kontext",
   "composer.contextHelp": "{used} von {window} Tokens des Kontextfensters",

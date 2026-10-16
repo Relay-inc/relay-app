@@ -81,8 +81,10 @@ cost 0, so a non-zero `cost` is only in a hand-written test row); the terminal c
 ## Known gaps
 
 - No plan or rate limits: OpenCode has none, and the providers' own are not read.
-- No subagents strip: `task` calls show as Agent tool calls, their child sessions are not followed. No AI titles
-  (OpenCode titles its sessions itself; the app does not read them back for its own conversations).
+- Subagents are the child sessions of `task` calls, read from the database: a child counts as running until its
+  last message ends on something other than a tool call, or it has been silent for 15 minutes (a child whose
+  parent was stopped keeps an open message). No AI titles (OpenCode titles its sessions itself; the app does not
+  read them back for its own conversations).
 - A card is once or reject; "always" (opencode's `always` patterns) is not offered.
 - Sessions from the database are all reported idle, so a turn running in the OpenCode TUI is not followed live.
 - Cost is what opencode recorded: 0 for free models and for models it has no price for, which then show as free.

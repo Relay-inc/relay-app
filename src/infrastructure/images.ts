@@ -74,8 +74,11 @@ export async function iconFrom(file: Blob): Promise<string | null> {
   canvas.getContext("2d")!.drawImage(img, (ICON_SIZE - width) / 2, (ICON_SIZE - height) / 2, width, height);
   return canvas.toDataURL("image/png");
 }
-/** A data url (a fetched favicon) as a 64 px icon. */
-export const iconFromDataUrl = async (dataUrl: string) => iconFrom(await (await fetch(dataUrl)).blob());
+/** A data url (a fetched favicon) as a 64 px icon. Decoded here: the CSP's connect-src blocks fetch() on a data url. */
+export function iconFromDataUrl(dataUrl: string) {
+  const [, mediaType = "", data = ""] = dataUrl.match(/^data:([^;,]+);base64,(.*)$/) || [];
+  return iconFrom(fileOf(mediaType, data, "favicon"));
+}
 /** base64 data as a File, so a picture read from its path goes through `prepareImage` like a pasted one. */
 export const fileOf = (mediaType: string, data: string, name: string) =>
   new File([Uint8Array.from(atob(data), char => char.charCodeAt(0))], name, { type: mediaType });
