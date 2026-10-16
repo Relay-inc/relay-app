@@ -297,6 +297,10 @@ export default {
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notes",
   "drawer.detail": "Détails",
+  "note.copyPath": "Copier le chemin",
+  "note.open": "Ouvrir dans l’app par défaut",
+  "note.linked": "Notes liées",
+  "note.properties": "Propriétés",
   "drawer.changes": "Modifications",
   "changes.empty":
     "Pas encore de modifications dans un dépôt git. Elles apparaissent dès que l’agent écrit un fichier dans un dépôt ou crée un worktree.",

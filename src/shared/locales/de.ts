@@ -290,6 +290,10 @@ export default {
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notizen",
   "drawer.detail": "Details",
+  "note.copyPath": "Pfad kopieren",
+  "note.open": "In Standard-App öffnen",
+  "note.linked": "Verlinkte Notizen",
+  "note.properties": "Eigenschaften",
   "drawer.changes": "Änderungen",
   "changes.empty":
     "Noch keine Änderungen in einem Git-Repo. Sie erscheinen, sobald der Agent eine Datei in einem Repo schreibt oder einen Worktree anlegt.",

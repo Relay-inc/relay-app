@@ -34,21 +34,24 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
   return (
     <aside className={`relay-drawer ${className}`}>
       <div className="flex flex-col flex-1 min-h-0 border-l border-separator">
+        {/* a note brings its own bar: where it lives, copy, open, close */}
+        {drawer === "detail" ? null : (
+          <div
+            className="h-12 flex-none flex items-center gap-2 pl-4.5 pr-3 border-b border-separator min-w-(--drawer-w) select-none"
+            data-tauri-drag-region
+          >
+            {/* the orchestrator's column belongs to it: its name, and it stays while the orchestrator is open */}
+            {drawer === "workers" ? <Icon name="agent" className="glyph size-4 text-secondary" /> : null}
+            <h2 className="flex-1 text-[15px] font-semibold">{t(TITLES[drawer])}</h2>
+            {drawer === "workers" ? null : (
+              <button className="btn-icon" title={t("pr.close")} aria-label={t("nav.close")} onClick={closeDrawer}>
+                <Icon name="close" className="glyph size-4" />
+              </button>
+            )}
+          </div>
+        )}
         <div
-          className="h-12 flex-none flex items-center gap-2 pl-4.5 pr-3 border-b border-separator min-w-(--drawer-w) select-none"
-          data-tauri-drag-region
-        >
-          {/* the orchestrator's column belongs to it: its name, and it stays while the orchestrator is open */}
-          {drawer === "workers" ? <Icon name="agent" className="glyph size-4 text-secondary" /> : null}
-          <h2 className="flex-1 text-[15px] font-semibold">{t(TITLES[drawer])}</h2>
-          {drawer === "workers" ? null : (
-            <button className="btn-icon" title={t("pr.close")} aria-label={t("nav.close")} onClick={closeDrawer}>
-              <Icon name="close" className="glyph size-4" />
-            </button>
-          )}
-        </div>
-        <div
-          className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : drawer === "detail" ? "overflow-y-auto pt-4.5 px-4.5 pb-6" : "flex-1 min-h-0 flex flex-col p-3"}`}
+          className={`min-w-(--drawer-w) ${drawer === "workers" || drawer === "agents" ? "overflow-y-auto pt-2.5 px-3 pb-4" : drawer === "detail" ? "flex-1 min-h-0 flex flex-col" : "flex-1 min-h-0 flex flex-col p-3"}`}
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}

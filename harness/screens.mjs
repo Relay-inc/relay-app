@@ -685,6 +685,12 @@ const VIEWS = {
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
+  // the same note with its properties unfolded under the title (the doc panel design)
+  "drawer-note-properties": async () => {
+    await VIEWS["drawer-note"]();
+    await page.locator(".relay-drawer button[aria-expanded]").click();
+    await settle(page, 300);
+  },
   "drawer-notes": async () => {
     await VIEWS["project-tools"]();
     await page.getByRole("button", { name: "Notes", exact: true, pressed: false }).click();
