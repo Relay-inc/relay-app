@@ -754,7 +754,15 @@ const VIEWS = {
   // the orchestrator before its first task
   "orchestrator-empty": async () => {
     await open(page, server.url, { fixture: "orch-empty", sel: keys.orch });
-    await waitText("Give it a task across projects");
+    // the starter, not the title: the bare line it replaces also says "Give it a task across projects"
+    await waitText("Draft this week's status mail");
+  },
+  // every worker closed, so the column lists none: still the empty state, not the bare line
+  "orchestrator-closed-empty": async () => {
+    await open(page, server.url, { fixture: "orch-closed", sel: keys.orch });
+    await page.waitForFunction(() => window.__harness.workersRead);
+    await page.waitForTimeout(500);
+    await waitText("Draft this week's status mail", 2000);
   },
   // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
   "orchestrator-plain": async () => {
