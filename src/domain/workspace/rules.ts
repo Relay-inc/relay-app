@@ -65,3 +65,21 @@ export const needsFavicon = (
   const icon = icons[project.name];
   return !icon || (isSite(icon.value) && !icon.img && tried?.[project.name] !== icon.value);
 };
+
+// ---------- a note's frontmatter as properties, the way Obsidian lists them: one row per key that has a value
+const unquote = (value: string) => value.trim().replace(/^(["'])(.*)\1$/, "$2");
+/** The frontmatter's keys with their values: `key: value`, a `- item` list under it or an inline `[a, b]`. Keys
+ *  without a value are left out, nested maps read as plain text. */
+export function noteProperties(yaml: string): [string, string[]][] {
+  const rows: [string, string[]][] = [];
+  for (const line of yaml.split("\n")) {
+    const pair = /^([^\s:#-][^:]*):(?:\s+(.*))?$/.exec(line);
+    const item = /^\s*-\s+(.*)$/.exec(line);
+    if (pair) {
+      const value = (pair[2] ?? "").trim();
+      const list = /^\[(.*)\]$/.exec(value);
+      rows.push([pair[1].trim(), list ? list[1].split(",").map(unquote) : [unquote(value)]]);
+    } else if (item && rows.length) rows[rows.length - 1][1].push(unquote(item[1]));
+  }
+  return rows.map(([key, values]): [string, string[]] => [key, values.filter(Boolean)]).filter(([, v]) => v.length);
+}

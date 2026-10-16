@@ -20,6 +20,8 @@ a PR. Versions follow
 ### Changed
 
 - **The model pick can be searched**: with more than 10 models (OpenCode and Pi list hundreds through OpenRouter) the composer's model menu opens on a filter field. Type part of the name and press Enter to pick the first match. Model and effort are now the same menu as the agent pick instead of a native select (#234)
+- **A vault note in the drawer reads like a document**: its frontmatter is a table of properties (empty ones left out, links clickable), headings step down with a rule under each section, tables get lines, task lists lose their bullets, and an Obsidian callout (`> [!note] Title`) is a tinted box, also in an answer (#233)
+- **Leaving plan mode shows the plan**: the card puts Claude's plan as formatted markdown on the left and Allow and Deny on the right, instead of the plan as raw JSON (#233)
 
 ### Fixed
 

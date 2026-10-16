@@ -349,6 +349,8 @@ export default {
   "card.deny": "Weigeren",
   "card.allow": "Toestaan",
   "card.always": "Altijd toestaan",
+  "card.plan": "Claude heeft een plan{where}",
+  "card.planAsk": "Toestaan en Claude verlaat de planmodus en begint eraan. Weigeren en het blijft plannen.",
   "card.allowed": "Toegestaan {c}",
   "card.denied": "Geweigerd {c}",
   steps_one: "{n} stap",
