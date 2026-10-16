@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **OpenCode conversations show their subagents**: the agents column lists the agents an OpenCode conversation started with its task tool, with their last step, and opens each one's messages. An agent counts as done once it ends its turn or has been quiet for 15 minutes
+
 ### Changed
 
 - **The model pick can be searched**: with more than 10 models (OpenCode and Pi list hundreds through OpenRouter) the composer's model menu opens on a filter field. Type part of the name and press Enter to pick the first match. Model and effort are now the same menu as the agent pick instead of a native select (#234)
