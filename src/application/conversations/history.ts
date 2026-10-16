@@ -62,7 +62,7 @@ export async function relayWrote(key: string, text: string) {
   flush();
   set(draft => {
     // the transcript just read may hold this turn already
-    if (!lastTurnIs(draft.messages[key], text)) push(draft, key, { kind: "me", text });
+    if (!lastTurnIs(draft.messages[key], text)) push(draft, key, { kind: "me", text, at: Date.now() });
     draft.status[key] = "busy";
     draft.queued[key] = (draft.queued[key] || 0) + 1;
   });
@@ -113,6 +113,7 @@ async function finishOutsideTurn(key: string) {
     push(draft, key, {
       kind: "done",
       text: doneText(span && span.to > span.from ? (span.to - span.from) / 1000 : 0, t),
+      at: span?.to || Date.now(),
     });
     if (key !== useNavigationStore.getState().selected) draft.unseen.add(key);
   });

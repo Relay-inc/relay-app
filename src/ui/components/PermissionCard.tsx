@@ -5,6 +5,7 @@ import { useT } from "../hooks/useT";
 import { Html } from "./Html";
 import { Icon } from "./Icon";
 import { Highlighted } from "./Highlighted";
+import { Markdown } from "./Markdown";
 import { isQuestion } from "../../domain/conversations/rules";
 
 // ---------- Enter allows a permission card, but only when it is the one card on screen that can be allowed: with two
@@ -40,6 +41,7 @@ window.addEventListener("keydown", e => {
 export function describe(request: Pending): string {
   const input = request.input || {};
   if (request.tool_name === "Bash") return String(input.command ?? "");
+  if (typeof input.plan === "string") return input.plan;
   if (input.file_path)
     return String(input.file_path) + (input.content ? `\n\n${String(input.content).slice(0, 600)}` : "");
   return JSON.stringify(input, null, 2).slice(0, 900);
@@ -189,6 +191,44 @@ export function PermissionCard({
         </div>
       </div>
     );
+  const allowButton = (
+    <button
+      className="btn btn-primary cursor-pointer inline-flex items-center justify-center gap-2"
+      disabled={busy}
+      onClick={() => onAnswer("allow")}
+    >
+      {t("card.allow")}
+      {only && !busy ? (
+        <span className="text-[11px] opacity-70" aria-hidden="true">
+          ↵
+        </span>
+      ) : null}
+    </button>
+  );
+  // leaving plan mode: the plan as a document on the left, the decision next to it (under it when the card is narrow)
+  if (request.tool_name === "ExitPlanMode" && typeof request.input.plan === "string")
+    return (
+      <div className={`${box} @container`}>
+        <div className="flex items-center gap-2 text-[13px] text-secondary">
+          {badge("list")}
+          {t("card.plan", { where: where ? t("card.in", { name: where }) : "" })}
+        </div>
+        <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(0,1fr)_200px] gap-3">
+          <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-well border border-separator px-4 py-3 select-text">
+            <Markdown className="md-note" text={request.input.plan} />
+          </div>
+          <div className="flex flex-col gap-2 @2xl:justify-end">
+            <p className="text-[13px] leading-normal text-secondary">{t("card.planAsk")}</p>
+            <div className="flex @2xl:flex-col-reverse justify-end gap-2">
+              <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
+                {t("card.deny")}
+              </button>
+              {allowButton}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   return (
     <div className={box}>
       <div className="flex items-center gap-2 text-[13px] text-secondary [&_b]:text-label [&_b]:font-semibold">
@@ -207,18 +247,7 @@ export function PermissionCard({
             {t("card.always")}
           </button>
         ) : null}
-        <button
-          className="btn btn-primary cursor-pointer inline-flex items-center gap-2"
-          disabled={busy}
-          onClick={() => onAnswer("allow")}
-        >
-          {t("card.allow")}
-          {only && !busy ? (
-            <span className="text-[11px] opacity-70" aria-hidden="true">
-              ↵
-            </span>
-          ) : null}
-        </button>
+        {allowButton}
       </div>
     </div>
   );

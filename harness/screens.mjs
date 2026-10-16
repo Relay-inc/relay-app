@@ -173,6 +173,29 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");
   },
+  // leaving plan mode: the plan as a document on the left, the decision on the right (#233)
+  "conversation-plan": async () => {
+    await open(page, server.url, { sel: keys.permission });
+    await waitText("push origin fix/portal-redirect");
+    await page.evaluate(key =>
+      window.__harness.addPending({
+        id: "plan-0001",
+        project: key,
+        provider: "claude",
+        kind: "tool",
+        tool_name: "ExitPlanMode",
+        tool_use_id: "toolu_plan",
+        request_id: "req-plan",
+        relay: true,
+        at: Date.now(),
+        input: {
+          plan: "# Credit notes before their invoice\n\n## Context\nThe sync writes a second balance when a credit note arrives before its invoice (`H42398`).\n\n- match credit notes by reference\n- only open dossiers\n\n## Steps\n1. **Read the invoice table** in `BalanceSync.php`\n2. Recompute the balance\n\n| Before | After |\n|---|---|\n| two balances | one balance |\n\n## Verification\n- [ ] unit tests\n- [ ] staging run\n",
+        },
+      }),
+    keys.permission);
+    await waitText("Claude has a plan", 15000);
+    await settle(page, 300);
+  },
   "conversation-action": async () => {
     await open(page, server.url, { sel: keys.action });
     await waitText("relay productive.create_task", 10000).catch(() => waitText("Depot import script"));
@@ -348,13 +371,21 @@ const VIEWS = {
     await waitText("Waiting until Claude Code reads it");
     await settle(page, 300);
   },
+  // more than 10 models: the model pick opens on a filter field, "lla" leaves the Llama models (PR: searchable model pick)
+  "composer-model-filter": async () => {
+    await open(page, server.url, { fixture: "models", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("button[aria-label='Model']").click();
+    await page.keyboard.type("lla");
+    await settle(page);
+  },
   "composer-resolved": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
     await page.evaluate(key => window.__harness.resolved(key), keys.switchTo);
-    // the label is the picker's selected option (a native select)
+    // the label is the model pick's button
     await page.waitForFunction(
-      () => window.__dom.all("select").some(s => s.selectedOptions[0]?.textContent.includes("Opus (default)")),
+      () => window.__dom.all("button[aria-label='Model']").some(b => b.textContent.includes("Opus (default)")),
       null,
       { timeout: 5000 },
     );
@@ -635,6 +666,24 @@ const VIEWS = {
     await page.keyboard.type("git status");
     await settle(page, 500);
     await page.waitForFunction(() => document.querySelector(".xterm-rows")?.textContent?.includes("git status"));
+  },
+  // the title bar's terminal button resumes the conversation in a drawer tab named after it, next to a shell whose
+  // close button is hovered: it fills the tab's right end (#230)
+  "drawer-terminal-chat": async () => {
+    await VIEWS["project-tools"]();
+    await page.getByRole("button", { name: "Resume in terminal (⌥-click: external terminal)" }).click();
+    await page.waitForSelector(".xterm-screen");
+    await page.getByRole("button", { name: "New terminal" }).click();
+    await page.waitForFunction(() => document.querySelectorAll(".relay-drawer button[title='Close terminal']").length === 2);
+    await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
+    await settle(page, 500);
+  },
+  // a vault note in the drawer: its frontmatter as properties, a callout, ruled headings, a task list and a table (#233)
+  "drawer-note": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await page.locator("a.vlink", { hasText: "Billing Spec" }).last().click();
+    await waitText("Archive: old repo");
+    await settle(page, 300);
   },
   "drawer-notes": async () => {
     await VIEWS["project-tools"]();

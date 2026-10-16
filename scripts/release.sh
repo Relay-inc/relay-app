@@ -38,8 +38,8 @@ notes=$(mktemp)
   scripts/changelog-section.sh "$version"
   echo
   echo "---"
-  echo "Relay is not signed by Apple yet: after moving it to Applications, run"
-  echo '`xattr -dr com.apple.quarantine /Applications/Relay.app` once, or macOS says it is damaged.'
+  echo "Relay is not notarized by Apple yet: the first time you open it, macOS refuses. Open System Settings ›"
+  echo "Privacy & Security and click Open Anyway (or run \`xattr -dr com.apple.quarantine /Applications/Relay.app\` once)."
   echo "From then on Relay updates itself (signed in to gh with access to this repo)."
   [ -n "$android" ] || echo "On an Android phone: install the .apk, then pair it from Relay on your Mac (Settings › Machines › Add phone)."
 } > "$notes"
@@ -48,6 +48,9 @@ pnpm install --frozen-lockfile
 pnpm tauri build
 dmg="target/release/bundle/dmg/Relay_${version}_aarch64.dmg"
 [ -f "$dmg" ] || { echo "no $dmg after the build" >&2; exit 1; }
+# ad-hoc signed as a whole (signingIdentity "-"): with only the linker's signature on the binary macOS calls a
+# downloaded Relay damaged, with no way to open it from System Settings
+codesign --verify --deep --strict target/release/bundle/macos/Relay.app || { echo "Relay.app is not signed as a whole" >&2; exit 1; }
 bundle=target/release/bundle/macos/Relay.app.tar.gz
 [ -f "$bundle.sig" ] || { echo "no $bundle.sig after the build" >&2; exit 1; }
 tgz="$(mktemp -d)/Relay_${version}_aarch64.app.tar.gz"

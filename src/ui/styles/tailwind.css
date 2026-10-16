@@ -216,6 +216,88 @@
     @apply underline decoration-focus underline-offset-2;
   }
 }
+/* a vault note read in the drawer: a document, not a chat answer. Headings that step down, room between blocks, ruled
+   tables, task lists without their bullets */
+@utility md-note {
+  @apply text-sm leading-[1.6] wrap-anywhere;
+  & > :first-child {
+    @apply mt-0;
+  }
+  & h1 {
+    @apply text-xl font-semibold leading-tight mt-6 mb-3;
+  }
+  & h2 {
+    @apply text-base font-semibold mt-6 mb-2 pb-1 border-b border-separator;
+  }
+  & h3 {
+    @apply text-sm font-semibold mt-5 mb-1.5;
+  }
+  & h4,
+  & h5,
+  & h6 {
+    @apply text-sm font-semibold text-secondary mt-4 mb-1;
+  }
+  & p {
+    @apply my-2;
+  }
+  & strong {
+    @apply font-semibold;
+  }
+  & ul,
+  & ol {
+    @apply pl-5 my-2;
+    list-style: revert;
+  }
+  & li + li,
+  & li > ul,
+  & li > ol {
+    @apply mt-1;
+  }
+  & li:has(> input[type="checkbox"]) {
+    @apply list-none -ml-5;
+  }
+  & input[type="checkbox"] {
+    @apply mr-1.5 align-[-2px] accent-accent;
+  }
+  & li:has(> input:checked) {
+    @apply text-tertiary line-through;
+  }
+  & hr {
+    @apply my-5 border-separator;
+  }
+  & code {
+    @apply font-mono text-[12.5px] bg-fill-2 px-1 py-px rounded-sm;
+  }
+  & pre code,
+  & .codeblock code {
+    @apply bg-transparent p-0;
+  }
+  & .codeblock pre {
+    @apply px-3 py-2.5 overflow-x-auto text-xs leading-[1.6];
+  }
+  & table {
+    @apply border-collapse my-3 text-[13px] block overflow-x-auto;
+  }
+  & th,
+  & td {
+    @apply border-b border-separator py-1.5 pr-4 text-left align-top;
+  }
+  & th {
+    @apply font-semibold text-secondary;
+  }
+  & blockquote {
+    @apply my-2 pl-3 border-l-[3px] border-separator-strong text-secondary;
+  }
+  & a {
+    @apply text-accent cursor-pointer;
+  }
+  & a:not(.vlink) {
+    @apply underline underline-offset-2;
+  }
+  & a.vlink {
+    @apply underline decoration-separator underline-offset-2 hover:decoration-current;
+  }
+}
 @utility md-panel {
   @apply text-sm leading-normal wrap-anywhere;
   & pre {

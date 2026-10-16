@@ -49,11 +49,11 @@ export async function changeLanguage(language: string) {
   showTitle();
 }
 export async function changeTheme(theme: Theme) {
-  applyTheme(theme, current().accent);
+  await applyTheme(theme, current().accent);
   await save({ ...current(), theme });
 }
 export async function changeAccent(accent: Accent) {
-  applyTheme(current().theme, accent);
+  await applyTheme(current().theme, accent);
   await save({ ...current(), accent });
 }
 export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), terminal });

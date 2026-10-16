@@ -272,35 +272,20 @@ export function Composer({ className }: { className: string }) {
       ? t("composer.resolvedDefault", { value })
       : t(kind === "model" ? "composer.defaultModel" : "composer.defaultEffort");
   };
+  // a switch restarts the process, so not while a turn runs
   const pick = (kind: PickKind, show: boolean) => {
     const { list, value } = view[kind];
-    return (
-      <span className={`relative items-center ${show ? "inline-flex" : "hidden"}`}>
-        {/* a switch restarts the process, so not while a turn runs */}
-        <select
-          disabled={busy}
-          title={t(`composer.${kind}`)}
-          aria-label={t(`composer.${kind}`)}
-          value={value}
-          onChange={e => setPick(kind, e.target.value)}
-        >
-          <option value="">{defaultLabel(kind)}</option>
-          {list.map(option => (
-            <option key={option.id} value={option.id}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        {chevron}
-      </span>
-    );
+    return show ? (
+      <PickMenu
+        options={[{ id: "", name: defaultLabel(kind) }, ...list.map(option => ({ id: option.id, name: option.label }))]}
+        value={value}
+        label={t(`composer.${kind}`)}
+        disabled={busy}
+        onPick={id => setPick(kind, id)}
+      />
+    ) : null;
   };
 
-  const chevron = (
-    <span className="absolute inset-y-0 right-1.5 flex items-center pointer-events-none text-secondary">
-      <Icon name="down" className="glyph size-2.75 stroke-2" />
-    </span>
-  );
   // "<repo> · on <machine>": no click, the agent works in that repo there
   const repoChip = repoThere ? (
     <span

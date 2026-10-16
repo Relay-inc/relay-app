@@ -102,7 +102,7 @@ test("a turn that ends ok: done with its duration, idle, a banner with the last 
   );
   assert.equal(next.status["c:1"], "idle");
   assert.equal(next.queued["c:1"], 0);
-  assert.deepEqual(next.messages["c:1"].at(-1), { kind: "done", text: 'work.doneIn {"d":"3 s"}' });
+  assert.deepEqual(next.messages["c:1"].at(-1), { kind: "done", text: 'work.doneIn {"d":"3 s"}', at: 1000 });
   assert.ok(next.unseen.has("c:1"));
   assert.equal(next.chats["c:1"].at, 1000);
   assert.deepEqual(effects, [
@@ -201,6 +201,18 @@ test("a transcript shows its compaction boundary and ends with the context it le
     [{ kind: "compact", text: "compact.done · 170k → 9k", state: "ok" }],
   );
   assert.deepEqual(contextOf(history), { used: 9_500, window: 200_000 });
+});
+
+test("a transcript's message carries the time of its line, one without a time line has none", () => {
+  const history: Parameters<typeof toItems>[0] = [
+    { type: "user", text: "first", images: [] },
+    { type: "time", at: "2026-10-14T12:30:00.000Z" },
+    { type: "user", text: "second", images: [] },
+  ];
+  assert.deepEqual(
+    toItems(history, () => "", t).map(item => item.at),
+    [undefined, Date.parse("2026-10-14T12:30:00.000Z")],
+  );
 });
 
 // two messages sent to Claude Code, neither read yet

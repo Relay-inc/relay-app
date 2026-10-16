@@ -15,12 +15,40 @@ a PR. Versions follow
 
 ### Added
 
+- **OpenCode conversations show their subagents**: the agents column lists the agents an OpenCode conversation started with its task tool, with their last step, and opens each one's messages. An agent counts as done once it ends its turn or has been quiet for 15 minutes (#235)
+
+### Changed
+
+- **The model pick can be searched**: with more than 10 models (OpenCode and Pi list hundreds through OpenRouter) the composer's model menu opens on a filter field. Type part of the name and press Enter to pick the first match. Model and effort are now the same menu as the agent pick instead of a native select (#234)
+- **A vault note in the drawer reads like a document**: its frontmatter is a table of properties (empty ones left out, links clickable), headings step down with a rule under each section, tables get lines, task lists lose their bullets, and an Obsidian callout (`> [!note] Title`) is a tinted box, also in an answer (#233)
+- **Leaving plan mode shows the plan**: the card puts Claude's plan as formatted markdown on the left and Allow and Deny on the right, instead of the plan as raw JSON (#233)
 - **Stuck workers show up**: once a minute Relay checks the orchestrator's running workers. One that waits more than 10 minutes on a permission card, or whose turn runs 20 minutes without output, shows "Looks stuck" in the workers column and the reason on its page, and the coordinator hears about it once so it can tell you or stop it. The mark goes as soon as the worker moves again (#225)
 - **The coordinator finds its way back after a compaction**: `workers` now gives each worker's brief (its first 400 characters), your answer to it and whether it looks stuck, and lists the newest 30, and the coordinator is told to call it after its conversation was compacted. The orchestrator selftest (`scripts/orch-selftest.sh`) now also checks that workers call `step`, that a worker needing a decision reports blocked with options, and that none is left marked stuck (#225)
 
 ### Fixed
 
-- **The orchestrator selftest builds and runs again**: `scripts/orch-selftest.sh` had stopped compiling (calls to commands whose arguments had changed), and its main-window check looked for "From Relay" text that report cards no longer show; it now opens the coordinator by its sidebar key and counts Relay's turns (#225)
+- **Conversations no longer show twice**: Claude Code (2.1.299 at least) lists Relay's own conversations among its sessions, so a new or resumed conversation also showed as a terminal session under General until Relay knew its session id. Relay now recognises its own processes and leaves them out of the terminal sessions (#228)
+
+## [0.0.28] - 2026-10-15
+
+### Changed
+
+- **The terminal button resumes a conversation inside Relay**: it opens in a tab of the project's terminal drawer on the right instead of iTerm or Terminal, and the shell stays after Claude quits. Option-click still opens the external terminal, and so does a conversation without a project (#230)
+
+### Fixed
+
+- **Switching between light and dark** happens in one frame: the sidebar, the page and the text change together instead of one after the other, and the sidebar keeps its frosted glass during the switch (#231)
+- **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone (#229)
+
+## [0.0.27] - 2026-10-15
+
+### Added
+
+- **Times in a conversation**: each message you send shows when you sent it under it (the day too when it was not today), the line that ends a turn shows when it ended next to how long it took, and while a turn runs the working line counts up how long it has been going (#224)
+
+### Fixed
+
+- **A downloaded Relay opens again**: the DMG's app was only signed by the linker, so macOS called it damaged after a download, with no way past it short of `xattr`. The app is now signed (ad-hoc) as a whole: macOS still refuses it the first time because Apple has not notarized it, and System Settings › Privacy & Security › Open Anyway opens it. The release script checks the signature before it publishes (#226)
 
 ## [0.0.26] - 2026-10-14
 
@@ -506,7 +534,9 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...HEAD
+[0.0.28]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...v0.0.28
+[0.0.27]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...v0.0.26
 [0.0.25]: https://github.com/Relay-inc/relay-app/compare/v0.0.24...v0.0.25
 [0.0.24]: https://github.com/Relay-inc/relay-app/compare/v0.0.23...v0.0.24

@@ -468,20 +468,18 @@ export function productive(method: string, path: string, body: unknown): unknown
   if (p === "/activities") {
     const ids = (f("task_id") || "").split(",");
     return page(
-      ids
-        .slice(0, 40)
-        .map(id => ({
-          id: `ac${id}`,
-          type: "activities",
-          attributes: {
-            item_type: "task",
-            task_id: Number(id),
-            event: "update",
-            created_at: iso(NOW - 30 * HOUR),
-            changeset: [{ task_list: [{ value: "To do" }, { value: "In progress" }] }],
-          },
-          relationships: { creator: { data: { type: "people", id: "70003" } } },
-        })),
+      ids.slice(0, 40).map(id => ({
+        id: `ac${id}`,
+        type: "activities",
+        attributes: {
+          item_type: "task",
+          task_id: Number(id),
+          event: "update",
+          created_at: iso(NOW - 30 * HOUR),
+          changeset: [{ task_list: [{ value: "To do" }, { value: "In progress" }] }],
+        },
+        relationships: { creator: { data: { type: "people", id: "70003" } } },
+      })),
       PEOPLE,
     );
   }
@@ -617,15 +615,13 @@ export const usageLimits = [
 export function usageTokens() {
   const today = tally(182_000, 64_000, 4_100_000, 310_000, 18.4);
   const week = tally(1_240_000, 402_000, 31_800_000, 2_050_000, 131.7);
-  const sessions = conversations
-    .slice(0, 8)
-    .map((c, i) => ({
-      sid: sidOf(c.key),
-      key: c.key,
-      today: tally(9000 * (8 - i), 3000 * (8 - i), 200_000 * (8 - i), 20_000, 1.2 * (8 - i)),
-      week: tally(40_000 * (8 - i), 9000 * (8 - i), 900_000 * (8 - i), 60_000, 6.1 * (8 - i)),
-      last: NOW - i * HOUR,
-    }));
+  const sessions = conversations.slice(0, 8).map((c, i) => ({
+    sid: sidOf(c.key),
+    key: c.key,
+    today: tally(9000 * (8 - i), 3000 * (8 - i), 200_000 * (8 - i), 20_000, 1.2 * (8 - i)),
+    week: tally(40_000 * (8 - i), 9000 * (8 - i), 900_000 * (8 - i), 60_000, 6.1 * (8 - i)),
+    last: NOW - i * HOUR,
+  }));
   sessions.unshift({
     sid: sidOf(LONG_KEY),
     key: LONG_KEY,
@@ -765,6 +761,26 @@ export const agentsStatus = {
       defaultBin: "/opt/homebrew/bin/pi",
     },
   ],
+};
+/** agents_status of fixture `models`: Claude with 40 models, so the composer's model pick gets its filter field. */
+export const agentsStatusManyModels = {
+  ...agentsStatus,
+  providers: agentsStatus.providers.map(p =>
+    p.id !== "claude"
+      ? p
+      : {
+          ...p,
+          models: [
+            ...p.models,
+            ...choices(
+              Array.from({ length: 36 }, (_, i): [string, string] => [
+                `openrouter/model-${i}`,
+                `${["Qwen", "Llama", "Mistral", "GLM"][i % 4]} ${i} · openrouter`,
+              ]),
+            ),
+          ],
+        },
+  ),
 };
 /** agent_commands: per provider, what the composer completes after a slash. */
 export const agentCommands = (provider: string) =>
