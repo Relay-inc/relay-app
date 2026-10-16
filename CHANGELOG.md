@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.29] - 2026-10-16
+
 ### Added
 
 - **OpenCode conversations show their subagents**: the agents column lists the agents an OpenCode conversation started with its task tool, with their last step, and opens each one's messages. An agent counts as done once it ends its turn or has been quiet for 15 minutes (#235)
@@ -28,6 +30,7 @@ a PR. Versions follow
 ### Fixed
 
 - **Conversations no longer show twice**: Claude Code (2.1.299 at least) lists Relay's own conversations among its sessions, so a new or resumed conversation also showed as a terminal session under General until Relay knew its session id. Relay now recognises its own processes and leaves them out of the terminal sessions (#228)
+- **A code block's copy button copies every time**: it showed its tick but sometimes left the clipboard as it was, because the webview's clipboard was refused now and then. The app now puts the text on the clipboard itself, for every copy button (#236)
 
 ## [0.0.28] - 2026-10-15
 
@@ -37,7 +40,6 @@ a PR. Versions follow
 
 ### Fixed
 
-- **A code block's copy button copies every time**: it showed its tick but sometimes left the clipboard as it was, because the webview's clipboard was refused now and then. The app now puts the text on the clipboard itself, for every copy button (#236)
 - **Switching between light and dark** happens in one frame: the sidebar, the page and the text change together instead of one after the other, and the sidebar keeps its frosted glass during the switch (#231)
 - **Project icons load again**: since the React frontend no favicon was stored, so a website typed as a project's icon kept the default folder and a new vault got no icons at all. The favicon was read with `fetch()` on a data url, which the app's content security policy blocks, and it is decoded directly now. A website set as the icon also stays: its favicon is stored beside it instead of replacing it, and an icon changed while a favicon run is busy is left alone (#229)
 
@@ -535,7 +537,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...HEAD
+[0.0.29]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...v0.0.28
 [0.0.27]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...v0.0.27
 [0.0.26]: https://github.com/Relay-inc/relay-app/compare/v0.0.25...v0.0.26
