@@ -53,7 +53,7 @@ impl AgentProvider for OpenCode {
     fn id(&self) -> &'static str { "opencode" }
     fn name(&self) -> &'static str { "OpenCode" }
     fn caps(&self) -> Caps {
-        Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: false, fork: true,
+        Caps { persistent: true, images: true, thinking: true, permissions: true, questions: true, subagents: true, fork: true,
             terminal: true, background: true, effort: true, limits: false, title: false, accounts: false, ..Caps::default() }
     }
     fn npm_package(&self) -> Option<&'static str> { Some("opencode-ai") }
@@ -107,6 +107,12 @@ impl AgentProvider for OpenCode {
         if !store::valid(sid) { return (vec![], 0); }
         store::query(&store::db(env.home), &store::history_sql(sid)).map_or((vec![], from), |r| store::history(&r, from))
     }
+    /// The child sessions of the `task` calls; a subagent's id is its session's.
+    fn subagents(&self, env: &Env, sid: &str) -> Vec<Value> {
+        if !store::valid(sid) { return vec![]; }
+        store::query(&store::db(env.home), &store::subagents_sql(sid)).map(|r| store::subagents(&r, usage::now_ms())).unwrap_or_default()
+    }
+    fn agent_history(&self, env: &Env, _sid: &str, id: &str, from: u64) -> (Vec<Event>, u64) { self.history(env, id, from) }
     fn sessions(&self, env: &Env) -> Vec<Value> {
         if env.vault.is_empty() { return vec![]; }
         let d = dirs(env.vault);

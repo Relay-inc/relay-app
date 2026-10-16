@@ -277,7 +277,9 @@ function handle(cmd: string, a: Args): unknown {
         setTimeout(() => resolve({ branch: "relay/server", dir: `/Users/demo/Code/${a.name}` }), 600),
       );
     case "host_status": // fixture "github": a development build, This Mac cannot be a machine
-      return fixture === "github" ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] } : null;
+      return fixture === "github"
+        ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] }
+        : null;
     case "machines_list":
       return fixture === "github" ? [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }] : [];
     // fixture "github": the Harbor CRM conversation that asks a question runs on Server
@@ -368,7 +370,7 @@ function handle(cmd: string, a: Args): unknown {
 
     // agents and conversations
     case "agents_status":
-      return integ.agentsStatus;
+      return fixture === "models" ? integ.agentsStatusManyModels : integ.agentsStatus;
     case "agent_commands":
       return integ.agentCommands(a.provider);
     case "action_config":

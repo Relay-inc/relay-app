@@ -74,8 +74,9 @@ export function terminalSessions(
   return sessions.flatMap(session => {
     const sid = session.sessionId;
     const agent = liveBySid.get(sid);
-    // only sessions the providers still run, that the app did not start, listed or hidden as asked
-    if (!agent || s.appSids.includes(sid) || s.forked.includes(sid) !== hiddenOnes) return [];
+    // only sessions the providers still run, that the app did not start (`app`: its process, before its id is known),
+    // listed or hidden as asked
+    if (!agent || agent.app || s.appSids.includes(sid) || s.forked.includes(sid) !== hiddenOnes) return [];
     if (agent.kind === "background" && agent.state === "done") return [];
     const override = overrides[sid];
     const named = agent.name && !GENERIC.test(agent.name);

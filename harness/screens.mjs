@@ -371,13 +371,21 @@ const VIEWS = {
     await waitText("Waiting until Claude Code reads it");
     await settle(page, 300);
   },
+  // more than 10 models: the model pick opens on a filter field, "lla" leaves the Llama models (PR: searchable model pick)
+  "composer-model-filter": async () => {
+    await open(page, server.url, { fixture: "models", sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("button[aria-label='Model']").click();
+    await page.keyboard.type("lla");
+    await settle(page);
+  },
   "composer-resolved": async () => {
     await open(page, server.url, { sel: keys.switchTo });
     await waitText(markers.switchEnd);
     await page.evaluate(key => window.__harness.resolved(key), keys.switchTo);
-    // the label is the picker's selected option (a native select)
+    // the label is the model pick's button
     await page.waitForFunction(
-      () => window.__dom.all("select").some(s => s.selectedOptions[0]?.textContent.includes("Opus (default)")),
+      () => window.__dom.all("button[aria-label='Model']").some(b => b.textContent.includes("Opus (default)")),
       null,
       { timeout: 5000 },
     );

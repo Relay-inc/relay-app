@@ -930,6 +930,7 @@ export default {
   "composer.model": "Modèle",
   "composer.resolvedDefault": "{value} (par défaut)",
   "composer.defaultModel": "Modèle par défaut",
+  "composer.filter": "Filtrer…",
   "composer.effort": "Effort",
   "composer.context": "{pct} % de contexte",
   "composer.contextHelp": "{used} sur {window} jetons de la fenêtre de contexte",

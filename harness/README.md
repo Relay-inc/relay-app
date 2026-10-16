@@ -38,9 +38,9 @@ the installed Google Chrome.
 
 ## The mock
 
-URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|orch|orch-plain|plugins|plugins-dark` (orch-plain: orch with the workers' crabs off; orch: `orch_workers` gives three workers (running, done with a diff, silent), `c:orch` has a folded `[Relay]` report, `__harness.orchLive()` emits the live `orch` events; dark: settings theme dark; graphite: the graphite accent;
+URL query: `?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|orch|orch-plain|plugins|plugins-dark|models` (orch-plain: orch with the workers' crabs off; orch: `orch_workers` gives three workers (running, done with a diff, silent), `c:orch` has a folded `[Relay]` report, `__harness.orchLive()` emits the live `orch` events; dark: settings theme dark; graphite: the graphite accent;
 icons: the sidebar's views as a row of icons; onboarding: `vault_status` not ok, no vault; calendar: two calendars switched on, the second one failing; accounts: Claude Code
-on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split; plugins(-dark): the example plugin (packages/plugin-example) set up, so its view is in the sidebar and `?sel=__plugin:example` opens it), `?sel=<key>` the view or
+on two extra logins, the work one active, auto-switch on; mailexp: the experimental mail flag on, so archive, delete and the Inbox/Other split; models: Claude with 40 models, so the composer's model pick has its filter field; plugins(-dark): the example plugin (packages/plugin-example) set up, so its view is in the sidebar and `?sel=__plugin:example` opens it), `?sel=<key>` the view or
 conversation the window opens on, `?link=<relay:// url>` the deep link the app was launched with (`plugin:deep-link|get_current`). On every load the mock resets localStorage to the fixture:
 the conversation list (`chats`), `sel`, and the Productive board choice (`pvProject`, `pvBoard`). The window is
 transparent over the macOS sidebar material in Tauri; the mock gives `html` the `--sidebar` token as its stand-in.

@@ -13,10 +13,19 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **OpenCode conversations show their subagents**: the agents column lists the agents an OpenCode conversation started with its task tool, with their last step, and opens each one's messages. An agent counts as done once it ends its turn or has been quiet for 15 minutes (#235)
+
 ### Changed
 
+- **The model pick can be searched**: with more than 10 models (OpenCode and Pi list hundreds through OpenRouter) the composer's model menu opens on a filter field. Type part of the name and press Enter to pick the first match. Model and effort are now the same menu as the agent pick instead of a native select (#234)
 - **A vault note in the drawer reads like a document**: its frontmatter is a table of properties (empty ones left out, links clickable), headings step down with a rule under each section, tables get lines, task lists lose their bullets, and an Obsidian callout (`> [!note] Title`) is a tinted box, also in an answer (#233)
 - **Leaving plan mode shows the plan**: the card puts Claude's plan as formatted markdown on the left and Allow and Deny on the right, instead of the plan as raw JSON (#233)
+
+### Fixed
+
+- **Conversations no longer show twice**: Claude Code (2.1.299 at least) lists Relay's own conversations among its sessions, so a new or resumed conversation also showed as a terminal session under General until Relay knew its session id. Relay now recognises its own processes and leaves them out of the terminal sessions (#228)
 
 ## [0.0.28] - 2026-10-15
 
