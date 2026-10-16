@@ -48,6 +48,42 @@ pub fn sessions_of(rows: &[Value]) -> Vec<Value> {
         Some(json!({"id": sid, "sessionId": sid, "name": name, "kind": "interactive", "status": "idle", "updatedAt": r["time_updated"].as_i64().unwrap_or(0)}))
     }).collect()
 }
+/// The child sessions a session's `task` calls made, with their last message and their last tool or text part.
+/// The session's own `time_updated` barely moves after it is made: the last activity is its newest part's.
+pub fn subagents_sql(sid: &str) -> String {
+    let last = |t: &str, w: &str| format!("(select data from {t} where session_id = s.id{w} order by time_created desc, id desc limit 1)");
+    format!("select s.id, s.title, s.agent, s.model, s.time_created, max(s.time_updated, coalesce((select max(time_updated) from part where session_id = s.id), 0)) time_updated, {} msg, {} step from session s where s.parent_id = {} order by s.time_created",
+        last("message", ""), last("part", " and json_extract(data,'$.type') in ('tool','text')"), quote(sid))
+}
+/// The rows of [`subagents_sql`] as the contract's subagents. Running unless the last message is the agent's and
+/// it stopped for a reason other than a tool call (or failed), or the session has been silent for 15 minutes:
+/// a child whose parent was stopped keeps an open message in the database.
+pub fn subagents(rows: &[Value], now_ms: i64) -> Vec<Value> {
+    let parse = |v: &Value| v.as_str().and_then(|s| serde_json::from_str::<Value>(s).ok()).unwrap_or_default();
+    rows.iter().filter_map(|r| {
+        let id = r["id"].as_str().filter(|s| valid(s))?;
+        let (msg, step, model) = (parse(&r["msg"]), parse(&r["step"]), parse(&r["model"]));
+        let updated = r["time_updated"].as_i64().unwrap_or(0);
+        let ended = msg["role"] == "assistant" && (!msg["error"].is_null() || (!msg["time"]["completed"].is_null() && msg["finish"] != "tool-calls"));
+        let title = r["title"].as_str().unwrap_or("");
+        let description = title.rsplit_once(" (@").filter(|(_, t)| t.ends_with(" subagent)")).map_or(title, |(d, _)| d);
+        let mut row = json!({"id": id, "description": description, "agentType": r["agent"], "model": model["id"],
+            "started_at": rfc3339(r["time_created"].as_i64().unwrap_or(0)), "last_at": rfc3339(updated),
+            "running": !ended && now_ms - updated < 900_000});
+        if step["type"] == "tool" {
+            let (name, input) = crate::events::tool(step["tool"].as_str().unwrap_or(""), &step["state"]["input"]);
+            // only the small fields the tool line needs, never a file's content
+            let input: serde_json::Map<String, Value> = ["file_path", "command", "pattern", "query", "url", "description"].iter()
+                .filter_map(|k| input[*k].as_str().map(|v| (k.to_string(), json!(v.chars().take(120).collect::<String>())))).collect();
+            row["tool"] = json!(name);
+            row["input"] = Value::Object(input);
+        } else if let Some(t) = step["text"].as_str().map(str::trim).filter(|t| !t.is_empty()) {
+            row["text"] = json!(t.chars().take(80).collect::<String>());
+        }
+        Some(row)
+    }).collect()
+}
+
 /// A session id: `ses_` and letters and digits.
 pub fn valid(id: &str) -> bool { id.len() > 4 && id.starts_with("ses_") && id[4..].chars().all(|c| c.is_ascii_alphanumeric()) }
 
@@ -220,6 +256,31 @@ mod tests {
         assert!(s.contains("directory = '/my vault'") && s.contains(r"'/private/my\_vault/%' escape '\'") && s.contains("parent_id is null"));
         let ss = sessions_of(&rows(r#"[{"id":"ses_f0c5bbf85ffe6aFOOEAgKslvWD","title":"Run echo hi","directory":"/v","time_updated":9},{"id":"x; rm","title":"","time_updated":1}]"#));
         assert_eq!(ss, [json!({"id": "ses_f0c5bbf85ffe6aFOOEAgKslvWD", "sessionId": "ses_f0c5bbf85ffe6aFOOEAgKslvWD", "name": "Run echo hi", "kind": "interactive", "status": "idle", "updatedAt": 9})]);
+    }
+
+    #[test]
+    fn subagents_of_a_session() {
+        let msg = |d: Value| json!(d.to_string());
+        let r = vec![
+            json!({"id": "ses_child1", "title": "Review backend (@general subagent)", "agent": "general", "model": r#"{"id":"glm-5.3","providerID":"openrouter"}"#,
+                "time_created": 1000, "time_updated": 2000, "msg": msg(json!({"role": "assistant", "time": {"created": 1500}})),
+                "step": msg(json!({"type": "tool", "tool": "read", "state": {"input": {"filePath": "/v/a.md", "content": "x"}}}))}),
+            json!({"id": "ses_child2", "title": "Done one", "agent": "explore", "model": null, "time_created": 1000, "time_updated": 2000,
+                "msg": msg(json!({"role": "assistant", "time": {"created": 1, "completed": 2}, "finish": "stop"})), "step": msg(json!({"type": "text", "text": " all good \n"}))}),
+            json!({"id": "x; rm", "title": "", "time_created": 0, "time_updated": 0}),
+        ];
+        let s = subagents(&r, 2000 + 60_000);
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0], json!({"id": "ses_child1", "description": "Review backend", "agentType": "general", "model": "glm-5.3",
+            "started_at": "1970-01-01T00:00:01.000Z", "last_at": "1970-01-01T00:00:02.000Z", "running": true, "tool": "Read", "input": {"file_path": "/v/a.md"}}));
+        assert_eq!((s[1]["running"].as_bool(), s[1]["text"].as_str(), s[1]["description"].as_str()), (Some(false), Some("all good"), Some("Done one")));
+        // an open message silent for 15 minutes: its parent was stopped
+        assert_eq!(subagents(&r[..1], 2000 + 900_000)[0]["running"], false);
+        // still calling tools is not done
+        let mut calling = r[1].clone();
+        calling["msg"] = msg(json!({"role": "assistant", "time": {"created": 1, "completed": 2}, "finish": "tool-calls"}));
+        assert_eq!(subagents(&[calling], 2001)[0]["running"], true);
+        assert!(subagents_sql("ses_p'1").contains("s.parent_id = 'ses_p''1'"));
     }
 
     #[test]
