@@ -33,9 +33,13 @@ function Design({ project }: { project: string }) {
     const ro = new ResizeObserver(place);
     ro.observe(el);
     window.addEventListener("resize", place);
+    // the drawer column slides in (and the sidebar collapses) by a grid transition: the box moves without
+    // resizing, so a ResizeObserver alone keeps the native view where it was mid-slide
+    document.addEventListener("transitionend", place);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", place);
+      document.removeEventListener("transitionend", place);
       designHide();
     };
   }, [live, link]);
