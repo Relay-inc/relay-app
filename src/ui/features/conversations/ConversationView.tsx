@@ -92,11 +92,11 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
       {where.writing ? <Working text={t("term.writing")} /> : null}
       {/* sent, not read by the agent yet: it moves up into the conversation where the agent takes it up */}
       {unread?.length ? (
-        <div className="flex flex-col gap-2 opacity-55">
+        <div className="flex flex-col gap-5 opacity-55">
           {unread.map((item, i) => (
             <UserMessage key={i} text={item.text} imgs={item.imgs} files={item.files} at={item.at} />
           ))}
-          <div className="self-end text-xs text-tertiary">{t("work.waiting", { agent: where.agent })}</div>
+          <div className="self-end -mt-3.5 text-xs text-tertiary">{t("work.waiting", { agent: where.agent })}</div>
         </div>
       ) : null}
     </div>
