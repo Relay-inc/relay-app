@@ -31,6 +31,22 @@ pub fn nav_ok(label: &str, url: &Url) -> bool { host_ok(url) || (label == POPUP 
 /// wry does not close a window on `window.close()` (macOS), and Google's sign-in popup closes itself to tell
 /// claude.ai it is done: the popup's `window.close()` navigates here instead, and the guard closes the window.
 const CLOSE_URL: &str = "https://relay-design.invalid/close";
+
+/// The drawer is narrow: once per page load, collapse claude.ai's sidebar and expand the canvas over its chat
+/// (the same buttons a person presses; they can open both again). The chat stays in the page, only hidden.
+/// ponytail: claude.ai's own selectors (sidebar toggle by its Cmd+B shortcut, the canvas expand button by test id);
+/// when claude.ai changes them this does nothing and the page shows as is.
+const COMPACT: &str = r#"(() => {
+  if (location.hostname !== "claude.ai") return;
+  let sidebar = false, chat = false, tries = 0;
+  const t = setInterval(() => {
+    const side = document.querySelector('aside button[aria-keyshortcuts="Meta+b"]');
+    if (!sidebar && side && side.closest("aside").getBoundingClientRect().width > 100) { side.click(); sidebar = true; }
+    const expand = document.querySelector('[data-testid="frame-artifact-header-expand"]');
+    if (!chat && expand) { expand.click(); chat = true; }
+    if ((sidebar && chat) || ++tries > 40) clearInterval(t);
+  }, 500);
+})();"#;
 pub fn is_close(url: &Url) -> bool { url.host_str() == Some("relay-design.invalid") }
 
 fn claude_url(s: &str) -> Result<Url, String> {
@@ -53,7 +69,7 @@ pub fn design_show(app: AppHandle, url: String, x: f64, y: f64, w: f64, h: f64) 
     let handle = app.clone();
     // Google sign-in opens a popup that talks back through window.opener: it has to be a real window made from the
     // opener's own features (`Create`), not a navigation of this webview. Anything else goes to the browser.
-    let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url)).on_new_window(move |url, features| {
+    let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url)).initialization_script(COMPACT).on_new_window(move |url, features| {
         if !host_ok(&url) {
             if matches!(url.scheme(), "http" | "https") { tauri_plugin_opener::open_url(url.as_str(), None::<&str>).ok(); }
             return NewWindowResponse::Deny;
