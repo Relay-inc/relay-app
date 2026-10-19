@@ -274,17 +274,38 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
 /// Fill the composer, send, and wait for Claude Design's answer: a new assistant message once it has its actions (copy,
 /// retry), which claude.ai shows only when the turn is over. The send button is no signal: it is gone while the composer is empty.
 fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
-    let fill = format!(r#"(() => {{
-      const el = document.querySelector('[data-testid="chat-input"]');
-      if (!el) return {{ none: true }};
-      el.focus(); document.execCommand("selectAll"); document.execCommand("delete"); document.execCommand("insertText", false, {});
-      return {{ before: document.querySelectorAll('[data-testid="assistant-message"]').length }};
-    }})()"#, json!(text));
+    // the compact view hides the chat (a 0×0 composer): "detach chat" floats it over the canvas, closed again at the end
+    let show = r#"(() => { const el = document.querySelector('[data-testid="chat-input"]');
+      if (!el) return "none";
+      if (el.getBoundingClientRect().width > 0) return "shown";
+      const pop = document.querySelector('[data-testid="frame-artifact-chat-popout"]');
+      if (!pop) return "none";
+      if (pop.getAttribute("aria-pressed") !== "true") pop.click();
+      return "opened"; })()"#;
+    let mut opened = false;
     // a page that has just opened has no composer yet
-    let before = poll(Duration::from_secs(20), Duration::from_millis(500), NO_CHAT, || {
-        let r = eval(view, &fill)?;
-        Ok(r["before"].as_u64())
+    poll(Duration::from_secs(20), Duration::from_millis(500), NO_CHAT, || {
+        let r = eval(view, show)?;
+        opened |= r == "opened";
+        Ok((r == "shown").then_some(()))
     })?;
+    // execCommand types only into a focused page: the drawer's webview is not focused while the person is in the conversation
+    view.set_focus().ok();
+    let fill = format!(r#"(() => {{
+      const el = document.querySelector('[data-testid="chat-input"]'), text = {};
+      el.focus();
+      if (el.innerText.trim()) {{ document.execCommand("selectAll"); document.execCommand("delete"); }}
+      document.execCommand("insertText", false, text);
+      if (!el.innerText.trim()) {{
+        // ProseMirror takes a paste without focus
+        const dt = new DataTransfer(); dt.setData("text/plain", text);
+        el.dispatchEvent(new ClipboardEvent("paste", {{ clipboardData: dt, bubbles: true, cancelable: true }}));
+      }}
+      return {{ before: document.querySelectorAll('[data-testid="assistant-message"]').length, typed: el.innerText.trim().length }};
+    }})()"#, json!(text));
+    let r = eval(view, &fill)?;
+    if r["typed"].as_u64().unwrap_or(0) == 0 { return Err("Claude Design's composer did not take the text".into()); }
+    let before = r["before"].as_u64().unwrap_or(0);
     // "sent", or why not: the reason goes into the error, since a page we cannot see is otherwise a guess
     let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"]');
       const el = document.querySelector('[data-testid="chat-input"]');
@@ -303,6 +324,7 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
         let r = eval(view, state)?;
         Ok((r["count"].as_u64() > Some(before) && r["idle"] == true).then(|| r["text"].as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>()))
     })?;
+    if opened { eval(view, r#"document.querySelector('[data-testid="frame-artifact-chat-popout"][aria-pressed="true"]')?.click(), true"#).ok(); }
     Ok(json!({ "untrusted_answer": answer, "notice": INSTRUCTIONS }))
 }
 
