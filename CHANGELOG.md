@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **A Design tool next to Terminal and Notes**: paste a project's Claude Design (claude.ai artifact) link and the canvas shows live in the right drawer, next to the conversation; you sign in to claude.ai once in it
+- **A Design tool next to Terminal and Notes**: paste a project's Claude Design (claude.ai artifact) link and the canvas shows live in the right drawer, next to the conversation; you sign in to claude.ai once in it (#241)
 
 ### Fixed
 
