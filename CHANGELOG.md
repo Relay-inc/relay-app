@@ -16,6 +16,7 @@ a PR. Versions follow
 ### Fixed
 
 - **The orchestrator's empty state shows again after you close every worker**: the middle showed only the bare "The orchestrator. Give it a task…" line while the workers column was already empty, because closed workers still counted
+- **A waiting message's time no longer sits on its bubble**: a message sent while the agent works showed its time half over the bubble; it now sits under it like on any other message, with "Waiting until … reads it" below
 
 ## [0.0.29] - 2026-10-16
 
