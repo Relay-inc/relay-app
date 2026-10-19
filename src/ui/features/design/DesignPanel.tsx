@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { designBounds, designHide, designLink, designShow, setDesignLink } from "../../../application/design/design";
+import {
+  designBounds,
+  designHide,
+  designLink,
+  designPlaced,
+  onDesignLink,
+  designShow,
+  setDesignLink,
+  useDesignStore,
+} from "../../../application/design/design";
 import { useT } from "../../hooks/useT";
 
 /** A project's Claude Design canvas: its claude.ai artifact link in a native webview that sits over the empty div
@@ -10,7 +19,10 @@ export function DesignPanel({ project }: { project: string }) {
 
 function Design({ project }: { project: string }) {
   const { t } = useT();
-  const [link, setLink] = useState<string | null>(null); // null while it loads
+  const [saved, setLink] = useState<string | null>(null); // null while it loads
+  // a design an agent is making has no link until claude.ai opened it: the page it starts from stands in (design.rs)
+  const start = useDesignStore(s => s.start[project]);
+  const link = saved === null ? null : saved || start || "";
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState("");
   const box = useRef<HTMLDivElement>(null);
@@ -18,6 +30,7 @@ function Design({ project }: { project: string }) {
 
   useEffect(() => {
     designLink(project).then(setLink);
+    return onDesignLink(created => created.project === project && setLink(created.url));
   }, [project]);
 
   useEffect(() => {
@@ -26,7 +39,9 @@ function Design({ project }: { project: string }) {
     let shown = false;
     const place = () => {
       const r = el.getBoundingClientRect();
-      (shown ? designBounds(r) : designShow(link, r)).catch(e => setError(String(e)));
+      (shown ? designBounds(r) : designShow(link, r))
+        .then(() => designPlaced(project, true))
+        .catch(e => setError(String(e)));
       shown = true;
     };
     place();
@@ -41,8 +56,9 @@ function Design({ project }: { project: string }) {
       window.removeEventListener("resize", place);
       document.removeEventListener("transitionend", place);
       designHide();
+      designPlaced(project, false);
     };
-  }, [live, link]);
+  }, [live, link, project]);
 
   const save = async (value: string) => {
     try {
@@ -68,7 +84,7 @@ function Design({ project }: { project: string }) {
         <p className="text-xs text-secondary">{t("design.hint")}</p>
         <input
           name="url"
-          defaultValue={link}
+          defaultValue={saved ?? ""}
           placeholder="https://claude.ai/artifact/…"
           spellCheck={false}
           autoFocus

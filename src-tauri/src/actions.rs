@@ -62,10 +62,25 @@ fn access(acts: &Value, ext: &str) -> bool { acts[ext]["access"] != false }
 
 /// The user's policy for an action: the action's own, the extension's `*`, the extension as a whole, else the
 /// action's default.
-fn chosen(acts: &Value, it: &Item) -> Policy {
-    let s = &acts[it.ext];
+fn chosen(acts: &Value, it: &Item) -> Policy { policy(acts, it.ext, it.id, it.default) }
+fn policy(acts: &Value, ext: &str, id: &str, default: Policy) -> Policy {
+    let s = &acts[ext];
     let pick = |v: &Value| v.as_str().and_then(Policy::parse);
-    pick(&s[it.id]).or_else(|| pick(&s["*"])).or_else(|| pick(s)).unwrap_or(it.default)
+    pick(&s[id]).or_else(|| pick(&s["*"])).or_else(|| pick(s)).unwrap_or(default)
+}
+
+/// A tool of the app's own MCP server relay-design that acts on the user's claude.ai account (`design.prompt`,
+/// `design.create`): the policy of an extension's action, under `design` in the vault's `actions`, asking by default.
+pub fn gate(app: &AppHandle, key: &str, pid: u32, action: String, args: &Value) -> Result<(), String> {
+    let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
+    let s = acts(app);
+    if !access(&s, "design") { return Err("the user switched off agent access to design".into()); }
+    match policy(&s, "design", action.trim_start_matches("design."), Policy::Ask) {
+        Policy::Deny => Err(format!("the user does not allow {action}")),
+        Policy::Auto => Ok(()),
+        // the agent's process is the one that waits: a card for nobody is withdrawn when it ends
+        Policy::Ask => ask(app, &|| !app.state::<crate::App>().procs.lock().unwrap().get(key).is_some_and(|p| p.child.id() == pid), key, &provider, &action, args),
+    }
 }
 /// Whether mail reaches a conversation of this provider: only through a control pipe, where the app can restrict a
 /// session that read mail.
@@ -168,7 +183,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
     match effective(&s, it, &provider) {
         Policy::Deny if it.ext == "mail" && !mail_allowed(&provider) => return Err("mail is only available to Claude Code conversations".into()),
         Policy::Deny => return Err(format!("the user does not allow {action}")),
-        Policy::Ask => ask(app, c, key, &provider, action, args)?,
+        Policy::Ask => ask(app, &|| gone(c), key, &provider, action, args)?,
         Policy::Auto => {}
     }
     match it.run {
@@ -190,7 +205,7 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
 }
 
 /// A card in the conversation, as for a permission; blocks until the user answers or the agent stops waiting.
-fn ask(app: &AppHandle, c: &UnixStream, key: &str, provider: &str, action: &str, args: &Value) -> Result<(), String> {
+fn ask(app: &AppHandle, stopped: &dyn Fn() -> bool, key: &str, provider: &str, action: &str, args: &Value) -> Result<(), String> {
     use agent_core::pending;
     let dir = crate::pending_dir(app);
     let mut r = pending::Request::new("tool", &format!("relay {action}"), args.clone());
@@ -201,9 +216,9 @@ fn ask(app: &AppHandle, c: &UnixStream, key: &str, provider: &str, action: &str,
         if let Some(d) = pending::take(&dir, &r.id) {
             if d["behavior"] != "allow" { return Err(format!("the user declined {action}{}", d["message"].as_str().map(|m| format!(": {m}")).unwrap_or_default())); }
             // the agent may have given up while the card waited: nothing runs for nobody
-            return if gone(c) { Err("gone".into()) } else { Ok(()) };
+            return if stopped() { Err("gone".into()) } else { Ok(()) };
         }
-        if gone(c) || Instant::now() > until {
+        if stopped() || Instant::now() > until {
             pending::answer(&dir, &r.id, &json!({ "behavior": "deny", "message": "the agent stopped waiting" })).ok();
             pending::take(&dir, &r.id);
             return Err("stopped waiting".into());

@@ -82,6 +82,9 @@ qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
+# a picture of the Design drawer's webview for relay-design (src/design.rs)
+objc2-web-kit = "0.3"
+block2 = "0.6"
 # the tap on what the Mac plays, for recording meetings (src/meeting.rs)
 objc2-core-audio = "0.3"
 objc2-core-foundation = "0.3"

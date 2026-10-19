@@ -1,7 +1,7 @@
 // The control pipe of a provider with `caps.control`, beyond the conversation itself: the app answers the in-process MCP
-// servers it offers (relay-mail, relay-orch). The provider words the requests and the replies.
+// servers it offers (relay-mail, relay-orch, relay-design). The provider words the requests and the replies.
 use super::Proc;
-use crate::{home, mail, orch, App};
+use crate::{design, home, mail, orch, App};
 use agent_core::AgentProvider;
 use serde_json::{json, Value};
 use std::io::Write;
@@ -12,6 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 /// messages are answered, a tool call runs off this reader thread so the conversation keeps streaming while IMAP works.
 pub(crate) fn control(app: &AppHandle, p: &'static dyn AgentProvider, key: &str, pid: u32, rid: &Value, server: Option<&str>, message: &Value) {
     if server == Some("relay-orch") && orch::is_orch(key) { return orch::control(app, key, pid, rid.clone(), message); }
+    if server == Some("relay-design") { return design::control(app, key, pid, rid.clone(), message); }
     if server != Some("relay-mail") { return pipe_reply(app, key, pid, rid, Err("unsupported".into())); }
     match mail::rpc(message) {
         mail::Rpc::Reply(r) => pipe_reply(app, key, pid, rid, Ok(r)),

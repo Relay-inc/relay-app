@@ -366,6 +366,7 @@ function handle(cmd: string, a: Args): unknown {
     case "design_show":
     case "design_bounds":
     case "design_hide":
+    case "design_opened":
     case "set_design_link":
     case "set_project_icon":
     case "set_project_repos":

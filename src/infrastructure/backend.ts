@@ -121,6 +121,14 @@ export const designBounds = (r: DOMRect) => invoke("design_bounds", { x: r.x, y:
 export const designHide = () => invoke("design_hide");
 export const designLink = (project: string) => invoke<string>("design_link", { project });
 export const setDesignLink = (project: string, url: string) => invoke("set_design_link", { project, url });
+/** An agent's design tool (relay-design, design.rs) wants the Design drawer of a conversation's project open, showing
+ *  `start` while the project has no link; `designOpened` answers once it is, "" for a conversation without a project. */
+export const onDesignOpen = (handler: (open: { id: number; key: string; start: string | null }) => void) =>
+  listen<{ id: number; key: string; start: string | null }>("design-open", e => handler(e.payload));
+export const designOpened = (id: number, project: string) => invoke("design_opened", { id, project });
+/** design_create saved the link of a project's new design. */
+export const onDesignLink = (handler: (link: { project: string; url: string }) => void) =>
+  listen<{ project: string; url: string }>("design-link", e => handler(e.payload));
 /** A GitHub repo no project has, an answered "not now": no conversation asks about it again. */
 export const ignoreRepo = (repo: string) => invoke("ignore_repo", { repo });
 export const reminder = (action: "done" | "push", id: string, date: string | null) =>

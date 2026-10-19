@@ -152,6 +152,12 @@ export const toggleDrawer = (tool: "terminal" | "notes" | "design" | "workers" |
     draft.drawer = draft.drawer === tool ? "" : tool;
     draft.panel.open = "";
   });
+/** A drawer tool open, whatever the drawer showed. */
+export const showDrawer = (tool: "design") =>
+  set(draft => {
+    draft.drawer = tool;
+    draft.panel.open = "";
+  });
 export const openProjectPanel = () => {
   // the coordinator belongs to no project and never moves
   if (isView(nav().selected) || nav().selected === ORCH) return;
