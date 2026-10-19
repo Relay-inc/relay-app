@@ -296,6 +296,11 @@ export default {
   "bar.linkRepo": "Associer un dépôt GitHub à ce projet dans les Réglages",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notes",
+  "drawer.design": "Design",
+  "design.hint": "Collez un lien d'artefact claude.ai pour le design de ce projet.",
+  "design.save": "Enregistrer",
+  "design.change": "Changer le lien",
+  "design.invalid": "Ce n'est pas un lien claude.ai.",
   "drawer.detail": "Détails",
   "drawer.changes": "Modifications",
   "changes.empty":

@@ -22,7 +22,7 @@ selftest = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "unstable"] }
 # the tray menu (src/tray.rs), same version as tauri's tray-icon
 muda = { version = "0.20", default-features = false }
 serde = { version = "1", features = ["derive"] }
@@ -82,6 +82,9 @@ qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
 objc2 = "0.6"
 objc2-app-kit = "0.3"
 objc2-foundation = "0.3"
+# a picture of the Design drawer's webview for relay-design (src/design.rs)
+objc2-web-kit = "0.3"
+block2 = "0.6"
 # the tap on what the Mac plays, for recording meetings (src/meeting.rs)
 objc2-core-audio = "0.3"
 objc2-core-foundation = "0.3"

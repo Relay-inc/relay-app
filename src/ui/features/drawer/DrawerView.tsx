@@ -10,6 +10,7 @@ import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { ScratchPanel } from "../scratch/ScratchPanel";
 import { WorkersColumn } from "../orchestrator/WorkersColumn";
 import { ChangesPanel } from "../changes/ChangesPanel";
+import { DesignPanel } from "../design/DesignPanel";
 import { AgentsColumn } from "../agents/AgentsColumn";
 import "../../styles/navigation.css";
 
@@ -17,6 +18,7 @@ const TITLES = {
   detail: "drawer.detail",
   terminal: "drawer.terminal",
   notes: "drawer.notes",
+  design: "drawer.design",
   workers: "nav.orch",
   changes: "drawer.changes",
   agents: "agents.column",
@@ -52,6 +54,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
         >
           {drawer === "terminal" ? <TerminalsPanel project={toolProject} /> : null}
           {drawer === "notes" ? <ScratchPanel project={toolProject} /> : null}
+          {drawer === "design" ? <DesignPanel project={toolProject} /> : null}
           {drawer === "detail" ? <PanelDetail /> : null}
           {drawer === "workers" ? <WorkersColumn /> : null}
           {drawer === "changes" ? <ChangesPanel /> : null}

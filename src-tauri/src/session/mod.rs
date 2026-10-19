@@ -99,6 +99,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         let mut eb = env_of(app, state, p);
         // that machine's paths and its claude; no mail tools there, and the mode comes with the mirrored settings
         eb.opts["mail"] = json!(false);
+        eb.opts["design"] = json!(false);
         eb.opts["machine"] = json!(true);
         // at its first start, the project's repo the page made ready there (machine_git.rs): the agent gets its folder
         // and a line saying where it is. The conversation itself stays in the vault, so the vault's rules load
@@ -117,6 +118,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     } else {
         let mut eb = env_of(app, state, p);
         if p.caps().accounts { eb.opts["account"] = json!(account); }
+        if orch::is_orch(project) { eb.opts["design"] = json!(false); }
         if caps.control && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
         // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
@@ -138,7 +140,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let broker::Conn { agent, mut stdin, frames, backlog } = c;
     // the orchestrator's tools are answered over this Mac's pipe: its conversations never run on a machine (see send)
     if caps.control {
-        let servers: Vec<&str> = [(mail_on, "relay-mail"), (!remote && orch::is_orch(project), "relay-orch")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
+        let servers: Vec<&str> = [(mail_on, "relay-mail"), (!remote && orch::is_orch(project), "relay-orch"), (!remote && !orch::is_orch(project), "relay-design")].into_iter().filter(|s| s.0).map(|s| s.1).collect();
         if let Some(line) = p.control_init(&servers) { writeln!(stdin, "{line}").and_then(|_| stdin.flush()).map_err(|e| format!("{} start: {e}", p.id()))?; }
     }
     // a resumed or forked session may keep its own model: only a fresh one shows the CLI's defaults

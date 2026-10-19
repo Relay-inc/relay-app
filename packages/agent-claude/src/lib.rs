@@ -24,6 +24,10 @@ pub const DENIED: [&str; 3] = ["mcp__claude_ai_Gmail__*", "Bash(himalaya*)", "Ed
 /// The mail tools run without a card, also once the session holds mail text: none can send, a draft only lands in Drafts.
 pub const MAIL_TOOLS: [&str; 5] = ["mcp__relay-mail__search", "mcp__relay-mail__read", "mcp__relay-mail__thread", "mcp__relay-mail__attachment", "mcp__relay-mail__save_draft"];
 
+/// The relay-design tools (src-tauri design.rs), without a Claude Code card: the app asks for the two that act on the
+/// user's claude.ai account itself, by the policy under `design` in the vault's `actions`.
+pub const DESIGN_TOOLS: [&str; 4] = ["mcp__relay-design__design_read", "mcp__relay-design__design_snapshot", "mcp__relay-design__design_prompt", "mcp__relay-design__design_create"];
+
 /// CLAUDE_CONFIG_DIR for an account, and not inherited for ~/.claude.
 fn on_account(cmd: &mut Command, account: &str) {
     if account.is_empty() { cmd.env_remove("CLAUDE_CONFIG_DIR"); } else { cmd.env("CLAUDE_CONFIG_DIR", account); }
@@ -155,6 +159,11 @@ impl AgentProvider for Claude {
         // role prompt, and the denies and asks that hold whatever the user's settings allow (ask beats allow)
         let strs = |k: &str| env.opts[k].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect::<Vec<_>>();
         let mut allowed: Vec<String> = MAIL_TOOLS.iter().chain([RELAY_TOOL].iter()).map(|t| t.to_string()).collect();
+        // opts.design, set by the app: the relay-design tools, answered over this pipe too
+        if env.opts["design"] == true {
+            mcp["mcpServers"]["relay-design"] = json!({"type": "sdk", "name": "relay-design"});
+            allowed.extend(DESIGN_TOOLS.iter().map(|t| t.to_string()));
+        }
         if let Some(role) = env.opts["orch"].as_str() {
             mcp["mcpServers"]["relay-orch"] = json!({"type": "sdk", "name": "relay-orch"});
             allowed.extend(if role == "coordinator" { &ORCH_COORD_TOOLS[..] } else { &ORCH_WORKER_TOOLS[..] }.iter().map(|t| t.to_string()));
@@ -378,6 +387,9 @@ mod tests {
         let opts = json!({"mail": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-mail\":{\"name\":\"relay-mail\",\"type\":\"sdk\"}"));
+        let opts = json!({"design": true});
+        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-design\":{\"name\":\"relay-design\",\"type\":\"sdk\"}") && args.contains(&"mcp__relay-design__design_snapshot".to_string()));
         let opts = json!({"orch": "worker", "system": "be a worker", "deny": ["Edit(//v/x)"], "ask": ["Bash(git push*)"]});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args[at(&args, "--mcp-config") + 1].contains("\"relay-orch\":{\"name\":\"relay-orch\",\"type\":\"sdk\"}"));

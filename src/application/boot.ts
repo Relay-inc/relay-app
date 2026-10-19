@@ -26,6 +26,7 @@ import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
 import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./conversations/polls";
 import { closeChat } from "./conversations/actions";
+import { watchDesign } from "./design/design";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
 import { select, newHere, watchUpdate } from "./navigation/navigation";
@@ -157,6 +158,7 @@ async function loadSettingsAndVault() {
   backend.onIconsChanged(reloadIcons);
   backend.onReposChanged(loadProjectRepos);
   backend.onRepoUnlinked(askRepo);
+  watchDesign();
 }
 
 // conversations from earlier versions: general:<id>, plain project names
