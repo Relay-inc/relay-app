@@ -214,11 +214,20 @@ pub fn design_opened(id: u64, project: String) {
 }
 
 /// Run a script in the webview and its JSON answer; null for an exception or no value.
-fn eval(view: &Webview, js: &str) -> Result<Value, String> {
+fn eval(view: &Webview, js: &str) -> Result<Value, String> { eval_within(view, js, Duration::from_secs(10)) }
+fn eval_within(view: &Webview, js: &str, within: Duration) -> Result<Value, String> {
     let (tx, rx) = mpsc::channel();
     view.eval_with_callback(js, move |s| { tx.send(s).ok(); }).map_err(|e| e.to_string())?;
-    let s = rx.recv_timeout(Duration::from_secs(10)).map_err(|_| "the design page does not answer".to_string())?;
+    let s = rx.recv_timeout(within).map_err(|_| "the design page does not answer".to_string())?;
     Ok(serde_json::from_str(&s).unwrap_or(Value::Null))
+}
+/// Wait until the page answers scripts. wry queues a script sent before a new webview's first page commits and drops
+/// its callback, so the first call after opening the drawer never answers: ask something trivial until it does.
+fn ready(view: &Webview) -> Result<(), String> {
+    let js = r#"document.readyState !== "loading" && location.hostname === "claude.ai""#;
+    poll(Duration::from_secs(30), Duration::from_millis(500), "the design page did not load", || {
+        Ok((eval_within(view, js, Duration::from_secs(2)).ok() == Some(Value::Bool(true))).then_some(()))
+    })
 }
 /// `f` every `every` until it has an answer or `within` is over (then `timeout`).
 fn poll<T>(within: Duration, every: Duration, timeout: &str, mut f: impl FnMut() -> Result<Option<T>, String>) -> Result<T, String> {
@@ -242,7 +251,9 @@ fn open(app: &AppHandle, key: &str, start: Option<&str>) -> Result<(String, Webv
         "the Design drawer did not open".to_string()
     })?;
     if project.is_empty() { return Err("this conversation has no project: Relay keeps one Design link per project".into()); }
-    Ok((project, app.get_webview(LABEL).ok_or("the Design view is not there")?))
+    let view = app.get_webview(LABEL).ok_or("the Design view is not there")?;
+    ready(&view)?;
+    Ok((project, view))
 }
 const NO_CHAT: &str = "the page has no Claude Design chat: open the canvas's Chat once in the drawer (the chat button of the canvas), then try again";
 
@@ -274,8 +285,17 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
         let r = eval(view, &fill)?;
         Ok(r["before"].as_u64())
     })?;
-    let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"]'); if (!b || b.disabled) return false; b.click(); return true; })()"#;
-    poll(Duration::from_secs(5), Duration::from_millis(250), "Claude Design is still busy or the send button is not there", || Ok((eval(view, send)? == true).then_some(())))?;
+    // "sent", or why not: the reason goes into the error, since a page we cannot see is otherwise a guess
+    let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"]');
+      const el = document.querySelector('[data-testid="chat-input"]');
+      if (!b) return "no send button (composer " + (el ? el.innerText.trim().length + " characters" : "missing") + ")";
+      if (b.disabled || b.getAttribute("aria-disabled") === "true") return "the send button is disabled";
+      b.click(); return "sent"; })()"#;
+    let mut why = String::new();
+    poll(Duration::from_secs(5), Duration::from_millis(250), "", || {
+        why = eval(view, send)?.as_str().unwrap_or("no answer").to_string();
+        Ok((why == "sent").then_some(()))
+    }).map_err(|_| format!("Claude Design did not take the prompt: {why}"))?;
     let state = r#"(() => { const m = [...document.querySelectorAll('[data-testid="assistant-message"]')];
       const last = m[m.length - 1];
       return { count: m.length, idle: !!last?.querySelector('[data-testid="message-actions"]'), text: last ? last.innerText : "" }; })()"#;
