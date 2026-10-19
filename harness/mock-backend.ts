@@ -361,6 +361,12 @@ function handle(cmd: string, a: Args): unknown {
     case "find_icon_sites":
     case "integration_import":
       return {};
+    case "design_link":
+      return "";
+    case "design_show":
+    case "design_bounds":
+    case "design_hide":
+    case "set_design_link":
     case "set_project_icon":
     case "set_project_repos":
     case "ignore_repo":
@@ -542,9 +548,21 @@ function handle(cmd: string, a: Args): unknown {
       const seeded = Object.fromEntries(Object.keys(localStorage).map(key => [key, localStorage.getItem(key) ?? ""]));
       const closed = workers.map(w => [
         w.key,
-        { key: w.key, at: w.at, project: w.project, title: w.title, draft: false, provider: "claude", orch: true, closed: w.at + 1 },
+        {
+          key: w.key,
+          at: w.at,
+          project: w.project,
+          title: w.title,
+          draft: false,
+          provider: "claude",
+          orch: true,
+          closed: w.at + 1,
+        },
       ]);
-      return { ...seeded, chats: JSON.stringify({ ...JSON.parse(seeded.chats || "{}"), ...Object.fromEntries(closed) }) };
+      return {
+        ...seeded,
+        chats: JSON.stringify({ ...JSON.parse(seeded.chats || "{}"), ...Object.fromEntries(closed) }),
+      };
     }
     case "ui_state_init":
       return a.state;

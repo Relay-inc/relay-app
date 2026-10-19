@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **A Design tool next to Terminal and Notes**: paste a project's Claude Design (claude.ai artifact) link and the canvas shows live in the right drawer, next to the conversation; you sign in to claude.ai once in it
+
 ### Fixed
 
 - **The orchestrator's empty state shows again after you close every worker**: the middle showed only the bare "The orchestrator. Give it a task…" line while the workers column was already empty, because closed workers still counted

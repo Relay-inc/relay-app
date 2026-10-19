@@ -9,6 +9,7 @@
 //   icons     project -> its icon: "icons/<file>.png" (a file next to the config), an emoji, a website whose
 //             favicon the app fetches and stores as a file, or "" (none, do not guess). No entry: the app guesses
 //             the project's website from its notes and stores the favicon.
+//   designs   project -> its Claude Design link (a claude.ai artifact), shown in the Design drawer (design.rs)
 //   actions   extension -> agent access and the policy per action for the `relay` command (actions.rs):
 //             {"access": false} switches an extension off for agents, {"*": "ask", "add_time": "auto"} sets
 //             policies (auto, ask, deny), a plain "auto" sets them all. No entry: on, reads run, writes ask.
@@ -117,6 +118,21 @@ pub fn set_actions(vault: &str, ext: &str, entry: &Value) -> Result<(), String> 
     if !c["actions"].is_object() { c["actions"] = json!({}); }
     let m = c["actions"].as_object_mut().unwrap();
     if o.is_empty() { m.remove(ext); } else { m.insert(ext.into(), entry.clone()); }
+    save(vault, &c)
+}
+
+// ---------- designs
+
+/// A project's Claude Design link, "" for none.
+pub fn design(vault: &str, project: &str) -> String {
+    load(vault).and_then(|c| c["designs"][project].as_str().map(String::from)).unwrap_or_default()
+}
+/// Set a project's Design link, "" removes it.
+pub fn set_design(vault: &str, project: &str, url: &str) -> Result<(), String> {
+    let mut c = load(vault).ok_or("no .relay/config.json")?;
+    if !c["designs"].is_object() { c["designs"] = json!({}); }
+    let m = c["designs"].as_object_mut().unwrap();
+    if url.is_empty() { m.remove(project); } else { m.insert(project.into(), json!(url)); }
     save(vault, &c)
 }
 

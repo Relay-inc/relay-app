@@ -22,7 +22,7 @@ selftest = []
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = ["macos-private-api", "tray-icon"] }
+tauri = { version = "2", features = ["macos-private-api", "tray-icon", "unstable"] }
 # the tray menu (src/tray.rs), same version as tauri's tray-icon
 muda = { version = "0.20", default-features = false }
 serde = { version = "1", features = ["derive"] }

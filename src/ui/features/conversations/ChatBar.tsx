@@ -65,7 +65,7 @@ export function ChatBar({
   onOpenTerminal: (external: boolean) => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "notes" | "changes") => void;
+  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "changes") => void;
   onShowInBrain?: () => void;
 }) {
   const { t } = useT();
@@ -210,7 +210,10 @@ export function ChatBar({
             />
           ) : null}
           {/* a conversation's changes, from git: only a conversation has them */}
-          {(renamable ? (["changes", "terminal", "notes"] as const) : (["terminal", "notes"] as const)).map(tool => (
+          {(renamable
+            ? (["changes", "terminal", "notes", "design"] as const)
+            : (["terminal", "notes", "design"] as const)
+          ).map(tool => (
             <ToolButton
               key={tool}
               on={drawer === tool}
@@ -225,7 +228,7 @@ export function ChatBar({
   );
 }
 
-const DRAWER_ICONS = { changes: "changes", terminal: "drawerTerm", notes: "notes" } as const;
+const DRAWER_ICONS = { changes: "changes", terminal: "drawerTerm", notes: "notes", design: "design" } as const;
 
 // one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer
 function ToolButton({

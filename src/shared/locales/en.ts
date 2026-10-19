@@ -285,6 +285,11 @@ const en = {
   "bar.linkRepo": "Link a GitHub repo to this project in Settings",
   "drawer.terminal": "Terminal",
   "drawer.notes": "Notes",
+  "drawer.design": "Design",
+  "design.hint": "Paste a claude.ai artifact link for this project's design.",
+  "design.save": "Save",
+  "design.change": "Change link",
+  "design.invalid": "Not a claude.ai link.",
   "drawer.detail": "Details",
   "drawer.changes": "Changes",
   "changes.empty":
