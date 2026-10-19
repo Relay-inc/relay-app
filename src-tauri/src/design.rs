@@ -18,10 +18,20 @@ const POPUP: &str = "design-popup";
 pub fn host_ok(url: &Url) -> bool {
     let Some(h) = url.host_str() else { return false };
     let under = |d: &str| h == d || h.ends_with(&format!(".{d}"));
-    url.scheme() == "https" && (under("claude.ai") || under("claudeusercontent.com") || h == "accounts.google.com" || h == "challenges.cloudflare.com")
+    // hcaptcha.com: claude.ai's sign-in checks the browser in an hCaptcha frame
+    url.scheme() == "https"
+        && (under("claude.ai") || under("claudeusercontent.com") || under("hcaptcha.com") || h == "accounts.google.com" || h == "challenges.cloudflare.com")
 }
 /// Whether a webview label is the Design webview or its popup.
 pub fn is_design(label: &str) -> bool { label == LABEL || label == POPUP }
+/// Whether a Design navigation may load. The sign-in popup may go anywhere on https: Google's sign-in passes
+/// through several of its hosts, and the popup is a plain page with no access to Relay.
+pub fn nav_ok(label: &str, url: &Url) -> bool { host_ok(url) || (label == POPUP && url.scheme() == "https") }
+
+/// wry does not close a window on `window.close()` (macOS), and Google's sign-in popup closes itself to tell
+/// claude.ai it is done: the popup's `window.close()` navigates here instead, and the guard closes the window.
+const CLOSE_URL: &str = "https://relay-design.invalid/close";
+pub fn is_close(url: &Url) -> bool { url.host_str() == Some("relay-design.invalid") }
 
 fn claude_url(s: &str) -> Result<Url, String> {
     let u: Url = s.trim().parse().map_err(|_| format!("not a link: {s}"))?;
@@ -51,6 +61,7 @@ pub fn design_show(app: AppHandle, url: String, x: f64, y: f64, w: f64, h: f64) 
         if let Some(old) = handle.get_webview_window(POPUP) { old.close().ok(); }
         match WebviewWindowBuilder::new(&handle, POPUP, WebviewUrl::External("about:blank".parse().unwrap()))
             .window_features(features)
+            .initialization_script(format!("window.close = () => {{ location.href = '{CLOSE_URL}'; }};"))
             .on_document_title_changed(|w, title| { w.set_title(&title).ok(); })
             .title(url.as_str())
             .build()
@@ -97,6 +108,11 @@ mod tests {
         assert!(ok("https://abc.claudeusercontent.com/x"));
         assert!(ok("https://accounts.google.com/o/oauth2/auth"));
         assert!(ok("https://challenges.cloudflare.com/turnstile"));
+        assert!(ok("https://newassets.hcaptcha.com/captcha/v1/x"));
+        let u = |s: &str| s.parse::<Url>().unwrap();
+        assert!(nav_ok(POPUP, &u("https://accounts.youtube.com/x")));
+        assert!(!nav_ok(LABEL, &u("https://accounts.youtube.com/x")));
+        assert!(is_close(&u(CLOSE_URL)));
         assert!(!ok("http://claude.ai/"));
         assert!(!ok("https://evilclaude.ai/"));
         assert!(!ok("https://claude.ai.evil.com/"));
