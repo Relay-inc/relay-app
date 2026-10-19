@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.30] - 2026-10-19
+
 ### Added
 
 - **A Design tool next to Terminal and Notes**: paste a project's Claude Design (claude.ai artifact) link and the canvas shows live in the right drawer, next to the conversation; you sign in to claude.ai once in it (#241)
@@ -20,7 +22,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **The orchestrator's empty state shows again after you close every worker**: the middle showed only the bare "The orchestrator. Give it a task…" line while the workers column was already empty, because closed workers still counted
+- **The orchestrator's empty state shows again after you close every worker**: the middle showed only the bare "The orchestrator. Give it a task…" line while the workers column was already empty, because closed workers still counted (#239)
 - **A waiting message's time no longer sits on its bubble**: a message sent while the agent works showed its time half over the bubble; it now sits under it like on any other message, with "Waiting until … reads it" below (#240)
 
 ## [0.0.29] - 2026-10-16
@@ -547,7 +549,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...HEAD
+[0.0.30]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...v0.0.28
 [0.0.27]: https://github.com/Relay-inc/relay-app/compare/v0.0.26...v0.0.27
