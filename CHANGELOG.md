@@ -16,7 +16,7 @@ a PR. Versions follow
 ### Added
 
 - **A Design tool next to Terminal and Notes**: paste a project's Claude Design (claude.ai artifact) link and the canvas shows live in the right drawer, next to the conversation; you sign in to claude.ai once in it (#241)
-- **Claude Code can work on the Design canvas**: a Claude Code conversation gets `design_read` (the canvas files), `design_snapshot` (a picture of the drawer), `design_prompt` (sends Claude Design a message and returns its answer) and `design_create` (starts a design for a project that has none, and saves its link). The Design drawer opens by itself. `design_prompt` and `design_create` act on your claude.ai account and ask first; set `{"design": {"*": "auto"}}` under `actions` in the vault's `.relay/config.json` to let them run.
+- **Claude Code can work on the Design canvas**: a Claude Code conversation gets `design_read` (the canvas files), `design_snapshot` (a picture of the drawer), `design_prompt` (sends Claude Design a message and returns its answer) and `design_create` (starts a design for a project that has none, and saves its link). The Design drawer opens by itself. `design_prompt` and `design_create` act on your claude.ai account and run without asking; set `{"design": {"*": "ask"}}` under `actions` in the vault's `.relay/config.json` to get a card first.
 
 ### Fixed
 

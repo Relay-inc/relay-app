@@ -70,12 +70,13 @@ fn policy(acts: &Value, ext: &str, id: &str, default: Policy) -> Policy {
 }
 
 /// A tool of the app's own MCP server relay-design that acts on the user's claude.ai account (`design.prompt`,
-/// `design.create`): the policy of an extension's action, under `design` in the vault's `actions`, asking by default.
+/// `design.create`): the policy of an extension's action, under `design` in the vault's `actions`, allowed by default
+/// (Kristof, 19 Oct 2026): they only touch the project's own private canvas.
 pub fn gate(app: &AppHandle, key: &str, pid: u32, action: String, args: &Value) -> Result<(), String> {
     let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
     let s = acts(app);
     if !access(&s, "design") { return Err("the user switched off agent access to design".into()); }
-    match policy(&s, "design", action.trim_start_matches("design."), Policy::Ask) {
+    match policy(&s, "design", action.trim_start_matches("design."), Policy::Auto) {
         Policy::Deny => Err(format!("the user does not allow {action}")),
         Policy::Auto => Ok(()),
         // the agent's process is the one that waits: a card for nobody is withdrawn when it ends
