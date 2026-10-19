@@ -260,7 +260,8 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
     Ok(json!({ "untrusted_files": files, "missing": reply["missing"], "notice": INSTRUCTIONS }))
 }
 
-/// Fill the composer, send, and wait for Claude Design's answer: the last assistant message once the send button is back.
+/// Fill the composer, send, and wait for Claude Design's answer: a new assistant message once it has its actions (copy,
+/// retry), which claude.ai shows only when the turn is over. The send button is no signal: it is gone while the composer is empty.
 fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
     let fill = format!(r#"(() => {{
       const el = document.querySelector('[data-testid="chat-input"]');
@@ -276,7 +277,8 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
     let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"]'); if (!b || b.disabled) return false; b.click(); return true; })()"#;
     poll(Duration::from_secs(5), Duration::from_millis(250), "Claude Design is still busy or the send button is not there", || Ok((eval(view, send)? == true).then_some(())))?;
     let state = r#"(() => { const m = [...document.querySelectorAll('[data-testid="assistant-message"]')];
-      return { count: m.length, idle: !!document.querySelector('button[data-testid="chat-input-send"]'), text: m.length ? m[m.length - 1].innerText : "" }; })()"#;
+      const last = m[m.length - 1];
+      return { count: m.length, idle: !!last?.querySelector('[data-testid="message-actions"]'), text: last ? last.innerText : "" }; })()"#;
     let answer = poll(Duration::from_secs(300), Duration::from_secs(1), "Claude Design did not finish within 5 minutes; it may still be working, look at the Design drawer", || {
         let r = eval(view, state)?;
         Ok((r["count"].as_u64() > Some(before) && r["idle"] == true).then(|| r["text"].as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>()))
