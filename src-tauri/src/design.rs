@@ -271,8 +271,8 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
     Ok(json!({ "untrusted_files": files, "missing": reply["missing"], "notice": INSTRUCTIONS }))
 }
 
-/// Fill the composer, send, and wait for Claude Design's answer: a new assistant message once it has its actions (copy,
-/// retry), which claude.ai shows only when the turn is over. The send button is no signal: it is gone while the composer is empty.
+/// Fill the composer, send, and wait for Claude Design's answer: the last assistant message once the turn is over (the
+/// composer's stop button is gone). Neither the send button nor message-actions tell: both come and go mid-turn.
 fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
     // the compact view hides the chat (a 0×0 composer): "detach chat" floats it over the canvas, closed again at the end
     let show = r#"(() => { const el = document.querySelector('[data-testid="chat-input"]');
@@ -317,12 +317,17 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
         why = eval(view, send)?.as_str().unwrap_or("no answer").to_string();
         Ok((why == "sent").then_some(()))
     }).map_err(|_| format!("Claude Design did not take the prompt: {why}"))?;
+    // the turn runs while the composer's stop button is there; message-actions show on a message while it still works
     let state = r#"(() => { const m = [...document.querySelectorAll('[data-testid="assistant-message"]')];
-      const last = m[m.length - 1];
-      return { count: m.length, idle: !!last?.querySelector('[data-testid="message-actions"]'), text: last ? last.innerText : "" }; })()"#;
+      return { count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"]'), text: m.length ? m[m.length - 1].innerText : "" }; })()"#;
+    let sent = Instant::now();
+    let mut seen = false;
     let answer = poll(Duration::from_secs(300), Duration::from_secs(1), "Claude Design did not finish within 5 minutes; it may still be working, look at the Design drawer", || {
         let r = eval(view, state)?;
-        Ok((r["count"].as_u64() > Some(before) && r["idle"] == true).then(|| r["text"].as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>()))
+        seen |= r["working"] == true;
+        // the stop button can come a moment after the send: done once it has come and gone (or never came within 10 s)
+        let done = r["count"].as_u64() > Some(before) && r["working"] == false && (seen || sent.elapsed() > Duration::from_secs(10));
+        Ok(done.then(|| r["text"].as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>()))
     })?;
     if opened { eval(view, r#"document.querySelector('[data-testid="frame-artifact-chat-popout"][aria-pressed="true"]')?.click(), true"#).ok(); }
     Ok(json!({ "untrusted_answer": answer, "notice": INSTRUCTIONS }))
