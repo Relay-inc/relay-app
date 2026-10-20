@@ -7,7 +7,7 @@ import { initialConversations, type ConversationsState } from "./state.ts";
 enableMapSet();
 const t = ((key: string, params?: Record<string, string | number>) =>
   params ? `${key} ${JSON.stringify(params)}` : key) as EventEnv["t"];
-const env: EventEnv = { t, selected: "c:open", now: 1000 };
+const env: EventEnv = { t, selected: "c:open", now: 1000, imageUrl: (mt, data) => `${mt};${data}` };
 const fresh = (): ConversationsState => ({
   ...initialConversations({ chats: {}, hidden: [], forked: [] }),
   chats: { "c:1": { key: "c:1", project: null, title: "x", at: 0 } },
@@ -75,12 +75,14 @@ test("a tool starts running and ends ok or with an error", () => {
     { type: "tool_result", id: "t1", error: false },
     { type: "tool_result", id: "t2", error: true },
     { type: "patch", id: "t1", hunks: [{ oldStart: 3, newStart: 3, lines: ["-a", "+b"] }] },
+    { type: "tool_images", id: "t1", images: [{ media_type: "image/png", data: "AA==" }] },
   );
   assert.deepEqual(
     done.messages["c:1"].map(item => item.state),
     ["ok", "err"],
   );
   assert.equal(done.messages["c:1"][0].hunks?.[0].oldStart, 3);
+  assert.deepEqual(done.messages["c:1"][0].imgs, ["image/png;AA=="]);
 });
 
 test("a mail tool marks the conversation as touching mail, once", () => {
@@ -213,6 +215,18 @@ test("a transcript's message carries the time of its line, one without a time li
     toItems(history, () => "", t).map(item => item.at),
     [undefined, Date.parse("2026-10-14T12:30:00.000Z")],
   );
+});
+
+test("a transcript's tool step shows the images its result held", () => {
+  const items = toItems(
+    [
+      { type: "tool_call", id: "t1", name: "Read", input: { file_path: "/v/shot.png" } },
+      { type: "tool_images", id: "t1", images: [{ media_type: "image/png", data: "AA==" }] },
+    ],
+    (mt, data) => `${mt};${data}`,
+    t,
+  );
+  assert.deepEqual(items[0].imgs, ["image/png;AA=="]);
 });
 
 // two messages sent to Claude Code, neither read yet

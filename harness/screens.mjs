@@ -168,6 +168,24 @@ const VIEWS = {
     await settle(page);
     await scrollMain("bottom");
   },
+  // a Read of a picture: its thumbnail on hover, the zoom on a click
+  "conversation-tool-image": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.evaluate(() => window.__harness.liveTail());
+    await settle(page);
+    await scrollMain("bottom");
+    await page.getByRole("button", { name: /invoice\.png/ }).hover();
+    await settle(page);
+  },
+  "conversation-tool-image-zoom": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.evaluate(() => window.__harness.liveTail());
+    await settle(page);
+    await page.getByRole("button", { name: /invoice\.png/ }).click();
+    await settle(page);
+  },
   // a card whose request carries Claude's permission_suggestions: Deny, Always allow, Allow
   "conversation-permission": async () => {
     await open(page, server.url, { sel: keys.permission });

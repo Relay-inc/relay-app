@@ -15,7 +15,13 @@ type EventOf<Type extends AgentEvent["type"]> = Extract<AgentEvent, { type: Type
 export const IMG_OK = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 /** What the reducer reads from outside the state. */
-export type EventEnv = { t: Translate; selected: string; now: number };
+export type EventEnv = {
+  t: Translate;
+  selected: string;
+  now: number;
+  /** an image a tool returned as something to show (a blob url) */
+  imageUrl: (mediaType: string, data: string) => string;
+};
 /** What the reducer asks for after an event. */
 export type Effect = { kind: "save-chats" } | { kind: "notify"; key: string; body: string } | { kind: "snapshot" };
 
@@ -131,6 +137,11 @@ export function applyAgentEvent(
       if (item) item.hunks = event.hunks;
       return [];
     }
+    case "tool_images": {
+      const item = state.messages[key]?.find(x => x.id === event.id);
+      if (item) item.imgs = toolImgs(event, env.imageUrl);
+      return [];
+    }
     case "turn_end":
       return onTurnEnd(state, key, event, env);
     case "error":
@@ -235,6 +246,9 @@ function onProcessExit(state: ConversationsState, key: string, env: EventEnv): E
   return effects;
 }
 
+const toolImgs = (event: EventOf<"tool_images">, imageUrl: EventEnv["imageUrl"]) =>
+  event.images.map(image => imageUrl(image.media_type, image.data));
+
 // ---------- history from the transcript, when a conversation opens for the first time
 /** A transcript's events as items. `imageUrl` turns an inline image into something to show (a blob url). */
 export function toItems(
@@ -276,6 +290,9 @@ export function toItems(
       // ponytail: a followed transcript read in pieces loses the patch whose call was in an earlier piece (it shows without line numbers)
       const tool = items.find(x => x.id === entry.id);
       if (tool) tool.hunks = entry.hunks;
+    } else if (entry.type === "tool_images") {
+      const tool = items.find(x => x.id === entry.id);
+      if (tool) tool.imgs = toolImgs(entry, imageUrl);
     }
   }
   settle();

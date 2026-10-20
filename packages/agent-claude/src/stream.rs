@@ -36,6 +36,21 @@ fn patch(content: &Value, result: &Value, out: &mut Vec<Event>) {
     if !hunks.is_empty() { out.push(Event::Patch { id: r["tool_use_id"].as_str().unwrap_or("").into(), hunks }); }
 }
 
+/// An image block inline as base64, of a type the webview shows.
+fn image(x: &Value) -> Option<Image> {
+    let s = &x["source"];
+    let mt = s["media_type"].as_str().unwrap_or("");
+    (s["type"] == "base64" && IMAGE_TYPES.contains(&mt)).then(|| s["data"].as_str().map(|d| Image { media_type: mt.into(), data: d.into() })).flatten()
+}
+
+/// The images in a message's tool results: what a Read of a picture or a screenshot tool gave Claude.
+fn tool_images(content: &Value, out: &mut Vec<Event>) {
+    for r in content.as_array().into_iter().flatten().filter(|c| c["type"] == "tool_result") {
+        let images: Vec<Image> = r["content"].as_array().into_iter().flatten().filter(|x| x["type"] == "image").filter_map(image).collect();
+        if !images.is_empty() { out.push(Event::ToolImages { id: r["tool_use_id"].as_str().unwrap_or("").into(), images }); }
+    }
+}
+
 /// The parser of one process. With `--include-partial-messages` text and thinking arrive as `stream_event` deltas
 /// first (the first piece of a block starts it, the next ones append), then the whole `assistant` message: its text
 /// is skipped for a message that streamed, or it would show twice.
@@ -130,6 +145,8 @@ fn parse(ev: &Value) -> Vec<Event> {
                 out.push(Event::ToolResult { id: c["tool_use_id"].as_str().unwrap_or("").into(), error: c["is_error"] == true });
             }
             patch(&ev["message"]["content"], &ev["tool_use_result"], &mut out);
+            // a subagent's results stay out: its steps are not in the conversation
+            if ev["parent_tool_use_id"].is_null() { tool_images(&ev["message"]["content"], &mut out); }
         }
         "result" => {
             let ok = ev["is_error"] != true && ev["subtype"] == "success";
@@ -173,15 +190,12 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
     let c = &e["message"]["content"];
     if e["type"] == "assistant" { assistant(c, false, out); out.extend(context(&e["message"]["usage"])); return; }
     patch(c, &e["toolUseResult"], out);
+    tool_images(c, out);
     if let Some(s) = c.as_str().map(strip) { if !harness(s) { out.push(Event::User { text: s.into(), images: vec![] }); } return; }
     let Some(blocks) = c.as_array() else { return };
     let texts: Vec<&str> = blocks.iter().filter(|x| x["type"] == "text").filter_map(|x| x["text"].as_str()).map(strip).filter(|t| !harness(t)).collect();
     // an image not inline as base64 is None: a placeholder
-    let images: Vec<Option<Image>> = blocks.iter().filter(|x| x["type"] == "image").map(|x| {
-        let s = &x["source"];
-        let mt = s["media_type"].as_str().unwrap_or("");
-        (s["type"] == "base64" && IMAGE_TYPES.contains(&mt)).then(|| s["data"].as_str().map(|d| Image { media_type: mt.into(), data: d.into() })).flatten()
-    }).collect();
+    let images: Vec<Option<Image>> = blocks.iter().filter(|x| x["type"] == "image").map(image).collect();
     if !texts.is_empty() || !images.is_empty() { out.push(Event::User { text: texts.join("\n\n"), images }); }
 }
 
@@ -313,6 +327,23 @@ mod tests {
         // a tool result is no message of the user's
         let result = json!({"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t1"}]}}).to_string();
         assert_eq!(st.parse(&result), vec![Event::ToolResult { id: "t1".into(), error: false }]);
+    }
+
+    #[test]
+    fn a_tool_result_with_an_image_gives_it_to_its_step() {
+        let mut st = State::default();
+        let png = json!({"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "AA=="}});
+        let html = json!({"type": "image", "source": {"type": "base64", "media_type": "text/html", "data": "x"}});
+        let content = json!([{"type": "tool_result", "tool_use_id": "t1", "content": [png, html, {"type": "text", "text": "ok"}]}]);
+        let image = Image { media_type: "image/png".into(), data: "AA==".into() };
+        let live = json!({"type": "user", "message": {"content": content}}).to_string();
+        assert_eq!(st.parse(&live), vec![Event::ToolResult { id: "t1".into(), error: false }, Event::ToolImages { id: "t1".into(), images: vec![image.clone()] }]);
+        // a subagent's screenshot is not shown
+        let sub = json!({"type": "user", "parent_tool_use_id": "toolu_9", "message": {"content": content}}).to_string();
+        assert_eq!(st.parse(&sub), vec![Event::ToolResult { id: "t1".into(), error: false }]);
+        let mut out = vec![];
+        history_line(&json!({"type": "user", "message": {"content": content}}), &mut out);
+        assert_eq!(out, vec![Event::ToolImages { id: "t1".into(), images: vec![image] }]);
     }
 
     #[test]
