@@ -154,6 +154,8 @@ pub enum Event {
     ToolResult { id: String, error: bool },
     /// The change a file tool made, as unified-diff hunks with line numbers, when the provider reports it.
     Patch { id: String, hunks: Vec<Hunk> },
+    /// The images a tool returned (a Read of a picture, a screenshot), inline as base64, when the provider keeps them.
+    ToolImages { id: String, images: Vec<Image> },
     /// A permission request or question raised in the provider's own protocol. The app writes it to the
     /// pending folder; the answer comes back through [`AgentProvider::respond`].
     Permission { request: pending::Request },

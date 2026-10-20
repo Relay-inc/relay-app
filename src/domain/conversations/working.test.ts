@@ -8,7 +8,7 @@ import type { AgentEvent } from "../agents/types";
 // The working indicator after a reload and during a live turn (Lit's working.test.ts): the app's own process table
 // decides, a late poll never revives a finished turn, and activity is not counted as another prompt.
 enableMapSet();
-const env: EventEnv = { t: (key => key) as EventEnv["t"], selected: "open", now: 1 };
+const env: EventEnv = { t: (key => key) as EventEnv["t"], selected: "open", now: 1, imageUrl: () => "" };
 const fresh = (provider: string): ConversationsState => ({
   ...initialConversations({ chats: {}, hidden: [], forked: [] }),
   chats: { open: { key: "open", provider, title: "Conversation", project: null, at: 1 } },

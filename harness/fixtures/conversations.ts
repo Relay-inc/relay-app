@@ -275,6 +275,13 @@ export const liveTail = (): Ev[] => [
     input: { file_path: "/Users/demo/code/beacon/src/Billing/Invoice.php" },
   },
   { type: "tool_result", id: "toolu_live_ok", error: false },
+  { type: "tool_call", id: "toolu_live_img", name: "Read", input: { file_path: "/Users/demo/code/beacon/invoice.png" } },
+  { type: "tool_result", id: "toolu_live_img", error: false },
+  {
+    type: "tool_images",
+    id: "toolu_live_img",
+    images: [{ media_type: "image/png", data: pngBase64(480, 300, "#e8eef9", "#3b6fd8") }],
+  },
   { type: "tool_call", id: "toolu_live_err", name: "Bash", input: { command: "php bin/console app:sync --dry-run" } },
   { type: "tool_result", id: "toolu_live_err", error: true },
   { type: "error", text: "Process exited with code 1: SQLSTATE[08006] connection to staging database refused" },

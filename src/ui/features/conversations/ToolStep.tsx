@@ -3,6 +3,7 @@ import type { Item } from "../../../domain/conversations/types";
 import { noteKey } from "../../../domain/navigation/keys";
 import { notePath } from "../../../application/workspace/vault";
 import { openDetail } from "../../../application/navigation/panel";
+import { zoom } from "../../../application/navigation/navigation";
 import { useDerived } from "../../hooks/useDerived";
 import { Icon } from "../../components/Icon";
 import { ToolLine } from "../../components/ToolLine";
@@ -20,7 +21,8 @@ const kindOf = (name: string) =>
         : "file";
 
 /** One tool call, a line with its icon, and the change it made when the call carries one. A Read or Edit on a note
- *  that exists opens it in the right panel; a command opens in full under its line. */
+ *  that exists opens it in the right panel; a command opens in full under its line; the images a result held (a Read
+ *  of a picture, a screenshot) show on hover and open in the zoom. */
 export function ToolStep({ item }: { item: Item }) {
   // re-read when the notes index changes, so a note written later links
   const note = useDerived(() => notePath(item.path));
@@ -28,6 +30,7 @@ export function ToolStep({ item }: { item: Item }) {
   const tool = item.tool;
   const change = tool ? changeOf(tool.name, tool.input) : null;
   const command = tool?.name === "Bash" ? String(tool.input?.command || "") : "";
+  const imgs = item.imgs ?? [];
   // the provider's patch has line numbers and context; without one, the old and new text from the call
   const rows = item.hunks?.length ? hunkRows(item.hunks) : null;
   const lines = item.hunks?.flatMap(hunk => hunk.lines) ?? [];
@@ -59,8 +62,12 @@ export function ToolStep({ item }: { item: Item }) {
   const box =
     "mt-1 mb-1.5 border border-separator rounded-lg overflow-hidden font-mono text-xs leading-[1.7] max-h-120 overflow-y-auto";
   return (
-    <div>
-      {note ? (
+    <div className={imgs.length ? "group relative" : ""}>
+      {imgs.length ? (
+        <button className={`${cls} w-full text-left cursor-zoom-in hover:text-label`} onClick={() => zoom(imgs[0])}>
+          {line}
+        </button>
+      ) : note ? (
         <button
           className={`${cls} w-full text-left cursor-pointer hover:underline`}
           onClick={() => openDetail(noteKey(note))}
@@ -78,6 +85,20 @@ export function ToolStep({ item }: { item: Item }) {
       ) : (
         <div className={cls}>{line}</div>
       )}
+      {imgs.length ? (
+        // ponytail: opens below its line, near the bottom of the log it scrolls; flip upward if that bothers
+        <div className="absolute left-5 top-full z-20 hidden group-hover:flex gap-1.5 p-1.5 bg-bg border border-separator rounded-lg shadow-lg">
+          {imgs.map((url, i) => (
+            <img
+              key={i}
+              className="block max-h-48 max-w-72 object-contain rounded-md cursor-zoom-in"
+              src={url}
+              alt=""
+              onClick={() => zoom(url)}
+            />
+          ))}
+        </div>
+      ) : null}
       {open && command ? (
         <pre className="my-1 px-3 py-2 bg-well border border-separator rounded-lg font-mono text-xs leading-[1.6] text-label whitespace-pre-wrap wrap-anywhere select-text max-h-60 overflow-y-auto">
           <Highlighted code={command} lang="bash" />
