@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **A ticket's picture opens in the viewer again**: the viewer window stayed white, because the guard for links in mails also refused the picture and the tracker's login in that window
 - **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
 
 ### Added

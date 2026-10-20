@@ -2026,6 +2026,9 @@ pub fn run() {
                 eprintln!("design: blocked {url}");
                 return false;
             }
+            // the viewer is a plain browser window (open_viewer): the picture, the tracker's login and its sign-in
+            // pages all load in it, instead of asking "open this link?" in the main window and staying white
+            if w.label() == "viewer" && url.scheme() == "https" { return true; }
             if matches!(url.scheme(), "http" | "https" | "mailto") { w.emit("mail-link", url.as_str()).ok(); }
             false
         }).build())
