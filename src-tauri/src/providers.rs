@@ -188,12 +188,49 @@ pub fn original(p: &Provider, url: &str) -> Result<tauri::Url, String> {
     if !(p.original)(url) { return Err(trc_v("err.call", p.name)); }
     tauri::Url::parse(url).map_err(|e| e.to_string())
 }
-/// Bytes as a data URL when they are a PNG, JPEG, GIF or WebP, told by their first bytes, not by what the server says.
+/// A picture's original for an agent, which cannot open the tracker's link: fetched as the viewer window loads it, with
+/// the login cookies in `jar` (curl's cookie engine sends each only to its own domain, also over the redirects), never
+/// with the secrets. Only a URL the provider's `original` allows. [media type, bytes]; the login page is no picture.
+pub fn original_bytes(p: &Provider, url: &str, jar: &str) -> Result<(&'static str, Vec<u8>), String> {
+    original(p, url)?;
+    let file = std::env::temp_dir().join(format!("relay-jar-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos())));
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        std::fs::OpenOptions::new().write(true).create_new(true).mode(0o600).open(&file).and_then(|mut f| f.write_all(jar.as_bytes())).map_err(|e| e.to_string())?;
+    }
+    let conf = format!("url = {}\ncookie = {}\n", curl_quote(url), curl_quote(&file.display().to_string()));
+    let out = (|| {
+        let mut ch = Command::new("/usr/bin/curl").args(["-sS", "--fail", "-L", "--max-redirs", "5", "--proto", "=https", "--proto-redir", "=https", "--max-time", "60", "--max-filesize", "20000000", "-K", "-"])
+            .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| e.to_string())?;
+        ch.stdin.take().unwrap().write_all(conf.as_bytes()).map_err(|e| e.to_string())?;
+        ch.wait_with_output().map_err(|e| e.to_string())
+    })();
+    std::fs::remove_file(&file).ok();
+    let o = out?;
+    if !o.status.success() { return Err(trc_v("err.down", String::from_utf8_lossy(&o.stderr).trim()).replace("{p}", p.name)); }
+    let mime = kind(&o.stdout).ok_or_else(|| format!("{}: not a picture (not signed in in the viewer?)", p.name))?;
+    Ok((mime, o.stdout))
+}
+/// The cookies of `host`'s site (its parent domain: files.productive.io → productive.io, so the login on app. counts
+/// too) as a Netscape cookie file for curl. Cookies of other sites never go in. (domain, path, secure, name, value)
+pub fn jar(host: &str, cookies: impl IntoIterator<Item = (String, String, bool, String, String)>) -> String {
+    let site = host.split_once('.').map_or(host, |(_, rest)| if rest.contains('.') { rest } else { host });
+    let mine = |d: &str| d == site || d.ends_with(&format!(".{site}"));
+    cookies.into_iter()
+        .filter(|(d, ..)| mine(d.trim_start_matches('.')))
+        .filter(|(d, path, _, n, v)| ![d, path, n, v].iter().any(|x| x.chars().any(|c| c.is_control())))
+        .map(|(d, path, secure, n, v)| format!("{d}\t{}\t{}\t{}\t0\t{n}\t{v}\n", if d.starts_with('.') { "TRUE" } else { "FALSE" }, if path.is_empty() { "/" } else { &path }, if secure { "TRUE" } else { "FALSE" }))
+        .collect()
+}
+/// PNG, JPEG, GIF or WebP, told by the first bytes, not by what the server says.
+fn kind(b: &[u8]) -> Option<&'static str> {
+    Some(if b.starts_with(b"\x89PNG") { "image/png" } else if b.starts_with(&[0xFF, 0xD8, 0xFF]) { "image/jpeg" }
+        else if b.starts_with(b"GIF8") { "image/gif" } else if b.len() > 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" { "image/webp" } else { return None })
+}
+/// Bytes as a data URL when they are a picture.
 fn picture(b: &[u8]) -> Option<String> {
     use base64::Engine;
-    let mime = if b.starts_with(b"\x89PNG") { "image/png" } else if b.starts_with(&[0xFF, 0xD8, 0xFF]) { "image/jpeg" }
-        else if b.starts_with(b"GIF8") { "image/gif" } else if b.len() > 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" { "image/webp" } else { return None };
-    Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(b)))
+    Some(format!("data:{};base64,{}", kind(b)?, base64::engine::general_purpose::STANDARD.encode(b)))
 }
 
 #[cfg(test)]
@@ -205,6 +242,13 @@ mod tests {
         assert!(picture(&[0xFF, 0xD8, 0xFF, 0xE0]).unwrap().starts_with("data:image/jpeg"));
         assert!(picture(b"RIFF\0\0\0\0WEBPVP8 ").unwrap().starts_with("data:image/webp"));
         assert!(picture(b"<svg onload=x>").is_none() && picture(b"<!DOCTYPE html>").is_none());
+    }
+    #[test]
+    fn jar_holds_only_the_site_cookies() {
+        let c = |d: &str, n: &str| (d.to_string(), "/".to_string(), true, n.to_string(), "v".to_string());
+        let j = jar("files.productive.io", [c(".productive.io", "sess"), c("app.productive.io", "csrf"), c("claude.ai", "x"), c("evilproductive.io", "y"), c(".productive.io", "bad\nline")]);
+        assert_eq!(j, ".productive.io\tTRUE\t/\tTRUE\t0\tsess\tv\napp.productive.io\tFALSE\t/\tTRUE\t0\tcsrf\tv\n");
+        assert!(jar("example.com", [c("example.com", "a")]).contains("\ta\t"), "a bare domain is its own site");
     }
     #[test]
     fn upload_posts_the_fields_then_the_file_and_reads_location() {

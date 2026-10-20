@@ -355,6 +355,9 @@ export const integrationUpload = (args: {
 /** A picture's preview from a URL the provider's `thumb` allows, fetched without secrets, as a data URL. */
 export const integrationThumb = (provider: string, url: string) =>
   invoke<string>("integration_thumb", { provider, url });
+/** A ticket's pictures ([name, url]) saved on this Mac for an agent, with the viewer window's login; the paths that came. */
+export const ticketPictures = (provider: string, files: [string, string][]) =>
+  invoke<string[]>("ticket_pictures", { provider, files });
 /** A picture's original in Relay's viewer window (the tracker's login once, then the picture). */
 export const openViewer = (provider: string, url: string, name: string) =>
   invoke<void>("open_viewer", { provider, url, name });
