@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in
+- **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
 
 ## [0.0.30] - 2026-10-19
 
