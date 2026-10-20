@@ -34,8 +34,8 @@ import { ConversationsView } from "../features/conversations/ConversationsView";
 import { DrawerView } from "../features/drawer/DrawerView";
 import { QuickAskView } from "../features/navigation/QuickAskView";
 import { WorkspaceView } from "../features/workspace/WorkspaceView";
-import { useChangesStore } from "../../application/changes/store";
-import { openFile } from "../../application/changes/changes";
+import { useGitStore } from "../../application/git/store";
+import { askDiscard, openFile } from "../../application/git/git";
 import { ColumnResize } from "../features/navigation/ColumnResize";
 
 /** Whether an event started in a text field, wherever it sits. */
@@ -59,7 +59,12 @@ function onEscape(e: KeyboardEvent) {
     closeTicket();
     return;
   }
-  if (useChangesStore.getState().open) {
+  if (useGitStore.getState().discard) {
+    e.preventDefault();
+    askDiscard("", "");
+    return;
+  }
+  if (useGitStore.getState().open) {
     e.preventDefault();
     openFile("", "");
     return;

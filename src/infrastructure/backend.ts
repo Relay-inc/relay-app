@@ -5,7 +5,7 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
-import type { RepoChanges } from "../domain/conversations/changes";
+import type { GitRepo } from "../domain/git/git";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../domain/settings/updates";
 import type {
   AgentSession,
@@ -171,8 +171,14 @@ export const stop = (project: string) => invoke("stop", { project });
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });
 /** What a conversation changed, per repo, from git: the repos of the paths it wrote and the worktrees it made. */
-export const conversationChanges = (key: string, paths: string[]) =>
-  invoke<RepoChanges[]>("conversation_changes", { key, paths });
+// the Git drawer (src-tauri/src/git.rs): a project's checkouts, open in conversation `key` (its worktrees count too)
+export const gitRepos = (key: string, project: string) => invoke<GitRepo[]>("git_repos", { key, project });
+export const gitStage = (key: string, project: string, repo: string, paths: string[], on: boolean) =>
+  invoke<void>("git_stage", { key, project, repo, paths, on });
+export const gitDiscard = (key: string, project: string, repo: string, path: string) =>
+  invoke<void>("git_discard", { key, project, repo, path });
+export const gitCommit = (key: string, project: string, repo: string, message: string, push: boolean) =>
+  invoke<void>("git_commit", { key, project, repo, message, push });
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });

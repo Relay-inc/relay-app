@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { commentsMessage, totals, writtenPaths, type RepoChanges } from "./changes.ts";
-import type { Item } from "./types.ts";
+import { commentsMessage, stagedDiff, worksIn, writtenPaths, type GitRepo } from "./git.ts";
+import type { Item } from "../conversations/types.ts";
 
 const tool = (name: string, input: Record<string, unknown>): Item =>
   ({ kind: "tool", text: "", tool: { name, input } }) as Item;
@@ -19,13 +19,39 @@ test("writtenPaths keeps the absolute paths of file tools, once each", () => {
   assert.deepEqual(writtenPaths(undefined), []);
 });
 
-test("totals add up every repo", () => {
-  const f = (add: number, del: number) => ({ path: "x", status: "M" as const, add, del, patch: "", binary: false });
-  const repos: RepoChanges[] = [
-    { repo: "/a", name: "a", branch: "b", base: "HEAD", files: [f(1, 2), f(3, 0)] },
-    { repo: "/c", name: "c", branch: "b", base: "HEAD", files: [f(5, 5)] },
-  ];
-  assert.deepEqual(totals(repos), { files: 3, add: 9, del: 7 });
+test("worksIn sees a tool call that names the checkout, not one next to it", () => {
+  const items = [tool("Bash", { command: "cd /p/apple && git status" })];
+  assert.equal(worksIn(items, "/p/apple"), true);
+  assert.equal(worksIn([tool("Edit", { file_path: "/p/apple/src/a.ts" })], "/p/apple"), true);
+  assert.equal(worksIn([tool("Bash", { command: "ls /p/apple-trees" })], "/p/apple"), false);
+  assert.equal(worksIn([{ kind: "me", text: "/p/apple" }], "/p/apple"), false);
+  assert.equal(worksIn(undefined, "/p/apple"), false);
+});
+
+test("stagedDiff holds only the staged files, cut at the limit", () => {
+  const f = (path: string, staged: boolean) => ({
+    path,
+    orig: null,
+    status: "M",
+    staged,
+    untracked: false,
+    add: 1,
+    del: 0,
+    patch: "@@ -1 +1 @@\n+x",
+    binary: false,
+  });
+  const repo: GitRepo = {
+    repo: "/r",
+    name: "r",
+    branch: "main",
+    upstream: "",
+    ahead: 0,
+    behind: 0,
+    made: false,
+    files: [f("a.ts", true), f("b.ts", false)],
+  };
+  assert.equal(stagedDiff(repo, 1000), "--- a.ts (M)\n@@ -1 +1 @@\n+x");
+  assert.equal(stagedDiff(repo, 5), "--- a\n…");
 });
 
 test("commentsMessage names the file, line and code of each comment", () => {

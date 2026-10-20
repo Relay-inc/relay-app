@@ -2,7 +2,7 @@ import type { AgentEvent } from "../agents/types";
 import type { ConversationsState, Translate } from "./state";
 import type { ContextUse, Item, ToolInput } from "./types";
 import { formatDuration, ktokens, lastAi } from "./rules.ts";
-import { FILE_TOOLS } from "./changes.ts";
+import { FILE_TOOLS } from "../git/git.ts";
 import { cleanCommands } from "./commands.ts";
 import { splitFiles } from "./files.ts";
 import { isRelayTurn } from "../orchestrator/rules.ts";

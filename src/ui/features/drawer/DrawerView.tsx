@@ -10,7 +10,7 @@ import { PanelDetail } from "../navigation/PanelDetail";
 import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { ScratchPanel } from "../scratch/ScratchPanel";
 import { WorkersColumn } from "../orchestrator/WorkersColumn";
-import { ChangesPanel } from "../changes/ChangesPanel";
+import { GitPanel } from "../git/GitPanel";
 import { DesignPanel } from "../design/DesignPanel";
 import { AgentsColumn } from "../agents/AgentsColumn";
 import "../../styles/navigation.css";
@@ -21,12 +21,12 @@ const TITLES = {
   notes: "drawer.notes",
   design: "drawer.design",
   workers: "nav.orch",
-  changes: "drawer.changes",
+  git: "drawer.git",
   agents: "agents.column",
 } as const;
 
 /** The right drawer, open on demand: a note's detail, one of the project's tools (terminals, notes), the
- *  open conversation's changes, or the orchestrator's workers next to its coordinator. */
+ *  project's git repos, or the orchestrator's workers next to its coordinator. */
 export function DrawerView({ className, drawer }: { className: string; drawer: Exclude<Drawer, ""> }) {
   const { t } = useT();
   const escape = useKeyLabel("app.escape");
@@ -67,7 +67,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           {drawer === "design" ? <DesignPanel project={toolProject} /> : null}
           {drawer === "detail" ? <PanelDetail /> : null}
           {drawer === "workers" ? <WorkersColumn /> : null}
-          {drawer === "changes" ? <ChangesPanel /> : null}
+          {drawer === "git" ? <GitPanel /> : null}
           {drawer === "agents" ? <AgentsColumn /> : null}
         </div>
       </div>

@@ -1,0 +1,1 @@
+Write a git commit message for the staged changes below. {{untrusted}} The first line says what the change does, in the imperative mood and in English, under 72 characters. Add a blank line and a short body only when the reason for the change is not obvious from the diff. Answer with the message only: no quotes, no code fence, no preamble.
