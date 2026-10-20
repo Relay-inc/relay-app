@@ -36,6 +36,9 @@ export const findProjects = (text: string) => findIn(ws().snap.projects, text);
 
 // ---------- notes: only notes that exist link
 export const noteKnown = (target: string) => knownIn(ws().notes, settings().vault, target);
+/** A note (relative to the vault) in its default app, Obsidian or an editor. */
+export const openNote = (path: string) =>
+  backend.openFile(`${ws().notes.root}/${path}`, false).catch(e => console.error(e));
 /** A path from a tool call that names an existing note, or "". */
 export const notePath = (path?: string) => (path && /\.md$/i.test(noteOf(path)) && noteKnown(noteOf(path)) ? path : "");
 // what the notes index was made from: an unchanged list keeps the parsed markdown (every 30 s and every turn end)

@@ -37,13 +37,14 @@ import { PermissionsSection } from "./PermissionsSection";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
+import { VaultSyncSection } from "./VaultSyncSection";
 
 const trimmed = (map: VaultMap) => Object.fromEntries(KEYS.map(([key]) => [key, map[key].trim()])) as VaultMap;
 
 // Relay blue is the fixed brand colour (it must not follow the current accent); graphite is the text colour
 const SWATCH = { relay: "bg-[#3a5ffb]", graphite: "bg-label" };
 
-/** General: the vault folder with its mapping, what agents may do with reminders, the interface (language, colour
+/** General: the vault folder with its mapping, its git backup, what agents may do with reminders, the interface (language, colour
  *  scheme, accent, favicons, terminal), the views on top of the sidebar and what macOS lets Relay do. */
 export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus; active: boolean }) {
   const { t, th } = useT();
@@ -153,6 +154,7 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
       >
         {KEYS.map(mapping)}
       </Section>
+      <VaultSyncSection />
       <ActionsSection ext="reminders" name={t("act.reminders")} />
       <Section title={t("set.sec.interface")} rows>
         <Field label={t("set.theme")} hint={<Html html={th("set.themeHelp")} />}>

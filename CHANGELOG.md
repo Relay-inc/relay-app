@@ -17,6 +17,17 @@ a PR. Versions follow
 
 - **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
 
+### Added
+
+- **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`)
+
+## [0.0.31] - 2026-10-20
+
+### Added
+
+- **Back up the vault to git**: Settings › General › Git backup takes a remote (ssh, https or a path on a disk); every 5 to 60 minutes Relay commits the vault and pushes it there, with your own git login. It only pushes, never pulls, and refuses a repository anyone can read. The last sync and any error show under it (#245)
+- **See the pictures Claude looks at**: a Read of an image or a screenshot from an MCP tool shows it on hover over its step, a click opens it large in the zoom, like a pasted image. Also in older conversations, from the transcript (#244)
+
 ## [0.0.30] - 2026-10-19
 
 ### Added
@@ -37,6 +48,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **A vault note in the side panel reads as a document**: one bar with where it lives, copy path, open and close; the note's title and description on top; its properties folded into one line you can open; inline code without boxes; and a list of the notes it links to (#238)
 - **The model pick can be searched**: with more than 10 models (OpenCode and Pi list hundreds through OpenRouter) the composer's model menu opens on a filter field. Type part of the name and press Enter to pick the first match. Model and effort are now the same menu as the agent pick instead of a native select (#234)
 - **A vault note in the drawer reads like a document**: its frontmatter is a table of properties (empty ones left out, links clickable), headings step down with a rule under each section, tables get lines, task lists lose their bullets, and an Obsidian callout (`> [!note] Title`) is a tinted box, also in an answer (#233)
 - **Leaving plan mode shows the plan**: the card puts Claude's plan as formatted markdown on the left and Allow and Deny on the right, instead of the plan as raw JSON (#233)
@@ -553,7 +565,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...HEAD
+[0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...v0.0.28

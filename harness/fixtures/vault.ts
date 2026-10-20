@@ -140,7 +140,7 @@ export const noteText = (target: string) => {
   const name = target.split("/").pop()!.replace(/\.md$/, "");
   return {
     path: notes.find(n => n.endsWith(`/${name}.md`)) || target,
-    text: `---\ntype: Document\ncontext: "[[Billing Spec]]"\nparent:\naliases:\n  - portal\n  - client-portal\nlaatst: 2026-10-01\n---\n# ${name}\n\n> [!note] Archive: old repo\n> The previous repo is archived, all work goes here.\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Laurent |\n| Phase | Build |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
+    text: `---\ntype: Document\ndescription: How the portal bills a client: one invoice per month, credit notes against the \`invoice_id\` they correct.\ncontext: "[[Billing Spec]]"\ncreated: 2026-09-21\nparent:\naliases:\n  - portal\n  - client-portal\nlaatst: 2026-10-01\n---\n# ${name}\n\n> [!note] Archive: old repo\n> The previous repo is archived, all work goes here.\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Laurent |\n| Phase | Build |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
   };
 };
 

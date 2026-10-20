@@ -18,6 +18,7 @@ import type {
 } from "../domain/conversations/types";
 import type {
   ActionConfig,
+  VaultSync,
   ActionEntry,
   DeviceCode,
   Machine,
@@ -392,6 +393,14 @@ export const pluginImport = (name: string) => invoke<Plugin>("plugin_import", { 
 export const actionConfig = () => invoke<ActionConfig>("action_config");
 export const setActionConfig = (ext: string, entry: ActionEntry) =>
   invoke<ActionConfig["config"]>("set_action_config", { ext, entry });
+
+// ---------- the vault's git backup (the vault's .relay/config.json `sync`, src-tauri/src/vaultsync.rs)
+export const vaultSync = () => invoke<VaultSync>("vault_sync");
+export const setVaultSync = (remote: string, on: boolean, minutes: number) =>
+  invoke<VaultSync>("set_vault_sync", { remote, on, minutes });
+/** A sync round ended. */
+export const onVaultSync = (handler: (last: NonNullable<VaultSync["last"]>) => void) =>
+  listen<NonNullable<VaultSync["last"]>>("vault-sync", e => handler(e.payload));
 
 // ---------- the embedded terminals (src-tauri/src/pty.rs) and the scratch notes (scratch.rs)
 /** A shell in the project's vault folder, first continuing the conversation `chat` when given. `onData` gets its

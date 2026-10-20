@@ -18,6 +18,7 @@ import {
   type PhonePairing,
   type Message,
   type Settings,
+  type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
 import type { AgentsStatus } from "../../domain/agents/types";
@@ -89,6 +90,8 @@ export type SettingsState = {
   // agent access per extension, from the vault's .relay/config.json: every action, the entry per extension, and why the
   // last load (`""`) or save (by extension) failed
   actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
+  // the vault's git backup as saved (null until read) and why the last save failed
+  vaultSync: { saved: VaultSync | null; message: Message | null };
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -168,6 +171,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     repoMessages: {},
   },
   actions: { list: [], entries: {}, errors: {} },
+  vaultSync: { saved: null, message: null },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

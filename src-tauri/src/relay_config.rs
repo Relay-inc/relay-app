@@ -13,6 +13,8 @@
 //   actions   extension -> agent access and the policy per action for the `relay` command (actions.rs):
 //             {"access": false} switches an extension off for agents, {"*": "ask", "add_time": "auto"} sets
 //             policies (auto, ask, deny), a plain "auto" sets them all. No entry: on, reads run, writes ask.
+//   sync      the git remote the vault is committed and pushed to, as a backup (vaultsync.rs):
+//             {"remote", "on", "minutes"}
 //
 // Written once from what the app detects, the first time a vault is used; after that the file is the truth,
 // edited by hand or in Settings. snapshot.rs and favicon.rs read the same file.
