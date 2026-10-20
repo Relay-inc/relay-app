@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Back up the vault to git**: Settings › General › Git backup takes a remote (ssh, https or a path on a disk); every 5 to 60 minutes Relay commits the vault and pushes it there, with your own git login. It only pushes, never pulls, and refuses a repository anyone can read. The last sync and any error show under it
+- **Back up the vault to git**: Settings › General › Git backup takes a remote (ssh, https or a path on a disk); every 5 to 60 minutes Relay commits the vault and pushes it there, with your own git login. It only pushes, never pulls, and refuses a repository anyone can read. The last sync and any error show under it (#245)
 
 ## [0.0.30] - 2026-10-19
 
