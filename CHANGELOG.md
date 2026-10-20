@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **See the pictures Claude looks at**: a Read of an image or a screenshot from an MCP tool shows it on hover over its step, a click opens it large in the zoom, like a pasted image. Also in older conversations, from the transcript (#PR)
+
 ## [0.0.30] - 2026-10-19
 
 ### Added
