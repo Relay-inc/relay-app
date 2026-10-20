@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
+
 ### Added
 
 - **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`)

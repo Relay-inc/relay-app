@@ -13,13 +13,12 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::webview::{NewWindowResponse, WebviewBuilder};
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, State, Url, Webview, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, Rect, State, Url, Webview, WebviewUrl};
 
 const LABEL: &str = "design";
-const POPUP: &str = "design-popup";
 
-/// Hosts the Design webview and its sign-in popup may navigate to: claude.ai, the sandbox the artifact runs in,
-/// Google sign-in and Cloudflare's challenge.
+/// Hosts the Design webview may navigate to (and open a sign-in popup on): claude.ai, the sandbox the artifact runs
+/// in, Google sign-in and Cloudflare's challenge.
 pub fn host_ok(url: &Url) -> bool {
     let Some(h) = url.host_str() else { return false };
     let under = |d: &str| h == d || h.ends_with(&format!(".{d}"));
@@ -27,15 +26,53 @@ pub fn host_ok(url: &Url) -> bool {
     url.scheme() == "https"
         && (under("claude.ai") || under("claudeusercontent.com") || under("hcaptcha.com") || h == "accounts.google.com" || h == "challenges.cloudflare.com")
 }
-/// Whether a webview label is the Design webview or its popup.
-pub fn is_design(label: &str) -> bool { label == LABEL || label == POPUP }
-/// Whether a Design navigation may load. The sign-in popup may go anywhere on https: Google's sign-in passes
-/// through several of its hosts, and the popup is a plain page with no access to Relay.
-pub fn nav_ok(label: &str, url: &Url) -> bool { host_ok(url) || (label == POPUP && url.scheme() == "https") }
+/// Whether a webview label is the Design webview.
+pub fn is_design(label: &str) -> bool { label == LABEL }
 
-/// wry does not close a window on `window.close()` (macOS), and Google's sign-in popup closes itself to tell
-/// claude.ai it is done: the popup's `window.close()` navigates here instead, and the guard closes the window.
-const CLOSE_URL: &str = "https://relay-design.invalid/close";
+/// wry's popup window (`NewWindowResponse::Allow`) ignores `window.close()`: its WKWebView has no UI delegate, and
+/// Google's sign-in closes the popup itself once claude.ai has the answer. `watch` gives every such window (a WKWebView
+/// as content view, no UI delegate; Relay's own webviews all have wry's) a delegate that closes it.
+#[cfg(target_os = "macos")]
+mod popup {
+    use objc2::rc::Retained;
+    use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
+    use objc2::{define_class, msg_send, ClassType, MainThreadMarker, MainThreadOnly};
+    use objc2_app_kit::NSApplication;
+    use objc2_web_kit::{WKUIDelegate, WKWebView};
+
+    define_class!(
+        #[unsafe(super(NSObject))]
+        #[thread_kind = MainThreadOnly]
+        #[name = "RelayDesignPopupCloser"]
+        struct Closer;
+
+        unsafe impl NSObjectProtocol for Closer {}
+
+        unsafe impl WKUIDelegate for Closer {
+            #[unsafe(method(webViewDidClose:))]
+            fn did_close(&self, web_view: &WKWebView) {
+                if let Some(w) = web_view.window() { w.close(); }
+            }
+        }
+    );
+
+    thread_local! {
+        // WebKit holds its UI delegate weakly: one closer, alive for the app's life
+        static CLOSER: Retained<Closer> = unsafe { msg_send![Closer::class(), new] };
+    }
+
+    pub fn watch() {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        for window in NSApplication::sharedApplication(mtm).windows() {
+            let Some(wk) = window.contentView().and_then(|v| v.downcast::<WKWebView>().ok()) else { continue };
+            if unsafe { wk.UIDelegate() }.is_none() {
+                CLOSER.with(|c| unsafe { wk.setUIDelegate(Some(ProtocolObject::from_ref(&**c))) });
+            }
+        }
+    }
+}
+#[cfg(not(target_os = "macos"))]
+mod popup { pub fn watch() {} }
 
 /// The drawer is narrow: once per page load, collapse claude.ai's sidebar and expand the canvas over its chat
 /// (the same buttons a person presses; they can open both again). The chat stays in the page, only hidden.
@@ -52,7 +89,6 @@ const COMPACT: &str = r#"(() => {
     if ((sidebar && chat) || ++tries > 40) clearInterval(t);
   }, 500);
 })();"#;
-pub fn is_close(url: &Url) -> bool { url.host_str() == Some("relay-design.invalid") }
 
 fn claude_url(s: &str) -> Result<Url, String> {
     let u: Url = s.trim().parse().map_err(|_| format!("not a link: {s}"))?;
@@ -71,25 +107,21 @@ pub fn design_show(app: AppHandle, url: String, x: f64, y: f64, w: f64, h: f64) 
         return view.show().map_err(|e| e.to_string());
     }
     let window = app.get_window("main").ok_or("no main window")?;
+    // Google sign-in opens a popup that talks back through window.opener. It is a plain window wry makes from the
+    // opener's configuration (`Allow`): a Tauri window (`Create`) aborts the app, because that configuration shares
+    // the Design webview's script handlers and wry adds Tauri's `ipc` handler a second time (wry 0.57, WebKit throws).
+    // The popup is not a Tauri webview (no IPC, no navigation guard); popup::watch makes its `window.close()` work.
+    // Anything off the allowed hosts goes to the browser.
     let handle = app.clone();
-    // Google sign-in opens a popup that talks back through window.opener: it has to be a real window made from the
-    // opener's own features (`Create`), not a navigation of this webview. Anything else goes to the browser.
-    let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url)).initialization_script(COMPACT).initialization_script_for_all_frames(BRIDGE).on_new_window(move |url, features| {
+    let builder = WebviewBuilder::new(LABEL, WebviewUrl::External(url)).initialization_script(COMPACT).initialization_script_for_all_frames(BRIDGE).on_new_window(move |url, _| {
         if !host_ok(&url) {
             if matches!(url.scheme(), "http" | "https") { tauri_plugin_opener::open_url(url.as_str(), None::<&str>).ok(); }
             return NewWindowResponse::Deny;
         }
-        if let Some(old) = handle.get_webview_window(POPUP) { old.close().ok(); }
-        match WebviewWindowBuilder::new(&handle, POPUP, WebviewUrl::External("about:blank".parse().unwrap()))
-            .window_features(features)
-            .initialization_script(format!("window.close = () => {{ location.href = '{CLOSE_URL}'; }};"))
-            .on_document_title_changed(|w, title| { w.set_title(&title).ok(); })
-            .title(url.as_str())
-            .build()
-        {
-            Ok(window) => NewWindowResponse::Create { window },
-            Err(_) => NewWindowResponse::Deny,
-        }
+        // wry makes the window after this returns: from another thread, run_on_main_thread queues behind it
+        let h = handle.clone();
+        std::thread::spawn(move || { h.run_on_main_thread(popup::watch).ok(); });
+        NewWindowResponse::Allow
     });
     window.add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w, h)).map_err(|e| e.to_string())?;
     Ok(())
@@ -459,10 +491,6 @@ mod tests {
         assert!(ok("https://accounts.google.com/o/oauth2/auth"));
         assert!(ok("https://challenges.cloudflare.com/turnstile"));
         assert!(ok("https://newassets.hcaptcha.com/captcha/v1/x"));
-        let u = |s: &str| s.parse::<Url>().unwrap();
-        assert!(nav_ok(POPUP, &u("https://accounts.youtube.com/x")));
-        assert!(!nav_ok(LABEL, &u("https://accounts.youtube.com/x")));
-        assert!(is_close(&u(CLOSE_URL)));
         assert!(!ok("http://claude.ai/"));
         assert!(!ok("https://evilclaude.ai/"));
         assert!(!ok("https://claude.ai.evil.com/"));

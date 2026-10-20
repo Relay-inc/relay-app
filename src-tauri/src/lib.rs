@@ -2019,14 +2019,9 @@ pub fn run() {
         // here: the app's own pages load, a web or mailto link goes to the UI to ask first, anything else is dropped
         .plugin(tauri::plugin::Builder::<tauri::Wry>::new("links").on_navigation(|w, url| {
             if nav_internal(url) { return true; }
-            // the Design webview (and its sign-in popup) is claude.ai itself
+            // the Design webview is claude.ai itself
             if design::is_design(w.label()) {
-                if design::is_close(url) {
-                    let window = w.window();
-                    tauri::async_runtime::spawn(async move { window.close().ok(); });
-                    return false;
-                }
-                if design::nav_ok(w.label(), url) { return true; }
+                if design::host_ok(url) { return true; }
                 // a frame inside claude.ai (a check, an embed) would otherwise ask "open this link?" in the main window
                 eprintln!("design: blocked {url}");
                 return false;
