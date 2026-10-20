@@ -3,12 +3,13 @@
 //! (src-tauri/src/lib.rs), so the webview's conversation code runs on both; only what a phone does is here. Every
 //! conversation runs on the server: the phone follows it (several devices at once, see relay-remote's broker), sends
 //! messages and answers its cards. Claude's lines are read with the same parser as on the laptop (agent-claude).
+//! A conversation the laptop shares from its own Mac (`/share-phone`) is listed and followed the same way; the server
+//! passes it through to the Mac, and relay-remote signs every line this phone sends to it (relay_remote::share).
 
 use agent_claude::PROVIDER;
 use agent_core::{pending, AgentProvider, Event, Image, Turn};
 use relay_remote::broker::{frame, Frame};
 use relay_remote::client::{self, Client};
-use relay_remote::tls::Identity;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
@@ -31,17 +32,20 @@ struct App {
     turns: Mutex<HashMap<String, u32>>,
     /// open permission cards, raised from the conversations' own lines
     cards: Mutex<Vec<pending::Request>>,
+    /// the conversations the last list said run on the laptop's Mac: never started on the server
+    shared: Mutex<HashSet<String>>,
 }
 
 /// The app's data folder: the sealed secrets (sealed.rs) and where the paired server is (`server.json`, no secret).
 fn dir(app: &AppHandle) -> Result<PathBuf, String> { app.path().app_data_dir().map_err(|e| e.to_string()) }
-fn identity(app: &AppHandle) -> Result<Identity, String> { Ok(sealed::load(app, &dir(app)?)?.id) }
+
 fn saved(app: &AppHandle) -> Result<Value, String> {
     serde_json::from_str(&fs::read_to_string(dir(app)?.join("server.json")).map_err(|_| "not paired yet")?).map_err(|e| e.to_string())
 }
 fn server(app: &AppHandle) -> Result<Client, String> {
     let s = saved(app)?;
-    Ok(Client::new(s["host"].as_str().unwrap_or(""), s["port"].as_u64().unwrap_or(0) as u16, s["fp"].as_str().unwrap_or(""), identity(app)?))
+    let secrets = sealed::load(app, &dir(app)?)?;
+    Ok(Client::new(s["host"].as_str().unwrap_or(""), s["port"].as_u64().unwrap_or(0) as u16, s["fp"].as_str().unwrap_or(""), secrets.id).with_link(secrets.link))
 }
 /// The mirrored vault on the server, where the conversations run (their transcripts are found by it).
 fn vault_there(c: &Client) -> Result<String, String> { Ok(format!("{}/vault", c.info()?.work)) }
@@ -57,6 +61,7 @@ fn pair(app: AppHandle, line: String, name: String) -> Result<Value, String> {
     let mut secrets = sealed::load(&app, &d)?;
     let (l, info) = client::pair(&line, &secrets.id, &name).inspect_err(|e| eprintln!("relay: pairing failed: {e}"))?;
     secrets.mirror = l.key.clone();
+    secrets.link = l.link.clone();
     sealed::save(&app, &d, &secrets)?;
     let s = json!({"host": l.host, "port": l.port, "fp": l.fp});
     fs::write(d.join("server.json"), s.to_string()).map_err(|e| e.to_string())?;
@@ -75,12 +80,14 @@ fn info(app: AppHandle) -> Result<Value, String> {
     Ok(json!(c.info()?))
 }
 
-/// The laptop's conversations on the server: [{key, title, provider, model, effort, sid}], `sid` and `title` (the first
-/// thing said in it) where the server saw them.
+/// The laptop's conversations on the server: [{key, title, provider, model, effort, sid, shared}], `sid` and `title`
+/// (the first thing said in it) where the server saw them, `shared` for one that runs on the laptop's Mac.
 #[tauri::command(async)]
-fn conversations(app: AppHandle) -> Result<Value, String> {
-    let (metas, sids, titles) = server(&app)?.list_named()?;
-    Ok(json!(metas.iter().map(|m| json!({"key": m.key, "title": titles.get(&m.key), "provider": m.provider, "model": m.model, "effort": m.effort, "sid": sids.get(&m.key)})).collect::<Vec<_>>()))
+fn conversations(app: AppHandle, state: State<App>) -> Result<Value, String> {
+    let (metas, sids, titles, shared) = server(&app)?.listing()?;
+    *state.shared.lock().unwrap() = shared.iter().cloned().collect();
+    Ok(json!(metas.iter().map(|m| json!({"key": m.key, "title": titles.get(&m.key), "provider": m.provider, "model": m.model, "effort": m.effort,
+        "sid": sids.get(&m.key), "shared": shared.contains(&m.key)})).collect::<Vec<_>>()))
 }
 
 /// The conversations whose agent runs, with the turns each has in flight as this phone saw them (desktop: `running`).
@@ -146,6 +153,7 @@ fn answer(state: State<App>, id: String, decision: Value) -> Result<(), String> 
 #[tauri::command(async)]
 fn history(app: AppHandle, project: String) -> Result<Value, String> {
     let c = server(&app)?;
+    if app.state::<App>().shared.lock().unwrap().contains(&project) { return Ok(c.history_key(&project)?.0); }
     let Some(sid) = c.list_sessions()?.1.remove(&project) else { return Ok(json!([])) };
     Ok(c.history(&sid, 0, &vault_there(&c)?)?.0)
 }
@@ -166,6 +174,8 @@ fn follow(app: &AppHandle, state: &App, key: &str, model: &str, effort: &str) ->
     let c = server(app)?;
     let conn = match c.attach(key)? {
         Some(conn) => conn,
+        // the laptop's Mac is not there now: the conversation is its, never forked onto the server
+        None if state.shared.lock().unwrap().contains(key) => return Err("the Mac does not answer: is Relay open on it?".into()),
         None => {
             let sid = c.list_sessions()?.1.remove(key);
             c.start(key, key, model, effort, sid.as_deref())?

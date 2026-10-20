@@ -47,6 +47,7 @@ mod reminders;
 mod retry;
 mod scratch;
 mod session;
+mod share;
 #[cfg(feature = "selftest")]
 mod selftest;
 mod snapshot;
@@ -255,6 +256,14 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.move_no_session", ["This conversation has not started yet: pick where it runs next to the model", "Dit gesprek is nog niet gestart: kies naast het model waar het loopt", "Cette conversation n'a pas encore commencé : choisissez où elle s'exécute à côté du modèle", "Dieses Gespräch hat noch nicht begonnen: Wähle neben dem Modell, wo es läuft"]),
     ("err.move_only_claude", ["Only a Claude Code conversation can move to another machine", "Enkel een gesprek met Claude Code kan naar een andere machine", "Seule une conversation Claude Code peut changer de machine", "Nur ein Claude-Code-Gespräch kann auf eine andere Maschine wechseln"]),
     ("err.move_busy", ["Wait until the turn ends and no card is open, then move it", "Wacht tot de beurt klaar is en er geen kaart openstaat, verhuis het dan", "Attendez la fin du tour et qu'aucune carte ne soit ouverte, puis déplacez-la", "Warte, bis die Runde endet und keine Karte offen ist, dann verschiebe es"]),
+    ("err.share_mail", ["A conversation about a mail stays on this Mac, also from the phone", "Een gesprek over een mail blijft op deze Mac, ook voor de telefoon",
+        "Une conversation sur un mail reste sur ce Mac, aussi pour le téléphone", "Ein Gespräch über eine Mail bleibt auf diesem Mac, auch für das Telefon"]),
+    ("err.share_machine", ["This conversation runs on {v}: the phone sees it there already", "Dit gesprek loopt op {v}: de telefoon ziet het daar al",
+        "Cette conversation tourne sur {v} : le téléphone la voit déjà là-bas", "Dieses Gespräch läuft auf {v}: das Telefon sieht es dort schon"]),
+    ("err.share_orch", ["Only a conversation of the app can be shared with the phone", "Alleen een gesprek van de app kan met de telefoon gedeeld worden",
+        "Seule une conversation de l'app peut être partagée avec le téléphone", "Nur ein Gespräch der App kann mit dem Telefon geteilt werden"]),
+    ("err.share_no_phone", ["Add a phone first: Settings › Machines › Add phone (a phone added before this version: add it again)", "Voeg eerst een telefoon toe: Instellingen › Machines › Telefoon toevoegen (een telefoon van voor deze versie: voeg hem opnieuw toe)",
+        "Ajoutez d'abord un téléphone : Réglages › Machines › Ajouter un téléphone (un téléphone ajouté avant cette version : ajoutez-le à nouveau)", "Füge zuerst ein Telefon hinzu: Einstellungen › Maschinen › Telefon hinzufügen (ein Telefon von vor dieser Version: füge es erneut hinzu)"]),
     ("err.machine_mail", ["A conversation about a mail runs on this Mac, not on a work machine", "Een gesprek over een mail loopt op deze Mac, niet op een werkmachine",
         "Une conversation sur un mail tourne sur ce Mac, pas sur une machine de travail", "Ein Gespräch über eine Mail läuft auf diesem Mac, nicht auf einer Arbeitsmaschine"]),
     ("err.machine_down", ["Work machine unreachable: {v}", "Werkmachine niet bereikbaar: {v}", "Machine de travail injoignable : {v}", "Arbeitsmaschine nicht erreichbar: {v}"]),
@@ -864,6 +873,7 @@ fn reset(app: AppHandle, state: State<App>, project: String) {
 fn move_chat(app: AppHandle, state: State<App>, from: String, to: String) -> Result<(), String> {
     if let Some(mut p) = state.procs.lock().unwrap().remove(&from) { p.child.kill().ok(); }
     state.machines.rebind(&from, &to);
+    share::rekey(&app, &from, &to);
     let mut sids = state.sids.lock().unwrap();
     if let Some(sid) = sids.remove(&from) { sids.insert(to.clone(), sid); }
     save_sids(&app, &sids);
@@ -1829,8 +1839,11 @@ async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -
     let c = state.machines.client(&m);
     let key = mirror::key(&data_dir(&app), &id)?;
     let code = tauri::async_runtime::spawn_blocking(move || c.pair_device()).await.map_err(|e| e.to_string())??;
+    // the phone's proof of its signing key for /share-phone (share.rs): from here to the phone, never to the machine
+    let link = relay_remote::tls::random_key();
+    share::add_link(&app, &id, &link);
     let s = |k: &str| m[k].as_str().unwrap_or("").to_string();
-    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key.clone()) }.format();
+    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key.clone()), link: Some(link) }.format();
     let qr = qrcode::QrCode::new(&line).map_err(|e| e.to_string())?.render::<qrcode::render::svg::Color>().min_dimensions(240, 240).build();
     Ok(json!({"line": line, "qr": qr, "ntfy": ntfy_url(&key)}))
 }
@@ -1929,6 +1942,7 @@ fn machine_forget(app: AppHandle, state: State<App>, id: String) -> Result<(), S
     if s["machines_default"] == id.as_str() { s["machines_default"] = json!(""); }
     state.mirrors.forget(&data_dir(&app), &id);
     state.machines.forget(&id);
+    share::forget(&app, &id);
     save_settings(&app, &s)
 }
 /// The vault folders that stay on this Mac, out of a machine's mirror.
@@ -2097,6 +2111,7 @@ pub fn run() {
             orch::flush_all(app.handle()); // briefs and reports that waited while the app was closed
             orch::watch(app.handle()); // workers stuck on a card or without output
             actions::start(app.handle());
+            share::start(app.handle()); // the conversations shared with the phone, offered on the machines it is paired on
             awake::start(app.handle());
             retry::start(app.handle());
             vaultsync::start(app.handle());
@@ -2146,7 +2161,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| tray::show_main(&handle));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the hidden main window back

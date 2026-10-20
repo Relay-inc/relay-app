@@ -42,6 +42,7 @@ import { loadTodayCards } from "./today/today";
 import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
+import { loadPhoneShared } from "./conversations/phoneShare";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
 import { onPipelineWorker, runPipelines } from "./pipeline/runner";
 import { loadRetries, onRetryEvent } from "./conversations/retry";
@@ -105,6 +106,7 @@ export async function boot() {
   await adoptEarlierConversations();
   await loadWorkers();
   await loadRetries();
+  loadPhoneShared();
   await pickStartView();
   listenToLinks();
   startPolls();

@@ -240,6 +240,12 @@ export const machinePair = (line: string, name: string) => invoke<Machine>("mach
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
 /** A one-time pairing for a phone of this Mac on a machine, valid 10 minutes: the line (with the mirror's key) and a QR (SVG). */
 export const machinePairPhone = (id: string) => invoke<PhonePairing>("machine_pair_phone", { id });
+/** `/share-phone`: the conversation (and its title for the phone's list) shared with this Mac's phone, or not any more.
+ *  Refused for a conversation about a mail, one on a machine and before a phone is added. */
+export const phoneShare = (key: string, on: boolean, title: string, mail: boolean) =>
+  invoke("phone_share", { key, on, title, mail });
+/** The conversations shared with the phone. */
+export const phoneShared = () => invoke<string[]>("phone_shared");
 /** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
 export const serverSetup = () => invoke<ServerSetup>("server_setup");
 /** This Mac as a work machine: whether its LaunchAgent and server run. */

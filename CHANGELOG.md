@@ -21,6 +21,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Continue a Mac conversation on your phone**: type `/share-phone` in a conversation that runs on this Mac and your phone lists it, reads it and writes to it through the machine it is paired with, while it keeps running here (Relay must be open). `/unshare-phone` stops it, the composer marks a shared one. The phone signs everything it sends and this Mac checks it, so the machine passes it on but cannot add anything of its own. A phone added before this version: Add phone again
 - **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`)
 
 ## [0.0.31] - 2026-10-20
