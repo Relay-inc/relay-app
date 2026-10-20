@@ -1,11 +1,11 @@
 {
-  "version": "0.0.30",
-  "notes": "### Added\n\n- **A Design tool next to Terminal and Notes**: paste a project's Claude Design (claude.ai artifact) link and the canvas shows live in the right drawer, next to the conversation; you sign in to claude.ai once in it (#241)\n- **Claude Code can work on the Design canvas**: a Claude Code conversation gets `design_read` (the canvas files), `design_snapshot` (a picture of the drawer), `design_prompt` (sends Claude Design a message and returns its answer) and `design_create` (starts a design for a project that has none, and saves its link). The Design drawer opens by itself. `design_prompt` and `design_create` act on your claude.ai account and run without asking; set `{\"design\": {\"*\": \"ask\"}}` under `actions` in the vault's `.relay/config.json` to get a card first (#242)\n\n### Fixed\n\n- **The orchestrator's empty state shows again after you close every worker**: the middle showed only the bare \"The orchestrator. Give it a task…\" line while the workers column was already empty, because closed workers still counted (#239)\n- **A waiting message's time no longer sits on its bubble**: a message sent while the agent works showed its time half over the bubble; it now sits under it like on any other message, with \"Waiting until … reads it\" below (#240)",
-  "pub_date": "2026-10-19T19:24:51.718Z",
+  "version": "0.0.31",
+  "notes": "### Added\n\n- **Back up the vault to git**: Settings › General › Git backup takes a remote (ssh, https or a path on a disk); every 5 to 60 minutes Relay commits the vault and pushes it there, with your own git login. It only pushes, never pulls, and refuses a repository anyone can read. The last sync and any error show under it (#245)\n- **See the pictures Claude looks at**: a Read of an image or a screenshot from an MCP tool shows it on hover over its step, a click opens it large in the zoom, like a pasted image. Also in older conversations, from the transcript (#244)",
+  "pub_date": "2026-10-20T07:39:54.894Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmsxaGs0WUNRTTNXUkF5aUZndnFjWmpjWVJtd0JMbjJQUUEvVVZ2L1ZIbm43UTBhOGp3cWdlS0FPTnJZMDZVUVlrK1N1bjV3MHZabE1HaU1pMEVLbkFNPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDM3Nzc2CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4zMAo0Vmp6RVFpdjdsbFRkWkdCU1Q1QXhHemVSZG1kWkhVRXk4S3hOQUlvRERadHpTaUtwZlFXRDJFeGtTSlZ5dGpPZStHUEtDYkZUYXl4NXVpWWlZckFBUT09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/657205568"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWmhrRE9kamNaTkxRTjRENFczUFlEbUVBbVVvWmFHbW5iS1lvVXdObGhNRHROMXpXK3VRamw2bXd4d1BLazRNSjFPWUZhcmtYUjdoWEJ0MlJuSCs5clE4PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkyNDgxOTI2CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4zMQo1RFZkSVhqSm10bUZCdWtENW5rWVZvODBSTFJuOVdQUmhsMlpaeitYMmJhL2ZCTHAzQVprbVNtUjFpRU1VN0QrdUZyVElkQ1BaemUzOEd1SzBpWWlDZz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/658625239"
     }
   }
 }
