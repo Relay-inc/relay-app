@@ -151,6 +151,18 @@ export function briefOf(v: CardView, since?: number) {
   return out.join("\n");
 }
 
+/** The ticket's pictures, on the ticket and on its comments, as [name, url]: what an agent gets as files. */
+export const picturesOf = (v: CardView): [string, string][] =>
+  [...(v.files ?? []), ...v.feed.flatMap(f => f.files)]
+    .filter(f => f.url && /\.(png|jpe?g|gif|webp)$/i.test(f.name))
+    .map(f => [f.name, f.url]);
+
+/** The brief with where the ticket's pictures were saved: the agent cannot open the tracker's links. */
+export const withPictures = (brief: string, paths: string[]) =>
+  paths.length
+    ? `${brief}\n\nThe ticket's pictures, saved on this Mac (open them with Read):\n${paths.map(p => `- ${p}`).join("\n")}`
+    : brief;
+
 /** Before a ticket from the pick column gets a worker: one call without tools judges whether an agent can build it
  *  without asking anyone, so an unclear ticket goes back with questions instead of costing a whole run. */
 export const PREFLIGHT_PROMPT = fill(prompts.pipeline.preflight, { untrusted: untrustedNote("en", ["ticket"]) });

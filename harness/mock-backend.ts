@@ -940,6 +940,8 @@ function handle(cmd: string, a: Args): unknown {
       return "https://files.example/upload/1";
     case "open_viewer":
       return null;
+    case "ticket_pictures":
+      return (a.files as [string, string][]).map(([name]) => `/tmp/relay-ticket-pictures/1f2e-${name}`);
     case "integration_thumb":
       return a.url === integ.THUMB_URL ? thumb : Promise.reject("not a picture");
   }

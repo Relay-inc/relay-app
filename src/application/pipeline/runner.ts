@@ -5,6 +5,8 @@ import type { Worker } from "../../domain/orchestrator/types";
 import {
   bare,
   briefOf,
+  picturesOf,
+  withPictures,
   buildState,
   inReview,
   manual,
@@ -224,7 +226,9 @@ async function claim(b: Board, project: string, card: Card, hand = false) {
       title: card.title,
       url,
     };
-    const task = view ? briefOf(view) : `Ticket #${card.number} "${card.title}"\n${url}`;
+    // ponytail: only at the start; a picture added later reaches a resumed worker as a link
+    const pictures = view ? await backend.ticketPictures(b.prov.id, picturesOf(view)).catch(() => []) : [];
+    const task = view ? withPictures(briefOf(view), pictures) : `Ticket #${card.number} "${card.title}"\n${url}`;
     const w = await backend.orchDispatchTicket({
       title: card.title,
       task,

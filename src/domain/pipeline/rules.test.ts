@@ -5,6 +5,8 @@ import type { Worker } from "../orchestrator/types.ts";
 import {
   bare,
   briefOf,
+  picturesOf,
+  withPictures,
   buildState,
   EMPTY_PIPELINE,
   htmlText,
@@ -185,6 +187,20 @@ test("briefOf: the whole ticket at the start, only what is new for a resume", ()
   const news = briefOf(v, 100);
   assert.ok(news.includes("answer") && !news.includes("first") && !news.includes("Description"), news);
   assert.equal(htmlText("a<br>b&nbsp;c"), "a\nb c");
+});
+
+test("picturesOf: the ticket's and its comments' pictures; withPictures: their paths in the brief", () => {
+  const f = (name: string, url = "https://t/" + name) => ({ id: name, name, size: 1, url });
+  const v = {
+    files: [f("spec.pdf"), f("shot.PNG")],
+    feed: [{ at: at(1), who: "Ann", html: "", change: "", files: [f("b.jpeg"), f("c.webp", "")] }],
+  } as unknown as CardView;
+  assert.deepEqual(picturesOf(v), [
+    ["shot.PNG", "https://t/shot.PNG"],
+    ["b.jpeg", "https://t/b.jpeg"],
+  ]);
+  assert.equal(withPictures("brief", []), "brief");
+  assert.match(withPictures("brief", ["/tmp/a.png"]), /^brief\n\n.*Read.*\n- \/tmp\/a\.png$/);
 });
 
 test("hand-picked: no pick column needed; the board's pipeline; what the ticket window offers", () => {

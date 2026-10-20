@@ -536,6 +536,13 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Amount excl. VAT");
   },
+  // Start conversation on a ticket with a screenshot: the picture is attached in the new conversation's composer (#251)
+  "ticket-chat-pictures": async () => {
+    await VIEWS["card-detail"]();
+    await button("Start conversation").click();
+    await page.locator(".ticket-window").waitFor({ state: "detached" });
+    await settle(page);
+  },
   // the ticket window of a board with a hand-picked pipeline: Build with agent under Start conversation
   "ticket-build": async () => {
     await open(page, server.url, { fixture: "pipeline-manual" });

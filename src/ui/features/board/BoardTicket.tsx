@@ -2,6 +2,7 @@ import type { BoardProvider, CardDetail } from "../../../domain/board/types";
 import { cardsIn, filtered, refOf, type Board } from "../../../domain/board/rules";
 import { buildTicket, pipelineOfBoard, ticketBuildState } from "../../../application/pipeline/runner";
 import { useDerived } from "../../hooks/useDerived";
+import { picturesOf } from "../../../domain/pipeline/rules";
 import { openBoardCard, ticketChat } from "../../../application/board/board";
 import { cardAct, cardOf, closeTicket } from "../../../application/navigation/panel";
 import { useNavigationStore } from "../../../application/navigation/store";
@@ -58,7 +59,12 @@ export function BoardTicket({
   const where = [projectName, view?.board].filter(Boolean).join(" · ");
   const act = (action: string, value: string, files: File[] = []) => cardAct(modal, action, { value, files });
   const startChat = () =>
-    ticketChat(provider, [`${number} ${view?.title ?? ""}`.trim(), view?.url].filter(Boolean).join("\n"), project);
+    ticketChat(
+      provider,
+      [`${number} ${view?.title ?? ""}`.trim(), view?.url].filter(Boolean).join("\n"),
+      project,
+      view ? picturesOf(view) : [],
+    );
 
   const body = () => {
     if (err)

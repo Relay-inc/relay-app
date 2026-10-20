@@ -25,7 +25,8 @@ import { useConversationsStore } from "../conversations/store";
 import { label } from "../conversations/selectors";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { newChat } from "../conversations/chats";
-import { typeInto } from "../conversations/actions";
+import { attachPaths, typeInto } from "../conversations/actions";
+import * as backend from "../../infrastructure/backend";
 import { useWorkspaceStore } from "../workspace/store";
 import { projectLabel } from "../workspace/vault";
 import { storedBoard, useBoardStore } from "./store";
@@ -390,7 +391,12 @@ export async function openFoundCard(provider: BoardProvider, hit: Hit) {
 /** "Start conversation" in the ticket window: a new conversation under the board's vault project (or `project`, a card
  *  under Today comes from a board that need not be on screen), with the card's number, title and link typed in its
  *  composer; the draft keeps its title. */
-export async function ticketChat(provider: BoardProvider, text: string, project = linkedProject(provider)) {
+export async function ticketChat(
+  provider: BoardProvider,
+  text: string,
+  project = linkedProject(provider),
+  pictures: [string, string][] = [],
+) {
   const key = newChat(project || null);
   // remembered, so the ticket lists it under Linked
   const card = useNavigationStore.getState().panel.modal;
@@ -403,6 +409,9 @@ export async function ticketChat(provider: BoardProvider, text: string, project 
   closeTicket();
   await select(key);
   typeInto(key, text);
+  // the ticket's pictures as attached images: the agent cannot open the tracker's links.
+  // ponytail: lands in the composer that is open when the download ends, switch away within that second and it goes there
+  if (pictures.length) await attachPaths(await backend.ticketPictures(provider.id, pictures).catch(() => []));
 }
 
 // ---------- which vault project a board belongs to: a vault project has at most one board
