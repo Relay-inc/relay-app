@@ -173,3 +173,11 @@ export type ActionMeta = { ext: string; id: string; about: string; write: boolea
 /** An extension's entry in the vault's .relay/config.json `actions`: `access` and a policy per action or `*`. */
 export type ActionEntry = Record<string, string | boolean>;
 export type ActionConfig = { actions: ActionMeta[]; config: Record<string, ActionEntry | string> };
+/** The vault's git backup (src-tauri/src/vaultsync.rs): the remote, whether it runs and every how many minutes, and the
+ *  last round (`at` in epoch seconds, `commit` null when nothing changed), null before the first. */
+export type VaultSync = {
+  remote: string;
+  on: boolean;
+  minutes: number;
+  last: { at: number; ok: boolean; error: string; commit: string | null } | null;
+};

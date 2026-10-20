@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Back up the vault to git**: Settings › General › Git backup takes a remote (ssh, https or a path on a disk); every 5 to 60 minutes Relay commits the vault and pushes it there, with your own git login. It only pushes, never pulls, and refuses a repository anyone can read. The last sync and any error show under it (#245)
 - **See the pictures Claude looks at**: a Read of an image or a screenshot from an MCP tool shows it on hover over its step, a click opens it large in the zoom, like a pasted image. Also in older conversations, from the transcript (#244)
 
 ## [0.0.30] - 2026-10-19

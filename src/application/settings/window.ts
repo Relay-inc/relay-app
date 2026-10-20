@@ -6,6 +6,7 @@ import { applyTheme, closeWindow, setTitle } from "../../infrastructure/window";
 import { loadBrainStatus } from "../brain/brain";
 import { initLanguage } from "./settings";
 import { watchUpdates } from "./updates-page";
+import { watchVaultSync } from "./vault-sync";
 import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
@@ -45,6 +46,7 @@ export async function initSettingsWindow() {
   // General's sidebar views list Brain once the plugin is known, also before Integrations was opened
   void loadBrainStatus();
   void watchUpdates();
+  void watchVaultSync();
   showTitle();
   void backend.onSettingsGo(to => {
     const tab = TABS.find(x => x[0] === to)?.[0];
