@@ -291,6 +291,10 @@ const en = {
   "design.change": "Change link",
   "design.invalid": "Not a claude.ai link.",
   "drawer.detail": "Details",
+  "note.copyPath": "Copy path",
+  "note.open": "Open in default app",
+  "note.linked": "Linked notes",
+  "note.properties": "Properties",
   "drawer.changes": "Changes",
   "changes.empty":
     "No changes in a git repo yet. Changes show once the agent writes a file inside a repo or makes a worktree.",

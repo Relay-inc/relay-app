@@ -83,3 +83,26 @@ export function noteProperties(yaml: string): [string, string[]][] {
   }
   return rows.map(([key, values]): [string, string[]] => [key, values.filter(Boolean)]).filter(([, v]) => v.length);
 }
+
+// ---------- a note read in the drawer: its title, and the notes it links to
+/** The note's title and the body under it: a leading `# heading` is the title, else the file name made readable
+ *  (`route-middleware-sees-rendered-refusals` → "Route middleware sees rendered refusals"). */
+export function noteTitle(path: string, body: string): { title: string; body: string } {
+  const heading = /^\s*# (.+)\n?/.exec(body);
+  if (heading) return { title: heading[1].trim(), body: body.slice(heading[0].length) };
+  const name = path.split("/").pop()!.replace(/\.md$/i, "");
+  const words = /^[a-z0-9_-]+$/.test(name) ? name.replace(/[-_]+/g, " ") : name;
+  return { title: words.charAt(0).toUpperCase() + words.slice(1), body };
+}
+/** The existing notes a note's [[wikilinks]] name, once each and without itself, with the folder each is in. */
+export function noteLinks(index: NotesIndex, vault: string, self: string, text: string) {
+  const links = new Map<string, { target: string; label: string; folder: string }>();
+  for (const [, inner] of text.matchAll(/\[\[([^\]\n]+)\]\]/g)) {
+    const target = inner.replace(/[#|].*$/, "").trim();
+    const md = relativeNote(target, [index.root, vault]);
+    const path = index.paths.has(md) ? md : md.includes("/") ? "" : [...index.paths].find(p => p.endsWith("/" + md));
+    if (!path || path === self || links.has(path)) continue;
+    links.set(path, { target, label: inner.split("|").pop()!.trim(), folder: path.split("/").slice(-2, -1)[0] ?? "" });
+  }
+  return [...links.values()];
+}

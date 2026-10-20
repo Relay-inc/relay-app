@@ -296,6 +296,10 @@ export default {
   "design.change": "Link wijzigen",
   "design.invalid": "Geen claude.ai-link.",
   "drawer.detail": "Details",
+  "note.copyPath": "Pad kopiëren",
+  "note.open": "Openen in standaardapp",
+  "note.linked": "Gelinkte notes",
+  "note.properties": "Eigenschappen",
   "drawer.changes": "Wijzigingen",
   "changes.empty":
     "Nog geen wijzigingen in een git-repo. Ze verschijnen zodra de agent een bestand in een repo schrijft of een worktree maakt.",
