@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.31] - 2026-10-20
+
 ### Added
 
 - **Back up the vault to git**: Settings › General › Git backup takes a remote (ssh, https or a path on a disk); every 5 to 60 minutes Relay commits the vault and pushes it there, with your own git login. It only pushes, never pulls, and refuses a repository anyone can read. The last sync and any error show under it (#245)
@@ -554,7 +556,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...HEAD
+[0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...v0.0.29
 [0.0.28]: https://github.com/Relay-inc/relay-app/compare/v0.0.27...v0.0.28
