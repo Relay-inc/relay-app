@@ -52,6 +52,18 @@ let pending = [...conv.pending];
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
+// the vault's git backup, with a round three minutes ago
+let vaultSync = {
+  remote: "git@github.com:you/vault.git",
+  on: true,
+  minutes: 15,
+  last: { at: Math.floor(Date.now() / 1000) - 180, ok: true, error: "", commit: "4e1f2a9" } as {
+    at: number;
+    ok: boolean;
+    error: string;
+    commit: string | null;
+  } | null,
+};
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
 const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty" || fixture === "orch-closed";
@@ -542,6 +554,11 @@ function handle(cmd: string, a: Args): unknown {
     // retries waiting for a usage limit to reset (src-tauri/src/retry.rs): none
     case "retries":
       return [];
+    case "vault_sync":
+      return structuredClone(vaultSync);
+    case "set_vault_sync":
+      vaultSync = { ...vaultSync, remote: a.remote, on: a.on && !!a.remote, minutes: a.minutes };
+      return structuredClone(vaultSync);
     // the UI state file (src/infrastructure/storage.ts): empty, so the app takes over the fixtures' localStorage
     case "ui_state_get": {
       if (!orchClosed) return {};

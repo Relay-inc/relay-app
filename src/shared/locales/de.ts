@@ -819,6 +819,18 @@ export default {
     "Wo „Im Terminal öffnen“ ein Gespräch fortsetzt. Automatisch nimmt das erste installierte: iTerm, WezTerm, dann Terminal.",
   "set.favicons": "Projektsymbole",
   "act.reminders": "Erinnerungen",
+  "vs.title": "Git-Backup",
+  "vs.help":
+    "Alle paar Minuten committet Relay den Vault und pusht ihn in ein Git-Repository. Nur Push, nie Pull. Git nutzt deinen eigenen Login: einen SSH-Schlüssel, einen Credential Helper oder <code>gh</code>. Ein öffentliches Repository wird abgelehnt.",
+  "vs.remote": "Remote",
+  "vs.remoteHelp": "Eine SSH- oder HTTPS-Adresse eines privaten Repositorys, oder ein Pfad auf einer Festplatte.",
+  "vs.every": "Alle",
+  "vs.minutes": "{n} Minuten",
+  "vs.on": "Vault sichern",
+  "vs.never": "Noch keine Synchronisierung.",
+  "vs.pushed": "Letzte Synchronisierung {when}: Commit {commit} gepusht",
+  "vs.unchanged": "Letzte Synchronisierung {when}: nichts geändert",
+  "vs.failed": "Letzte Synchronisierung fehlgeschlagen {when}: {error}",
   "act.title": "Zugriff für den Agenten",
   "act.help":
     "Was der Agent in einer Unterhaltung über den Befehl relay mit {name} tun darf. Gespeichert in der .relay/config.json des Vaults, die der Agent nicht bearbeiten kann.",

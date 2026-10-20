@@ -817,6 +817,18 @@ export default {
     "Waar “Openen in Terminal” een gesprek verderzet. Automatisch neemt de eerste die geïnstalleerd is: iTerm, WezTerm, dan Terminal.",
   "set.favicons": "Projecticonen",
   "act.reminders": "Herinneringen",
+  "vs.title": "Git-backup",
+  "vs.help":
+    "Om de paar minuten commit Relay de vault en pusht hem naar een git-repository. Enkel pushen, nooit pullen. Git gebruikt je eigen login: een ssh-sleutel, een credential helper of <code>gh</code>. Een publieke repository wordt geweigerd.",
+  "vs.remote": "Remote",
+  "vs.remoteHelp": "Een ssh- of https-adres van een private repository, of een pad op een schijf.",
+  "vs.every": "Elke",
+  "vs.minutes": "{n} minuten",
+  "vs.on": "Vault back-uppen",
+  "vs.never": "Nog geen sync.",
+  "vs.pushed": "Laatste sync {when}: commit {commit} gepusht",
+  "vs.unchanged": "Laatste sync {when}: niets veranderd",
+  "vs.failed": "Laatste sync mislukt {when}: {error}",
   "act.title": "Toegang voor de agent",
   "act.help":
     "Wat de agent in een gesprek met {name} mag doen via het relay-commando. Bewaard in .relay/config.json van de vault, dat de agent niet kan aanpassen.",

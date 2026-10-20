@@ -811,6 +811,18 @@ const en = {
     "Where “Open in Terminal” continues a conversation. Automatic takes the first one installed: iTerm, WezTerm, then Terminal.",
   "set.favicons": "Project icons",
   "act.reminders": "Reminders",
+  "vs.title": "Git backup",
+  "vs.help":
+    "Every few minutes Relay commits the vault and pushes it to a git repository. It only pushes, it never pulls. Git uses your own login: an ssh key, a credential helper or <code>gh</code>. A public repository is refused.",
+  "vs.remote": "Remote",
+  "vs.remoteHelp": "An ssh or https address of a private repository, or a path on a disk.",
+  "vs.every": "Every",
+  "vs.minutes": "{n} minutes",
+  "vs.on": "Back up the vault",
+  "vs.never": "No sync yet.",
+  "vs.pushed": "Last sync {when}: pushed commit {commit}",
+  "vs.unchanged": "Last sync {when}: nothing changed",
+  "vs.failed": "Last sync failed {when}: {error}",
   "act.title": "Agent access",
   "act.help":
     "What the agent in a conversation may do with {name} through the relay command. Kept in the vault's .relay/config.json, which the agent cannot edit.",

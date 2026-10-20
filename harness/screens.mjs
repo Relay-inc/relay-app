@@ -177,22 +177,24 @@ const VIEWS = {
   "conversation-plan": async () => {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");
-    await page.evaluate(key =>
-      window.__harness.addPending({
-        id: "plan-0001",
-        project: key,
-        provider: "claude",
-        kind: "tool",
-        tool_name: "ExitPlanMode",
-        tool_use_id: "toolu_plan",
-        request_id: "req-plan",
-        relay: true,
-        at: Date.now(),
-        input: {
-          plan: "# Credit notes before their invoice\n\n## Context\nThe sync writes a second balance when a credit note arrives before its invoice (`H42398`).\n\n- match credit notes by reference\n- only open dossiers\n\n## Steps\n1. **Read the invoice table** in `BalanceSync.php`\n2. Recompute the balance\n\n| Before | After |\n|---|---|\n| two balances | one balance |\n\n## Verification\n- [ ] unit tests\n- [ ] staging run\n",
-        },
-      }),
-    keys.permission);
+    await page.evaluate(
+      key =>
+        window.__harness.addPending({
+          id: "plan-0001",
+          project: key,
+          provider: "claude",
+          kind: "tool",
+          tool_name: "ExitPlanMode",
+          tool_use_id: "toolu_plan",
+          request_id: "req-plan",
+          relay: true,
+          at: Date.now(),
+          input: {
+            plan: "# Credit notes before their invoice\n\n## Context\nThe sync writes a second balance when a credit note arrives before its invoice (`H42398`).\n\n- match credit notes by reference\n- only open dossiers\n\n## Steps\n1. **Read the invoice table** in `BalanceSync.php`\n2. Recompute the balance\n\n| Before | After |\n|---|---|\n| two balances | one balance |\n\n## Verification\n- [ ] unit tests\n- [ ] staging run\n",
+          },
+        }),
+      keys.permission,
+    );
     await waitText("Claude has a plan", 15000);
     await settle(page, 300);
   },
@@ -674,7 +676,9 @@ const VIEWS = {
     await page.getByRole("button", { name: "Resume in terminal (⌥-click: external terminal)" }).click();
     await page.waitForSelector(".xterm-screen");
     await page.getByRole("button", { name: "New terminal" }).click();
-    await page.waitForFunction(() => document.querySelectorAll(".relay-drawer button[title='Close terminal']").length === 2);
+    await page.waitForFunction(
+      () => document.querySelectorAll(".relay-drawer button[title='Close terminal']").length === 2,
+    );
     await page.locator(".relay-drawer button[title='Close terminal']").last().hover();
     await settle(page, 500);
   },
@@ -911,6 +915,24 @@ const VIEWS = {
   "settings-reminders-access": async () => {
     await settingsPage("General");
     await intoView("reminders.push");
+  },
+  // the vault's git backup under General, after a round that pushed
+  "settings-vault-sync": async () => {
+    await settingsPage("General");
+    await intoView("Last sync");
+  },
+  // the same after a round the remote refused
+  "settings-vault-sync-failed": async () => {
+    await settingsPage("General");
+    await page.evaluate(() =>
+      window.__harness.emit("vault-sync", {
+        at: Math.floor(Date.now() / 1000) - 60,
+        ok: false,
+        error: "the remote is public, a vault only syncs to a private repository",
+        commit: null,
+      }),
+    );
+    await intoView("Last sync");
   },
   "settings-agent-access": async () => {
     await settingsPage("Integrations", "Productive");
