@@ -9,6 +9,7 @@ import { loadSnapshot } from "../workspace/vault";
 import { useConversationsStore } from "./store";
 import { label } from "./selectors";
 import { saveChats } from "./chats";
+import { imageUrl } from "./images";
 
 // The agent processes' events, through the pure reducer (domain/conversations/events.ts). Stream deltas are the hot
 // path: the text deltas of one animation frame go into the store as one update, so a delta redraws the streaming
@@ -46,7 +47,7 @@ type Received = [string, AgentEvent, string];
 function apply(events: Received[]) {
   if (!events.length) return;
   const effects: Effect[] = [];
-  const env = { t, selected: useNavigationStore.getState().selected, now: Date.now() };
+  const env = { t, selected: useNavigationStore.getState().selected, now: Date.now(), imageUrl };
   useConversationsStore.setState(draft => {
     for (const [key, event, provider] of events) effects.push(...applyAgentEvent(draft, key, event, env, provider));
   });
