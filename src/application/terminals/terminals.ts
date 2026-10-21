@@ -1,7 +1,7 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { t } from "../../shared/i18n";
-import { activeAfterClose, nextTitle } from "../../domain/terminals/tabs";
+import { activeAfterClose, chatTab, nextTitle } from "../../domain/terminals/tabs";
 import * as backend from "../../infrastructure/backend";
 import { useTerminalsStore } from "./store";
 
@@ -27,8 +27,11 @@ function patch(project: string, id: number, change: { exited: boolean }) {
 // the projects that got their first terminal: closing the last tab leaves a project empty, not a fresh shell
 const opened = new Set<string>();
 
-/** A new shell in the project, shown at once. With `chat` it continues that conversation first, in a tab named after it. */
+/** A new shell in the project, shown at once. With `chat` it continues that conversation first, in a tab named after it;
+ *  when a running tab already continues it, that tab is shown instead. */
 export async function addTerminal(project: string, chat?: { key: string; name: string; title: string }) {
+  const open = chat && chatTab(useTerminalsStore.getState().byProject[project]?.tabs ?? [], chat.key);
+  if (open) return showTerminal(project, open.id);
   if (starting.has(project)) return;
   starting.add(project);
   opened.add(project);
@@ -69,7 +72,12 @@ export async function addTerminal(project: string, chat?: { key: string; name: s
     screens.set(id, screen);
     set(draft => {
       const entry = (draft.byProject[project] ??= { tabs: [], active: 0 });
-      entry.tabs.push({ id, title: chat?.title ?? nextTitle(entry.tabs.map(tab => tab.title)), exited });
+      entry.tabs.push({
+        id,
+        title: chat?.title ?? nextTitle(entry.tabs.map(tab => tab.title)),
+        exited,
+        chat: chat?.key,
+      });
       entry.active = id;
     });
   } finally {
