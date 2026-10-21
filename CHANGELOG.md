@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **The terminal button shows a conversation's open terminal**: clicking it again on a conversation that already runs in the project's terminal drawer shows that tab, instead of resuming the conversation in a new one. Once that shell has exited, it starts a new one as before
+- **The terminal button shows a conversation's open terminal**: clicking it again on a conversation that already runs in the project's terminal drawer shows that tab, instead of resuming the conversation in a new one. Once that shell has exited, it starts a new one as before (#253)
 - **Agents see a ticket's screenshots**: Start conversation on a ticket attaches its pictures to the new conversation, and a board pipeline's worker gets them as files on this Mac (their paths in its brief). Before, the agent only got the tracker's links, which it cannot open. Productive's originals load with the login of Relay's viewer window: open one picture there and sign in once (#251)
 - **A ticket's picture opens in the viewer again**: the viewer window stayed white, because the guard for links in mails also refused the picture and the tracker's login in that window (#250)
 - **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
