@@ -439,7 +439,7 @@ const VIEWS = {
     await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-Option-T
     await settle(page);
   },
-  // a window Cmd-N opened starts on Today, whatever the main window had open (#PR)
+  // a window Cmd-N opened starts on Today, whatever the main window had open (#257)
   "new-window": async () => {
     await open(page, server.url, { sel: keys.question, window: "main-2" });
   },
