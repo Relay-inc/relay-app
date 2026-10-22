@@ -1027,7 +1027,7 @@ const VIEWS = {
     await click("Reminders");
     await waitText("Dictating ·");
   },
-  // a folder under a project, made from the project's menu, with a general conversation dragged into it (sidebar folders)
+  // a folder under a project, made from the project's menu, with a general conversation dragged into it (#254)
   "sidebar-folder": async () => {
     await open(page, server.url);
     const nav = page.locator(".relay-sidebar");
