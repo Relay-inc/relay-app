@@ -21,6 +21,8 @@ a PR. Versions follow
 
 ### Added
 
+- **Folders in the sidebar**: right-click a project (or General) › New folder groups its conversations. Drag a conversation onto a folder to put it there, the folder's + starts a new conversation in it, a click folds it to a count. Deleting a folder keeps its conversations under the project
+- **Drag a conversation to another project**: drop it on another project, on a folder there, among that project's conversations, or on General. It moves there like with Change project…, and its next message tells the agent. Terminal sessions move along too, outside any folder
 - **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`)
 
 ## [0.0.31] - 2026-10-20
