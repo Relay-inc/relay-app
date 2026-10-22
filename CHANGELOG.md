@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.32] - 2026-10-22
+
 ### Fixed
 
 - **Agents see a ticket's screenshots**: Start conversation on a ticket attaches its pictures to the new conversation, and a board pipeline's worker gets them as files on this Mac (their paths in its brief). Before, the agent only got the tracker's links, which it cannot open. Productive's originals load with the login of Relay's viewer window: open one picture there and sign in once (#251)
@@ -22,9 +24,9 @@ a PR. Versions follow
 ### Added
 
 - **Continue a Mac conversation on your phone**: type `/share-phone` in a conversation that runs on this Mac and your phone lists it, reads it and writes to it through the machine it is paired with, while it keeps running here (Relay must be open). `/unshare-phone` stops it, the composer marks a shared one. The phone signs everything it sends and this Mac checks it, so the machine passes it on but cannot add anything of its own. A phone added before this version: Add phone again (#252)
-- **Folders in the sidebar**: right-click a project (or General) › New folder groups its conversations. Drag a conversation onto a folder to put it there, the folder's + starts a new conversation in it, a click folds it to a count. Deleting a folder keeps its conversations under the project
-- **Drag a conversation to another project**: drop it on another project, on a folder there, among that project's conversations, or on General. It moves there like with Change project…, and its next message tells the agent. Terminal sessions move along too, outside any folder
-- **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`)
+- **Folders in the sidebar**: right-click a project (or General) › New folder groups its conversations. Drag a conversation onto a folder to put it there, the folder's + starts a new conversation in it, a click folds it to a count. Deleting a folder keeps its conversations under the project (#254)
+- **Drag a conversation to another project**: drop it on another project, on a folder there, among that project's conversations, or on General. It moves there like with Change project…, and its next message tells the agent. Terminal sessions move along too, outside any folder (#254)
+- **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`) (#247)
 
 ## [0.0.31] - 2026-10-20
 
@@ -570,7 +572,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...HEAD
+[0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...v0.0.30
 [0.0.29]: https://github.com/Relay-inc/relay-app/compare/v0.0.28...v0.0.29
