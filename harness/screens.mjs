@@ -1027,6 +1027,22 @@ const VIEWS = {
     await click("Reminders");
     await waitText("Dictating ·");
   },
+  // a folder under a project, made from the project's menu, with a general conversation dragged into it (#254)
+  "sidebar-folder": async () => {
+    await open(page, server.url);
+    const nav = page.locator(".relay-sidebar");
+    await nav.locator('[data-kind="proj"]').first().click({ button: "right" });
+    await click("New folder");
+    await page.getByRole("textbox", { name: "Folder name" }).fill("Quotes");
+    await page.keyboard.press("Enter");
+    const from = await nav.locator('[data-kind="conv"][data-project=""]').nth(1).boundingBox();
+    const to = await nav.locator('[data-kind="folder"]').boundingBox();
+    await page.mouse.move(from.x + 20, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + 40, to.y + to.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await settle(page);
+  },
   // Today after 16:00 with activity in the day's conversations: the "Book today's time" item (Time from sessions)
   "today-time": async () => {
     await page.clock.setFixedTime(Date.parse("2026-10-01T14:30:00Z"));

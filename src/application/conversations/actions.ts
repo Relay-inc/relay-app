@@ -402,6 +402,29 @@ export function moveTo(project: string | null) {
   });
   if (project) saveChats();
 }
+/** A conversation dragged in the sidebar to a project (null for Algemeen) and a folder there ("" for none). Under
+ *  another project it gets the note the project panel gives, and its next message tells the agent. A terminal session
+ *  moves through the settings' overrides and sits in no folder. */
+export async function moveChat(key: string, project: string | null, folder: string) {
+  if (isTerminal(key)) {
+    if (terminalOf(key)?.project === project) return;
+    const next = structuredClone(settings());
+    next.overrides[termSid(key)] = project;
+    await saveMainSettings(next);
+    return;
+  }
+  const conversation = cs().chats[key];
+  if (!conversation || (conversation.project === project && (conversation.folder ?? "") === folder)) return;
+  set(draft => {
+    const moved = draft.chats[key];
+    if (moved.project !== project)
+      push(draft, key, { kind: "note", text: t("note.moved", { name: project ?? t("general") }) });
+    moved.project = project;
+    if (folder) moved.folder = folder;
+    else delete moved.folder;
+  });
+  saveChats();
+}
 /** The Cmd-K question's project offer, answered once: move the open conversation there, or keep it general (""). */
 export function answerAsk(project: string) {
   set(draft => {

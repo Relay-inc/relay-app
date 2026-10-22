@@ -7,6 +7,7 @@ import {
   ordered,
   place,
   type ConvRow,
+  type FolderBlock,
   type ProjectBlock,
   type ReorderKind,
   type Section,
@@ -17,6 +18,7 @@ import {
 } from "../../domain/navigation/sidebar";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { arranged, isHidden, withHidden } from "../../domain/navigation/sidebar-order";
+import { byFolder, newFolderId } from "../../domain/navigation/sidebar-folders";
 import type { SidebarCfg } from "../../domain/settings/types";
 import { viewItems } from "../../domain/navigation/sidebar-views";
 import { shownPlugins } from "../../domain/plugins/rules";
@@ -28,6 +30,7 @@ import { storage } from "../../infrastructure/storage";
 import { applyTheme, prefersDark } from "../../infrastructure/window";
 import { useConversationsStore } from "../conversations/store";
 import { typedOf } from "../conversations/drafts";
+import { saveChats } from "../conversations/chats";
 import {
   chatsOf,
   displayTitle,
@@ -96,6 +99,48 @@ export function reorder(kind: ReorderKind, scope: string, visible: string[], id:
   else storage.set("projOrder", sb().projOrder);
 }
 
+// ---------- folders: per project ("" for Algemeen), their open state in `collapsed` under their id
+/** A new folder under the project ("" for Algemeen), its name typed in place at once. */
+export function addFolder(scope: string) {
+  const id = newFolderId(Date.now());
+  set(draft => {
+    (draft.sidebar.folders[scope] ??= []).push({ id, name: t("nav.newFolder") });
+    draft.sidebar.editing = id;
+  });
+  storage.set("folders", sb().folders);
+}
+export const editFolder = (id: string) =>
+  set(draft => {
+    draft.sidebar.editing = id;
+  });
+/** The typed name, done: empty keeps the one it had. */
+export function renameFolder(id: string, name: string) {
+  set(draft => {
+    draft.sidebar.editing = "";
+    const folder = Object.values(draft.sidebar.folders)
+      .flat()
+      .find(other => other.id === id);
+    if (folder && name.trim()) folder.name = name.trim();
+  });
+  storage.set("folders", sb().folders);
+}
+/** The folder goes, its conversations stay under their project. */
+export function deleteFolder(id: string) {
+  set(draft => {
+    for (const scope of Object.keys(draft.sidebar.folders))
+      draft.sidebar.folders[scope] = draft.sidebar.folders[scope].filter(folder => folder.id !== id);
+    delete draft.sidebar.convOrder[id];
+    delete draft.sidebar.collapsed[id];
+  });
+  useConversationsStore.setState(draft => {
+    for (const conversation of Object.values(draft.chats)) if (conversation.folder === id) delete conversation.folder;
+  });
+  saveChats();
+  storage.set("folders", sb().folders);
+  storage.set("convOrder", sb().convOrder);
+  storage.set("collapsed", sb().collapsed);
+}
+
 // ---------- the rows
 const isOpenDraft = (conversation: Chat, project: string | null) =>
   conversation.draft &&
@@ -120,9 +165,12 @@ const subsOf = (key: string) => {
   const count = runningSubs(key);
   return { subs: count, subsTitle: count ? tn("nav.agentsWorking", count) : "" };
 };
-const convRow = (conversation: Chat): ConvRow => ({
+// `folder`: the folder it is shown in, it is reordered among that folder's conversations
+const convRow = (conversation: Chat, folder = ""): ConvRow => ({
   key: conversation.key,
-  parent: conversation.project ?? "",
+  parent: folder || (conversation.project ?? ""),
+  project: conversation.project ?? "",
+  folder,
   term: false,
   glyph: agent(chatAgent(conversation.key))?.glyph ?? "",
   title: displayTitle(conversation.title),
@@ -140,6 +188,8 @@ const WORK_ICON = { review: "pr", mail: "mail", meeting: "cal" } as const;
 const workRow = (work: Work): ConvRow => ({
   key: work.key,
   parent: work.project ?? "",
+  project: work.project ?? "",
+  folder: "",
   term: false,
   glyph: "",
   title: work.title,
@@ -157,6 +207,8 @@ const workRow = (work: Work): ConvRow => ({
 const termRow = (session: TerminalSession): ConvRow => ({
   key: session.key,
   parent: session.project ?? "",
+  project: session.project ?? "",
+  folder: "",
   term: true,
   glyph: "",
   title: session.title,
@@ -176,13 +228,43 @@ const foldLabel = (total: number, unfolded: boolean) => {
   return unfolded ? t("nav.less") : t("nav.more", { n: total - SHOWN_CONVERSATIONS });
 };
 
+// a project's (or Algemeen's) folders with what is in them; with a search an empty one is left out
+const folderBlocks = (scope: string, inside: Map<string, Chat[]>, query = ""): FolderBlock[] =>
+  (sb().folders[scope] ?? []).flatMap(folder => {
+    const conversations = inside.get(folder.id) ?? [];
+    const editing = sb().editing === folder.id;
+    if (query && !conversations.length && !editing) return [];
+    const keys = conversations.map(conversation => conversation.key);
+    return [
+      {
+        id: folder.id,
+        project: scope,
+        name: folder.name,
+        open: !sb().collapsed[folder.id] || !!query,
+        editing,
+        count: conversations.length,
+        unseen: keys.some(key => cs().unseen.has(key)),
+        trail: trailOf(keys),
+        convs: ordered(
+          conversations.map(conversation => convRow(conversation, folder.id)),
+          row => row.key,
+          sb().convOrder[folder.id],
+          undefined,
+          true,
+        ),
+      },
+    ];
+  });
+
 function projectBlock(project: Project, allSessions: TerminalSession[]): ProjectBlock {
   const conversations = listed(project.name);
   const sessions = allSessions.filter(session => session.project === project.name);
   const keys = [...conversations.map(conversation => conversation.key), ...sessions.map(session => session.key)];
   const unfolded = sb().unfolded.has(project.name);
   const icon = useWorkspaceStore.getState().icons[project.name];
-  const shownConversations = conversations.slice(0, unfolded ? conversations.length : SHOWN_CONVERSATIONS);
+  // what sits in a folder is shown there, the first five of the rest under the project
+  const { inside, loose } = byFolder(conversations, conversation => conversation.folder, sb().folders[project.name]);
+  const shownConversations = loose.slice(0, unfolded ? loose.length : SHOWN_CONVERSATIONS);
   return {
     name: project.name,
     context: project.context,
@@ -192,18 +274,19 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
     label: blockLabel(project.name),
     img: icon?.img,
     emoji: icon?.icon,
+    folders: folderBlocks(project.name, inside),
     // what is in progress on Today first, then the sessions and conversations in the user's order
     convs: [
       ...workOf(project.name).map(workRow),
       ...ordered(
-        [...sessions.map(termRow), ...shownConversations.map(convRow)],
+        [...sessions.map(termRow), ...shownConversations.map(conversation => convRow(conversation))],
         row => row.key,
         sb().convOrder[project.name],
         undefined,
         true,
       ),
     ],
-    fold: foldLabel(conversations.length, unfolded),
+    fold: foldLabel(loose.length, unfolded),
   };
 }
 
@@ -301,15 +384,17 @@ function generalSection(query: string, sessions: TerminalSession[]): Section {
   const generalSessions = sessions.filter(
     session => !session.project && (!query || session.title.toLowerCase().includes(query)),
   );
+  const { inside, loose } = byFolder(conversations, conversation => conversation.folder, sb().folders[""]);
   return section(GENERAL, query, {
     label: t("general").toUpperCase(),
     tint: "",
     count: conversations.length + generalSessions.length,
     add: "",
+    folders: folderBlocks("", inside, query),
     convs: [
       ...workOf(null).map(workRow),
       ...ordered(
-        [...conversations.map(convRow), ...generalSessions.map(termRow)],
+        [...loose.map(conversation => convRow(conversation)), ...generalSessions.map(termRow)],
         row => row.key,
         sb().convOrder[""],
         undefined,
@@ -362,6 +447,7 @@ function contextSection(
     label: context.toUpperCase(),
     tint: CONTEXT_TINTS[index % CONTEXT_TINTS.length],
     count: shown.length,
+    folders: [],
     convs: [],
     projects: shown.map(project => projectBlock(project, sessions)),
   });

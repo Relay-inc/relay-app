@@ -1,4 +1,5 @@
 import type { BoardRef } from "../../domain/board/types";
+import type { Folder } from "../../domain/navigation/sidebar-folders";
 import { WAIT, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
 import { storage } from "../../infrastructure/storage";
 import { makeStore } from "../make-store";
@@ -37,7 +38,9 @@ type NavigationState = {
     unfolded: Set<string>; // projects whose conversations past the first five are shown
     secOrder: string[]; // sections
     projOrder: Record<string, string[]>; // projects within a section
-    convOrder: Record<string, string[]>; // conversations per project (or "" for Algemeen)
+    convOrder: Record<string, string[]>; // conversations per project or folder (or "" for Algemeen)
+    folders: Record<string, Folder[]>; // the folders per project (or "" for Algemeen)
+    editing: string; // the folder whose name is being typed, "" for none
   };
 };
 
@@ -72,5 +75,7 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
     secOrder: storage.get<string[]>("secOrder", ["Algemeen"]),
     projOrder: storage.get<Record<string, string[]>>("projOrder", {}),
     convOrder: storage.get<Record<string, string[]>>("convOrder", {}),
+    folders: storage.get<Record<string, Folder[]>>("folders", {}),
+    editing: "",
   },
 }));
