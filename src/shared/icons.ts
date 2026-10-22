@@ -4,6 +4,7 @@
 import {
   Notification01Icon,
   QrCodeIcon,
+  KeyboardIcon,
   ServerStack01Icon,
   Brain02Icon,
   LeftToRightListBulletIcon,
@@ -130,6 +131,7 @@ const ICONS: Record<string, Icon> = {
   board: DashboardSquare01Icon,
   workflow: WorkflowSquare01Icon,
   mic: Mic01Icon,
+  keyboard: KeyboardIcon,
   qr: QrCodeIcon,
   video: Video01Icon,
   alert: Alert02Icon,

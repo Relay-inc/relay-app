@@ -27,7 +27,7 @@ export function ShortcutField({
     if (!listening) return;
     calls.current.onListening(true);
     const onKey = (e: KeyboardEvent) => {
-      // the window's own keys (Escape closes it, ⌘1… switch pages) do not run while a shortcut is being set
+      // the window's own keys (Escape and ⌘W close it) do not run while a shortcut is being set
       e.preventDefault();
       e.stopImmediatePropagation();
       if (e.key === "Escape") return setListening(false);

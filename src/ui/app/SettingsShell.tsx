@@ -1,16 +1,11 @@
 import { useEffect } from "react";
 import { useSettingsStore } from "../../application/settings/store";
-import { TABS, close, go, initSettingsWindow, openLink } from "../../application/settings/window";
+import { close, initSettingsWindow, openLink } from "../../application/settings/window";
 import { SettingsApp } from "../features/settings/SettingsApp";
 
-// the settings window's keys: Escape and Cmd-W close it, Cmd-1 to 5 jump to a page
+// the settings window's keys: Escape and Cmd-W close it
 function onKey(e: KeyboardEvent) {
   if (e.key === "Escape" || (e.metaKey && e.key === "w")) close();
-  const pageNumber = e.metaKey && !e.altKey && !e.shiftKey ? Number(e.key) : 0;
-  if (pageNumber >= 1 && pageNumber <= TABS.length) {
-    e.preventDefault();
-    go(TABS[pageNumber - 1][0]);
-  }
 }
 // a web link (Google's app password page) opens in the browser, the settings window never navigates
 function onLink(e: MouseEvent) {

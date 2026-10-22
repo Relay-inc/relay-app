@@ -13,6 +13,14 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Shortcuts in Settings**: a Shortcuts page lists what the keys do in Relay, in a conversation, on Today and in Mail, plus the dictation shortcuts you switched on in Voice
+
+### Removed
+
+- **⌘1 to ⌘8 in Settings**: the sidebar showed them next to each page, but they did nothing
+
 ## [0.0.32] - 2026-10-22
 
 ### Fixed

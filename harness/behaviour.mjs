@@ -172,7 +172,7 @@ const navHas = async (page, text) => (await visible(nav(page).getByText(text, { 
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 /** a visible element whose whole text is `text` (a mail row's subject, not a longer subject that contains it) */
 const listed = async (page, text) => (await visible(byText(page, text)).count()) > 0;
-/** a settings section in the window's sidebar: its name and its shortcut (⌘1…) */
+/** a settings section in the window's sidebar, by its name */
 const navButton = (page, name) => page.getByRole("button", { name: new RegExp(`^${name}\\b`) });
 async function typeInComposer(page, text) {
   await composer(page).click({ timeout: 4000 });
