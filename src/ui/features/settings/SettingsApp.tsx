@@ -8,6 +8,7 @@ import { IntegrationsPage } from "./IntegrationsPage";
 import { MachinesPage } from "./MachinesPage";
 import { PluginsPage } from "./PluginsPage";
 import { ProjectsPage } from "./ProjectsPage";
+import { ShortcutsPage } from "./ShortcutsPage";
 import { UpdatesPage } from "./UpdatesPage";
 import { VoicePage } from "./VoicePage";
 
@@ -26,7 +27,7 @@ export function SettingsApp() {
     <div className="flex h-full min-h-0 [line-height:1.4]">
       <nav className="w-52 flex-none overflow-y-auto border-r border-s-seam bg-s-side px-2 pt-12 select-none">
         <div className="grid gap-px py-1">
-          {TABS.map(([id, name, glyph], index) => (
+          {TABS.map(([id, name, glyph]) => (
             <button
               key={id}
               className={`flex h-7 items-center gap-2.5 overflow-hidden rounded-[7px] px-2 text-[13px] text-s-fg focus-visible:ring-2 ring-s-ring focus-visible:outline-none ${tab === id ? "bg-s-sel font-medium" : "hover:bg-s-hover"}`}
@@ -38,7 +39,6 @@ export function SettingsApp() {
                 className={`size-4 flex-none fill-none stroke-current stroke-2 glyph ${tab === id ? "text-accent-text" : "text-secondary"}`}
               />
               <span className="min-w-0 flex-1 truncate text-left">{t(name)}</span>
-              <span className="text-[11px] font-normal text-tertiary">⌘{index + 1}</span>
             </button>
           ))}
         </div>
@@ -68,6 +68,9 @@ export function SettingsApp() {
           </div>
           <div className={page("voice")}>
             <VoicePage active={tab === "voice"} />
+          </div>
+          <div className={page("shortcuts")}>
+            <ShortcutsPage />
           </div>
           <div className={page("updates")}>
             <UpdatesPage active={tab === "updates"} />

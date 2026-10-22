@@ -6,6 +6,8 @@ import { setPop, useDetailsStore } from "../../../application/today/details";
 import { closeCompose } from "../../../application/today/mail";
 import { ContextFilter } from "./ContextFilter";
 import { useNavigationStore } from "../../../application/navigation/store";
+import { isKey } from "../../../application/settings/settings";
+import type { CommandId } from "../../../domain/settings/shortcuts";
 import { cardOf } from "../../../application/navigation/panel";
 import {
   loadTodayCards,
@@ -36,6 +38,15 @@ const inControl = (e: KeyboardEvent) =>
  *  one quiet line: the day, the next meeting, how far the day got and the project filter; below, the queue per slot
  *  (the meetings in it at their time) and the open item with its actions. Design "Today Calm", 6a / 6c.
  *  Enter and Backspace run the open item's actions, L puts it off, the arrows walk the queue. */
+// a mail's actions by their command, with the letter the action knows itself by (domain/today/kinds/mail.ts)
+const MAIL_KEYS = [
+  ["replyAll", "A"],
+  ["forward", "F"],
+  ["ticket", "T"],
+  ["read", "U"],
+  ["trash", "#"],
+] as const;
+
 export function TodayView({ className = "" }: { className?: string }) {
   const { t, locale } = useT();
   // a clock, for the plan and the timeline: the stores do not change when only time passes
@@ -63,13 +74,14 @@ export function TodayView({ className = "" }: { className?: string }) {
 
   useEffect(() => {
     // the keys of Keel and the design: J K walk, Enter and Backspace the two actions, E done, S snooze, L later,
-    // P in progress; for a mail R A F reply, reply all, forward, U read, # trash. Esc closes a menu or the composer.
+    // P in progress; for a mail R A F reply, reply all, forward, T ticket, U read, # trash. Each as Settings ›
+    // Shortcuts has it (an action knows its default letter, `key`). Esc closes a menu or the composer.
     const onKey = (e: KeyboardEvent) => {
       const { panel, zoom, quickAsk, selected } = useNavigationStore.getState();
       if (selected !== "__wait" || panel.modal || zoom || quickAsk || e.defaultPrevented || e.isComposing) return;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || inControl(e)) return;
+      if (e.repeat || inControl(e)) return;
       const details = useDetailsStore.getState();
-      if (e.key === "Escape" && (details.pop || details.compose)) {
+      if (e.key === "Escape" && !e.metaKey && !e.ctrlKey && !e.altKey && (details.pop || details.compose)) {
         e.preventDefault();
         return details.pop ? setPop("") : closeCompose();
       }
@@ -80,24 +92,25 @@ export function TodayView({ className = "" }: { className?: string }) {
         const next = now.queue[Math.min(now.queue.length - 1, Math.max(0, at + by))];
         if (next) selectEntry(next.id);
       };
-      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const is = (id: string) => isKey(e, `today.${id}` as CommandId);
       const actions = entry ? actionsOf(entry) : null;
-      const byKey = (k: string) => actions?.acts.find(action => action.key?.toLowerCase() === k);
+      const mailAction = MAIL_KEYS.find(([id]) => is(id));
+      const byKey = mailAction && actions?.acts.find(action => action.key === mailAction[1]);
       const mail = entry?.subject.type === "mail";
-      if (key === "ArrowDown" || key === "j") step(1);
-      else if (key === "ArrowUp" || key === "k") step(-1);
+      if (is("next")) step(1);
+      else if (is("prev")) step(-1);
       else if (!entry || !actions) return;
-      else if (key === "l") putOff(entry.id);
-      else if (key === "s" && entry.subject.type !== "meeting") setPop("snooze");
-      else if (key === "e" && actions.done) actions.done.run();
-      else if (key === "p" && entry.kind !== "ask")
+      else if (is("later")) putOff(entry.id);
+      else if (is("snooze") && entry.subject.type !== "meeting") setPop("snooze");
+      else if (is("done") && actions.done) actions.done.run();
+      else if (is("doing") && entry.kind !== "ask")
         setStatus(entry, entry.status === "doing" ? "todo" : "doing").catch(console.error);
-      else if (mail && key === "r") actions.primary?.run();
-      else if (mail && ["a", "f", "t", "u", "#"].includes(key) && byKey(key)) byKey(key)!.run();
+      else if (mail && is("reply")) actions.primary?.run();
+      else if (mail && byKey) byKey.run();
       // an agent's question or permission takes Enter itself (its card)
-      else if (key === "Enter" && entry.kind !== "ask" && !(e.target instanceof HTMLButtonElement))
+      else if (is("primary") && entry.kind !== "ask" && !(e.target instanceof HTMLButtonElement))
         actions.primary?.run();
-      else if (key === "Backspace" && actions.secondary) actions.secondary.run();
+      else if (is("secondary") && actions.secondary) actions.secondary.run();
       else return;
       e.preventDefault();
     };

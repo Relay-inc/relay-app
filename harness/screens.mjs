@@ -833,7 +833,7 @@ const VIEWS = {
     await waitText("From Relay");
   },
   ...Object.fromEntries(
-    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Updates"].map(tab => [
+    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Shortcuts", "Updates"].map(tab => [
       `settings-${tab.toLowerCase()}`,
       () => settingsPage(tab),
     ]),

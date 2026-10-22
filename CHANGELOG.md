@@ -13,6 +13,14 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Shortcuts in Settings**: a Shortcuts page lists every key Relay takes (anywhere, in a conversation, on Today, in Mail, dictation) and lets you change each one: click it and press the new key, the arrow puts it back. A key that would type in a field, that macOS or the Edit menu has, or that another command already has is refused with the reason. Tooltips and the menu bar follow (#256)
+
+### Removed
+
+- **⌘1 to ⌘8 in Settings**: the sidebar showed them next to each page, but they did nothing (#256)
+
 ## [0.0.32] - 2026-10-22
 
 ### Fixed

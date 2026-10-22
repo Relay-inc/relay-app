@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useT } from "../hooks/useT";
+import { useKeyLabel } from "../hooks/useKeyLabel";
 import { Icon } from "./Icon";
 
 // a header button: an icon with its title
@@ -28,6 +29,7 @@ export function ModalHeader({
   onClose: () => void;
 }) {
   const { t } = useT();
+  const escape = useKeyLabel("app.escape");
   return (
     <div className="h-13 flex-none flex items-center gap-2 pl-5 pr-3 border-b border-separator">
       {left}
@@ -37,7 +39,7 @@ export function ModalHeader({
       {button("right", t("kb.next"), () => onStep(1), last)}
       <span className="w-px h-4 bg-separator-strong mx-1"></span>
       {link}
-      {button("close", t("kb.closeEsc"), onClose, false)}
+      {button("close", t("kb.closeEsc", { key: escape }), onClose, false)}
     </div>
   );
 }

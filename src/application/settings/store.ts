@@ -29,7 +29,7 @@ import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/t
 import { makeStore } from "../make-store";
 
 export type SettingsTab =
-  "general" | "projects" | "agents" | "integrations" | "plugins" | "machines" | "voice" | "updates";
+  "general" | "projects" | "agents" | "integrations" | "plugins" | "machines" | "voice" | "shortcuts" | "updates";
 
 /** The settings as the backend keeps them and the UI language (both windows), plus what the settings window shows.
  *  Every save result is a `Message | null` (null: nothing to say). */
