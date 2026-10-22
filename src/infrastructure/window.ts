@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { Accent, Theme } from "../domain/settings/types";
 
@@ -71,3 +72,35 @@ export const setPageLang = (lang: string) => {
 export const closeWindow = () => window.close();
 /** The browser's language, when the backend cannot say. */
 export const navigatorLang = () => navigator.language.slice(0, 2);
+
+// Which window this page is: the main one, one Cmd-N opened (main-2, …), or another (settings). The active one is the
+// Relay window used last (src-tauri/src/windows.rs): it alone writes the UI state, takes the menu and sends banners.
+const label = (() => {
+  try {
+    return getCurrentWindow().label;
+  } catch {
+    return "main"; // no Tauri (a test)
+  }
+})();
+export const windowLabel = label;
+const relayWindow = label === "main" || label.startsWith("main-");
+/** The main window: it runs what must happen once for the app (retries, board pipelines, meeting banners). */
+export const isPrimary = () => label === "main";
+let active = "main";
+let heard = false;
+const onLeave = new Set<() => void>();
+void listen<string>("active-window", event => {
+  const was = isActive();
+  heard = true;
+  active = event.payload;
+  if (was && !isActive()) onLeave.forEach(left => left());
+}).catch(() => {});
+void invoke<string>("active_window")
+  .then(answer => {
+    if (!heard) active = answer;
+  })
+  .catch(() => {});
+/** Whether this page is the active Relay window. A window that is not one (settings) counts as active. */
+export const isActive = () => !relayWindow || active === label;
+/** Run `left` each time this window stops being the active one. */
+export const whenLeft = (left: () => void) => onLeave.add(left);

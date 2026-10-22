@@ -13,6 +13,7 @@ import type { Meeting } from "../../domain/calendar/types";
 import { calendarOn as isCalendarOn } from "../../domain/settings/types";
 import { WAIT } from "../../domain/navigation/views";
 import * as backend from "../../infrastructure/backend";
+import { isPrimary } from "../../infrastructure/window";
 import { settings } from "../settings/settings";
 import { findProjects } from "../workspace/vault";
 import { select, toast } from "../navigation/navigation";
@@ -75,6 +76,7 @@ export function tick() {
   set(draft => {
     draft.now = now;
   });
+  if (!isPrimary()) return; // one banner, from the main window
   for (const meeting of bannerDue(cal().list, now, sent)) {
     sent.add(meeting.id);
     // a slot per meeting, so the next one's banner does not replace this one; a click opens Waiting

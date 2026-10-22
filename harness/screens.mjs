@@ -436,8 +436,12 @@ const VIEWS = {
   },
   "new-general-draft": async () => {
     await open(page, server.url);
-    await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-T
+    await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-Option-T
     await settle(page);
+  },
+  // a window Cmd-N opened starts on Today, whatever the main window had open (#PR)
+  "new-window": async () => {
+    await open(page, server.url, { sel: keys.question, window: "main-2" });
   },
   terminal: async () => {
     await open(page, server.url, { sel: keys.terminal });

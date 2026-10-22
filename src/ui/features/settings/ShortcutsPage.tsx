@@ -30,8 +30,10 @@ import { ShortcutField } from "./ShortcutField";
 
 const APP: CommandId[] = [
   "app.quickAsk",
-  "app.newGeneral",
   "app.newProject",
+  "app.newGeneral",
+  "app.reopenChat",
+  "app.newWindow",
   "app.closeChat",
   "app.settings",
   "app.escape",

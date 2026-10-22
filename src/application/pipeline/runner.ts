@@ -24,6 +24,7 @@ import {
 } from "../../domain/pipeline/rules";
 import type { Pipeline, Step, Ticket } from "../../domain/pipeline/types";
 import * as backend from "../../infrastructure/backend";
+import { isPrimary } from "../../infrastructure/window";
 import { t } from "../../shared/i18n";
 import { provider as providerOf } from "../../shared/plugins";
 import { ctxOf } from "../board/ctx";
@@ -55,7 +56,7 @@ function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
 
 /** One pass over every pipeline. Calls while one waits to start make no second one. */
 export function runPipelines() {
-  if (queued) return;
+  if (queued || !isPrimary()) return; // the main window runs them, once for the app
   queued = true;
   return serial(async () => {
     queued = false;

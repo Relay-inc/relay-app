@@ -1298,6 +1298,8 @@ export default {
   "keys.app.quickAsk": "Snelle vraag, beantwoord in een nieuw algemeen gesprek",
   "keys.app.newGeneral": "Nieuw algemeen gesprek",
   "keys.app.newProject": "Nieuw gesprek in dit project",
+  "keys.app.reopenChat": "Heropen het laatst gesloten gesprek",
+  "keys.app.newWindow": "Nieuw venster",
   "keys.app.closeChat": "Sluit het gesprek",
   "keys.app.settings": "Instellingen",
   "keys.app.escape": "Sluit een afbeelding, ticket, bestand of de lade, anders stopt de lopende beurt",

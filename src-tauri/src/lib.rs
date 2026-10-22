@@ -54,6 +54,7 @@ mod snapshot;
 mod updater;
 mod tray;
 mod vault;
+mod windows;
 mod vaultsync;
 mod worktrees;
 
@@ -177,6 +178,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("chat", ["Conversation", "Gesprek", "Conversation", "Gespräch"]),
     ("new_general", ["New General Conversation", "Nieuw algemeen gesprek", "Nouvelle conversation générale", "Neues allgemeines Gespräch"]),
     ("new_project", ["New Conversation in This Project", "Nieuw gesprek in dit project", "Nouvelle conversation dans ce projet", "Neues Gespräch in diesem Projekt"]),
+    ("reopen_chat", ["Reopen Closed Conversation", "Heropen gesloten gesprek", "Rouvrir la conversation fermée", "Geschlossenes Gespräch öffnen"]),
+    ("new_window", ["New Window", "Nieuw venster", "Nouvelle fenêtre", "Neues Fenster"]),
     ("close_chat", ["Close Conversation", "Sluit gesprek", "Fermer la conversation", "Gespräch schließen"]),
     ("run_setup", ["Set Up Vault…", "Vault instellen…", "Configurer la vault…", "Vault einrichten…"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
@@ -332,14 +335,17 @@ fn build_menu(h: &AppHandle, lang: &str, keys: Option<&Value>) -> tauri::Result<
     let edit = Submenu::with_items(h, t("edit"), true, &[
         &P::undo(h, Some(&t("undo")))?, &P::redo(h, Some(&t("redo")))?, &P::separator(h)?,
         &P::cut(h, Some(&t("cut")))?, &P::copy(h, Some(&t("copy")))?, &P::paste(h, Some(&t("paste")))?, &P::select_all(h, Some(&t("select_all")))?])?;
-    // Cmd-W closes the conversation like a browser tab, the main window stays open
+    // the conversations are the tabs: Cmd-T a new one in this project, Cmd-Shift-T the last one closed back, Cmd-W
+    // closes one and the window stays open
     let chat = Submenu::with_items(h, t("chat"), true, &[
-        &item("new-general", "app.newGeneral", "meta+KeyT")?,
-        &item("new-project", "app.newProject", "meta+KeyN")?,
+        &item("new-project", "app.newProject", "meta+KeyT")?,
+        &item("new-general", "app.newGeneral", "alt+meta+KeyT")?,
+        &item("reopen-chat", "app.reopenChat", "shift+meta+KeyT")?,
         &MenuItem::with_id(h, "run-setup", t("run_setup"), true, None::<&str>)?,
         &P::separator(h)?,
         &item("close-chat", "app.closeChat", "meta+KeyW")?])?;
     let window = Submenu::with_items(h, t("window"), true, &[
+        &item("new-window", "app.newWindow", "meta+KeyN")?, &P::separator(h)?,
         &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?])?;
     Menu::with_items(h, &[&app, &chat, &edit, &window])
 }
@@ -435,14 +441,17 @@ async fn ui_state_init(app: AppHandle, state: serde_json::Map<String, Value>) ->
 }
 /// One key of it: read, change, write whole.
 #[tauri::command]
-async fn ui_state_set(app: AppHandle, key: String, value: String) -> Result<(), String> {
+async fn ui_state_set(app: AppHandle, window: tauri::WebviewWindow, key: String, value: String) -> Result<(), String> {
     let path = data_dir(&app).join("ui-state.json");
+    let changed = json!({"key": key, "value": value, "from": window.label()});
     tauri::async_runtime::spawn_blocking(move || {
         let _one = UI_STATE.lock().unwrap_or_else(|e| e.into_inner());
         let mut state: serde_json::Map<String, Value> = fs::read_to_string(&path).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
         state.insert(key, Value::String(value));
         relay_remote::sync::write_atomic(&path, serde_json::to_string(&state).unwrap().as_bytes(), None).map_err(|e| e.to_string())
-    }).await.map_err(|e| e.to_string())?
+    }).await.map_err(|e| e.to_string())??;
+    app.emit("ui-state", changed).ok(); // the other windows follow (storage.ts)
+    Ok(())
 }
 
 /// The favicon of each project's website, guessed from its notes (favicon.rs), for the projects
@@ -2075,7 +2084,9 @@ pub fn run() {
             }
             if tray::owns(event.id().as_ref()) { return; } // handled by the tray's own listener
             if event.id() == "check-updates" { open_settings(app, Some("updates")); return; }
-            if event.id() != "settings" { app.emit("menu", event.id().as_ref()).ok(); return; }
+            if event.id() == "new-window" { windows::open_new(app).map_err(|e| eprintln!("new window: {e}")).ok(); return; }
+            // the window the user works in (the webview listens on its own window, backend.ts)
+            if event.id() != "settings" { app.emit_to(windows::active(), "menu", event.id().as_ref()).ok(); return; }
             open_settings(app, None);
         })
         // a link clicked inside a mail navigates its sandboxed frame (no scripts run there). Every navigation passes
@@ -2106,9 +2117,13 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::default()
             .with_state_flags(tauri_plugin_window_state::StateFlags::SIZE | tauri_plugin_window_state::StateFlags::POSITION | tauri_plugin_window_state::StateFlags::MAXIMIZED)
             .build())
-        // closing the main window hides it: the app keeps running for the menu bar icon, Cmd-Q quits
-        .on_window_event(|w, e| if let tauri::WindowEvent::CloseRequested { api, .. } = e {
-            if w.label() == "main" { api.prevent_close(); w.hide().ok(); }
+        // closing the main window hides it: the app keeps running for the menu bar icon, Cmd-Q quits. A window Cmd-N
+        // opened closes for good
+        .on_window_event(|w, e| {
+            windows::track(w, e);
+            if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                if w.label() == "main" { api.prevent_close(); w.hide().ok(); }
+            }
         })
         .setup(|app| {
             let sids = agents::load_sessions(&fs::read_to_string(data_dir(app.handle()).join("sessions.json")).unwrap_or_default());
@@ -2176,15 +2191,15 @@ pub fn run() {
             });
             tray::init(app.handle())?;
             let handle = app.handle().clone();
-            app.deep_link().on_open_url(move |_| tray::show_main(&handle));
+            app.deep_link().on_open_url(move |_| { windows::show_active(&handle); });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
-        // a click on the Dock icon brings the hidden main window back
+        // a click on the Dock icon brings the window used last back (the main one may be hidden)
         .run(|app, e| match e {
-            tauri::RunEvent::Reopen { .. } => tray::show_main(app),
+            tauri::RunEvent::Reopen { .. } => { windows::show_active(app); }
             tauri::RunEvent::Exit => { quit(app); pty::kill_all(app); plugins::kill_all(app); }
             _ => {}
         });
@@ -2218,7 +2233,7 @@ mod shortcut_tests {
     #[test]
     fn menu_shortcuts_from_settings_parse_and_bad_ones_drop_out() {
         // the bindings Settings › Shortcuts writes, as build_menu hands them to the menu
-        for b in ["meta+KeyT", "meta+Comma", "alt+shift+meta+KeyN", "ctrl+F5"] {
+        for b in ["meta+KeyT", "meta+Comma", "alt+shift+meta+KeyN", "ctrl+F5", "alt+meta+KeyT", "shift+meta+KeyT"] {
             assert!(b.replace("meta", "super").parse::<muda::accelerator::Accelerator>().is_ok(), "{b}");
         }
         let s = norm(json!({"shortcuts": {"app.quickAsk": ["meta+KeyJ"], "bad": "x", "long": ["a", "b", "c", "d"]}}));

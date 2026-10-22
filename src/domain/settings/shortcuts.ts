@@ -10,8 +10,10 @@ type Command = { scope: Scope; keys: readonly string[] };
 
 export const COMMANDS = {
   "app.quickAsk": { scope: "app", keys: ["meta+KeyK"] },
-  "app.newGeneral": { scope: "app", keys: ["meta+KeyT"] },
-  "app.newProject": { scope: "app", keys: ["meta+KeyN"] },
+  "app.newProject": { scope: "app", keys: ["meta+KeyT"] },
+  "app.newGeneral": { scope: "app", keys: ["alt+meta+KeyT"] },
+  "app.reopenChat": { scope: "app", keys: ["shift+meta+KeyT"] },
+  "app.newWindow": { scope: "app", keys: ["meta+KeyN"] },
   "app.closeChat": { scope: "app", keys: ["meta+KeyW"] },
   "app.settings": { scope: "app", keys: ["meta+Comma"] },
   "app.escape": { scope: "app", keys: ["Escape"] },
@@ -40,8 +42,10 @@ export const COMMANDS = {
 export type CommandId = keyof typeof COMMANDS;
 /** The ones in the menu bar (src-tauri/src/lib.rs build_menu reads them from the settings too). */
 export const MENU_COMMANDS: readonly CommandId[] = [
-  "app.newGeneral",
   "app.newProject",
+  "app.newGeneral",
+  "app.reopenChat",
+  "app.newWindow",
   "app.closeChat",
   "app.settings",
 ];

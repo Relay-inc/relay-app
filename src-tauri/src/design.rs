@@ -99,14 +99,15 @@ fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
 }
 
 #[tauri::command]
-pub fn design_show(app: AppHandle, url: String, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
+pub fn design_show(app: AppHandle, window: tauri::Window, url: String, x: f64, y: f64, w: f64, h: f64) -> Result<(), String> {
     let url = claude_url(&url)?;
     if let Some(view) = app.get_webview(LABEL) {
+        // one Design webview: it moves to the Relay window that opens the drawer
+        if view.window().label() != window.label() { view.reparent(&window).map_err(|e| e.to_string())?; }
         if view.url().map_err(|e| e.to_string())? != url { view.navigate(url).map_err(|e| e.to_string())?; }
         view.set_bounds(rect(x, y, w, h)).map_err(|e| e.to_string())?;
         return view.show().map_err(|e| e.to_string());
     }
-    let window = app.get_window("main").ok_or("no main window")?;
     // Google sign-in opens a popup that talks back through window.opener. It is a plain window wry makes from the
     // opener's configuration (`Allow`): a Tauri window (`Create`) aborts the app, because that configuration shares
     // the Design webview's script handlers and wry adds Tauri's `ipc` handler a second time (wry 0.57, WebKit throws).
@@ -277,7 +278,7 @@ fn open(app: &AppHandle, key: &str, start: Option<&str>) -> Result<(String, Webv
     let (tx, rx) = mpsc::channel();
     let id = SEQ.fetch_add(1, Ordering::Relaxed);
     OPENING.lock().unwrap().get_or_insert_with(HashMap::new).insert(id, tx);
-    app.emit("design-open", json!({"id": id, "key": key, "start": start})).map_err(|e| e.to_string())?;
+    app.emit_to(super::windows::active(), "design-open", json!({"id": id, "key": key, "start": start})).map_err(|e| e.to_string())?;
     let project = rx.recv_timeout(Duration::from_secs(20)).map_err(|_| {
         OPENING.lock().unwrap().as_mut().map(|m| m.remove(&id));
         "the Design drawer did not open".to_string()
