@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   GENERAL,
   type ConvRow,
+  type FolderBlock,
   type ProjectBlock,
   type Section,
   type ViewRow,
@@ -22,6 +23,10 @@ import {
   hiddenViews,
   isDark,
   toggleTheme,
+  addFolder,
+  editFolder,
+  renameFolder,
+  deleteFolder,
 } from "../../../application/navigation/sidebar";
 import { newChat } from "../../../application/conversations/chats";
 import { chatsOf, closedOf, sessionIdOf, terminalSessions } from "../../../application/conversations/selectors";
@@ -36,18 +41,19 @@ import { SidebarRow } from "./SidebarRow";
 import { SidebarHead } from "./SidebarHead";
 import { SidebarMenu, type MenuItem } from "./SidebarMenu";
 import { SidebarFooter } from "./SidebarFooter";
+import { FolderName } from "./FolderName";
 import { useReorder } from "./useReorder";
 import { DROP_LINE_AFTER } from "./rows";
 import { closeWork, openWork } from "../../../application/today/work";
 import "../../styles/navigation.css";
 
-// a view's menu has its key in `chatKey`
+// a view's menu has its key in `chatKey`, a folder's its id
 type MenuTarget = {
   x: number;
   y: number;
   chatKey: string;
   project: string | null;
-  kind: "conv" | "proj" | "view" | "more";
+  kind: "conv" | "proj" | "folder" | "view" | "more";
 };
 
 /** The whole left sidebar: search, the sections with their conversations, the footer buttons and the right-click menu.
@@ -108,6 +114,12 @@ export function NavigationView({ className }: { className: string }) {
     if (target.kind === "view") return viewMenuItems(target);
     if (target.kind === "more")
       return hidden.map(view => ({ id: view.key, label: view.name, icon: view.icon, mark: view.mark }));
+    if (target.kind === "folder")
+      return [
+        { id: "new", label: t("nav.newChat") },
+        { id: "renamefolder", label: t("nav.renameFolder") },
+        { id: "deletefolder", label: t("nav.deleteFolder") },
+      ];
     if (target.kind === "conv")
       return [
         { id: "assign", label: t("ctx.assign") },
@@ -125,6 +137,7 @@ export function NavigationView({ className }: { className: string }) {
       chatsOf(target.project).length > 0 || terminalSessions().some(session => session.project === target.project);
     return [
       { id: "new", label: t("nav.newChat") },
+      { id: "newfolder", label: t("nav.newFolder") },
       ...(anyOpen ? [{ id: "closeall", label: t("ctx.closeAll") }] : []),
       ...recent,
     ];
@@ -133,14 +146,22 @@ export function NavigationView({ className }: { className: string }) {
     setMenu(null);
     if (target.kind === "view") pickView(target, itemId);
     else if (target.kind === "more") select(itemId);
+    else if (target.kind === "folder") pickFolder(target, itemId);
     else if (itemId === "assign") {
       await select(target.chatKey);
       openProjectPanel();
     } else if (itemId === "copyid") copyText(sessionIdOf(target.chatKey));
     else if (itemId === "close") closeChat(target.chatKey);
     else if (itemId === "new") select(newChat(target.project));
+    else if (itemId === "newfolder") addFolder(target.project ?? "");
     else if (itemId === "closeall") closeAll(target.project);
     else reopen(itemId.slice("reopen:".length));
+  };
+
+  const pickFolder = (target: MenuTarget, itemId: string) => {
+    if (itemId === "new") select(newChat(target.project, target.chatKey));
+    else if (itemId === "renamefolder") editFolder(target.chatKey);
+    else deleteFolder(target.chatKey);
   };
 
   // middle-click on a conversation closes it, like a browser tab
@@ -201,7 +222,7 @@ export function NavigationView({ className }: { className: string }) {
         {renderMore(false)}
       </>
     );
-  const renderConversation = (row: ConvRow, indent: boolean) =>
+  const renderConversation = (row: ConvRow, indent: boolean, nested = false) =>
     row.work ? (
       // Today's work in progress: opens Today on it, closing discards it; not dragged, no conversation menu
       <SidebarRow
@@ -230,6 +251,8 @@ export function NavigationView({ className }: { className: string }) {
         data-kind="conv"
         data-key={row.key}
         data-parent={row.parent}
+        data-project={row.project}
+        data-folder={row.folder}
         title={row.term ? t("nav.inTerminal") : undefined}
         icon={row.term ? "term" : "chat"}
         svg={row.glyph}
@@ -237,6 +260,7 @@ export function NavigationView({ className }: { className: string }) {
         selected={row.selected}
         unseen={row.unseen}
         indent={indent}
+        nested={nested}
         closable={row.closable}
         closing={row.closing}
         trail={row.trail}
@@ -251,6 +275,35 @@ export function NavigationView({ className }: { className: string }) {
         onClose={unlessDragged(() => closeChat(row.key))}
       />
     );
+  // a folder under a project (`indent`) or under Algemeen, its conversations one step further in; the folder's name typed
+  // in place while it is being named
+  const renderFolder = (folder: FolderBlock, indent: boolean) => (
+    <Fragment key={folder.id}>
+      {folder.editing ? (
+        <FolderName name={folder.name} indent={indent} onDone={name => renameFolder(folder.id, name)} />
+      ) : (
+        <SidebarRow
+          kind="folder"
+          data-kind="folder"
+          data-folder={folder.id}
+          data-project={folder.project}
+          aria-expanded={folder.open}
+          icon="folder"
+          name={folder.name}
+          indent={indent}
+          unseen={!folder.open && folder.unseen}
+          trail={folder.open ? "" : folder.trail}
+          meta={!folder.open && folder.count ? { kind: "count", n: folder.count } : undefined}
+          addTitle={t("nav.newChatIn", { name: folder.name })}
+          {...dropzone("folder", folder.id)}
+          onClick={unlessDragged(() => toggleSection(folder.id))}
+          onContextMenu={openMenu({ chatKey: folder.id, project: folder.project || null, kind: "folder" })}
+          onAdd={unlessDragged(() => select(newChat(folder.project || null, folder.id)))}
+        />
+      )}
+      {folder.open ? folder.convs.map(row => renderConversation(row, true, indent)) : null}
+    </Fragment>
+  );
   const renderProject = (project: ProjectBlock, tint: Section["tint"]) => (
     <Fragment key={project.name}>
       <SidebarRow
@@ -271,6 +324,7 @@ export function NavigationView({ className }: { className: string }) {
         onContextMenu={openMenu({ chatKey: "", project: project.name, kind: "proj" })}
         onAdd={unlessDragged(() => select(newChat(project.name)))}
       />
+      {project.folders.map(folder => renderFolder(folder, true))}
       {project.convs.map(row => renderConversation(row, true))}
       {project.fold ? (
         <SidebarRow kind="fold" indent name={project.fold} onClick={unlessDragged(() => toggleUnfold(project.name))} />
@@ -282,7 +336,7 @@ export function NavigationView({ className }: { className: string }) {
     return (
       <div
         key={section.id}
-        className={`mt-3 ${dragging ? "opacity-40" : ""} ${drop === "after" ? DROP_LINE_AFTER : ""}`}
+        className={`mt-3 ${dragging ? "opacity-40" : ""} ${drop === "after" ? DROP_LINE_AFTER : ""} ${drop === "in" ? "rounded-md ring-1 ring-inset ring-accent" : ""}`}
         data-drop={section.id}
       >
         <SidebarHead
@@ -298,6 +352,7 @@ export function NavigationView({ className }: { className: string }) {
         />
         {section.open ? (
           <>
+            {section.folders.map(folder => renderFolder(folder, false))}
             {section.convs.map(row => renderConversation(row, false))}
             {section.projects.map(project => renderProject(project, section.tint))}
           </>

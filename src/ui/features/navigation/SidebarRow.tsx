@@ -12,7 +12,7 @@ import { DROP_LINE_BEFORE, DROP_LINE_AFTER, clickOnKey } from "./rows";
 type Tint = Section["tint"];
 
 type Props = Omit<ComponentProps<"div">, "className"> & {
-  kind?: "view" | "tile" | "proj" | "conv" | "fold";
+  kind?: "view" | "tile" | "proj" | "folder" | "conv" | "fold";
   name: string;
   icon?: string; // a named icon, or `svg`: a provider's own glyph
   svg?: string;
@@ -23,6 +23,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   selected?: boolean;
   unseen?: boolean;
   indent?: boolean; // under its project
+  nested?: boolean; // in a folder under its project: one step further in
   closable?: boolean;
   closing?: boolean; // being closed: greyed out and pulsing until it is gone
   trail?: Trail;
@@ -30,7 +31,7 @@ type Props = Omit<ComponentProps<"div">, "className"> & {
   subsTitle?: string;
   mark?: string; // a worker of the orchestrator: its small marker carries this tooltip
   meta?: Meta;
-  addTitle?: string; // the "+" of a project row
+  addTitle?: string; // the "+" of a project or folder row
   dragging?: boolean;
   drop?: Drop;
   onClose?: () => void;
@@ -45,6 +46,8 @@ function metaClass(meta: Meta) {
   return "tabular-nums text-xs font-medium text-secondary";
 }
 function dropLineClass(drop: Drop, tile: boolean) {
+  // a conversation held over a project or folder goes into it: the whole row is outlined
+  if (drop === "in") return "ring-1 ring-inset ring-accent";
   // tiles stand side by side: the line goes left or right of them
   if (tile && drop)
     return `relative before:absolute before:inset-y-1 before:w-0.5 before:bg-accent ${drop === "before" ? "before:-left-0.5" : "before:-right-0.5"}`;
@@ -57,7 +60,7 @@ function dropLineClass(drop: Drop, tile: boolean) {
 // The number is in the tooltip
 const TILE_DOT: Record<Meta["kind"], string> = { badge: "bg-accent", late: "bg-late", soon: "bg-accent", count: "" };
 
-/** One row of the sidebar: a view, a project, a conversation or terminal session, or the "n more" fold; or a view as a
+/** One row of the sidebar: a view, a project, a folder, a conversation or terminal session, or the "n more" fold; or a view as a
  *  square icon (`tile`) when the views are shown as a row of icons. The click, press and context menu are the
  *  container's (passed through to the row); the close and "+" buttons are their own. */
 export function SidebarRow({
@@ -72,6 +75,7 @@ export function SidebarRow({
   selected = false,
   unseen = false,
   indent = false,
+  nested = false,
   closable = false,
   closing = false,
   trail = "",
@@ -156,7 +160,7 @@ export function SidebarRow({
       onKeyDown={clickOnKey}
       aria-busy={closing}
       {...rest}
-      className={`group flex ${indent ? "h-7.5 gap-2" : "h-8 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
+      className={`group flex ${indent ? "h-7.5 gap-2" : "h-8 gap-2.5"} items-center px-2 rounded-md cursor-default transition-colors duration-150 ease-out ${rowClass} ${nested ? "ml-9" : indent ? "ml-4.5" : ""} ${dropLineClass(drop, false)} ${dragging ? "opacity-40" : ""} ${closing ? "pointer-events-none animate-skel" : ""}`}
     >
       {lead}
       <span

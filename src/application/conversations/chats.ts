@@ -12,12 +12,14 @@ export const saveChats = () =>
     "chats",
     chatsToStore({ chats: useConversationsStore.getState().chats, typed: useDraftsStore.getState().typed }),
   );
-/** A new draft conversation under a project (null: general); its key. It is stored once something is typed. */
-export function newChat(project: string | null): string {
+/** A new draft conversation under a project (null: general), in one of its sidebar folders when `folder` is given;
+ *  its key. It is stored once something is typed. */
+export function newChat(project: string | null, folder = ""): string {
   const now = Date.now();
   const key = newChatKey(now);
   useConversationsStore.setState(draft => {
     draft.chats[key] = newChatEntry(key, project, now);
+    if (folder) draft.chats[key].folder = folder;
   });
   return key;
 }
