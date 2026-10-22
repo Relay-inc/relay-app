@@ -4,10 +4,11 @@
 
 use crate::broker::{self, Conn, Meta, Spec, Stop};
 use crate::proto::{self, DeviceCode, Github, Info, PairLine, RepoStatus, Snapshot, MAX_REPLY, MAX_SESSION, PROTO};
+use crate::share;
 use crate::sync::{self, Manifest};
 use crate::tls::{self, Identity};
 use serde_json::{json, Value};
-use std::io::BufReader;
+use std::io::{BufRead, BufReader, Read};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -16,15 +17,16 @@ const CONNECT: Duration = Duration::from_secs(4);
 /// A request's answer (history reads a transcript, which can take a moment).
 const ANSWER: Duration = Duration::from_secs(10);
 
-/// A paired machine: where it is and the certificate it must show.
+/// A paired machine: where it is and the certificate it must show. `link`: a phone's secret from the laptop's QR, to
+/// sign what it sends to the laptop's shared conversations (share.rs); without one a phone cannot reach them.
 #[derive(Clone)]
-pub struct Client { pub addr: String, pub fp: String, id: Identity }
+pub struct Client { pub addr: String, pub fp: String, id: Identity, link: Option<String> }
 
 /// Pair with the line `relay-server pair` printed: connect, check the server's certificate against the line, prove
 /// the code. Returns the line and what the server says about itself, for the settings.
 pub fn pair(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Info), String> {
     let l = PairLine::parse(line).ok_or("not a pairing line (relay://host:port#fp=…&code=…)")?;
-    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone() };
+    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
     let proof = tls::proof(&l.code, &id.fingerprint(), &l.fp);
     c.call(json!({"op": "pair", "name": name, "proof": proof}))?;
     let info = c.info()?;
@@ -32,7 +34,17 @@ pub fn pair(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Info), S
 }
 
 impl Client {
-    pub fn new(host: &str, port: u16, fp: &str, id: Identity) -> Client { Client { addr: proto::addr(host, port), fp: fp.to_lowercase(), id } }
+    pub fn new(host: &str, port: u16, fp: &str, id: Identity) -> Client { Client { addr: proto::addr(host, port), fp: fp.to_lowercase(), id, link: None } }
+    pub fn with_link(self, link: Option<String>) -> Client { Client { link, ..self } }
+
+    /// A request answered by the laptop of a shared conversation starts with its challenge instead of the answer:
+    /// the request again, signed for that challenge (share.rs), and what signs this connection's next lines.
+    fn sign(&self, challenge: &str, req: &Value, w: &mut tls::Writer) -> Result<share::Signer, String> {
+        let link = self.link.as_deref().ok_or("this phone cannot reach the Mac's conversations yet: pair it again from the Mac (Settings › Machines › Add phone)")?;
+        let mut s = share::Signer::new(&self.id, link, challenge, req["key"].as_str().unwrap_or(""))?;
+        proto::write_json(w, &s.envelope(&req.to_string())).map_err(|e| e.to_string())?;
+        Ok(s)
+    }
 
     fn open(&self) -> Result<(BufReader<tls::Reader>, tls::Writer), String> {
         let d = tls::connect(&self.addr, &self.id, &self.fp, CONNECT).map_err(|e| format!("{}: {e}", self.addr))?;
@@ -55,7 +67,11 @@ impl Client {
                 let (mut r, mut w) = me.open()?;
                 proto::write_json(&mut w, &req).map_err(|e| e.to_string())?;
                 if let Some(b) = &body { std::io::Write::write_all(&mut w, b).map_err(|e| e.to_string())?; }
-                let v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
+                let mut v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
+                if let Some(ch) = v["challenge"].as_str() {
+                    me.sign(ch, &req, &mut w)?;
+                    v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
+                }
                 let data = match want_body { Some(max) if v["ok"] == true => proto::read_body(&mut r, v["len"].as_u64().unwrap_or(0), max).map_err(|e| e.to_string())?, _ => vec![] };
                 w.shutdown();
                 Ok::<(Value, Vec<u8>), String>((v, data))
@@ -133,9 +149,15 @@ impl Client {
     }
     /// The same with each one's title too, the first thing said in it (key -> title), where the server saw it.
     pub fn list_named(&self) -> Result<(Vec<Meta>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>), String> {
+        self.listing().map(|(m, s, t, _)| (m, s, t))
+    }
+    /// The same, and for a phone the conversations among them that run on its laptop (shared from there, share.rs).
+    #[allow(clippy::type_complexity)]
+    pub fn listing(&self) -> Result<(Vec<Meta>, std::collections::HashMap<String, String>, std::collections::HashMap<String, String>, Vec<String>), String> {
         let v = self.call(json!({"op": "list"}))?;
         let metas = serde_json::from_value(v["metas"].clone()).map_err(|e| e.to_string())?;
-        Ok((metas, serde_json::from_value(v["sids"].clone()).unwrap_or_default(), serde_json::from_value(v["titles"].clone()).unwrap_or_default()))
+        Ok((metas, serde_json::from_value(v["sids"].clone()).unwrap_or_default(), serde_json::from_value(v["titles"].clone()).unwrap_or_default(),
+            serde_json::from_value(v["shared"].clone()).unwrap_or_default()))
     }
     pub fn kill(&self, key: &str, pid: u32) -> Result<(), String> { self.call(json!({"op": "kill", "key": key, "pid": pid})).map(|_| ()) }
     pub fn pending(&self) -> Result<Vec<Value>, String> {
@@ -145,6 +167,11 @@ impl Client {
     /// A Claude session's messages there, from byte offset `from`: (items, next offset).
     pub fn history(&self, sid: &str, from: u64, cwd: &str) -> Result<(Value, u64), String> {
         let v = self.call(json!({"op": "history", "sid": sid, "from": from, "cwd": cwd}))?;
+        Ok((v["items"].clone(), v["next"].as_u64().unwrap_or(0)))
+    }
+    /// A shared conversation's messages, from its laptop: (items, next offset).
+    pub fn history_key(&self, key: &str) -> Result<(Value, u64), String> {
+        let v = self.call(json!({"op": "history", "key": key}))?;
         Ok((v["items"].clone(), v["next"].as_u64().unwrap_or(0)))
     }
     pub fn is_dir(&self, path: &str) -> Result<bool, String> { Ok(self.call(json!({"op": "exists", "path": path}))?["dir"] == true) }
@@ -161,14 +188,37 @@ impl Client {
     pub fn start(&self, key: &str, name: &str, model: &str, effort: &str, resume: Option<&str>) -> Result<Conn, String> {
         self.stream(json!({"op": "start", "key": key, "name": name, "model": model, "effort": effort, "resume": resume}), key)?.ok_or_else(|| "relay-server: no broker".into())
     }
+    /// Offer this laptop's shared conversations to its phone there (`convs`: [{key, title, provider}]). The connection
+    /// stays open: the server writes `{"open": token}` on it for each request of the phone, answered with share_open.
+    pub fn share(&self, convs: &Value) -> Result<(BufReader<tls::Reader>, tls::Writer), String> {
+        let (mut r, mut w) = self.open()?;
+        proto::write_json(&mut w, &json!({"op": "share", "convs": convs})).map_err(|e| e.to_string())?;
+        let v = proto::read_json(&mut r, MAX_REPLY).map_err(|e| e.to_string())?;
+        if v["ok"] != true { return Err(v["error"].as_str().unwrap_or("refused").to_string()); }
+        Ok((r, w))
+    }
+    /// The connection for one request of the phone (share::serve): the server passes it through from here.
+    pub fn share_open(&self, token: &str) -> Result<(BufReader<tls::Reader>, tls::Writer), String> {
+        let (r, mut w) = self.open()?;
+        proto::write_json(&mut w, &json!({"op": "share_open", "token": token})).map_err(|e| e.to_string())?;
+        Ok((r, w))
+    }
     /// Take back a conversation whose broker runs there. None when there is none any more.
     pub fn attach(&self, key: &str) -> Result<Option<Conn>, String> { self.stream(json!({"op": "attach", "key": key}), key) }
 
     fn stream(&self, req: Value, key: &str) -> Result<Option<Conn>, String> {
-        let (r, mut w) = self.open()?;
+        let (mut r, mut w) = self.open()?;
         proto::write_json(&mut w, &req).map_err(|e| e.to_string())?;
+        // a shared conversation of the laptop: a challenge first, then every line to it signed
+        let mut first = String::new();
+        r.read_line(&mut first).map_err(|e| e.to_string())?;
+        let challenge = serde_json::from_str::<Value>(&first).ok().and_then(|v| v["challenge"].as_str().map(String::from));
+        let (stdin, frames): (Box<dyn std::io::Write + Send>, Box<dyn BufRead + Send>) = match challenge {
+            Some(ch) => { let s = self.sign(&ch, &req, &mut w)?; (Box::new(share::SignedLines::new(w, s)), Box::new(r)) }
+            None => (Box::new(w), Box::new(BufReader::new(std::io::Cursor::new(first).chain(r)))),
+        };
         // this device's own id at the broker: the laptop and its phone each get what they missed
-        match broker::open(Box::new(w), Box::new(r), &self.id.fingerprint()[..16]).map_err(|e| e.to_string())? {
+        match broker::open(stdin, frames, &self.id.fingerprint()[..16]).map_err(|e| e.to_string())? {
             Ok(mut c) => { c.agent = broker::Agent::remote(c.agent.id(), self.stop(key)); Ok(Some(c)) }
             Err(e) if e == "gone" => Ok(None),
             Err(e) => Err(e),

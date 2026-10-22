@@ -38,6 +38,7 @@ import { prepImages, releaseImages } from "./images";
 import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
 import { pollAgents } from "./polls";
+import { phoneCommand, setPhoneShare } from "./phoneShare";
 import { captureOnClose } from "../today/capture";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
@@ -280,6 +281,17 @@ function takeTyped() {
 /** Send `forced`, or what is typed in the open conversation with its images and files. `to` sends to a conversation
  *  that is not open (Cmd-K) with its own: the composer, its attachments and the view stay as they are. */
 export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], toFiles: string[] = []): Promise<void> {
+  // Relay's own commands, typed in the open conversation: handled here, the agent never hears them
+  const share = forced === undefined && !to ? phoneCommand(drafts().typed[selected()] ?? "") : null;
+  if (share !== null) {
+    const key = selected();
+    const conversation = cs().chats[key];
+    takeTyped();
+    return note(
+      key,
+      await setPhoneShare(key, share, displayTitle(conversation?.title || ""), !!conversation?.fromMail),
+    );
+  }
   const plan = planSend({ ...drafts(), outside: cs().outside }, selected(), forced, to, toImgs.length + toFiles.length);
   if (plan.kind === "nothing") return;
   if (plan.kind === "wait-outside") return note(plan.key, t("work.waitOutside"));

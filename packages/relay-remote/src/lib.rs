@@ -5,5 +5,6 @@
 pub mod broker;
 pub mod client;
 pub mod proto;
+pub mod share;
 pub mod sync;
 pub mod tls;

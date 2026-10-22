@@ -749,6 +749,14 @@ const en = {
   "note.moved": "Moved under {name}",
   "note.movedTo": "Moved to {name}. The next message goes on there.",
   "note.stopped": "Stopped.",
+  "note.phoneShared":
+    "Shared with your phone: it goes on here, on this Mac, while Relay is open. /unshare-phone stops it.",
+  "note.phoneUnshared": "No longer shared with your phone.",
+  "composer.phoneShared": "Shared with phone",
+  "composer.phoneSharedHelp":
+    "Your phone can read and continue this conversation through the machine it is paired with. /unshare-phone stops it.",
+  "phone.shareCmd": "Continue this conversation from your phone",
+  "phone.unshareCmd": "Stop sharing this conversation with your phone",
   "toast.escStop": "Press Escape again to cancel the request",
   "toast.closed": "Closed: {title}",
   "toast.worktreesRemoved_one": "{n} worktree removed",

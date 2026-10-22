@@ -21,6 +21,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Continue a Mac conversation on your phone**: type `/share-phone` in a conversation that runs on this Mac and your phone lists it, reads it and writes to it through the machine it is paired with, while it keeps running here (Relay must be open). `/unshare-phone` stops it, the composer marks a shared one. The phone signs everything it sends and this Mac checks it, so the machine passes it on but cannot add anything of its own. A phone added before this version: Add phone again (#252)
 - **Folders in the sidebar**: right-click a project (or General) › New folder groups its conversations. Drag a conversation onto a folder to put it there, the folder's + starts a new conversation in it, a click folds it to a count. Deleting a folder keeps its conversations under the project
 - **Drag a conversation to another project**: drop it on another project, on a folder there, among that project's conversations, or on General. It moves there like with Change project…, and its next message tells the agent. Terminal sessions move along too, outside any folder
 - **License**: Relay is source-available under the Functional Source License (FSL-1.1-ALv2). Use, change and share it for anything but a competing commercial product, every release becomes Apache-2.0 two years after it ships (`LICENSE.md`)

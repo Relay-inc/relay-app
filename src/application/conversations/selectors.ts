@@ -20,6 +20,7 @@ import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
 import { workerCounts } from "../orchestrator/orchestrator";
 import { useConversationsStore } from "./store";
+import { phoneCommands } from "./phoneShare";
 import { useDraftsStore } from "./drafts";
 import { useReviewStore } from "../today/review";
 import { todayRest } from "../today/today";
@@ -41,8 +42,12 @@ export const chatsOf = (project: string | null) => rules.chatsOf(cs(), project);
 export const terminalSessions = (hidden = false) =>
   rules.terminalSessions(cs(), useWorkspaceStore.getState().snap.sessions.items, settings().overrides, t, hidden);
 export const terminalOf = (key: string) => terminalSessions().find(session => session.key === key);
-/** The slash commands and skills of a conversation's agent, for the composer's completion. */
-export const commandsOf = (key: string) => cs().commands[chatAgent(key)] ?? [];
+/** The slash commands and skills of a conversation's agent, for the composer's completion, and Relay's own for an app
+ *  conversation (phoneShare). */
+export const commandsOf = (key: string) => [
+  ...(cs().commands[chatAgent(key)] ?? []),
+  ...(cs().chats[key] && !isOrchKey(key) ? phoneCommands() : []),
+];
 /** The project of the open conversation, terminal or app. */
 export const selectedProject = () => {
   const selected = useNavigationStore.getState().selected;

@@ -247,6 +247,20 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     Ok(true)
 }
 
+/// A conversation shared with the phone (share.rs), opened there: its process on this Mac, started (resuming its
+/// session, on the CLI's default model) when it has none, so the phone can follow it and write to it.
+pub(crate) fn ensure_local(app: &AppHandle, key: &str) -> Result<(), String> {
+    let state = app.state::<App>();
+    let p = provider_of(&state, key, None);
+    if !p.caps().persistent { return Err(format!("{}: a turn at a time, not from the phone", p.name())); }
+    let account = account_of(&state, p, key, "");
+    let mut procs = state.procs.lock().unwrap();
+    if procs.contains_key(key) { return Ok(()); }
+    let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None })?;
+    procs.insert(key.into(), x);
+    Ok(())
+}
+
 /// The agent behind `pid` ended: takes its process out of the slot. A process replaced for a model or effort switch
 /// exits quietly, its successor keeps the slot: false then.
 fn release(procs: &mut HashMap<String, Proc>, key: &str, pid: u32) -> bool {

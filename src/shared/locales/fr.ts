@@ -763,6 +763,14 @@ export default {
   "note.moved": "Rangée sous {name}",
   "note.movedTo": "Déplacée vers {name}. Le prochain message continue là-bas.",
   "note.stopped": "Arrêté.",
+  "note.phoneShared":
+    "Partagée avec votre téléphone : elle continue ici, sur ce Mac, tant que Relay est ouvert. /unshare-phone arrête le partage.",
+  "note.phoneUnshared": "N'est plus partagée avec votre téléphone.",
+  "composer.phoneShared": "Partagée avec le téléphone",
+  "composer.phoneSharedHelp":
+    "Votre téléphone peut lire et poursuivre cette conversation via la machine à laquelle il est associé. /unshare-phone arrête le partage.",
+  "phone.shareCmd": "Poursuivre cette conversation depuis votre téléphone",
+  "phone.unshareCmd": "Ne plus partager cette conversation avec votre téléphone",
   "toast.escStop": "Appuyez encore sur Échap pour annuler la requête",
   "toast.closed": "Fermée : {title}",
   "toast.worktreesRemoved_one": "{n} worktree supprimé",

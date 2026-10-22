@@ -199,7 +199,7 @@ fn update_goes_on_in_the_binary_sent() {
 fn linked(parent: &Client, tag: &str) -> Client {
     let code = parent.pair_device().unwrap();
     let (host, port) = parent.addr.rsplit_once(':').unwrap();
-    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None }.format();
+    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None, link: None }.format();
     let id = device(tag);
     let (l, _) = client::pair(&line, &id, tag).unwrap();
     Client::new(&l.host, l.port, &l.fp, id)
@@ -371,6 +371,84 @@ fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("Revoked phone"));
     assert!(phone.info().is_err());
     assert!(other.info().is_ok());
+}
+
+/// The laptop's own Mac in the share tests: one stand-in agent per attach that answers `got <line>`, the phones it
+/// trusts, and what was stopped.
+struct Mac { shared: Vec<String>, phones: std::sync::Mutex<relay_remote::share::Phones>, killed: std::sync::Mutex<Vec<String>> }
+impl relay_remote::share::Local for Mac {
+    fn shared(&self, key: &str) -> bool { self.shared.iter().any(|k| k == key) }
+    fn attach(&self, _key: &str) -> Result<relay_remote::broker::Conn, String> {
+        let (a, b) = std::os::unix::net::UnixStream::pair().map_err(|e| e.to_string())?;
+        std::thread::spawn(move || {
+            let mut out = b.try_clone().unwrap();
+            for l in std::io::BufReader::new(b).lines().map_while(Result::ok) { if writeln!(out, "o got {l}").is_err() { break; } }
+        });
+        Ok(relay_remote::broker::Conn { agent: 42.into(), stdin: Box::new(a.try_clone().unwrap()), frames: Box::new(std::io::BufReader::new(a)), backlog: 0 })
+    }
+    fn kill(&self, key: &str, pid: u32) -> Result<(), String> {
+        if pid != 42 { return Err("not that conversation's agent".into()); }
+        self.killed.lock().unwrap().push(key.into());
+        Ok(())
+    }
+    fn history(&self, key: &str) -> Result<serde_json::Value, String> { Ok(serde_json::json!({"items": [format!("said in {key}")], "next": 7})) }
+    fn admit(&self, pk: &str, proof: &str) -> bool { self.phones.lock().unwrap().admit(pk, proof) }
+}
+
+#[test]
+fn a_phone_continues_a_conversation_shared_from_the_mac_and_only_that() {
+    use relay_remote::share::{self, Phones};
+    let s = start("share");
+    let laptop = paired(&s, "laptop");
+    let link = relay_remote::tls::random_key();
+    let phone = linked(&laptop, "phone").with_link(Some(link.clone()));
+
+    // the Mac offers c:mac (and the server is told about c:unshared too, which the Mac itself does not share)
+    let mac = std::sync::Arc::new(Mac { shared: vec!["c:mac".into()], phones: std::sync::Mutex::new(Phones { keys: vec![], links: vec![link] }), killed: Default::default() });
+    let convs = serde_json::json!([{"key": "c:mac", "title": "On the Mac", "provider": "claude"}, {"key": "c:unshared", "title": "", "provider": "claude"}]);
+    let (r, offer) = laptop.share(&convs).unwrap();
+    let (lap, m2) = (laptop.clone(), mac.clone());
+    std::thread::spawn(move || for l in r.lines().map_while(Result::ok) {
+        let token = serde_json::from_str::<serde_json::Value>(&l).unwrap()["open"].as_str().unwrap().to_string();
+        let (lap, m) = (lap.clone(), m2.clone());
+        std::thread::spawn(move || { let (r, w) = lap.share_open(&token).unwrap(); share::serve(r, w, m).ok(); });
+    });
+
+    // the phone lists it, with its title; the laptop's own list does not
+    let (metas, _, titles, shared) = phone.listing().unwrap();
+    assert!(metas.iter().any(|m| m.key == "c:mac"));
+    assert_eq!(titles["c:mac"], "On the Mac");
+    assert_eq!(shared, ["c:mac", "c:unshared"]);
+    assert!(laptop.listing().unwrap().0.is_empty());
+
+    // it follows it and writes to it: signed on the phone, checked on the Mac, the first request pins the phone's key
+    let mut c = phone.attach("c:mac").unwrap().expect("the Mac's agent");
+    assert_eq!(c.agent.id(), 42);
+    writeln!(c.stdin, "hello").unwrap();
+    c.stdin.flush().unwrap();
+    assert_eq!(next(&mut c.frames), "got hello");
+    assert_eq!(mac.phones.lock().unwrap().links.len(), 0, "the link is used up, the key pinned");
+    assert_eq!(phone.history_key("c:mac").unwrap(), (serde_json::json!(["said in c:mac"]), 7));
+    phone.kill("c:mac", 42).unwrap();
+    assert_eq!(*mac.killed.lock().unwrap(), ["c:mac"]);
+    // the phone never forks it onto the server
+    assert!(phone.start("c:mac", "x", "", "", None).err().unwrap().contains("runs on the Mac"));
+
+    // what the Mac does not share is not reachable, also when the server forwards it
+    assert_eq!(phone.attach("c:unshared").err().unwrap(), "not shared with the phone");
+    assert!(phone.history_key("c:unshared").unwrap_err().contains("not shared"));
+    // and what nobody shares goes nowhere near the Mac
+    assert!(phone.attach("c:other").unwrap().is_none());
+
+    // another phone of the same laptop, with a link the Mac never made, or with none at all
+    let stranger = linked(&laptop, "phone2").with_link(Some(relay_remote::tls::random_key()));
+    assert!(stranger.attach("c:mac").err().unwrap().contains("not a phone this Mac paired"));
+    assert!(linked(&laptop, "phone3").attach("c:mac").err().unwrap().contains("pair it again"));
+
+    // the Mac gone: the phone hears so instead of waiting forever
+    offer.shutdown();
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(phone.attach("c:mac").unwrap().is_none());
 }
 
 #[test]

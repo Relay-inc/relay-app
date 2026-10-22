@@ -757,6 +757,14 @@ export default {
   "note.moved": "Unter {name} abgelegt",
   "note.movedTo": "Verschoben nach {name}. Die nächste Nachricht geht dort weiter.",
   "note.stopped": "Gestoppt.",
+  "note.phoneShared":
+    "Mit deinem Telefon geteilt: Es läuft hier weiter, auf diesem Mac, solange Relay offen ist. /unshare-phone beendet das.",
+  "note.phoneUnshared": "Nicht mehr mit deinem Telefon geteilt.",
+  "composer.phoneShared": "Mit Telefon geteilt",
+  "composer.phoneSharedHelp":
+    "Dein Telefon kann dieses Gespräch über die Maschine, mit der es gekoppelt ist, lesen und fortsetzen. /unshare-phone beendet das.",
+  "phone.shareCmd": "Dieses Gespräch auf dem Telefon fortsetzen",
+  "phone.unshareCmd": "Dieses Gespräch nicht mehr mit dem Telefon teilen",
   "toast.escStop": "Drücke erneut Escape, um die Anfrage abzubrechen",
   "toast.closed": "Geschlossen: {title}",
   "toast.worktreesRemoved_one": "{n} Worktree entfernt",
