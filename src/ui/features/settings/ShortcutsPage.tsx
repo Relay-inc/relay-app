@@ -1,77 +1,137 @@
 import { useSettingsStore } from "../../../application/settings/store";
+import {
+  resetAll,
+  resetKey,
+  saveKey,
+  savePick,
+  useShortcutsPageStore,
+} from "../../../application/settings/shortcuts-page";
+import { pauseShortcuts, saveShortcut, useVoicePageStore } from "../../../application/settings/voice-page";
+import {
+  bindingLabel,
+  bindingOf,
+  bindingsOf,
+  PICK_ID,
+  PICK_MODS,
+  pickLabel,
+  pickModOf,
+  type CommandId,
+} from "../../../domain/settings/shortcuts";
 import { mailExperimental } from "../../../domain/settings/types";
-import { shortcutLabel, voiceOf } from "../../../domain/settings/voice";
+import { voiceOf, type ShortcutKey } from "../../../domain/settings/voice";
 import type { Key } from "../../../shared/i18n";
+import { Icon } from "../../components/Icon";
 import { useT } from "../../hooks/useT";
+import { BUTTON_GLYPH, buttonClass, ERROR_MESSAGE } from "./blocks";
 import { Field } from "./Field";
 import { Section } from "./Section";
+import { Segmented } from "./Segmented";
+import { ShortcutField } from "./ShortcutField";
 
-type Row = readonly [keys: readonly string[], label: Key];
-
-// what the main window's handlers take (ui/app/App.tsx, the menu in src-tauri/src/lib.rs, TodayView, PermissionCard,
-// the composer): keep in step when a key changes there
-const APP: Row[] = [
-  [["⌘K"], "keys.quickAsk"],
-  [["⌘T"], "keys.newGeneral"],
-  [["⌘N"], "keys.newProject"],
-  [["⌘W"], "keys.closeChat"],
-  [["⌘,"], "keys.settings"],
-  [["Esc"], "keys.esc"],
-  [["⌃C"], "keys.ctrlC"],
+const APP: CommandId[] = [
+  "app.quickAsk",
+  "app.newGeneral",
+  "app.newProject",
+  "app.closeChat",
+  "app.settings",
+  "app.escape",
+  "app.stop",
 ];
-const CHAT: Row[] = [
-  [["↵"], "keys.send"],
-  [["⇧↵"], "keys.newline"],
-  [["1–9"], "keys.pickOption"],
+const TODAY: CommandId[] = [
+  "today.next",
+  "today.prev",
+  "today.primary",
+  "today.secondary",
+  "today.done",
+  "today.snooze",
+  "today.later",
+  "today.doing",
+  "today.reply",
+  "today.replyAll",
+  "today.forward",
+  "today.ticket",
+  "today.read",
+  "today.trash",
 ];
-const TODAY: Row[] = [
-  [["J", "K"], "keys.walk"],
-  [["↵"], "keys.primary"],
-  [["⌫"], "keys.secondary"],
-  [["E"], "keys.done"],
-  [["S"], "keys.snooze"],
-  [["L"], "keys.later"],
-  [["P"], "keys.doing"],
-  [["R", "A", "F"], "keys.reply"],
-  [["U"], "keys.read"],
-];
-const MAIL: Row[] = [
-  [["E"], "keys.archive"],
-  [["#", "⌫"], "keys.trash"],
-  [["⌘A"], "keys.selectAll"],
-  [["Esc"], "keys.unselect"],
+const MAIL: CommandId[] = ["mail.archive", "mail.trash", "mail.selectAll", "mail.unselect"];
+const DICTATION: [ShortcutKey, "on" | "chatOn" | "pasteOn", Key][] = [
+  ["shortcut", "on", "voice.on"],
+  ["chatShortcut", "chatOn", "voice.chat"],
+  ["pasteShortcut", "pasteOn", "voice.paste"],
 ];
 
 const KEY =
   "inline-flex h-5.5 min-w-5.5 items-center justify-center rounded-[5px] border border-s-border bg-s-mutedbg/40 px-1.5 font-sans text-xs text-s-fg";
 
-/** Shortcuts: what the keys do in the main window, read only. Dictation shows the shortcuts set in Voice. */
+/** Shortcuts: every key the main window takes, each changed by clicking it and pressing a new one, with a reset when
+ *  it differs from the default. Dictation's are the same settings as in Voice. */
 export function ShortcutsPage() {
   const { t } = useT();
   const settings = useSettingsStore(s => s.settings);
+  const error = useShortcutsPageStore(s => s.error);
+  const voiceError = useVoicePageStore(s => s.shortcutError);
   const voice = voiceOf(settings.voice);
-  const rows = (list: Row[]) =>
-    list.map(([keys, label]) => (
-      <Field key={label} label={t(label)}>
-        {keys.map(key => (
-          <kbd key={key} className={KEY}>
-            {key}
-          </kbd>
+  const changed = (id: string) => !!settings.shortcuts?.[id];
+  const resetButton = (onClick: () => void) => (
+    <button className={buttonClass("ghost", true)} title={t("keys.reset")} onClick={onClick}>
+      <Icon name="refresh" className={BUTTON_GLYPH} />
+    </button>
+  );
+  const rows = (list: CommandId[]) =>
+    list.map(id => (
+      <Field
+        key={id}
+        label={t(`keys.${id}`)}
+        hint={error[id] ? <span className={ERROR_MESSAGE}>{error[id]}</span> : undefined}
+      >
+        {changed(id) ? resetButton(() => resetKey(id)) : null}
+        {bindingsOf(settings, id).map((binding, index) => (
+          <ShortcutField
+            key={index}
+            value={binding}
+            record={bindingOf}
+            show={bindingLabel}
+            onPick={next => saveKey(id, index, next)}
+            onListening={pauseShortcuts}
+          />
         ))}
       </Field>
     ));
-  const dictation: Row[] = [
-    ...(voice.on ? [[[shortcutLabel(voice.shortcut)], "voice.on"] as const] : []),
-    ...(voice.chatOn ? [[[shortcutLabel(voice.chatShortcut)], "voice.chat"] as const] : []),
-    ...(voice.pasteOn ? [[[shortcutLabel(voice.pasteShortcut)], "voice.paste"] as const] : []),
-  ];
+  const send = bindingsOf(settings, "chat.send")[0];
+  const pickMods = PICK_MODS.map(mod => [mod || "none", pickLabel(mod)] as const);
+  const dictation = DICTATION.filter(([, on]) => voice[on]);
   return (
     <div className="grid gap-7">
-      <Section title={t("keys.sec.app")} rows>
+      <Section
+        title={t("keys.sec.app")}
+        desc={t("keys.help")}
+        action={
+          Object.keys(settings.shortcuts ?? {}).length ? (
+            <button className={buttonClass()} onClick={resetAll}>
+              {t("keys.resetAll")}
+            </button>
+          ) : null
+        }
+        rows
+      >
         {rows(APP)}
       </Section>
       <Section title={t("keys.sec.chat")} rows>
-        {rows(CHAT)}
+        {rows(["chat.send"])}
+        {/* the textarea makes the new line itself, on whichever Enter does not send */}
+        <Field label={t("keys.chat.newline")}>
+          <kbd className={KEY}>{bindingLabel(send === "Enter" ? "shift+Enter" : "Enter")}</kbd>
+        </Field>
+        {rows(["card.confirm"])}
+        <Field label={t("keys.card.pick")}>
+          {changed(PICK_ID) ? resetButton(() => savePick("")) : null}
+          <Segmented
+            label={t("keys.card.pick")}
+            options={pickMods}
+            value={pickModOf(settings) || "none"}
+            onPick={mod => savePick(mod === "none" ? "" : mod)}
+          />
+        </Field>
       </Section>
       <Section title={t("keys.sec.today")} desc={t("keys.todayHelp")} rows>
         {rows(TODAY)}
@@ -82,7 +142,21 @@ export function ShortcutsPage() {
         </Section>
       ) : null}
       <Section title={t("keys.sec.dictation")} desc={t("keys.dictationHelp")} rows>
-        {dictation.length ? rows(dictation) : null}
+        {dictation.length
+          ? dictation.map(([key, , label]) => (
+              <Field
+                key={key}
+                label={t(label)}
+                hint={voiceError[key] ? <span className={ERROR_MESSAGE}>{voiceError[key]}</span> : undefined}
+              >
+                <ShortcutField
+                  value={voice[key]}
+                  onPick={shortcut => saveShortcut(key, shortcut)}
+                  onListening={pauseShortcuts}
+                />
+              </Field>
+            ))
+          : null}
       </Section>
     </div>
   );

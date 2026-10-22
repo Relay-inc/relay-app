@@ -1,4 +1,5 @@
 import { useT } from "../../hooks/useT";
+import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { Icon } from "../../components/Icon";
 import mark from "../../assets/relay-mark.svg";
 import { RecordingRow } from "./RecordingRow";
@@ -29,6 +30,7 @@ export function SidebarFooter({
   onSettings: () => void;
 }) {
   const { t } = useT();
+  const settingsKey = useKeyLabel("app.settings");
   const themeTip = t(dark ? "nav.themeLight" : "nav.themeDark");
   return (
     <div className="flex flex-col border-t border-separator">
@@ -52,7 +54,7 @@ export function SidebarFooter({
         </button>
         <button
           className={BTN}
-          title={update ? t("nav.updateTooltip", { version: update }) : t("nav.settingsTooltip")}
+          title={update ? t("nav.updateTooltip", { version: update }) : t("nav.settingsTooltip", { key: settingsKey })}
           aria-label={t("nav.settingsLabel")}
           onClick={onSettings}
         >

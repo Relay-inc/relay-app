@@ -64,12 +64,15 @@ pub fn apply(app: &AppHandle) {
     }
 }
 
-/// Settings › Voice records a new shortcut: the registered ones step aside until it is done.
+/// Settings records a new shortcut (Voice, Shortcuts): the registered ones and the menu bar's step aside until it is
+/// done.
 #[tauri::command]
 pub fn dictation_pause_shortcuts(app: AppHandle, paused: bool) {
     *PAUSED.lock().unwrap() = paused;
     apply(&app);
+    super::refresh_menu(&app);
 }
+pub fn paused() -> bool { *PAUSED.lock().unwrap() }
 
 fn pill(app: &AppHandle, state: Value) {
     if app.get_webview_window(PILL).is_none() {

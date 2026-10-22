@@ -5,6 +5,7 @@ import {
   mailExperimental as mailIsExperimental,
   type Settings,
 } from "../../domain/settings/types";
+import { pickedDigit, pressed, type CommandId } from "../../domain/settings/shortcuts";
 import * as backend from "../../infrastructure/backend";
 import { navigatorLang, setPageLang } from "../../infrastructure/window";
 import { useSettingsStore } from "./store";
@@ -14,6 +15,10 @@ export const settings = () => useSettingsStore.getState().settings;
 export const ghOn = () => githubOn(settings());
 export const mailOn = () => mailIsOn(settings());
 export const mailExperimental = () => mailIsExperimental(settings());
+/** Whether a key press runs a command, as Settings › Shortcuts has them. */
+export const isKey = (e: KeyboardEvent, id: CommandId) => pressed(settings(), id, e);
+/** The answer on an agent's question a key press picks, 1 to 9, or 0. */
+export const pickedAnswer = (e: KeyboardEvent) => pickedDigit(settings(), e);
 /** Time from sessions: on unless switched off in Settings › General. */
 export const timeFromSessionsOn = () => settings().timeFromSessions !== false;
 /** The settings as the backend sent them (merged over what is known, as an older backend may leave fields out). */

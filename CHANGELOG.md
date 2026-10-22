@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Shortcuts in Settings**: a Shortcuts page lists what the keys do in Relay, in a conversation, on Today and in Mail, plus the dictation shortcuts you switched on in Voice (#256)
+- **Shortcuts in Settings**: a Shortcuts page lists every key Relay takes (anywhere, in a conversation, on Today, in Mail, dictation) and lets you change each one: click it and press the new key, the arrow puts it back. A key that would type in a field, that macOS or the Edit menu has, or that another command already has is refused with the reason. Tooltips and the menu bar follow (#256)
 
 ### Removed
 

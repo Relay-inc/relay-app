@@ -124,6 +124,9 @@ fn norm(mut v: Value) -> Value {
     if !v["language"].as_str().is_some_and(|l| l == "system" || LANGS.contains(&l)) { v["language"] = json!("system"); }
     if !v["theme"].as_str().is_some_and(|t| ["system", "light", "dark"].contains(&t)) { v["theme"] = json!("system"); }
     if !v["accent"].as_str().is_some_and(|a| ["relay", "graphite"].contains(&a)) { v["accent"] = json!("relay"); }
+    // Settings › Shortcuts: command id -> its bindings, at most three short strings each
+    if !v["shortcuts"].is_object() { v["shortcuts"] = json!({}); }
+    v["shortcuts"].as_object_mut().unwrap().retain(|id, keys| id.len() <= 40 && keys.as_array().is_some_and(|k| k.len() <= 3 && k.iter().all(|x| x.as_str().is_some_and(|x| x.len() <= 40))));
     if !v["terminal"].as_str().is_some_and(|t| t == "auto" || TERMINALS.iter().any(|(id, _)| *id == t)) { v["terminal"] = json!("auto"); }
     // work machines (machines.rs): only complete ones, a broken entry is dropped rather than half used
     if !v["machines"].is_array() { v["machines"] = json!([]); }
@@ -308,11 +311,19 @@ fn ui_locale_of(settings: &Value) -> String {
 fn ui_locale(state: State<App>) -> String { ui_locale_of(&state.settings.lock().unwrap()) }
 
 /// Native menu bar: Vault > Settings… (Cmd-comma), Conversation, plus Edit and Window so copy, paste and
-/// window shortcuts keep working once the default menu is replaced. Rebuilt when the language changes.
-fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+/// window shortcuts keep working once the default menu is replaced. Rebuilt when the language or Settings ›
+/// Shortcuts changes. `keys` is settings.shortcuts (src/domain/settings/shortcuts.ts); None leaves the items without
+/// a shortcut, while Settings records one (anywhere::paused), else the menu would take the keys it waits for.
+fn build_menu(h: &AppHandle, lang: &str, keys: Option<&Value>) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem as P, Submenu};
     let t = |k: &str| tr(lang, k);
-    let settings = MenuItem::with_id(h, "settings", t("settings"), true, Some("CmdOrCtrl+,"))?;
+    // "meta+KeyT" as the menu parses it; one it does not parse falls back to the default
+    let item = |id: &str, key: &str, default: &str| {
+        let accel = keys.map(|k| k[key][0].as_str().unwrap_or(default).replace("meta", "super"));
+        MenuItem::with_id(h, id, t(&id.replace('-', "_")), true, accel.as_deref())
+            .or_else(|_| MenuItem::with_id(h, id, t(&id.replace('-', "_")), true, keys.map(|_| default.replace("meta", "super")).as_deref()))
+    };
+    let settings = item("settings", "app.settings", "meta+Comma")?;
     let app = Submenu::with_items(h, "Relay", true, &[
         &P::about(h, Some(&t("about")), None)?, &MenuItem::with_id(h, "check-updates", t("check_updates"), true, None::<&str>)?,
         &P::separator(h)?, &settings, &P::separator(h)?,
@@ -323,14 +334,20 @@ fn build_menu(h: &AppHandle, lang: &str) -> tauri::Result<tauri::menu::Menu<taur
         &P::cut(h, Some(&t("cut")))?, &P::copy(h, Some(&t("copy")))?, &P::paste(h, Some(&t("paste")))?, &P::select_all(h, Some(&t("select_all")))?])?;
     // Cmd-W closes the conversation like a browser tab, the main window stays open
     let chat = Submenu::with_items(h, t("chat"), true, &[
-        &MenuItem::with_id(h, "new-general", t("new_general"), true, Some("CmdOrCtrl+T"))?,
-        &MenuItem::with_id(h, "new-project", t("new_project"), true, Some("CmdOrCtrl+N"))?,
+        &item("new-general", "app.newGeneral", "meta+KeyT")?,
+        &item("new-project", "app.newProject", "meta+KeyN")?,
         &MenuItem::with_id(h, "run-setup", t("run_setup"), true, None::<&str>)?,
         &P::separator(h)?,
-        &MenuItem::with_id(h, "close-chat", t("close_chat"), true, Some("CmdOrCtrl+W"))?])?;
+        &item("close-chat", "app.closeChat", "meta+KeyW")?])?;
     let window = Submenu::with_items(h, t("window"), true, &[
         &P::minimize(h, Some(&t("minimize")))?, &P::maximize(h, Some(&t("zoom")))?, &P::fullscreen(h, Some(&t("fullscreen")))?])?;
     Menu::with_items(h, &[&app, &chat, &edit, &window])
+}
+/// The menu bar again, with the settings' language and shortcuts (none while Settings records one).
+pub(crate) fn refresh_menu(app: &AppHandle) {
+    let settings = app.state::<App>().settings.lock().unwrap().clone();
+    let keys = (!anywhere::paused()).then_some(&settings["shortcuts"]);
+    if let Ok(m) = build_menu(app, ui_lang_of(&settings), keys) { app.set_menu(m).ok(); }
 }
 
 struct App {
@@ -1285,13 +1302,14 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
+    let rekey = state.settings.lock().unwrap()["shortcuts"] != s["shortcuts"];
     *state.settings.lock().unwrap() = s.clone();
     plugins::sync(&app); // a plugin switched off or removed stops
     anywhere::apply(&app); // the shortcut follows Settings › Voice
     set_cur_lang(lang);
     tray::refresh(&app); // another vault or language
-    if relang { // the menu bar and the settings window title follow a new language right away
-        if let Ok(m) = build_menu(&app, lang) { app.set_menu(m).ok(); }
+    if relang || rekey { refresh_menu(&app); } // the menu bar follows a new language or shortcut right away
+    if relang { // and the settings window title the language
         if let Some(w) = app.get_webview_window("settings") { w.set_title(&tr(lang, "settings.title")).ok(); }
     }
     Ok(s)
@@ -2097,7 +2115,7 @@ pub fn run() {
             let settings = norm(fs::read_to_string(data_dir(app.handle()).join("settings.json")).ok()
                 .and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default());
             set_cur_lang(ui_lang_of(&settings));
-            app.set_menu(build_menu(app.handle(), ui_lang_of(&settings))?)?;
+            app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
             app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
@@ -2193,6 +2211,21 @@ mod lang_tests {
     }
 }
 
+
+#[cfg(test)]
+mod shortcut_tests {
+    use super::*;
+    #[test]
+    fn menu_shortcuts_from_settings_parse_and_bad_ones_drop_out() {
+        // the bindings Settings › Shortcuts writes, as build_menu hands them to the menu
+        for b in ["meta+KeyT", "meta+Comma", "alt+shift+meta+KeyN", "ctrl+F5"] {
+            assert!(b.replace("meta", "super").parse::<muda::accelerator::Accelerator>().is_ok(), "{b}");
+        }
+        let s = norm(json!({"shortcuts": {"app.quickAsk": ["meta+KeyJ"], "bad": "x", "long": ["a", "b", "c", "d"]}}));
+        assert_eq!(s["shortcuts"], json!({"app.quickAsk": ["meta+KeyJ"]}));
+        assert_eq!(norm(json!({}))["shortcuts"], json!({}));
+    }
+}
 
 #[cfg(test)]
 mod index_tests {
