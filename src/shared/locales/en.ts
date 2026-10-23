@@ -1292,6 +1292,8 @@ const en = {
   "keys.app.quickAsk": "Quick question, answered in a new general conversation",
   "keys.app.newGeneral": "New general conversation",
   "keys.app.newProject": "New conversation in this project",
+  "keys.app.reopenChat": "Reopen the conversation closed last",
+  "keys.app.newWindow": "New window",
   "keys.app.closeChat": "Close the conversation",
   "keys.app.settings": "Settings",
   "keys.app.escape": "Close a picture, ticket, file or the drawer, else stop the running turn",

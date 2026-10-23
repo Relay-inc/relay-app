@@ -34,6 +34,15 @@ export const chatsOf = (s: Pick<S, "chats">, project: string | null) =>
 /** What is stored under `chats`: a draft only once something is typed in it. */
 export const chatsToStore = (s: Pick<ConversationsState, "chats"> & Pick<DraftsState, "typed">) =>
   Object.fromEntries(Object.entries(s.chats).filter(([key, conversation]) => !conversation.draft || s.typed[key]));
+/** The conversations another window stored, taken over this window's: a draft of its own nobody stored stays, an
+ *  unchanged one keeps its object (only what changed redraws). */
+export function followChats(mine: Record<string, Chat>, stored: Record<string, Chat>) {
+  const next: Record<string, Chat> = {};
+  for (const [key, chat] of Object.entries(mine)) if (chat.draft && !stored[key]) next[key] = chat;
+  for (const [key, chat] of Object.entries(stored))
+    next[key] = mine[key] && JSON.stringify(mine[key]) === JSON.stringify(chat) ? mine[key] : chat;
+  return next;
+}
 export const newChatEntry = (key: string, project: string | null, now: number): Chat => ({
   key,
   project,

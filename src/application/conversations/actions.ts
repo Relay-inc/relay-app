@@ -604,6 +604,12 @@ export async function reopen(key: string) {
   hideToast();
   await select(key);
 }
+/** Cmd-Shift-T: the conversation closed last comes back, like a browser tab. */
+export async function reopenLast() {
+  const closed = Object.values(cs().chats).filter(conversation => conversation.closed);
+  const last = closed.sort((newer, older) => older.closed! - newer.closed!)[0];
+  if (last) await reopen(last.key);
+}
 // Escape on a running turn: the first press warns, a second within 2s stops it like the stop button
 let escAt = 0;
 export function escStop() {

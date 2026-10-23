@@ -124,8 +124,8 @@ fn finish(app: &AppHandle) {
         Ok(text) if text.is_empty() => pill(&a, json!({ "phase": "hidden" })),
         Ok(text) if *TARGET.lock().unwrap() == Target::Chat => {
             pill(&a, json!({ "phase": "hidden" }));
-            super::tray::show_main(&a);
-            a.emit_to("main", "dictated-chat", text).ok();
+            let w = super::windows::show_active(&a);
+            a.emit_to(w, "dictated-chat", text).ok();
         }
         Ok(text) => {
             let pasted = mac::trusted();

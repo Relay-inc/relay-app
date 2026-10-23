@@ -29,12 +29,8 @@ pub fn init(app: &AppHandle) -> tauri::Result<()> {
 /// Menu ids of the tray, which the app-wide menu handler leaves alone.
 pub fn owns(id: &str) -> bool { id == "tray-open" || id.starts_with("rem|") }
 
-pub fn show_main(app: &AppHandle) {
-    if let Some(w) = app.get_webview_window("main") { w.show().ok(); w.unminimize().ok(); w.set_focus().ok(); }
-}
-
 fn on_menu(app: &AppHandle, id: &str) {
-    if id == "tray-open" { show_main(app); return; }
+    if id == "tray-open" { super::windows::show_active(app); return; }
     let parts: Vec<&str> = id.split('|').collect();
     let ["rem", action, rid, rest @ ..] = parts.as_slice() else { return };
     if let Ok((file, log, _)) = rem_ctx(app) {

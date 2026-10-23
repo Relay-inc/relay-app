@@ -1312,6 +1312,8 @@ export default {
   "keys.app.quickAsk": "Question rapide, traitée dans une nouvelle conversation générale",
   "keys.app.newGeneral": "Nouvelle conversation générale",
   "keys.app.newProject": "Nouvelle conversation dans ce projet",
+  "keys.app.reopenChat": "Rouvrir la dernière conversation fermée",
+  "keys.app.newWindow": "Nouvelle fenêtre",
   "keys.app.closeChat": "Fermer la conversation",
   "keys.app.settings": "Réglages",
   "keys.app.escape": "Fermer une image, un ticket, un fichier ou le tiroir, sinon arrêter le tour en cours",

@@ -1,6 +1,7 @@
 import { parseLink, unhandled } from "../domain/navigation/deep-links";
 import * as backend from "../infrastructure/backend";
 import { session } from "../infrastructure/storage";
+import { isActive, isPrimary } from "../infrastructure/window";
 import { openProject, quickProjects, toggleQuickAsk } from "./navigation/navigation";
 
 /** A relay:// link from outside the app (Raycast, a launcher, any web page). Deliberately unlike Lit, which sent
@@ -22,8 +23,9 @@ function handleOnce(link: string) {
   session.set(HANDLED, [...session.get<string[]>(HANDLED, []), link]);
   handleLink(link);
 }
-/** The link that launched the app, once per launch, then every one opened later. */
+/** The link that launched the app, once per launch (in the main window), then every one opened later (in the active
+ *  window, which the backend brought up). */
 export async function listenToLinks() {
-  unhandled(await backend.launchLinks(), session.get<string[]>(HANDLED, [])).forEach(handleOnce);
-  backend.onDeepLink(handleOnce);
+  if (isPrimary()) unhandled(await backend.launchLinks(), session.get<string[]>(HANDLED, [])).forEach(handleOnce);
+  backend.onDeepLink(link => isActive() && handleOnce(link));
 }

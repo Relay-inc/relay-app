@@ -45,3 +45,9 @@ export const useBoardStore = makeStore<BoardState>(() => ({
   composing: null,
   ticketChats: storage.get<Record<string, string[]>>("ticketChats", {}),
 }));
+// started in another Relay window
+storage.watch("ticketChats", () =>
+  useBoardStore.setState(draft => {
+    draft.ticketChats = storage.get<Record<string, string[]>>("ticketChats", {});
+  }),
+);

@@ -61,7 +61,7 @@ test("a binding is refused where it would type, belongs to macOS, or another com
   assert.equal(refusal(none, "chat.send", "shift+Enter"), null);
   assert.equal(refusal(none, "app.quickAsk", "meta+KeyC")?.why, "reserved");
   assert.equal(refusal(none, "mail.selectAll", "meta+KeyA"), null);
-  assert.deepEqual(refusal(none, "app.quickAsk", "meta+KeyT"), { why: "taken", by: "app.newGeneral" });
+  assert.deepEqual(refusal(none, "app.quickAsk", "meta+KeyT"), { why: "taken", by: "app.newProject" });
   assert.deepEqual(refusal(none, "today.done", "s"), { why: "taken", by: "today.snooze" });
   assert.deepEqual(refusal(none, "today.done", "#"), { why: "taken", by: "today.trash" });
   // another view's letter, and Esc for unticking mails, are fine
