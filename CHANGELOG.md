@@ -13,10 +13,13 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.33] - 2026-10-24
+
 ### Fixed
 
 - **The terminal button shows a conversation's open terminal**: clicking it again on a conversation that already runs in the project's terminal drawer shows that tab, instead of resuming the conversation in a new one. Once that shell has exited, it starts a new one as before (#253)
-- **An arrow key at the edge of a field no longer types a character**: → at the end of the composer (and ← at the start) left an invisible control character (0x1d, the classic Mac arrow code) in the text. The key is unhandled by the page when the caret cannot move, and the webview typed it in. Relay now swallows those keys
+- **An arrow key at the edge of a field no longer types a character**: → at the end of the composer (and ← at the start) left an invisible control character (0x1d, the classic Mac arrow code) in the text. The key is unhandled by the page when the caret cannot move, and the webview typed it in. Relay now swallows those keys (#258)
+
 ### Added
 
 - **Shortcuts in Settings**: a Shortcuts page lists every key Relay takes (anywhere, in a conversation, on Today, in Mail, dictation) and lets you change each one: click it and press the new key, the arrow puts it back. A key that would type in a field, that macOS or the Edit menu has, or that another command already has is refused with the reason. Tooltips and the menu bar follow (#256)
@@ -590,7 +593,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...HEAD
+[0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31
 [0.0.30]: https://github.com/Relay-inc/relay-app/compare/v0.0.29...v0.0.30
