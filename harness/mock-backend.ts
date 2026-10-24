@@ -2,7 +2,7 @@
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
 // events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
-// opens on), ?link=<relay:// url> (the deep link the app was launched with).
+// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as vault from "./fixtures/vault";
@@ -585,6 +585,8 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "ui_state_init":
       return a.state;
+    case "active_window":
+      return "main";
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
       return null;
@@ -979,7 +981,7 @@ const settle = () => {
   quietTimer = window.setTimeout(() => markReady(), 250);
 };
 
-mockWindows(isSettingsWindow ? "settings" : "main");
+mockWindows(query.get("window") || (isSettingsWindow ? "settings" : "main")); // ?window=main-2: a window Cmd-N opened
 mockIPC((cmd, args) => {
   const a = (args ?? {}) as Args;
   calls.push({ cmd, args: a, at: performance.now() });

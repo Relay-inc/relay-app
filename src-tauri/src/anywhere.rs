@@ -64,12 +64,15 @@ pub fn apply(app: &AppHandle) {
     }
 }
 
-/// Settings › Voice records a new shortcut: the registered ones step aside until it is done.
+/// Settings records a new shortcut (Voice, Shortcuts): the registered ones and the menu bar's step aside until it is
+/// done.
 #[tauri::command]
 pub fn dictation_pause_shortcuts(app: AppHandle, paused: bool) {
     *PAUSED.lock().unwrap() = paused;
     apply(&app);
+    super::refresh_menu(&app);
 }
+pub fn paused() -> bool { *PAUSED.lock().unwrap() }
 
 fn pill(app: &AppHandle, state: Value) {
     if app.get_webview_window(PILL).is_none() {
@@ -121,8 +124,8 @@ fn finish(app: &AppHandle) {
         Ok(text) if text.is_empty() => pill(&a, json!({ "phase": "hidden" })),
         Ok(text) if *TARGET.lock().unwrap() == Target::Chat => {
             pill(&a, json!({ "phase": "hidden" }));
-            super::tray::show_main(&a);
-            a.emit_to("main", "dictated-chat", text).ok();
+            let w = super::windows::show_active(&a);
+            a.emit_to(w, "dictated-chat", text).ok();
         }
         Ok(text) => {
             let pasted = mac::trusted();

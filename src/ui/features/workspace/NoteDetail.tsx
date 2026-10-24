@@ -10,6 +10,7 @@ import { settings } from "../../../application/settings/settings";
 import { noteLinks, noteProperties, noteTitle } from "../../../domain/workspace/rules";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { useT } from "../../hooks/useT";
+import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { Markdown } from "../../components/Markdown";
 import { Icon } from "../../components/Icon";
 import { Note } from "../../components/Note";
@@ -25,6 +26,7 @@ const LEAD = ["description", "title"];
  *  note (ui/app handles `data-note`, the frontmatter's [[links]] and the linked notes use it too). */
 export function NoteDetail({ panelKey }: { panelKey: string }) {
   const { t, locale } = useT();
+  const escape = useKeyLabel("app.escape");
   const note = useNavigationStore(s => s.panel.detail[panelKey]) as NoteText | undefined;
   const err = useNavigationStore(s => s.panel.err);
   // which notes exist: the frontmatter's links and the linked notes follow it
@@ -95,7 +97,12 @@ export function NoteDetail({ panelKey }: { panelKey: string }) {
             <span className="w-px h-4 bg-separator-strong mx-1" />
           </>
         ) : null}
-        <button className="btn-icon" title={t("pr.close")} aria-label={t("nav.close")} onClick={closeDrawer}>
+        <button
+          className="btn-icon"
+          title={t("pr.close", { key: escape })}
+          aria-label={t("nav.close")}
+          onClick={closeDrawer}
+        >
           <Icon name="close" className="glyph size-3.75" />
         </button>
       </div>

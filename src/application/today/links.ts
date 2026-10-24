@@ -4,6 +4,7 @@ import { byNumber, byTitle, type Candidate } from "../../domain/today/link";
 import type { PR } from "../../domain/pull-requests/types";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
+import { isPrimary } from "../../infrastructure/window";
 import { makeStore } from "../make-store";
 import { usePullRequestsStore } from "../pull-requests/store";
 import { useTodayStore } from "./store";
@@ -23,6 +24,11 @@ export type Link = {
 };
 const KEY = "prTickets";
 export const useLinksStore = makeStore<{ links: Record<string, Link> }>(() => ({ links: storage.get(KEY, {}) }));
+storage.watch(KEY, () =>
+  useLinksStore.setState(draft => {
+    draft.links = storage.get(KEY, {});
+  }),
+);
 const keep = (url: string, link: Link) => {
   useLinksStore.setState(draft => {
     draft.links[url] = link;
@@ -36,7 +42,7 @@ let running = false;
 /** Work out the ticket of every open PR that does not have one yet. Runs after the boards' cards come in. */
 export async function linkPrs() {
   const list = usePullRequestsStore.getState().list;
-  if (running || !list) return;
+  if (running || !list || !isPrimary()) return; // the main window works them out, the others follow its store
   running = true;
   let ai = AI_PER_ROUND;
   try {

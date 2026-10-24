@@ -3,7 +3,7 @@ import type { AgentEvent } from "../../domain/agents/types";
 import { applyAgentEvent, type Effect } from "../../domain/conversations/events";
 import { WAIT } from "../../domain/navigation/views";
 import * as backend from "../../infrastructure/backend";
-import { isFocused } from "../../infrastructure/window";
+import { isActive, isFocused } from "../../infrastructure/window";
 import { useNavigationStore } from "../navigation/store";
 import { loadSnapshot } from "../workspace/vault";
 import { useConversationsStore } from "./store";
@@ -16,9 +16,10 @@ import { imageUrl } from "./images";
 // message once per frame. Any other event first applies what is buffered, then itself, at once: a turn end in a
 // window in the background (no frames there) still gives its banner.
 
-/** A banner while the window is in the background, a click opens that conversation (src-tauri/src/notify.rs). */
+/** A banner while the window is in the background, a click opens that conversation (src-tauri/src/notify.rs). With
+ *  more than one Relay window, the active one sends it. */
 export async function notify(key: string, body: string) {
-  if (await isFocused()) return;
+  if (!isActive() || (await isFocused())) return;
   backend.notify(
     key,
     key === WAIT ? t("nav.today") : label(key),

@@ -10,5 +10,11 @@ export const useDraftsStore = makeStore<DraftsState>(() => ({
   files: [],
   machine: {},
 }));
+// typed in another Relay window
+storage.watch("typed", () =>
+  useDraftsStore.setState(draft => {
+    draft.typed = storage.get<Record<string, string>>("typed", {});
+  }),
+);
 /** What is typed in a conversation's composer, "" for nothing. */
 export const typedOf = (key: string) => useDraftsStore.getState().typed[key] ?? "";

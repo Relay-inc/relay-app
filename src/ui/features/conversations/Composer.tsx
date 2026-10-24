@@ -14,6 +14,7 @@ import {
 import { insertDictated } from "../../../domain/conversations/dictation";
 import { isShortcut, shortcutCode, shortcutLabel, voiceOf } from "../../../domain/settings/voice";
 import { useSettingsStore } from "../../../application/settings/store";
+import { isKey } from "../../../application/settings/settings";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { ORCH } from "../../../domain/orchestrator/rules";
 import { projectName as plainProject } from "../../../application/workspace/vault";
@@ -259,7 +260,8 @@ export function Composer({ className }: { className: string }) {
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (onCompletionKey(e)) return;
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // Settings › Shortcuts may move sending to ⌘↵, the textarea then makes the new line on Enter itself
+    if (isKey(e.nativeEvent, "chat.send") && !e.nativeEvent.isComposing) {
       e.preventDefault();
       // nothing to send: Enter allows the permission card that waits, as its button shows
       if (!e.repeat && !typed.trim() && !attached.length && allowOnlyCard()) return;

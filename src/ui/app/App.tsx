@@ -17,7 +17,7 @@ import {
 import { ORCH } from "../../domain/orchestrator/rules";
 import { closeDrawer, closeTicket, openDetail } from "../../application/navigation/panel";
 import { request } from "../../application/navigation/requests";
-import { mailExperimental } from "../../application/settings/settings";
+import { isKey, mailExperimental } from "../../application/settings/settings";
 import { useMailStore } from "../../application/mail/store";
 import {
   clearMailSelection,
@@ -38,8 +38,6 @@ import { useChangesStore } from "../../application/changes/store";
 import { openFile } from "../../application/changes/changes";
 import { ColumnResize } from "../features/navigation/ColumnResize";
 
-const isQuickAskKey = (e: KeyboardEvent) => e.metaKey && !e.altKey && !e.shiftKey && !e.ctrlKey && e.code === "KeyK";
-const isCtrlCKey = (e: KeyboardEvent) => e.ctrlKey && !e.metaKey && !e.altKey && e.code === "KeyC";
 /** Whether an event started in a text field, wherever it sits. */
 const inField = (e: Event, sel = "input, textarea, select, [contenteditable]") =>
   e.composedPath().some(node => node instanceof HTMLElement && node.matches(sel));
@@ -108,14 +106,13 @@ function typesIntoComposer(e: KeyboardEvent) {
   return isCharacter && !isView(selected) && !projectPanel && !quickAsk && !inField(e);
 }
 // the Mail view, experimental, as in Gmail and Keel: E archives, # or Delete deletes, Cmd-A ticks all, Esc unticks
-// before the app's Esc. Whether it handled the key.
+// before the app's Esc (each as Settings › Shortcuts has it). Whether it handled the key.
 function onMailKey(e: KeyboardEvent) {
   const { selected, zoom: zoomed, panel } = useNavigationStore.getState();
   // an image or the ticket window over the view takes the keys (Esc closes it), not the mail behind it
   if (selected !== MAIL || zoomed || panel.modal || !mailExperimental() || inField(e) || e.isComposing) return false;
-  const plain = !e.metaKey && !e.ctrlKey && !e.altKey;
-  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key; // Caps Lock gives "E"
-  if (plain && (key === "e" || key === "#" || key === "Delete" || key === "Backspace")) {
+  const archive = isKey(e, "mail.archive");
+  if (archive || isKey(e, "mail.trash")) {
     // a held key would walk down the list, one mail per repeat
     if (e.repeat) {
       e.preventDefault();
@@ -124,15 +121,15 @@ function onMailKey(e: KeyboardEvent) {
     const keys = mailTargets();
     if (!keys.length) return false;
     e.preventDefault();
-    mailMove(keys, key !== "e");
+    mailMove(keys, !archive);
     return true;
   }
-  if (e.metaKey && key === "a" && mailListActive()) {
+  if (isKey(e, "mail.selectAll") && mailListActive()) {
     e.preventDefault();
     toggleMailSelectAll();
     return true;
   }
-  if (e.key === "Escape" && useMailStore.getState().selected.size) {
+  if (isKey(e, "mail.unselect") && useMailStore.getState().selected.size) {
     clearMailSelection();
     return true;
   }
@@ -160,15 +157,15 @@ function onKey(e: KeyboardEvent) {
     return;
   }
   if (onMailKey(e)) return;
-  if (isQuickAskKey(e)) {
+  if (isKey(e, "app.quickAsk")) {
     // Cmd-K: a question that starts a general conversation in the background
     e.preventDefault();
     toggleQuickAsk();
-  } else if (isCtrlCKey(e)) {
+  } else if (isKey(e, "app.stop")) {
     // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
     e.preventDefault();
     ctrlC();
-  } else if (e.key === "Escape") {
+  } else if (isKey(e, "app.escape")) {
     onEscape(e);
   } else if (typesIntoComposer(e)) {
     request("focus-composer");

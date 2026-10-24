@@ -16,6 +16,19 @@ a PR. Versions follow
 ### Fixed
 
 - **An arrow key at the edge of a field no longer types a character**: → at the end of the composer (and ← at the start) left an invisible control character (0x1d, the classic Mac arrow code) in the text. The key is unhandled by the page when the caret cannot move, and the webview typed it in. Relay now swallows those keys
+### Added
+
+- **Shortcuts in Settings**: a Shortcuts page lists every key Relay takes (anywhere, in a conversation, on Today, in Mail, dictation) and lets you change each one: click it and press the new key, the arrow puts it back. A key that would type in a field, that macOS or the Edit menu has, or that another command already has is refused with the reason. Tooltips and the menu bar follow (#256)
+- **More than one Relay window**: Cmd-N (Window › New Window) opens another window with all of Relay, starting on Today. Both keep the same conversations, folders and Today up to date, and closing a window leaves its conversations running. The menu, a banner's click and dictation go to the window you used last, and banners come once (#257)
+- **Cmd-Shift-T reopens the conversation closed last**, like a browser tab (#257)
+
+### Changed
+
+- **Cmd-T starts a conversation in this project**, the way a browser tab opens next to the one you're in. A general conversation is Cmd-Option-T. Cmd-N opens a new window now (#257)
+
+### Removed
+
+- **⌘1 to ⌘8 in Settings**: the sidebar showed them next to each page, but they did nothing (#256)
 
 ## [0.0.32] - 2026-10-22
 
