@@ -55,6 +55,7 @@ export type Item = {
 export type Chat = {
   key: string;
   project: string | null;
+  folder?: string; // the sidebar folder it sits in under its project (domain/navigation/sidebar-folders)
   title: string;
   at: number;
   draft?: boolean;

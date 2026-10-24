@@ -49,6 +49,10 @@ import type { Plugin, PluginTest, PluginViewInfo, ToolResult } from "../domain/p
 // Every Tauri command the webview calls and every event it listens to, one typed function each (src-tauri/src/lib.rs
 // has the other half). Nothing else in the app calls `invoke` or `listen`. The arguments are the backend's, unchanged.
 
+/** An event the backend sends to one Relay window (the menu, a banner's click): a plain `listen` hears what is sent to
+ *  any window, this only what is sent to this one or to all (src-tauri/src/windows.rs). */
+const listenHere: typeof listen = (event, handler) => getCurrentWebview().listen(event, handler);
+
 // ---------- files attached by their path (src-tauri/src/files.rs)
 /** The files picked in the open dialog, as paths. */
 export const pickFiles = () => invoke<string[]>("pick_files");
@@ -125,7 +129,7 @@ export const setDesignLink = (project: string, url: string) => invoke("set_desig
 /** An agent's design tool (relay-design, design.rs) wants the Design drawer of a conversation's project open, showing
  *  `start` while the project has no link; `designOpened` answers once it is, "" for a conversation without a project. */
 export const onDesignOpen = (handler: (open: { id: number; key: string; start: string | null }) => void) =>
-  listen<{ id: number; key: string; start: string | null }>("design-open", e => handler(e.payload));
+  listenHere<{ id: number; key: string; start: string | null }>("design-open", e => handler(e.payload));
 export const designOpened = (id: number, project: string) => invoke("design_opened", { id, project });
 /** design_create saved the link of a project's new design. */
 export const onDesignLink = (handler: (link: { project: string; url: string }) => void) =>
@@ -240,6 +244,12 @@ export const machinePair = (line: string, name: string) => invoke<Machine>("mach
 export const machineStatus = (id: string) => invoke<MachineStatus>("machine_status", { id });
 /** A one-time pairing for a phone of this Mac on a machine, valid 10 minutes: the line (with the mirror's key) and a QR (SVG). */
 export const machinePairPhone = (id: string) => invoke<PhonePairing>("machine_pair_phone", { id });
+/** `/share-phone`: the conversation (and its title for the phone's list) shared with this Mac's phone, or not any more.
+ *  Refused for a conversation about a mail, one on a machine and before a phone is added. */
+export const phoneShare = (key: string, on: boolean, title: string, mail: boolean) =>
+  invoke("phone_share", { key, on, title, mail });
+/** The conversations shared with the phone. */
+export const phoneShared = () => invoke<string[]>("phone_shared");
 /** This Relay's version and the relay-server image that speaks its protocol, for setting up a machine. */
 export const serverSetup = () => invoke<ServerSetup>("server_setup");
 /** This Mac as a work machine: whether its LaunchAgent and server run. */
@@ -449,7 +459,7 @@ export const dictationAccess = () => invoke<boolean>("dictation_access");
 export const dictationPauseShortcuts = (paused: boolean) => invoke("dictation_pause_shortcuts", { paused });
 /** What was said with the new-conversation shortcut, from any app (src-tauri/src/anywhere.rs). */
 export const onDictatedChat = (handler: (text: string) => void) =>
-  listen<string>("dictated-chat", e => handler(e.payload));
+  listenHere<string>("dictated-chat", e => handler(e.payload));
 /** Shows macOS's Accessibility dialog; resolves with whether it is already allowed. */
 export const dictationAskAccess = () => invoke<boolean>("dictation_ask_access");
 /** What macOS lets Relay do, per permission: "ok", "missing", "ask" (not asked yet) or null when it cannot be told
@@ -508,7 +518,7 @@ export const onOrch = (handler: (event: OrchEvent) => void) => listen<OrchEvent>
 /** The waiting retries changed, or one is due: send it. */
 export const onRetry = (handler: (event: RetryEvent) => void) => listen<RetryEvent>("retry", e => handler(e.payload));
 /** A notification banner was clicked: open that conversation. */
-export const onOpenChat = (handler: (key: string) => void) => listen<string>("open-chat", e => handler(e.payload));
+export const onOpenChat = (handler: (key: string) => void) => listenHere<string>("open-chat", e => handler(e.payload));
 /** A link clicked inside a mail's sandboxed frame. */
 export const onMailLink = (handler: (url: string) => void) => listen<string>("mail-link", e => handler(e.payload));
 /** The settings window saved. */
@@ -521,8 +531,8 @@ export const onUpdateProgress = (handler: (progress: UpdateProgress) => void) =>
   listen<UpdateProgress>("update-progress", e => handler(e.payload));
 /** The open settings window is asked to show a page (Relay › Check for Updates). */
 export const onSettingsGo = (handler: (tab: string) => void) => listen<string>("settings-go", e => handler(e.payload));
-/** An item of the app menu (new-general, new-project, close-chat). */
-export const onMenu = (handler: (item: string) => void) => listen<string>("menu", e => handler(e.payload));
+/** An item of the app menu (new-project, new-general, reopen-chat, close-chat). */
+export const onMenu = (handler: (item: string) => void) => listenHere<string>("menu", e => handler(e.payload));
 export const onIconsChanged = (handler: () => void) => listen("icons-changed", () => handler());
 /** The GitHub repos of a project changed (the settings, or a link answered in a conversation). */
 export const onReposChanged = (handler: () => void) => listen("repos-changed", () => handler());

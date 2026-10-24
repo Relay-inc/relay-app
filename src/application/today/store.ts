@@ -54,6 +54,17 @@ export const useTodayStore = makeStore<TodayState>(() => ({
   selected: "",
   context: storage.getRaw("todayContext"),
 }));
+// what another Relay window did with the queue
+storage.watch("today", () =>
+  useTodayStore.setState(draft => {
+    Object.assign(draft, stored());
+  }),
+);
+storage.watch("todaySnooze", () =>
+  useTodayStore.setState(draft => {
+    draft.snoozed = storage.get<Record<string, Snooze>>("todaySnooze", {});
+  }),
+);
 
 /** Change the day's state and keep it; past midnight it starts from an empty day first. */
 export function changeDay(recipe: (day: DayState) => void) {

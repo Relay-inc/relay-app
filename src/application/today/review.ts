@@ -75,12 +75,22 @@ type Kept = Pick<
   Review,
   "title" | "project" | "prs" | "findings" | "ran" | "by" | "read" | "comments" | "body" | "verdict" | "file"
 >;
-const kept = storage.get<Record<string, Kept>>(KEY, {});
-export const useReviewStore = makeStore<ReviewState>(() => ({
-  reviews: Object.fromEntries(
-    Object.entries(kept).map(([id, k]) => [id, { ...fresh(), ...k, by: k.by ?? (k.ran ? ["claude"] : []) }]),
-  ),
-}));
+// what is not kept (what runs, the files read) stays as this window has it
+const fromKept = (now: Record<string, Review> = {}) =>
+  Object.fromEntries(
+    Object.entries(storage.get<Record<string, Kept>>(KEY, {})).map(([id, k]) => [
+      id,
+      { ...fresh(), ...now[id], ...k, by: k.by ?? (k.ran ? ["claude"] : []) },
+    ]),
+  );
+export const useReviewStore = makeStore<ReviewState>(() => ({ reviews: fromKept() }));
+// a review another Relay window went on with
+storage.watch(KEY, () => {
+  const reviews = fromKept(useReviewStore.getState().reviews);
+  useReviewStore.setState(draft => {
+    draft.reviews = reviews;
+  });
+});
 const set = useReviewStore.setState;
 const save = () =>
   storage.set(

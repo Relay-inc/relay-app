@@ -11,7 +11,9 @@ export type Meta = { kind: "badge" | "count" | "late" | "soon"; n: number; title
 export type ViewRow = ViewItem & { meta?: Meta; unseen?: boolean; trail?: Trail };
 export type ConvRow = {
   key: string;
-  parent: string;
+  parent: string; // what it is reordered among: its folder, else its project ("" for Algemeen)
+  project: string; // its project, "" for Algemeen
+  folder: string; // its folder, "" for none
   term: boolean;
   glyph: string; // the agent's own mark; a terminal session draws the terminal
   title: string;
@@ -26,6 +28,18 @@ export type ConvRow = {
   work?: boolean; // Today's work in progress (domain/today/work.ts): opens Today on it, not draggable, no menu
   icon?: string; // a work row's icon: a review, a mail, a meeting
 };
+/** A folder with its conversations, under a project or Algemeen (`project` ""). Shut, it shows its count. */
+export type FolderBlock = {
+  id: string;
+  project: string;
+  name: string;
+  open: boolean;
+  editing: boolean; // its name is being typed
+  count: number;
+  unseen: boolean;
+  trail: Trail;
+  convs: ConvRow[];
+};
 export type ProjectBlock = {
   name: string;
   context: string;
@@ -35,6 +49,7 @@ export type ProjectBlock = {
   unseen: boolean;
   trail: Trail;
   addTitle: string;
+  folders: FolderBlock[];
   convs: ConvRow[];
   fold: string;
 };
@@ -47,6 +62,7 @@ export type Section = {
   collapsed: boolean;
   open: boolean;
   add?: string;
+  folders: FolderBlock[];
   convs: ConvRow[];
   projects: ProjectBlock[];
 };

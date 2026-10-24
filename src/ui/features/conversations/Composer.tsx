@@ -14,6 +14,7 @@ import {
 import { insertDictated } from "../../../domain/conversations/dictation";
 import { isShortcut, shortcutCode, shortcutLabel, voiceOf } from "../../../domain/settings/voice";
 import { useSettingsStore } from "../../../application/settings/store";
+import { isKey } from "../../../application/settings/settings";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { ORCH } from "../../../domain/orchestrator/rules";
 import { projectName as plainProject } from "../../../application/workspace/vault";
@@ -35,6 +36,7 @@ import {
 } from "../../../application/conversations/actions";
 import { dropTarget } from "../../../application/conversations/attachments";
 import { pollMachines } from "../../../application/conversations/polls";
+import { isPhoneShared } from "../../../application/conversations/phoneShare";
 import { agentOf, chatAgent, inherited, onAgents, picks, setPick } from "../../../application/agents/agents";
 import { project } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
@@ -207,6 +209,7 @@ export function Composer({ className }: { className: string }) {
   }, [hasChat]);
   // the open conversation's agent's slash commands and skills
   const commands = useDerived(() => commandsOf(selected));
+  const phoneShared = useDerived(() => isPhoneShared(selected));
   const [dropping, setDropping] = useState(false);
   const [picked, setPicked] = useState(0);
   // the text Escape closed the list on: it stays closed until the text changes
@@ -257,7 +260,8 @@ export function Composer({ className }: { className: string }) {
   };
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (onCompletionKey(e)) return;
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+    // Settings › Shortcuts may move sending to ⌘↵, the textarea then makes the new line on Enter itself
+    if (isKey(e.nativeEvent, "chat.send") && !e.nativeEvent.isComposing) {
       e.preventDefault();
       // nothing to send: Enter allows the permission card that waits, as its button shows
       if (!e.repeat && !typed.trim() && !attached.length && allowOnlyCard()) return;
@@ -463,6 +467,18 @@ export function Composer({ className }: { className: string }) {
                 {t("composer.onMachine", { name: machine })}
               </span>
               {repoChip}
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : null}
+          {phoneShared ? (
+            <>
+              <span
+                className="flex items-center gap-1 px-1.5 text-xs text-secondary whitespace-nowrap"
+                title={t("composer.phoneSharedHelp")}
+              >
+                <Icon name="link" className="glyph size-3" />
+                {t("composer.phoneShared")}
+              </span>
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}

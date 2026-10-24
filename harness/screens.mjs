@@ -311,6 +311,26 @@ const VIEWS = {
     await page.keyboard.type("/");
     await settle(page);
   },
+  // Relay's own /share-phone in the completion, next to the agent's (PR phone-share)
+  "composer-share-slash": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("/share");
+    await settle(page);
+  },
+  // /share-phone sent: the note in the conversation and the mark in the composer (PR phone-share)
+  "composer-phone-shared": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("/share-phone");
+    // the first Enter takes the completion, the second sends
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await waitText("Shared with phone");
+    await settle(page);
+  },
   // a large paste: the field stops growing at 40% of the window and scrolls, the conversation stays in view
   "composer-paste": async () => {
     await open(page, server.url, { sel: keys.switchTo });
@@ -416,8 +436,12 @@ const VIEWS = {
   },
   "new-general-draft": async () => {
     await open(page, server.url);
-    await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-T
+    await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-Option-T
     await settle(page);
+  },
+  // a window Cmd-N opened starts on Today, whatever the main window had open (#257)
+  "new-window": async () => {
+    await open(page, server.url, { sel: keys.question, window: "main-2" });
   },
   terminal: async () => {
     await open(page, server.url, { sel: keys.terminal });
@@ -813,7 +837,7 @@ const VIEWS = {
     await waitText("From Relay");
   },
   ...Object.fromEntries(
-    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Updates"].map(tab => [
+    ["General", "Projects", "Agents", "Integrations", "Plugins", "Voice", "Shortcuts", "Updates"].map(tab => [
       `settings-${tab.toLowerCase()}`,
       () => settingsPage(tab),
     ]),
@@ -1026,6 +1050,22 @@ const VIEWS = {
     await page.evaluate(() => window.__harness.dictationLevel(0.4));
     await click("Reminders");
     await waitText("Dictating ·");
+  },
+  // a folder under a project, made from the project's menu, with a general conversation dragged into it (#254)
+  "sidebar-folder": async () => {
+    await open(page, server.url);
+    const nav = page.locator(".relay-sidebar");
+    await nav.locator('[data-kind="proj"]').first().click({ button: "right" });
+    await click("New folder");
+    await page.getByRole("textbox", { name: "Folder name" }).fill("Quotes");
+    await page.keyboard.press("Enter");
+    const from = await nav.locator('[data-kind="conv"][data-project=""]').nth(1).boundingBox();
+    const to = await nav.locator('[data-kind="folder"]').boundingBox();
+    await page.mouse.move(from.x + 20, from.y + from.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(to.x + 40, to.y + to.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await settle(page);
   },
   // Today after 16:00 with activity in the day's conversations: the "Book today's time" item (Time from sessions)
   "today-time": async () => {

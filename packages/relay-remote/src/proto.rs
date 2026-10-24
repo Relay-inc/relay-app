@@ -13,6 +13,9 @@
 //! `github_login_poll`, `github_logout`, and its repos: `repos`, `repo_ensure {repo}` (an `owner/repo` on GitHub,
 //! cloned when it is not there yet), `repo_push {name}`, `repo_snapshot {name,branch}` (the work there as one commit on
 //! `relay/…`, pushed), and from a device that is not paired yet only `pair {name,proof}`.
+//! A laptop's conversations shared with its phone (share.rs): `share {convs}` stays open and gets `{"open":token}` lines,
+//! each answered with a new connection `share_open {token}` that the server joins to the phone's request; such a request
+//! (`attach`, `kill`, `history {key}`) is answered with `{"challenge"}` first, then takes only signed lines.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -107,32 +110,36 @@ pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8
 
 /// The line `relay-server pair` prints: where the server is, the fingerprint of its certificate and the one-time code.
 /// `relay://192.168.1.2:47800#fp=<64 hex>&code=<32 hex>`. A line Relay makes for a phone (pair_device) also carries the
-/// key to the laptop's mirror there, `&key=<64 hex>`, so the phone can open it while the laptop is closed.
+/// key to the laptop's mirror there, `&key=<64 hex>`, so the phone can open it while the laptop is closed, and a secret
+/// only the laptop and the phone know, `&link=<64 hex>`, with which the phone proves its signing key to the laptop
+/// (share.rs). The server never sees `link`.
 #[derive(Clone, Debug, PartialEq)]
-pub struct PairLine { pub host: String, pub port: u16, pub fp: String, pub code: String, pub key: Option<String> }
+pub struct PairLine { pub host: String, pub port: u16, pub fp: String, pub code: String, pub key: Option<String>, pub link: Option<String> }
 impl PairLine {
     pub fn parse(s: &str) -> Option<PairLine> {
         let (addr, frag) = s.trim().strip_prefix("relay://")?.split_once('#')?;
         let (host, port) = addr.rsplit_once(':')?;
         let host = host.trim_start_matches('[').trim_end_matches(']');
         let hex = |v: &str, n: usize| v.len() == n && v.chars().all(|c| c.is_ascii_hexdigit());
-        let (mut fp, mut code, mut key) = (None, None, None);
+        let (mut fp, mut code, mut key, mut link) = (None, None, None, None);
         for kv in frag.split('&') {
             match kv.split_once('=') {
                 Some(("fp", v)) if hex(v, 64) => fp = Some(v.to_lowercase()),
                 Some(("code", v)) if hex(v, 32) => code = Some(v.to_lowercase()),
                 Some(("key", v)) if hex(v, 64) => key = Some(v.to_lowercase()),
+                Some(("link", v)) if hex(v, 64) => link = Some(v.to_lowercase()),
                 _ => {}
             }
         }
         let ok_host = !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c));
         ok_host.then_some(())?;
-        Some(PairLine { host: host.into(), port: port.parse().ok()?, fp: fp?, code: code?, key })
+        Some(PairLine { host: host.into(), port: port.parse().ok()?, fp: fp?, code: code?, key, link })
     }
     pub fn format(&self) -> String {
         let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
         let key = self.key.as_ref().map(|k| format!("&key={k}")).unwrap_or_default();
-        format!("relay://{host}:{}#fp={}&code={}{key}", self.port, self.fp, self.code)
+        let link = self.link.as_ref().map(|k| format!("&link={k}")).unwrap_or_default();
+        format!("relay://{host}:{}#fp={}&code={}{key}{link}", self.port, self.fp, self.code)
     }
     /// "host:port" for a TCP connect, IPv6 in brackets.
     pub fn addr(&self) -> String { addr(&self.host, self.port) }
@@ -152,7 +159,7 @@ mod tests {
         let v6 = PairLine { host: "fe80::1".into(), ..l.clone() };
         assert_eq!(PairLine::parse(&v6.format()), Some(v6.clone()));
         assert_eq!(v6.addr(), "[fe80::1]:47800");
-        let phone = PairLine { key: Some("b".repeat(64)), ..l.clone() };
+        let phone = PairLine { key: Some("b".repeat(64)), link: Some("c".repeat(64)), ..l.clone() };
         assert_eq!(PairLine::parse(&phone.format()), Some(phone.clone()));
         assert_eq!(PairLine::parse(&format!("{}&key=short", l.format())).unwrap().key, None);
         for bad in ["relay://h:1#fp=abc&code=0123456789abcdef0123456789abcdef", "http://h:1#fp=&code=", &format!("relay://h x:1#fp={fp}&code={code}"),

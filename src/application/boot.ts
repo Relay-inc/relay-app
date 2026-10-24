@@ -25,7 +25,7 @@ import { terminalOf } from "./conversations/selectors";
 import { onAgentEvent } from "./conversations/events";
 import { ensureHistory, tailTerm, tailOutside } from "./conversations/history";
 import { pollPending, pollAgents, pollSubs, agentsStale, setSessions } from "./conversations/polls";
-import { closeChat } from "./conversations/actions";
+import { closeChat, reopenLast } from "./conversations/actions";
 import { watchDesign } from "./design/design";
 import { loadAgents, sawDefaults } from "./agents/agents";
 import { useNavigationStore } from "./navigation/store";
@@ -42,6 +42,7 @@ import { loadTodayCards } from "./today/today";
 import { loadTodayTime } from "./time/time";
 import { listenToLinks } from "./deep-links";
 import { listenToFileDrops } from "./conversations/attachments";
+import { loadPhoneShared } from "./conversations/phoneShare";
 import { loadWorkers, onOrchEvent } from "./orchestrator/orchestrator";
 import { onPipelineWorker, runPipelines } from "./pipeline/runner";
 import { loadRetries, onRetryEvent } from "./conversations/retry";
@@ -105,6 +106,7 @@ export async function boot() {
   await adoptEarlierConversations();
   await loadWorkers();
   await loadRetries();
+  loadPhoneShared();
   await pickStartView();
   listenToLinks();
   startPolls();
@@ -130,11 +132,12 @@ function listenToBackend() {
   listenToFileDrops();
 }
 
-// the Gesprek menu: Cmd-T general, Cmd-N in the current project, Cmd-W closes the open conversation, Set Up Vault
-// runs the setup interview
+// the Gesprek menu: Cmd-T in the current project, Cmd-Option-T general, Cmd-Shift-T the one closed last, Cmd-W closes
+// the open conversation, Set Up Vault runs the setup interview. Cmd-N (a new window) stays in the backend
 function onMenu(item: string) {
   if (item === "new-general") select(newChat(null));
   else if (item === "new-project") newHere();
+  else if (item === "reopen-chat") void reopenLast();
   else if (item === "close-chat" && !isView(selected()) && !cs().chats[selected()]?.draft) closeChat(selected());
   else if (item === "run-setup") void runSetup();
 }

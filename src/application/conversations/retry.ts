@@ -2,6 +2,7 @@ import { t } from "../../shared/i18n";
 import { prompts } from "../../shared/prompts";
 import type { Retry, RetryEvent } from "../../domain/conversations/types";
 import * as backend from "../../infrastructure/backend";
+import { isPrimary } from "../../infrastructure/window";
 import { useConversationsStore } from "./store";
 import { ensureHistory } from "./history";
 import { notify } from "./events";
@@ -23,6 +24,7 @@ export const cancelRetry = (key: string) => backend.retryCancel(key);
 /** The backend's `retry` event. A refused turn that did nothing yet sends its message again, else the agent goes on. */
 export async function onRetryEvent(event: RetryEvent) {
   if (event.type === "list") return adopt(event.retries);
+  if (!isPrimary()) return; // sent once, by the main window
   const { key } = event;
   if (!useConversationsStore.getState().chats[key]) return; // closed meanwhile
   if (!useConversationsStore.getState().messages[key]) await ensureHistory(key).catch(() => {});

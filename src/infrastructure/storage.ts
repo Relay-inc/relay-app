@@ -5,7 +5,12 @@
 // loads (a top-level await: every module that imports it, the stores that read it while loading among them, waits
 // for it), then from memory. The keys and their encodings are the ones the app
 // always used: most hold JSON (`get`/`set`), a few a bare string (`getRaw`/`setRaw`).
+// With more than one Relay window (Cmd-N) only the active one writes: the others apply the same agent events and
+// would write the same keys from an older copy. Each write reaches the other windows (`ui-state`), and a store that
+// reads a shared key at load follows it there with `storage.watch`.
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { isActive, whenLeft, windowLabel } from "./window";
 
 let state: Record<string, string> = {};
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -22,6 +27,7 @@ function put(key: string, value: string, now = false) {
   state[key] = value;
   clearTimeout(timers.get(key));
   timers.delete(key);
+  if (!isActive()) return Promise.resolve();
   if (now) return write(key);
   timers.set(
     key,
@@ -67,6 +73,21 @@ async function load() {
 
 await load();
 
+// what is still waiting goes out when another window becomes the active one, before that one writes
+whenLeft(() => {
+  for (const [key, timer] of timers) {
+    clearTimeout(timer);
+    timers.delete(key);
+    void write(key);
+  }
+});
+const watchers = new Map<string, Set<() => void>>();
+void listen<{ key: string; value: string; from: string }>("ui-state", ({ payload }) => {
+  if (payload.from === windowLabel || state[payload.key] === payload.value) return;
+  state[payload.key] = payload.value;
+  watchers.get(payload.key)?.forEach(follow => follow());
+}).catch(() => {});
+
 export const storage = {
   get: <T>(key: string, fallback: T): T => {
     try {
@@ -81,6 +102,10 @@ export const storage = {
   getRaw: (key: string) => state[key] || "",
   /** Written at once: another window may read it right after (the settings window's `prefsTab`). */
   setRaw: (key: string, value: string) => put(key, value, true),
+  /** Run `follow` when another window wrote `key` (read it again with `get`). */
+  watch: (key: string, follow: () => void) => {
+    (watchers.get(key) ?? watchers.set(key, new Set()).get(key)!).add(follow);
+  },
 };
 /** sessionStorage, as quiet: it lives as long as the webview, so it survives a reload but not an app restart. */
 export const session = {

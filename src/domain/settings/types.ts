@@ -115,6 +115,7 @@ export type Settings = {
   terminal?: TerminalApp;
   keepAwake?: boolean; // hold off idle sleep while a turn runs, on unless false
   voice?: VoiceCfg; // Settings › Voice (domain/settings/voice.ts)
+  shortcuts?: Record<string, string[]>; // Settings › Shortcuts, what differs from the defaults (domain/settings/shortcuts.ts)
   autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true
   timeFromSessions?: boolean; // Today proposes the day's Productive time from the conversations, on unless false
   workerCrabs?: boolean; // the orchestrator's workers as pixel crabs in their list (ui/features/orchestrator/Crab), on unless false

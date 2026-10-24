@@ -35,8 +35,8 @@ pub fn notify(app: AppHandle, key: String, title: String, body: String, slot: Op
         }
         drop(banners);
         if out.starts_with(b"click") {
-            super::tray::show_main(&app);
-            app.emit("open-chat", key).ok();
+            let w = super::windows::show_active(&app);
+            app.emit_to(w, "open-chat", key).ok();
         }
     });
 }

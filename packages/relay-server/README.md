@@ -19,6 +19,9 @@ going while your laptop is closed. Relay connects to it over the LAN, or over yo
   shares its conversations, cards and mirror, but may only work with conversations: no mirror files, no moving
   sessions, no updating the server, no pairing further devices. Revoking a device revokes the devices linked to it.
 
+- **A conversation from the Mac on the phone, signed.** A conversation that runs on the laptop itself reaches the
+  phone only when it is shared there (`/share-phone`), and only through this server: see below.
+
 What it does not change: an agent here runs with the same rights and in the same permission mode as on your laptop
 (Relay sends the allow, deny and ask rules and `defaultMode` of `~/.claude/settings.json` with every start), and the
 permission cards still come to Relay. Mail never runs here (Relay answers the mail tools itself). The vault comes as an encrypted mirror (below).
@@ -170,6 +173,34 @@ Known limits:
   and the next round sends everything again.
 
 Without a RAM disk the server logs a warning and Settings › Machines says the working copy is on disk.
+
+## A conversation from the Mac on the phone
+
+`/share-phone` in a conversation on the laptop lets its phone read and continue it, while it keeps running on the laptop
+(`/unshare-phone` stops it). The laptop never listens on a port: Relay keeps a `share` connection open to the server the
+phone is paired with, listing the shared conversations (key, title, agent). The phone sees them in its list. For each
+request of the phone for one of them (`attach`, `kill`, `history {key}`) the server writes `{"open": token}` on that
+connection, the laptop connects back with `share_open {token}`, and the server passes the bytes both ways. `start` for a
+shared key is refused, so the phone never forks it onto the server.
+
+The threat: this server (or someone who took it over) must be able to relay, not to make the laptop's agent do
+anything. So the laptop believes only what the phone signed, and checks it itself (`relay_remote::share`):
+
+- **The phone's key.** The phone signs with its certificate's private key (ECDSA P-256), sealed on the phone (the
+  Android Keystore). The laptop learns the matching public key at pairing: the QR of Add phone carries a secret
+  (`&link=`) that goes from the laptop's screen to the phone's camera, never to the server. The phone's first signed
+  request carries `HMAC(link, its public key)`; the laptop then pins that key and the secret is used up. Only pinned
+  keys count after that. Forget the machine on the laptop to drop them.
+- **No replays.** Every connection the laptop serves starts with a fresh random challenge. The phone signs each line
+  over the challenge, the conversation key, a counter that only goes up, and the line. A line from another connection,
+  an older one, one sent twice, one changed on the way or one not signed is dropped before it reaches the agent.
+- **Only what is shared.** The laptop answers only for conversations shared at that moment, on the laptop, that did not
+  read mail (the same rule as moving to a machine), whatever key the server asks for. It stops passing lines the moment
+  that changes.
+
+What the server still can: see what passes (the shared conversation's lines and history, both ways, while the phone
+follows it), drop or delay it, and know which conversations are shared and their titles. A phone paired before this
+needs Add phone again to sign. The laptop must have Relay open; when it does not answer, the phone says so.
 
 ## Moving a conversation
 

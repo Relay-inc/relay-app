@@ -143,9 +143,20 @@ pub fn info(data: &Path, path: &str) -> Info {
 
 /// `attached`: per conversation, how many devices follow it now (no notification then); `watching`: the conversations
 /// the server follows itself; `sids`: the Claude session of each, for a device that joins after it started (a phone).
+/// `shares`: per laptop (ns), the conversations it shares with its phone from its own Mac and the connection it waits
+/// on; `opens`: a phone's request waiting for that laptop's connection, by token (see share_forward).
 pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>, github: Arc<github::Hub>,
     attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>>,
-    titles: Mutex<HashMap<String, String>> }
+    titles: Mutex<HashMap<String, String>>, shares: Mutex<HashMap<String, Share>>, opens: Mutex<HashMap<String, Open>> }
+
+/// A laptop's shared conversations (`share`): [{key, title, provider}], and the connection to ask it for a stream on.
+/// `gen` tells two registrations apart, so the end of an older one never removes a newer one.
+struct Share { convs: Vec<Value>, w: tls::Writer, gen: u64 }
+/// A phone's request for a shared conversation, waiting for its laptop's `share_open`: the laptop's ns, and where the
+/// laptop's connection goes.
+type Open = (String, std::sync::mpsc::Sender<(BufReader<tls::Reader>, tls::Writer)>);
+/// How long a phone's request waits for its laptop to connect back.
+const OPEN_WAIT: Duration = Duration::from_secs(10);
 
 impl Server {
     pub fn new(data: &Path) -> io::Result<Server> {
@@ -157,7 +168,7 @@ impl Server {
         Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info, mirror, github,
             attached: Mutex::default(), watching: Mutex::default(),
             sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()),
-            titles: Mutex::default() })
+            titles: Mutex::default(), shares: Mutex::default(), opens: Mutex::default() })
     }
     pub fn fingerprint(&self) -> &str { &self.fp }
 
@@ -202,6 +213,12 @@ impl Server {
         let ns = &parent.as_deref().unwrap_or(&fp)[..16];
         let key = |k: &Value| format!("{ns}:{}", k.as_str().unwrap_or(""));
         let pending = self.data.join("pending").join(ns);
+        // a phone's request for a conversation its laptop shares from its own Mac: the laptop answers it, and checks
+        // the phone's signature itself (relay_remote::share); this server only passes the bytes
+        if parent.is_some() && ["attach", "kill", "history"].contains(&op) && self.is_shared(ns, req["key"].as_str().unwrap_or("")) {
+            self.revoked_closes(&fp, &w);
+            return self.share_forward(ns, &req, r, w);
+        }
         match op {
             "pair_device" => reply(&mut w, open_pairing_for(&self.data, Some(&fp)).map(|code| json!({"code": code, "fp": self.fp})).map_err(|e| e.to_string())),
             "pair" => { let res = self.pair(&fp, &req); if res.is_ok() { eprintln!("relay-server: paired {} ({peer})", req["name"]); } reply(&mut w, res) }
@@ -268,7 +285,9 @@ impl Server {
                     if let Some(t) = sids.get(&k).and_then(|sid| self.session_find(sid)).and_then(|p| transcript_title(&p)) { titles.insert(k, t); }
                 }
                 let named: serde_json::Map<String, Value> = metas.iter().filter_map(|m| titles.get(&format!("{ns}:{}", m.key)).map(|s| (m.key.clone(), json!(s)))).collect();
-                reply(&mut w, Ok(json!({"metas": metas, "sids": of, "titles": named})))
+                let mut v = json!({"metas": metas, "sids": of, "titles": named});
+                if parent.is_some() { self.list_shared(ns, &mut v); }
+                reply(&mut w, Ok(v))
             }
             "kill" => reply(&mut w, kill(&key(&req["key"]), req["pid"].as_u64().unwrap_or(0) as u32)),
             "pending" => reply(&mut w, Ok(json!({"pending": agent_core::pending::list(&pending)}))),
@@ -277,12 +296,73 @@ impl Server {
             "exists" => reply(&mut w, Ok(json!({"dir": req["path"].as_str().is_some_and(|p| p.starts_with('/') && Path::new(p).is_dir())}))),
             "launch" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["meta"]["key"])); self.launch(ns, &req, None, r, w) }
             "profile_put" => reply(&mut w, write_private(&self.profile_path(ns), &req["profile"].to_string()).map(|_| json!({})).map_err(|e| e.to_string())),
+            // a conversation of the laptop's Mac never forks onto this machine from the phone
+            "start" if self.is_shared(ns, req["key"].as_str().unwrap_or("")) => bang(&mut w, "this conversation runs on the Mac: open Relay there"),
             "start" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); self.start(ns, &req, r, w) }
             "attach" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); attach(&key(&req["key"]), r, w) }
+            "share" => self.share(ns, &req, r, w),
+            "share_open" => {
+                let token = req["token"].as_str().unwrap_or("");
+                let open = self.opens.lock().unwrap().remove(token);
+                match open {
+                    Some((owner, tx)) if owner == ns => { tx.send((r, w)).ok(); Ok(()) }
+                    _ => reply(&mut w, Err("no such request".into())),
+                }
+            }
             _ => reply(&mut w, Err(format!("unknown request {op:?}"))),
         }
     }
 
+    fn is_shared(&self, ns: &str, key: &str) -> bool {
+        !key.is_empty() && self.shares.lock().unwrap().get(ns).is_some_and(|s| s.convs.iter().any(|c| c["key"] == key))
+    }
+    /// A laptop offers its shared conversations: kept until this connection ends or the laptop offers again. The laptop
+    /// reads `{"open": token}` lines on it, one per request of its phone.
+    fn share(&self, ns: &str, req: &Value, mut r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+        // what a phone's list shows of them: a key, a title and the agent, nothing that runs anything here
+        let convs: Vec<Value> = req["convs"].as_array().into_iter().flatten().filter_map(|c| {
+            let k = c["key"].as_str().filter(|k| !k.is_empty() && k.len() <= 200)?;
+            let s = |f: &str| c[f].as_str().unwrap_or("").chars().take(200).collect::<String>();
+            Some(json!({"key": k, "title": s("title"), "provider": s("provider")}))
+        }).take(500).collect();
+        proto::write_json(&mut w, &json!({"ok": true}))?;
+        let gen = { let mut sh = self.shares.lock().unwrap(); let gen = sh.get(ns).map_or(0, |s| s.gen + 1);
+            if let Some(old) = sh.insert(ns.into(), Share { convs, w: w.clone(), gen }) { old.w.shutdown(); } gen };
+        // the laptop sends nothing more: its end (or a newer offer, which shuts this one) ends the offer
+        io::copy(&mut r, &mut io::sink()).ok();
+        let mut sh = self.shares.lock().unwrap();
+        if sh.get(ns).is_some_and(|s| s.gen == gen) { sh.remove(ns); }
+        w.shutdown();
+        Ok(())
+    }
+    /// A phone's request for a shared conversation: its laptop is asked for a connection of its own (`open` on the
+    /// share connection), which gets the phone's request line, then the two pass through each other until either goes.
+    fn share_forward(&self, ns: &str, req: &Value, r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::Result<()> {
+        let refuse = |w: &mut tls::Writer, why: &str| if req["op"] == "attach" { bang(w, why) } else { reply(w, Err(why.into())) };
+        let token = tls::random_secret();
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.opens.lock().unwrap().insert(token.clone(), (ns.into(), tx));
+        // one write per line: several phones' requests may go to the same connection at once
+        let asked = self.shares.lock().unwrap().get(ns).map(|s| s.w.clone()).is_some_and(|mut sw| sw.write_all(format!("{}\n", json!({"open": token})).as_bytes()).is_ok());
+        let got = if asked { rx.recv_timeout(OPEN_WAIT).ok() } else { None };
+        self.opens.lock().unwrap().remove(&token);
+        let Some((mr, mut mw)) = got else { return refuse(&mut w, "the Mac does not answer: is Relay open on it?") };
+        proto::write_json(&mut mw, req)?;
+        splice(r, w, mr, mw);
+        Ok(())
+    }
+    /// A phone's list: its laptop's shared conversations too (no pid, they do not run here), and which ones they are.
+    fn list_shared(&self, ns: &str, v: &mut Value) {
+        let convs = self.shares.lock().unwrap().get(ns).map(|s| s.convs.clone()).unwrap_or_default();
+        for c in &convs {
+            let k = c["key"].as_str().unwrap_or("");
+            if v["metas"].as_array().is_some_and(|m| m.iter().any(|m| m["key"] == k)) { continue; }
+            let meta = Meta { key: k.into(), provider: c["provider"].as_str().unwrap_or("claude").into(), model: String::new(), effort: String::new(), tainted: false, pid: 0, account: String::new(), turns: 0 };
+            if let (Some(m), Ok(meta)) = (v["metas"].as_array_mut(), serde_json::to_value(meta)) { m.push(meta); }
+            if c["title"].as_str().is_some_and(|t| !t.is_empty()) { v["titles"][k] = c["title"].clone(); }
+        }
+        v["shared"] = json!(convs.iter().map(|c| c["key"].clone()).collect::<Vec<_>>());
+    }
     /// A conversation's stream lasts as long as the conversation: once its device is revoked, it ends within seconds,
     /// not at the next connection.
     fn revoked_closes(&self, fp: &str, w: &tls::Writer) {
@@ -554,6 +634,20 @@ fn attach(key: &str, mut r: BufReader<tls::Reader>, mut w: tls::Writer) -> io::R
     Ok(())
 }
 
+/// Two TLS connections through each other, both ways, until either side goes: a phone and its laptop (share_forward).
+/// What the phone sent after its request line, still in its reader's buffer, goes first.
+fn splice(mut r: BufReader<tls::Reader>, w: tls::Writer, mut mr: BufReader<tls::Reader>, mut mw: tls::Writer) {
+    let (mut w2, mw2) = (w.clone(), mw.clone());
+    let out = thread::spawn(move || { io::copy(&mut mr, &mut w2).ok(); w2.shutdown(); mw2.shutdown(); });
+    let buffered = r.buffer().to_vec();
+    mw.write_all(&buffered).ok();
+    r.consume(buffered.len());
+    io::copy(r.get_mut(), &mut mw).ok();
+    mw.shutdown();
+    w.shutdown();
+    out.join().ok();
+}
+
 /// The LAN address other devices reach this machine at: the source address of a route out (no packet is sent).
 pub fn lan_ip() -> Option<String> {
     let s = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
@@ -568,7 +662,7 @@ pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Re
     let host = host.or_else(lan_ip).ok_or_else(|| io::Error::other("no LAN address found, pass --host"))?;
     let fp = identity(data)?.fingerprint();
     let code = open_pairing(data)?;
-    Ok(proto::PairLine { host, port, fp, code, key: None }.format())
+    Ok(proto::PairLine { host, port, fp, code, key: None, link: None }.format())
 }
 
 

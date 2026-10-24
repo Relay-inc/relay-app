@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useEffectEvent, useState, useSyncExternalStore } from "react";
 import type { CardChoice, Pending, Question } from "../../domain/conversations/types";
 import { useNavigationStore } from "../../application/navigation/store";
+import { isKey, pickedAnswer } from "../../application/settings/settings";
 import { useT } from "../hooks/useT";
 import { Html } from "./Html";
 import { Icon } from "./Icon";
@@ -29,7 +30,7 @@ export function allowOnlyCard() {
   return true;
 }
 window.addEventListener("keydown", e => {
-  if (e.key !== "Enter" || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.repeat) return;
+  if (!isKey(e, "card.confirm") || e.isComposing || e.repeat) return;
   if (e.defaultPrevented) return;
   const inControl = e
     .composedPath()
@@ -113,17 +114,17 @@ export function PermissionCard({
   const open = questions.findIndex((_, qi) => !picked[qi]?.size);
   const current = open < 0 ? questions.length - 1 : open;
   const onKey = useEffectEvent((e: KeyboardEvent) => {
-    if (busy || e.metaKey || e.ctrlKey || e.altKey || e.isComposing || e.defaultPrevented) return;
+    if (busy || e.isComposing || e.defaultPrevented) return;
     const inField = e
       .composedPath()
       .some(node => node instanceof HTMLElement && node.matches("input, textarea, select, [contenteditable]"));
     if (inField) return;
     const options = questions[current]?.options ?? [];
-    const n = Number(e.key);
-    if (Number.isInteger(n) && n >= 1 && n <= Math.min(9, options.length)) {
+    const n = pickedAnswer(e);
+    if (n >= 1 && n <= Math.min(9, options.length)) {
       e.preventDefault();
       pick(current, options[n - 1].label, !!questions[current].multiSelect);
-    } else if (e.key === "Enter" && hasAnswer && !(e.target instanceof HTMLButtonElement)) {
+    } else if (isKey(e, "card.confirm") && hasAnswer && !(e.target instanceof HTMLButtonElement)) {
       e.preventDefault();
       answerQuestions();
     }

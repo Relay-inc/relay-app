@@ -9,6 +9,7 @@ import {
   dictationPauseShortcuts,
 } from "../../infrastructure/backend";
 import { shortcutLabel, voiceOf, type ShortcutKey } from "../../domain/settings/voice";
+import { bindingsOf, COMMANDS, type CommandId } from "../../domain/settings/shortcuts";
 import { t } from "../../shared/i18n";
 import { makeStore } from "../make-store";
 import { useSettingsStore } from "./store";
@@ -93,13 +94,22 @@ export async function askAccess() {
 }
 
 const KEYS: ShortcutKey[] = ["shortcut", "chatShortcut", "pasteShortcut"];
-/** One way's shortcut, unless another way already has it: then it stays and the field says why. */
+/** One way's shortcut, unless another way or one of Relay's own keys (Settings › Shortcuts) already has it: then it
+ *  stays and the field says why. */
 export async function saveShortcut(key: ShortcutKey, shortcut: string) {
   const voice = voiceOf(current().voice);
   const taken = KEYS.some(other => other !== key && voice[other] === shortcut);
+  const command = (Object.keys(COMMANDS) as CommandId[]).find(
+    id => COMMANDS[id].scope === "app" && bindingsOf(current(), id).includes(shortcut),
+  );
+  const label = shortcutLabel(shortcut);
   set(draft => {
-    draft.shortcutError[key] = taken ? t("voice.shortcutTaken", { key: shortcutLabel(shortcut) }) : undefined;
+    draft.shortcutError[key] = taken
+      ? t("voice.shortcutTaken", { key: label })
+      : command
+        ? t("keys.taken", { key: label, name: t(`keys.${command}`) })
+        : undefined;
   });
-  if (!taken) await saveVoice({ [key]: shortcut });
+  if (!taken && !command) await saveVoice({ [key]: shortcut });
 }
 export const pauseShortcuts = (paused: boolean) => dictationPauseShortcuts(paused).catch(() => {});

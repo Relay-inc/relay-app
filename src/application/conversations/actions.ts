@@ -38,6 +38,7 @@ import { prepImages, releaseImages } from "./images";
 import { fromPaths, pickedPaths } from "./attachments";
 import { flush } from "./events";
 import { pollAgents } from "./polls";
+import { phoneCommand, setPhoneShare } from "./phoneShare";
 import { captureOnClose } from "../today/capture";
 
 // What the user does with a conversation: typing, images, sending and stopping, the cards and questions, routing it
@@ -280,6 +281,17 @@ function takeTyped() {
 /** Send `forced`, or what is typed in the open conversation with its images and files. `to` sends to a conversation
  *  that is not open (Cmd-K) with its own: the composer, its attachments and the view stay as they are. */
 export async function sendMsg(forced?: string, to?: string, toImgs: Img[] = [], toFiles: string[] = []): Promise<void> {
+  // Relay's own commands, typed in the open conversation: handled here, the agent never hears them
+  const share = forced === undefined && !to ? phoneCommand(drafts().typed[selected()] ?? "") : null;
+  if (share !== null) {
+    const key = selected();
+    const conversation = cs().chats[key];
+    takeTyped();
+    return note(
+      key,
+      await setPhoneShare(key, share, displayTitle(conversation?.title || ""), !!conversation?.fromMail),
+    );
+  }
   const plan = planSend({ ...drafts(), outside: cs().outside }, selected(), forced, to, toImgs.length + toFiles.length);
   if (plan.kind === "nothing") return;
   if (plan.kind === "wait-outside") return note(plan.key, t("work.waitOutside"));
@@ -401,6 +413,29 @@ export function moveTo(project: string | null) {
     } else draft.dismissed.add(key);
   });
   if (project) saveChats();
+}
+/** A conversation dragged in the sidebar to a project (null for Algemeen) and a folder there ("" for none). Under
+ *  another project it gets the note the project panel gives, and its next message tells the agent. A terminal session
+ *  moves through the settings' overrides and sits in no folder. */
+export async function moveChat(key: string, project: string | null, folder: string) {
+  if (isTerminal(key)) {
+    if (terminalOf(key)?.project === project) return;
+    const next = structuredClone(settings());
+    next.overrides[termSid(key)] = project;
+    await saveMainSettings(next);
+    return;
+  }
+  const conversation = cs().chats[key];
+  if (!conversation || (conversation.project === project && (conversation.folder ?? "") === folder)) return;
+  set(draft => {
+    const moved = draft.chats[key];
+    if (moved.project !== project)
+      push(draft, key, { kind: "note", text: t("note.moved", { name: project ?? t("general") }) });
+    moved.project = project;
+    if (folder) moved.folder = folder;
+    else delete moved.folder;
+  });
+  saveChats();
 }
 /** The Cmd-K question's project offer, answered once: move the open conversation there, or keep it general (""). */
 export function answerAsk(project: string) {
@@ -568,6 +603,12 @@ export async function reopen(key: string) {
   }
   hideToast();
   await select(key);
+}
+/** Cmd-Shift-T: the conversation closed last comes back, like a browser tab. */
+export async function reopenLast() {
+  const closed = Object.values(cs().chats).filter(conversation => conversation.closed);
+  const last = closed.sort((newer, older) => older.closed! - newer.closed!)[0];
+  if (last) await reopen(last.key);
 }
 // Escape on a running turn: the first press warns, a second within 2s stops it like the stop button
 let escAt = 0;

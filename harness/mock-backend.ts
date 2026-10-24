@@ -2,7 +2,7 @@
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
 // events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
-// opens on), ?link=<relay:// url> (the deep link the app was launched with).
+// opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
 import * as vault from "./fixtures/vault";
@@ -65,6 +65,7 @@ let vaultSync = {
   } | null,
 };
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
+const phoneShared = new Set<string>(); // conversation keys shared with the phone (/share-phone)
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
 const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty" || fixture === "orch-closed";
 // orch-empty: the orchestrator before its first task, no workers and an empty conversation
@@ -252,7 +253,7 @@ function handle(cmd: string, a: Args): unknown {
     // a pairing for a phone: the line and a QR, here a stand-in square pattern
     case "machine_pair_phone":
       return {
-        line: `relay://192.168.1.2:47800#fp=${"0f9534960dd3570a".padEnd(64, "0")}&code=${"c".repeat(32)}&key=${"k".repeat(64)}`,
+        line: `relay://192.168.1.2:47800#fp=${"0f9534960dd3570a".padEnd(64, "0")}&code=${"c".repeat(32)}&key=${"k".repeat(64)}&link=${"l".repeat(64)}`,
         ntfy: "https://ntfy.sh/relay-0123456789abcdef0123456789abcdef",
         qr: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 21 21" shape-rendering="crispEdges"><rect width="21" height="21" fill="#fff"/><path d="M0 0h7v7H0zM14 0h7v7h-7zM0 14h7v7H0zM9 9h3v3H9zM15 15h2v2h-2z" fill="#000"/></svg>`,
       };
@@ -584,6 +585,8 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "ui_state_init":
       return a.state;
+    case "active_window":
+      return "main";
     case "ui_state_set":
       localStorage.setItem(a.key, a.value);
       return null;
@@ -661,6 +664,15 @@ function handle(cmd: string, a: Args): unknown {
     case "stop":
     case "bg":
     case "open_terminal":
+    // /share-phone: shared conversations in memory; a conversation about a mail is refused, as the backend does
+    case "phone_share": {
+      if (a.on && a.mail) throw new Error("A conversation about a mail stays on this Mac, also from the phone");
+      phoneShared.delete(a.key);
+      if (a.on) phoneShared.add(a.key);
+      return null;
+    }
+    case "phone_shared":
+      return [...phoneShared];
     case "notify":
     case "open_settings_window":
     case "reset":
@@ -969,7 +981,7 @@ const settle = () => {
   quietTimer = window.setTimeout(() => markReady(), 250);
 };
 
-mockWindows(isSettingsWindow ? "settings" : "main");
+mockWindows(query.get("window") || (isSettingsWindow ? "settings" : "main")); // ?window=main-2: a window Cmd-N opened
 mockIPC((cmd, args) => {
   const a = (args ?? {}) as Args;
   calls.push({ cmd, args: a, at: performance.now() });

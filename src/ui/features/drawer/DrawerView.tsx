@@ -4,6 +4,7 @@ import { closeDrawer } from "../../../application/navigation/panel";
 import { selectedProject } from "../../../application/conversations/selectors";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
+import { useKeyLabel } from "../../hooks/useKeyLabel";
 import { Icon } from "../../components/Icon";
 import { PanelDetail } from "../navigation/PanelDetail";
 import { TerminalsPanel } from "../terminals/TerminalsPanel";
@@ -28,6 +29,7 @@ const TITLES = {
  *  open conversation's changes, or the orchestrator's workers next to its coordinator. */
 export function DrawerView({ className, drawer }: { className: string; drawer: Exclude<Drawer, ""> }) {
   const { t } = useT();
+  const escape = useKeyLabel("app.escape");
   const project = useDerived(() => selectedProject()) ?? "";
   // the tool follows the project of what the middle column shows: a project's board or PRs keeps its tools
   const toolProject = useNavigationStore(s => s.tool?.project) ?? project;
@@ -46,7 +48,12 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
             {drawer === "workers" ? <Icon name="agent" className="glyph size-4 text-secondary" /> : null}
             <h2 className="flex-1 text-[15px] font-semibold">{t(TITLES[drawer])}</h2>
             {drawer === "workers" ? null : (
-              <button className="btn-icon" title={t("pr.close")} aria-label={t("nav.close")} onClick={closeDrawer}>
+              <button
+                className="btn-icon"
+                title={t("pr.close", { key: escape })}
+                aria-label={t("nav.close")}
+                onClick={closeDrawer}
+              >
                 <Icon name="close" className="glyph size-4" />
               </button>
             )}
