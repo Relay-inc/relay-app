@@ -13,6 +13,9 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **An arrow key at the edge of a field no longer types a character**: → at the end of the composer (and ← at the start) left an invisible control character (0x1d, the classic Mac arrow code) in the text. The key is unhandled by the page when the caret cannot move, and the webview typed it in. Relay now swallows those keys
 ### Added
 
 - **Shortcuts in Settings**: a Shortcuts page lists every key Relay takes (anywhere, in a conversation, on Today, in Mail, dictation) and lets you change each one: click it and press the new key, the arrow puts it back. A key that would type in a field, that macOS or the Edit menu has, or that another command already has is refused with the reason. Tooltips and the menu bar follow (#256)

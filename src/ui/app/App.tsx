@@ -135,7 +135,27 @@ function onMailKey(e: KeyboardEvent) {
   }
   return false;
 }
+// WebKit in a Tauri window: an arrow key that cannot move the caret (→ at the end, ← at the start) is not handled by
+// the page, AppKit then resends it and the classic Mac arrow code (0x1c-0x1f) lands in the field as text. Swallow it.
+function stuckArrow(e: KeyboardEvent) {
+  const el = e.target;
+  if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) return false;
+  const { selectionStart: start, selectionEnd: end, value } = el;
+  if (start !== end) return false;
+  const atStart = end === 0;
+  const atEnd = end === value.length;
+  return (
+    (e.key === "ArrowRight" && atEnd) ||
+    (e.key === "ArrowDown" && atEnd) ||
+    (e.key === "ArrowLeft" && atStart) ||
+    (e.key === "ArrowUp" && atStart)
+  );
+}
 function onKey(e: KeyboardEvent) {
+  if (stuckArrow(e)) {
+    e.preventDefault();
+    return;
+  }
   if (onMailKey(e)) return;
   if (isKey(e, "app.quickAsk")) {
     // Cmd-K: a question that starts a general conversation in the background
