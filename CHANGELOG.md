@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **The terminal button shows a conversation's open terminal**: clicking it again on a conversation that already runs in the project's terminal drawer shows that tab, instead of resuming the conversation in a new one. Once that shell has exited, it starts a new one as before (#253)
 - **An arrow key at the edge of a field no longer types a character**: → at the end of the composer (and ← at the start) left an invisible control character (0x1d, the classic Mac arrow code) in the text. The key is unhandled by the page when the caret cannot move, and the webview typed it in. Relay now swallows those keys
 ### Added
 
