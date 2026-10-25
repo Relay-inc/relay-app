@@ -364,6 +364,7 @@ export const subagents = {
       last_at: iso(NOW - 20000),
       tool: "Grep",
       input: { pattern: "->add\\(" },
+      ctx: 41800,
     },
     {
       id: "b2c3d4e5f6",
@@ -375,6 +376,7 @@ export const subagents = {
       last_at: iso(NOW - 5000),
       tool: "Bash",
       input: { command: "gcloud logging read 'severity>=ERROR' --limit 50" },
+      ctx: 18200,
     },
     {
       id: "c3d4e5f6a7",
@@ -385,6 +387,8 @@ export const subagents = {
       started_at: iso(NOW - 30 * 60000),
       last_at: iso(NOW - 22 * 60000),
       text: "Draft saved in Drafts.",
+      ctx: 64000,
+      cut: true,
     },
     {
       id: "d4e5f6a7b8",
@@ -395,6 +399,7 @@ export const subagents = {
       started_at: iso(NOW - 50 * 60000),
       last_at: iso(NOW - 41 * 60000),
       text: "Totals match for 38 of 38 dossiers.",
+      ctx: 27500,
     },
   ],
 };

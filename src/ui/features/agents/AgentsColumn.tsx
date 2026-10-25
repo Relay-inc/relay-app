@@ -4,6 +4,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { closeAgent, openAgent } from "../../../application/navigation/navigation";
 import { WorkerAvatar } from "../orchestrator/parts";
 import { ToolLine } from "../../components/ToolLine";
+import { subMeta } from "../../../domain/conversations/rules";
 import { useT } from "../../hooks/useT";
 import { useElapsed } from "./useElapsed";
 
@@ -56,8 +57,9 @@ export function AgentsColumn() {
 
 /** One agent: its crab, what it was asked, its type and model, the step it is on (or how long it took). */
 function AgentRow({ agent, selected, onOpen }: { agent: Sub; selected: boolean; onOpen: () => void }) {
+  const { t } = useT();
   const elapsed = useElapsed(agent);
-  const meta = [agent.agentType, agent.model].filter(Boolean).join(" · ");
+  const meta = subMeta(agent, t);
   return (
     <button
       className={`flex w-full items-center gap-3 min-h-13 px-2.5 rounded-[10px] border-0 text-left cursor-default ${selected ? "bg-accent-soft" : "bg-transparent hover:bg-fill"}`}
@@ -71,6 +73,7 @@ function AgentRow({ agent, selected, onOpen }: { agent: Sub; selected: boolean; 
         <span className={`text-sm truncate ${selected ? "font-semibold" : "font-medium"}`}>{agent.description}</span>
         <span className="text-xs text-secondary truncate [&_code]:font-mono [&_code]:text-xs">
           {agent.running && agent.tool ? <ToolLine name={agent.tool} input={agent.input} /> : meta}
+          {agent.cut ? <span className="text-late">{` · ${t("agents.cut")}`}</span> : null}
         </span>
       </span>
       <span className="flex-none text-xs text-secondary tabular-nums">{elapsed}</span>

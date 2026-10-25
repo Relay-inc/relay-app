@@ -13,6 +13,11 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **The end of a turn says what the turn did**: next to its duration, the line under the answer counts the file edits, failed tools and agents of that turn, and what it cost when the agent reports it (Claude Code, OpenCode, pi). Claude Code reports its cost over the whole process, so Relay now takes the difference per turn
+- **Subagents show their context**: an agent's row, its line in the Agents column and its page show the context of its latest request ("42k context"), and "cut off" in red when its answer stopped at the output limit (Claude Code)
+
 ## [0.0.33] - 2026-10-24
 
 ### Fixed

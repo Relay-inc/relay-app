@@ -9,6 +9,7 @@ import { ConversationItem } from "../conversations/ConversationItem";
 import { ToolGroup } from "../conversations/ToolGroup";
 import { Working } from "../conversations/Working";
 import { NoteLine } from "../conversations/NoteLine";
+import { subMeta } from "../../../domain/conversations/rules";
 import { useT } from "../../hooks/useT";
 import { useElapsed } from "./useElapsed";
 
@@ -70,7 +71,7 @@ export function AgentPage({ id }: { id: string }) {
 function AgentHeader({ agent }: { agent: Sub }) {
   const { t } = useT();
   const elapsed = useElapsed(agent);
-  const meta = [agent.agentType, agent.model].filter(Boolean).join(" · ");
+  const meta = subMeta(agent, t);
   return (
     <div className="flex items-center gap-3 pb-4 border-b border-separator">
       <WorkerAvatar worker={{ state: agent.running ? "running" : "done", model: agent.model }} size={36} />
@@ -82,6 +83,7 @@ function AgentHeader({ agent }: { agent: Sub }) {
             {t(agent.running ? "agents.state.running" : "agents.state.done")}
           </span>
           {` · ${elapsed}`}
+          {agent.cut ? <span className="text-late">{` · ${t("agents.cut")}`}</span> : null}
         </span>
       </div>
     </div>
