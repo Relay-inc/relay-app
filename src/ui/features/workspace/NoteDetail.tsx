@@ -115,7 +115,7 @@ export function NoteDetail({ panelKey }: { panelKey: string }) {
             <Note>{t("pr.loading")}</Note>
           </div>
         ) : (
-          <article className="max-w-[520px] pt-7 px-8 pb-10 flex flex-col gap-5">
+          <article className="pt-7 px-8 pb-10 flex flex-col gap-5">
             <header className="flex flex-col gap-2.5">
               <h1 className="text-xl leading-[1.3] font-semibold tracking-[-0.01em] text-pretty">{title}</h1>
               {prop("description") ? (
