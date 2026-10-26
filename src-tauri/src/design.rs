@@ -338,7 +338,9 @@ const QUESTION: &str = r#"const q = () => {
     g.options.push(label(o));
     g.multiple ||= o.matches('[role="checkbox"],input[type="checkbox"]') || host.getAttribute("aria-multiselectable") === "true" || /one or more|all that apply|multiple/i.test(root.innerText.slice(0, 500));
   }
-  const submit = [...root.querySelectorAll("button")].filter(b => !opts.some(o => o.contains(b)) && /^(submit|send|continue|next|done|answer|verstuur|verzend|doorgaan|volgende|klaar|beantwoord)/i.test(b.innerText.trim() || b.getAttribute("aria-label") || "")).pop();
+  const submit = [...root.querySelectorAll("button")].filter(b => !opts.some(o => o.contains(b)) && (/^(submit|send|continue|next|done|answer|verstuur|verzend|doorgaan|volgende|klaar|beantwoord)/i.test(b.innerText.trim())
+    // an icon-only button by its exact label: "Next question" pages a card, it does not submit it
+    || /^(submit|send|verstuur|verzend)$/i.test(b.getAttribute("aria-label") || ""))).pop();
   const step = (root.innerText.match(/Question \d+ of \d+/) || [])[0];
   return { root, opts, submit, step, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
 };"#;
