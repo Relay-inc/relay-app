@@ -124,7 +124,7 @@ export function ShortcutsPage() {
         <Field label={t("keys.chat.newline")}>
           <kbd className={KEY}>{bindingLabel(send === "Enter" ? "shift+Enter" : "Enter")}</kbd>
         </Field>
-        {rows(["card.confirm"])}
+        {rows(["chat.find", "card.confirm"])}
         <Field label={t("keys.card.pick")}>
           {changed(PICK_ID) ? resetButton(() => savePick("")) : null}
           <Segmented

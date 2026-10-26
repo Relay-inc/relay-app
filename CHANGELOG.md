@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Find in a conversation**: ⌘F (or ⌃F) opens a find bar above the open conversation. Every match is marked, ↵ and ⇧↵ walk them with a count like "3 of 12", Esc closes it. It searches what the conversation shows, so the text inside a folded step is left out until you open it. The keys are in Settings › Shortcuts
+
 ## [0.0.33] - 2026-10-24
 
 ### Fixed

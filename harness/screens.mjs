@@ -169,6 +169,17 @@ const VIEWS = {
     await scrollMain("bottom");
   },
   // a Read of a picture: its thumbnail on hover, the zoom on a click
+  // Cmd-F over a conversation: every match marked, the current one stronger, Enter walked to the third (#find)
+  "conversation-find": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.keyboard.press("Meta+f");
+    await page.keyboard.type("balance");
+    await settle(page, 400);
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Enter");
+    await settle(page, 300);
+  },
   "conversation-tool-image": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
@@ -842,6 +853,11 @@ const VIEWS = {
       () => settingsPage(tab),
     ]),
   ),
+  // the keys that work in a conversation, Find among them
+  "settings-shortcuts-chat": async () => {
+    await settingsPage("Shortcuts");
+    await intoView("Find in the conversation");
+  },
   // the speech models, Whisper among them
   "settings-voice-models": async () => {
     await settingsPage("Voice");
