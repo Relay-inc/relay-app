@@ -818,6 +818,8 @@ export default {
     "D'autres vaults dont les projets s'affichent dans la barre latérale à côté des vôtres, par exemple un vault d'équipe dans git. Un projet présent dans deux vaults s'affiche une fois, avec les données des deux ; une nouvelle conversation demande dans quel vault elle tourne.",
   "set.extraVaultAdd": "Ajouter un vault…",
   "set.extraVaultRemove": "Retirer {name}",
+  "set.extraVaultSync": "Synchroniser avec l'équipe : commit, récupérer leurs changements, push, toutes les 5 minutes",
+  "set.extraVaultSynced": "Dernière synchro {when} : {pulled} commits récupérés, poussé {pushed}",
   "set.extraVaultMerged": "Aussi dans votre propre vault, affichés comme un seul projet : {names}",
   "set.title": "Réglages",
   "set.vaultHelp":

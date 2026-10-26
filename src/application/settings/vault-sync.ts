@@ -15,6 +15,16 @@ export async function watchVaultSync() {
   } catch {
     // no vault yet: the section shows empty
   }
+  backend.sharedSync().then(all =>
+    set(draft => {
+      draft.sharedSync = all;
+    }),
+  );
+  void backend.onSharedSync(all =>
+    set(draft => {
+      draft.sharedSync = all;
+    }),
+  );
   void backend.onVaultSync(last =>
     set(draft => {
       if (draft.vaultSync.saved) draft.vaultSync.saved.last = last;

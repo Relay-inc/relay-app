@@ -811,6 +811,8 @@ export default {
     "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. Een project in twee vaults staat er één keer, met gegevens uit beide; een nieuw gesprek erover vraagt in welke vault het draait.",
   "set.extraVaultAdd": "Vault toevoegen…",
   "set.extraVaultRemove": "{name} verwijderen",
+  "set.extraVaultSync": "Synchroniseren met het team: committen, hun wijzigingen ophalen, pushen, elke 5 minuten",
+  "set.extraVaultSynced": "Laatste sync {when}: {pulled} commits opgehaald, gepusht {pushed}",
   "set.extraVaultMerged": "Ook in je eigen vault, getoond als één project: {names}",
   "set.title": "Instellingen",
   "set.vaultHelp":

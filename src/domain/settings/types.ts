@@ -102,6 +102,7 @@ export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
   extraVaults?: string[]; // shared vaults whose projects show next to the main vault's
+  syncVaults?: string[]; // the shared vaults that sync with the team (commit, rebase on the upstream, push)
   projects: Record<string, { icon?: string; img?: string; label?: string }>;
   overrides: Record<string, string | null>; // a terminal session's project, by session id
   integrations: Record<string, IntegrationConfig>;
@@ -177,6 +178,11 @@ export type ActionEntry = Record<string, string | boolean>;
 export type ActionConfig = { actions: ActionMeta[]; config: Record<string, ActionEntry | string> };
 /** The vault's git backup (src-tauri/src/vaultsync.rs): the remote, whether it runs and every how many minutes, and the
  *  last round (`at` in epoch seconds, `commit` null when nothing changed), null before the first. */
+/** The last sync round of each shared vault with sync on (vaultsync.rs `shared_round`), by vault folder. */
+export type SharedSync = Record<
+  string,
+  { at: number; ok: boolean; error: string; commit: string | null; pulled: number }
+>;
 export type VaultSync = {
   remote: string;
   on: boolean;

@@ -18,6 +18,7 @@ import {
   type PhonePairing,
   type Message,
   type Settings,
+  type SharedSync,
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
@@ -93,6 +94,7 @@ export type SettingsState = {
   actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
   // the vault's git backup as saved (null until read) and why the last save failed
   vaultSync: { saved: VaultSync | null; message: Message | null };
+  sharedSync: SharedSync; // the shared vaults' last sync rounds
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -174,6 +176,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   },
   actions: { list: [], entries: {}, errors: {} },
   vaultSync: { saved: null, message: null },
+  sharedSync: {},
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

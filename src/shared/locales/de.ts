@@ -812,6 +812,8 @@ export default {
     "Weitere Vaults, deren Projekte in der Seitenleiste neben deinen stehen, zum Beispiel ein Team-Vault in git. Ein Projekt in zwei Vaults erscheint einmal, mit Daten aus beiden; ein neues Gespräch fragt, in welchem Vault es läuft.",
   "set.extraVaultAdd": "Vault hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
+  "set.extraVaultSync": "Mit dem Team synchronisieren: committen, ihre Änderungen holen, pushen, alle 5 Minuten",
+  "set.extraVaultSynced": "Letzte Synchronisierung {when}: {pulled} Commits geholt, gepusht {pushed}",
   "set.extraVaultMerged": "Auch in deinem eigenen Vault, als ein Projekt angezeigt: {names}",
   "set.title": "Einstellungen",
   "set.vaultHelp":

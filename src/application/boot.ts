@@ -120,6 +120,7 @@ function listenToBackend() {
   backend.onOpenChat(select);
   backend.onMailLink(mailLinkClicked);
   backend.onSettingsChanged(settingsChanged);
+  backend.onVaultPulled(loadSnapshot);
   backend.onMenu(onMenu);
   watchUpdate();
   backend.onOrch(event => {

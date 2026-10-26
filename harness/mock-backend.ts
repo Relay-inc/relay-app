@@ -48,7 +48,7 @@ let settings = vault.settings(fixture);
 // orch-plain: the orchestrator with the workers' crabs switched off (Settings › General)
 if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
 const shared = fixture === "shared";
-if (shared) settings = { ...settings, extraVaults: [vault.TEAM_VAULT] };
+if (shared) settings = { ...settings, extraVaults: [vault.TEAM_VAULT], syncVaults: [vault.TEAM_VAULT] };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 let reminders = [...vault.reminders];
@@ -318,6 +318,8 @@ function handle(cmd: string, a: Args): unknown {
       return "en-GB";
     case "vault_status":
       return vault.vaultStatus(vaultOk);
+    case "shared_sync":
+      return shared ? vault.teamSync : {};
     case "extra_vaults_status":
       return harness.extraVaults ?? [];
     case "detect_vault":

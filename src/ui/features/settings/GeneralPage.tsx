@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { Key } from "../../../shared/i18n";
 import { KEYS, type MapKey, type VaultMap, type VaultStatus } from "../../../domain/workspace/types";
-import type { TerminalApp } from "../../../domain/settings/types";
+import type { SharedSync, TerminalApp } from "../../../domain/settings/types";
+import { agoParts } from "../../../domain/settings/machines";
+import { relativeFormat } from "../../../shared/format";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
   changeAccent,
@@ -12,6 +14,7 @@ import {
   pickVaultFolder,
   addExtraVault,
   removeExtraVault,
+  syncVault,
   saveFavicons,
   saveKeepAwake,
   saveAutoRetry,
@@ -38,6 +41,7 @@ import { PathField } from "./PathField";
 import { PermissionsSection } from "./PermissionsSection";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
+import { StatusLine } from "./StatusLine";
 import { Switch } from "./Switch";
 import { VaultSyncSection } from "./VaultSyncSection";
 
@@ -68,6 +72,8 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const message = useSettingsStore(s => s.message);
   const extraVaults = useSettingsStore(s => s.settings.extraVaults ?? NONE);
   const extraRead = useSettingsStore(s => s.extraVaults);
+  const syncing = useSettingsStore(s => s.settings.syncVaults ?? NONE);
+  const synced = useSettingsStore(s => s.sharedSync);
   // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
   const [map, setMap] = useState(vaultStatus.map);
   const [mapOf, setMapOf] = useState(vaultStatus);
@@ -164,6 +170,13 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
                   </button>
                 </div>
                 {read?.error && <p className="text-xs text-s-warn">{read.error}</p>}
+                <div className="flex items-center gap-2">
+                  <Switch id={`sync-${vault}`} on={syncing.includes(vault)} onToggle={on => syncVault(vault, on)} />
+                  <label htmlFor={`sync-${vault}`} className="text-xs text-s-fg">
+                    {t("set.extraVaultSync")}
+                  </label>
+                </div>
+                {syncing.includes(vault) && <SharedSyncLine last={synced[vault]} />}
                 {!!read?.merged.length && (
                   <p className="text-xs text-s-muted">{t("set.extraVaultMerged", { names: read.merged.join(", ") })}</p>
                 )}
@@ -299,5 +312,19 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
       </Section>
       <PermissionsSection active={active} />
     </>
+  );
+}
+
+/** A shared vault's last sync round: what it took from the team and pushed, or why it stopped (a conflict names the files). */
+function SharedSyncLine({ last }: { last: SharedSync[string] | undefined }) {
+  const { t, locale } = useT();
+  if (!last) return <StatusLine level="off">{t("vs.never")}</StatusLine>;
+  const ago = agoParts(last.at);
+  const when = ago ? relativeFormat(locale, { numeric: "auto" }).format(ago.value, ago.unit) : "";
+  if (!last.ok) return <StatusLine level="warn">{t("vs.failed", { when, error: last.error })}</StatusLine>;
+  return (
+    <StatusLine level="ok">
+      {t("set.extraVaultSynced", { when, pulled: last.pulled, pushed: last.commit ?? "–" })}
+    </StatusLine>
   );
 }

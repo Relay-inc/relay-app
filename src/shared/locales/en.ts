@@ -804,6 +804,8 @@ const en = {
     "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A project in two vaults shows once, with its data from both; a new conversation on it asks which vault it runs in.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
+  "set.extraVaultSync": "Sync with the team: commit, take their changes, push, every 5 minutes",
+  "set.extraVaultSynced": "Last sync {when}: {pulled} commits taken, pushed {pushed}",
   "set.extraVaultMerged": "Also in your own vault, shown as one project: {names}",
   "set.title": "Settings",
   "set.vaultHelp":
