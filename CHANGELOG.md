@@ -13,6 +13,14 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **The context meter stands out**: the percentage next to the model pick gets a ring that fills up. It turns orange from 70% and red from 90%, where it was grey until 90%
+
+### Fixed
+
+- **The context meter counts against the right window after a restart**: a conversation on a 1M model, read again from its transcript, counted against 200k until its next turn ended, so 300k showed as 100% in red. The conversation now keeps the window its last turn reported, and without one, more than 200k counts as a 1M window
+
 ## [0.0.33] - 2026-10-24
 
 ### Fixed

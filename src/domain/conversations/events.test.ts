@@ -205,6 +205,18 @@ test("a transcript shows its compaction boundary and ends with the context it le
   assert.deepEqual(contextOf(history), { used: 9_500, window: 200_000 });
 });
 
+test("a reported window stays with the conversation, and a transcript counts against it", () => {
+  const { next, effects } = run(fresh(), { type: "context", window: 1_000_000 });
+  assert.equal(next.chats["c:1"].window, 1_000_000);
+  assert.deepEqual(effects, [{ kind: "save-chats" }]);
+  assert.deepEqual(run(next, { type: "context", window: 1_000_000 }).effects, []); // the same window saves nothing
+  const history: Parameters<typeof toItems>[0] = [{ type: "context", used: 150_000 }];
+  assert.deepEqual(contextOf(history, 1_000_000), { used: 150_000, window: 1_000_000 });
+  // no window known: more than 200k can only be a 1M model's
+  assert.deepEqual(contextOf(history), { used: 150_000, window: 200_000 });
+  assert.deepEqual(contextOf([{ type: "context", used: 300_000 }]), { used: 300_000, window: 1_000_000 });
+});
+
 test("a transcript's message carries the time of its line, one without a time line has none", () => {
   const history: Parameters<typeof toItems>[0] = [
     { type: "user", text: "first", images: [] },
