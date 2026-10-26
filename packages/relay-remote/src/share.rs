@@ -37,8 +37,8 @@ fn link_msg(pk_hex: &str) -> String { format!("relay-phone-key\n{}", pk_hex.to_a
 pub fn link_proof(link: &str, pk_hex: &str) -> String {
     hex(hmac::sign(&hmac::Key::new(hmac::HMAC_SHA256, link.as_bytes()), link_msg(pk_hex).as_bytes()).as_ref())
 }
-fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
-fn unhex(s: &str) -> Option<Vec<u8>> {
+pub(crate) fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
+pub(crate) fn unhex(s: &str) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) { return None; }
     (0..s.len()).step_by(2).map(|i| s.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect()
 }
