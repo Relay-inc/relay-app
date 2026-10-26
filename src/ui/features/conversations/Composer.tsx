@@ -24,7 +24,7 @@ import {
   commandsOf,
   machineChoice,
   machineRepo,
-  vaultChoice,
+  sharedVault,
 } from "../../../application/conversations/selectors";
 import {
   attach,
@@ -35,7 +35,6 @@ import {
   setAgent,
   moveConversation,
   setMachine,
-  setVault,
   setTyped,
   typeInto,
   unattach,
@@ -220,7 +219,7 @@ export function Composer({ className }: { className: string }) {
   // where the conversation runs or is to start: the machines are asked every few seconds while it shows
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
-  const inVault = useDerived(() => vaultChoice(selected));
+  const inShared = useDerived(() => sharedVault(selected));
   // the repo the agent gets on that machine, next to the pick
   const repoThere = useDerived(() => machineRepo(selected));
   const [moving, setMoving] = useState(false);
@@ -452,16 +451,15 @@ export function Composer({ className }: { className: string }) {
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
-          {hasChat && inVault.value !== null ? (
+          {hasChat && inShared ? (
             <>
-              {/* a project in two vaults: which one a new conversation runs in, the other goes along */}
-              <PickMenu
-                options={inVault.vaults.map(vault => ({ id: vault, name: vault.split("/").pop() || vault }))}
-                value={inVault.value}
-                label={t("composer.vault")}
+              {/* a shared vault's project: the conversation runs in that vault and stays there, no pick */}
+              <span
+                className="px-1.5 py-0.5 rounded-md bg-fill-2 text-xs text-secondary whitespace-nowrap"
                 title={t("composer.vaultHelp")}
-                onPick={setVault}
-              />
+              >
+                {`${t("composer.vault")}: ${inShared}`}
+              </span>
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}

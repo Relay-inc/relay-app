@@ -182,6 +182,8 @@ impl AgentProvider for Claude {
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
             .arg("--replay-user-messages");
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
+        // opts.strict_mcp, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
+        if env.opts["strict_mcp"] == true { cmd.arg("--strict-mcp-config"); }
         if !brain.is_empty() { cmd.env("COMMONWEALTH_BRAIN_DIR", brain); }
         // and which project its notes belong to: Commonwealth stamps `source` from the cwd, which is the vault. The
         // project name is matched against the brain's registry (Commonwealth 0.7, ADR-0047); the repo is the fallback
@@ -251,10 +253,14 @@ impl AgentProvider for Claude {
         let bin = if env.bin == self.default_bin(env.home) { "claude".to_string() } else { q(env.bin) };
         // on another account than ~/.claude: the terminal's claude gets its config folder too
         let on = |dir: &str| if dir == config_dir(env.home, "") { bin.clone() } else { format!("CLAUDE_CONFIG_DIR={} {bin}", q(dir)) };
+        // the fence the app set (opts.deny, opts.strict_mcp) goes along, so the terminal reaches no further than Relay
+        let deny: Vec<String> = env.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(q).collect();
+        let fence = format!("{}{}", if deny.is_empty() { String::new() } else { format!(" --disallowedTools {}", deny.join(" ")) },
+            if env.opts["strict_mcp"] == true { " --strict-mcp-config" } else { "" });
         Some(match t {
-            Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}", q(env.vault), on(&session_dir(env, s))),
+            Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}{fence}", q(env.vault), on(&session_dir(env, s))),
             Terminal::Resume(_) => return None,
-            Terminal::New(name) => format!("cd {} && {} -n {}", q(env.vault), on(&config_dir(env.home, account(env))), q(name)),
+            Terminal::New(name) => format!("cd {} && {} -n {}{fence}", q(env.vault), on(&config_dir(env.home, account(env))), q(name)),
             Terminal::Attach(id) if id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => format!("{bin} attach {id}"),
             Terminal::Attach(_) => return None,
         })
@@ -398,6 +404,12 @@ mod tests {
         assert_eq!(args[at("--disallowedTools") + 1..at("--append-system-prompt")].last().unwrap(), "Edit(//v/x)");
         assert!(args[at("--append-system-prompt") + 1].starts_with(agent_core::envelope::HINT) && args[at("--append-system-prompt") + 1].ends_with("be a worker"));
         assert_eq!(args[at("--settings") + 1], r#"{"permissions":{"ask":["Bash(git push*)"]}}"#);
+        assert!(!args.contains(&"--strict-mcp-config".to_string()));
+        // in a shared vault: the fence's rules among the denies, and only Relay's own MCP servers
+        let opts = json!({"mail": true, "deny": ["Read(//Users/me/my vault/**)"], "strict_mcp": true});
+        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args.contains(&"Read(//Users/me/my vault/**)".to_string()) && args.contains(&"--strict-mcp-config".to_string()));
+        assert!(args[args.iter().position(|a| a == "--mcp-config").unwrap() + 1].contains("relay-mail"));
     }
     #[test]
     fn a_routed_project_gets_its_brain_and_the_commonwealth_tools() {
@@ -441,6 +453,11 @@ mod tests {
         assert_eq!(PROVIDER.terminal(&env(&p), Terminal::New("It's")).unwrap(), "cd '/Users/me/my vault' && claude -n 'It'\\''s'");
         assert_eq!(PROVIDER.terminal(&env(&p), Terminal::Attach("bg1")).unwrap(), "claude attach bg1");
         assert!(PROVIDER.terminal(&env(&p), Terminal::Resume("x; rm")).is_none());
+        // a fenced conversation's terminal gets the same fence
+        let opts = json!({"deny": ["Read(//Users/me/team/**)"], "strict_mcp": true});
+        let e = Env { opts: &opts, ..env(&p) };
+        assert_eq!(PROVIDER.terminal(&e, Terminal::Resume("ab-12")).unwrap(),
+            "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config");
         assert_eq!(transcripts(&env(&p)), "/Users/me/.claude/projects/-Users-me-my-vault");
         let opts = json!({"account": "/Users/me/.claude-work"});
         let work = Env { opts: &opts, ..env(&p) };

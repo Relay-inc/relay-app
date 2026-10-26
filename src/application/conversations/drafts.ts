@@ -9,7 +9,6 @@ export const useDraftsStore = makeStore<DraftsState>(() => ({
   attached: [],
   files: [],
   machine: {},
-  vault: {},
 }));
 // typed in another Relay window
 storage.watch("typed", () =>

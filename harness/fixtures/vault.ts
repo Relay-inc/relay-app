@@ -127,8 +127,8 @@ export const projects = P.map(p => ({
 }));
 export const projectNames = P.map(p => p.name);
 
-/** The shared fixture: a team vault next to the main one. Northwind Portal lives in both: one project, a new
- *  conversation on it picks the vault. */
+/** The shared fixture: a team vault next to the main one. Both have a Northwind Portal: two projects, the team's shown
+ *  as "Northwind Portal (Team vault)", each conversation in its own vault. */
 export const TEAM_VAULT = "/Users/me/Team vault";
 export const teamProjects = [
   {
@@ -141,7 +141,19 @@ export const teamProjects = [
     open_items: ["Review onboarding chapter", "Add the release checklist"],
     stand: null,
     aliases: [],
-    vaults: [TEAM_VAULT],
+    vault: TEAM_VAULT,
+  },
+  {
+    name: "Northwind Portal (Team vault)",
+    context: "Team",
+    state: "Active",
+    last: ymd(NOW - DAY),
+    summary: "Release notes for the portal's next version, written with the whole team.",
+    open: 1,
+    open_items: ["Collect the release notes"],
+    stand: null,
+    aliases: [],
+    vault: TEAM_VAULT,
   },
   {
     name: "Hiring 2027",
@@ -153,7 +165,7 @@ export const teamProjects = [
     open_items: [],
     stand: null,
     aliases: [],
-    vaults: [TEAM_VAULT],
+    vault: TEAM_VAULT,
   },
 ];
 /** The team vault's last sync round: stopped at a conflict in the work-state. */
@@ -167,7 +179,7 @@ export const teamSync = {
     pulled: 0,
   },
 };
-export const teamStatus = [{ vault: TEAM_VAULT, merged: ["Northwind Portal"], error: null }];
+export const teamStatus = [{ vault: TEAM_VAULT, renamed: ["Northwind Portal (Team vault)"], error: null }];
 
 const contextFolder = (context: string) => `Contexts/${context}`;
 export const notes = [

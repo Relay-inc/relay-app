@@ -355,9 +355,7 @@ function handle(cmd: string, a: Args): unknown {
     case "snapshot": {
       const snap = vault.snapshot(reminders);
       if (!shared) return snap;
-      const both = (p: { name: string }) =>
-        p.name === "Northwind Portal" ? [vault.VAULT, vault.TEAM_VAULT] : [vault.VAULT];
-      const own = snap.projects.map(p => ({ ...p, vaults: both(p) }));
+      const own = snap.projects.map(p => ({ ...p, vault: vault.VAULT }));
       return { ...snap, projects: [...own, ...vault.teamProjects], extraVaults: vault.teamStatus };
     }
     case "vault_notes":
@@ -1105,7 +1103,7 @@ const harness = {
   autoReply: true,
   echo: true,
   /** What `extra_vaults_status` answers: the shared vaults as the last snapshot read them. */
-  extraVaults: (shared ? vault.teamStatus : []) as { vault: string; merged: string[]; error: string | null }[],
+  extraVaults: (shared ? vault.teamStatus : []) as { vault: string; renamed: string[]; error: string | null }[],
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,
   /** What `pick_files` answers (the + button's dialog): [] is cancelled. */

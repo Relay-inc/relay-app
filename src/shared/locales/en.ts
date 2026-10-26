@@ -839,12 +839,12 @@ const en = {
   "rem.none": "No reminders.",
   "set.extraVaults": "Shared vaults",
   "set.extraVaultsHelp":
-    "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A project in two vaults shows once, with its data from both; a new conversation on it asks which vault it runs in.",
+    "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A conversation stays in the vault of its project: it cannot read or edit your other vaults, and in a shared vault your own MCP servers and claude.ai connectors are off.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
   "set.extraVaultSync": "Sync with the team: commit, take their changes, push, every 5 minutes",
   "set.extraVaultSynced": "Last sync {when}: {pulled} commits taken, pushed {pushed}",
-  "set.extraVaultMerged": "Also in your own vault, shown as one project: {names}",
+  "set.extraVaultRenamed": "Same name as a project in another vault, shown as: {names}",
   "set.title": "Settings",
   "set.vaultHelp":
     "The folder with your Obsidian vault. Conversations start in it, and the sidebar reads work-state and reminders from it.",
@@ -1493,13 +1493,15 @@ const en = {
   "composer.onMachineHelp": "This conversation runs on another machine and keeps running when this Mac is closed.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "The vault this conversation runs in, with its rules. The project's other vault goes along, to read and write.",
+    "This conversation runs in this shared vault and stays there: it cannot read or edit your other vaults, and your own MCP servers and claude.ai connectors are off.",
   "composer.runOn": "Runs on",
   "composer.thisMac": "This Mac",
   "composer.available": "available",
   "composer.unavailable": "not available",
   "composer.machineOnlyClaude": "Only Claude Code runs on a work machine.",
   "composer.machineNoMail": "A conversation about a mail stays on this Mac: the mail tools run here.",
+  "composer.machineSharedVault":
+    "A conversation in a shared vault stays on this Mac: a work machine has your main vault only.",
   "mc.intro":
     "A conversation can run on a machine and keeps running when this Mac is closed: pick the machine next to the model before its first message, or make it the default below. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here.",
   "mc.runDefaultTitle": "Where conversations run",

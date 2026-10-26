@@ -141,14 +141,16 @@ pub fn design_hide(app: AppHandle) -> Result<(), String> {
 /// A project's saved Design link, "" for none.
 #[tauri::command]
 pub fn design_link(state: State<App>, project: String) -> Result<String, String> {
-    Ok(relay_config::design(&crate::team_vault(&state, &project)?, &project))
+    let (v, name) = crate::project_home(&state, &project)?;
+    Ok(relay_config::design(&v, &name))
 }
 /// Save a project's Design link ("" removes it).
 #[tauri::command]
 pub fn set_design_link(state: State<App>, project: String, url: String) -> Result<(), String> {
     let url = url.trim();
     if !url.is_empty() { claude_url(url)?; }
-    relay_config::set_design(&crate::team_vault(&state, &project)?, &project, url)
+    let (v, name) = crate::project_home(&state, &project)?;
+    relay_config::set_design(&v, &name, url)
 }
 
 // ---------- the relay-design MCP server: tools for a conversation's agent on the Design drawer's canvas
@@ -455,7 +457,8 @@ fn run(app: &AppHandle, key: &str, pid: u32, name: &str, args: &Value) -> Result
     match name {
         "design_read" | "design_snapshot" | "design_prompt" => {
             let (project, view) = open(app, key, None)?;
-            if relay_config::design(&crate::team_vault(&st, &project)?, &project).is_empty() {
+            let (v, in_vault) = crate::project_home(&st, &project)?;
+            if relay_config::design(&v, &in_vault).is_empty() {
                 return Err(format!("{project} has no Design link yet: design_create starts a design, or the user pastes a claude.ai link in the Design drawer"));
             }
             match name {
@@ -469,10 +472,10 @@ fn run(app: &AppHandle, key: &str, pid: u32, name: &str, args: &Value) -> Result
         "design_create" => {
             let text_in = s("prompt").ok_or("prompt is empty")?;
             let (project, view) = open(app, key, Some(START))?;
-            let vault = crate::team_vault(&st, &project)?;
-            if !relay_config::design(&vault, &project).is_empty() { return Err(format!("{project} already has a design: use design_prompt")); }
+            let (vault, in_vault) = crate::project_home(&st, &project)?;
+            if !relay_config::design(&vault, &in_vault).is_empty() { return Err(format!("{project} already has a design: use design_prompt")); }
             let url = create(&view)?;
-            relay_config::set_design(&vault, &project, &url)?;
+            relay_config::set_design(&vault, &in_vault, &url)?;
             app.emit("design-link", json!({"project": project, "url": url})).ok();
             prompt(&view, &text_in).map(|mut v| { v["design"] = json!(url); text(v.to_string()) })
         }

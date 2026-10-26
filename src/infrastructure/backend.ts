@@ -171,7 +171,6 @@ type SendArgs = {
   effort: string;
   provider: string;
   machine: string | null; // where a new conversation runs: "" this Mac, a machine id, null the default
-  vault: string | null; // the vault a new conversation runs in, of its project's; null the project's own
   /** The project to tell the agent about; the backend puts the project line in front of `text`. */
   told: string | null;
   /** The conversation's project, sent on every message so the team brain files what it learns under it. */

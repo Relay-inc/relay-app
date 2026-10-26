@@ -846,12 +846,12 @@ export default {
   "rem.none": "Geen reminders.",
   "set.extraVaults": "Gedeelde vaults",
   "set.extraVaultsHelp":
-    "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. Een project in twee vaults staat er één keer, met gegevens uit beide; een nieuw gesprek erover vraagt in welke vault het draait.",
+    "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. Een gesprek blijft in de vault van zijn project: het kan je andere vaults niet lezen of wijzigen, en in een gedeelde vault staan je eigen MCP-servers en claude.ai-connectors uit.",
   "set.extraVaultAdd": "Vault toevoegen…",
   "set.extraVaultRemove": "{name} verwijderen",
   "set.extraVaultSync": "Synchroniseren met het team: committen, hun wijzigingen ophalen, pushen, elke 5 minuten",
   "set.extraVaultSynced": "Laatste sync {when}: {pulled} commits opgehaald, gepusht {pushed}",
-  "set.extraVaultMerged": "Ook in je eigen vault, getoond als één project: {names}",
+  "set.extraVaultRenamed": "Zelfde naam als een project in een andere vault, getoond als: {names}",
   "set.title": "Instellingen",
   "set.vaultHelp":
     "De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",
@@ -1498,13 +1498,15 @@ export default {
   "composer.onMachineHelp": "Dit gesprek loopt op een andere machine en blijft draaien als deze Mac dicht is.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "De vault waarin dit gesprek draait, met zijn regels. De andere vault van het project gaat mee, om te lezen en te schrijven.",
+    "Dit gesprek loopt in deze gedeelde vault en blijft daar: het kan je andere vaults niet lezen of wijzigen, en je eigen MCP-servers en claude.ai-connectors staan uit.",
   "composer.runOn": "Loopt op",
   "composer.thisMac": "Deze Mac",
   "composer.available": "beschikbaar",
   "composer.unavailable": "niet bereikbaar",
   "composer.machineOnlyClaude": "Enkel Claude Code loopt op een werkmachine.",
   "composer.machineNoMail": "Een gesprek over een mail blijft op deze Mac, want de mailtools draaien hier.",
+  "composer.machineSharedVault":
+    "Een gesprek in een gedeelde vault blijft op deze Mac: een werkmachine heeft enkel je hoofdvault.",
   "mc.intro":
     "Een gesprek kan op een machine lopen en blijft draaien als deze Mac dicht is: kies de machine naast het model vóór het eerste bericht, of maak ze hieronder de standaard. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je vault, zodat gesprekken daar weten wat Claude hier weet.",
   "mc.runDefaultTitle": "Waar gesprekken draaien",

@@ -128,14 +128,16 @@ const VIEWS = {
   },
   // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
   // "harbor-crm · on Server" next to the control (PR #217)
-  // a new conversation about Northwind Portal, which lives in the main vault and the team vault: the Vault pick
+  // a new conversation about the team vault's Northwind Portal: the Vault label, no pick (it stays in that vault)
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
-    await byText(page, "Northwind Portal").hover();
-    await page.getByRole("button", { name: "New conversation about Northwind Portal", exact: true }).click();
+    await page.getByPlaceholder("Search").fill("northwind");
+    await byText(page, "Northwind Portal (Team vault)").hover();
+    await page
+      .getByRole("button", { name: "New conversation about Northwind Portal (Team vault)", exact: true })
+      .click();
     await settle(page);
-    await page.getByRole("button", { name: "Vault" }).locator("visible=true").first().click();
-    await waitText("Team vault");
+    await waitText("Vault: Team vault");
   },
   "composer-repo-chip": async () => {
     await open(page, server.url, { fixture: "github" });
@@ -995,7 +997,7 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // a shared vault under General: its path, Remove, and the project the main vault has too (shown as one)
+  // a shared vault under General: its path, Remove, and the project shown under another name (the main vault has one)
   "settings-shared-vaults": async () => {
     await settingsPage("General", undefined, "shared");
     await intoView("Shared vaults");

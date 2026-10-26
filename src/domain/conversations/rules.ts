@@ -178,6 +178,13 @@ export function decisionOf(request: Pending, choice: CardChoice): Decision | nul
 /** Whether a message sent during a turn waits below the conversation: only when the agent says it took the message up
  *  (`picked`), else it goes into the conversation at once. */
 export const waitsForPickup = (caps: Pick<Caps, "picked"> | undefined) => !!caps?.picked;
-/** Why a conversation cannot run on a work machine: its agent cannot, or it started with a mail. */
-export const machineBlock = (caps: Pick<Caps, "remote"> | undefined, fromMail: boolean): Key | null =>
-  !caps?.remote ? "composer.machineOnlyClaude" : fromMail ? "composer.machineNoMail" : null;
+/** Why a conversation cannot run on a work machine: its agent cannot, it started with a mail, or it is in a shared
+ *  vault (a machine has the main vault's mirror only). */
+export const machineBlock = (caps: Pick<Caps, "remote"> | undefined, fromMail: boolean, shared = false): Key | null =>
+  !caps?.remote
+    ? "composer.machineOnlyClaude"
+    : fromMail
+      ? "composer.machineNoMail"
+      : shared
+        ? "composer.machineSharedVault"
+        : null;

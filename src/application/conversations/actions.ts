@@ -27,7 +27,6 @@ import {
   displayTitle,
   label,
   machineChoice,
-  vaultChoice,
   machineRepo,
   projectOf,
   selectedProject,
@@ -233,7 +232,6 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       provider: chatAgent(key),
       // where it runs, as the composer shows it; the backend only reads it at the first spawn
       machine: machineChoice(key).value,
-      vault: vaultChoice(key).value,
       told: told || null,
       about: conversation?.project ?? null,
       context: context || null,
@@ -373,13 +371,6 @@ export async function answerRepoWork(choice: "push" | "move" | null) {
   // moved, or failed with the error under the log: the bar goes, unless the move was refused again (a new bar)
   set(draft => {
     if (draft.repoWork[key]?.busy) delete draft.repoWork[key];
-  });
-}
-/** The vault the open conversation is to run in, before it starts. */
-export function setVault(vault: string) {
-  const key = selected();
-  setDrafts(draft => {
-    draft.vault[key] = vault;
   });
 }
 /** Where the open conversation is to run, before it starts: "" this Mac, or a machine id. */

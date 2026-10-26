@@ -84,11 +84,10 @@ export const initialConversations = (stored: {
 /** The composer's drafts, kept apart from the conversations so a keystroke only changes this small state: what is
  *  typed but not sent per conversation (survives switching and closing the app), and the images waiting for the
  *  next send with the files attached by their path (`files`), and where a conversation without a session yet is to
- *  run (`machinePick`) and in which vault (`vaultChoice`). */
+ *  run (`machinePick`). */
 export type DraftsState = {
   typed: Record<string, string>;
   attached: Img[];
   files: string[];
   machine: Record<string, string>;
-  vault: Record<string, string>;
 };

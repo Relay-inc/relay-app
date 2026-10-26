@@ -855,12 +855,12 @@ export default {
   "rem.none": "Aucun rappel.",
   "set.extraVaults": "Vaults partagés",
   "set.extraVaultsHelp":
-    "D'autres vaults dont les projets s'affichent dans la barre latérale à côté des vôtres, par exemple un vault d'équipe dans git. Un projet présent dans deux vaults s'affiche une fois, avec les données des deux ; une nouvelle conversation demande dans quel vault elle tourne.",
+    "D'autres coffres dont les projets s'affichent dans la barre latérale à côté des vôtres, un coffre d'équipe dans git par exemple. Une conversation reste dans le coffre de son projet : elle ne peut ni lire ni modifier vos autres coffres, et dans un coffre partagé vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
   "set.extraVaultAdd": "Ajouter un vault…",
   "set.extraVaultRemove": "Retirer {name}",
   "set.extraVaultSync": "Synchroniser avec l'équipe : commit, récupérer leurs changements, push, toutes les 5 minutes",
   "set.extraVaultSynced": "Dernière synchro {when} : {pulled} commits récupérés, poussé {pushed}",
-  "set.extraVaultMerged": "Aussi dans votre propre vault, affichés comme un seul projet : {names}",
+  "set.extraVaultRenamed": "Même nom qu'un projet d'un autre coffre, affiché comme : {names}",
   "set.title": "Réglages",
   "set.vaultHelp":
     "Le dossier de votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",
@@ -1519,13 +1519,15 @@ export default {
   "composer.onMachineHelp": "Cette conversation tourne sur une autre machine et continue quand ce Mac est fermé.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "Le vault où tourne cette conversation, avec ses règles. L'autre vault du projet suit, en lecture et écriture.",
+    "Cette conversation tourne dans ce coffre partagé et y reste : elle ne peut ni lire ni modifier vos autres coffres, et vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
   "composer.runOn": "S'exécute sur",
   "composer.thisMac": "Ce Mac",
   "composer.available": "disponible",
   "composer.unavailable": "injoignable",
   "composer.machineOnlyClaude": "Seul Claude Code s'exécute sur une machine de travail.",
   "composer.machineNoMail": "Une conversation sur un e-mail reste sur ce Mac : les outils de courrier tournent ici.",
+  "composer.machineSharedVault":
+    "Une conversation dans un coffre partagé reste sur ce Mac : une machine de travail n'a que votre coffre principal.",
   "mc.intro":
     "Une conversation peut s'exécuter sur une machine et continue quand ce Mac est fermé : choisissez la machine à côté du modèle avant son premier message, ou faites-en la valeur par défaut ci-dessous. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici.",
   "mc.runDefaultTitle": "Où s'exécutent les conversations",

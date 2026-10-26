@@ -179,8 +179,10 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
                   </label>
                 </div>
                 {syncing.includes(vault) && <SharedSyncLine last={synced[vault]} />}
-                {!!read?.merged.length && (
-                  <p className="text-xs text-s-muted">{t("set.extraVaultMerged", { names: read.merged.join(", ") })}</p>
+                {!!read?.renamed.length && (
+                  <p className="text-xs text-s-muted">
+                    {t("set.extraVaultRenamed", { names: read.renamed.join(", ") })}
+                  </p>
                 )}
               </div>
             );
