@@ -1,5 +1,5 @@
-Geef een korte titel (2 tot 5 woorden, in de taal van het bericht, geen aanhalingstekens, geen punt) voor een gesprek dat begint met het bericht hieronder. Antwoord enkel met de titel.
+Give a short title (2 to 5 words, no quotes, no full stop) for a conversation that starts with the message below. Write the title in the language of the message: an English message gets an English title, a Dutch message a Dutch title. Reply with the title only.
 
-<bericht>
+<message>
 {{text}}
-</bericht>
+</message>

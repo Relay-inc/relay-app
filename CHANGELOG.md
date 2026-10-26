@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **A conversation's title is in the language you wrote in**: the generated title came out in Dutch for English messages too, because the prompt asking for it was written in Dutch. The prompt is English now and names the rule
+
 ## [0.0.33] - 2026-10-24
 
 ### Fixed
