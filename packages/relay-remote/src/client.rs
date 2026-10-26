@@ -239,12 +239,12 @@ impl sync::Remote for RemoteRoot {
     fn get(&self, path: &str) -> Result<Vec<u8>, String> {
         self.c.call_bin(json!({"op": "sync_get", "root": self.root, "path": path}), None, Some(MAX_REPLY), Duration::ZERO).map(|(_, b)| b)
     }
-    fn put(&self, path: &str, data: &[u8], mtime: i64) -> Result<(), String> {
-        self.c.call_bin(json!({"op": "sync_put", "root": self.root, "path": path, "len": data.len(), "mtime": mtime}), Some(data.to_vec()), None, Duration::ZERO).map(|_| ())
+    fn put(&self, path: &str, data: &[u8], mtime: i64, expect: &str) -> Result<(), String> {
+        self.c.call_bin(json!({"op": "sync_put", "root": self.root, "path": path, "len": data.len(), "mtime": mtime, "expect": expect}), Some(data.to_vec()), None, Duration::ZERO).map(|_| ())
     }
-    fn put_many(&self, files: &[(String, Vec<u8>, i64)]) -> Result<Vec<Option<String>>, String> {
-        let head: Vec<Value> = files.iter().map(|(p, d, m)| json!({"path": p, "len": d.len(), "mtime": m})).collect();
-        let body: Vec<u8> = files.iter().flat_map(|(_, d, _)| d.iter().copied()).collect();
+    fn put_many(&self, files: &[(String, Vec<u8>, i64, String)]) -> Result<Vec<Option<String>>, String> {
+        let head: Vec<Value> = files.iter().map(|(p, d, m, x)| json!({"path": p, "len": d.len(), "mtime": m, "expect": x})).collect();
+        let body: Vec<u8> = files.iter().flat_map(|(_, d, ..)| d.iter().copied()).collect();
         let (v, _) = self.c.call_bin(json!({"op": "sync_put_many", "root": self.root, "files": head}), Some(body), None, Duration::ZERO)?;
         Ok(files.iter().map(|(p, ..)| v["errors"][p].as_str().map(String::from)).collect())
     }

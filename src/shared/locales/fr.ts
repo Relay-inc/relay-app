@@ -1709,6 +1709,16 @@ export default {
   "mc.mirrorConflicts_one": "{n} conflit. Les deux versions ont été conservées :",
   "mc.mirrorConflicts_other": "{n} conflits. Les deux versions ont été conservées :",
   "mc.mirrorConflict": "copie en conflit : {path}",
+  "mc.mirrorHeld_one":
+    "{n} suppression retenue : plus d'un cinquième des fichiers disparaîtrait d'un coup. Rien n'est supprimé avant votre choix :",
+  "mc.mirrorHeld_other":
+    "{n} suppressions retenues : plus d'un cinquième des fichiers disparaîtrait d'un coup. Rien n'est supprimé avant votre choix :",
+  "mc.mirrorHeldMore": "et {n} de plus",
+  "mc.mirrorHeldRestore": "Les restaurer",
+  "mc.mirrorHeldDelete": "Les supprimer",
+  "mc.mirrorHeldAllowed":
+    "Elles partent au prochain passage. Ce qui est supprimé sur ce Mac reste 30 jours dans la corbeille du miroir.",
+  "mc.mirrorHeldRestored": "Ils reviennent au prochain passage.",
   "nav.brain": "Cerveau",
   "nav.brainPending": "Notes en attente de revue",
   "brain.pick": "Choisis une note pour la relire",

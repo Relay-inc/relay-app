@@ -107,6 +107,12 @@ const VIEWS = {
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
+  // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
+  "settings-machines-mirror-held": async () => {
+    await settingsPage("Machines", null, "mirror");
+    await waitText("9 deletions held");
+    await intoView("Restore them");
+  },
   // Settings › Machines, a machine online with GitHub connected and three repos: clean, 2 commits not pushed, work
   // not committed
   "settings-machines-github": async () => {

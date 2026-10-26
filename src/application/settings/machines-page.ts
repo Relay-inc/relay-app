@@ -195,6 +195,17 @@ export async function pollMirrors() {
     });
   }
 }
+/** The deletes a mirror holds back: through in its next round, or undone. Says which until that round. */
+export async function settleHeldDeletes(machine: Machine, allow: boolean) {
+  mirrorMessage(machine.id, "");
+  try {
+    await (allow ? backend.mirrorAllowDeletes(machine.id) : backend.mirrorRestoreHeld(machine.id));
+    mirrorMessage(machine.id, t(allow ? "mc.mirrorHeldAllowed" : "mc.mirrorHeldRestored"), true);
+    pollMirrors();
+  } catch (error) {
+    mirrorMessage(machine.id, String(error));
+  }
+}
 /** Saves the excluded folders. True when it worked. */
 async function saveExclude(machine: Machine, exclude: string[]) {
   mirrorMessage(machine.id, "");

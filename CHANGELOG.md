@@ -26,6 +26,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **The mirror never overwrites an agent's edit on a machine**: a file an agent there wrote after a round compared both sides was pushed over without a trace. Now the machine refuses that write and the next round keeps both versions, with a conflict copy. Many deletes at once are held: when a round would delete more than a fifth of the vault on either side (at least 6 files), nothing goes until you choose Restore them or Delete them in Settings › Machines. A file the mirror deletes on this Mac, or replaces with a fifth of itself, is first kept 30 days in the mirror's trash (`mirror-trash` in Relay's app data). What an agent writes there is sealed every second instead of every 5 (#276)
 - **A vault note fills the drawer**: the note stayed 520 px wide in a wider drawer, and a table's narrow columns broke their words per letter ("Poi nts"). The note now takes the drawer's width and a column is never narrower than its longest word, also in a conversation's tables (#271)
 - **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead (#265)
 

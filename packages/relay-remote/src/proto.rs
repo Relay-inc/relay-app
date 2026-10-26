@@ -5,7 +5,8 @@
 //! Requests: `info`, `list` (the brokers that run), `kill {key,pid}`, `pending` (open permission cards), `answer
 //! {id,decision}`, `history {sid,from,cwd}`, `exists {path}`, `launch {meta,spec}`, `attach {key}`, the mirror's
 //! `unlock {key}`, `sync_manifest {root}`, `sync_get {root,path}` (the reply line has `len`, the bytes follow),
-//! `sync_put {root,path,len,mtime}` (the bytes follow the request line), `sync_put_many {root,files:[{path,len,mtime}]}`
+//! `sync_put {root,path,len,mtime,expect}` (the bytes follow the request line; `expect` the hash the file there must
+//! still have, "" absent, left out by an older app: no check), `sync_put_many {root,files:[{path,len,mtime,expect}]}`
 //! (the files' bytes follow one after the other, the reply has `errors` per path), `sync_delete {root,path,hash}`, `wipe`, moving
 //! a conversation's `session_get {sid}` (len and bytes like sync_get) and `session_put {sid,cwd,len}` (bytes follow),
 //! `update {version,sha256,len}` (relay-server's binary follows, the server goes on in it after the reply),

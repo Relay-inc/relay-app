@@ -1699,6 +1699,16 @@ export default {
   "mc.mirrorConflicts_one": "{n} Konflikt. Beide Versionen wurden behalten:",
   "mc.mirrorConflicts_other": "{n} Konflikte. Beide Versionen wurden behalten:",
   "mc.mirrorConflict": "Konfliktkopie: {path}",
+  "mc.mirrorHeld_one":
+    "{n} Löschung zurückgehalten: mehr als ein Fünftel der Dateien würde auf einmal verschwinden. Nichts wird gelöscht, bis du wählst:",
+  "mc.mirrorHeld_other":
+    "{n} Löschungen zurückgehalten: mehr als ein Fünftel der Dateien würde auf einmal verschwinden. Nichts wird gelöscht, bis du wählst:",
+  "mc.mirrorHeldMore": "und {n} weitere",
+  "mc.mirrorHeldRestore": "Wiederherstellen",
+  "mc.mirrorHeldDelete": "Löschen",
+  "mc.mirrorHeldAllowed":
+    "Sie werden in der nächsten Runde gelöscht. Was auf diesem Mac gelöscht wird, bleibt 30 Tage im Papierkorb des Spiegels.",
+  "mc.mirrorHeldRestored": "Sie kommen in der nächsten Runde zurück.",
   "nav.brain": "Brain",
   "nav.brainPending": "Notizen zur Prüfung",
   "brain.pick": "Wähle eine Notiz, um sie zu prüfen",

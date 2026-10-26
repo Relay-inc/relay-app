@@ -270,9 +270,9 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
-  // online, connected to GitHub, with three repos (machineGit)
+  // online, connected to GitHub, with three repos (machineGit); mirror: online, its mirror holding deletes back
   const machines =
-    fixture === "machines" || fixture === "phone" || fixture === "github"
+    fixture === "machines" || fixture === "phone" || fixture === "github" || fixture === "mirror"
       ? {
           machines: [
             {
