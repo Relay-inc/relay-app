@@ -397,6 +397,9 @@ fn answer(view: &Webview, q: &Value, text: &str) -> Result<(), String> {
     let submit = format!(r#"(() => {{ {QUESTION}
       const o = q();
       if (!o || o.key !== {}) return "advanced";
+      // a card's Submit sends all its questions: before the last one, the click moves on by itself (slowly in a background drawer)
+      const at = (o.step || "").match(/(\d+) of (\d+)/);
+      if (at && +at[1] < +at[2]) return "no button";
       if (!o.submit) return "no button";
       if (o.submit.disabled || o.submit.getAttribute("aria-disabled") === "true") return "disabled";
       o.submit.click(); return "sent"; }})()"#, json!(q["key"]));
