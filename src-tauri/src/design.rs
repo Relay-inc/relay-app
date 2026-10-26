@@ -311,7 +311,9 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
 /// `[role="group"]`, labelled by a `<bdi>` after their number; the question is a `<bdi>` above them; "Something else" is a
 /// text field in a `<form>` without a submit button (Enter submits it), next to "Skip", which is never clicked.
 /// A multi-select form has `span[role="checkbox"]` options, each with a hidden checkbox input beside it (skipped), and an
-/// icon-only `button[aria-label="Submit"]`.
+/// icon-only `button[aria-label="Submit"]`. A card with several questions shows one at a time ("Question 1 of 3", Previous and
+/// Next buttons); picking an option moves on to the next. `step` is that line.
+/// ponytail: `step` matches claude.ai's English text only.
 const QUESTION: &str = r#"const q = () => {
   const vis = e => e.getBoundingClientRect().width > 0 && !e.closest('[data-testid="chat-input"],[role="menu"]');
   const opts = [...document.querySelectorAll('[role="radio"],[role="checkbox"],[role="option"],input[type="radio"],input[type="checkbox"],[role="group"] button[aria-pressed]')].filter(vis)
@@ -337,7 +339,8 @@ const QUESTION: &str = r#"const q = () => {
     g.multiple ||= o.matches('[role="checkbox"],input[type="checkbox"]') || host.getAttribute("aria-multiselectable") === "true" || /one or more|all that apply|multiple/i.test(root.innerText.slice(0, 500));
   }
   const submit = [...root.querySelectorAll("button")].filter(b => !opts.some(o => o.contains(b)) && /^(submit|send|continue|next|done|answer|verstuur|verzend|doorgaan|volgende|klaar|beantwoord)/i.test(b.innerText.trim() || b.getAttribute("aria-label") || "")).pop();
-  return { root, opts, submit, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
+  const step = (root.innerText.match(/Question \d+ of \d+/) || [])[0];
+  return { root, opts, submit, step, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
 };"#;
 
 /// What the chat shows now: the assistant's messages, whether a turn runs and the open question, if any.
@@ -345,7 +348,7 @@ fn state(view: &Webview) -> Result<Value, String> {
     let js = format!(r#"(() => {{ {QUESTION}
       const m = [...document.querySelectorAll('[data-testid="assistant-message"]')], o = q();
       return {{ count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"],button[aria-label="Stop response"]'), text: m.length ? m[m.length - 1].innerText : "",
-        question: o && {{ form: o.form, questions: o.groups, free_text: o.free_text, submit: o.submit && (o.submit.innerText.trim() || o.submit.getAttribute("aria-label")) }} }}; }})()"#);
+        question: o && {{ form: o.form, step: o.step, questions: o.groups, free_text: o.free_text, submit: o.submit && (o.submit.innerText.trim() || o.submit.getAttribute("aria-label")) }} }}; }})()"#);
     eval(view, &js)
 }
 
@@ -460,7 +463,7 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
         if r["question"].is_object() {
             if answered.as_deref() != r["question"]["form"].as_str() {
                 return Ok(Some(json!({ "waiting_for_answer": true, "untrusted_question": r["question"], "untrusted_answer": cut(&r["text"]),
-                    "note": "Claude Design asks a question and waits for the answer: call design_prompt with it (an option's label per line, and/or free text), it answers instead of sending a new message." })));
+                    "note": "Claude Design asks a question and waits for the answer: call design_prompt with it (an option's label per line, and/or free text), it answers instead of sending a new message. With a step (Question 1 of 3), answer only this question: the next one comes back after." })));
             }
             if sent.elapsed() > Duration::from_secs(15) { return Err("Claude Design still shows the same question: it did not take the answer".into()); }
         }
