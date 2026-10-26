@@ -686,8 +686,12 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude");
     let (Some(sid), Some(p)) = (sid, p) else { return Ok(()) };
     if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(()); }
-    let eb = env_for(&app, &state, p, &key);
+    let mut eb = env_for(&app, &state, p, &key);
     if eb.vault.is_empty() { return Ok(()); }
+    // fenced in like the conversation it closes: it runs unasked, in that conversation's vault, on what was said there
+    let dir = eb.vault.clone();
+    fence_in(&app, &state, &mut eb.opts, &dir);
+    let deny: Vec<String> = eb.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
     // on the account the session was recorded on, its transcript is there
     let account = account_of(&state, p, &key, "sonnet");
     let prompt = CAPTURE_PROMPT;
@@ -695,6 +699,7 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
         let mut c = Command::new(&eb.bin);
         c.args(["-p", "--resume", &sid, "--fork-session", "--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
                 "--tools", "Read,Glob,Grep,Edit,Write", "--allowedTools", "Read,Glob,Grep,Edit,Write"])
+            .args(if deny.is_empty() { vec![] } else { std::iter::once("--disallowedTools".to_string()).chain(deny).collect() })
             .current_dir(&eb.vault).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }

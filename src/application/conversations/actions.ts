@@ -682,6 +682,11 @@ async function saveProjectFields(next: Settings, project: string, fields: Projec
 /** The open conversation to `project`, and the icon and name of the project it was under. `img` an image data url,
  *  else `emoji`; empty both resets the icon so the favicon run guesses again. Resolves with an error to show, or "". */
 export async function saveProjectPanel(project: string | null, fields?: ProjectFields): Promise<string> {
+  // a started conversation keeps running in its vault: it cannot follow a project into another one (as moveChat)
+  const key = selected();
+  const from = cs().chats[key]?.project ?? null;
+  if (!isTerminal(key) && cs().sidOf[key] && changesVault(useWorkspaceStore.getState().snap, from, project))
+    return t("toast.otherVault");
   const next = structuredClone(settings());
   const iconProject = selectedProject(); // the project the icon fields belong to
   assignProject(next, project);
