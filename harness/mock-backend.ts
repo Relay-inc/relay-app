@@ -361,9 +361,11 @@ function handle(cmd: string, a: Args): unknown {
       return { ...snap, projects: [...own, ...vault.teamProjects], extraVaults: vault.teamStatus };
     }
     case "vault_notes":
-      return { root: vault.VAULT, notes: vault.notes };
-    case "read_note":
-      return vault.noteText(a.target);
+      return { root: vault.VAULT, notes: shared ? [...vault.notes, ...vault.teamNotes] : vault.notes };
+    case "read_note": {
+      const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
+      return team ? { ...vault.noteText(a.target), path: team } : vault.noteText(a.target);
+    }
     case "project_icons":
       return vault.projectIcons();
     case "project_repos":

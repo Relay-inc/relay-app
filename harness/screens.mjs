@@ -869,6 +869,18 @@ const VIEWS = {
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
+  // a note of the team vault, linked from a conversation, in the drawer: its absolute path in the bar
+  "drawer-note-shared": async () => {
+    await open(page, server.url, { fixture: "shared", sel: keys.long });
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "text", text: "The handbook is in [[Team Handbook]].", delta: true });
+      window.__harness.emitAgent(key, { type: "turn_end" });
+    }, keys.long);
+    await waitText("The handbook is in");
+    await page.locator("a.vlink", { hasText: "Team Handbook" }).last().click();
+    await waitText("Archive: old repo");
+    await settle(page, 300);
+  },
   // the same note with its properties unfolded under the title (the doc panel design)
   "drawer-note-properties": async () => {
     await VIEWS["drawer-note"]();

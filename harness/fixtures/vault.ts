@@ -167,6 +167,8 @@ export const teamSync = {
     pulled: 0,
   },
 };
+/** The team vault's notes, absolute as `vault_notes` gives a shared vault's. */
+export const teamNotes = [`${TEAM_VAULT}/Contexts/Team/Projects/Team Handbook.md`, `${TEAM_VAULT}/Calendar/2026-10-01 Standup.md`];
 export const teamStatus = [{ vault: TEAM_VAULT, merged: ["Northwind Portal"], error: null }];
 
 const contextFolder = (context: string) => `Contexts/${context}`;

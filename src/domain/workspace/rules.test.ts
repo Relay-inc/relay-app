@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { noteLinks, noteProperties, noteTitle, notesIndex } from "./rules.ts";
+import { noteKnown, noteLinks, noteProperties, noteTitle, notesIndex } from "./rules.ts";
 
 test("noteProperties: values, lists, inline lists and quotes, empty keys left out", () => {
   const yaml = [
@@ -41,4 +41,16 @@ test("noteLinks: existing notes once, by path or name, not the note itself", () 
     { target: "Spec", label: "Spec", folder: "Docs" },
     { target: "B/Plan", label: "B/Plan", folder: "B" },
   ]);
+});
+
+test("a shared vault's notes: known by name, by its path and by a path inside it", () => {
+  const index = notesIndex("/v", ["Mine.md", "/team/Contexts/Work/Projects/Spardex.md", "/team/Calendar/Standup.md"]);
+  assert.ok(noteKnown(index, "/v", "Spardex"));
+  assert.ok(noteKnown(index, "/v", "/team/Calendar/Standup.md"));
+  assert.ok(noteKnown(index, "/v", "Contexts/Work/Projects/Spardex"), "a path-style link in a team note");
+  assert.ok(!noteKnown(index, "/v", "Contexts/Work/Projects/Other"));
+  assert.deepEqual(
+    noteLinks(index, "/v", "Mine.md", "[[Calendar/Standup]] and [[Spardex|the project]]").map(link => link.label),
+    ["Calendar/Standup", "the project"],
+  );
 });
