@@ -8,8 +8,12 @@
 //! agents' permission requests travel over their own pipe to the app (agent-claude's permission.rs); the cards in this
 //! machine's pending folder, from before that, are listed and answered on request.
 //!
+//! Shared vaults (vaults.rs) live here too, as ciphertext only: a device that joined one through an invite link is a
+//! vault-only client, it may only work with its vaults.
+//!
 //! Files in the data folder: identity.{crt,key}.der, clients.json, pairing.json (while a code is open), serve.json (the
-//! port the running server listens on), pending/, and per device its sealed mirror and GitHub token (mirror/<device>/).
+//! port the running server listens on), pending/, per device its sealed mirror and GitHub token (mirror/<device>/), and
+//! per shared vault its members, invites and records (vaults/<id>/).
 
 pub mod cli;
 pub mod github;
@@ -17,6 +21,7 @@ pub mod mirror;
 #[cfg(target_os = "macos")]
 pub mod ramdisk;
 pub mod upgrade;
+pub mod vaults;
 
 use relay_remote::broker::{self, Meta, Spec};
 use relay_remote::proto::{self, Info, MAX_LINE, MAX_SESSION, PROTO};
@@ -62,25 +67,34 @@ pub fn identity(data: &Path) -> io::Result<Identity> { Identity::load_or_create(
 
 /// A paired device. `parent`: a linked device (a phone), paired through the device it belongs to; it shares that
 /// device's conversations, cards and mirror, may only work with conversations (LINKED_OPS), and goes when that one does.
+/// `vaults_only`: a device that came in through a shared vault's invite, not a pairing code (VAULT_OPS).
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq)]
-pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(default, skip_serializing_if = "Option::is_none")] pub parent: Option<String> }
+pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(default, skip_serializing_if = "Option::is_none")] pub parent: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")] pub vaults_only: bool }
 
 /// What a linked device may ask: its conversations and their cards, and opening the mirror with the key it was given.
 /// Not the mirror's files, moving sessions, updating the server or pairing further devices.
 const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach", "start"];
+/// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
+/// further devices, and makes no vaults of its own.
+const VAULT_OPS: &[&str] = &["info", "vault_list", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
+    "vault_get", "vault_put", "vault_put_many", "vault_delete"];
+/// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
+static CLIENTS: Mutex<()> = Mutex::new(());
 
 pub fn clients(data: &Path) -> Vec<Client> {
     fs::read_to_string(data.join("clients.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
 }
 fn save_clients(data: &Path, c: &[Client]) -> io::Result<()> { write_private(&data.join("clients.json"), &serde_json::to_string_pretty(c).unwrap()) }
 /// Remove the clients whose name is `who`, or whose fingerprint starts with it (at least 8 characters), and the devices
-/// linked to them. Returns them.
+/// linked to them, with their memberships of shared vaults. Returns them.
 pub fn revoke(data: &Path, who: &str) -> io::Result<Vec<Client>> {
     let who = who.trim();
     let all = clients(data);
     let hit: Vec<String> = all.iter().filter(|c| c.name == who || (who.len() >= 8 && c.fp.starts_with(&who.to_lowercase()))).map(|c| c.fp.clone()).collect();
     let (gone, keep): (Vec<Client>, Vec<Client>) = all.into_iter().partition(|c| hit.contains(&c.fp) || c.parent.as_ref().is_some_and(|p| hit.contains(p)));
     if !gone.is_empty() { save_clients(data, &keep)?; }
+    vaults::forget(data, &gone.iter().map(|c| c.fp.clone()).collect::<Vec<_>>());
     // a revoked device's mirror goes too (a linked one has none of its own); a running server also drops its key and
     // working copy (see Server::run)
     for c in gone.iter().filter(|c| c.parent.is_none()) { fs::remove_dir_all(data.join("mirror").join(&c.fp[..16])).ok(); }
@@ -145,7 +159,7 @@ pub fn info(data: &Path, path: &str) -> Info {
 /// the server follows itself; `sids`: the Claude session of each, for a device that joins after it started (a phone).
 /// `shares`: per laptop (ns), the conversations it shares with its phone from its own Mac and the connection it waits
 /// on; `opens`: a phone's request waiting for that laptop's connection, by token (see share_forward).
-pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>, github: Arc<github::Hub>,
+pub struct Server { data: PathBuf, acceptor: Acceptor, fp: String, info: Info, mirror: Arc<mirror::Mirror>, github: Arc<github::Hub>, vaults: vaults::Vaults,
     attached: Mutex<HashMap<String, usize>>, watching: Mutex<HashSet<String>>, sids: Mutex<HashMap<String, String>>,
     titles: Mutex<HashMap<String, String>>, shares: Mutex<HashMap<String, Share>>, opens: Mutex<HashMap<String, Open>> }
 
@@ -165,7 +179,7 @@ impl Server {
         let id = identity(data)?;
         let (info, mirror) = (info(data, &login_path()), mirror::Mirror::new(data));
         let github = github::Hub::new(mirror.clone(), &info.host);
-        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info, mirror, github,
+        Ok(Server { data: data.into(), acceptor: Acceptor::new(&id), fp: id.fingerprint(), info, mirror, github, vaults: vaults::Vaults::new(data, &id.fingerprint()),
             attached: Mutex::default(), watching: Mutex::default(),
             sids: Mutex::new(fs::read_to_string(data.join("sids.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()),
             titles: Mutex::default(), shares: Mutex::default(), opens: Mutex::default() })
@@ -196,16 +210,19 @@ impl Server {
 
     fn conn(self: &Arc<Self>, tcp: TcpStream) -> io::Result<()> {
         let peer = tcp.peer_addr().map(|a| a.to_string()).unwrap_or_default();
-        // inside the handshake: a known device, or any device while a pairing code is open (it may then only pair)
+        // inside the handshake: a known device, or any device while a pairing code or a vault's invite is open (it may
+        // then only pair or join)
         let data = self.data.clone();
-        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some());
+        let allow: Arc<dyn Fn(&str) -> bool + Send + Sync> = Arc::new(move |fp: &str| clients(&data).iter().any(|c| c.fp == fp) || pairing(&data).is_some() || vaults::invite_open(&data));
         let (duplex, fp) = self.acceptor.accept(tcp, HANDSHAKE, allow).map_err(|e| io::Error::other(format!("{peer}: {e}")))?;
         let (r, mut w) = duplex.split();
         let mut r = BufReader::new(r);
         let req = proto::read_json(&mut r, MAX_LINE)?;
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
-        if me.is_none() && op != "pair" { return reply(&mut w, Err("not paired".into())); }
+        if me.is_none() && op != "pair" && op != "vault_join" { return reply(&mut w, Err("not paired".into())); }
+        if me.as_ref().is_some_and(|c| c.vaults_only) && !VAULT_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
+        let my_name = me.as_ref().map(|c| c.name.clone()).unwrap_or_default();
         let parent = me.and_then(|c| c.parent);
         if parent.is_some() && !LINKED_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a linked device"))); }
         // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"; a linked
@@ -219,6 +236,7 @@ impl Server {
             self.revoked_closes(&fp, &w);
             return self.share_forward(ns, &req, r, w);
         }
+        let s = |k: &str| req[k].as_str().unwrap_or("");
         match op {
             "pair_device" => reply(&mut w, open_pairing_for(&self.data, Some(&fp)).map(|code| json!({"code": code, "fp": self.fp})).map_err(|e| e.to_string())),
             "pair" => { let res = self.pair(&fp, &req); if res.is_ok() { eprintln!("relay-server: paired {} ({peer})", req["name"]); } reply(&mut w, res) }
@@ -301,6 +319,37 @@ impl Server {
             "start" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); self.start(ns, &req, r, w) }
             "attach" => { self.revoked_closes(&fp, &w); let _a = self.attach_guard(&key(&req["key"])); attach(&key(&req["key"]), r, w) }
             "share" => self.share(ns, &req, r, w),
+            // shared vaults (vaults.rs): only ciphertext passes here, by member
+            "vault_create" => reply(&mut w, self.vaults.create(&fp, &my_name, s("name"))),
+            "vault_list" => reply(&mut w, Ok(self.vaults.list(&fp))),
+            "vault_info" => reply(&mut w, self.vaults.info(&fp, s("vault"))),
+            "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"))),
+            "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
+            "vault_join" => {
+                let res = self.vaults.join(&fp, s("vault"), s("invite"), s("name"), s("proof"));
+                if res.is_ok() { eprintln!("relay-server: {} joined a shared vault ({peer})", req["name"]); }
+                reply(&mut w, res)
+            }
+            "vault_remove" => reply(&mut w, self.vaults.remove(&fp, s("vault"), s("fp")).map(|_| json!({}))),
+            "vault_manifest" => reply(&mut w, self.vaults.manifest(&fp, s("vault")).map(|b| json!({"blobs": b}))),
+            "vault_get" => match self.vaults.get(&fp, s("vault"), s("name")) {
+                Ok((b, etag)) => { proto::write_json(&mut w, &json!({"ok": true, "len": b.len(), "etag": etag}))?; w.write_all(&b)?; w.shutdown(); Ok(()) }
+                Err(e) => reply(&mut w, Err(e)),
+            },
+            "vault_put" => {
+                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), vaults::MAX_RECORD)?;
+                reply(&mut w, self.vaults.put(&fp, s("vault"), s("name"), &body, req["expect"].as_str()).map(|etag| json!({"etag": etag})))
+            }
+            "vault_put_many" => {
+                let (mut etags, mut errors) = (serde_json::Map::new(), serde_json::Map::new());
+                for f in req["files"].as_array().into_iter().flatten() {
+                    let body = proto::read_body(&mut r, f["len"].as_u64().unwrap_or(0), vaults::MAX_RECORD)?;
+                    let name = f["name"].as_str().unwrap_or("");
+                    match self.vaults.put(&fp, s("vault"), name, &body, f["expect"].as_str()) { Ok(e) => { etags.insert(name.into(), json!(e)); } Err(e) => { errors.insert(name.into(), json!(e)); } }
+                }
+                reply(&mut w, Ok(json!({"etags": etags, "errors": errors})))
+            }
+            "vault_delete" => reply(&mut w, self.vaults.delete(&fp, s("vault"), s("name"), req["expect"].as_str()).map(|_| json!({}))),
             "share_open" => {
                 let token = req["token"].as_str().unwrap_or("");
                 let open = self.opens.lock().unwrap().remove(token);
@@ -375,6 +424,7 @@ impl Server {
     }
 
     fn pair(&self, fp: &str, req: &Value) -> Result<Value, String> {
+        let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
         let Some(mut p) = pairing(&self.data) else { return Err("no pairing code open, run `relay-server pair` on the server".into()) };
         let name: String = req["name"].as_str().unwrap_or("").trim().chars().filter(|c| !c.is_control()).take(60).collect();
         let name = if name.is_empty() { format!("device-{}", &fp[..8]) } else { name };
@@ -392,7 +442,8 @@ impl Server {
         let mut n = name.clone();
         let mut i = 2;
         while list.iter().any(|c| c.name == n) { n = format!("{name} {i}"); i += 1; }
-        list.push(Client { name: n.clone(), fp: fp.into(), added: now(), parent: p.parent });
+        // a vault-only device that pairs becomes a full one
+        list.push(Client { name: n.clone(), fp: fp.into(), added: now(), parent: p.parent, vaults_only: false });
         save_clients(&self.data, &list).map_err(|e| e.to_string())?;
         Ok(json!({"name": n}))
     }
