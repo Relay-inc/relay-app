@@ -10,7 +10,8 @@ import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
 import * as orch from "./fixtures/orchestrator";
 import * as brain from "./fixtures/brain";
-import { changes } from "./fixtures/changes";
+import * as git from "./fixtures/git";
+import * as files from "./fixtures/files";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -51,6 +52,7 @@ const shared = fixture === "shared";
 if (shared) settings = { ...settings, extraVaults: [vault.TEAM_VAULT] };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
+const gitRepos = structuredClone(git.repos);
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
@@ -449,8 +451,40 @@ function handle(cmd: string, a: Args): unknown {
       }));
     case "open":
       return null;
-    case "conversation_changes":
-      return a.key === conv.LONG_KEY ? changes : [];
+    // the Git drawer: Beacon Billing's two checkouts, staged, discarded and committed in memory
+    case "git_repos":
+      return a.project === "Beacon Billing" ? structuredClone(gitRepos) : [];
+    case "git_log":
+      return git.log(a.repo, a.all);
+    case "git_show":
+      return git.show(a.hash);
+    case "git_pull":
+      return null;
+    // the Files drawer
+    case "file_roots":
+      return files.roots(a.project);
+    case "list_dir":
+      return files.list(a.path);
+    case "read_file_text":
+      return files.read(a.path);
+    case "git_stage":
+    case "git_discard":
+    case "git_commit": {
+      const repo = gitRepos.find(r => r.repo === a.repo);
+      if (!repo) return Promise.reject(`${a.repo} is not a repo of ${a.project}`);
+      if (cmd === "git_stage")
+        for (const f of repo.files.filter(f => a.paths.includes(f.path)))
+          Object.assign(f, { staged: a.on, untracked: false, status: f.untracked ? "A" : f.status });
+      if (cmd === "git_discard") repo.files = repo.files.filter(f => f.path !== a.path);
+      if (cmd === "git_commit") {
+        if (!repo.files.some(f => f.staged)) return Promise.reject("no changes added to commit");
+        repo.files = repo.files.filter(f => !f.staged);
+        repo.ahead++;
+        if (a.push && repo.name === "beacon-api") return Promise.reject(git.pushRejected);
+        if (a.push) repo.ahead = 0;
+      }
+      return null;
+    }
     case "drop_worktrees":
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
@@ -786,6 +820,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     // one Claude call without tools (src-tauri ai_write): findings, quick replies, an answer on a line, or a draft
     case "ai_write":
+      if (/git commit message/.test(a.system)) return git.commitMessage;
       // a PR to a ticket: the invoice PR is ticket 300, anything else none
       if (/koppelt een pull request/.test(a.system)) return /Invoice/.test(a.text) ? "300" : "geen";
       if (/JSON-array/.test(a.system)) {

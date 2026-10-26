@@ -1,7 +1,8 @@
 import type { AgentEvent } from "../agents/types";
 import type { ConversationsState, Translate } from "./state";
 import type { ContextUse, Item, ToolInput } from "./types";
-import { formatDuration, lastAi } from "./rules.ts";
+import { formatDuration, ktokens, lastAi } from "./rules.ts";
+import { FILE_TOOLS } from "../git/git.ts";
 import { cleanCommands } from "./commands.ts";
 import { splitFiles } from "./files.ts";
 import { isRelayTurn } from "../orchestrator/rules.ts";
@@ -49,6 +50,8 @@ export const doneText = (seconds: number, t: Translate) =>
 
 /** Claude Code's window until a turn's result names the model's (the 1M models say so there). */
 export const DEFAULT_WINDOW = 200_000;
+/** The window of the 1M models: the only one larger than the default. */
+export const LARGE_WINDOW = 1_000_000;
 /** The context after an event: tokens in use and window as they come, a compaction leaves what it kept, a reset none. */
 export function applyContext(context: ContextUse | undefined, event: AgentEvent): ContextUse | undefined {
   const window = context?.window ?? DEFAULT_WINDOW;
@@ -56,7 +59,6 @@ export function applyContext(context: ContextUse | undefined, event: AgentEvent)
   if (event.type === "compacted") return event.post_tokens == null ? undefined : { used: event.post_tokens, window };
   return event.type === "reset" ? undefined : context;
 }
-const ktokens = (n: number) => `${Math.round(n / 1000)}k`;
 const compactedText = (e: EventOf<"compacted">, t: Translate) =>
   t(e.trigger === "auto" ? "compact.auto" : "compact.done") +
   (e.pre_tokens != null && e.post_tokens != null ? ` · ${ktokens(e.pre_tokens)} → ${ktokens(e.post_tokens)}` : "");
@@ -159,7 +161,11 @@ function setContext(state: ConversationsState, key: string, event: AgentEvent): 
   const next = applyContext(state.context[key], event);
   if (next) state.context[key] = next;
   else delete state.context[key];
-  return [];
+  // the window a turn reported stays with the conversation, for when its transcript is read again
+  const chat = state.chats[key];
+  if (event.type !== "context" || !event.window || !chat || chat.window === event.window) return [];
+  chat.window = event.window;
+  return [{ kind: "save-chats" }];
 }
 
 // the real recipients, independent of what the agent writes about it
@@ -205,6 +211,22 @@ function finishTurnInQueue(state: ConversationsState, key: string) {
   state.status[key] = state.queued[key] ? "busy" : "idle";
 }
 
+/** What a turn did: its file edits, failed tools and agents, counted from the items since the last end of a turn. */
+// ponytail: a failed turn pushes no "done", so the next receipt counts it too
+export function receiptOf(items: Item[] | undefined, cost?: number | null): Item["receipt"] {
+  const all = items || [];
+  let from = all.length;
+  while (from > 0 && all[from - 1].kind !== "done") from--;
+  const receipt = { edits: 0, errors: 0, agents: 0, ...(cost ? { cost } : {}) };
+  for (const x of all.slice(from)) {
+    if (x.kind !== "tool" || !x.tool) continue;
+    if (x.state === "err") receipt.errors++;
+    else if (FILE_TOOLS.has(x.tool.name)) receipt.edits++;
+    if (x.tool.name === "Agent" || x.tool.name === "Task") receipt.agents++;
+  }
+  return receipt;
+}
+
 function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_end">, env: EventEnv): Effect[] {
   const { t } = env;
   const effects: Effect[] = [];
@@ -216,6 +238,7 @@ function onTurnEnd(state: ConversationsState, key: string, end: EventOf<"turn_en
       kind: "done",
       text: doneText(end.duration_ms ? end.duration_ms / 1000 : 0, t),
       at: env.now,
+      receipt: receiptOf(state.messages[key], end.usage?.cost),
     });
   if (!state.queued[key])
     effects.push({
@@ -300,10 +323,12 @@ export function toItems(
 }
 
 /** How full the context was at the end of a transcript. */
-export function contextOf(history: AgentEvent[]) {
+export function contextOf(history: AgentEvent[], window?: number) {
   let context: ContextUse | undefined;
   for (const event of history) context = applyContext(context, event);
-  return context;
+  if (!context) return context;
+  // a transcript names no window: the one the conversation last reported, else more than the default can only be 1M
+  return { ...context, window: window ?? (context.used > DEFAULT_WINDOW ? LARGE_WINDOW : context.window) };
 }
 
 /** history gives a "time" event before each transcript line's events: a user message is a new prompt, any later line
