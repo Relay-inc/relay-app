@@ -1,4 +1,5 @@
 import { t } from "../../shared/i18n";
+import type { SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { useSettingsStore, type SettingsState } from "./store";
 
@@ -13,10 +14,11 @@ const say = (key: string, text: string, ok = false) =>
     draft.messages[key] = text ? { text, ok } : null;
   });
 
-/** Runs `work` as `busy`, its error shown under `key`. True when it worked. */
+/** Runs `work` as `busy` (its button off until it ends, whatever else ends first), its error shown under `key`. True
+ *  when it worked. */
 async function run(busy: string, key: string, work: () => Promise<unknown>) {
   change(draft => {
-    draft.busy = busy;
+    draft.busy[busy] = true;
     draft.messages[key] = null;
   });
   try {
@@ -26,9 +28,7 @@ async function run(busy: string, key: string, work: () => Promise<unknown>) {
     say(key, String(error));
     return false;
   } finally {
-    change(draft => {
-      draft.busy = "";
-    });
+    change(draft => void delete draft.busy[busy]);
   }
 }
 
@@ -41,9 +41,14 @@ async function reload() {
   });
 }
 
-/** The join form opened with an invite link in it. */
+/** The join form opened with an invite link in it. A new vault's recovery key on screen stays: it is shown only
+ *  once, so the link waits until Done closes that form. */
 function openJoin(link: string) {
   change(draft => {
+    if (draft.form.recovery) {
+      draft.invite = link;
+      return;
+    }
     draft.form = { ...draft.form, mode: "join", link, recovery: "" };
     draft.messages.form = null;
   });
@@ -70,10 +75,12 @@ export async function watchSharedVaults(show: () => void) {
   }
 }
 
-/** The form under the list: "new", "join" or closed (""). */
+/** The form under the list: "new", "join" or closed (""). Closing the recovery key opens the invite that waited. */
 export const openForm = (mode: Shared["form"]["mode"]) =>
   change(draft => {
-    draft.form = { ...draft.form, mode, recovery: "" };
+    const link = !mode && draft.invite;
+    draft.form = link ? { ...draft.form, mode: "join", link, recovery: "" } : { ...draft.form, mode, recovery: "" };
+    draft.invite = "";
     draft.messages.form = null;
   });
 export const editForm = (patch: Partial<Pick<Shared["form"], "machine" | "name" | "link">>) =>
@@ -87,25 +94,27 @@ export async function pickSharedFolder() {
 export async function createSharedVault(machine: string) {
   const { name, folder } = st().form;
   let recovery = "";
-  const made = await run("create", "form", async () => {
+  await run("create", "form", async () => {
     recovery = (await backend.sharedVaultCreate(machine, name, folder)).recovery;
-    await reload();
   });
-  if (made)
-    change(draft => {
-      draft.form = { mode: "new", machine: "", name: "", folder: "", link: "", recovery };
-    });
+  if (!recovery) return;
+  // the key first: it is shown only once, so a failed reload below must not hide it. An invite that opened the join
+  // form meanwhile waits for Done.
+  change(draft => {
+    if (draft.form.mode === "join" && draft.form.link) draft.invite = draft.form.link;
+    draft.form = { mode: "new", machine: "", name: "", folder: "", link: "", recovery };
+  });
+  await run("create", "form", reload);
 }
 export async function joinSharedVault() {
   const { link, folder } = st().form;
-  const joined = await run("join", "form", async () => {
-    await backend.sharedVaultJoin(link.trim(), folder);
-    await reload();
+  const joined = await run("join", "form", () => backend.sharedVaultJoin(link.trim(), folder));
+  if (!joined) return;
+  // joined: the invite is spent, so the form closes even when the reload fails
+  change(draft => {
+    draft.form = { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" };
   });
-  if (joined)
-    change(draft => {
-      draft.form = { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" };
-    });
+  await run("join", "form", reload);
 }
 
 /** The members and open invites read again, when they show. */
@@ -127,7 +136,7 @@ export async function toggleMembers(id: string) {
 }
 
 /** A single-use link for a new member or admin; the open invites follow when they show. */
-export async function inviteToShared(id: string, role: "member" | "admin") {
+export async function inviteToShared(id: string, role: SharedRole) {
   await run(`${id}:invite`, id, async () => {
     const made = await backend.sharedVaultInvite(id, role);
     change(draft => void (draft.links[id] = made));
@@ -161,9 +170,9 @@ export const leaveShared = (id: string) =>
     await reload();
   });
 
-/** The held deletes go through in the next round, or the files come back. */
-export const settleShared = (id: string, allow: boolean) =>
+/** The held deletes the user saw (`paths`) go through in the next round, or those files come back. */
+export const settleShared = (id: string, allow: boolean, paths: string[]) =>
   run(`${id}:held`, id, async () => {
-    await backend.sharedVaultHeld(id, allow);
+    await backend.sharedVaultHeld(id, allow, paths);
     say(id, t(allow ? "set.sharedHeldAllowed" : "set.sharedHeldRestored"), true);
   });

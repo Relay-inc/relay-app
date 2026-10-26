@@ -102,7 +102,8 @@ export type SettingsState = {
     info: Record<string, SharedInfo | null>; // per vault whose members are open: what the server said, null while asked
     links: Record<string, { link: string; invite: SharedInvite } | null>; // per vault: the invite link just made
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
-    busy: string; // what runs: "<id>:<action>", "create" or "join", "" nothing
+    busy: Record<string, boolean>; // what runs, each on its own: "<id>:<action>", "create" or "join"
+    invite: string; // an invite link that came while the recovery key was on screen: the join form opens with it after
     // the form under the list: a new vault or joining one; `recovery` the new vault's key, shown once
     form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string; recovery: string };
   };
@@ -192,7 +193,8 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     info: {},
     links: {},
     messages: {},
-    busy: "",
+    busy: {},
+    invite: "",
     form: { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" },
   },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },

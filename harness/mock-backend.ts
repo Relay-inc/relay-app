@@ -389,8 +389,11 @@ function handle(cmd: string, a: Args): unknown {
       } else sharedMembers = sharedMembers.filter(m => m.fp !== a.fp);
       return null;
     case "shared_vault_held":
-      // the next round: the held deletes went through or the files came back
-      if (sharedStatus[a.id]) sharedStatus = { ...sharedStatus, [a.id]: { ...sharedStatus[a.id], held: [] } };
+      // the next round: the held deletes the user saw (`paths`) went through or came back, newer ones stay held
+      if (sharedStatus[a.id]) {
+        const held = sharedStatus[a.id].held.filter((path: string) => !a.paths.includes(path));
+        sharedStatus = { ...sharedStatus, [a.id]: { ...sharedStatus[a.id], held } };
+      }
       setTimeout(() => emit("shared-vaults", structuredClone(sharedStatus)), 300);
       return null;
     case "machines_list":

@@ -1,7 +1,7 @@
 import type { Key } from "../../shared/i18n";
 import type { Caps, Decision } from "../agents/types";
 import type { Settings } from "../settings/types";
-import type { Project, SessionItem } from "../workspace/types";
+import type { Project, SessionItem, Snapshot } from "../workspace/types";
 import { findProjects } from "../workspace/rules.ts";
 import { termKey } from "../navigation/keys.ts";
 import { ORCH } from "../orchestrator/rules.ts";
@@ -188,3 +188,10 @@ export const machineBlock = (caps: Pick<Caps, "remote"> | undefined, fromMail: b
       : shared
         ? "composer.machineSharedVault"
         : null;
+/** Whether a conversation moved from project `from` to `to` (null: a general one, the main vault) changes vault. One
+ *  with a session keeps running in the vault it started in (src-tauri `fence`), so it may not. */
+export function changesVault(snap: Pick<Snapshot, "projects" | "vault">, from: string | null, to: string | null) {
+  const vaultOf = (name: string | null) =>
+    (name && snap.projects.find(project => project.name === name)?.vault) || snap.vault?.vault;
+  return vaultOf(from) !== vaultOf(to);
+}

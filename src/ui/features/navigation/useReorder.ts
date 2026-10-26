@@ -69,7 +69,7 @@ export function useReorder(root: RefObject<HTMLElement | null>, sideways: boolea
     if (into.scope === group) return reorder(kind, group, visibleIds(kind, group), id, target, !!after);
     // ids before the move: the dragged one is not among them yet, `place` puts it next to the target
     const among = into.scope === undefined ? [] : visibleIds(kind, into.scope);
-    await moveChat(id, into.project || null, into.folder);
+    if (!(await moveChat(id, into.project || null, into.folder))) return;
     if (into.scope !== undefined) reorder(kind, into.scope, among, id, target, !!after);
   };
   const { drag, start } = usePointerDrag<Press>({

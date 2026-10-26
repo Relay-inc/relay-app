@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Machine, SharedVault } from "../../../domain/settings/types";
+import type { Machine, SharedRole, SharedVault } from "../../../domain/settings/types";
 import { agoParts } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
@@ -60,8 +60,9 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const message = useSettingsStore(s => s.shared.messages[vault.id]);
   const busy = useSettingsStore(s => s.shared.busy);
   const [inviting, setInviting] = useState(false);
-  const [role, setRole] = useState<"member" | "admin">("member");
+  const [role, setRole] = useState<SharedRole>("member");
   const [leaving, setLeaving] = useState(false);
+  const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
   const admin = vault.role === "admin";
   const ago = status ? agoParts(status.at) : null;
   const roleName = (role: string) => t(role === "admin" ? "set.sharedAdmin" : "set.sharedMember");
@@ -81,7 +82,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
         <button
           className={buttonClass("ghost")}
           aria-expanded={membersOpen}
-          disabled={busy === `${vault.id}:members`}
+          disabled={busy[`${vault.id}:members`]}
           onClick={() => toggleMembers(vault.id)}
         >
           {t("set.sharedMembers")}
@@ -91,7 +92,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             <span className="text-xs text-s-muted">{t("set.sharedLeaveSure")}</span>
             <button
               className={buttonClass("dangerSolid")}
-              disabled={busy === `${vault.id}:leave`}
+              disabled={busy[`${vault.id}:leave`]}
               onClick={async () => {
                 await leaveShared(vault.id);
                 setLeaving(false);
@@ -157,15 +158,15 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                 <div className="flex items-center gap-2">
                   <button
                     className={buttonClass()}
-                    disabled={busy === `${vault.id}:held`}
-                    onClick={() => settleShared(vault.id, false)}
+                    disabled={busy[`${vault.id}:held`]}
+                    onClick={() => settleShared(vault.id, false, status.held)}
                   >
                     {t("set.sharedHeldRestore")}
                   </button>
                   <button
                     className={buttonClass("danger")}
-                    disabled={busy === `${vault.id}:held`}
-                    onClick={() => settleShared(vault.id, true)}
+                    disabled={busy[`${vault.id}:held`]}
+                    onClick={() => settleShared(vault.id, true, status.held)}
                   >
                     {t("set.sharedHeldDelete")}
                   </button>
@@ -206,7 +207,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
           </button>
           <button
             className={buttonClass("primary")}
-            disabled={busy === `${vault.id}:invite`}
+            disabled={busy[`${vault.id}:invite`]}
             onClick={async () => {
               await inviteToShared(vault.id, role);
               setInviting(false);
@@ -230,16 +231,33 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                   </span>
                   <span className={PILL}>{roleName(member.role)}</span>
                   <span className="flex-1"></span>
-                  {admin && member.fp !== info.me ? (
+                  {!admin || member.fp === info.me ? null : removing === member.fp ? (
+                    <>
+                      <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
+                      <button
+                        className={buttonClass("dangerSolid")}
+                        disabled={busy[`${vault.id}:remove`]}
+                        aria-label={t("set.extraVaultRemove", { name: member.name })}
+                        onClick={async () => {
+                          await removeMember(vault.id, member.fp);
+                          setRemoving("");
+                        }}
+                      >
+                        {t("ag.remove")}
+                      </button>
+                      <button className={buttonClass("ghost")} onClick={() => setRemoving("")}>
+                        {t("mc.cancel")}
+                      </button>
+                    </>
+                  ) : (
                     <button
                       className={buttonClass("ghost")}
-                      disabled={busy === `${vault.id}:remove`}
                       aria-label={t("set.extraVaultRemove", { name: member.name })}
-                      onClick={() => removeMember(vault.id, member.fp)}
+                      onClick={() => setRemoving(member.fp)}
                     >
                       {t("ag.remove")}
                     </button>
-                  ) : null}
+                  )}
                 </div>
               ))}
               {admin && info.vault.invites.length ? (
@@ -252,7 +270,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                       </span>
                       <button
                         className={buttonClass("ghost")}
-                        disabled={busy === `${vault.id}:withdraw`}
+                        disabled={busy[`${vault.id}:withdraw`]}
                         onClick={() => withdrawInvite(vault.id, invite.id)}
                       >
                         {t("set.sharedWithdraw")}
@@ -347,7 +365,7 @@ function SharedForm() {
           />
         </Field>
         {folder}
-        {footer(t("set.sharedCreate"), busy === "create" || !machine || !form.name.trim() || !form.folder, () =>
+        {footer(t("set.sharedCreate"), busy.create || !machine || !form.name.trim() || !form.folder, () =>
           createSharedVault(machine),
         )}
       </div>
@@ -367,7 +385,7 @@ function SharedForm() {
           />
         </Field>
         {folder}
-        {footer(t("set.sharedJoinButton"), busy === "join" || !form.link.trim() || !form.folder, joinSharedVault)}
+        {footer(t("set.sharedJoinButton"), busy.join || !form.link.trim() || !form.folder, joinSharedVault)}
       </div>
     );
   return (

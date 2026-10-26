@@ -37,6 +37,7 @@ import type {
   Settings,
   SharedInfo,
   SharedInvite,
+  SharedRole,
   SharedStatus,
 } from "../domain/settings/types";
 import type {
@@ -209,8 +210,10 @@ export const gitShow = (key: string, project: string, repo: string, hash: string
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });
-export const openTerminal = (project: string, session: string | null, name: string) =>
-  invoke("open_terminal", { project, session, name });
+/** A conversation (`project`: its key) resumed in iTerm; `about` its vault project, null for a general one: a new
+ *  conversation runs in that project's vault. */
+export const openTerminal = (project: string, session: string | null, name: string, about: string | null) =>
+  invoke("open_terminal", { project, session, name, about });
 export const aiTitle = (text: string, provider: string) => invoke<string>("ai_title", { text, provider });
 export const agentHistory = (key: string, id: string, from: number) =>
   invoke<Transcript<AgentEvent>>("agent_history", { key, id, from });
@@ -463,15 +466,16 @@ export const sharedVaultCreate = (machine: string, name: string, folder: string)
 /** Join with an invite link into an empty folder. */
 export const sharedVaultJoin = (link: string, folder: string) =>
   invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
-export const sharedVaultInvite = (id: string, role: string) =>
+export const sharedVaultInvite = (id: string, role: SharedRole) =>
   invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
 export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });
 /** Remove a member, or leave the vault with this Mac's own fingerprint (the folder stays). */
 export const sharedVaultRemove = (id: string, fp: string) => invoke("shared_vault_remove", { id, fp });
-/** The held deletes of a vault: through in its next round, or the files put back. */
-export const sharedVaultHeld = (id: string, allow: boolean) => invoke("shared_vault_held", { id, allow });
+/** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
+export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
+  invoke("shared_vault_held", { id, allow, paths });
 /** The invite link that opened Relay, once; later ones come as `vault-invite`. */
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
 export const onVaultInvite = (handler: (link: string) => void) =>

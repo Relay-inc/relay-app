@@ -1,6 +1,6 @@
 import { t, tn } from "../../shared/i18n";
 import type { Img, Item, Pending, CardChoice } from "../../domain/conversations/types";
-import { NEW, decisionOf, waitsForPickup } from "../../domain/conversations/rules";
+import { NEW, changesVault, decisionOf, waitsForPickup } from "../../domain/conversations/rules";
 import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
 import { fileName, withFiles } from "../../domain/conversations/files";
@@ -416,17 +416,22 @@ export function moveTo(project: string | null) {
 }
 /** A conversation dragged in the sidebar to a project (null for Algemeen) and a folder there ("" for none). Under
  *  another project it gets the note the project panel gives, and its next message tells the agent. A terminal session
- *  moves through the settings' overrides and sits in no folder. */
+ *  moves through the settings' overrides and sits in no folder. False when it was refused. */
 export async function moveChat(key: string, project: string | null, folder: string) {
   if (isTerminal(key)) {
-    if (terminalOf(key)?.project === project) return;
+    if (terminalOf(key)?.project === project) return true;
     const next = structuredClone(settings());
     next.overrides[termSid(key)] = project;
     await saveMainSettings(next);
-    return;
+    return true;
   }
   const conversation = cs().chats[key];
-  if (!conversation || (conversation.project === project && (conversation.folder ?? "") === folder)) return;
+  if (!conversation || (conversation.project === project && (conversation.folder ?? "") === folder)) return true;
+  // a started conversation keeps running in its vault: it cannot follow a project into another one
+  if (cs().sidOf[key] && changesVault(useWorkspaceStore.getState().snap, conversation.project, project)) {
+    toast(t("toast.otherVault"), undefined, undefined, 6000);
+    return false;
+  }
   set(draft => {
     const moved = draft.chats[key];
     if (moved.project !== project)
@@ -436,6 +441,7 @@ export async function moveChat(key: string, project: string | null, folder: stri
     else delete moved.folder;
   });
   saveChats();
+  return true;
 }
 /** The Cmd-K question's project offer, answered once: move the open conversation there, or keep it general (""). */
 export function answerAsk(project: string) {
@@ -491,7 +497,7 @@ export function openTerminal(external = false) {
   }
   const project = projectOf(key);
   const name = `${project || t("general")}: ${label(key)}`;
-  if (external || !project) backend.openTerminal(key, null, name);
+  if (external || !project) backend.openTerminal(key, null, name, project);
   else {
     useNavigationStore.setState(draft => {
       draft.drawer = "terminal";

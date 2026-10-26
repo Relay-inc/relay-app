@@ -820,6 +820,8 @@ export default {
   "toast.closedAll_one": "{n} conversation fermée",
   "toast.closedAll_other": "{n} conversations fermées",
   "toast.undo": "Annuler",
+  "toast.otherVault":
+    "Cette conversation tourne dans un autre vault. Commencez plutôt une nouvelle conversation dans ce projet.",
   "ctx.assign": "Changer de projet…",
   "ctx.copyId": "Copier l'ID de session",
   "ctx.recent": "Fermées récemment",
@@ -868,6 +870,7 @@ export default {
   "set.sharedMembers": "Membres",
   "set.sharedLeave": "Quitter",
   "set.sharedLeaveSure": "Quitter ce vault ?",
+  "set.sharedRemoveSure": "Retirer ce membre ? Son Mac garde les fichiers qu'il a déjà.",
   "set.sharedLeaveHelp": "Ce Mac arrête de synchroniser le vault. Le dossier reste tel quel sur ce Mac.",
   "set.sharedLast": "Synchronisé {when}",
   "set.sharedNever": "Pas encore synchronisé",
@@ -910,7 +913,7 @@ export default {
   "set.sharedCreate": "Créer",
   "set.sharedRecovery": "Clé de récupération",
   "set.sharedRecoveryHelp":
-    "Gardez cette clé dans votre gestionnaire de mots de passe. Sans elle, et sans le Mac d'un membre, le vault est illisible. Relay ne l'affiche qu'une seule fois.",
+    "Gardez cette clé dans votre gestionnaire de mots de passe. Si le Mac de chaque membre perd le vault, seule cette clé ouvre une sauvegarde des fichiers du serveur. Relay ne l'affiche qu'une seule fois.",
   "set.sharedJoinTitle": "Rejoindre un vault partagé",
   "set.sharedLinkLabel": "Lien d'invitation",
   "set.sharedLinkLabelHelp": "Le lien relay:// qu'un admin vous a envoyé.",

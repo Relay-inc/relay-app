@@ -814,6 +814,8 @@ export default {
   "toast.closedAll_one": "{n} Gespräch geschlossen",
   "toast.closedAll_other": "{n} Gespräche geschlossen",
   "toast.undo": "Widerrufen",
+  "toast.otherVault":
+    "Dieses Gespräch läuft in einem anderen Vault. Beginne stattdessen ein neues Gespräch in diesem Projekt.",
   "ctx.assign": "Projekt ändern…",
   "ctx.copyId": "Sitzungs-ID kopieren",
   "ctx.recent": "Kürzlich geschlossen",
@@ -862,6 +864,7 @@ export default {
   "set.sharedMembers": "Mitglieder",
   "set.sharedLeave": "Verlassen",
   "set.sharedLeaveSure": "Diesen Vault verlassen?",
+  "set.sharedRemoveSure": "Dieses Mitglied entfernen? Sein Mac behält die Dateien, die schon darauf sind.",
   "set.sharedLeaveHelp":
     "Dieser Mac synchronisiert den Vault nicht mehr. Der Ordner bleibt unverändert auf diesem Mac.",
   "set.sharedLast": "Synchronisiert {when}",
@@ -905,7 +908,7 @@ export default {
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":
-    "Bewahre diesen Schlüssel in deinem Passwortmanager auf. Ohne ihn, und ohne den Mac eines Mitglieds, lässt sich der Vault nicht lesen. Relay zeigt ihn nur dieses eine Mal.",
+    "Bewahre diesen Schlüssel in deinem Passwortmanager auf. Verliert der Mac jedes Mitglieds den Vault, öffnet nur dieser Schlüssel noch eine Sicherung der Dateien auf dem Server. Relay zeigt ihn nur dieses eine Mal.",
   "set.sharedJoinTitle": "Einem geteilten Vault beitreten",
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",
