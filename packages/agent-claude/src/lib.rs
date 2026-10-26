@@ -322,7 +322,7 @@ mod tests {
     #[test]
     fn the_title_prompt_holds_the_message_as_data() {
         let p = agent_core::prompt::fill(TITLE, &[("text", "wat is {{dit}}?")]);
-        assert!(p.ends_with("<bericht>\nwat is {{dit}}?\n</bericht>") && !TITLE_SYSTEM.is_empty());
+        assert!(p.ends_with("<message>\nwat is {{dit}}?\n</message>") && !TITLE_SYSTEM.is_empty());
     }
     #[test]
     fn too_old_reads_the_version_line() {
