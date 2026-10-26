@@ -6,6 +6,7 @@ import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types"
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { GitRepo } from "../domain/git/git";
+import type { CommitFile, GitCommit } from "../domain/git/graph";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../domain/settings/updates";
 import type {
   AgentSession,
@@ -179,6 +180,14 @@ export const gitDiscard = (key: string, project: string, repo: string, path: str
   invoke<void>("git_discard", { key, project, repo, path });
 export const gitCommit = (key: string, project: string, repo: string, message: string, push: boolean) =>
   invoke<void>("git_commit", { key, project, repo, message, push });
+/** The newest 200 commits of a repo: its branch and upstream, or every branch (`all`). */
+export const gitLog = (key: string, project: string, repo: string, all: boolean) =>
+  invoke<GitCommit[]>("git_log", { key, project, repo, all });
+/** Pull a repo from its upstream, fast-forward only. */
+export const gitPull = (key: string, project: string, repo: string) => invoke<void>("git_pull", { key, project, repo });
+/** One commit's whole message and its files with their diffs, against its first parent. */
+export const gitShow = (key: string, project: string, repo: string, hash: string) =>
+  invoke<{ body: string; files: CommitFile[] }>("git_show", { key, project, repo, hash });
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });

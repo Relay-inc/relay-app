@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { writtenPaths, type GitFile, type GitRepo } from "../../../domain/git/git";
+import type { OpenCommit } from "../../../domain/git/graph";
 import { anchorOf, parsePatch } from "../../../domain/pull-requests/diff";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { useConversationsStore } from "../../../application/conversations/store";
@@ -15,6 +16,9 @@ import {
   followGit,
   loadGit,
   openFile,
+  pullRepo,
+  closeCommit,
+  showCommitFile,
   pickLine,
   removeComment,
   sendComments,
@@ -28,6 +32,7 @@ import {
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { Icon } from "../../components/Icon";
+import { GitLog } from "./GitLog";
 import { Modal } from "../../components/Modal";
 import { ModalHeader } from "../../components/ModalHeader";
 
@@ -53,7 +58,7 @@ export function GitPanel() {
   const busy = useConversationsStore(s => s.status[key] === "busy");
   const written = useDerived(() => writtenPaths(useConversationsStore.getState().messages[key]));
   const blocked = useDerived(() => busyRepos());
-  const { repos, err, open, discard } = useGitStore();
+  const { repos, err, open, discard, commit } = useGitStore();
   const comments = useGitStore(s => s.comments[key]) ?? [];
 
   useEffect(() => followGit(key, project, busy), [key, project, busy]);
@@ -99,10 +104,19 @@ export function GitPanel() {
       {repos && !repos.length ? <div className="text-sm text-secondary">{t("git.noRepos")}</div> : null}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {repos?.map((r, i) => (
-          <RepoBox key={r.repo} repo={r} written={written} colour={REPO_COLOURS[i % REPO_COLOURS.length]} />
+          <RepoBox
+            key={r.repo}
+            repo={r}
+            written={written}
+            blocked={blocked.includes(r.repo)}
+            colour={REPO_COLOURS[i % REPO_COLOURS.length]}
+          />
         ))}
       </div>
       {repos?.some(r => r.files.length) ? <CommitBox repos={repos} blocked={blocked} /> : null}
+      {repos?.length ? (
+        <GitLog repos={repos} colours={repos.map((_, i) => REPO_COLOURS[i % REPO_COLOURS.length])} />
+      ) : null}
       {send}
       {/* over the whole window, not inside the drawer */}
       {repo && file
@@ -124,7 +138,7 @@ export function GitPanel() {
                 onClose={() => openFile("", "")}
               />
               <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-4 pb-6">
-                <FileDiff repo={repo} file={file} />
+                <FileDiff repo={repo.repo} file={file} />
               </div>
               {send ? (
                 <div className="flex-none flex justify-end px-5 py-3 border-t border-separator">{send}</div>
@@ -134,7 +148,86 @@ export function GitPanel() {
           )
         : null}
       {discard ? createPortal(<DiscardDialog what={discard} />, document.body) : null}
+      {commit ? createPortal(<CommitWindow open={commit} />, document.body) : null}
     </div>
+  );
+}
+
+/** A commit of the log over the app: its message, who and when, its files on the left and the picked one's diff,
+ *  the header's arrows step through the files. */
+function CommitWindow({ open }: { open: OpenCommit }) {
+  const { t, locale } = useT();
+  const at = useGitStore(s => s.commitFile);
+  const { commit, files, body, err } = open;
+  const file = files?.[at];
+  return (
+    <Modal onClose={closeCommit}>
+      <ModalHeader
+        left={
+          <span className="flex items-center gap-2 min-w-0 text-[13px]">
+            <span className="font-mono text-xs text-tertiary">{commit.hash.slice(0, 8)}</span>
+            <span className="font-semibold truncate">{commit.subject}</span>
+          </span>
+        }
+        position={files?.length ? `${at + 1} / ${files.length}` : ""}
+        first={at <= 0}
+        last={!files || at >= files.length - 1}
+        onStep={by => showCommitFile(at + by)}
+        onClose={closeCommit}
+      />
+      <div className="flex-1 min-h-0 flex">
+        <div className="w-64 flex-none flex flex-col min-h-0 border-r border-separator select-none">
+          <div className="flex-none flex flex-col gap-1 px-4 pt-3 pb-3 border-b border-separator text-xs text-secondary">
+            <span className="text-[13px] text-label whitespace-pre-wrap break-words select-text max-h-40 overflow-y-auto">
+              {body}
+            </span>
+            <span>
+              {commit.author} ·{" "}
+              {new Date(commit.at * 1000).toLocaleString(locale, { dateStyle: "medium", timeStyle: "short" })}
+            </span>
+            {commit.refs.length ? <span className="font-mono truncate">{commit.refs.join(", ")}</span> : null}
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto p-1.5">
+            {err ? <div className="err-box select-text">{err}</div> : null}
+            {!files && !err ? <div className="px-2 text-xs text-tertiary">{t("kb.loading")}</div> : null}
+            {files && !files.length ? <div className="px-2 text-xs text-tertiary">{t("git.noFiles")}</div> : null}
+            {files?.map((f, i) => {
+              const cut = f.path.lastIndexOf("/");
+              return (
+                <button
+                  key={f.path}
+                  className={`w-full flex items-center gap-1.5 h-7 px-2 rounded-md text-left text-xs cursor-pointer ${i === at ? "bg-accent-soft" : "hover:bg-fill"}`}
+                  title={f.path}
+                  onClick={() => showCommitFile(i)}
+                >
+                  <span className="flex-1 min-w-0 truncate">
+                    <span className="text-tertiary">{cut > 0 ? f.path.slice(0, cut + 1) : ""}</span>
+                    {f.path.slice(cut + 1)}
+                  </span>
+                  <span
+                    className={`flex-none grid place-items-center size-3.5 rounded-[3px] border text-[9px] font-bold ${STATUS[f.status] ?? "text-secondary border-separator-strong"}`}
+                  >
+                    {f.status}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <div className="flex-1 min-w-0 overflow-y-auto px-5 pt-4 pb-6">
+          {file ? (
+            <>
+              <div className="flex items-center gap-2 mb-2 font-mono text-xs">
+                <span className="font-semibold truncate">{file.path}</span>
+                <span className="text-add-fg">+{file.add}</span>
+                <span className="text-del-fg">−{file.del}</span>
+              </div>
+              <FileDiff repo={open.repo} file={file} readOnly />
+            </>
+          ) : null}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -229,7 +322,17 @@ function CommitBox({ repos, blocked }: { repos: GitRepo[]; blocked: string[] }) 
   );
 }
 
-function RepoBox({ repo, written, colour }: { repo: GitRepo; written: string[]; colour: string }) {
+function RepoBox({
+  repo,
+  written,
+  blocked,
+  colour,
+}: {
+  repo: GitRepo;
+  written: string[];
+  blocked: boolean;
+  colour: string;
+}) {
   const { t } = useT();
   const running = useGitStore(s => s.running === repo.repo);
   const err = useGitStore(s => s.errs[repo.repo]) ?? repo.err ?? "";
@@ -281,7 +384,16 @@ function RepoBox({ repo, written, colour }: { repo: GitRepo; written: string[]; 
             {staged ? `${staged}/${repo.files.length}` : repo.files.length}
           </span>
         ) : null}
-        {running ? <span className="spinner" /> : null}
+        {/* a pull while an agent works in the repo would change files under it */}
+        <button
+          className="btn-icon size-6! flex-none disabled:opacity-40"
+          disabled={blocked || running}
+          title={blocked ? t("git.busy") : t("git.pull")}
+          aria-label={t("git.pullRepo", { repo: repo.name })}
+          onClick={() => pullRepo(repo.repo)}
+        >
+          {running ? <span className="spinner" /> : <Icon name="bottom" className="glyph size-3.5" />}
+        </button>
       </div>
       {folded ? null : (
         <>
@@ -380,26 +492,33 @@ function Group({
   );
 }
 
-function FileDiff({ repo, file }: { repo: GitRepo; file: GitFile }) {
+/** A file's diff, every changed line open to a comment for the agent; `readOnly` (a commit of the log) without. */
+function FileDiff({
+  repo,
+  file,
+  readOnly = false,
+}: {
+  repo: string;
+  file: Pick<GitFile, "path" | "patch" | "binary">;
+  readOnly?: boolean;
+}) {
   const { t } = useT();
   const lines = useMemo(() => parsePatch(file.patch), [file.patch]);
   const { line: picked, draft } = useGitStore();
-  const comments = (useGitStore(s => s.comments[s.key]) ?? []).filter(
-    c => c.repo === repo.repo && c.path === file.path,
-  );
+  const comments = (useGitStore(s => s.comments[s.key]) ?? []).filter(c => c.repo === repo && c.path === file.path);
   return (
     <div className="flex flex-col gap-2 select-text">
       {file.binary || !lines.length ? (
         <div className="text-sm text-secondary">{t("git.binary")}</div>
       ) : (
         <>
-          <span className="text-xs text-tertiary">{t("git.clickLine")}</span>
+          {readOnly ? null : <span className="text-xs text-tertiary">{t("git.clickLine")}</span>}
           {/* long lines scroll sideways; every row is as wide as the widest, so the colours run through */}
           <div className="shrink-0 border border-separator rounded-[10px] overflow-x-auto overflow-y-hidden font-mono text-xs leading-5.5 [container-type:inline-size]">
             <div className="w-max min-w-full flex flex-col">
               {lines.map((line, i) => {
                 const anchor = anchorOf(line);
-                const key = anchor ? `${anchor.side}:${anchor.line}` : "";
+                const key = anchor && !readOnly ? `${anchor.side}:${anchor.line}` : "";
                 const on = !!key && picked === key;
                 const mine = anchor ? comments.filter(c => c.side === anchor.side && c.line === anchor.line) : [];
                 const bg = on
@@ -452,7 +571,7 @@ function FileDiff({ repo, file }: { repo: GitRepo; file: GitFile }) {
                           onKeyDown={e => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
-                              addComment(repo.repo, file.path, anchor.side, anchor.line, line.text);
+                              addComment(repo, file.path, anchor.side, anchor.line, line.text);
                             }
                             if (e.key === "Escape") {
                               e.stopPropagation();
@@ -472,7 +591,7 @@ function FileDiff({ repo, file }: { repo: GitRepo; file: GitFile }) {
                           <button
                             disabled={!draft.trim()}
                             className="h-7 px-2.5 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer disabled:opacity-50"
-                            onClick={() => addComment(repo.repo, file.path, anchor.side, anchor.line, line.text)}
+                            onClick={() => addComment(repo, file.path, anchor.side, anchor.line, line.text)}
                           >
                             {t("git.add")}
                           </button>

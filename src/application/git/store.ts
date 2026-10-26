@@ -1,4 +1,5 @@
 import type { GitRepo, LineComment } from "../../domain/git/git";
+import type { GitCommit, OpenCommit } from "../../domain/git/graph";
 import { makeStore } from "../make-store";
 
 type GitState = {
@@ -16,6 +17,13 @@ type GitState = {
   line: string; // the line a comment is being written on, "side:line", "" for none
   draft: string;
   comments: Record<string, LineComment[]>; // per conversation, until sent
+  logRepo: string; // the repo the log shows, "" (or one no longer listed) for the first
+  logAll: boolean; // every branch in the log, else the branch checked out and its upstream
+  log: GitCommit[] | null; // null while loading
+  logErr: string;
+  logHeight: number; // px, dragged on its top edge
+  commit: OpenCommit | null; // the commit open in a window over the app
+  commitFile: number; // the file of it shown
 };
 
 export const useGitStore = makeStore<GitState>(() => ({
@@ -33,4 +41,11 @@ export const useGitStore = makeStore<GitState>(() => ({
   line: "",
   draft: "",
   comments: {},
+  logRepo: "",
+  logAll: false,
+  log: null,
+  logErr: "",
+  logHeight: 260,
+  commit: null,
+  commitFile: 0,
 }));

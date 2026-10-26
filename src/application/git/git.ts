@@ -6,6 +6,7 @@ import { useConversationsStore } from "../conversations/store";
 import { typedOf } from "../conversations/drafts";
 import { typeInto } from "../conversations/actions";
 import { useGitStore } from "./store";
+import type { GitCommit } from "../../domain/git/graph";
 
 // The Git drawer of a project (domain/git/git.ts): its checkouts as git sees them, staging, discarding, committing
 // and pushing, the file open, and the comments on its lines that go back to the agent as one message in the composer.
@@ -25,6 +26,8 @@ export async function loadGit(key: string, project: string) {
       draft.open = "";
       draft.line = "";
       draft.draft = "";
+      draft.log = null;
+      draft.logErr = "";
     }
   });
   try {
@@ -33,7 +36,69 @@ export async function loadGit(key: string, project: string) {
   } catch (err) {
     if (st().key === key) set(draft => void (draft.err = String(err)));
   }
+  await loadLog();
 }
+
+// ---------- the log under the commit box: one repo at a time, folded under "\nlog"
+export const LOG = "\nlog";
+/** The repo the log shows: the one picked while it is listed, else the first. */
+export const logRepoOf = (repos: GitRepo[] | null, picked: string) =>
+  (repos ?? []).find(r => r.repo === picked) ?? repos?.[0];
+
+/** The log read again, unless it is folded: it follows every load of the drawer (a commit, a turn that ended). */
+export async function loadLog() {
+  const { key, project, repos, logRepo, logAll, folded } = st();
+  const repo = logRepoOf(repos, logRepo)?.repo;
+  if (!repo || folded[LOG]) return;
+  try {
+    const log = await backend.gitLog(key, project, repo, logAll);
+    // a pick or a switch while it ran: that load wins
+    if (st().key === key && logRepoOf(st().repos, st().logRepo)?.repo === repo && st().logAll === logAll)
+      set(draft => {
+        draft.log = log;
+        draft.logErr = "";
+      });
+  } catch (err) {
+    if (st().key === key) set(draft => void (draft.logErr = String(err)));
+  }
+}
+export function pickLogRepo(repo: string) {
+  set(draft => {
+    draft.logRepo = repo;
+    draft.log = null;
+  });
+  void loadLog();
+}
+export function toggleLogAll() {
+  set(draft => {
+    draft.logAll = !draft.logAll;
+    draft.log = null;
+  });
+  void loadLog();
+}
+export function toggleLog() {
+  toggleFold(LOG);
+  void loadLog();
+}
+export const setLogHeight = (px: number) => set(draft => void (draft.logHeight = px));
+
+/** A commit of the log in a window over the app: its message and its files, one diff at a time. */
+export async function openCommit(repo: string, commit: GitCommit) {
+  const { key, project } = st();
+  set(draft => {
+    draft.commit = { repo, commit, body: commit.subject, files: null, err: "" };
+    draft.commitFile = 0;
+  });
+  const mine = () => st().commit?.commit.hash === commit.hash;
+  try {
+    const { body, files } = await backend.gitShow(key, project, repo, commit.hash);
+    if (mine()) set(draft => void Object.assign(draft.commit!, { body, files }));
+  } catch (err) {
+    if (mine()) set(draft => void (draft.commit!.err = String(err)));
+  }
+}
+export const closeCommit = () => set(draft => void (draft.commit = null));
+export const showCommitFile = (at: number) => set(draft => void (draft.commitFile = at));
 
 /** The drawer follows the open conversation: loaded when it opens on another conversation or project, and again
  *  whenever no turn runs (a turn that ended may have changed files). */
@@ -111,6 +176,9 @@ export async function commitStaged(repos: string[], push: boolean) {
     ok = (await act(repo, () => backend.gitCommit(st().key, st().project, repo, message, push))) && ok;
   if (ok) set(draft => void (draft.message = ""));
 }
+
+/** Pull the repo from its upstream, fast-forward only: git's error under the repo when it went its own way. */
+export const pullRepo = (repo: string) => act(repo, () => backend.gitPull(st().key, st().project, repo));
 
 /** The repos a commit would take an agent's half-done work in: a running conversation of the project works there (a
  *  tool call names the checkout), or the open conversation runs and made that worktree. */

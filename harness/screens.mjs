@@ -317,6 +317,26 @@ const VIEWS = {
     await page.getByRole("button", { name: "Unversioned 2" }).click();
     await settle(page);
   },
+  // the log under the commit box: beacon's graph with its merges, then All branches with the spike
+  "git-log": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "Unversioned 2" }).click();
+    await waitText("Merge pull request #41 from acme/feat/credit-notes");
+    await settle(page);
+  },
+  "git-log-all": async () => {
+    await VIEWS["git-log"]();
+    await button("All branches").click();
+    await waitText("Try a queue per tenant");
+    await settle(page);
+  },
+  // a commit of the log opened: its message, its files and the first one's diff
+  "git-commit": async () => {
+    await VIEWS["git-log"]();
+    await click("Skip a balance the sync already added");
+    await waitText("src/Billing/BalanceSync.php");
+    await settle(page);
+  },
   "git-discard": async () => {
     await VIEWS["git-drawer"]();
     await page.getByRole("button", { name: "Discard the changes to scripts/backfill-balances.php" }).click();

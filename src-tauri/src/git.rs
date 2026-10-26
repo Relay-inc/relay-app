@@ -135,6 +135,50 @@ pub fn commit(top: &str, message: &str, push: bool, path_env: &str) -> Result<()
     run(top, if upstream { &["push"] } else { &["push", "--set-upstream", "origin", "HEAD"] }, path_env).map(|_| ())
 }
 
+/// Pull the branch from its upstream, fast-forward only: no merge commit, no rebase. A branch that went its own way
+/// fails with git's own words, the drawer shows them.
+pub fn pull(top: &str, path_env: &str) -> Result<(), String> {
+    run(top, &["pull", "--ff-only", "-q"], path_env).map(|_| ())
+}
+
+/// The newest `max` commits of a checkout for the drawer's log, parents first after children (topo order): the
+/// branch checked out and its upstream, or every branch, remote branch and tag (`all`). Per commit its parents, the
+/// refs on it (HEAD's branch first, marked by `head`), its author, when (unix seconds) and its subject. Only reads.
+pub fn log(top: &str, all: bool, max: usize, path_env: &str) -> Result<Value, String> {
+    // a repo without a commit has no log
+    if ok(top, &["rev-parse", "--verify", "-q", "HEAD"], path_env).is_none() { return Ok(json!([])); }
+    let n = format!("-n{max}");
+    let mut args = vec!["-c", "core.quotepath=off", "log", "--topo-order", &n, "--format=%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s%x1e"];
+    if all { args.extend(["--branches", "--remotes", "--tags", "HEAD"]); }
+    else {
+        args.push("HEAD");
+        if ok(top, &["rev-parse", "--verify", "-q", "@{u}"], path_env).is_some() { args.push("@{u}"); }
+    }
+    let out = run(top, &args, path_env)?;
+    Ok(Value::Array(out.split('\x1e').map(|r| r.trim_start_matches('\n')).filter(|r| !r.is_empty()).filter_map(|r| {
+        let f: Vec<&str> = r.split('\x1f').collect();
+        if f.len() < 6 { return None; }
+        let mut head = false;
+        let refs: Vec<&str> = f[4].split(", ").filter(|d| !d.is_empty()).filter_map(|d| {
+            if d == "HEAD" { head = true; return None; }
+            d.strip_prefix("HEAD -> ").map(|b| { head = true; b }).or(Some(d))
+        }).collect();
+        Some(json!({"hash": f[0], "parents": f[1].split(' ').filter(|p| !p.is_empty()).collect::<Vec<_>>(), "author": f[2],
+                    "at": f[3].parse::<i64>().unwrap_or(0), "refs": refs, "head": head, "subject": f[5]}))
+    }).collect()))
+}
+
+/// One commit as its window shows it: its whole message and per file its letter, counts and diff, against its first
+/// parent (a merge as the branch it landed on saw it, as JetBrains shows it), a first commit against the empty tree.
+/// `hash` must be a hash, so nothing the webview sends is read as an option. Only reads.
+pub fn show(top: &str, hash: &str, path_env: &str) -> Result<Value, String> {
+    if !(4..=40).contains(&hash.len()) || !hash.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(format!("{hash}: not a commit hash")); }
+    let body = run(top, &["log", "-1", "--format=%B", hash], path_env)?;
+    let parent = ok(top, &["rev-parse", "--verify", "-q", &format!("{hash}^")], path_env).unwrap_or_else(|| "4b825dc642cb6eb9a060e54bf8d69288fbee4904".into());
+    let diff = run(top, &["-c", "core.quotepath=off", "diff", "--no-color", "--no-ext-diff", "-M", &parent, hash], path_env)?;
+    Ok(json!({"hash": hash, "body": body.trim_end(), "files": split(&diff)}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -196,6 +240,63 @@ mod tests {
         assert_eq!(ok(&top, &["log", "-1", "--format=%s"], &path).unwrap(), "Plant the apple trees");
         // nothing staged: git's own words come back
         assert!(commit(&top, "Empty", false, &path).unwrap_err().contains("no changes added to commit"));
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn pull_fast_forwards_only() {
+        let path = std::env::var("PATH").unwrap();
+        let tmp = std::env::temp_dir().join(format!("relay-git-pull-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let cfg = "git config user.email t@t && git config user.name t";
+        sh(&tmp, &format!("git init -q --bare -b main origin.git && git clone -q origin.git a && cd a && {cfg} && git commit -q --allow-empty -m one \
+                  && git push -q origin main && cd .. && git clone -q origin.git b && cd b && {cfg} && cd ../a && git commit -q --allow-empty -m two && git push -q"));
+        let b = tmp.join("b").to_string_lossy().into_owned();
+        pull(&b, &path).unwrap();
+        assert_eq!(ok(&b, &["log", "-1", "--format=%s"], &path).unwrap(), "two");
+        // both sides went on: no merge, git says why
+        sh(&tmp, "cd a && git commit -q --allow-empty -m three && git push -q && cd ../b && git commit -q --allow-empty -m mine");
+        assert!(!pull(&b, &path).unwrap_err().is_empty());
+        assert_eq!(ok(&b, &["log", "-1", "--format=%s"], &path).unwrap(), "mine");
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn log_follows_the_branch_or_every_branch() {
+        let path = std::env::var("PATH").unwrap();
+        let tmp = std::env::temp_dir().join(format!("relay-git-log-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let top = tmp.to_string_lossy().into_owned();
+        sh(&tmp, "git init -q -b main && git config user.email t@t && git config user.name Tess");
+        assert_eq!(log(&top, false, 10, &path).unwrap(), json!([]));
+        sh(&tmp, "git commit -q --allow-empty -m one && git tag v1 && git checkout -q -b side && git commit -q --allow-empty -m 'side work' \
+                  && git checkout -q main && git commit -q --allow-empty -m two && git merge -q --no-ff side -m 'Merge side' \
+                  && git checkout -q -b later && git commit -q --allow-empty -m elsewhere && git checkout -q main");
+        let v = log(&top, false, 10, &path).unwrap();
+        let subjects: Vec<&str> = v.as_array().unwrap().iter().map(|c| c["subject"].as_str().unwrap()).collect();
+        assert_eq!(subjects.len(), 4, "{subjects:?}");
+        assert_eq!((subjects[0], subjects[3]), ("Merge side", "one"));
+        assert_eq!((v[0]["head"].clone(), v[0]["refs"].clone(), v[0]["author"].clone()), (json!(true), json!(["main"]), json!("Tess")));
+        assert_eq!(v[0]["parents"].as_array().unwrap().len(), 2);
+        assert_eq!(v[3]["refs"], json!(["tag: v1"]));
+        assert!(v[0]["at"].as_i64().unwrap() > 1_600_000_000);
+        // every branch: the one not merged shows too, and stays at most `max`
+        let all = log(&top, true, 10, &path).unwrap();
+        assert!(all.as_array().unwrap().iter().any(|c| c["subject"] == "elsewhere"));
+        assert_eq!(log(&top, true, 2, &path).unwrap().as_array().unwrap().len(), 2);
+        // a commit's files against its first parent, the first commit against nothing
+        sh(&tmp, "printf 'a\\nb\\n' > f.txt && git add f.txt && git commit -qm 'Add f' -m 'Why it is there.' && printf 'a\\nB\\n' > f.txt && git commit -qam 'Change f'");
+        let head = ok(&top, &["rev-parse", "HEAD"], &path).unwrap();
+        let c = show(&top, &head, &path).unwrap();
+        assert_eq!((c["files"][0]["path"].clone(), c["files"][0]["status"].clone(), c["files"][0]["add"].clone(), c["files"][0]["del"].clone()), (json!("f.txt"), json!("M"), json!(1), json!(1)));
+        let added = show(&top, &ok(&top, &["rev-parse", "HEAD^"], &path).unwrap(), &path).unwrap();
+        assert_eq!((added["files"][0]["status"].clone(), added["body"].clone()), (json!("A"), json!("Add f\n\nWhy it is there.")));
+        let first = ok(&top, &["rev-list", "--max-parents=0", "HEAD"], &path).unwrap();
+        assert_eq!(show(&top, &first, &path).unwrap()["files"], json!([]));
+        assert!(show(&top, "--output=/tmp/x", &path).is_err());
+        assert!(show(&top, "HEAD", &path).is_err());
         std::fs::remove_dir_all(&tmp).ok();
     }
 }

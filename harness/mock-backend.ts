@@ -443,6 +443,12 @@ function handle(cmd: string, a: Args): unknown {
     // the Git drawer: Beacon Billing's two checkouts, staged, discarded and committed in memory
     case "git_repos":
       return a.project === "Beacon Billing" ? structuredClone(gitRepos) : [];
+    case "git_log":
+      return git.log(a.repo, a.all);
+    case "git_show":
+      return git.show(a.hash);
+    case "git_pull":
+      return null;
     case "git_stage":
     case "git_discard":
     case "git_commit": {
