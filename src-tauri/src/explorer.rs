@@ -16,8 +16,11 @@ pub fn roots(vault: &str, repos_json: Option<String>, project: &str) -> Value {
     let mut out = vec![];
     if !project.is_empty() {
         let idx: serde_json::Map<String, Value> = repos_json.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        // never the home folder or one above it: the index is the vault's, but a wrong line must not open ~/.ssh
+        let home = std::env::var("HOME").ok().and_then(|h| fs::canonicalize(h).ok());
+        let too_wide = |d: &str| fs::canonicalize(d).ok().is_none_or(|d| home.as_ref().is_some_and(|h| h.starts_with(&d)));
         let mut code: Vec<&String> = idx.iter()
-            .filter(|(d, n)| Path::new(d.as_str()).is_dir() && n.as_str().and_then(|n| n.rsplit('/').next()).map(|n| n.trim_end_matches(".md")) == Some(project))
+            .filter(|(d, n)| Path::new(d.as_str()).is_dir() && !too_wide(d) && n.as_str().and_then(|n| n.rsplit('/').next()).map(|n| n.trim_end_matches(".md")) == Some(project))
             .map(|(d, _)| d).collect();
         code.sort();
         for d in code {
@@ -50,7 +53,8 @@ pub fn list(roots: &[String], path: &str, path_env: &str) -> Result<Value, Strin
     let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
     // outside a repo git exits 128 and nothing is ignored
     let ignored: Vec<String> = if names.is_empty() { vec![] } else {
-        Command::new("git").arg("-C").arg(&dir).args(["check-ignore", "--"]).args(&names).env("PATH", path_env).output()
+        // a folder in the tree may be any checkout: no fsmonitor command from its config, no index read
+        Command::new("git").arg("-C").arg(&dir).args(["-c", "core.fsmonitor=false", "check-ignore", "--no-index", "--"]).args(&names).env("PATH", path_env).output()
             .map(|o| String::from_utf8_lossy(&o.stdout).lines().map(str::to_string).collect()).unwrap_or_default()
     };
     Ok(Value::Array(entries.iter().map(|(n, d)| json!({"name": n, "path": dir.join(n).to_string_lossy(), "dir": d, "ignored": ignored.contains(n)})).collect()))
@@ -116,6 +120,8 @@ mod tests {
             tmp.join("code/beacon").to_string_lossy(): "Contexts/Work/Projects/Beacon/Beacon.md",
             tmp.join("code/gone").to_string_lossy(): "Contexts/Work/Projects/Beacon/Beacon.md",
             tmp.join("code").to_string_lossy(): "Contexts/Work/Projects/Other/Other.md",
+            std::env::var("HOME").unwrap(): "Contexts/Work/Projects/Beacon/Beacon.md",
+            "/": "Contexts/Work/Projects/Beacon/Beacon.md",
         }).to_string();
         let v = roots(&vault.to_string_lossy(), Some(idx), "Beacon");
         let got: Vec<(String, bool)> = v["roots"].as_array().unwrap().iter().map(|r| (r["label"].as_str().unwrap().to_string(), r["vault"].as_bool().unwrap())).collect();
