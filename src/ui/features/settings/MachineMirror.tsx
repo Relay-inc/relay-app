@@ -3,11 +3,14 @@ import type { Machine, MirrorProgress } from "../../../domain/settings/types";
 import type { Key } from "../../../shared/i18n";
 import { agoParts, conflictPath } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
-import { addMirrorExclude, removeMirrorExclude } from "../../../application/settings/machines-page";
+import { addMirrorExclude, removeMirrorExclude, settleHeldDeletes } from "../../../application/settings/machines-page";
 import { relativeFormat } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
 import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW } from "./blocks";
 import { StatusLine } from "./StatusLine";
+
+/** Held deletes listed by name, the rest counted. */
+const HELD_SHOWN = 5;
 
 const ROOT: Record<MirrorProgress["root"], Key> = {
   context: "mc.mirrorRootContext",
@@ -111,6 +114,30 @@ export function MachineMirror({ machine }: { machine: Machine }) {
                     {t("mc.mirrorConflict", { path: conflictPath(conflict) })}
                   </span>
                 ))}
+              </div>
+            ) : null}
+            {/* more deletes at once than the mirror lets through on its own: nothing goes until a choice */}
+            {status.held.length ? (
+              <div className="grid gap-1">
+                <StatusLine level="warn">{tn("mc.mirrorHeld", status.held.length)}</StatusLine>
+                {status.held.slice(0, HELD_SHOWN).map(path => (
+                  <span key={path} className="truncate font-mono text-xs text-s-fg">
+                    {path}
+                  </span>
+                ))}
+                {status.held.length > HELD_SHOWN ? (
+                  <span className="text-xs text-s-muted">
+                    {t("mc.mirrorHeldMore", { n: status.held.length - HELD_SHOWN })}
+                  </span>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <button className={buttonClass()} onClick={() => settleHeldDeletes(machine, false)}>
+                    {t("mc.mirrorHeldRestore")}
+                  </button>
+                  <button className={buttonClass("danger")} onClick={() => settleHeldDeletes(machine, true)}>
+                    {t("mc.mirrorHeldDelete")}
+                  </button>
+                </div>
               </div>
             ) : null}
             {status.errors.map((error, index) => (

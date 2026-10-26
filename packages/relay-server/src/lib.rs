@@ -233,7 +233,7 @@ impl Server {
             },
             "sync_put" => {
                 let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), mirror::MAX_FILE)?;
-                reply(&mut w, self.mirror.put(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or(""), &body, req["mtime"].as_i64().unwrap_or(0)).map(|_| json!({})))
+                reply(&mut w, self.mirror.put(ns, req["root"].as_str().unwrap_or(""), req["path"].as_str().unwrap_or(""), &body, req["mtime"].as_i64().unwrap_or(0), req["expect"].as_str()).map(|_| json!({})))
             }
             "sync_put_many" => {
                 let root = req["root"].as_str().unwrap_or("");
@@ -241,7 +241,7 @@ impl Server {
                 for f in req["files"].as_array().into_iter().flatten() {
                     let body = proto::read_body(&mut r, f["len"].as_u64().unwrap_or(0), mirror::MAX_FILE)?;
                     let path = f["path"].as_str().unwrap_or("");
-                    if let Err(e) = self.mirror.put(ns, root, path, &body, f["mtime"].as_i64().unwrap_or(0)) { errors.insert(path.into(), json!(e)); }
+                    if let Err(e) = self.mirror.put(ns, root, path, &body, f["mtime"].as_i64().unwrap_or(0), f["expect"].as_str()) { errors.insert(path.into(), json!(e)); }
                 }
                 reply(&mut w, Ok(json!({"errors": errors})))
             }

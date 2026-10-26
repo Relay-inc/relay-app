@@ -1683,6 +1683,16 @@ export default {
   "mc.mirrorConflicts_one": "{n} conflict. Beide versies zijn bewaard:",
   "mc.mirrorConflicts_other": "{n} conflicten. Beide versies zijn bewaard:",
   "mc.mirrorConflict": "conflictkopie: {path}",
+  "mc.mirrorHeld_one":
+    "{n} verwijdering tegengehouden: meer dan een vijfde van de bestanden zou in één keer verdwijnen. Er gaat niets weg tot je kiest:",
+  "mc.mirrorHeld_other":
+    "{n} verwijderingen tegengehouden: meer dan een vijfde van de bestanden zou in één keer verdwijnen. Er gaat niets weg tot je kiest:",
+  "mc.mirrorHeldMore": "en nog {n}",
+  "mc.mirrorHeldRestore": "Terugzetten",
+  "mc.mirrorHeldDelete": "Verwijderen",
+  "mc.mirrorHeldAllowed":
+    "Ze gaan weg bij de volgende ronde. Wat op deze Mac verdwijnt, blijft 30 dagen in de prullenbak van de spiegel.",
+  "mc.mirrorHeldRestored": "Ze komen terug bij de volgende ronde.",
   "nav.brain": "Brein",
   "nav.brainPending": "Notities die op review wachten",
   "brain.pick": "Kies een notitie om ze te beoordelen",

@@ -9,7 +9,7 @@
 
 use relay_remote::client::Client;
 use relay_remote::proto::Info;
-use relay_remote::sync::{self, Filter, Manifest, Mode, Report, Walker};
+use relay_remote::sync::{self, Filter, Guard, Manifest, Mode, Report, Walker};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -18,15 +18,22 @@ use std::sync::Mutex;
 pub const ROOTS: [(&str, Mode); 4] = [("context", Mode::Replica), ("plugins", Mode::Replica), ("vault", Mode::TwoWay), ("memory", Mode::TwoWay)];
 
 /// What the last rounds did, per machine, for Settings › Machines.
+/// `held`: the deletes of the last round that wait for the user (sync::Guard), as "<root>/<path>".
 #[derive(Default, Clone, serde::Serialize)]
-pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub skipped: Vec<String>, pub errors: Vec<String>, pub locked: bool, pub in_ram: bool }
+pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub skipped: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub locked: bool, pub in_ram: bool }
 
 /// Where a running round is, per machine: root `step` of 4, `done` of `total` files (total 0: still comparing).
 #[derive(Clone, serde::Serialize)]
 pub struct Progress { pub root: &'static str, pub step: usize, pub done: usize, pub total: usize }
 
 #[derive(Default)]
-pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, pub progress: Mutex<HashMap<String, Progress>>, busy: Mutex<std::collections::HashSet<String>> }
+/// `allow`: the machines whose next round may delete more than the brake lets through (the user said so).
+pub struct Mirrors { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, pub progress: Mutex<HashMap<String, Progress>>, busy: Mutex<std::collections::HashSet<String>>, allow: Mutex<std::collections::HashSet<String>> }
+
+/// Where a round keeps what it deletes or mostly empties here: <data>/mirror-trash/<machine>/<round's minute>/<root>/<path>.
+fn trash(data: &Path, id: &str) -> PathBuf { data.join("mirror-trash").join(id) }
+/// Rounds kept that long, the older ones go at the start of a round.
+const TRASH_DAYS: i64 = 30;
 
 /// The machine's excluded vault folders (relative paths).
 pub fn excludes(m: &Value) -> Vec<String> {
@@ -136,6 +143,12 @@ impl Mirrors {
         if unlocked {
             let name = m["name"].as_str().unwrap_or("machine").to_string();
             let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
+            // the folders are named by the minute, so the name sorts by age
+            let cutoff = (chrono::Local::now() - chrono::Duration::days(TRASH_DAYS)).format("%Y-%m-%d").to_string();
+            for e in std::fs::read_dir(trash(data, &id)).into_iter().flatten().flatten() {
+                if e.file_name().to_string_lossy().as_ref() < cutoff.as_str() { std::fs::remove_dir_all(e.path()).ok(); }
+            }
+            let allow_deletes = self.allow.lock().unwrap().remove(&id);
             let copy = |p: &str| sync::conflict_copy(p, &name, &stamp);
             let mergeable = |p: &str| p.rsplit('/').next() == Some("MEMORY.md");
             for (step, (root, mode)) in ROOTS.into_iter().enumerate() {
@@ -147,7 +160,10 @@ impl Mirrors {
                 let progress = |done, total| { if total > 0 || first { self.progress.lock().unwrap().insert(id.clone(), Progress { root, step: step + 1, done, total }); } };
                 let mut walkers = self.walkers.lock().unwrap();
                 let w = walkers.entry(format!("{id}/{root}")).or_default();
-                let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable, &progress);
+                let to = trash(data, &id).join(&stamp).join(root);
+                let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
+                let guard = Guard { allow_deletes, keep: &keep };
+                let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable, &guard, &progress);
                 drop(walkers);
                 Self::save_base(data, &id, root, &next);
                 st.pushed += r.pushed.len() + r.deleted_remote.len();
@@ -155,6 +171,7 @@ impl Mirrors {
                 st.conflicts.extend(r.conflicts.into_iter().map(|c| format!("{root}/{c}")));
                 st.skipped.extend(r.skipped.into_iter().map(|c| format!("{root}/{c}")));
                 st.errors.extend(r.errors.into_iter().map(|c| format!("{root}: {c}")));
+                st.held.extend(r.held.into_iter().map(|c| format!("{root}/{c}")));
             }
         }
         self.progress.lock().unwrap().remove(&id);
@@ -169,10 +186,25 @@ impl Mirrors {
         st
     }
 
+    /// The held deletes of a machine go through in its next round.
+    pub fn allow_deletes(&self, id: &str) { self.allow.lock().unwrap().insert(id.into()); }
+    /// The held deletes of a machine are undone instead: out of the base, so the next round sees each file as new on
+    /// the side that still has it and copies it back to the other.
+    pub fn restore_held(&self, data: &Path, id: &str) {
+        let Some(st) = self.status.lock().unwrap().get_mut(id).map(|s| std::mem::take(&mut s.held)) else { return };
+        for (root, _) in ROOTS {
+            let mut base = Self::load_base(data, id, root);
+            let n = base.len();
+            for p in st.iter().filter_map(|h| h.strip_prefix(root)?.strip_prefix('/')) { base.remove(p); }
+            if base.len() != n { Self::save_base(data, id, root, &base); }
+        }
+    }
+
     /// Forget this Mac's side of a machine's mirror: the bases (so a new mirror starts from nothing) and the stage.
     pub fn forget(&self, data: &Path, id: &str) {
         std::fs::remove_dir_all(data.join("mirror-base").join(id)).ok();
         std::fs::remove_dir_all(data.join("mirror-stage").join(id)).ok();
+        std::fs::remove_dir_all(trash(data, id)).ok();
         self.status.lock().unwrap().remove(id);
         self.walkers.lock().unwrap().retain(|k, _| !k.starts_with(&format!("{id}/")));
     }
@@ -208,6 +240,20 @@ mod tests {
         assert_eq!(env[0].0, "CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD");
         let (args, _) = session_args(&info, "/home/relay/repos/x");
         assert!(serde_json::from_str::<Value>(args.last().unwrap()).unwrap()["autoMemoryDirectory"].is_null(), "memory only for the vault");
+    }
+    #[test]
+    fn restoring_held_deletes_takes_them_out_of_the_base() {
+        let data = std::env::temp_dir().join(format!("relay-mirror-restore-{}", std::process::id()));
+        let e = |p: &str| (p.to_string(), sync::Entry { path: p.into(), size: 1, mtime: 0, hash: "h".into() });
+        Mirrors::save_base(&data, "m", "vault", &[e("a.md"), e("b.md")].into_iter().collect());
+        Mirrors::save_base(&data, "m", "memory", &[e("a.md")].into_iter().collect());
+        let ms = Mirrors::default();
+        ms.status.lock().unwrap().insert("m".into(), Status { held: vec!["vault/a.md".into()], ..Default::default() });
+        ms.restore_held(&data, "m");
+        assert_eq!(Mirrors::load_base(&data, "m", "vault").keys().collect::<Vec<_>>(), ["b.md"]);
+        assert_eq!(Mirrors::load_base(&data, "m", "memory").len(), 1, "the same path in another root stays");
+        assert!(ms.status.lock().unwrap()["m"].held.is_empty());
+        std::fs::remove_dir_all(&data).ok();
     }
     #[test]
     fn a_machine_session_starts_in_the_mode_of_a_window_here() {

@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -243,7 +243,8 @@ function handle(cmd: string, a: Args): unknown {
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
     // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
     case "machine_status":
-      if (fixture === "phone") return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
+      if (fixture === "phone" || fixture === "mirror")
+        return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
       return {
@@ -261,7 +262,27 @@ function handle(cmd: string, a: Args): unknown {
       };
     case "server_setup":
       return { version: "0.0.4", image: "ghcr.io/relay-inc/relay-server" };
+    // fixture "mirror": an agent there deleted a folder, the round holds the 9 deletes back; Restore and Delete answer
     case "mirror_status":
+      return fixture === "mirror"
+        ? {
+            at: NOW_S - 40,
+            pushed: 12,
+            pulled: 3,
+            conflicts: [],
+            skipped: [],
+            errors: [],
+            held: Array.from(
+              { length: 9 },
+              (_, i) => `vault/Contexts/Work/Projects/Harbor CRM/Documents/Note ${i + 1}.md`,
+            ),
+            locked: false,
+            in_ram: true,
+          }
+        : null;
+    case "mirror_allow_deletes":
+    case "mirror_restore_held":
+      return null;
     case "mirror_progress":
       return null;
     // GitHub and the repos on the machine (fixture "github"): Disconnect, then Connect shows the code, typed 5 s later
