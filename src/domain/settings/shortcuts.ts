@@ -19,6 +19,7 @@ export const COMMANDS = {
   "app.escape": { scope: "app", keys: ["Escape"] },
   "app.stop": { scope: "app", keys: ["ctrl+KeyC"] },
   "chat.send": { scope: "chat", keys: ["Enter"] },
+  "chat.find": { scope: "chat", keys: ["meta+KeyF", "ctrl+KeyF"] },
   "card.confirm": { scope: "card", keys: ["Enter"] },
   "today.next": { scope: "today", keys: ["j", "ArrowDown"] },
   "today.prev": { scope: "today", keys: ["k", "ArrowUp"] },
