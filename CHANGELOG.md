@@ -72,6 +72,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **macOS asks for the microphone again**: Relay lacked the entitlement the hardened runtime needs for it, so macOS never showed the prompt and dictation recorded silence, while Settings › General kept saying "Asked on first use". A build not signed by Apple still asks again after each update (#277)
 - **Agents see a ticket's screenshots**: Start conversation on a ticket attaches its pictures to the new conversation, and a board pipeline's worker gets them as files on this Mac (their paths in its brief). Before, the agent only got the tracker's links, which it cannot open. Productive's originals load with the login of Relay's viewer window: open one picture there and sign in once (#251)
 - **A ticket's picture opens in the viewer again**: the viewer window stayed white, because the guard for links in mails also refused the picture and the tracker's login in that window (#250)
 - **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
