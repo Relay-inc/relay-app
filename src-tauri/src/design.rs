@@ -387,7 +387,16 @@ fn answer(view: &Webview, q: &Value, text: &str) -> Result<(), String> {
         const f = o.root.querySelector('textarea,input[type="text"],input:not([type])');
         if (!f) return "the form has no text field";
         f.focus(); f.select(); document.execCommand("insertText", false, free);
-        if (!o.submit && f.form) f.form.requestSubmit();
+        // the page may not have the focus (claude.ai's sidebar over the chat): then set the value as React reads it
+        if (f.value !== free) {{
+          Object.getOwnPropertyDescriptor(Object.getPrototypeOf(f), "value").set.call(f, free);
+          f.dispatchEvent(new Event("input", {{ bubbles: true }}));
+        }}
+        // no submit button: the card takes Enter in the field ("⏎ Enter"), a form submit when that did nothing
+        if (!o.submit) {{
+          f.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }}));
+          setTimeout(() => {{ if (f.isConnected && f.form) f.form.requestSubmit(); }}, 500);
+        }}
       }}
       return "ok"; }})()"#, json!(picks), json!(free));
     view.set_focus().ok();
