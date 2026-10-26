@@ -469,10 +469,11 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
 }
 
 /// The chat panel's elements as an outline (tag, role, test id, aria-label, text), to find selectors of claude.ai's widgets:
-/// design_snapshot with `dom`, while the widget is open.
+/// design_snapshot with `dom`, while the widget is open. Starts at the chat column: claude.ai nests it ~15 divs below `main`.
 fn dom(view: &Webview) -> Result<Value, String> {
     let js = r#"(() => {
-      const root = (document.querySelector('[data-testid="chat-input"]') || document.body).closest('main,[role="complementary"],aside') || document.body;
+      const root = document.querySelector('[data-testid="chat-column-body"]')
+        || (document.querySelector('[data-testid="chat-input"]') || document.body).closest('main,[role="complementary"],aside') || document.body;
       const out = [];
       const walk = (e, d) => {
         if (d > 14 || out.length > 600 || e.tagName === "svg" || e.tagName === "SCRIPT" || e.tagName === "STYLE") return;
