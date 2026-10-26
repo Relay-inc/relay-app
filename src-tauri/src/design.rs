@@ -434,7 +434,8 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
     let asked = state(view)?;
     let (before, answered) = if asked["question"].is_object() {
         answer(view, &asked["question"], text)?;
-        (asked["count"].as_u64().unwrap_or(0), asked["question"]["key"].as_str().map(String::from))
+        // the turn's answer is already there, still streaming behind the question: wait for it, not for a new one
+        (asked["count"].as_u64().unwrap_or(0).saturating_sub(1), asked["question"]["key"].as_str().map(String::from))
     } else {
         let fill = format!(r#"(() => {{
       const el = document.querySelector('[data-testid="chat-input"]'), text = {};
