@@ -18,10 +18,13 @@ use std::sync::Mutex;
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Shared { pub id: String, pub name: String, pub host: String, pub port: u16, pub fp: String, pub folder: String, #[serde(default)] pub role: String }
 
-/// The shared vaults in the settings; an entry that does not read is left out.
+/// The shared vaults in the settings; an entry that does not read, or whose id is not one, is left out.
 pub fn list(s: &Value) -> Vec<Shared> {
-    s["sharedVaults"].as_array().into_iter().flatten().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect()
+    s["sharedVaults"].as_array().into_iter().flatten().filter_map(|v| serde_json::from_value::<Shared>(v.clone()).ok()).filter(|v| valid_id(&v.id)).collect()
 }
+/// A vault id as the server makes them: 16 lowercase hex. It names files here (the key, the base), so nothing else
+/// a server answers ever reaches a path.
+pub fn valid_id(id: &str) -> bool { id.len() == 16 && id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)) }
 pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter().find(|v| v.id == id).ok_or_else(|| format!("no shared vault {id}")) }
 
 /// What the last round of a vault did, for Settings: counts since the app started, the conflict copies made, and the
@@ -189,6 +192,7 @@ pub async fn shared_vault_create(app: tauri::AppHandle, state: St<'_>, machine: 
         Ok((c.vault_create(&name)?, VaultKey::generate()))
     }).await.map_err(|e| e.to_string())??;
     let (r, key) = made;
+    if !valid_id(&r.id) { return Err(format!("the server answered an invalid vault id {:?}", r.id)); }
     let data = crate::data_dir(&app);
     save_key(&data, &r.id, &key)?;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
@@ -206,6 +210,7 @@ pub async fn shared_vault_join(app: tauri::AppHandle, state: St<'_>, link: Strin
     check_folder(&folder, &taken(&s), true)?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
     let (line, joined, key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
+    if !valid_id(&joined.id) { return Err(format!("not a vault id: {:?}", joined.id)); }
     save_key(&crate::data_dir(&app), &joined.id, &key)?;
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role };
@@ -271,12 +276,14 @@ mod tests {
     use serde_json::json;
     #[test]
     fn the_settings_list_skips_what_does_not_read() {
-        let s = json!({"sharedVaults": [{"id": "0123456789abcdef", "name": "Team", "host": "192.168.1.2", "port": 47800, "fp": "ab", "folder": "/Users/me/Team"}, {"id": 3}]});
+        let s = json!({"sharedVaults": [{"id": "0123456789abcdef", "name": "Team", "host": "192.168.1.2", "port": 47800, "fp": "ab", "folder": "/Users/me/Team"}, {"id": 3},
+            {"id": "../../x", "name": "Bad", "host": "h", "port": 1, "fp": "ab", "folder": "/tmp/x"}]});
         let l = list(&s);
         assert_eq!(l.len(), 1);
         assert_eq!((l[0].role.as_str(), l[0].port), ("", 47800));
         assert!(find(&s, "nope").is_err());
         assert!(list(&json!({})).is_empty());
+        assert!(valid_id("0123456789abcdef") && !valid_id("0123456789ABCDEF") && !valid_id("../../etc/passwd") && !valid_id("0123456789abcde"));
     }
     #[test]
     fn a_vault_folder_stands_alone() {
