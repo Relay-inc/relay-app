@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder.
+- **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder (#267)
 
 ### Changed
 
