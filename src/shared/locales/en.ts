@@ -327,6 +327,7 @@ const en = {
   "git.busy": "A conversation of this project is working in this repo. Committing now would take its half-done work.",
   "git.nothingStaged": "Nothing staged. Tick the files to commit.",
   "git.noMessage": "Write a commit message first.",
+  "git.commitIn": "A commit in {repos}",
   "git.ahead": "Not pushed: {n}",
   "git.behind": "To pull: {n}",
   "git.binary": "Binary file, no diff to show.",

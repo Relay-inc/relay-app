@@ -10,7 +10,7 @@ import {
   addComment,
   askDiscard,
   busyRepos,
-  commitRepo,
+  commitStaged,
   discardFile,
   followGit,
   loadGit,
@@ -20,7 +20,9 @@ import {
   sendComments,
   setLineDraft,
   setMessage,
+  stagedRepos,
   suggestMessage,
+  toggleFold,
   toggleStaged,
 } from "../../../application/git/git";
 import { useDerived } from "../../hooks/useDerived";
@@ -37,8 +39,12 @@ const STATUS: Record<string, string> = {
   "?": "text-tertiary border-separator-strong",
 };
 
-/** The project's checkouts as git sees them: per repo its branch, its changed files (staged ones ticked) and a commit
- *  box, a file's diff in a window over the app to comment on line by line. The comments go to the composer together,
+// a colour per repo, in the order the drawer lists them: the macOS system colours, without the red and orange the
+// file badges use
+const REPO_COLOURS = ["#007aff", "#34c759", "#af52de", "#ff2d55", "#30b0c7", "#ffcc00", "#5856d6", "#a2845e"];
+
+/** The project's checkouts as git sees them: per repo its branch and its changed files (staged ones ticked), under
+ *  them one commit box for every repo with something staged, as in JetBrains, and a file's diff in a window over the app to comment on line by line. The comments go to the composer together,
  *  as one message to the agent. */
 export function GitPanel() {
   const { t } = useT();
@@ -92,10 +98,11 @@ export function GitPanel() {
       {!repos && !err ? <div className="text-sm text-secondary">{t("kb.loading")}</div> : null}
       {repos && !repos.length ? <div className="text-sm text-secondary">{t("git.noRepos")}</div> : null}
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {repos?.map(r => (
-          <RepoBox key={r.repo} repo={r} written={written} blocked={blocked.includes(r.repo)} />
+        {repos?.map((r, i) => (
+          <RepoBox key={r.repo} repo={r} written={written} colour={REPO_COLOURS[i % REPO_COLOURS.length]} />
         ))}
       </div>
+      {repos?.some(r => r.files.length) ? <CommitBox repos={repos} blocked={blocked} /> : null}
       {send}
       {/* over the whole window, not inside the drawer */}
       {repo && file
@@ -155,90 +162,169 @@ function DiscardDialog({ what }: { what: string }) {
   );
 }
 
-function RepoBox({ repo, written, blocked }: { repo: GitRepo; written: string[]; blocked: boolean }) {
+/** The one message for every repo with staged files: each gets its own commit with it, pushed when asked. */
+function CommitBox({ repos, blocked }: { repos: GitRepo[]; blocked: string[] }) {
+  const { t } = useT();
+  const message = useGitStore(s => s.message);
+  const suggesting = useGitStore(s => s.suggesting);
+  const running = useGitStore(s => !!s.running);
+  const staged = stagedRepos(repos);
+  // why a commit cannot go now, as the buttons' title
+  const why = staged.some(r => blocked.includes(r.repo))
+    ? t("git.busy")
+    : !staged.length
+      ? t("git.nothingStaged")
+      : !message.trim()
+        ? t("git.noMessage")
+        : "";
+  const commit = (push: boolean) =>
+    commitStaged(
+      staged.map(r => r.repo),
+      push,
+    );
+  return (
+    <div className="flex-none flex flex-col gap-1.5 pt-2.5 px-1 border-t border-separator">
+      <div className="relative">
+        <textarea
+          rows={3}
+          value={message}
+          onChange={e => setMessage(e.target.value)}
+          placeholder={t("git.message")}
+          aria-label={t("git.message")}
+          className="field h-auto w-full py-1.5 pr-9 resize-none select-text"
+        />
+        <button
+          className="btn-icon absolute right-1 top-1 disabled:opacity-40"
+          disabled={!staged.length || suggesting}
+          title={staged.length ? t("git.suggest") : t("git.nothingStaged")}
+          aria-label={t("git.suggest")}
+          onClick={() => suggestMessage(staged)}
+        >
+          {suggesting ? <span className="spinner" /> : <Icon name="wand" className="glyph size-4" />}
+        </button>
+      </div>
+      <div className="flex items-center gap-2">
+        {/* with several repos, which ones get a commit */}
+        <span className="flex-1 min-w-0 truncate text-xs text-tertiary">
+          {repos.length > 1 && staged.length ? t("git.commitIn", { repos: staged.map(r => r.name).join(", ") }) : ""}
+        </span>
+        <button
+          className="btn disabled:opacity-50"
+          disabled={!!why || running}
+          title={why || undefined}
+          onClick={() => commit(false)}
+        >
+          {t("git.commit")}
+        </button>
+        <button
+          className="btn btn-primary disabled:opacity-50"
+          disabled={!!why || running}
+          title={why || undefined}
+          onClick={() => commit(true)}
+        >
+          {t("git.commitPush")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RepoBox({ repo, written, colour }: { repo: GitRepo; written: string[]; colour: string }) {
   const { t } = useT();
   const running = useGitStore(s => s.running === repo.repo);
-  const suggesting = useGitStore(s => s.suggesting === repo.repo);
-  const message = useGitStore(s => s.messages[repo.repo]) ?? "";
   const err = useGitStore(s => s.errs[repo.repo]) ?? repo.err ?? "";
+  const folded = useGitStore(s => !!s.folded[repo.repo]);
   const changed = repo.files.filter(f => !f.untracked);
   const loose = repo.files.filter(f => f.untracked);
-  const staged = changed.some(f => f.staged);
-  // why a commit cannot go now, as the buttons' title
-  const why = blocked ? t("git.busy") : !staged ? t("git.nothingStaged") : !message.trim() ? t("git.noMessage") : "";
+  const staged = repo.files.filter(f => f.staged).length;
   return (
-    <div className="flex flex-col mb-4">
-      <div className="flex items-center gap-1.5 px-1 pb-1.5">
-        <span className="text-[13px] font-semibold truncate" title={repo.repo}>
-          {repo.name}
-        </span>
+    <div className={`flex flex-col ${folded ? "mb-0.5" : "mb-3"}`}>
+      <div className={`flex items-center gap-1.5 px-1 ${folded ? "" : "pb-1"}`}>
+        <button
+          className="flex-none flex items-center gap-1 max-w-[60%] -ml-1 pl-1 pr-1.5 h-6 rounded-md cursor-pointer hover:bg-fill"
+          title={repo.repo}
+          aria-expanded={!folded}
+          onClick={() => toggleFold(repo.repo)}
+        >
+          <Icon
+            name="chevron"
+            className={`glyph size-3 flex-none text-tertiary transition-transform ${folded ? "-rotate-90" : ""}`}
+          />
+          <span className="flex-none size-2.5 rounded-[3px]" style={{ background: colour }} />
+          <span className="ml-0.5 text-[13px] font-semibold truncate">{repo.name}</span>
+        </button>
+        {/* the name left, the branch and the counts right */}
+        <span className="flex-1" />
         {repo.branch ? (
-          <span className="flex items-center gap-1 h-5 px-1.5 rounded-md bg-fill-2 text-xs text-secondary font-mono">
-            <Icon name="branch" className="glyph size-3" />
-            {repo.branch}
-            {repo.ahead ? <span title={t("git.ahead", { n: repo.ahead })}>↑{repo.ahead}</span> : null}
-            {repo.behind ? <span title={t("git.behind", { n: repo.behind })}>↓{repo.behind}</span> : null}
+          // one line: the branch name gives way first, cut off with an ellipsis, the counts stay
+          <span
+            className="min-w-0 flex items-center gap-1 h-5 px-1.5 rounded-md bg-fill-2 text-xs text-secondary font-mono whitespace-nowrap"
+            title={repo.branch}
+          >
+            <Icon name="branch" className="glyph size-3 flex-none" />
+            <span className="min-w-0 truncate">{repo.branch}</span>
+            {repo.ahead ? (
+              <span className="flex-none" title={t("git.ahead", { n: repo.ahead })}>
+                ↑{repo.ahead}
+              </span>
+            ) : null}
+            {repo.behind ? (
+              <span className="flex-none" title={t("git.behind", { n: repo.behind })}>
+                ↓{repo.behind}
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+        {/* folded, what it hides: its files, the ticked ones first */}
+        {folded && repo.files.length ? (
+          <span className="flex-none text-xs text-tertiary tabular-nums">
+            {staged ? `${staged}/${repo.files.length}` : repo.files.length}
           </span>
         ) : null}
         {running ? <span className="spinner" /> : null}
       </div>
-      {!repo.files.length && !repo.err ? <div className="px-1 text-xs text-tertiary">{t("git.clean")}</div> : null}
-      {changed.length ? <Group title={t("git.changes")} repo={repo} files={changed} written={written} /> : null}
-      {loose.length ? <Group title={t("git.unversioned")} repo={repo} files={loose} written={written} /> : null}
-      {repo.files.length ? (
-        <div className="flex flex-col gap-1.5 mt-1.5 px-1">
-          <div className="relative">
-            <textarea
-              rows={3}
-              value={message}
-              onChange={e => setMessage(repo.repo, e.target.value)}
-              placeholder={t("git.message")}
-              aria-label={t("git.message")}
-              className="field h-auto w-full py-1.5 pr-9 resize-none select-text"
-            />
-            <button
-              className="btn-icon absolute right-1 top-1 disabled:opacity-40"
-              disabled={!staged || suggesting}
-              title={staged ? t("git.suggest") : t("git.nothingStaged")}
-              aria-label={t("git.suggest")}
-              onClick={() => suggestMessage(repo)}
-            >
-              {suggesting ? <span className="spinner" /> : <Icon name="wand" className="glyph size-4" />}
-            </button>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              className="btn disabled:opacity-50"
-              disabled={!!why || running}
-              title={why || undefined}
-              onClick={() => commitRepo(repo.repo, false)}
-            >
-              {t("git.commit")}
-            </button>
-            <button
-              className="btn btn-primary disabled:opacity-50"
-              disabled={!!why || running}
-              title={why || undefined}
-              onClick={() => commitRepo(repo.repo, true)}
-            >
-              {t("git.commitPush")}
-            </button>
-          </div>
-        </div>
-      ) : null}
+      {folded ? null : (
+        <>
+          {!repo.files.length && !repo.err ? <div className="px-1 text-xs text-tertiary">{t("git.clean")}</div> : null}
+          {changed.length ? (
+            <Group id="changes" title={t("git.changes")} repo={repo} files={changed} written={written} />
+          ) : null}
+          {loose.length ? (
+            <Group id="unversioned" title={t("git.unversioned")} repo={repo} files={loose} written={written} />
+          ) : null}
+        </>
+      )}
       {err ? <div className="err-box mt-2 mx-1 select-text">{err}</div> : null}
     </div>
   );
 }
 
-function Group({ title, repo, files, written }: { title: string; repo: GitRepo; files: GitFile[]; written: string[] }) {
+function Group({
+  id,
+  title,
+  repo,
+  files,
+  written,
+}: {
+  id: string;
+  title: string;
+  repo: GitRepo;
+  files: GitFile[];
+  written: string[];
+}) {
   const { t } = useT();
+  const folded = useGitStore(s => !!s.folded[`${repo.repo}\n${id}`]);
   return (
     <div className="flex flex-col">
-      <div className="px-1 pt-1 pb-0.5 text-xs text-tertiary">
+      <button
+        className="self-start flex items-center gap-1 h-6 -ml-0.5 pl-0.5 pr-1.5 rounded-md text-xs text-tertiary cursor-pointer hover:bg-fill"
+        aria-expanded={!folded}
+        onClick={() => toggleFold(`${repo.repo}\n${id}`)}
+      >
+        <Icon name="chevron" className={`glyph size-2.5 transition-transform ${folded ? "-rotate-90" : ""}`} />
         {title} <span className="tabular-nums">{files.length}</span>
-      </div>
-      {files.map(f => {
+      </button>
+      {(folded ? [] : files).map(f => {
         const cut = f.path.lastIndexOf("/");
         const mine = written.includes(`${repo.repo}/${f.path}`);
         return (

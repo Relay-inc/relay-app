@@ -333,6 +333,7 @@ export default {
     "Ein Gespräch dieses Projekts arbeitet in diesem Repo. Ein Commit jetzt nähme seine halbfertige Arbeit mit.",
   "git.nothingStaged": "Nichts gestaged. Hake die Dateien an, die in den Commit sollen.",
   "git.noMessage": "Schreibe zuerst eine Commit-Nachricht.",
+  "git.commitIn": "Ein Commit in {repos}",
   "git.ahead": "Nicht gepusht: {n}",
   "git.behind": "Zu pullen: {n}",
   "git.binary": "Binärdatei, kein Diff.",

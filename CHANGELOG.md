@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Changed
 
-- **Git drawer replaces Changes**: a project conversation can show a Git drawer with every repo of the project on this Mac and the worktrees the conversation made. Per repo you see the branch, tick files to stage them, discard a file's changes (after a confirmation), let the model suggest a commit message, and Commit or Commit & Push. Commit is blocked while a conversation of the project is working in that repo. Git's own error shows in the drawer when a push or hook fails. Off by default: switch it on in Settings › General › Git in project conversations
+- **Git drawer replaces Changes**: a project conversation can show a Git drawer with every repo of the project on this Mac and the worktrees the conversation made. Per repo you see the branch, tick files to stage them, discard a file's changes (after a confirmation), fold a repo to its header, and write one commit message under all repos (or let the model suggest one): Commit or Commit & Push makes a commit with it in every repo with ticked files, as in JetBrains. Commit is blocked while a conversation of the project is working in that repo. Git's own error shows in the drawer when a push or hook fails. Off by default: switch it on in Settings › General › Git in project conversations
 
 ### Fixed
 

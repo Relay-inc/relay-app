@@ -294,15 +294,27 @@ const VIEWS = {
     await page.keyboard.press("Enter");
     await button("Git").click();
     await waitText("BalanceSync.php");
-    await page.getByRole("textbox", { name: "Commit message" }).first().fill("Skip a balance the sync already added");
-    await page.getByRole("textbox", { name: "Commit message" }).nth(1).fill("Take the period on the balance route");
+    await page.getByRole("textbox", { name: "Commit message" }).fill("Skip a balance the sync already added");
     await settle(page);
   },
   "git-error": async () => {
     await VIEWS["git-drawer"]();
-    await page.getByRole("textbox", { name: "Commit message" }).nth(1).fill("Take the period on the balance route");
-    await page.getByRole("button", { name: "Commit & Push", exact: true }).nth(1).click();
+    await page.getByRole("textbox", { name: "Commit message" }).fill("Skip a balance the sync already added");
+    await page.getByRole("button", { name: "Commit & Push", exact: true }).click();
     await waitText("failed to push some refs");
+    await settle(page);
+  },
+  // a repo folded to its header: how many of its files are ticked
+  "git-folded": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "beacon", exact: true }).click();
+    await page.getByRole("button", { name: "beacon-api", exact: true }).click();
+    await settle(page);
+  },
+  // a group of a repo folded: beacon's unversioned files
+  "git-group-folded": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "Unversioned 2" }).click();
     await settle(page);
   },
   "git-discard": async () => {

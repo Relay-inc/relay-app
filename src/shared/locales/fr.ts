@@ -340,6 +340,7 @@ export default {
     "Une conversation de ce projet travaille dans ce dépôt. Committer maintenant emporterait son travail à moitié fait.",
   "git.nothingStaged": "Rien d’indexé. Cochez les fichiers à committer.",
   "git.noMessage": "Écrivez d’abord un message de commit.",
+  "git.commitIn": "Un commit dans {repos}",
   "git.ahead": "Non poussés : {n}",
   "git.behind": "À récupérer : {n}",
   "git.binary": "Fichier binaire, pas de diff.",

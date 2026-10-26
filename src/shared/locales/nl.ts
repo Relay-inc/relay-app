@@ -332,6 +332,7 @@ export default {
   "git.busy": "Een gesprek van dit project werkt in deze repo. Nu committen neemt zijn half afgewerkte werk mee.",
   "git.nothingStaged": "Niets gestaged. Vink de bestanden aan die mee moeten.",
   "git.noMessage": "Schrijf eerst een commitbericht.",
+  "git.commitIn": "Een commit in {repos}",
   "git.ahead": "Niet gepusht: {n}",
   "git.behind": "Te pullen: {n}",
   "git.binary": "Binair bestand, geen diff.",

@@ -8,8 +8,9 @@ type GitState = {
   err: string; // loading failed
   errs: Record<string, string>; // per repo: what git or the model said when an action there failed
   running: string; // the repo a git command runs in, "" for none
-  messages: Record<string, string>; // per repo, the commit message being written
-  suggesting: string; // the repo whose commit message a model is writing
+  folded: Record<string, boolean>; // the repos folded to their header and their groups ("repo\nchanges"), kept over conversations
+  message: string; // the commit message being written, one for every repo with staged files
+  suggesting: boolean; // a model is writing the commit message
   discard: string; // the file whose discard waits for a confirmation, "repo\npath", "" for none
   open: string; // the file shown, "repo\npath", "" for the list
   line: string; // the line a comment is being written on, "side:line", "" for none
@@ -24,8 +25,9 @@ export const useGitStore = makeStore<GitState>(() => ({
   err: "",
   errs: {},
   running: "",
-  messages: {},
-  suggesting: "",
+  folded: {},
+  message: "",
+  suggesting: false,
   discard: "",
   open: "",
   line: "",

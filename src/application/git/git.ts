@@ -41,8 +41,10 @@ export function followGit(key: string, project: string, busy: boolean) {
   if (st().key !== key || st().project !== project || !busy) void loadGit(key, project);
 }
 
-/** A git command in `repo`: its error stays under the repo, the drawer loads again after it either way. */
+/** A git command in `repo`: its error stays under the repo, the drawer loads again after it either way. False when
+ *  it failed. */
 async function act(repo: string, run: () => Promise<unknown>) {
+  let ok = true;
   const { key, project } = st();
   set(draft => {
     draft.running = repo;
@@ -51,15 +53,20 @@ async function act(repo: string, run: () => Promise<unknown>) {
   try {
     await run();
   } catch (err) {
+    ok = false;
     set(draft => void (draft.errs[repo] = String(err)));
   }
   set(draft => void (draft.running = ""));
   await loadGit(key, project);
+  return ok;
 }
 
 /** The checkbox: a staged file is unstaged, any other staged. */
 export const toggleStaged = (repo: string, file: GitFile) =>
   act(repo, () => backend.gitStage(st().key, st().project, repo, [file.path], !file.staged));
+
+/** A repo folded to its header, or a group of its files ("repo\nchanges"), or open again. */
+export const toggleFold = (what: string) => set(draft => void (draft.folded[what] = !draft.folded[what]));
 
 /** Discard asks first: "" cancels. */
 export const askDiscard = (repo: string, path: string) =>
@@ -71,32 +78,39 @@ export function discardFile() {
   return act(repo, () => backend.gitDiscard(st().key, st().project, repo, path));
 }
 
-export const setMessage = (repo: string, text: string) => set(draft => void (draft.messages[repo] = text));
+export const setMessage = (text: string) => set(draft => void (draft.message = text));
 
-/** A commit message for what is staged, written by the model the app writes with (ai_write). */
-export async function suggestMessage(repo: GitRepo) {
+/** The repos with something staged: a commit goes to each of them. */
+export const stagedRepos = (repos: GitRepo[] | null) => (repos ?? []).filter(r => r.files.some(f => f.staged));
+
+/** One commit message for what is staged over every repo, written by the model the app writes with (ai_write). */
+export async function suggestMessage(repos: GitRepo[]) {
   set(draft => {
-    draft.suggesting = repo.repo;
-    delete draft.errs[repo.repo];
+    draft.suggesting = true;
+    draft.err = "";
   });
   try {
+    const diff = repos.map(r => `=== ${r.name}\n${stagedDiff(r, 20000 / repos.length)}`).join("\n\n");
     const text = await backend.aiWrite(
       fill(prompts.git.commitMessage, { untrusted: untrustedNote("en", ["diff"]) }),
-      untrusted("diff", stagedDiff(repo, 20000)),
+      untrusted("diff", diff),
     );
-    set(draft => void (draft.messages[repo.repo] = text.trim()));
+    set(draft => void (draft.message = text.trim()));
   } catch (err) {
-    set(draft => void (draft.errs[repo.repo] = String(err)));
+    set(draft => void (draft.err = String(err)));
   }
-  set(draft => void (draft.suggesting = ""));
+  set(draft => void (draft.suggesting = false));
 }
 
-/** Commit what is staged with the repo's message, then push when asked. The message goes once the commit is made. */
-export const commitRepo = (repo: string, push: boolean) =>
-  act(repo, async () => {
-    await backend.gitCommit(st().key, st().project, repo, st().messages[repo]?.trim() ?? "", push);
-    set(draft => void (draft.messages[repo] = ""));
-  });
+/** The one message committed in every repo with something staged, one repo after the other, each pushed when asked.
+ *  The message stays until every commit went through, so a failed repo can go again with it. */
+export async function commitStaged(repos: string[], push: boolean) {
+  const message = st().message.trim();
+  let ok = true;
+  for (const repo of repos)
+    ok = (await act(repo, () => backend.gitCommit(st().key, st().project, repo, message, push))) && ok;
+  if (ok) set(draft => void (draft.message = ""));
+}
 
 /** The repos a commit would take an agent's half-done work in: a running conversation of the project works there (a
  *  tool call names the checkout), or the open conversation runs and made that worktree. */
