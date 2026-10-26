@@ -67,9 +67,11 @@ pub fn invite_open(data: &Path) -> bool { all(data).iter().any(|v| !v.invites.is
 // ponytail: no lock against a running server (revoke is the CLI's own process); clients.json has the same race with pair
 pub(crate) fn forget(data: &Path, fps: &[String]) {
     for mut v in all(data) {
-        let n = v.members.len();
+        let n = v.members.len() + v.invites.len();
         v.members.retain(|m| !fps.contains(&m.fp));
-        if v.members.is_empty() { fs::remove_dir_all(dir(data).join(&v.id)).ok(); } else if v.members.len() != n { save(data, &v).ok(); }
+        // the invites they made go too: a link of someone who is out lets nobody in
+        v.invites.retain(|i| !fps.contains(&i.by));
+        if v.members.is_empty() { fs::remove_dir_all(dir(data).join(&v.id)).ok(); } else if v.members.len() + v.invites.len() != n { save(data, &v).ok(); }
     }
 }
 
@@ -172,6 +174,8 @@ impl Vaults {
                 return Err("wrong invite code".into());
             }
             let inv = v.invites.remove(i);
+            // an invite counts only while its maker is still an admin here
+            if v.role(&inv.by) != Some("admin") { save(&self.data, v).ok(); return Err("this invite is used, expired or revoked".into()); }
             let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
             let mut list = clients(&self.data);
             let known = list.iter().find(|c| c.fp == fp).map(|c| c.name.clone());
@@ -204,6 +208,7 @@ impl Vaults {
             if me != "admin" && fp != who { return Err("only an admin can remove someone else".into()); }
             if v.role(who).is_none() { return Err("not a member of this vault".into()); }
             v.members.retain(|m| m.fp != who);
+            v.invites.retain(|i| i.by != who);
             if v.members.is_empty() { return fs::remove_dir_all(dir(&self.data).join(&v.id)).map_err(|e| e.to_string()); }
             if !v.has_admin() { return Err("that would leave the vault without an admin".into()); }
             save(&self.data, v)
@@ -455,6 +460,17 @@ mod tests {
         fs::remove_dir_all(&s.data).ok();
     }
 
+    #[test]
+    fn an_invite_dies_with_its_maker() {
+        let s = store("maker");
+        let id = made(&s);
+        join(&s, OTHER, &id, "admin");
+        let (inv, code) = invite(&s, &id, "member");
+        // ADMIN made that invite; the second admin removes ADMIN, and the link lets nobody in any more
+        s.remove(OTHER, &id, ADMIN).unwrap();
+        let late = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
+        assert!(s.join(late, &id, &inv, "late", &tls::proof(&code, late, SERVER)).is_err());
+    }
     #[test]
     fn revoke_removes_the_memberships() {
         let s = store("revoke");

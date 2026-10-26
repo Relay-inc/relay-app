@@ -77,7 +77,7 @@ pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(de
 const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach", "start"];
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own.
-const VAULT_OPS: &[&str] = &["info", "vault_list", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
+const VAULT_OPS: &[&str] = &["vault_list", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete"];
 /// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
 static CLIENTS: Mutex<()> = Mutex::new(());
@@ -713,7 +713,7 @@ pub fn pair_line(data: &Path, host: Option<String>, port: Option<u16>) -> io::Re
     let host = host.or_else(lan_ip).ok_or_else(|| io::Error::other("no LAN address found, pass --host"))?;
     let fp = identity(data)?.fingerprint();
     let code = open_pairing(data)?;
-    Ok(proto::PairLine { host, port, fp, code, key: None, link: None }.format())
+    Ok(proto::PairLine { host, port, fp, code, key: None, link: None, ..Default::default() }.format())
 }
 
 

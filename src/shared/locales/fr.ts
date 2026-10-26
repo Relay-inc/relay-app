@@ -855,7 +855,7 @@ export default {
   "rem.none": "Aucun rappel.",
   "set.extraVaults": "Vaults partagés",
   "set.extraVaultsHelp":
-    "D'autres coffres dont les projets s'affichent dans la barre latérale à côté des vôtres, un coffre d'équipe dans git par exemple. Une conversation reste dans le coffre de son projet : elle ne peut ni lire ni modifier vos autres coffres, et dans un coffre partagé vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
+    "D'autres dossiers avec un coffre, dont les projets s'affichent dans la barre latérale à côté des vôtres. Une conversation reste dans le coffre de son projet : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres coffres.",
   "set.extraVaultAdd": "Ajouter un vault…",
   "set.extraVaultRemove": "Retirer {name}",
   "set.extraVaultRenamed": "Même nom qu'un projet d'un autre coffre, affiché comme : {names}",
@@ -1573,7 +1573,7 @@ export default {
   "composer.onMachineHelp": "Cette conversation tourne sur une autre machine et continue quand ce Mac est fermé.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "Cette conversation tourne dans ce coffre partagé et y reste : elle ne peut ni lire ni modifier vos autres coffres, et vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
+    "Cette conversation tourne dans ce coffre partagé et y reste : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres coffres, et vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
   "composer.runOn": "S'exécute sur",
   "composer.thisMac": "Ce Mac",
   "composer.available": "disponible",

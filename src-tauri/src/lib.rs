@@ -49,6 +49,7 @@ mod retry;
 mod scratch;
 mod session;
 mod share;
+mod shared_vaults;
 #[cfg(feature = "selftest")]
 mod selftest;
 mod snapshot;
@@ -86,7 +87,14 @@ fn need_vault(st: &App) -> Result<String, String> {
     if vs["ok"] == true { Ok(vs["vault"].as_str().unwrap().to_string()) } else { Err(tr(ui_lang_of(&s), "err.no_vault_set")) }
 }
 /// The extra vaults (Settings › General): shared vaults whose projects show next to the main vault's.
+/// With the folders of the shared vaults on a server (shared_vaults.rs), which count as extra vaults too.
 fn extra_vaults(s: &Value) -> Vec<String> {
+    let mut all = own_extra(s);
+    for v in shared_vaults::list(s) { if !all.contains(&v.folder) { all.push(v.folder); } }
+    all
+}
+/// The extra vault folders the user added in Settings, without the shared ones.
+fn own_extra(s: &Value) -> Vec<String> {
     s["extraVaults"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
 }
 /// The main vault and the extra ones, the main one first.
@@ -156,7 +164,7 @@ fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(""); }
     for k in ["projects", "overrides", "vaults", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
-    if !v["extraVaults"].is_array() { v["extraVaults"] = json!([]); }
+    for k in ["extraVaults", "sharedVaults"] { if !v[k].is_array() { v[k] = json!([]); } }
     providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
     agents::migrate(&mut v);    // agents.default and agents.providers.<id>: on, bin
     plugins::norm(&mut v);      // plugins: the MCP servers (plugins.rs), checked in set_settings
@@ -433,6 +441,7 @@ struct App {
     orch: Mutex<()>,                       // one writer of orch.json at a time (orch.rs)
     proj_vault: Mutex<HashMap<String, (String, String)>>, // project key -> (its vault, its name there), from the last snapshot
     extra: Mutex<Value>,                   // the last snapshot's extra vaults: [{vault, renamed, error}]
+    shared: shared_vaults::Hub,            // the shared vaults' sync rounds (shared_vaults.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -1496,12 +1505,16 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     relay_config::set_paths(&v, &map).map_err(|e| format!(".relay/config.json: {e}"))?;
     s["vaults"].as_object_mut().unwrap().remove(&v);
     // extra vaults by their real path, each usable, the main vault and doubles left out
+    // the shared vaults are this app's to write (shared_vaults.rs): what the window sends back is ignored
+    s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
+    let shared: Vec<String> = shared_vaults::list(&s).into_iter().map(|x| x.folder).collect();
     let mut extra: Vec<String> = vec![];
-    for e in extra_vaults(&s).iter().map(|e| vault::canon(e)) {
+    for e in own_extra(&s).iter().map(|e| vault::canon(e)) {
+        if shared.contains(&e) { continue; }
         if e.is_empty() || e == v || extra.contains(&e) { continue; }
         if vault::status(&e, &vault_map(&s, &e))["ok"] != true { return Err(tr_v(lang, "err.no_vault", &e)); }
         // a vault inside another: the other's conversations would see it, and the fence around one covers both
-        if let Some(o) = std::iter::once(&v).chain(extra.iter()).find(|o| nested(&e, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{e}, {o}"))); }
+        if let Some(o) = std::iter::once(&v).chain(extra.iter()).chain(shared.iter()).find(|o| nested(&e, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{e}, {o}"))); }
         extra.push(e);
     }
     s["extraVaults"] = json!(extra);
@@ -2090,7 +2103,7 @@ async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -
     let link = relay_remote::tls::random_key();
     share::add_link(&app, &id, &link);
     let s = |k: &str| m[k].as_str().unwrap_or("").to_string();
-    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key.clone()), link: Some(link) }.format();
+    let line = relay_remote::proto::PairLine { host: s("host"), port: m["port"].as_u64().unwrap_or(0) as u16, fp: s("fp"), code, key: Some(key.clone()), link: Some(link), ..Default::default() }.format();
     let qr = qrcode::QrCode::new(&line).map_err(|e| e.to_string())?.render::<qrcode::render::svg::Color>().min_dimensions(240, 240).build();
     Ok(json!({"line": line, "qr": qr, "ntfy": ntfy_url(&key)}))
 }
@@ -2359,7 +2372,7 @@ pub fn run() {
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])) });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default() });
             app.manage(pty::Ptys::default());
             app.manage(plugins::Plugins::default());
             app.manage(dictation::Dictation::default());
@@ -2415,12 +2428,41 @@ pub fn run() {
                     if profiles.get(id) != Some(&text) && client.profile_put(&profile).is_ok() { profiles.insert(id.into(), text); }
                 }
             });
+            // the shared vaults on a server (shared_vaults.rs): a round every 10 s for each, or at once after one was made
+            // or joined; the team's changes coming in make the sidebar read the vaults again
+            let h = app.handle().clone();
+            std::thread::spawn(move || {
+                let mut next = std::time::Instant::now();
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    if !shared_vaults::asked() && std::time::Instant::now() < next { continue; }
+                    next = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                    let st = h.state::<App>();
+                    let s = st.settings.lock().unwrap().clone();
+                    let name = sys_name();
+                    let mut pulled = false;
+                    for v in shared_vaults::list(&s) {
+                        let before = st.shared.status.lock().unwrap().get(&v.id).map_or(0, |x| x.pulled);
+                        pulled |= st.shared.round(&data_dir(&h), &v, &st.machines.id, &name).pulled > before;
+                    }
+                    if !shared_vaults::list(&s).is_empty() { h.emit("shared-vaults", serde_json::to_value(&*st.shared.status.lock().unwrap()).unwrap_or_default()).ok(); }
+                    if pulled { h.emit("vault-pulled", ()).ok(); }
+                }
+            });
             tray::init(app.handle())?;
             let handle = app.handle().clone();
-            app.deep_link().on_open_url(move |_| { windows::show_active(&handle); });
+            // an invite to a shared vault (relay://…&vault=…) opens Settings › General with the link filled in
+            app.deep_link().on_open_url(move |e| {
+                windows::show_active(&handle);
+                if let Some(link) = e.urls().iter().map(|u| u.to_string()).find(|u| relay_remote::proto::PairLine::parse(u).is_some_and(|l| l.is_invite())) {
+                    shared_vaults::invite_opened(link.clone());
+                    open_settings(&handle, Some("general"));
+                    handle.emit("vault-invite", link).ok();
+                }
+            });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, file_roots, list_dir, read_file_text, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_allow_deletes, mirror_restore_held, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, shared_vaults::shared_vaults_status, shared_vaults::shared_vault_create, shared_vaults::shared_vault_join, shared_vaults::shared_vault_invite, shared_vaults::shared_vault_info, shared_vaults::shared_vault_invite_revoke, shared_vaults::shared_vault_remove, shared_vaults::shared_vault_held, shared_vaults::shared_vault_pending_invite, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

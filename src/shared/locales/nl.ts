@@ -846,7 +846,7 @@ export default {
   "rem.none": "Geen reminders.",
   "set.extraVaults": "Gedeelde vaults",
   "set.extraVaultsHelp":
-    "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. Een gesprek blijft in de vault van zijn project: het kan je andere vaults niet lezen of wijzigen, en in een gedeelde vault staan je eigen MCP-servers en claude.ai-connectors uit.",
+    "Andere mappen met een vault, waarvan de projecten naast de jouwe in de zijbalk staan. Een gesprek blijft in de vault van zijn project: de bestandstools en bestandscommando's van Claude Code zijn geblokkeerd voor je andere vaults.",
   "set.extraVaultAdd": "Vault toevoegen…",
   "set.extraVaultRemove": "{name} verwijderen",
   "set.extraVaultRenamed": "Zelfde naam als een project in een andere vault, getoond als: {names}",
@@ -1551,7 +1551,7 @@ export default {
   "composer.onMachineHelp": "Dit gesprek loopt op een andere machine en blijft draaien als deze Mac dicht is.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "Dit gesprek loopt in deze gedeelde vault en blijft daar: het kan je andere vaults niet lezen of wijzigen, en je eigen MCP-servers en claude.ai-connectors staan uit.",
+    "Dit gesprek loopt in deze gedeelde vault en blijft daar: de bestandstools en bestandscommando's van Claude Code zijn geblokkeerd voor je andere vaults, en je eigen MCP-servers en claude.ai-connectors staan uit.",
   "composer.runOn": "Loopt op",
   "composer.thisMac": "Deze Mac",
   "composer.available": "beschikbaar",

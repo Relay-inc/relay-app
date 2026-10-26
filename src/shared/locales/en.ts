@@ -839,7 +839,7 @@ const en = {
   "rem.none": "No reminders.",
   "set.extraVaults": "Shared vaults",
   "set.extraVaultsHelp":
-    "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A conversation stays in the vault of its project: it cannot read or edit your other vaults, and in a shared vault your own MCP servers and claude.ai connectors are off.",
+    "Other folders with a vault, whose projects show in the sidebar next to yours. A conversation stays in the vault of its project: Claude Code's file tools and file commands are blocked from your other vaults.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
   "set.extraVaultRenamed": "Same name as a project in another vault, shown as: {names}",
@@ -1544,7 +1544,7 @@ const en = {
   "composer.onMachineHelp": "This conversation runs on another machine and keeps running when this Mac is closed.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "This conversation runs in this shared vault and stays there: it cannot read or edit your other vaults, and your own MCP servers and claude.ai connectors are off.",
+    "This conversation runs in this shared vault and stays there: Claude Code's file tools and file commands are blocked from your other vaults, and your own MCP servers and claude.ai connectors are off.",
   "composer.runOn": "Runs on",
   "composer.thisMac": "This Mac",
   "composer.available": "available",

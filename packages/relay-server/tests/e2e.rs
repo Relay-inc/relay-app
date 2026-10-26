@@ -199,7 +199,7 @@ fn update_goes_on_in_the_binary_sent() {
 fn linked(parent: &Client, tag: &str) -> Client {
     let code = parent.pair_device().unwrap();
     let (host, port) = parent.addr.rsplit_once(':').unwrap();
-    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None, link: None }.format();
+    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None, link: None, ..Default::default() }.format();
     let id = device(tag);
     let (l, _) = client::pair(&line, &id, tag).unwrap();
     Client::new(&l.host, l.port, &l.fp, id)
@@ -896,4 +896,60 @@ fn a_shared_vault_invite_join_put_get_and_walls() {
     assert!(bin().args(["revoke", "colleague"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap().status.success());
     assert_eq!(laptop.call(json!({"op": "vault_list"})).unwrap()["vaults"][0]["members"], 1);
     assert!(colleague.call(json!({"op": "vault_list"})).is_err());
+}
+
+/// The whole way a team shares a vault, with the app's own calls against the real binary: the laptop makes a vault
+/// and an invite link, a colleague joins with the link alone, and two folders stay the same through the server, which
+/// holds only ciphertext. Then the colleague is removed and syncs no more.
+#[test]
+fn two_macs_share_a_vault_through_the_server() {
+    use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
+    use relay_remote::vault::VaultKey;
+    let s = start("vaultsync");
+    let lid = device("share-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid);
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = VaultKey::generate();
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device("share-colleague");
+    let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    assert_eq!((joined.id.as_str(), joined.role.as_str(), theirs.to_hex()), (vault.as_str(), "member", key.to_hex()));
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
+    assert!(client::vault_join(&link, &device("share-late"), "late").is_err(), "a link works once");
+
+    let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-share-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
+    let (a, b) = (dir("a"), dir("b"));
+    let keep = |_: &str, _: &[u8]| Ok(());
+    let guard = Guard { allow_deletes: false, keep: &keep };
+    let round = |c: &Client, k: &VaultKey, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker| {
+        let (next, r) = sync::run(Mode::TwoWay, root, base, w, &Filter::vault_default(), &c.sealed(&vault, k.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {});
+        *base = next;
+        r
+    };
+    let (mut ba, mut bb, mut wa, mut wb) = (sync::Manifest::new(), sync::Manifest::new(), Walker::default(), Walker::default());
+    std::fs::create_dir_all(a.join("Projects")).unwrap();
+    std::fs::write(a.join("Projects/Acme.md"), "secret plan").unwrap();
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa).pushed, vec!["Projects/Acme.md"]);
+    // on the server's disk: neither the path nor the content
+    for e in std::fs::read_dir(s.data.join("vaults").join(&vault).join("blobs")).unwrap().flatten() {
+        let b = std::fs::read(e.path()).unwrap();
+        assert!(!String::from_utf8_lossy(&b).contains("secret") && !String::from_utf8_lossy(&b).contains("Acme"));
+    }
+    assert_eq!(round(&colleague, &theirs, &b, &mut bb, &mut wb).pulled, vec!["Projects/Acme.md"]);
+    assert_eq!(std::fs::read_to_string(b.join("Projects/Acme.md")).unwrap(), "secret plan");
+    // both edit the same note: both versions stay, on both Macs
+    std::fs::write(a.join("Projects/Acme.md"), "laptop's version").unwrap();
+    std::fs::write(b.join("Projects/Acme.md"), "colleague's version").unwrap();
+    round(&laptop, &key, &a, &mut ba, &mut wa);
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb);
+    assert_eq!(r.conflicts.len(), 1, "{r:?}");
+
+    // removed: the server refuses the colleague's next round, their folder stays as it was
+    laptop.vault_remove(&vault, &cid.fingerprint()).unwrap();
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb);
+    assert!(!r.errors.is_empty(), "{r:?}");
+    assert!(b.join("Projects/Acme.md").is_file());
+    std::fs::remove_dir_all(&a).ok();
+    std::fs::remove_dir_all(&b).ok();
 }

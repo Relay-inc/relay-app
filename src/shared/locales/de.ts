@@ -849,7 +849,7 @@ export default {
   "rem.none": "Keine Erinnerungen.",
   "set.extraVaults": "Geteilte Vaults",
   "set.extraVaultsHelp":
-    "Andere Vaults, deren Projekte in der Seitenleiste neben deinen stehen, zum Beispiel ein Team-Vault in git. Ein Gespräch bleibt im Vault seines Projekts: Es kann deine anderen Vaults weder lesen noch ändern, und in einem geteilten Vault sind deine eigenen MCP-Server und claude.ai-Konnektoren aus.",
+    "Andere Ordner mit einem Vault, deren Projekte in der Seitenleiste neben deinen stehen. Ein Gespräch bleibt im Vault seines Projekts: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Vaults gesperrt.",
   "set.extraVaultAdd": "Vault hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
   "set.extraVaultRenamed": "Gleicher Name wie ein Projekt in einem anderen Vault, angezeigt als: {names}",
@@ -1565,7 +1565,7 @@ export default {
     "Dieses Gespräch läuft auf einer anderen Maschine und läuft weiter, wenn dieser Mac zu ist.",
   "composer.vault": "Vault",
   "composer.vaultHelp":
-    "Dieses Gespräch läuft in diesem geteilten Vault und bleibt dort: Es kann deine anderen Vaults weder lesen noch ändern, und deine eigenen MCP-Server und claude.ai-Konnektoren sind aus.",
+    "Dieses Gespräch läuft in diesem geteilten Vault und bleibt dort: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Vaults gesperrt, und deine eigenen MCP-Server und claude.ai-Konnektoren sind aus.",
   "composer.runOn": "Läuft auf",
   "composer.thisMac": "Dieser Mac",
   "composer.available": "verfügbar",

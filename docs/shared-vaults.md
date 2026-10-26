@@ -25,9 +25,9 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 (unexpired) invite. A device that is not paired may only send `pair` or `vault_join`.
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
-`VAULT_OPS` = `info`, `vault_list`, `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
-`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror or
-pairs further devices. A linked device (a phone) gets no vault ops.
+`VAULT_OPS` = `vault_list`, `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
+`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror, pairs
+further devices or sees `info` (the server's paths). A linked device (a phone) gets no vault ops.
 
 Ids: vault id 16 lowercase hex, invite id 16 lowercase hex, invite code 32 lowercase hex (`tls::random_secret`),
 blob name 64 lowercase hex. Anything else is refused.
