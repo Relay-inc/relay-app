@@ -304,27 +304,149 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
     Ok(json!({ "untrusted_files": files, "missing": reply["missing"], "notice": INSTRUCTIONS }))
 }
 
+/// In the Design webview: `q()` finds the open question form of Claude Design's chat (null when there is none), which
+/// replaces the composer and has no send button. Found by what it is, not by class: visible radio/checkbox/option
+/// controls outside the composer, and the smallest ancestor holding all of them and a button of its own.
+/// claude.ai's widget (checked with design_snapshot's `dom`, 26 Oct 2026): the card is a `[role="presentation"]` with an
+/// `<h3>` ("Claude asked you a question"), and only its controls count: the sidebar has a Chat/Code switch. Options are
+/// `button[aria-pressed]` in a `[role="group"]`, labelled by a `<bdi>` after their number; the question is a `<bdi>` above
+/// them; "Something else" is a text field in a `<form>` without a submit button (Enter submits it), next to "Skip", which
+/// is never clicked.
+/// A multi-select form has `span[role="checkbox"]` options, each with a hidden checkbox input beside it (skipped), and an
+/// icon-only `button[aria-label="Submit"]`. A card with several questions shows one at a time ("Question 1 of 3", Previous and
+/// Next buttons); picking an option moves on to the next. `step` is that line.
+/// ponytail: `step` matches claude.ai's English text only.
+const QUESTION: &str = r#"const q = () => {
+  const vis = e => e.getBoundingClientRect().width > 0 && !e.closest('[data-testid="chat-input"],[role="menu"]');
+  const opts = [...document.querySelectorAll('[role="presentation"]:has(> h3)')].flatMap(c => [...c.querySelectorAll('[role="radio"],[role="checkbox"],[role="option"],input[type="radio"],input[type="checkbox"],[role="group"] button[aria-pressed]')]).filter(vis)
+    .filter(o => !(o.matches("input") && o.parentElement.querySelector('[role="checkbox"],[role="radio"]')));
+  if (!opts.length) return null;
+  const hasButton = r => [...r.querySelectorAll('button')].some(b => !opts.some(o => o.contains(b) || b.contains(o)));
+  const title = r => [...r.querySelectorAll('bdi,legend,[role="heading"],h1,h2,h3,h4')].find(e => !opts.some(o => o.contains(e)));
+  let root = opts[0];
+  for (let i = 0; i < 16 && root.parentElement && !(root.contains(opts[opts.length - 1]) && hasButton(root) && title(root)); i++) root = root.parentElement;
+  const line = s => (s || "").trim().split("\n")[0].trim();
+  const label = o => line(o.matches("input") ? (o.labels && o.labels[0] || o.parentElement).innerText : o.getAttribute("aria-label") || (o.querySelector("bdi") || o).innerText);
+  const groups = [];
+  for (const o of opts) {
+    const host = o.closest('[role="radiogroup"],[role="group"],[role="listbox"],fieldset') || root;
+    let g = groups.find(g => g.host === host);
+    if (!g) {
+      const by = host.getAttribute("aria-labelledby"), el = by && document.getElementById(by.split(" ")[0]);
+      const before = host !== root && host.previousElementSibling;
+      g = { host, question: line(host.getAttribute("aria-label") || el && el.innerText || host.querySelector("legend") && host.querySelector("legend").innerText || before && before.innerText || title(root) && title(root).innerText), options: [], multiple: false, free_text: !!host.querySelector('textarea,input[type="text"],input:not([type])') };
+      groups.push(g);
+    }
+    g.options.push(label(o));
+    g.multiple ||= o.matches('[role="checkbox"],input[type="checkbox"]') || host.getAttribute("aria-multiselectable") === "true" || /one or more|all that apply|multiple/i.test(root.innerText.slice(0, 500));
+  }
+  const submit = [...root.querySelectorAll("button")].filter(b => !opts.some(o => o.contains(b)) && (/^(submit|send|continue|next|done|answer|verstuur|verzend|doorgaan|volgende|klaar|beantwoord)/i.test(b.innerText.trim())
+    // an icon-only button by its exact label: "Next question" pages a card, it does not submit it
+    || /^(submit|send|verstuur|verzend)$/i.test(b.getAttribute("aria-label") || ""))).pop();
+  const step = (root.innerText.match(/\d+ of \d+/) || [])[0];
+  // which question this is: ticking an option changes the form's text ("2 selected"), not this
+  const key = groups.map(g => [g.question, ...g.options].join("|")).join("\n");
+  return { root, opts, submit, step, key, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
+};"#;
+
+/// What the chat shows now: the assistant's messages, whether a turn runs and the open question, if any.
+fn state(view: &Webview) -> Result<Value, String> {
+    let js = format!(r#"(() => {{ {QUESTION}
+      const m = [...document.querySelectorAll('[data-testid="assistant-message"]')], o = q();
+      return {{ count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"],button[aria-label="Stop response"]'), text: m.length ? m[m.length - 1].innerText : "",
+        question: o && {{ form: o.form, step: o.step, key: o.key, questions: o.groups, free_text: o.free_text, submit: o.submit && (o.submit.innerText.trim() || o.submit.getAttribute("aria-label")) }} }}; }})()"#);
+    eval(view, &js)
+}
+
+/// Which options of a question an answer picks: its lines (or `;`-separated parts) that are an option's label, in any case.
+/// The other parts are free text.
+fn pick(labels: &[String], answer: &str) -> (Vec<usize>, String) {
+    let (mut picks, mut rest) = (vec![], vec![]);
+    for part in answer.split(['\n', ';']).map(|p| p.trim().trim_start_matches(['-', '*']).trim()).filter(|p| !p.is_empty()) {
+        match labels.iter().position(|l| l.trim().eq_ignore_ascii_case(part)) {
+            Some(i) => picks.push(i),
+            None => rest.push(part),
+        }
+    }
+    (picks, rest.join("\n"))
+}
+
+/// Answer the open question `q` (from `state`): click the options `text` names, type the rest into the form's text field, submit.
+fn answer(view: &Webview, q: &Value, text: &str) -> Result<(), String> {
+    let labels: Vec<String> = q["questions"].as_array().into_iter().flatten().flat_map(|g| g["options"].as_array().into_iter().flatten()).filter_map(|o| o.as_str().map(String::from)).collect();
+    let (picks, free) = pick(&labels, text);
+    if picks.is_empty() && (free.is_empty() || q["free_text"] != true) {
+        return Err(format!("Claude Design asks a question and the answer matches none of its options ({}) and the form has no text field: answer with an option's label", labels.join(" | ")));
+    }
+    // single-choice: the last pick wins, as clicking them one after the other would
+    let fill = format!(r#"(() => {{ {QUESTION}
+      const o = q(), picks = {}, free = {};
+      if (!o) return "the question is gone";
+      picks.forEach(i => o.opts[i].click());
+      if (free) {{
+        const f = o.root.querySelector('textarea,input[type="text"],input:not([type])');
+        if (!f) return "the form has no text field";
+        f.focus(); f.select(); document.execCommand("insertText", false, free);
+        // the page may not have the focus (claude.ai's sidebar over the chat): then set the value as React reads it
+        if (f.value !== free) {{
+          Object.getOwnPropertyDescriptor(Object.getPrototypeOf(f), "value").set.call(f, free);
+          f.dispatchEvent(new Event("input", {{ bubbles: true }}));
+        }}
+        // no submit button: the card takes Enter in the field ("⏎ Enter"), a form submit when that did nothing
+        if (!o.submit) {{
+          f.dispatchEvent(new KeyboardEvent("keydown", {{ key: "Enter", code: "Enter", keyCode: 13, bubbles: true, cancelable: true }}));
+          setTimeout(() => {{ if (f.isConnected && f.form) f.form.requestSubmit(); }}, 500);
+        }}
+      }}
+      return "ok"; }})()"#, json!(picks), json!(free));
+    view.set_focus().ok();
+    let r = eval(view, &fill)?;
+    if r != "ok" { return Err(format!("could not answer Claude Design's question: {}", r.as_str().unwrap_or("no answer"))); }
+    // the submit button may take a moment to enable; a form without one (an option click advanced it) is left to the wait
+    let submit = format!(r#"(() => {{ {QUESTION}
+      const o = q();
+      if (!o || o.key !== {}) return "advanced";
+      // a card's Submit sends all its questions: before the last one, the click moves on by itself (slowly in a background drawer)
+      const at = (o.step || "").match(/(\d+) of (\d+)/);
+      if (at && +at[1] < +at[2]) return "no button";
+      if (!o.submit) return "no button";
+      if (o.submit.disabled || o.submit.getAttribute("aria-disabled") === "true") return "disabled";
+      o.submit.click(); return "sent"; }})()"#, json!(q["key"]));
+    poll(Duration::from_secs(5), Duration::from_millis(250), "", || {
+        Ok(matches!(eval(view, &submit)?.as_str(), Some("sent" | "advanced" | "no button")).then_some(()))
+    }).map_err(|_| "Claude Design's submit button stayed disabled: the answer is incomplete".to_string())
+}
+
 /// Fill the composer, send, and wait for Claude Design's answer: the last assistant message once the turn is over (the
-/// composer's stop button is gone). Neither the send button nor message-actions tell: both come and go mid-turn.
+/// composer's stop button is gone), or the question it asks, which has no send button: while one is open `text` answers it.
+/// Neither the send button nor message-actions tell the turn is over: both come and go mid-turn.
 fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
     // the compact view hides the chat (a 0×0 composer): "detach chat" floats it over the canvas, closed again at the end
-    let show = r#"(() => { const el = document.querySelector('[data-testid="chat-input"]');
+    let show = format!(r#"(() => {{ {QUESTION}
+      if (q()) return "shown";
+      const el = document.querySelector('[data-testid="chat-input"]');
       if (!el) return "none";
       if (el.getBoundingClientRect().width > 0) return "shown";
       const pop = document.querySelector('[data-testid="frame-artifact-chat-popout"]');
       if (!pop) return "none";
       if (pop.getAttribute("aria-pressed") !== "true") pop.click();
-      return "opened"; })()"#;
+      return "opened"; }})()"#);
     let mut opened = false;
     // a page that has just opened has no composer yet
     poll(Duration::from_secs(20), Duration::from_millis(500), NO_CHAT, || {
-        let r = eval(view, show)?;
+        let r = eval(view, &show)?;
         opened |= r == "opened";
         Ok((r == "shown").then_some(()))
     })?;
     // execCommand types only into a focused page: the drawer's webview is not focused while the person is in the conversation
     view.set_focus().ok();
-    let fill = format!(r#"(() => {{
+    let asked = state(view)?;
+    let (before, answered) = if asked["question"].is_object() {
+        answer(view, &asked["question"], text)?;
+        // the turn's answer is already there, still streaming behind the question: wait for it, not for a new one
+        (asked["count"].as_u64().unwrap_or(0).saturating_sub(1), asked["question"]["key"].as_str().map(String::from))
+    } else {
+        let fill = format!(r#"(() => {{
       const el = document.querySelector('[data-testid="chat-input"]'), text = {};
       el.focus();
       if (el.innerText.trim()) {{ document.execCommand("selectAll"); document.execCommand("delete"); }}
@@ -336,34 +458,62 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
       }}
       return {{ before: document.querySelectorAll('[data-testid="assistant-message"]').length, typed: el.innerText.trim().length }};
     }})()"#, json!(text));
-    let r = eval(view, &fill)?;
-    if r["typed"].as_u64().unwrap_or(0) == 0 { return Err("Claude Design's composer did not take the text".into()); }
-    let before = r["before"].as_u64().unwrap_or(0);
-    // "sent", or why not: the reason goes into the error, since a page we cannot see is otherwise a guess
-    let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"]');
+        let r = eval(view, &fill)?;
+        if r["typed"].as_u64().unwrap_or(0) == 0 { return Err("Claude Design's composer did not take the text".into()); }
+        // "sent", or why not: the reason goes into the error, since a page we cannot see is otherwise a guess
+        let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"],button[aria-label="Send message"]');
       const el = document.querySelector('[data-testid="chat-input"]');
       if (!b) return "no send button (composer " + (el ? el.innerText.trim().length + " characters" : "missing") + ")";
       if (b.disabled || b.getAttribute("aria-disabled") === "true") return "the send button is disabled";
       b.click(); return "sent"; })()"#;
-    let mut why = String::new();
-    poll(Duration::from_secs(5), Duration::from_millis(250), "", || {
-        why = eval(view, send)?.as_str().unwrap_or("no answer").to_string();
-        Ok((why == "sent").then_some(()))
-    }).map_err(|_| format!("Claude Design did not take the prompt: {why}"))?;
+        let mut why = String::new();
+        poll(Duration::from_secs(5), Duration::from_millis(250), "", || {
+            why = eval(view, send)?.as_str().unwrap_or("no answer").to_string();
+            Ok((why == "sent").then_some(()))
+        }).map_err(|_| format!("Claude Design did not take the prompt: {why}"))?;
+        (r["before"].as_u64().unwrap_or(0), None)
+    };
     // the turn runs while the composer's stop button is there; message-actions show on a message while it still works
-    let state = r#"(() => { const m = [...document.querySelectorAll('[data-testid="assistant-message"]')];
-      return { count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"]'), text: m.length ? m[m.length - 1].innerText : "" }; })()"#;
     let sent = Instant::now();
     let mut seen = false;
-    let answer = poll(Duration::from_secs(300), Duration::from_secs(1), "Claude Design did not finish within 5 minutes; it may still be working, look at the Design drawer", || {
-        let r = eval(view, state)?;
+    let mut out = poll(Duration::from_secs(300), Duration::from_secs(1), "Claude Design did not finish within 5 minutes; it may still be working, look at the Design drawer", || {
+        let r = state(view)?;
+        let cut = |s: &Value| s.as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>();
+        if r["question"].is_object() {
+            if answered.as_deref() != r["question"]["key"].as_str() {
+                return Ok(Some(json!({ "waiting_for_answer": true, "untrusted_question": r["question"], "untrusted_answer": cut(&r["text"]),
+                    "note": "Claude Design asks a question and waits for the answer: call design_prompt with it (an option's label per line, and/or free text), it answers instead of sending a new message. With a step (Question 1 of 3), answer only this question: the next one comes back after." })));
+            }
+            // a background drawer is throttled: the card can take well over 15 s to move on after a click (seen 26 Oct 2026)
+            if sent.elapsed() > Duration::from_secs(60) { return Err("Claude Design still shows the same question after a minute: it did not take the answer".into()); }
+        }
         seen |= r["working"] == true;
         // the stop button can come a moment after the send: done once it has come and gone (or never came within 10 s)
         let done = r["count"].as_u64() > Some(before) && r["working"] == false && (seen || sent.elapsed() > Duration::from_secs(10));
-        Ok(done.then(|| r["text"].as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>()))
+        Ok(done.then(|| json!({ "untrusted_answer": cut(&r["text"]) })))
     })?;
-    if opened { eval(view, r#"document.querySelector('[data-testid="frame-artifact-chat-popout"][aria-pressed="true"]')?.click(), true"#).ok(); }
-    Ok(json!({ "untrusted_answer": answer, "notice": INSTRUCTIONS }))
+    if opened && out["waiting_for_answer"] != true { eval(view, r#"document.querySelector('[data-testid="frame-artifact-chat-popout"][aria-pressed="true"]')?.click(), true"#).ok(); }
+    out["notice"] = json!(INSTRUCTIONS);
+    Ok(out)
+}
+
+/// The chat panel's elements as an outline (tag, role, test id, aria-label, text), to find selectors of claude.ai's widgets:
+/// design_snapshot with `dom`, while the widget is open. Starts at the chat column: claude.ai nests it ~15 divs below `main`.
+fn dom(view: &Webview) -> Result<Value, String> {
+    let js = r#"(() => {
+      const root = document.querySelector('[data-testid="chat-column-body"]')
+        || (document.querySelector('[data-testid="chat-input"]') || document.body).closest('main,[role="complementary"],aside') || document.body;
+      const out = [];
+      const walk = (e, d) => {
+        if (d > 24 || out.length > 600 || e.tagName === "svg" || e.tagName === "SCRIPT" || e.tagName === "STYLE") return;
+        const a = n => e.getAttribute(n) ? ` ${n}=${JSON.stringify(e.getAttribute(n))}` : "";
+        const own = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(" ").slice(0, 80);
+        out.push("  ".repeat(d) + "<" + e.tagName.toLowerCase() + a("role") + a("data-testid") + a("aria-label") + a("type") + a("aria-checked") + a("aria-pressed") + (e.disabled ? " disabled" : "") + ">" + (own ? " " + own : ""));
+        [...e.children].forEach(c => walk(c, d + 1));
+      };
+      walk(root, 0);
+      return out.join("\n"); })()"#;
+    eval(view, js)
 }
 
 #[cfg(target_os = "macos")]
@@ -401,6 +551,17 @@ fn create(view: &Webview) -> Result<String, String> {
     })
 }
 
+/// The context line a new design's first prompt starts with: the project's repos, for Claude Design to match their UI.
+/// ponytail: no way to attach a repo in claude.ai's UI is known, so it is asked for in words; all of the project's repos are
+/// listed (renamed or archived ones too), there is no cheap way to tell which one is current.
+fn repos_line(repo_projects: &HashMap<String, String>, project: &str) -> String {
+    let mut repos: Vec<&str> = repo_projects.iter().filter(|(_, p)| *p == project).map(|(r, _)| r.as_str()).collect();
+    repos.sort();
+    if repos.is_empty() { return String::new(); }
+    format!("The project's code is on GitHub: {}. Match the UI of that codebase (components, spacing, colors, copy).\n\n",
+        repos.iter().map(|r| format!("https://github.com/{r}")).collect::<Vec<_>>().join(", "))
+}
+
 fn text(t: impl Into<String>) -> Value { json!({"content": [{"type": "text", "text": t.into()}]}) }
 fn fail(t: impl Into<String>) -> Value { json!({"content": [{"type": "text", "text": t.into()}], "isError": true}) }
 
@@ -412,9 +573,10 @@ pub fn tool_list() -> Value {
     json!({ "tools": [
         tool("design_read", "Read the project's canvas: canvas.json and every artboard file (.dc.html) it lists, or only the given paths.",
             json!({ "paths": { "type": "array", "maxItems": 50, "items": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*(/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$" }, "description": "Files under the canvas's project/ folder, default all" } }), &[]),
-        tool("design_prompt", "Send a message to Claude Design in the Design drawer's chat, wait for it to finish (up to 5 minutes, a change publishes a new canvas version) and return its answer. Acts on the user's claude.ai account.",
+        tool("design_prompt", "Send a message to Claude Design in the Design drawer's chat, wait for it to finish (up to 5 minutes, a change publishes a new canvas version) and return its answer. Claude Design may instead ask a clarifying question (a form with options): it comes back with waiting_for_answer, its questions and each option's label, and the next design_prompt answers it (an option's label per line and/or free text) instead of sending a new message. Acts on the user's claude.ai account.",
             json!({ "text": { "type": "string", "maxLength": 20000 } }), &["text"]),
-        tool("design_snapshot", "A picture of the Design drawer as the user sees it.", json!({}), &[]),
+        tool("design_snapshot", "A picture of the Design drawer as the user sees it, or with dom the outline of its chat panel as text (to debug how a widget is found).",
+            json!({ "dom": { "type": "boolean" } }), &[]),
         tool("design_create", "Start a design for a project that has none: a new empty canvas in the user's claude.ai account, then the prompt sent to it. Fails when the project already has a design.",
             json!({ "prompt": { "type": "string", "maxLength": 20000, "description": "What to design" } }), &["prompt"]),
     ] })
@@ -461,6 +623,7 @@ fn run(app: &AppHandle, key: &str, pid: u32, name: &str, args: &Value) -> Result
             match name {
                 "design_read" => read(&view, &args["paths"]).map(|v| text(v.to_string())),
                 "design_prompt" => prompt(&view, &s("text").ok_or("text is empty")?).map(|v| text(v.to_string())),
+                _ if args["dom"] == true => dom(&view).map(|v| text(v.as_str().unwrap_or(""))),
                 _ => Ok(json!({"content": [
                     {"type": "image", "data": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, snapshot(&view)?), "mimeType": "image/png"},
                     {"type": "text", "text": UNTRUSTED}]})),
@@ -471,10 +634,11 @@ fn run(app: &AppHandle, key: &str, pid: u32, name: &str, args: &Value) -> Result
             let (project, view) = open(app, key, Some(START))?;
             let vault = need_vault(&st)?;
             if !relay_config::design(&vault, &project).is_empty() { return Err(format!("{project} already has a design: use design_prompt")); }
+            let repos = repos_line(&crate::repo_projects(&vault), &project);
             let url = create(&view)?;
             relay_config::set_design(&vault, &project, &url)?;
             app.emit("design-link", json!({"project": project, "url": url})).ok();
-            prompt(&view, &text_in).map(|mut v| { v["design"] = json!(url); text(v.to_string()) })
+            prompt(&view, &format!("{repos}{text_in}")).map(|mut v| { v["design"] = json!(url); text(v.to_string()) })
         }
         _ => Err(format!("unknown tool {name}")),
     }
@@ -504,6 +668,20 @@ mod tests {
     fn canvas_paths() {
         for p in ["canvas.json", "home.dc.html", "boards/a_1.dc.html", "_x", "a-b.c"] { assert!(path_ok(p), "{p}"); }
         for p in ["", "../x", "a/../b", "a..b", "/abs", "a//b", "a/", ".hidden", "a/.b", "a b", "a\\b", "x?y", "a%2e"] { assert!(!path_ok(p), "{p}"); }
+    }
+    #[test]
+    fn answer_picks_options_by_label() {
+        let l: Vec<String> = ["Dark", "Light, with accents", "Other"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(pick(&l, "dark"), (vec![0], String::new()));
+        assert_eq!(pick(&l, "- Light, with accents\n* Dark"), (vec![1, 0], String::new()));
+        assert_eq!(pick(&l, "Other; Make it calm\nand airy"), (vec![2], "Make it calm\nand airy".into()));
+        assert_eq!(pick(&l, "Something else"), (vec![], "Something else".into()));
+    }
+    #[test]
+    fn repos_of_a_project() {
+        let m: HashMap<String, String> = [("relay-inc/relay-app", "Relay"), ("laurentme/vault-app", "Relay"), ("kristoffeys/facturio", "IC")].iter().map(|(a, b)| (a.to_string(), b.to_string())).collect();
+        assert_eq!(repos_line(&m, "Relay"), "The project's code is on GitHub: https://github.com/laurentme/vault-app, https://github.com/relay-inc/relay-app. Match the UI of that codebase (components, spacing, colors, copy).\n\n");
+        assert_eq!(repos_line(&m, "None"), "");
     }
     #[test]
     fn design_tile() {
