@@ -23,6 +23,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **A vault note fills the drawer**: the note stayed 520 px wide in a wider drawer, and a table's narrow columns broke their words per letter ("Poi nts"). The note now takes the drawer's width and a column is never narrower than its longest word, also in a conversation's tables
 - **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead (#265)
 
 ## [0.0.34] - 2026-10-26
