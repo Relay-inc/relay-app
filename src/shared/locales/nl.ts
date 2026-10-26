@@ -849,8 +849,6 @@ export default {
     "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. Een gesprek blijft in de vault van zijn project: het kan je andere vaults niet lezen of wijzigen, en in een gedeelde vault staan je eigen MCP-servers en claude.ai-connectors uit.",
   "set.extraVaultAdd": "Vault toevoegen…",
   "set.extraVaultRemove": "{name} verwijderen",
-  "set.extraVaultSync": "Synchroniseren met het team: committen, hun wijzigingen ophalen, pushen, elke 5 minuten",
-  "set.extraVaultSynced": "Laatste sync {when}: {pulled} commits opgehaald, gepusht {pushed}",
   "set.extraVaultRenamed": "Zelfde naam als een project in een andere vault, getoond als: {names}",
   "set.title": "Instellingen",
   "set.vaultHelp":

@@ -43,11 +43,6 @@ export async function addExtraVault() {
 }
 export const removeExtraVault = (vault: string) =>
   save({ ...current(), extraVaults: (current().extraVaults ?? []).filter(v => v !== vault) });
-/** A shared vault syncing with the team, or not; switched on, the backend runs a round right away. */
-export function syncVault(vault: string, on: boolean) {
-  const others = (current().syncVaults ?? []).filter(v => v !== vault);
-  return save({ ...current(), syncVaults: on ? [...others, vault] : others });
-}
 export function saveFolders(map: VaultMap) {
   const vault = st().vaultStatus!.vault;
   return save({ ...current(), vault, vaults: { ...current().vaults, [vault]: map } }, t("set.saved"));

@@ -858,8 +858,6 @@ export default {
     "D'autres coffres dont les projets s'affichent dans la barre latérale à côté des vôtres, un coffre d'équipe dans git par exemple. Une conversation reste dans le coffre de son projet : elle ne peut ni lire ni modifier vos autres coffres, et dans un coffre partagé vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
   "set.extraVaultAdd": "Ajouter un vault…",
   "set.extraVaultRemove": "Retirer {name}",
-  "set.extraVaultSync": "Synchroniser avec l'équipe : commit, récupérer leurs changements, push, toutes les 5 minutes",
-  "set.extraVaultSynced": "Dernière synchro {when} : {pulled} commits récupérés, poussé {pushed}",
   "set.extraVaultRenamed": "Même nom qu'un projet d'un autre coffre, affiché comme : {names}",
   "set.title": "Réglages",
   "set.vaultHelp":

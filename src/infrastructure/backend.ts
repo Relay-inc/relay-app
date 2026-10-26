@@ -20,7 +20,6 @@ import type {
 } from "../domain/conversations/types";
 import type {
   ActionConfig,
-  SharedSync,
   VaultSync,
   ActionEntry,
   DeviceCode,
@@ -446,12 +445,6 @@ export const setActionConfig = (ext: string, entry: ActionEntry) =>
 export const vaultSync = () => invoke<VaultSync>("vault_sync");
 export const setVaultSync = (remote: string, on: boolean, minutes: number) =>
   invoke<VaultSync>("set_vault_sync", { remote, on, minutes });
-export const sharedSync = () => invoke<SharedSync>("shared_sync");
-/** The shared vaults' sync round ended. */
-export const onSharedSync = (handler: (all: SharedSync) => void) =>
-  listen<SharedSync>("shared-sync", e => handler(e.payload));
-/** A shared vault took commits from the team: the sidebar reads the vaults again. */
-export const onVaultPulled = (handler: () => void) => listen("vault-pulled", () => handler());
 /** A sync round ended. */
 export const onVaultSync = (handler: (last: NonNullable<VaultSync["last"]>) => void) =>
   listen<NonNullable<VaultSync["last"]>>("vault-sync", e => handler(e.payload));

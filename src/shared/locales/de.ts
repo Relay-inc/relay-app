@@ -852,8 +852,6 @@ export default {
     "Andere Vaults, deren Projekte in der Seitenleiste neben deinen stehen, zum Beispiel ein Team-Vault in git. Ein Gespräch bleibt im Vault seines Projekts: Es kann deine anderen Vaults weder lesen noch ändern, und in einem geteilten Vault sind deine eigenen MCP-Server und claude.ai-Konnektoren aus.",
   "set.extraVaultAdd": "Vault hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
-  "set.extraVaultSync": "Mit dem Team synchronisieren: committen, ihre Änderungen holen, pushen, alle 5 Minuten",
-  "set.extraVaultSynced": "Letzte Synchronisierung {when}: {pulled} Commits geholt, gepusht {pushed}",
   "set.extraVaultRenamed": "Gleicher Name wie ein Projekt in einem anderen Vault, angezeigt als: {names}",
   "set.title": "Einstellungen",
   "set.vaultHelp":

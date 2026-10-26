@@ -168,17 +168,6 @@ export const teamProjects = [
     vault: TEAM_VAULT,
   },
 ];
-/** The team vault's last sync round: stopped at a conflict in the work-state. */
-export const teamSync = {
-  [TEAM_VAULT]: {
-    at: Math.floor(NOW / 1000) - 120,
-    ok: false,
-    error:
-      "conflict with the team in work-state.md: run git pull --rebase in the vault and resolve it, the next round pushes",
-    commit: null,
-    pulled: 0,
-  },
-};
 export const teamStatus = [{ vault: TEAM_VAULT, renamed: ["Northwind Portal (Team vault)"], error: null }];
 
 const contextFolder = (context: string) => `Contexts/${context}`;

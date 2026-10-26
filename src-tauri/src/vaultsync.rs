@@ -19,11 +19,6 @@ use super::App;
 pub const MINUTES: [u64; 4] = [5, 15, 30, 60];
 /// The last round: {"at" (epoch s), "ok", "error", "commit"}; null before the first.
 static LAST: Mutex<Value> = Mutex::new(Value::Null);
-/// The last round of each shared vault with sync on: {vault: {"at", "ok", "error", "commit", "pulled"}}.
-static SHARED: Mutex<Value> = Mutex::new(Value::Null);
-/// How often a shared vault syncs: often enough that the team's changes show the same morning.
-// ponytail: one fixed interval for every shared vault, a setting per vault when someone asks
-const SHARED_MINUTES: u64 = 5;
 /// Run a round now (the setting was saved), without waiting for the interval.
 static NOW: AtomicBool = AtomicBool::new(false);
 
@@ -85,45 +80,6 @@ fn is_public(url: &str, path_env: &str) -> bool {
         .status().is_ok_and(|s| s.success())
 }
 
-/// Commit everything that changed, as the user or, on a Mac without a git identity, as Relay. Some(commit) when
-/// something was committed.
-fn commit_all(vault: &str, path_env: &str) -> Result<Option<String>, String> {
-    if git(vault, path_env, &["status", "--porcelain"])?.is_empty() { return Ok(None); }
-    git(vault, path_env, &["add", "-A"])?;
-    let msg = format!("Relay sync {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
-    git(vault, path_env, &[who(vault, path_env).as_slice(), &["commit", "-q", "-m", &msg]].concat())?;
-    Ok(Some(git(vault, path_env, &["rev-parse", "--short", "HEAD"])?))
-}
-fn who(vault: &str, path_env: &str) -> Vec<&'static str> {
-    if git(vault, path_env, &["config", "user.email"]).is_ok() { vec![] } else { vec!["-c", "user.name=Relay", "-c", "user.email=relay@localhost"] }
-}
-
-/// One round of a shared vault, a clone of the team's repository: commit what changed here, put it on top of what the
-/// team pushed (rebase on the upstream branch) and push. A conflict puts the vault back as it was before the rebase, its
-/// own commit kept, and names the files; every next round tries again. Returns (own commit, commits pulled).
-fn shared_round(vault: &str, path_env: &str) -> Result<(Option<String>, usize), String> {
-    let up = git(vault, path_env, &["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
-        .map_err(|_| "the vault has no upstream branch: clone it from the team's repository".to_string())?;
-    let (remote, branch) = up.split_once('/').ok_or_else(|| format!("not a remote branch: {up}"))?;
-    let url = git(vault, path_env, &["remote", "get-url", remote])?;
-    if is_public(&url, path_env) { return Err("the remote is public, a vault only syncs to a private repository".into()); }
-    let commit = commit_all(vault, path_env)?;
-    git(vault, path_env, &["fetch", "-q", remote])?;
-    let pulled: usize = git(vault, path_env, &["rev-list", "--count", &format!("HEAD..{up}")])?.parse().unwrap_or(0);
-    if pulled > 0 {
-        if let Err(e) = git(vault, path_env, &[who(vault, path_env).as_slice(), &["rebase", "-q", &up]].concat()) {
-            let files = git(vault, path_env, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
-            git(vault, path_env, &["rebase", "--abort"]).ok();
-            if files.is_empty() { return Err(e); }
-            return Err(format!("conflict with the team in {}: run git pull --rebase in the vault and resolve it, the next round pushes", files.lines().collect::<Vec<_>>().join(", ")));
-        }
-    }
-    if git(vault, path_env, &["rev-list", "--count", &format!("{up}..HEAD")])? != "0" {
-        git(vault, path_env, &["push", "-q", remote, &format!("HEAD:refs/heads/{branch}")])?;
-    }
-    Ok((commit, pulled))
-}
-
 /// One round: commit what changed, push the branch. Some(commit) when something was committed.
 fn round(vault: &str, remote: &str, path_env: &str) -> Result<Option<String>, String> {
     if !Path::new(vault).join(".git").exists() {
@@ -134,7 +90,15 @@ fn round(vault: &str, remote: &str, path_env: &str) -> Result<Option<String>, St
     }
     if is_public(remote, path_env) { return Err("the remote is public, a vault only syncs to a private repository".into()); }
     let branch = git(vault, path_env, &["symbolic-ref", "--short", "HEAD"]).map_err(|_| "the vault is not on a branch (detached HEAD)".to_string())?;
-    let commit = commit_all(vault, path_env)?;
+    let mut commit = None;
+    if !git(vault, path_env, &["status", "--porcelain"])?.is_empty() {
+        git(vault, path_env, &["add", "-A"])?;
+        // a Mac without a git identity still commits, as Relay
+        let who: Vec<&str> = if git(vault, path_env, &["config", "user.email"]).is_ok() { vec![] } else { vec!["-c", "user.name=Relay", "-c", "user.email=relay@localhost"] };
+        let msg = format!("Relay sync {}", chrono::Local::now().format("%Y-%m-%d %H:%M"));
+        git(vault, path_env, &[who.as_slice(), &["commit", "-q", "-m", &msg]].concat())?;
+        commit = Some(git(vault, path_env, &["rev-parse", "--short", "HEAD"])?);
+    }
     if git(vault, path_env, &["rev-parse", "-q", "--verify", "HEAD"]).is_ok() {
         git(vault, path_env, &["push", "-q", remote, &format!("HEAD:refs/heads/{branch}")])?;
     }
@@ -157,52 +121,18 @@ fn run(app: &AppHandle) {
     app.emit("vault-sync", last).ok();
 }
 
-/// A round of every shared vault with sync on (settings `syncVaults`). New commits from the team: "vault-pulled", so
-/// the sidebar reads the vaults again.
-fn run_shared(app: &AppHandle) {
-    let st = app.state::<App>();
-    let on = { let s = st.settings.lock().unwrap(); crate::extra_vaults(&s).into_iter().filter(|v| syncs(&s, v)).collect::<Vec<_>>() };
-    let at = chrono::Utc::now().timestamp();
-    let mut all = serde_json::Map::new();
-    let mut pulled_any = false;
-    for v in on {
-        let last = match shared_round(&v, &st.path) {
-            Ok((commit, pulled)) => { pulled_any |= pulled > 0; json!({"at": at, "ok": true, "error": "", "commit": commit, "pulled": pulled}) }
-            Err(e) => json!({"at": at, "ok": false, "error": e, "commit": null, "pulled": 0}),
-        };
-        all.insert(v, last);
-    }
-    *SHARED.lock().unwrap() = Value::Object(all.clone());
-    app.emit("shared-sync", Value::Object(all)).ok();
-    if pulled_any { app.emit("vault-pulled", ()).ok(); }
-}
-/// Whether a shared vault syncs with the team: its path in the settings' `syncVaults`.
-pub fn syncs(s: &Value, vault: &str) -> bool { s["syncVaults"].as_array().is_some_and(|a| a.iter().any(|v| v == vault)) }
-
 pub fn start(app: &AppHandle) {
     let h = app.clone();
     std::thread::spawn(move || {
         let mut next = Instant::now() + Duration::from_secs(60);
-        let mut next_shared = next;
         loop {
             std::thread::sleep(Duration::from_secs(5));
-            let now = NOW.swap(false, Ordering::Relaxed);
-            if now || Instant::now() >= next_shared {
-                run_shared(&h);
-                next_shared = Instant::now() + Duration::from_secs(60 * SHARED_MINUTES);
-            }
-            if !now && Instant::now() < next { continue; }
+            if !NOW.swap(false, Ordering::Relaxed) && Instant::now() < next { continue; }
             run(&h);
             next = Instant::now() + Duration::from_secs(60 * minutes(&config(&crate::vault(&h.state::<App>()))));
         }
     });
 }
-
-/// The shared vaults' last rounds, for Settings: {vault: {at, ok, error, commit, pulled}}.
-#[tauri::command]
-pub fn shared_sync(_state: tauri::State<App>) -> Value { SHARED.lock().unwrap().clone() }
-/// Run a round now: Settings saved, or a shared vault's sync switched on.
-pub fn sync_now() { NOW.store(true, Ordering::Relaxed); }
 
 /// The vault's sync setting and the last round, for Settings.
 #[tauri::command]
@@ -259,44 +189,6 @@ mod tests {
         assert!(round(v, r, &path_env).unwrap().is_some());
         assert_eq!(round(v, r, &path_env).unwrap(), None, "nothing changed, nothing committed");
         assert!(git(r, &path_env, &["rev-parse", "main"]).is_ok(), "pushed to the remote");
-        std::fs::remove_dir_all(&tmp).ok();
-    }
-
-    #[test]
-    fn shared_round_takes_the_teams_commits_and_stops_at_a_conflict() {
-        let tmp = std::env::temp_dir().join(format!("relay-sharedsync-{}", std::process::id()));
-        std::fs::remove_dir_all(&tmp).ok();
-        let path_env = std::env::var("PATH").unwrap();
-        let bare = tmp.join("team.git");
-        let sh = |args: &[&str], dir: &Path| assert!(Command::new("git").args(args).current_dir(dir).output().unwrap().status.success(), "{args:?}");
-        std::fs::create_dir_all(&tmp).unwrap();
-        sh(&["init", "-q", "--bare", "-b", "main", "team.git"], &tmp);
-        let seed = tmp.join("seed");
-        sh(&["clone", "-q", bare.to_str().unwrap(), "seed"], &tmp);
-        std::fs::write(seed.join("work-state.md"), "| X | Active |\n").unwrap();
-        sh(&["add", "-A"], &seed);
-        sh(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "seed"], &seed);
-        sh(&["push", "-q", "origin", "HEAD:main"], &seed);
-        for c in ["me", "colleague"] { sh(&["clone", "-q", bare.to_str().unwrap(), c], &tmp); }
-        let (me, them) = (tmp.join("me"), tmp.join("colleague"));
-        let (m, t) = (me.to_str().unwrap(), them.to_str().unwrap());
-        // different files: my round takes their commit and pushes mine on top
-        std::fs::write(them.join("meeting.md"), "theirs").unwrap();
-        assert_eq!(shared_round(t, &path_env).unwrap().1, 0);
-        std::fs::write(me.join("note.md"), "mine").unwrap();
-        let (commit, pulled) = shared_round(m, &path_env).unwrap();
-        assert!(commit.is_some());
-        assert_eq!(pulled, 1);
-        assert!(me.join("meeting.md").is_file(), "the team's note is here");
-        assert_eq!(shared_round(t, &path_env).unwrap().1, 1, "and mine reached them");
-        // the same line on both sides: an error naming the file, my change kept, no rebase left halfway
-        std::fs::write(them.join("work-state.md"), "| X | Blocked |\n").unwrap();
-        shared_round(t, &path_env).unwrap();
-        std::fs::write(me.join("work-state.md"), "| X | Quiet |\n").unwrap();
-        let e = shared_round(m, &path_env).unwrap_err();
-        assert!(e.contains("conflict") && e.contains("work-state.md"), "{e}");
-        assert_eq!(std::fs::read_to_string(me.join("work-state.md")).unwrap(), "| X | Quiet |\n");
-        assert!(!me.join(".git/rebase-merge").exists() && !me.join(".git/rebase-apply").exists());
         std::fs::remove_dir_all(&tmp).ok();
     }
 }

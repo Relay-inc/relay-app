@@ -842,8 +842,6 @@ const en = {
     "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A conversation stays in the vault of its project: it cannot read or edit your other vaults, and in a shared vault your own MCP servers and claude.ai connectors are off.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
-  "set.extraVaultSync": "Sync with the team: commit, take their changes, push, every 5 minutes",
-  "set.extraVaultSynced": "Last sync {when}: {pulled} commits taken, pushed {pushed}",
   "set.extraVaultRenamed": "Same name as a project in another vault, shown as: {names}",
   "set.title": "Settings",
   "set.vaultHelp":
