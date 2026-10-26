@@ -467,7 +467,8 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
                 return Ok(Some(json!({ "waiting_for_answer": true, "untrusted_question": r["question"], "untrusted_answer": cut(&r["text"]),
                     "note": "Claude Design asks a question and waits for the answer: call design_prompt with it (an option's label per line, and/or free text), it answers instead of sending a new message. With a step (Question 1 of 3), answer only this question: the next one comes back after." })));
             }
-            if sent.elapsed() > Duration::from_secs(15) { return Err("Claude Design still shows the same question: it did not take the answer".into()); }
+            // a background drawer is throttled: the card can take well over 15 s to move on after a click (seen 26 Oct 2026)
+            if sent.elapsed() > Duration::from_secs(60) { return Err("Claude Design still shows the same question after a minute: it did not take the answer".into()); }
         }
         seen |= r["working"] == true;
         // the stop button can come a moment after the send: done once it has come and gone (or never came within 10 s)
