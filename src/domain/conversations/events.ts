@@ -50,6 +50,8 @@ export const doneText = (seconds: number, t: Translate) =>
 
 /** Claude Code's window until a turn's result names the model's (the 1M models say so there). */
 export const DEFAULT_WINDOW = 200_000;
+/** The window of the 1M models: the only one larger than the default. */
+export const LARGE_WINDOW = 1_000_000;
 /** The context after an event: tokens in use and window as they come, a compaction leaves what it kept, a reset none. */
 export function applyContext(context: ContextUse | undefined, event: AgentEvent): ContextUse | undefined {
   const window = context?.window ?? DEFAULT_WINDOW;
@@ -159,7 +161,11 @@ function setContext(state: ConversationsState, key: string, event: AgentEvent): 
   const next = applyContext(state.context[key], event);
   if (next) state.context[key] = next;
   else delete state.context[key];
-  return [];
+  // the window a turn reported stays with the conversation, for when its transcript is read again
+  const chat = state.chats[key];
+  if (event.type !== "context" || !event.window || !chat || chat.window === event.window) return [];
+  chat.window = event.window;
+  return [{ kind: "save-chats" }];
 }
 
 // the real recipients, independent of what the agent writes about it
@@ -317,10 +323,12 @@ export function toItems(
 }
 
 /** How full the context was at the end of a transcript. */
-export function contextOf(history: AgentEvent[]) {
+export function contextOf(history: AgentEvent[], window?: number) {
   let context: ContextUse | undefined;
   for (const event of history) context = applyContext(context, event);
-  return context;
+  if (!context) return context;
+  // a transcript names no window: the one the conversation last reported, else more than the default can only be 1M
+  return { ...context, window: window ?? (context.used > DEFAULT_WINDOW ? LARGE_WINDOW : context.window) };
 }
 
 /** history gives a "time" event before each transcript line's events: a user message is a new prompt, any later line

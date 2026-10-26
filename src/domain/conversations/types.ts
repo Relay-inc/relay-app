@@ -72,6 +72,7 @@ export type Chat = {
   meeting?: string; // the meeting (Meeting.id) whose briefing this is, shown under Today
   pr?: string; // the PR (its url) this conversation reviews, listed in that PR's detail
   answers?: string; // a second opinion: the review conversation it answers
+  window?: number; // the context window its last turn reported, for the meter once its transcript is read again
   briefing?: string; // that briefing as rewritten under Today, shown instead of the agent's answer
 };
 /** How full a conversation's context is, in tokens. */

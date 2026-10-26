@@ -39,7 +39,7 @@ export async function ensureHistory(key: string, fresh = false) {
   if (cs().messages[key] && !fresh) return;
   const history = await backend.history(key);
   const items = toItems(history, imageUrl, t);
-  const context = contextOf(history);
+  const context = contextOf(history, cs().chats[key]?.window);
   let retitled = false;
   set(draft => {
     draft.messages[key] = items;
