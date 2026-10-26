@@ -231,13 +231,17 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.action });
     await waitText("relay productive.create_task", 10000).catch(() => waitText("Depot import script"));
   },
-  // the conversation's changes from git in the drawer: the file list, then a file's diff in a window over the app with a
-  // comment on a line, then the comments sent to the composer (which closes the window)
-  "changes-list": async () => {
+  // the Git drawer (switched on in Settings › General): the project's two checkouts with staged, unstaged and untracked
+  // files and a suggested commit message, a file's diff in a window over the app with a comment on a line, the
+  // comments sent to the composer, commit blocked while the conversation works in a repo, and a refused push
+  "git-drawer": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
-    await button("Changes").click();
-    await waitText("DossierSync.php");
+    await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
+    await button("Git").click();
+    await waitText("BalanceSync.php");
+    await button("Suggest a message").click();
+    await waitText("Skip a balance the sync already added");
     await settle(page);
   },
   // the agents Claude Code spawned in a conversation (PR: subagents column): the column next to the conversation, a
@@ -262,20 +266,81 @@ const VIEWS = {
     await waitText("Totals match for 38 of 38 dossiers.");
     await settle(page);
   },
-  "changes-diff": async () => {
-    await VIEWS["changes-list"]();
-    await click("DossierSync.php");
+  "git-diff": async () => {
+    await VIEWS["git-drawer"]();
+    await click("BalanceSync.php");
     await click("return; // a retried job: the balance is already there");
     await page.keyboard.type("Is a retried job the only way this happens? Check the queue's retry policy too.");
     await button("Add comment").click();
     await click("$this->repository->addBalance($dossier, $balance);");
     await settle(page);
   },
-  "changes-sent": async () => {
-    await VIEWS["changes-diff"]();
+  "git-sent": async () => {
+    await VIEWS["git-diff"]();
     await page.keyboard.press("Escape");
     // the window's own button: the drawer's is under the backdrop
     await page.locator(".ticket-window").getByRole("button", { name: "Send 1 comment to the composer" }).click();
+    await settle(page);
+  },
+  "git-busy": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.evaluate(() => {
+      window.__harness.autoReply = false;
+      window.__harness.changeSettings({ gitDrawer: true });
+    });
+    await page.locator("textarea").locator("visible=true").last().click();
+    await page.keyboard.type("Run the sync tests again");
+    await page.keyboard.press("Enter");
+    await button("Git").click();
+    await waitText("BalanceSync.php");
+    await page.getByRole("textbox", { name: "Commit message" }).fill("Skip a balance the sync already added");
+    await settle(page);
+  },
+  "git-error": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("textbox", { name: "Commit message" }).fill("Skip a balance the sync already added");
+    await page.getByRole("button", { name: "Commit & Push", exact: true }).click();
+    await waitText("failed to push some refs");
+    await settle(page);
+  },
+  // a repo folded to its header: how many of its files are ticked
+  "git-folded": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "beacon", exact: true }).click();
+    await page.getByRole("button", { name: "beacon-api", exact: true }).click();
+    await settle(page);
+  },
+  // a group of a repo folded: beacon's unversioned files
+  "git-group-folded": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "Unversioned 2" }).click();
+    await settle(page);
+  },
+  // the log under the commit box: beacon's graph with its merges, then All branches with the spike
+  "git-log": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "Unversioned 2" }).click();
+    await waitText("Merge pull request #41 from acme/feat/credit-notes");
+    await settle(page);
+  },
+  "git-log-all": async () => {
+    await VIEWS["git-log"]();
+    await button("All branches").click();
+    await waitText("Try a queue per tenant");
+    await settle(page);
+  },
+  // a commit of the log opened: its message, its files and the first one's diff
+  "git-commit": async () => {
+    await VIEWS["git-log"]();
+    await click("Skip a balance the sync already added");
+    await waitText("src/Billing/BalanceSync.php");
+    await settle(page);
+  },
+  "git-discard": async () => {
+    await VIEWS["git-drawer"]();
+    await page.getByRole("button", { name: "Discard the changes to scripts/backfill-balances.php" }).click();
+    await waitText("Discard changes?");
     await settle(page);
   },
   "conversation-code": async () => {
@@ -860,6 +925,12 @@ const VIEWS = {
     await page.waitForFunction(() => window.__harness.workersRead);
     await page.waitForTimeout(500);
     await waitText("Draft this week's status mail", 2000);
+  },
+  // Settings › General › Git in project conversations, switched on (off by default)
+  "settings-git": async () => {
+    await settingsPage("General");
+    await click("Git in project conversations");
+    await intoView("Git in project conversations");
   },
   // the workers without their crabs (Settings › General › Crabs for the orchestrator's workers off)
   "orchestrator-plain": async () => {

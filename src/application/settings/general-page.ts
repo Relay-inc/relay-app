@@ -60,6 +60,7 @@ export const saveTerminal = (terminal: TerminalApp) => save({ ...current(), term
 export const saveKeepAwake = (keepAwake: boolean) => save({ ...current(), keepAwake });
 export const saveAutoRetry = (autoRetry: boolean) => save({ ...current(), autoRetry });
 export const saveTimeFromSessions = (timeFromSessions: boolean) => save({ ...current(), timeFromSessions });
+export const saveGitDrawer = (gitDrawer: boolean) => save({ ...current(), gitDrawer });
 export const saveWorkerCrabs = (workerCrabs: boolean) => save({ ...current(), workerCrabs });
 export const saveCaptureOnClose = (captureOnClose: boolean) => save({ ...current(), captureOnClose });
 /** The sidebar's views: the layout, the order, the ones switched off (each patch keeps the rest). */

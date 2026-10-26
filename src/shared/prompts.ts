@@ -2,6 +2,7 @@
 // include_str!). They are imported here as text, one place for the frontend: `prompts.mail.draft`. A prompt with
 // {{name}} placeholders goes through fill() before it is sent.
 import conversationUsageLimitResume from "../../prompts/conversation/usage-limit-resume.md?raw";
+import gitCommitMessage from "../../prompts/git/commit-message.md?raw";
 import mailComposeForward from "../../prompts/mail/compose-forward.md?raw";
 import mailComposeReply from "../../prompts/mail/compose-reply.md?raw";
 import mailDraft from "../../prompts/mail/draft.md?raw";
@@ -42,6 +43,9 @@ const text = (raw: string) => raw.replace(/\n$/, "");
 export const prompts = {
   conversation: {
     usageLimitResume: text(conversationUsageLimitResume),
+  },
+  git: {
+    commitMessage: text(gitCommitMessage),
   },
   mail: {
     composeForward: text(mailComposeForward),

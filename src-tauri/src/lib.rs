@@ -24,7 +24,6 @@ pub use relay_remote::broker;
 mod calendar;
 mod commonwealth;
 mod design;
-mod changes;
 mod commits;
 mod dictation;
 mod files;
@@ -33,6 +32,7 @@ mod machine_git;
 mod machines;
 mod mirror;
 mod favicon;
+mod git;
 mod mail;
 mod meeting;
 pub mod notify;
@@ -804,20 +804,76 @@ async fn drop_worktrees(app: AppHandle, state: State<'_, App>, project: String) 
     Ok(json!({"removed": removed, "kept": kept.len()}))
 }
 
-/// What a conversation changed, per repo (changes.rs): the repos of the files its tool calls wrote (`paths`) and the
-/// worktrees it made. In a checkout it did not make (the vault, a shared repo) only the files it wrote show, else the
-/// drawer holds every other session's uncommitted work too. Files outside a git checkout do not show.
+/// The checkouts the Git drawer shows for a project and may run git in (git.rs), as (top, made by the conversation):
+/// the project's linked repos that have a checkout on this Mac, and the worktrees conversation `made` lists. Never the
+/// vault itself: its git backup (vaultsync.rs) commits there on its own, a second commit button would race it.
+fn git_tops(vault: &str, project: &str, made: &[String], path: &str) -> Vec<(String, bool)> {
+    let linked = repo_projects(vault);
+    let skip = git::top_of(vault, path);
+    let mut out: Vec<(String, bool)> = repo_checkouts(vault).into_iter().filter(|(r, _)| linked.get(r).is_some_and(|p| p == project))
+        .filter_map(|(_, (d, _))| git::top_of(&d, path).map(|t| (t, false)))
+        .chain(made.iter().filter_map(|p| git::top_of(p, path).map(|t| (t, true))))
+        .filter(|(t, _)| skip.as_ref() != Some(t)).collect();
+    out.sort();
+    out.dedup_by(|a, b| a.0 == b.0);
+    out
+}
+/// What git_tops needs from the state, to run off the main thread.
+fn git_ctx(state: &App, key: &str) -> (String, Vec<String>, String) {
+    (vault(state), state.worktrees.lock().unwrap().get(key).cloned().unwrap_or_default(), state.path.clone())
+}
+/// `repo` when it is one of git_tops, else an error: the webview never picks a directory of its own.
+fn git_allowed(vault: &str, project: &str, made: &[String], path: &str, repo: &str) -> Result<String, String> {
+    git_tops(vault, project, made, path).into_iter().map(|t| t.0).find(|t| t == repo).ok_or_else(|| format!("{repo} is not a repo of {project}"))
+}
+/// The Git drawer's repos for a project, open in conversation `key` (git::status each, `made` when that conversation
+/// made the worktree). A repo git cannot read comes with its `err`.
 #[tauri::command]
-async fn conversation_changes(state: State<'_, App>, key: String, paths: Vec<String>) -> Result<Value, String> {
-    let made = state.worktrees.lock().unwrap().get(&key).cloned().unwrap_or_default();
-    let path = state.path.clone();
+async fn git_repos(state: State<'_, App>, key: String, project: String) -> Result<Value, String> {
+    let (v, made, path) = git_ctx(&state, &key);
     tauri::async_runtime::spawn_blocking(move || {
-        let mut tops: Vec<String> = made.iter().chain(paths.iter()).filter_map(|p| changes::top_of(p, &path)).collect();
-        tops.sort();
-        tops.dedup();
-        let own: Vec<String> = made.iter().filter_map(|p| changes::top_of(p, &path)).collect();
-        Value::Array(tops.iter().map(|t| changes::of_repo(t, (!own.contains(t)).then_some(&paths[..]), &path)).collect())
+        Value::Array(git_tops(&v, &project, &made, &path).into_iter().map(|(t, m)| {
+            let mut s = git::status(&t, &path).unwrap_or_else(|e| json!({"repo": t, "name": t.rsplit('/').next(), "branch": "", "files": [], "err": e}));
+            s["made"] = json!(m);
+            s
+        }).collect())
     }).await.map_err(|e| e.to_string())
+}
+/// Stage (`on`) or unstage files of a project's repo.
+#[tauri::command]
+async fn git_stage(state: State<'_, App>, key: String, project: String, repo: String, paths: Vec<String>, on: bool) -> Result<(), String> {
+    let (v, made, path) = git_ctx(&state, &key);
+    tauri::async_runtime::spawn_blocking(move || git::stage(&git_allowed(&v, &project, &made, &path, &repo)?, &paths, on, &path)).await.map_err(|e| e.to_string())?
+}
+/// Throw away one file's changes in a project's repo, the drawer asked first.
+#[tauri::command]
+async fn git_discard(state: State<'_, App>, key: String, project: String, repo: String, path: String) -> Result<(), String> {
+    let (v, made, env) = git_ctx(&state, &key);
+    tauri::async_runtime::spawn_blocking(move || git::discard(&git_allowed(&v, &project, &made, &env, &repo)?, &path, &env)).await.map_err(|e| e.to_string())?
+}
+/// The newest commits of a project's repo for the drawer's log: its branch and upstream, or every branch (`all`).
+#[tauri::command]
+async fn git_log(state: State<'_, App>, key: String, project: String, repo: String, all: bool) -> Result<Value, String> {
+    let (v, made, path) = git_ctx(&state, &key);
+    tauri::async_runtime::spawn_blocking(move || git::log(&git_allowed(&v, &project, &made, &path, &repo)?, all, 200, &path)).await.map_err(|e| e.to_string())?
+}
+/// One commit of a project's repo with its files and their diffs, for the log's commit window.
+#[tauri::command]
+async fn git_show(state: State<'_, App>, key: String, project: String, repo: String, hash: String) -> Result<Value, String> {
+    let (v, made, path) = git_ctx(&state, &key);
+    tauri::async_runtime::spawn_blocking(move || git::show(&git_allowed(&v, &project, &made, &path, &repo)?, &hash, &path)).await.map_err(|e| e.to_string())?
+}
+/// Pull a project's repo from its upstream, fast-forward only.
+#[tauri::command]
+async fn git_pull(state: State<'_, App>, key: String, project: String, repo: String) -> Result<(), String> {
+    let (v, made, path) = git_ctx(&state, &key);
+    tauri::async_runtime::spawn_blocking(move || git::pull(&git_allowed(&v, &project, &made, &path, &repo)?, &path)).await.map_err(|e| e.to_string())?
+}
+/// Commit what is staged in a project's repo, and push when asked.
+#[tauri::command]
+async fn git_commit(state: State<'_, App>, key: String, project: String, repo: String, message: String, push: bool) -> Result<(), String> {
+    let (v, made, path) = git_ctx(&state, &key);
+    tauri::async_runtime::spawn_blocking(move || git::commit(&git_allowed(&v, &project, &made, &path, &repo)?, &message, push, &path)).await.map_err(|e| e.to_string())?
 }
 
 /// A short title for a new conversation, from its provider or else the first switched-on one that can.
@@ -2194,7 +2250,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| { windows::show_active(&handle); });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, git_repos, git_stage, git_discard, git_commit, git_log, git_show, git_pull, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)
