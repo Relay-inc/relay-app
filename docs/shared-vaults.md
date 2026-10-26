@@ -29,6 +29,10 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   `.claude` links to a folder with a non-ASCII name does not sync until that folder is renamed. A round follows no symlink, so a link
   someone made inside the folder does not take a member's writes out of it. Project MCP servers (`.mcp.json`) do not
   start: shared-vault conversations run with `--strict-mcp-config`.
+- **Two more layers against a member's code.** Each round takes this Mac's `.claude` settings and `hooks/` and puts
+  them back after (`shared_vaults::Kept`): what a pull changed there is restored, what it added removed, a `.claude` a
+  round made goes again. And shared-vault conversations and their terminal run with `disableAllHooks`, so no hook runs
+  there, also one in a skill's or agent's frontmatter. The user's own hooks don't run in a shared vault either.
 - **Not reach your other vaults through your agent.** A conversation in a shared vault gets Read and Edit denies on
   every other vault, on their transcripts and auto memory in each Claude config folder (also of an account removed
   from the list), on what those folders keep per session (`file-history`, `history.jsonl`, `paste-cache`), and on

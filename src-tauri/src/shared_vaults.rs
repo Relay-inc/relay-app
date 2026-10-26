@@ -84,6 +84,54 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
     Ok(f)
 }
 
+/// What Claude Code would run for a vault on this Mac, as it was before a round: the settings files and hooks of the
+/// folder `.claude` resolves to, or that there was no `.claude`. A round puts it back as it was (`restore`), whatever a
+/// member pushed: on a case-insensitive disk `System/Settings.json` from the server is this Mac's `System/settings.json`,
+/// which no filter by name sees, and a Unicode spelling can slip past a lowercase compare too.
+pub struct Kept { link: PathBuf, had: bool, dir: Option<PathBuf>, files: HashMap<PathBuf, Vec<u8>> }
+impl Kept {
+    pub fn take(folder: &Path) -> Kept {
+        let link = folder.join(".claude");
+        let had = std::fs::symlink_metadata(&link).is_ok();
+        let dir = std::fs::canonicalize(&link).ok().filter(|d| d.is_dir());
+        let mut files = HashMap::new();
+        if let Some(d) = &dir { for f in Self::guarded(d) { if let Ok(b) = std::fs::read(&f) { files.insert(f, b); } } }
+        Kept { link, had, dir, files }
+    }
+    /// The settings files and every file under hooks/ there now.
+    fn guarded(d: &Path) -> Vec<PathBuf> {
+        let mut out: Vec<PathBuf> = ["settings.json", "settings.local.json"].iter().map(|f| d.join(f)).filter(|f| f.is_file()).collect();
+        let mut stack = vec![d.join("hooks")];
+        while let Some(p) = stack.pop() {
+            for e in std::fs::read_dir(&p).into_iter().flatten().flatten() {
+                let path = e.path();
+                if e.file_type().is_ok_and(|t| t.is_dir()) { stack.push(path) } else { out.push(path) }
+            }
+        }
+        out
+    }
+    /// Put it back: a `.claude` the round made goes, a guarded file it changed or made is restored or removed. Returns
+    /// what was undone, for the round's errors.
+    pub fn restore(self) -> Vec<String> {
+        let mut undone = vec![];
+        if !self.had {
+            if std::fs::symlink_metadata(&self.link).is_ok() {
+                std::fs::remove_dir_all(&self.link).or_else(|_| std::fs::remove_file(&self.link)).ok();
+                undone.push(".claude".to_string());
+            }
+            return undone;
+        }
+        let Some(d) = self.dir else { return undone };
+        for f in Self::guarded(&d) {
+            if !self.files.contains_key(&f) { std::fs::remove_file(&f).ok(); undone.push(f.display().to_string()); }
+        }
+        for (f, b) in &self.files {
+            if std::fs::read(f).ok().as_deref() != Some(b.as_slice()) { sync::write_atomic(f, b, None).ok(); undone.push(f.display().to_string()); }
+        }
+        undone
+    }
+}
+
 /// A folder by its real path, also one that does not exist yet: the nearest folder that does, resolved (links, `..`),
 /// with the rest put back. A rest with `.` or `..` is refused, it could climb out of the folder checked.
 pub fn real_path(p: &str) -> Result<String, String> {
@@ -136,6 +184,7 @@ impl Hub {
                 let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
                 let w = walkers.entry(v.id.clone()).or_default();
+                let kept = Kept::take(Path::new(&v.folder));
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, w, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
                 let p = base_path(data, &v.id);
                 if let Some(d) = p.parent() { std::fs::create_dir_all(d).ok(); }
@@ -144,6 +193,8 @@ impl Hub {
                 st.pulled = r.pulled.len() + r.deleted_local.len();
                 st.conflicts = r.conflicts;
                 st.errors = r.errors;
+                let undone = kept.restore();
+                if !undone.is_empty() { st.errors.push(format!("a pull tried to change what Claude Code runs on this Mac, put back: {}", undone.join(", "))); }
                 st.held = r.held;
                 st.bad = remote.bad().len();
             }
@@ -377,6 +428,31 @@ mod tests {
         std::fs::remove_file(tmp.join(".claude")).unwrap();
         let f = filter(&tmp).unwrap();
         assert!(f.skips(".claude/settings.json", false) && f.skips("System/settings.json", false));
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+    #[test]
+    fn a_round_puts_this_macs_settings_and_hooks_back() {
+        let tmp = std::env::temp_dir().join(format!("relay-shared-kept-{}", std::process::id()));
+        std::fs::remove_dir_all(&tmp).ok();
+        std::fs::create_dir_all(tmp.join("System/hooks")).unwrap();
+        std::fs::write(tmp.join("System/settings.json"), "mine").unwrap();
+        std::fs::write(tmp.join("System/hooks/check.sh"), "mine").unwrap();
+        std::os::unix::fs::symlink("System", tmp.join(".claude")).unwrap();
+        let kept = Kept::take(&tmp);
+        // what a pull could do on a case-insensitive disk: change the settings, add a hook
+        std::fs::write(tmp.join("System/Settings.json"), "theirs").unwrap();
+        std::fs::write(tmp.join("System/hooks/evil.sh"), "theirs").unwrap();
+        assert_eq!(kept.restore().len(), 2);
+        assert_eq!(std::fs::read_to_string(tmp.join("System/settings.json")).unwrap(), "mine");
+        assert!(!tmp.join("System/hooks/evil.sh").exists() && tmp.join("System/hooks/check.sh").is_file());
+        // a vault without .claude: one a round makes goes again
+        let bare = tmp.join("bare");
+        std::fs::create_dir_all(&bare).unwrap();
+        let kept = Kept::take(&bare);
+        std::fs::create_dir_all(bare.join(".Claude")).unwrap();
+        std::fs::write(bare.join(".Claude/settings.json"), "theirs").unwrap();
+        assert_eq!(kept.restore(), vec![".claude".to_string()]);
+        assert!(std::fs::symlink_metadata(bare.join(".claude")).is_err());
         std::fs::remove_dir_all(&tmp).ok();
     }
     #[test]

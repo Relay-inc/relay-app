@@ -193,7 +193,12 @@ impl AgentProvider for Claude {
         let project = env.opt("commonwealth_project");
         if !brain.is_empty() && !project.is_empty() { cmd.env("COMMONWEALTH_PROJECT", project); }
         let ask = strs("ask");
-        if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
+        let mut settings = serde_json::Map::new();
+        if !ask.is_empty() { settings.insert("permissions".into(), json!({"ask": ask})); }
+        // a shared vault: no hook runs, wherever it is defined (settings, a skill's or agent's frontmatter), since a
+        // member could have put one in the vault for every other member's Mac
+        if env.opts["strict_mcp"] == true { settings.insert("disableAllHooks".into(), json!(true)); }
+        if !settings.is_empty() { cmd.arg("--settings").arg(Value::Object(settings).to_string()); }
         // no mode set: auto, as a terminal window starts; `-p` would start in manual and ask for every edit. A work
         // machine (opts.machine) gets the mode with this Mac's mirrored settings (src-tauri mirror.rs)
         // a shared vault (opts.strict_mcp) always: a mode like bypassPermissions has no auto classifier, and that is
@@ -259,7 +264,7 @@ impl AgentProvider for Claude {
         let deny: Vec<String> = env.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(q).collect();
         let fence = format!("{}{}", if deny.is_empty() { String::new() } else { format!(" --disallowedTools {}", deny.join(" ")) },
             // a shared vault runs in auto whatever the account's default mode, as in command(): bypass has no classifier
-            if env.opts["strict_mcp"] == true { " --strict-mcp-config --permission-mode auto" } else { "" });
+            if env.opts["strict_mcp"] == true { " --strict-mcp-config --permission-mode auto --settings '{\"disableAllHooks\":true}'" } else { "" });
         Some(match t {
             Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}{fence}", q(env.vault), on(&session_dir(env, s))),
             Terminal::Resume(_) => return None,
@@ -413,6 +418,7 @@ mod tests {
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args.contains(&"Read(//Users/me/my vault/**)".to_string()) && args.contains(&"--strict-mcp-config".to_string()));
         assert_eq!(args[args.iter().position(|a| a == "--permission-mode").unwrap() + 1], "auto", "a shared vault runs in auto, whatever the account says");
+        assert_eq!(args[args.iter().position(|a| a == "--settings").unwrap() + 1], r#"{"disableAllHooks":true}"#, "and no hook runs there");
         assert!(args[args.iter().position(|a| a == "--mcp-config").unwrap() + 1].contains("relay-mail"));
     }
     #[test]
@@ -461,7 +467,7 @@ mod tests {
         let opts = json!({"deny": ["Read(//Users/me/team/**)"], "strict_mcp": true});
         let e = Env { opts: &opts, ..env(&p) };
         assert_eq!(PROVIDER.terminal(&e, Terminal::Resume("ab-12")).unwrap(),
-            "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config --permission-mode auto");
+            "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config --permission-mode auto --settings '{\"disableAllHooks\":true}'");
         assert_eq!(transcripts(&env(&p)), "/Users/me/.claude/projects/-Users-me-my-vault");
         let opts = json!({"account": "/Users/me/.claude-work"});
         let work = Env { opts: &opts, ..env(&p) };

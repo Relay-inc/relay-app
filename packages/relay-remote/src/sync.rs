@@ -35,6 +35,8 @@ impl Filter {
         Filter { names: [".obsidian", ".git", ".trash", ".relay", "node_modules", ".DS_Store"].map(String::from).to_vec(), max_size: 20 << 20, ..Default::default() }
     }
     /// Every segment is checked, not only the last, so a server can judge a single incoming path the same way a walk does.
+    /// Without regard to case: on a Mac's disk `.Git` or `System/Settings.json` from the other side is the very file
+    /// a name here keeps out.
     pub fn skips(&self, rel: &str, is_dir: bool) -> bool {
         let rel = fold(rel);
         let under = |p: &str, r: &str| { let (p, r) = (fold(p.trim_end_matches('/')), fold(r)); r == p || r.strip_prefix(&p).is_some_and(|x| x.starts_with('/')) };

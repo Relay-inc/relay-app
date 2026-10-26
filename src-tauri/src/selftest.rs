@@ -73,7 +73,9 @@ fn turn_tools(ev: &Events, timeout: Duration) -> Result<(Vec<String>, Vec<(Strin
     let (rx, end, mut texts) = (ev.lock().unwrap(), Instant::now() + timeout, vec![]);
     let mut calls: Vec<(String, String, String, Option<bool>)> = vec![];
     loop {
-        let e = rx.recv_timeout(end.saturating_duration_since(Instant::now())).map_err(|_| format!("no turn end within {timeout:?}, texts {texts:?}"))?;
+        // a deadline of its own: events that keep coming would otherwise never let recv_timeout run out
+        if Instant::now() >= end { return Err(format!("no turn end within {timeout:?}, texts {texts:?}, calls {calls:?}")); }
+        let e = rx.recv_timeout(end.saturating_duration_since(Instant::now())).map_err(|_| format!("no turn end within {timeout:?}, texts {texts:?}, calls {calls:?}"))?;
         if e["project"] != KEY { continue; }
         let x = &e["event"];
         match x["type"].as_str().unwrap_or("") {
