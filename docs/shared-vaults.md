@@ -40,6 +40,10 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   the terminal too, because the auto
   classifier is what stops a script in Bash that no deny rule covers. That classifier is a model's judgement, not a
   sandbox: the fence is strong for Claude Code's file tools and file commands, weaker for arbitrary scripts.
+- **Not read your own mail, reminders or calendar through your agent.** A teammate's note can ask the agent for them
+  and the sync would carry the answer to the team, and no deny rule sees a read the app does for the agent. So a
+  shared vault's conversation gets an error for `relay mail.search|read|thread|attachment`, `relay reminders.list`,
+  `relay calendar.meetings` and the relay-mail tools' reads. Writing to you still works: a reminder, a mail draft.
 - **Not keep a removed member in.** The server refuses their device at the next connection; they keep what they
   had synced (see key rotation above). Their open invites die with them.
 
