@@ -169,7 +169,7 @@ const VIEWS = {
     await scrollMain("bottom");
   },
   // a Read of a picture: its thumbnail on hover, the zoom on a click
-  // Cmd-F over a conversation: every match marked, the current one stronger, Enter walked to the third (#find)
+  // Cmd-F over a conversation: every match marked, the current one stronger, Enter walked to the third (#261)
   "conversation-find": async () => {
     await open(page, server.url, { sel: keys.long });
     await waitText(markers.longEnd);
