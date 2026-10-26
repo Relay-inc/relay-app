@@ -165,6 +165,10 @@ function onKey(e: KeyboardEvent) {
     // Ctrl-C like in the terminal: stops a running turn, otherwise clears what is typed
     e.preventDefault();
     ctrlC();
+  } else if (isKey(e, "chat.find") && !isView(useNavigationStore.getState().selected)) {
+    // Cmd-F: the find bar over the open conversation
+    e.preventDefault();
+    request("find");
   } else if (isKey(e, "app.escape")) {
     onEscape(e);
   } else if (typesIntoComposer(e)) {
