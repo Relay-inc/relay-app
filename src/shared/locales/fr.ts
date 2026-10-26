@@ -354,6 +354,8 @@ export default {
   "git.pullRepo": "Pull {repo}",
   "git.ahead": "Non poussés : {n}",
   "git.behind": "À récupérer : {n}",
+  "git.split": "Côte à côte",
+  "git.unified": "Une colonne",
   "git.binary": "Fichier binaire, pas de diff.",
   "git.clickLine": "Cliquez sur une ligne pour la commenter. Les commentaires partent ensemble vers l’agent.",
   "git.linePlaceholder": "Commentaire sur la ligne {n}…",

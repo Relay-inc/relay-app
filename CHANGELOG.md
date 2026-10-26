@@ -13,17 +13,21 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-10-26
+
 ### Added
 
 - **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder (#267)
 
 ### Changed
 
+- **Diffs side by side in the Git drawer**: a file's diff, in the drawer and in a commit of the log, shows the old file on the left and the new one on the right, like JetBrains. A removed run of lines sits next to the added run that replaces it, long lines wrap so both sides stay level. The button in the diff's header switches back to one column. Line comments for the agent work in both views (#270)
 - **Git drawer replaces Changes**: a project conversation can show a Git drawer with every repo of the project on this Mac and the worktrees the conversation made. Per repo you see the branch, tick files to stage them, discard a file's changes (after a confirmation), fold a repo to its header, and write one commit message under all repos (or let the model suggest one): Commit or Commit & Push makes a commit with it in every repo with ticked files, as in JetBrains. Under the commit box a log per repo draws the branch as a graph, like Sourcetree: a row per commit with its subject, branches and tags, author and age. The colour squares pick the repo, All branches shows every branch, its top edge drags it higher. A click on a commit opens it over the app: its message, its files and each file's diff against the commit before. The arrow next to a repo's branch pulls it, fast-forward only: when the branch went its own way, git's message shows under the repo. Commit is blocked while a conversation of the project is working in that repo. Git's own error shows in the drawer when a push or hook fails. Off by default: switch it on in Settings › General › Git in project conversations (#266)
 
 ### Fixed
 
 - **The mirror never overwrites an agent's edit on a machine**: a file an agent there wrote after a round compared both sides was pushed over without a trace. Now the machine refuses that write and the next round keeps both versions, with a conflict copy. Many deletes at once are held: when a round would delete more than a fifth of the vault on either side (at least 6 files), nothing goes until you choose Restore them or Delete them in Settings › Machines. A file the mirror deletes on this Mac, or replaces with a fifth of itself, is first kept 30 days in the mirror's trash (`mirror-trash` in Relay's app data). What an agent writes there is sealed every second instead of every 5 (#276)
+- **A vault note fills the drawer**: the note stayed 520 px wide in a wider drawer, and a table's narrow columns broke their words per letter ("Poi nts"). The note now takes the drawer's width and a column is never narrower than its longest word, also in a conversation's tables (#271)
 - **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead (#265)
 
 ## [0.0.34] - 2026-10-26
@@ -623,7 +627,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...HEAD
+[0.0.35]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32

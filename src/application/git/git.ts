@@ -80,6 +80,7 @@ export function toggleLog() {
   toggleFold(LOG);
   void loadLog();
 }
+export const toggleSplit = () => set(draft => void (draft.split = !draft.split));
 export const setLogHeight = (px: number) => set(draft => void (draft.logHeight = px));
 
 /** A commit of the log in a window over the app: its message and its files, one diff at a time. */
