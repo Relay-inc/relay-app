@@ -7,7 +7,7 @@ resolver = "2"
 
 # Relay's version, for the app and relay-server alike (a machine reports it), the same as package.json
 [workspace.package]
-version = "0.0.33"
+version = "0.0.34"
 
 [workspace.dependencies]
 serde_json = "1"
