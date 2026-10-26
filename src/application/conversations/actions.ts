@@ -406,6 +406,12 @@ export function routeTo(name: string) {
 /** The bar that asks whether a general conversation is about a project: yes moves it, no hides the question. */
 export function moveTo(project: string | null) {
   const key = selected();
+  // the offer comes after the first message: a conversation that runs cannot follow a project into another vault
+  const from = cs().chats[key]?.project ?? null;
+  if (project && cs().sidOf[key] && changesVault(useWorkspaceStore.getState().snap, from, project)) {
+    toast(t("toast.otherVault"), undefined, undefined, 6000);
+    return;
+  }
   set(draft => {
     if (project) {
       draft.chats[key].project = project;

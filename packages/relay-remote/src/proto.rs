@@ -23,7 +23,7 @@
 //! {vault}`, `vault_get {vault,name}` (len, etag and bytes like sync_get), `vault_put {vault,name,len,expect}` (the record
 //! follows; `expect` the etag the record there must still have, "" absent), `vault_put_many {vault,files:[{name,len,
 //! expect}]}` (the records follow, the reply has `etags` and `errors` per name) and `vault_delete {vault,name,expect}`.
-//! A vault-only client may send only `info` and these, a linked device none of them.
+//! A vault-only client may send only these (no `info`), a linked device none of them.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

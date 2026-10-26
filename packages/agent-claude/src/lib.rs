@@ -196,7 +196,9 @@ impl AgentProvider for Claude {
         if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
         // no mode set: auto, as a terminal window starts; `-p` would start in manual and ask for every edit. A work
         // machine (opts.machine) gets the mode with this Mac's mirrored settings (src-tauri mirror.rs)
-        if env.opts["machine"] != true && !mode_set(env) { cmd.args(["--permission-mode", "auto"]); }
+        // a shared vault (opts.strict_mcp) always: a mode like bypassPermissions has no auto classifier, and that is
+        // what stops a script reading another vault where no deny rule reaches (Bash)
+        if env.opts["machine"] != true && (env.opts["strict_mcp"] == true || !mode_set(env)) { cmd.args(["--permission-mode", "auto"]); }
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }
@@ -409,6 +411,7 @@ mod tests {
         let opts = json!({"mail": true, "deny": ["Read(//Users/me/my vault/**)"], "strict_mcp": true});
         let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
         assert!(args.contains(&"Read(//Users/me/my vault/**)".to_string()) && args.contains(&"--strict-mcp-config".to_string()));
+        assert_eq!(args[args.iter().position(|a| a == "--permission-mode").unwrap() + 1], "auto", "a shared vault runs in auto, whatever the account says");
         assert!(args[args.iter().position(|a| a == "--mcp-config").unwrap() + 1].contains("relay-mail"));
     }
     #[test]

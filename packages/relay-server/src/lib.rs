@@ -76,8 +76,8 @@ pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(de
 /// Not the mirror's files, moving sessions, updating the server or pairing further devices.
 const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach", "start"];
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
-/// further devices, and makes no vaults of its own.
-const VAULT_OPS: &[&str] = &["vault_list", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
+/// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
+const VAULT_OPS: &[&str] = &["pair", "vault_list", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete"];
 /// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
 static CLIENTS: Mutex<()> = Mutex::new(());

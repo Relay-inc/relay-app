@@ -32,7 +32,7 @@ fn size(cols: u16, rows: u16) -> PtySize { PtySize { rows: rows.max(1), cols: co
 pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, project: String, chat: Option<String>, name: Option<String>, cols: u16, rows: u16, on_data: Channel<InvokeResponseBody>) -> Result<u32, String> {
     let (vault, in_vault) = super::project_home(&state, &project)?;
     if project.trim().is_empty() { return Err("bad project".into()); }
-    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name)).transpose()?;
+    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name, Some(&project))).transpose()?;
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
     let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     let mut cmd = CommandBuilder::new(&shell);

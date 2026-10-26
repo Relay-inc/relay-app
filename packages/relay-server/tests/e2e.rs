@@ -544,7 +544,7 @@ fn mirror_sealed_locked_and_synced() {
     let mut w = Walker::default();
     let copy = |p: &str| sync::conflict_copy(p, "server", "2026-10-02 1200");
     let merge = |p: &str| p.ends_with("MEMORY.md");
-    let guard = sync::Guard { allow_deletes: false, keep: &|_, _| Ok(()) };
+    let guard = sync::Guard { allow_deletes: false, allowed: &[], keep: &|_, _| Ok(()) };
     let (base, r) = sync::run(Mode::TwoWay, &local, &Default::default(), &mut w, &Filter::default(), &vault, &copy, &merge, &guard, &|_, _| {});
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     assert_eq!(r.pushed.len(), 2);
@@ -921,7 +921,7 @@ fn two_macs_share_a_vault_through_the_server() {
     let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-share-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
     let (a, b) = (dir("a"), dir("b"));
     let keep = |_: &str, _: &[u8]| Ok(());
-    let guard = Guard { allow_deletes: false, keep: &keep };
+    let guard = Guard { allow_deletes: false, allowed: &[], keep: &keep };
     let round = |c: &Client, k: &VaultKey, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker| {
         let (next, r) = sync::run(Mode::TwoWay, root, base, w, &Filter::vault_default(), &c.sealed(&vault, k.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {});
         *base = next;

@@ -148,7 +148,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
                 }
             }
         }
-        crate::fence_in(state, &mut eb.opts, &dir);
+        crate::fence_in(app, state, &mut eb.opts, &dir);
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();

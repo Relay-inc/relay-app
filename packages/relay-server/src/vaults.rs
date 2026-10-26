@@ -71,6 +71,9 @@ pub(crate) fn forget(data: &Path, fps: &[String]) {
         v.members.retain(|m| !fps.contains(&m.fp));
         // the invites they made go too: a link of someone who is out lets nobody in
         v.invites.retain(|i| !fps.contains(&i.by));
+        // the owner's revoke always goes through, also on the last admin: the longest-standing member takes over, or
+        // nobody left could invite, remove or even leave
+        if !v.has_admin() { if let Some(m) = v.members.iter_mut().min_by_key(|m| m.added) { m.role = "admin".into(); } }
         if v.members.is_empty() { fs::remove_dir_all(dir(data).join(&v.id)).ok(); } else if v.members.len() + v.invites.len() != n { save(data, &v).ok(); }
     }
 }
@@ -207,10 +210,11 @@ impl Vaults {
         self.with(id, fp, |v, me| {
             if me != "admin" && fp != who { return Err("only an admin can remove someone else".into()); }
             if v.role(who).is_none() { return Err("not a member of this vault".into()); }
+            let had_admin = v.has_admin();
             v.members.retain(|m| m.fp != who);
             v.invites.retain(|i| i.by != who);
             if v.members.is_empty() { return fs::remove_dir_all(dir(&self.data).join(&v.id)).map_err(|e| e.to_string()); }
-            if !v.has_admin() { return Err("that would leave the vault without an admin".into()); }
+            if had_admin && !v.has_admin() { return Err("that would leave the vault without an admin".into()); }
             save(&self.data, v)
         })?;
         let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -470,6 +474,16 @@ mod tests {
         s.remove(OTHER, &id, ADMIN).unwrap();
         let late = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
         assert!(s.join(late, &id, &inv, "late", &tls::proof(&code, late, SERVER)).is_err());
+    }
+    #[test]
+    fn a_revoked_last_admin_hands_over_to_the_longest_member() {
+        let s = store("handover");
+        let id = made(&s);
+        join(&s, OTHER, &id, "member");
+        forget(&s.data, &[ADMIN.to_string()]);
+        // OTHER is admin now: it can invite, and it can leave again
+        assert!(s.invite(OTHER, &id, "member", &"ab".repeat(32)).is_ok());
+        s.remove(OTHER, &id, OTHER).unwrap();
     }
     #[test]
     fn revoke_removes_the_memberships() {

@@ -16,6 +16,23 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   synced and the key. Rotation needs a static X25519 key per device (`x25519-dalek`, `ring` has only ephemeral
   agreement) and is a follow-up.
 
+### What members can and cannot do to each other
+
+- **Write notes in the vault.** Everything a member syncs, every other member's agent may read. A note can carry
+  instructions aimed at an agent (prompt injection); the fence below limits what such an agent can reach.
+- **Not run code on another Mac.** Claude Code runs a project's `settings.json` (hooks, `env`, `apiKeyHelper`,
+  `statusLine`) as plain code. `.claude` never syncs, and the settings and `hooks/` of the folder a Mac's `.claude`
+  links to (`System/` in a vault Relay makes) stay on that Mac in both directions (`shared_vaults::filter`). Joining
+  makes that link before the first round. Project MCP servers (`.mcp.json`) do not start: shared-vault conversations
+  run with `--strict-mcp-config`.
+- **Not reach your other vaults through your agent.** A conversation in a shared vault gets Read and Edit denies on
+  every other vault, on their transcripts and auto memory in each Claude config folder, and on Relay's data folder
+  (keys, certificate, trash, bases). It runs in auto mode whatever the account's default mode, because the auto
+  classifier is what stops a script in Bash that no deny rule covers. That classifier is a model's judgement, not a
+  sandbox: the fence is strong for Claude Code's file tools and file commands, weaker for arbitrary scripts.
+- **Not keep a removed member in.** The server refuses their device at the next connection; they keep what they
+  had synced (see key rotation above). Their open invites die with them.
+
 ## Wire protocol
 
 JSON lines over the existing mTLS connection (`proto.rs`), one request per connection, like the mirror's `sync_*`.
@@ -25,7 +42,7 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 (unexpired) invite. A device that is not paired may only send `pair` or `vault_join`.
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
-`VAULT_OPS` = `vault_list`, `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
+`VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_list`, `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
 `vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror, pairs
 further devices or sees `info` (the server's paths). A linked device (a phone) gets no vault ops.
 

@@ -162,7 +162,7 @@ impl Mirrors {
                 let w = walkers.entry(format!("{id}/{root}")).or_default();
                 let to = trash(data, &id).join(&stamp).join(root);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
-                let guard = Guard { allow_deletes, keep: &keep };
+                let guard = Guard { allow_deletes, allowed: &[], keep: &keep };
                 let (next, r): (Manifest, Report) = sync::run(mode, &src, &base, w, &filter(root, m), &client.root(root), &copy, &mergeable, &guard, &progress);
                 drop(walkers);
                 Self::save_base(data, &id, root, &next);

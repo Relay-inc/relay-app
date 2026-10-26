@@ -122,23 +122,37 @@ fn shared_key(taken: &HashMap<String, (String, String)>, name: &str, vault: &str
 fn key_in(index: &HashMap<String, (String, String)>, vault: &str, name: &str) -> String {
     index.iter().find(|(_, (v, n))| v == vault && n == name).map_or_else(|| name.to_string(), |(k, _)| k.clone())
 }
-/// What a conversation in `dir` may not touch: Read and Edit on every other vault, as Claude Code permission rules
-/// (`//` is an absolute path). Edit covers Write and the other editing tools.
-fn fence(dir: &str, vaults: &[String]) -> Vec<String> {
-    vaults.iter().filter(|v| v.as_str() != dir).flat_map(|v| ["Read", "Edit"].map(|t| format!("{t}(/{}/**)", v.trim_end_matches('/')))).collect()
+/// What a conversation in `dir` may not touch, as Claude Code permission rules (`//` is an absolute path; Edit covers
+/// Write and the other editing tools): Read and Edit on every other vault, and on its transcripts and auto memory in
+/// each Claude config folder (`<config>/projects/<slug>`, which hold copies of what was read there). `data`, for a
+/// shared vault: Relay's data folder, with the other shared vaults' keys, this Mac's certificate, their trash and bases.
+fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>) -> Vec<String> {
+    let rule = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{}/**)", p.trim_end_matches('/')));
+    let mut out = vec![];
+    for v in vaults.iter().filter(|v| v.trim_end_matches('/') != dir.trim_end_matches('/')) {
+        out.extend(rule(v));
+        for c in configs { out.extend(rule(&format!("{}/projects/{}", c.trim_end_matches('/'), agent_claude::slug(v.trim_end_matches('/'))))); }
+    }
+    if let Some(d) = data { out.extend(rule(d)); }
+    out
 }
 /// A conversation in `dir` fenced in, in its provider's opts: `deny` gets the fence's rules, and in a shared vault
 /// `strict_mcp`: none of the user's own MCP servers and claude.ai connectors (Slack, mail, Drive) run there, so nothing
 /// of theirs ends up in the team's vault. Relay's own tools come over the pipe and stay.
-fn fence_in(st: &App, opts: &mut Value, dir: &str) {
+fn fence_in(app: &AppHandle, st: &App, opts: &mut Value, dir: &str) {
     let all = all_vaults(st);
-    let rules = fence(dir, &all);
+    let shared = all.first().is_some_and(|main| main != dir);
+    let mut configs = vec![format!("{}/.claude", home())];
+    let s = st.settings.lock().unwrap().clone();
+    configs.extend(s["agents"]["providers"]["claude"]["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).filter(|d| !d.is_empty()).map(String::from));
+    let data = data_dir(app).to_string_lossy().into_owned();
+    let rules = fence(dir, &all, &configs, shared.then_some(data.as_str()));
     if !rules.is_empty() {
         let mut deny = opts["deny"].as_array().cloned().unwrap_or_default();
         deny.extend(rules.into_iter().map(Value::from));
         opts["deny"] = json!(deny);
     }
-    if all.first().is_some_and(|main| main != dir) { opts["strict_mcp"] = json!(true); }
+    if shared { opts["strict_mcp"] = json!(true); }
 }
 /// Whether one vault folder is the other or lies inside it: a fence around one would then cover the other too.
 fn nested(a: &str, b: &str) -> bool {
@@ -1334,7 +1348,8 @@ fn runs_for_server(agent: &Value, server_work: &std::path::Path) -> bool {
 
 /// The shell command that continues a conversation in a terminal, external or embedded (pty.rs). The app's own
 /// process for it stops first, so two processes never write the same session.
-fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<String>, name: Option<String>) -> Result<String, String> {
+/// `about`: the conversation's project, for one without a session yet, which runs in that project's vault.
+fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<String>, name: Option<String>, about: Option<&str>) -> Result<String, String> {
     if let Some(b) = state.machines.bind_of(project) {
         let m = machines::Machines::find(&state.settings.lock().unwrap(), &b.machine).map(|m| m["name"].as_str().unwrap_or("").to_string()).unwrap_or_default();
         return Err(trc_v("err.machine_terminal", &m));
@@ -1343,9 +1358,13 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
     need_vault(state)?;
     let p = provider_of(state, project, None);
     let mut eb = env_for(app, state, p, project);
-    // the terminal's claude gets the same fence as the conversation in Relay
+    // a conversation without a session yet: its project's vault, as spawn picks it
+    let started = state.sids.lock().unwrap().contains_key(project);
+    if let (false, Some(a)) = (started, about) { eb.vault = project_home(state, a)?.0; }
+    // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only
     let dir = eb.vault.clone();
-    fence_in(state, &mut eb.opts, &dir);
+    if dir != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    fence_in(app, state, &mut eb.opts, &dir);
     let sid = session.or_else(|| state.sids.lock().unwrap().get(project).map(|s| s.sid.clone()));
     sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
         .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(project))))
@@ -1354,8 +1373,8 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
 
 /// Continue a conversation in iTerm.
 #[tauri::command]
-fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>) -> Result<(), String> {
-    let cmd = terminal_cmd(&app, &state, &project, session, name)?;
+fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>, about: Option<String>) -> Result<(), String> {
+    let cmd = terminal_cmd(&app, &state, &project, session, name, about.as_deref())?;
     in_terminal(&state, &cmd)
 }
 
@@ -1508,6 +1527,8 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     // the shared vaults are this app's to write (shared_vaults.rs): what the window sends back is ignored
     s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
     let shared: Vec<String> = shared_vaults::list(&s).into_iter().map(|x| x.folder).collect();
+    // the main vault may not hold a shared vault's folder or lie inside one either
+    if let Some(o) = shared.iter().find(|o| nested(&v, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{v}, {o}"))); }
     let mut extra: Vec<String> = vec![];
     for e in own_extra(&s).iter().map(|e| vault::canon(e)) {
         if shared.contains(&e) { continue; }
@@ -2514,9 +2535,17 @@ mod vault_tests {
     #[test]
     fn a_conversation_may_not_read_or_edit_another_vault() {
         let all = ["/me/vault".to_string(), "/team/shared/".to_string()];
-        assert_eq!(fence("/me/vault", &all), ["Read(//team/shared/**)", "Edit(//team/shared/**)"]);
-        assert_eq!(fence("/team/shared/", &all), ["Read(//me/vault/**)", "Edit(//me/vault/**)"]);
-        assert!(fence("/me/vault", &all[..1]).is_empty(), "one vault, nothing to fence");
+        let configs = ["/me/.claude".to_string()];
+        let slug = |v: &str| agent_claude::slug(v);
+        assert_eq!(fence("/me/vault", &all, &configs, None), [
+            "Read(//team/shared/**)".to_string(), "Edit(//team/shared/**)".into(),
+            format!("Read(//me/.claude/projects/{}/**)", slug("/team/shared")), format!("Edit(//me/.claude/projects/{}/**)", slug("/team/shared"))]);
+        // in a shared vault: the main vault, its transcripts, and Relay's data folder with the keys
+        let shared = fence("/team/shared/", &all, &configs, Some("/me/Library/Application Support/relay"));
+        assert!(shared.contains(&"Read(//me/vault/**)".to_string()) && shared.contains(&format!("Read(//me/.claude/projects/{}/**)", slug("/me/vault"))));
+        assert!(shared.contains(&"Read(//me/Library/Application Support/relay/**)".to_string()) && shared.contains(&"Edit(//me/Library/Application Support/relay/**)".to_string()));
+        assert!(!shared.iter().any(|r| r.contains(&slug("/team/shared"))), "its own transcripts stay readable");
+        assert!(fence("/me/vault", &all[..1], &configs, None).is_empty(), "one vault, nothing to fence");
         // a vault inside another would sit inside its fence: refused in the settings
         assert!(nested("/me/vault/team", "/me/vault") && nested("/me/vault", "/me/vault/team"));
         assert!(!nested("/me/vault", "/me/vault2"), "a folder name that starts the same is no parent");
