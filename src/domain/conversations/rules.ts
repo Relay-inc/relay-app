@@ -6,7 +6,7 @@ import { findProjects } from "../workspace/rules.ts";
 import { termKey } from "../navigation/keys.ts";
 import { ORCH } from "../orchestrator/rules.ts";
 import type { ConversationsState, DraftsState, Translate } from "./state";
-import type { CardChoice, Chat, Item, Pending, TerminalSession } from "./types";
+import type { CardChoice, Chat, Item, Pending, Sub, TerminalSession } from "./types";
 
 type S = Pick<ConversationsState, "chats" | "messages">;
 
@@ -134,6 +134,11 @@ export function closedOf(
 /** A question with options (kind "question"; files from before the providers only have Claude's tool name). */
 export const isQuestion = (request: Pending) => request.kind === "question" || request.tool_name === "AskUserQuestion";
 
+/** Tokens in thousands: "42k". */
+export const ktokens = (n: number) => `${Math.round(n / 1000)}k`;
+/** A subagent's type, model and the context of its latest request: "Explore · haiku · 42k context". */
+export const subMeta = (sub: Sub, t: Translate) =>
+  [sub.agentType, sub.model, sub.ctx ? t("agents.ctx", { n: ktokens(sub.ctx) }) : ""].filter(Boolean).join(" · ");
 export const formatDuration = (seconds: number) => {
   const total = Math.max(0, Math.round(seconds));
   return total < 60 ? `${total} s` : `${Math.floor(total / 60)} min ${total % 60} s`;

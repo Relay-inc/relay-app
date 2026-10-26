@@ -16,6 +16,7 @@ export type BarTools = {
   github: boolean; // GitHub is on: the PRs button shows
   repos: boolean; // the project has repos; without them the button offers to link one
   active: "" | "board" | "prs"; // the project's board or PRs is what the centre shows
+  git: boolean; // the Git drawer is switched on (Settings › General)
 };
 
 /** The title bar of the centre column: the project (or the view), the conversation's title, a view's own
@@ -65,7 +66,7 @@ export function ChatBar({
   onOpenTerminal: (external: boolean) => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "changes") => void;
+  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files") => void;
   onShowInBrain?: () => void;
 }) {
   const { t } = useT();
@@ -209,10 +210,11 @@ export function ChatBar({
               icon={<Icon name="github" className="glyph size-4" />}
             />
           ) : null}
-          {/* a conversation's changes, from git: only a conversation has them */}
-          {(renamable
-            ? (["changes", "terminal", "notes", "design"] as const)
-            : (["terminal", "notes", "design"] as const)
+          {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
+              folders as a tree next to them */}
+          {(renamable && tools.git
+            ? (["git", "files", "terminal", "notes", "design"] as const)
+            : (["files", "terminal", "notes", "design"] as const)
           ).map(tool => (
             <ToolButton
               key={tool}
@@ -228,7 +230,13 @@ export function ChatBar({
   );
 }
 
-const DRAWER_ICONS = { changes: "changes", terminal: "drawerTerm", notes: "notes", design: "design" } as const;
+const DRAWER_ICONS = {
+  git: "branch",
+  files: "folder",
+  terminal: "drawerTerm",
+  notes: "notes",
+  design: "design",
+} as const;
 
 // one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer
 function ToolButton({

@@ -48,6 +48,8 @@ export type MirrorStatus = {
   conflicts: string[];
   skipped: string[];
   errors: string[];
+  /** deletes of the last round that wait for the user, "<root>/<path>" */
+  held: string[];
   locked: boolean;
   in_ram: boolean;
 };
@@ -118,6 +120,7 @@ export type Settings = {
   shortcuts?: Record<string, string[]>; // Settings › Shortcuts, what differs from the defaults (domain/settings/shortcuts.ts)
   autoRetry?: boolean; // send a turn refused for a limit again once it resets, off unless true
   timeFromSessions?: boolean; // Today proposes the day's Productive time from the conversations, on unless false
+  gitDrawer?: boolean; // the Git drawer in a project conversation's title bar, off unless true
   workerCrabs?: boolean; // the orchestrator's workers as pixel crabs in their list (ui/features/orchestrator/Crab), on unless false
   captureOnClose?: boolean; // write vault updates when a conversation closes (application/today/capture), on unless false
   favicons?: { on: boolean; last?: string; tried: Record<string, string> };

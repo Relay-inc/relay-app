@@ -70,7 +70,7 @@ gh release create "v$version" "$dmg" "$tgz" ${apk:+"$apk"} --target "$(git rev-p
 rm -f "$notes"
 
 # the update for the installed apps: latest.json on the `updates` branch, its url the API url of the .app.tar.gz
-# (the app downloads it with the user's gh token, the repo is private)
+# (the app downloads it anonymously, or with the user's gh token when there is one)
 repo=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 url=$(gh release view "v$version" --json assets -q ".assets[] | select(.name == \"$(basename "$tgz")\") | .apiUrl")
 gh api "repos/$repo/git/ref/heads/updates" >/dev/null 2>&1 ||

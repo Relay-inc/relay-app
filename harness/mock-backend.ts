@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -10,7 +10,8 @@ import * as conv from "./fixtures/conversations";
 import * as integ from "./fixtures/integrations";
 import * as orch from "./fixtures/orchestrator";
 import * as brain from "./fixtures/brain";
-import { changes } from "./fixtures/changes";
+import * as git from "./fixtures/git";
+import * as files from "./fixtures/files";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -49,6 +50,7 @@ let settings = vault.settings(fixture);
 if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
+const gitRepos = structuredClone(git.repos);
 let reminders = [...vault.reminders];
 let added = 0;
 let actionConfig = integ.actionConfig();
@@ -241,7 +243,8 @@ function handle(cmd: string, a: Args): unknown {
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
     // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
     case "machine_status":
-      if (fixture === "phone") return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
+      if (fixture === "phone" || fixture === "mirror")
+        return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
       return {
@@ -259,7 +262,27 @@ function handle(cmd: string, a: Args): unknown {
       };
     case "server_setup":
       return { version: "0.0.4", image: "ghcr.io/relay-inc/relay-server" };
+    // fixture "mirror": an agent there deleted a folder, the round holds the 9 deletes back; Restore and Delete answer
     case "mirror_status":
+      return fixture === "mirror"
+        ? {
+            at: NOW_S - 40,
+            pushed: 12,
+            pulled: 3,
+            conflicts: [],
+            skipped: [],
+            errors: [],
+            held: Array.from(
+              { length: 9 },
+              (_, i) => `vault/Contexts/Work/Projects/Harbor CRM/Documents/Note ${i + 1}.md`,
+            ),
+            locked: false,
+            in_ram: true,
+          }
+        : null;
+    case "mirror_allow_deletes":
+    case "mirror_restore_held":
+      return null;
     case "mirror_progress":
       return null;
     // GitHub and the repos on the machine (fixture "github"): Disconnect, then Connect shows the code, typed 5 s later
@@ -439,8 +462,40 @@ function handle(cmd: string, a: Args): unknown {
       }));
     case "open":
       return null;
-    case "conversation_changes":
-      return a.key === conv.LONG_KEY ? changes : [];
+    // the Git drawer: Beacon Billing's two checkouts, staged, discarded and committed in memory
+    case "git_repos":
+      return a.project === "Beacon Billing" ? structuredClone(gitRepos) : [];
+    case "git_log":
+      return git.log(a.repo, a.all);
+    case "git_show":
+      return git.show(a.hash);
+    case "git_pull":
+      return null;
+    // the Files drawer
+    case "file_roots":
+      return files.roots(a.project);
+    case "list_dir":
+      return files.list(a.path);
+    case "read_file_text":
+      return files.read(a.path);
+    case "git_stage":
+    case "git_discard":
+    case "git_commit": {
+      const repo = gitRepos.find(r => r.repo === a.repo);
+      if (!repo) return Promise.reject(`${a.repo} is not a repo of ${a.project}`);
+      if (cmd === "git_stage")
+        for (const f of repo.files.filter(f => a.paths.includes(f.path)))
+          Object.assign(f, { staged: a.on, untracked: false, status: f.untracked ? "A" : f.status });
+      if (cmd === "git_discard") repo.files = repo.files.filter(f => f.path !== a.path);
+      if (cmd === "git_commit") {
+        if (!repo.files.some(f => f.staged)) return Promise.reject("no changes added to commit");
+        repo.files = repo.files.filter(f => !f.staged);
+        repo.ahead++;
+        if (a.push && repo.name === "beacon-api") return Promise.reject(git.pushRejected);
+        if (a.push) repo.ahead = 0;
+      }
+      return null;
+    }
     case "drop_worktrees":
       // the switch-to conversation made one git worktree, removed when it closes
       return a.project === conv.SWITCH_KEY ? { removed: 1, kept: 0 } : { removed: 0, kept: 0 };
@@ -776,6 +831,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     // one Claude call without tools (src-tauri ai_write): findings, quick replies, an answer on a line, or a draft
     case "ai_write":
+      if (/git commit message/.test(a.system)) return git.commitMessage;
       // a PR to a ticket: the invoice PR is ticket 300, anything else none
       if (/koppelt een pull request/.test(a.system)) return /Invoice/.test(a.text) ? "300" : "geen";
       if (/JSON-array/.test(a.system)) {

@@ -51,6 +51,8 @@ export type Item = {
   end?: number;
   /** the change a file tool made, with line numbers, when the provider reports it (Claude Code) */
   hunks?: Hunk[];
+  /** the end of a turn: what the turn did, and what it cost when the provider says (USD) */
+  receipt?: { edits: number; errors: number; agents: number; cost?: number };
 };
 export type Chat = {
   key: string;
@@ -70,6 +72,7 @@ export type Chat = {
   meeting?: string; // the meeting (Meeting.id) whose briefing this is, shown under Today
   pr?: string; // the PR (its url) this conversation reviews, listed in that PR's detail
   answers?: string; // a second opinion: the review conversation it answers
+  window?: number; // the context window its last turn reported, for the meter once its transcript is read again
   briefing?: string; // that briefing as rewritten under Today, shown instead of the agent's answer
 };
 /** How full a conversation's context is, in tokens. */
@@ -88,6 +91,9 @@ export type Sub = {
   tool?: string;
   input?: ToolInput;
   text?: string;
+  /** the context of its latest request, in tokens, and whether that answer stopped at the output limit (Claude Code) */
+  ctx?: number;
+  cut?: boolean;
 };
 /** A session open in the terminal (not started by the app), with the project snapshot.rs read from its transcript. */
 export type TerminalSession = {

@@ -79,8 +79,8 @@ logged in (`claude` once in a terminal). Codex, OpenCode or Pi work too, next to
    Obsidian vault.
 4. Start a conversation from the sidebar. That's it.
 
-From then on Relay updates itself. Updates need the [GitHub CLI](https://cli.github.com) signed in (`gh auth login`)
-with access to this repo, which the pull requests view uses too.
+From then on Relay updates itself, no GitHub account needed. The pull requests view uses the
+[GitHub CLI](https://cli.github.com) signed in (`gh auth login`).
 
 **Next:** connect a board in Settings › Integrations, add a mail account in the Mail view, or open the Orchestrator
 and give it a task.

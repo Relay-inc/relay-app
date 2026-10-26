@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { anchorOf, inPatch, parsePatch } from "./diff.ts";
+import { anchorOf, inPatch, parsePatch, splitRows } from "./diff.ts";
 
 const patch = "@@ -10,4 +10,5 @@ fn main\n a\n-b\n+B\n+C\n c\n\\ No newline at end of file";
 
@@ -21,4 +21,13 @@ test("a comment goes on the new line, or the old one for a removed line; only li
   assert.ok(inPatch(lines, 12, "RIGHT"));
   assert.ok(!inPatch(lines, 40, "RIGHT"));
   assert.ok(inPatch(lines, 11, "LEFT"));
+});
+
+test("side by side: a removed run pairs with the added run after it, the rest against nothing", () => {
+  const rows = splitRows(parsePatch("@@ -1,4 +1,4 @@\n a\n-b\n+B\n+C\n c\n-d\n+e"));
+  const side = (l: ReturnType<typeof parsePatch>[number] | null) => (l && l.kind !== "hunk" ? l.text : "_");
+  assert.deepEqual(
+    rows.map(r => (r.kind === "hunk" ? "@" : `${side(r.left)}|${side(r.right)}`)),
+    ["@", "a|a", "b|B", "_|C", "c|c", "d|e"],
+  );
 });

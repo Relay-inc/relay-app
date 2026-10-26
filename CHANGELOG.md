@@ -17,6 +17,40 @@ a PR. Versions follow
 
 - **Claude Design's questions reach the conversation**: when Claude Design answers with a clarifying question instead of a design, `design_prompt` and `design_create` return the question with each option's label and say that it waits; the next `design_prompt` answers it (option labels and/or free text) instead of failing with "no send button". `design_create` also names the project's GitHub repos in the first prompt, so the design matches the codebase
 
+## [0.0.35] - 2026-10-26
+
+### Added
+
+- **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder (#267)
+
+### Changed
+
+- **Diffs side by side in the Git drawer**: a file's diff, in the drawer and in a commit of the log, shows the old file on the left and the new one on the right, like JetBrains. A removed run of lines sits next to the added run that replaces it, long lines wrap so both sides stay level. The button in the diff's header switches back to one column. Line comments for the agent work in both views (#270)
+- **Git drawer replaces Changes**: a project conversation can show a Git drawer with every repo of the project on this Mac and the worktrees the conversation made. Per repo you see the branch, tick files to stage them, discard a file's changes (after a confirmation), fold a repo to its header, and write one commit message under all repos (or let the model suggest one): Commit or Commit & Push makes a commit with it in every repo with ticked files, as in JetBrains. Under the commit box a log per repo draws the branch as a graph, like Sourcetree: a row per commit with its subject, branches and tags, author and age. The colour squares pick the repo, All branches shows every branch, its top edge drags it higher. A click on a commit opens it over the app: its message, its files and each file's diff against the commit before. The arrow next to a repo's branch pulls it, fast-forward only: when the branch went its own way, git's message shows under the repo. Commit is blocked while a conversation of the project is working in that repo. Git's own error shows in the drawer when a push or hook fails. Off by default: switch it on in Settings › General › Git in project conversations (#266)
+
+### Fixed
+
+- **The mirror never overwrites an agent's edit on a machine**: a file an agent there wrote after a round compared both sides was pushed over without a trace. Now the machine refuses that write and the next round keeps both versions, with a conflict copy. Many deletes at once are held: when a round would delete more than a fifth of the vault on either side (at least 6 files), nothing goes until you choose Restore them or Delete them in Settings › Machines. A file the mirror deletes on this Mac, or replaces with a fifth of itself, is first kept 30 days in the mirror's trash (`mirror-trash` in Relay's app data). What an agent writes there is sealed every second instead of every 5 (#276)
+- **A vault note fills the drawer**: the note stayed 520 px wide in a wider drawer, and a table's narrow columns broke their words per letter ("Poi nts"). The note now takes the drawer's width and a column is never narrower than its longest word, also in a conversation's tables (#271)
+- **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead (#265)
+
+## [0.0.34] - 2026-10-26
+
+### Added
+
+- **The end of a turn says what the turn did**: next to its duration, the line under the answer counts the file edits, failed tools and agents of that turn, and what it cost when the agent reports it (Claude Code, OpenCode, pi). Claude Code reports its cost over the whole process, so Relay now takes the difference per turn (#260)
+- **Subagents show their context**: an agent's row, its line in the Agents column and its page show the context of its latest request ("42k context"), and "cut off" in red when its answer stopped at the output limit (Claude Code) (#260)
+- **Find in a conversation**: ⌘F (or ⌃F) opens a find bar above the open conversation. Every match is marked, ↵ and ⇧↵ walk them with a count like "3 of 12", Esc closes it. It searches what the conversation shows, so the text inside a folded step is left out until you open it. The keys are in Settings › Shortcuts (#261)
+
+### Changed
+
+- **The context meter stands out**: the percentage next to the model pick gets a ring that fills up. It turns orange from 70% and red from 90%, where it was grey until 90% (#262)
+
+### Fixed
+
+- **A conversation's title is in the language you wrote in**: the generated title came out in Dutch for English messages too, because the prompt asking for it was written in Dutch. The prompt is English now and names the rule (#263)
+- **The context meter counts against the right window after a restart**: a conversation on a 1M model, read again from its transcript, counted against 200k until its next turn ended, so 300k showed as 100% in red. The conversation now keeps the window its last turn reported, and without one, more than 200k counts as a 1M window (#262)
+
 ## [0.0.33] - 2026-10-24
 
 ### Fixed
@@ -42,6 +76,7 @@ a PR. Versions follow
 
 ### Fixed
 
+- **macOS asks for the microphone again**: Relay lacked the entitlement the hardened runtime needs for it, so macOS never showed the prompt and dictation recorded silence, while Settings › General kept saying "Asked on first use". A build not signed by Apple still asks again after each update (#277)
 - **Agents see a ticket's screenshots**: Start conversation on a ticket attaches its pictures to the new conversation, and a board pipeline's worker gets them as files on this Mac (their paths in its brief). Before, the agent only got the tracker's links, which it cannot open. Productive's originals load with the login of Relay's viewer window: open one picture there and sign in once (#251)
 - **A ticket's picture opens in the viewer again**: the viewer window stayed white, because the guard for links in mails also refused the picture and the tracker's login in that window (#250)
 - **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
@@ -597,7 +632,9 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...HEAD
+[0.0.35]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...v0.0.35
+[0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31

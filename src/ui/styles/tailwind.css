@@ -201,7 +201,7 @@
   }
   & th,
   & td {
-    @apply border-b border-separator py-1.5 pr-3 text-left align-top;
+    @apply border-b border-separator py-1.5 pr-3 text-left align-top wrap-break-word;
   }
   & th {
     @apply font-semibold;
@@ -280,7 +280,7 @@
   }
   & th,
   & td {
-    @apply border-b border-separator py-1.5 pr-4 text-left align-top;
+    @apply border-b border-separator py-1.5 pr-4 text-left align-top wrap-break-word;
   }
   & th {
     @apply font-semibold text-secondary;

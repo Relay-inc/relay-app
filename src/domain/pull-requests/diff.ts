@@ -29,6 +29,32 @@ export function parsePatch(patch: string | null | undefined): DiffLine[] {
   return out;
 }
 
+/** A row of the side-by-side view: a hunk header, or the old line on the left and the new one on the right. A run of
+ *  removed lines pairs up with the added run after it, line by line, the longer run's rest against nothing. */
+export type SplitRow = { kind: "hunk"; text: string } | { kind: "pair"; left: DiffLine | null; right: DiffLine | null };
+
+export function splitRows(lines: DiffLine[]): SplitRow[] {
+  const out: SplitRow[] = [];
+  for (let i = 0; i < lines.length;) {
+    const line = lines[i];
+    if (line.kind === "hunk") {
+      out.push({ kind: "hunk", text: line.text });
+      i++;
+    } else if (line.kind === "ctx") {
+      out.push({ kind: "pair", left: line, right: line });
+      i++;
+    } else {
+      const dels: DiffLine[] = [];
+      const adds: DiffLine[] = [];
+      while (lines[i]?.kind === "del") dels.push(lines[i++]);
+      while (lines[i]?.kind === "add") adds.push(lines[i++]);
+      for (let n = 0; n < Math.max(dels.length, adds.length); n++)
+        out.push({ kind: "pair", left: dels[n] ?? null, right: adds[n] ?? null });
+    }
+  }
+  return out;
+}
+
 /** Where a comment on the line goes: the new line, or the old one for a removed line. */
 export const anchorOf = (line: DiffLine): { line: number; side: Side } | null =>
   line.kind === "hunk"

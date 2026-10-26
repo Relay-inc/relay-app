@@ -26,8 +26,8 @@ use std::{fs, thread};
 pub const ROOTS: [&str; 4] = ["context", "plugins", "vault", "memory"];
 /// Every root sealed here: the mirrored ones and the transcripts, which never come from the app.
 const SEALED: [&str; 5] = ["context", "plugins", "vault", "memory", "sessions"];
-/// How often what the agents wrote is sealed back to disk.
-const FLUSH: Duration = Duration::from_secs(5);
+/// How often what the agents wrote is sealed back to disk: what a hard reboot can lose. A round only stats the files.
+const FLUSH: Duration = Duration::from_secs(1);
 /// One file at most; the app skips bigger ones already (20 MB in the vault).
 pub const MAX_FILE: u64 = 64 << 20;
 const CHECK: &[u8] = b"relay mirror key check v2";
@@ -163,10 +163,16 @@ impl Mirror {
         self.check(ns, root, rel)?;
         fs::read(self.work_of(ns).join(root).join(rel)).map_err(|e| e.to_string())
     }
-    /// Write a file from the app: the working copy, and sealed at once so it survives a restart.
-    pub fn put(&self, ns: &str, root: &str, rel: &str, data: &[u8], mtime: i64) -> Result<(), String> {
+    /// Write a file from the app: the working copy, and sealed at once so it survives a restart. With `expect` only
+    /// while the file still has that hash ("" = absent): an agent here may have written it since the app's manifest.
+    pub fn put(&self, ns: &str, root: &str, rel: &str, data: &[u8], mtime: i64, expect: Option<&str>) -> Result<(), String> {
         self.check(ns, root, rel)?;
-        sync::write_atomic(&self.work_of(ns).join(root).join(rel), data, Some(mtime)).map_err(|e| e.to_string())?;
+        let p = self.work_of(ns).join(root).join(rel);
+        // ponytail: checked, then written: an agent that writes between the two still loses, a lock against agents does not exist
+        if let Some(want) = expect {
+            if fs::read(&p).map(|b| sync::sha256_hex(&b)).unwrap_or_default() != want { return Err("changed meanwhile".into()); }
+        }
+        sync::write_atomic(&p, data, Some(mtime)).map_err(|e| e.to_string())?;
         let mut open = self.open.lock().unwrap();
         let o = open.get_mut(ns).ok_or("mirror locked")?;
         self.seal_file(o, ns, root, rel, data)
@@ -487,6 +493,20 @@ mod tests {
         assert_eq!(m.get_secret("dev", "github").unwrap().as_deref(), Some(&token[..]));
         m.wipe("dev");
         assert!(!m.has_secret("dev", "github"));
+        fs::remove_dir_all(m.data.parent().unwrap()).ok();
+    }
+
+    #[test]
+    fn a_put_with_expect_refuses_a_file_changed_meanwhile() {
+        let m = mirror("expect");
+        m.unlock("dev", &hex(&RAW)).unwrap();
+        m.put("dev", "vault", "a.md", b"one", 0, Some("")).unwrap();
+        assert!(m.put("dev", "vault", "a.md", b"two", 0, Some("")).unwrap_err().contains("changed meanwhile"), "it exists now");
+        let one = sync::sha256_hex(b"one");
+        m.put("dev", "vault", "a.md", b"two", 0, Some(&one)).unwrap();
+        assert!(m.put("dev", "vault", "a.md", b"three", 0, Some(&one)).is_err(), "an agent's two is not pushed over");
+        m.put("dev", "vault", "a.md", b"three", 0, None).unwrap(); // an older app sends no expect: no check
+        assert_eq!(fs::read(m.work_of("dev").join("vault/a.md")).unwrap(), b"three");
         fs::remove_dir_all(m.data.parent().unwrap()).ok();
     }
 

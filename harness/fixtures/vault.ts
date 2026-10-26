@@ -140,7 +140,7 @@ export const noteText = (target: string) => {
   const name = target.split("/").pop()!.replace(/\.md$/, "");
   return {
     path: notes.find(n => n.endsWith(`/${name}.md`)) || target,
-    text: `---\ntype: Document\ndescription: How the portal bills a client: one invoice per month, credit notes against the \`invoice_id\` they correct.\ncontext: "[[Billing Spec]]"\ncreated: 2026-09-21\nparent:\naliases:\n  - portal\n  - client-portal\nlaatst: 2026-10-01\n---\n# ${name}\n\n> [!note] Archive: old repo\n> The previous repo is archived, all work goes here.\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Laurent |\n| Phase | Build |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
+    text: `---\ntype: Document\ndescription: How the portal bills a client: one invoice per month, credit notes against the \`invoice_id\` they correct.\ncontext: "[[Billing Spec]]"\ncreated: 2026-09-21\nparent:\naliases:\n  - portal\n  - client-portal\nlaatst: 2026-10-01\n---\n# ${name}\n\n> [!note] Archive: old repo\n> The previous repo is archived, all work goes here.\n\n## Stand van zaken\n\nThe note for **${name}**. It links to [[Billing Spec]] and [[Portal Architecture]].\n\n## Open\n\n- [ ] First open loop\n- [ ] Second open loop\n\n| Field | Value |\n|---|---|\n| Owner | Laurent |\n| Phase | Build |\n\n| ID | Story | Points |\n|---|---|---|\n| S1.1 | The contact form posts to the backend, which creates the client and the dossier and shows the reference on the confirmation screen | 5 |\n| S1.2 | A duplicate address reuses the existing dossier instead of creating a second one | 3 |\n\n\`\`\`ts\nexport const answer = 42;\n\`\`\`\n`,
   };
 };
 
@@ -270,9 +270,9 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
-  // online, connected to GitHub, with three repos (machineGit)
+  // online, connected to GitHub, with three repos (machineGit); mirror: online, its mirror holding deletes back
   const machines =
-    fixture === "machines" || fixture === "phone" || fixture === "github"
+    fixture === "machines" || fixture === "phone" || fixture === "github" || fixture === "mirror"
       ? {
           machines: [
             {
