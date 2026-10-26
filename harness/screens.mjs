@@ -275,6 +275,12 @@ const VIEWS = {
     await click("$this->repository->addBalance($dossier, $balance);");
     await settle(page);
   },
+  // the same diff as one column, switched in the window's header
+  "git-diff-unified": async () => {
+    await VIEWS["git-diff"]();
+    await button("One column").click();
+    await settle(page);
+  },
   "git-sent": async () => {
     await VIEWS["git-diff"]();
     await page.keyboard.press("Escape");
