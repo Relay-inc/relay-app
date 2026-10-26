@@ -297,6 +297,10 @@ export const setMachinesDefault = (id: string) => invoke("set_machines_default",
 export const setMachineMirror = (id: string, exclude: string[]) => invoke("set_machine_mirror", { id, exclude });
 /** The last sync round of a machine's mirror, null before the first. */
 export const mirrorStatus = (id: string) => invoke<MirrorStatus | null>("mirror_status", { id });
+/** The deletes a machine's mirror holds back go through in its next round. */
+export const mirrorAllowDeletes = (id: string) => invoke("mirror_allow_deletes", { id });
+/** Or are undone: the next round copies those files back. */
+export const mirrorRestoreHeld = (id: string) => invoke("mirror_restore_held", { id });
 /** Where the running round of a machine's mirror is, null between rounds. */
 export const mirrorProgress = (id: string) => invoke<MirrorProgress | null>("mirror_progress", { id });
 /** GitHub on a machine: connected or not, and as whom. */

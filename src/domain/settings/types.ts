@@ -48,6 +48,8 @@ export type MirrorStatus = {
   conflicts: string[];
   skipped: string[];
   errors: string[];
+  /** deletes of the last round that wait for the user, "<root>/<path>" */
+  held: string[];
   locked: boolean;
   in_ram: boolean;
 };

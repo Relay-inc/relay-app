@@ -1692,6 +1692,15 @@ const en = {
   "mc.mirrorConflicts_one": "{n} conflict. Both versions were kept:",
   "mc.mirrorConflicts_other": "{n} conflicts. Both versions were kept:",
   "mc.mirrorConflict": "conflict copy: {path}",
+  "mc.mirrorHeld_one":
+    "{n} deletion held: more than a fifth of the files would go at once. Nothing is deleted until you choose:",
+  "mc.mirrorHeld_other":
+    "{n} deletions held: more than a fifth of the files would go at once. Nothing is deleted until you choose:",
+  "mc.mirrorHeldMore": "and {n} more",
+  "mc.mirrorHeldRestore": "Restore them",
+  "mc.mirrorHeldDelete": "Delete them",
+  "mc.mirrorHeldAllowed": "They go in the next round. What is deleted on this Mac stays 30 days in the mirror's trash.",
+  "mc.mirrorHeldRestored": "They come back in the next round.",
   "nav.brain": "Brain",
   "nav.brainPending": "Notes waiting for review",
   "brain.pick": "Pick a note to review it",
