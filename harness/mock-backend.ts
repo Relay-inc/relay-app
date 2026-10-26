@@ -11,6 +11,7 @@ import * as integ from "./fixtures/integrations";
 import * as orch from "./fixtures/orchestrator";
 import * as brain from "./fixtures/brain";
 import * as git from "./fixtures/git";
+import * as files from "./fixtures/files";
 // the example plugin's real view: the harness serves it from a blob, where the app has the relay-plugin:// scheme
 import diceView from "../packages/plugin-example/view.html?raw";
 
@@ -449,6 +450,13 @@ function handle(cmd: string, a: Args): unknown {
       return git.show(a.hash);
     case "git_pull":
       return null;
+    // the Files drawer
+    case "file_roots":
+      return files.roots(a.project);
+    case "list_dir":
+      return files.list(a.path);
+    case "read_file_text":
+      return files.read(a.path);
     case "git_stage":
     case "git_discard":
     case "git_commit": {

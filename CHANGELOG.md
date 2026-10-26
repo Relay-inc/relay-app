@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder (#267)
+
 ### Changed
 
 - **Git drawer replaces Changes**: a project conversation can show a Git drawer with every repo of the project on this Mac and the worktrees the conversation made. Per repo you see the branch, tick files to stage them, discard a file's changes (after a confirmation), fold a repo to its header, and write one commit message under all repos (or let the model suggest one): Commit or Commit & Push makes a commit with it in every repo with ticked files, as in JetBrains. Under the commit box a log per repo draws the branch as a graph, like Sourcetree: a row per commit with its subject, branches and tags, author and age. The colour squares pick the repo, All branches shows every branch, its top edge drags it higher. A click on a commit opens it over the app: its message, its files and each file's diff against the commit before. The arrow next to a repo's branch pulls it, fast-forward only: when the branch went its own way, git's message shows under the repo. Commit is blocked while a conversation of the project is working in that repo. Git's own error shows in the drawer when a push or hook fails. Off by default: switch it on in Settings › General › Git in project conversations (#266)

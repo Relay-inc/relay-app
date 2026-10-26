@@ -337,6 +337,25 @@ const VIEWS = {
     await waitText("src/Billing/BalanceSync.php");
     await settle(page);
   },
+  // the Files drawer: the project's code folder and its vault folder, a folder open, git's colours, ignored grey
+  "files-drawer": async () => {
+    await open(page, server.url, { sel: keys.long });
+    await waitText(markers.longEnd);
+    await page.evaluate(() => window.__harness.changeSettings({ gitDrawer: true }));
+    await button("Files").click();
+    await click("beacon");
+    await click("src");
+    await click("Billing");
+    await waitText("BalanceSync.php");
+    await settle(page);
+  },
+  // a code file opened from it, read only with its line numbers
+  "files-view": async () => {
+    await VIEWS["files-drawer"]();
+    await click("BalanceSync.php");
+    await waitText("final class BalanceSync");
+    await settle(page);
+  },
   "git-discard": async () => {
     await VIEWS["git-drawer"]();
     await page.getByRole("button", { name: "Discard the changes to scripts/backfill-balances.php" }).click();
