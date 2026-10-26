@@ -13,20 +13,22 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.34] - 2026-10-26
+
 ### Added
 
-- **The end of a turn says what the turn did**: next to its duration, the line under the answer counts the file edits, failed tools and agents of that turn, and what it cost when the agent reports it (Claude Code, OpenCode, pi). Claude Code reports its cost over the whole process, so Relay now takes the difference per turn
-- **Subagents show their context**: an agent's row, its line in the Agents column and its page show the context of its latest request ("42k context"), and "cut off" in red when its answer stopped at the output limit (Claude Code)
-### Fixed
-
-- **A conversation's title is in the language you wrote in**: the generated title came out in Dutch for English messages too, because the prompt asking for it was written in Dutch. The prompt is English now and names the rule
-- **The context meter counts against the right window after a restart**: a conversation on a 1M model, read again from its transcript, counted against 200k until its next turn ended, so 300k showed as 100% in red. The conversation now keeps the window its last turn reported, and without one, more than 200k counts as a 1M window (#262)
-
+- **The end of a turn says what the turn did**: next to its duration, the line under the answer counts the file edits, failed tools and agents of that turn, and what it cost when the agent reports it (Claude Code, OpenCode, pi). Claude Code reports its cost over the whole process, so Relay now takes the difference per turn (#260)
+- **Subagents show their context**: an agent's row, its line in the Agents column and its page show the context of its latest request ("42k context"), and "cut off" in red when its answer stopped at the output limit (Claude Code) (#260)
 - **Find in a conversation**: ⌘F (or ⌃F) opens a find bar above the open conversation. Every match is marked, ↵ and ⇧↵ walk them with a count like "3 of 12", Esc closes it. It searches what the conversation shows, so the text inside a folded step is left out until you open it. The keys are in Settings › Shortcuts (#261)
 
 ### Changed
 
 - **The context meter stands out**: the percentage next to the model pick gets a ring that fills up. It turns orange from 70% and red from 90%, where it was grey until 90% (#262)
+
+### Fixed
+
+- **A conversation's title is in the language you wrote in**: the generated title came out in Dutch for English messages too, because the prompt asking for it was written in Dutch. The prompt is English now and names the rule (#263)
+- **The context meter counts against the right window after a restart**: a conversation on a 1M model, read again from its transcript, counted against 200k until its next turn ended, so 300k showed as 100% in red. The conversation now keeps the window its last turn reported, and without one, more than 200k counts as a 1M window (#262)
 
 ## [0.0.33] - 2026-10-24
 
@@ -608,7 +610,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...HEAD
+[0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31
