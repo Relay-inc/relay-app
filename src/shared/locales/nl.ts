@@ -1013,6 +1013,7 @@ export default {
   "note.secondOpinion": "Second opinion op {repo} #{n}, als antwoord op de review van {agent}",
   "qk.searching": "Tickets zoeken…",
   "card.other": "Ander antwoord…",
+  "card.note": "Notitie bij je keuze…",
   "card.skip": "Overslaan",
   "nav.prs": "Pull requests",
   "nav.prsReview": "Wacht op jouw review",

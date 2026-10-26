@@ -1025,6 +1025,7 @@ export default {
   "note.secondOpinion": "Second avis sur {repo} #{n}, en réponse à la revue de {agent}",
   "qk.searching": "Recherche de tickets…",
   "card.other": "Autre réponse…",
+  "card.note": "Note sur votre choix…",
   "card.skip": "Passer",
   "nav.prs": "Pull requests",
   "nav.prsReview": "En attente de votre revue",

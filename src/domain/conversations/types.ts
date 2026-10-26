@@ -21,8 +21,13 @@ export type ToolInput = {
   questions?: Question[];
   [other: string]: unknown;
 };
-/** A question an agent asks, with its options (AskUserQuestion). */
-export type Question = { question: string; multiSelect?: boolean; options?: { label: string; description?: string }[] };
+/** A question an agent asks, with its options (AskUserQuestion). An option's `preview` is a mockup, code or ASCII
+ *  sketch to compare the options by. */
+export type Question = {
+  question: string;
+  multiSelect?: boolean;
+  options?: { label: string; description?: string; preview?: string }[];
+};
 /** A session as the agent providers report it (`agents`): in the terminal or in the background. */
 export type AgentSession = {
   id: string;
@@ -124,7 +129,7 @@ export type Transcript<E> = { items: E[]; next: number };
 export type SessionOf = Record<string, { provider: string; sid: string }>;
 /** The answer a card gives: allow (once, or "always": the agent's own suggestions to remember it) or deny a permission, or a
  *  question's picked labels and typed "other" per question. */
-export type CardChoice = "allow" | "always" | "deny" | { picked: string[][]; other: string[] };
+export type CardChoice = "allow" | "always" | "deny" | { picked: string[][]; other: string[]; notes?: string[] };
 export type RouteChoice = { key: string; text: string; hits: string[] };
 
 /** A conversation refused for its provider's limit, waiting to be sent again: at the reset (`known`), or `at` is when

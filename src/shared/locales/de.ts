@@ -1017,6 +1017,7 @@ export default {
   "note.secondOpinion": "Zweitmeinung zu {repo} #{n}, als Antwort auf das Review von {agent}",
   "qk.searching": "Tickets werden gesucht…",
   "card.other": "Andere Antwort…",
+  "card.note": "Notiz zu deiner Wahl…",
   "card.skip": "Überspringen",
   "nav.prs": "Pull Requests",
   "nav.prsReview": "Wartet auf dein Review",

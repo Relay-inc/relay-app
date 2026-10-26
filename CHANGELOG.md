@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Question cards show an option's preview and take a note**: when an agent's question carries a mockup, code or sketch per option, the card shows the one you point at or pick; once you pick, you can add a note to your choice. Both go back to the agent with the answer
 - **Claude Design's questions reach the conversation**: when Claude Design answers with a clarifying question instead of a design, `design_prompt` and `design_create` return the question with each option's label and say that it waits; the next `design_prompt` answers it (option labels and/or free text) instead of failing with "no send button". `design_create` also names the project's GitHub repos in the first prompt, so the design matches the codebase
 
 ## [0.0.35] - 2026-10-26
