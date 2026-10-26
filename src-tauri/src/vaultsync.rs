@@ -110,18 +110,50 @@ fn shared_round(vault: &str, path_env: &str) -> Result<(Option<String>, usize), 
     let commit = commit_all(vault, path_env)?;
     git(vault, path_env, &["fetch", "-q", remote])?;
     let pulled: usize = git(vault, path_env, &["rev-list", "--count", &format!("HEAD..{up}")])?.parse().unwrap_or(0);
-    if pulled > 0 {
-        if let Err(e) = git(vault, path_env, &[who(vault, path_env).as_slice(), &["rebase", "-q", &up]].concat()) {
-            let files = git(vault, path_env, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default();
-            git(vault, path_env, &["rebase", "--abort"]).ok();
-            if files.is_empty() { return Err(e); }
-            return Err(format!("conflict with the team in {}: run git pull --rebase in the vault and resolve it, the next round pushes", files.lines().collect::<Vec<_>>().join(", ")));
-        }
-    }
+    if pulled > 0 && rebase(vault, path_env, &up)? { rebuild_index(vault, path_env); }
     if git(vault, path_env, &["rev-list", "--count", &format!("{up}..HEAD")])? != "0" {
         git(vault, path_env, &["push", "-q", remote, &format!("HEAD:refs/heads/{branch}")])?;
     }
     Ok((commit, pulled))
+}
+
+/// The index script of a vault laid out with project cards: what it writes nobody edits by hand.
+const INDEX_SCRIPT: &str = "System/scripts/build-index.py";
+/// What a vault with project cards generates from them (build-index.py): its work-state and repo index.
+fn generated(vault: &str) -> Vec<String> {
+    if !Path::new(vault).join(INDEX_SCRIPT).is_file() { return vec![]; }
+    let ws = crate::relay_config::load(vault).and_then(|c| c["paths"]["workState"].as_str().map(String::from)).filter(|s| !s.is_empty());
+    vec![ws.unwrap_or_else(|| "System/rules/core/work-state.md".into()), "System/index/repos.json".into()]
+}
+
+/// Rebase what is here on the team's `up`. A conflict only in generated files takes the team's version (the index is
+/// rebuilt afterwards from the cards, which did merge); any other conflict puts the vault back as it was before the
+/// rebase, its own commits kept, and names the files. Ok(true) when a generated file was taken.
+fn rebase(vault: &str, path_env: &str, up: &str) -> Result<bool, String> {
+    let gen = generated(vault);
+    let mut step = git(vault, path_env, &[who(vault, path_env).as_slice(), &["rebase", "-q", up]].concat());
+    let mut took = false;
+    while let Err(e) = step {
+        let files: Vec<String> = git(vault, path_env, &["diff", "--name-only", "--diff-filter=U"]).unwrap_or_default().lines().map(String::from).collect();
+        if files.is_empty() || !files.iter().all(|f| gen.contains(f)) {
+            git(vault, path_env, &["rebase", "--abort"]).ok();
+            if files.is_empty() { return Err(e); }
+            return Err(format!("conflict with the team in {}: run git pull --rebase in the vault and resolve it, the next round pushes", files.join(", ")));
+        }
+        // during a rebase "ours" is the branch rebased onto: the team's
+        for f in &files { git(vault, path_env, &["checkout", "--ours", "--", f])?; git(vault, path_env, &["add", "--", f])?; }
+        took = true;
+        // a commit that only changed generated files is empty now
+        let empty = git(vault, path_env, &["diff", "--cached", "--quiet"]).is_ok();
+        step = if empty { git(vault, path_env, &["rebase", "--skip"]) }
+            else { git(vault, path_env, &[who(vault, path_env).as_slice(), &["-c", "core.editor=true", "rebase", "--continue"]].concat()) };
+    }
+    Ok(took)
+}
+/// The vault's index from its cards again, after a rebase took the team's generated files; the next round commits it.
+fn rebuild_index(vault: &str, path_env: &str) {
+    let o = Command::new("python3").arg(Path::new(vault).join(INDEX_SCRIPT)).env("VAULT", vault).env("PATH", path_env).output();
+    if let Some(o) = o.ok().filter(|o| !o.status.success()) { eprintln!("build-index {vault}: {}", String::from_utf8_lossy(&o.stderr).trim()); }
 }
 
 /// One round: commit what changed, push the branch. Some(commit) when something was committed.
@@ -297,6 +329,42 @@ mod tests {
         assert!(e.contains("conflict") && e.contains("work-state.md"), "{e}");
         assert_eq!(std::fs::read_to_string(me.join("work-state.md")).unwrap(), "| X | Quiet |\n");
         assert!(!me.join(".git/rebase-merge").exists() && !me.join(".git/rebase-apply").exists());
+        std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn a_conflict_in_the_generated_index_takes_the_teams_and_rebuilds() {
+        let tmp = std::env::temp_dir().join(format!("relay-gensync-{}", std::process::id()));
+        std::fs::remove_dir_all(&tmp).ok();
+        let path_env = std::env::var("PATH").unwrap();
+        let sh = |args: &[&str], dir: &Path| assert!(Command::new("git").args(args).current_dir(dir).output().unwrap().status.success(), "{args:?}");
+        let w = |p: std::path::PathBuf, body: &str| { std::fs::create_dir_all(p.parent().unwrap()).unwrap(); std::fs::write(p, body).unwrap(); };
+        std::fs::create_dir_all(&tmp).unwrap();
+        sh(&["init", "-q", "--bare", "-b", "main", "team.git"], &tmp);
+        let seed = tmp.join("seed");
+        sh(&["clone", "-q", tmp.join("team.git").to_str().unwrap(), "seed"], &tmp);
+        // the index script: the work-state is every card's name, as build-index.py makes it from the cards
+        w(seed.join(INDEX_SCRIPT), "import os,glob\nv=os.environ['VAULT']\nn=sorted(os.path.basename(p) for p in glob.glob(v+'/Contexts/*/Projects/*.md'))\nopen(v+'/System/rules/core/work-state.md','w').write(' '.join(n)+'\\n')\n");
+        w(seed.join("System/rules/core/work-state.md"), "\n");
+        sh(&["add", "-A"], &seed);
+        sh(&["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "seed"], &seed);
+        sh(&["push", "-q", "origin", "HEAD:main"], &seed);
+        for c in ["me", "colleague"] { sh(&["clone", "-q", tmp.join("team.git").to_str().unwrap(), c], &tmp); }
+        let (me, them) = (tmp.join("me"), tmp.join("colleague"));
+        // each adds a card and rebuilds the index: the same generated line on both sides
+        w(them.join("Contexts/Work/Projects/Theirs.md"), "t");
+        w(them.join("System/rules/core/work-state.md"), "Theirs.md\n");
+        shared_round(them.to_str().unwrap(), &path_env).unwrap();
+        w(me.join("Contexts/Work/Projects/Mine.md"), "m");
+        w(me.join("System/rules/core/work-state.md"), "Mine.md\n");
+        let (_, pulled) = shared_round(me.to_str().unwrap(), &path_env).unwrap();
+        assert_eq!(pulled, 1);
+        assert!(me.join("Contexts/Work/Projects/Theirs.md").is_file() && me.join("Contexts/Work/Projects/Mine.md").is_file(), "both cards");
+        assert_eq!(std::fs::read_to_string(me.join("System/rules/core/work-state.md")).unwrap(), "Mine.md Theirs.md\n", "rebuilt from both cards");
+        // the rebuilt index goes out with the next round, and reaches the colleague
+        shared_round(me.to_str().unwrap(), &path_env).unwrap();
+        shared_round(them.to_str().unwrap(), &path_env).unwrap();
+        assert_eq!(std::fs::read_to_string(them.join("System/rules/core/work-state.md")).unwrap(), "Mine.md Theirs.md\n");
         std::fs::remove_dir_all(&tmp).ok();
     }
 }

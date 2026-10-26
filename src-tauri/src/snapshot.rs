@@ -78,7 +78,69 @@ pub fn vault_projects(vault: &str, work_state: &str, notes: &str) -> Result<(Vec
         let name = e.file_name().to_string_lossy().into_owned();
         if !name.starts_with('.') && e.path().is_dir() { contexts.insert(name); }
     }
-    Ok((projects(work_state, &contexts, &n)?, n.root))
+    // a vault with project cards has its status in them: the work-state is generated from the cards, and in a vault
+    // the team shares it is the file everyone's index rebuild touches
+    let today = chrono::Local::now().date_naive().format("%Y-%m-%d").to_string();
+    let mut projs = cards(&n.root, &contexts, &today);
+    if projs.is_empty() { projs = projects(work_state, &contexts, &n)?; }
+    else { for p in projs.iter_mut() { let s = note_state(p["name"].as_str().unwrap_or(""), &n); p.as_object_mut().unwrap().extend(s); } }
+    Ok((projs, n.root))
+}
+
+/// An Active card without work for this many days shows as Quiet (build-index.py QUIET_DAYS).
+const QUIET_DAYS: i64 = 30;
+
+/// The projects of a vault laid out with project cards, as build-index.py reads them: a note `<context>/Projects/<P>.md`
+/// or `<context>/Projects/<P>/<P>.md` under the notes, whose frontmatter has `status`, `last` (YYYY-MM-DD), `index` (the
+/// one-line summary) and `context`. Closed cards and cards missing a field or naming an unknown context are left out,
+/// newest first per context. Empty when the vault has no cards.
+pub fn cards(notes: &Path, contexts: &HashSet<String>, today: &str) -> Vec<Value> {
+    let mut out: Vec<Value> = vec![];
+    let mut ctxs: Vec<&String> = contexts.iter().collect();
+    ctxs.sort();
+    let day = |d: &str| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok();
+    for ctx in ctxs {
+        let Ok(rd) = fs::read_dir(notes.join(ctx).join("Projects")) else { continue };
+        let mut found: Vec<Value> = vec![];
+        for e in rd.flatten() {
+            let (name, p) = (e.file_name().to_string_lossy().into_owned(), e.path());
+            let file = if p.is_dir() { p.join(format!("{name}.md")) } else if name.ends_with(".md") { p.clone() } else { continue };
+            let Some(fm) = read(&file).and_then(|t| front(&t)) else { continue };
+            let stem = file.file_stem().unwrap_or_default().to_string_lossy().into_owned();
+            let field = |k: &str| fm.get(k).cloned().unwrap_or_default();
+            let (status, last) = (field("status"), field("last"));
+            let card_ctx = field("context").replace(['[', ']', '"'], "");
+            if status.is_empty() || status == "Closed" || card_ctx != *ctx { continue }
+            let (Some(l), Some(t)) = (day(&last), day(today)) else { continue };
+            let state = if status == "Active" && (t - l).num_days() >= QUIET_DAYS { "Quiet".to_string() } else { status };
+            let summary = field("index").replace('|', "/").split_whitespace().collect::<Vec<_>>().join(" ");
+            found.push(json!({"name": stem, "context": ctx, "state": state, "last": last, "summary": summary}));
+        }
+        found.sort_by(|a, b| b["last"].as_str().cmp(&a["last"].as_str()).then(a["name"].as_str().cmp(&b["name"].as_str())));
+        out.extend(found);
+    }
+    out
+}
+
+/// The top-level fields of a note's frontmatter as text: a scalar as written (quotes off), a list as its first item.
+fn front(text: &str) -> Option<HashMap<String, String>> {
+    let body = text.strip_prefix("---\n")?;
+    let fm = &body[..body.find("\n---")?];
+    let (mut out, mut open) = (HashMap::new(), None::<String>);
+    let unquote = |v: &str| { let v = v.trim(); v.strip_prefix('"').and_then(|v| v.strip_suffix('"')).or_else(|| v.strip_prefix('\'').and_then(|v| v.strip_suffix('\''))).unwrap_or(v).to_string() };
+    for line in fm.lines() {
+        if let (Some(k), Some(item)) = (&open, line.trim_start().strip_prefix("- ")) {
+            if line.starts_with(' ') { out.insert(k.clone(), unquote(item)); open = None; continue; }
+        }
+        let Some((k, v)) = line.split_once(':') else { continue };
+        if line.starts_with(' ') || !k.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_') { continue }
+        let v = v.trim();
+        if v.is_empty() { open = Some(k.to_string()); continue; }
+        open = None;
+        let v = v.strip_prefix('[').and_then(|v| v.strip_suffix(']')).map_or(v, |l| l.split(',').next().unwrap_or(""));
+        out.insert(k.to_string(), unquote(v));
+    }
+    Some(out)
 }
 
 fn projects(work_state: &str, contexts: &HashSet<String>, n: &Notes) -> Result<Vec<Value>, String> {
@@ -270,6 +332,34 @@ fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn status_from_project_cards_as_build_index_reads_them() {
+        let d = std::env::temp_dir().join(format!("relay-cards-{}", std::process::id()));
+        fs::remove_dir_all(&d).ok();
+        let w = |rel: &str, body: &str| { let p = d.join(rel); fs::create_dir_all(p.parent().unwrap()).unwrap(); fs::write(p, body).unwrap(); };
+        w("Work/Projects/A/A.md", "---\ncontext: \"[[Work]]\"\nstatus: Active\nindex: \"One | line.\"\nlast: 2026-09-01\nrepos:\n  - ~/code/a\n---\n");
+        w("Work/Projects/B.md", "---\ncontext: \"[[Work]]\"\nstatus: Blocked\nindex: Newer.\nlast: 2026-09-20\n---\n");
+        w("Work/Projects/C/C.md", "---\ncontext: \"[[Work]]\"\nstatus: Closed\nindex: x\nlast: 2026-09-20\n---\n");
+        w("Work/Projects/A/Log.md", "---\ncontext: x\n---\n");
+        w("Work/Projects/W/W.md", "---\ncontext: \"[[Work]]\"\nstatus: Blocked\nindex: Wait.\nlast: 2026-08-01\n---\n");
+        w("Work/Projects/X/X.md", "---\ncontext: \"[[Work]]\"\nstatus: Active\nindex: no date\n---\n");
+        w("Personal/Projects/Old/Old.md", "---\ncontext: \"[[Personal]]\"\nstatus: Active\nindex: Old.\nlast: 2026-08-31\n---\n");
+        w("Personal/Projects/L/L.md", "---\ncontext:\n  - \"[[Personal]]\"\nstatus: Active\nindex: List.\nlast: 2026-09-02\n---\n");
+        w("Personal/Projects/M/M.md", "---\ncontext: \"[[Work]]\"\nstatus: Active\nindex: wrong folder\nlast: 2026-09-02\n---\n");
+        let ctx: HashSet<String> = ["Work", "Personal"].map(String::from).into();
+        let p = cards(&d, &ctx, "2026-09-30");
+        let row = |p: &Value| format!("{} {} {} {} {}", p["context"].as_str().unwrap(), p["name"].as_str().unwrap(), p["state"].as_str().unwrap(), p["last"].as_str().unwrap(), p["summary"].as_str().unwrap());
+        assert_eq!(p.iter().map(row).collect::<Vec<_>>(), [
+            "Personal L Active 2026-09-02 List.",
+            "Personal Old Quiet 2026-08-31 Old.", // 30 days: Quiet
+            "Work B Blocked 2026-09-20 Newer.",
+            "Work A Active 2026-09-01 One / line.", // 29 days: still Active, a | would break the table
+            "Work W Blocked 2026-08-01 Wait.", // only Active turns Quiet
+        ]);
+        assert!(cards(&d.join("Work"), &ctx, "2026-09-30").is_empty(), "no cards: the work-state table is read");
+        fs::remove_dir_all(&d).ok();
+    }
+
     #[test]
     fn a_project_in_two_vaults_is_one() {
         let mut a = json!({"name": "Spardex", "context": "Antenna", "state": "Active", "last": "2026-10-20", "summary": "mine",
