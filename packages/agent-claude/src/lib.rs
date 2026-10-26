@@ -258,7 +258,8 @@ impl AgentProvider for Claude {
         // the fence the app set (opts.deny, opts.strict_mcp) goes along, so the terminal reaches no further than Relay
         let deny: Vec<String> = env.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(q).collect();
         let fence = format!("{}{}", if deny.is_empty() { String::new() } else { format!(" --disallowedTools {}", deny.join(" ")) },
-            if env.opts["strict_mcp"] == true { " --strict-mcp-config" } else { "" });
+            // a shared vault runs in auto whatever the account's default mode, as in command(): bypass has no classifier
+            if env.opts["strict_mcp"] == true { " --strict-mcp-config --permission-mode auto" } else { "" });
         Some(match t {
             Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}{fence}", q(env.vault), on(&session_dir(env, s))),
             Terminal::Resume(_) => return None,
@@ -460,7 +461,7 @@ mod tests {
         let opts = json!({"deny": ["Read(//Users/me/team/**)"], "strict_mcp": true});
         let e = Env { opts: &opts, ..env(&p) };
         assert_eq!(PROVIDER.terminal(&e, Terminal::Resume("ab-12")).unwrap(),
-            "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config");
+            "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config --permission-mode auto");
         assert_eq!(transcripts(&env(&p)), "/Users/me/.claude/projects/-Users-me-my-vault");
         let opts = json!({"account": "/Users/me/.claude-work"});
         let work = Env { opts: &opts, ..env(&p) };

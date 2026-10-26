@@ -873,7 +873,6 @@ export default {
     "{n} verwijdering tegengehouden: veel bestanden zouden tegelijk verdwijnen. Er gaat niets weg tot je kiest:",
   "set.sharedHeld_other":
     "{n} verwijderingen tegengehouden: veel bestanden zouden tegelijk verdwijnen. Er gaat niets weg tot je kiest:",
-  "set.sharedHeldMore": "en nog {n}",
   "set.sharedHeldRestore": "Terugzetten",
   "set.sharedHeldDelete": "Verwijderen",
   "set.sharedHeldAllowed": "Ze gaan weg in de volgende ronde.",

@@ -30,8 +30,6 @@ import { StatusLine } from "./StatusLine";
 
 const NONE: SharedVault[] = [];
 const NO_MACHINES: Machine[] = [];
-/** Held deletes listed by name, the rest counted. */
-const HELD_SHOWN = 5;
 const EDGE = "border-b border-s-border px-3.5 py-3 last:border-b-0";
 const ROW = `grid min-w-0 grid-cols-1 gap-2.5 ${EDGE}`;
 const LABEL = "text-xs font-medium text-s-fg";
@@ -145,16 +143,14 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             {status.held.length ? (
               <div className="grid gap-1">
                 <StatusLine level="warn">{tn("set.sharedHeld", status.held.length)}</StatusLine>
-                {status.held.slice(0, HELD_SHOWN).map(path => (
-                  <span key={path} className="truncate font-mono text-xs text-s-fg" title={path}>
-                    {path}
-                  </span>
-                ))}
-                {status.held.length > HELD_SHOWN ? (
-                  <span className="text-xs text-s-muted">
-                    {t("set.sharedHeldMore", { n: status.held.length - HELD_SHOWN })}
-                  </span>
-                ) : null}
+                {/* every path, not the first few: Delete lets through exactly the list on screen */}
+                <div className="grid max-h-40 gap-1 overflow-y-auto">
+                  {status.held.map(path => (
+                    <span key={path} className="truncate font-mono text-xs text-s-fg" title={path}>
+                      {path}
+                    </span>
+                  ))}
+                </div>
                 <div className="flex items-center gap-2">
                   <button
                     className={buttonClass()}

@@ -878,7 +878,6 @@ export default {
     "{n} Löschung zurückgehalten: viele Dateien würden auf einmal verschwinden. Nichts wird gelöscht, bis du wählst:",
   "set.sharedHeld_other":
     "{n} Löschungen zurückgehalten: viele Dateien würden auf einmal verschwinden. Nichts wird gelöscht, bis du wählst:",
-  "set.sharedHeldMore": "und {n} weitere",
   "set.sharedHeldRestore": "Zurückholen",
   "set.sharedHeldDelete": "Löschen",
   "set.sharedHeldAllowed": "Sie gehen in der nächsten Runde weg.",

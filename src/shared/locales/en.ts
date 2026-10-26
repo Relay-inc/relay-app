@@ -864,7 +864,6 @@ const en = {
   "set.sharedConflicts_other": "{n} conflicts. Both versions were kept:",
   "set.sharedHeld_one": "{n} deletion held: many files would go at once. Nothing is deleted until you choose:",
   "set.sharedHeld_other": "{n} deletions held: many files would go at once. Nothing is deleted until you choose:",
-  "set.sharedHeldMore": "and {n} more",
   "set.sharedHeldRestore": "Put them back",
   "set.sharedHeldDelete": "Delete them",
   "set.sharedHeldAllowed": "They go in the next round.",

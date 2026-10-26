@@ -117,7 +117,7 @@ fn filter(root: &str, m: &Value) -> Filter {
     match root {
         "vault" => { let mut f = Filter::vault_default(); f.prefixes = excludes(m); f }
         // a plugin can ship its node_modules or a git checkout: the plugin itself is enough
-        _ => Filter { names: vec![".git".into(), "node_modules".into(), ".DS_Store".into()], prefixes: vec![], max_size: 20 << 20 },
+        _ => Filter { names: vec![".git".into(), "node_modules".into(), ".DS_Store".into()], max_size: 20 << 20, ..Default::default() },
     }
 }
 

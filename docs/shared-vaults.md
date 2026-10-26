@@ -20,14 +20,19 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
 
 - **Write notes in the vault.** Everything a member syncs, every other member's agent may read. A note can carry
   instructions aimed at an agent (prompt injection); the fence below limits what such an agent can reach.
-- **Not run code on another Mac.** Claude Code runs a project's `settings.json` (hooks, `env`, `apiKeyHelper`,
-  `statusLine`) as plain code. `.claude` never syncs, and the settings and `hooks/` of the folder a Mac's `.claude`
-  links to (`System/` in a vault Relay makes) stay on that Mac in both directions (`shared_vaults::filter`). Joining
-  makes that link before the first round. Project MCP servers (`.mcp.json`) do not start: shared-vault conversations
-  run with `--strict-mcp-config`.
+- **Not run code on another Mac.** Claude Code runs what is in a project's config folder as plain code: the
+  `settings.json` (hooks, `env`, `apiKeyHelper`, `statusLine`), and through hooks and skills the scripts they point at.
+  `.claude` never syncs, and of the folder it links to (`System/` in a vault Relay makes; `System/` also before the
+  link resolves, on a join's first round) only `rules/`, `reference/`, `index/`, `archive/` and `reminders.md` go, in
+  both directions (`shared_vaults::filter`). Settings, hooks, scripts, skills and agents stay on each Mac. Paths match
+  case-folded, as APFS compares them, so `System/Hooks/x.sh` is held back too. A round follows no symlink, so a link
+  someone made inside the folder does not take a member's writes out of it. Project MCP servers (`.mcp.json`) do not
+  start: shared-vault conversations run with `--strict-mcp-config`.
 - **Not reach your other vaults through your agent.** A conversation in a shared vault gets Read and Edit denies on
-  every other vault, on their transcripts and auto memory in each Claude config folder, and on Relay's data folder
-  (keys, certificate, trash, bases). It runs in auto mode whatever the account's default mode, because the auto
+  every other vault, on their transcripts and auto memory in each Claude config folder (also of an account removed
+  from the list), on what those folders keep per session (`file-history`, `history.jsonl`, `paste-cache`), and on
+  Relay's data folder (keys, certificate, trash, bases). It runs in auto mode whatever the account's default mode, in
+  the terminal too, because the auto
   classifier is what stops a script in Bash that no deny rule covers. That classifier is a model's judgement, not a
   sandbox: the fence is strong for Claude Code's file tools and file commands, weaker for arbitrary scripts.
 - **Not keep a removed member in.** The server refuses their device at the next connection; they keep what they

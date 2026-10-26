@@ -125,7 +125,9 @@ fn key_in(index: &HashMap<String, (String, String)>, vault: &str, name: &str) ->
 /// What a conversation in `dir` may not touch, as Claude Code permission rules (`//` is an absolute path; Edit covers
 /// Write and the other editing tools): Read and Edit on every other vault, and on its transcripts and auto memory in
 /// each Claude config folder (`<config>/projects/<slug>`, which hold copies of what was read there). `data`, for a
-/// shared vault: Relay's data folder, with the other shared vaults' keys, this Mac's certificate, their trash and bases.
+/// shared vault: Relay's data folder, with the other shared vaults' keys, this Mac's certificate, their trash and bases;
+/// and what each config folder keeps per session rather than per vault: edited files' backups (`file-history`), the
+/// prompts (`history.jsonl`) and pastes (`paste-cache`).
 fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>) -> Vec<String> {
     let rule = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{}/**)", p.trim_end_matches('/')));
     let mut out = vec![];
@@ -133,7 +135,14 @@ fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>) -
         out.extend(rule(v));
         for c in configs { out.extend(rule(&format!("{}/projects/{}", c.trim_end_matches('/'), agent_claude::slug(v.trim_end_matches('/'))))); }
     }
-    if let Some(d) = data { out.extend(rule(d)); }
+    if let Some(d) = data {
+        out.extend(rule(d));
+        for c in configs {
+            let c = c.trim_end_matches('/');
+            for x in ["file-history", "paste-cache"] { out.extend(rule(&format!("{c}/{x}"))); }
+            out.extend(["Read", "Edit"].map(|t| format!("{t}(/{c}/history.jsonl)")));
+        }
+    }
     out
 }
 /// A conversation in `dir` fenced in, in its provider's opts: `deny` gets the fence's rules, and in a shared vault
@@ -145,6 +154,10 @@ fn fence_in(app: &AppHandle, st: &App, opts: &mut Value, dir: &str) {
     let mut configs = vec![format!("{}/.claude", home())];
     let s = st.settings.lock().unwrap().clone();
     configs.extend(s["agents"]["providers"]["claude"]["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).filter(|d| !d.is_empty()).map(String::from));
+    // also an account removed from the list since, as env_of has it: its transcripts are still there
+    configs.extend(st.sids.lock().unwrap().values().filter(|x| x.provider == "claude" && !x.account.is_empty()).map(|x| x.account.clone()));
+    configs.sort();
+    configs.dedup();
     let data = data_dir(app).to_string_lossy().into_owned();
     let rules = fence(dir, &all, &configs, shared.then_some(data.as_str()));
     if !rules.is_empty() {
@@ -2545,6 +2558,9 @@ mod vault_tests {
         assert!(shared.contains(&"Read(//me/vault/**)".to_string()) && shared.contains(&format!("Read(//me/.claude/projects/{}/**)", slug("/me/vault"))));
         assert!(shared.contains(&"Read(//me/Library/Application Support/relay/**)".to_string()) && shared.contains(&"Edit(//me/Library/Application Support/relay/**)".to_string()));
         assert!(!shared.iter().any(|r| r.contains(&slug("/team/shared"))), "its own transcripts stay readable");
+        // what the config folder keeps per session: backups of edited main-vault notes, prompts, pastes
+        for r in ["Read(//me/.claude/file-history/**)", "Read(//me/.claude/paste-cache/**)", "Read(//me/.claude/history.jsonl)"] { assert!(shared.contains(&r.to_string()), "{r}"); }
+        assert!(!fence("/me/vault", &all, &configs, None).iter().any(|r| r.contains("file-history")), "the main vault keeps its own history");
         assert!(fence("/me/vault", &all[..1], &configs, None).is_empty(), "one vault, nothing to fence");
         // a vault inside another would sit inside its fence: refused in the settings
         assert!(nested("/me/vault/team", "/me/vault") && nested("/me/vault", "/me/vault/team"));

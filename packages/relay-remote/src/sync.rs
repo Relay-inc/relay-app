@@ -26,20 +26,28 @@ const NS: i64 = 1_000_000_000;
 
 /// What to skip: directory or file names matched anywhere (e.g. ".obsidian", ".git", ".trash", ".relay", "node_modules"),
 /// path prefixes relative to the root (e.g. "Communication/transcripts"), and a size limit (bigger files are skipped and
-/// listed, 0 = none).
+/// listed, 0 = none). Under a `guarded` folder only what lies under one of `only` goes. `no_links`: a symlink is neither
+/// followed nor written through, so a round stays inside the root. Names and prefixes match as APFS does, case-folded.
 #[derive(Clone, Debug, Default)]
-pub struct Filter { pub names: Vec<String>, pub prefixes: Vec<String>, pub max_size: u64 }
+pub struct Filter { pub names: Vec<String>, pub prefixes: Vec<String>, pub max_size: u64, pub guarded: Vec<String>, pub only: Vec<String>, pub no_links: bool }
 impl Filter {
     pub fn vault_default() -> Filter {
-        Filter { names: [".obsidian", ".git", ".trash", ".relay", "node_modules", ".DS_Store"].map(String::from).to_vec(), prefixes: vec![], max_size: 20 << 20 }
+        Filter { names: [".obsidian", ".git", ".trash", ".relay", "node_modules", ".DS_Store"].map(String::from).to_vec(), max_size: 20 << 20, ..Default::default() }
     }
     /// Every segment is checked, not only the last, so a server can judge a single incoming path the same way a walk does.
     pub fn skips(&self, rel: &str, is_dir: bool) -> bool {
-        rel.split('/').any(|s| self.names.iter().any(|n| n == s))
-            || self.prefixes.iter().map(|p| p.trim_end_matches('/')).any(|p| rel == p || rel.strip_prefix(p).is_some_and(|r| r.starts_with('/')))
+        let rel = fold(rel);
+        let under = |p: &str, r: &str| { let (p, r) = (fold(p.trim_end_matches('/')), fold(r)); r == p || r.strip_prefix(&p).is_some_and(|x| x.starts_with('/')) };
+        rel.split('/').any(|s| self.names.iter().any(|n| fold(n) == s))
+            || self.prefixes.iter().any(|p| under(p, &rel))
+            // a folder above an allowed one is walked, to reach it
+            || (self.guarded.iter().any(|g| under(g, &rel)) && !self.only.iter().any(|o| under(o, &rel) || (is_dir && under(&rel, o))))
             || (!is_dir && rel.rsplit('/').next().is_some_and(|n| n.starts_with(TMP)))
     }
 }
+/// A name as APFS compares it, close enough for matching ASCII names: lowercase, and the two non-ASCII letters that fold
+/// into ASCII (ſ, the Kelvin sign) as the letter they fold to, so `ſystem/Settings.json` still is `System/settings.json`.
+fn fold(s: &str) -> String { s.chars().map(|c| match c { '\u{17F}' => 's', '\u{212A}' => 'k', c => c.to_ascii_lowercase() }).collect() }
 
 /// Scans a root, rehashing only files whose (size, mtime) changed since the last scan.
 #[derive(Default)]
@@ -74,6 +82,7 @@ impl Walker {
             let Some(name) = ent.file_name().to_str().map(str::to_owned) else { out.skipped.push(format!("{prefix}{}", ent.file_name().to_string_lossy())); continue };
             let rel = format!("{prefix}{name}");
             let link = ent.file_type()?.is_symlink();
+            if link && f.no_links { continue; }
             let meta = match fs::metadata(&path) {
                 Ok(m) => m,
                 Err(_) if link => continue, // dangling or looping link: nothing to sync
@@ -295,7 +304,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     }
     for (i, a) in acts.iter().filter(|a| !matches!(a, Action::Push(_))).enumerate() {
         progress(done + i, acts.len());
-        match exec(root, &local, &rm, remote, walker, guard.keep, a) {
+        match exec(root, filter.no_links, &local, &rm, remote, walker, guard.keep, a) {
             Ok(ups) => {
                 for (p, e) in ups { match e { Some(e) => { next.insert(p, e); } None => { next.remove(&p); } } }
                 let (list, p) = match a {
@@ -316,7 +325,8 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
 
 // One action; Ok holds its base updates (None = the path is gone on both sides).
 type Ups = Vec<(String, Option<Entry>)>;
-fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walker: &mut Walker, keep: &dyn Fn(&str, &[u8]) -> io::Result<()>, a: &Action) -> Result<Ups, String> {
+#[allow(clippy::too_many_arguments)]
+fn exec(root: &Path, no_links: bool, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walker: &mut Walker, keep: &dyn Fn(&str, &[u8]) -> io::Result<()>, a: &Action) -> Result<Ups, String> {
     let abs = |p: &str| root.join(p);
     let io = |e: io::Error| e.to_string();
     let keep = |p: &str, d: &[u8]| keep(p, d).map_err(|e| format!("keeping the old copy: {e}"));
@@ -333,7 +343,9 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
         if d.as_deref().map(sha256_hex).as_deref() != local.get(p).map(|e| e.hash.as_str()) { return Err("changed locally during the sync".into()); }
         Ok(d)
     };
-    let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
+    // with no_links, a link already on the disk (one the user made) is not a way out of the root
+    let inside = |p: &str| if no_links && through_link(root, p) { Err(format!("{p}: a symlink on the way, not followed")) } else { Ok(()) };
+    let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { inside(&e.path)?; write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
     match a {
         Action::Push(_) => unreachable!("pushes go in batches, in run()"),
         Action::Pull(p) => {
@@ -344,6 +356,7 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
         }
         Action::DeleteRemote(p) => { remote.delete(p, &rm[p].hash)?; Ok(vec![(p.clone(), None)]) }
         Action::DeleteLocal(p) => {
+            inside(p)?;
             if let Some(old) = same(p)? { keep(p, &old)?; }
             let f = abs(p);
             fs::remove_file(&f).map_err(io)?;
@@ -374,6 +387,16 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
             Ok(vec![(p.clone(), Some(e))])
         }
     }
+}
+
+/// Whether `rel` under `root`, or a folder on its way, is a symlink (a part that does not exist yet is none).
+fn through_link(root: &Path, rel: &str) -> bool {
+    let mut at = root.to_path_buf();
+    for seg in rel.split('/') {
+        at.push(seg);
+        match fs::symlink_metadata(&at) { Ok(m) if m.file_type().is_symlink() => return true, Ok(_) => {} Err(_) => return false }
+    }
+    false
 }
 
 /// Write via a temp file in the same directory (".relay-sync-…"), fsync, rename: a reader or a crash sees the old file or
@@ -489,7 +512,7 @@ mod tests {
         let t = Tmp::new("filter");
         for p in [".git/config", "x/.obsidian/w.json", "Communication/transcripts/t.md", "Communication/n.md", "ok.md", ".relay-sync-1-0"] { t.put(p, "x"); }
         t.put("big.bin", &"x".repeat(100));
-        let f = Filter { names: vec![s(".git"), s(".obsidian")], prefixes: vec![s("Communication/transcripts/")], max_size: 50 };
+        let f = Filter { names: vec![s(".git"), s(".obsidian")], prefixes: vec![s("Communication/transcripts/")], max_size: 50, ..Default::default() };
         let (m, skipped) = Walker::default().scan(&t.0, &f).unwrap();
         assert_eq!(keys(&m), vec!["Communication/n.md", "ok.md"]);
         assert_eq!(skipped, vec![s("big.bin")]);
@@ -503,6 +526,29 @@ mod tests {
         symlink(t.0.join("nowhere"), t.0.join("dangling")).unwrap();
         let (m, _) = Walker::default().scan(&t.0, &Filter::vault_default()).unwrap();
         assert_eq!(keys(&m), vec!["lf.md", "link/f.md", "real/f.md"]);
+    }
+    #[test] fn a_guarded_folder_lets_only_its_allowed_part_through_whatever_the_case() {
+        let f = Filter { guarded: vec![s("System")], only: vec![s("System/rules"), s("System/reminders.md")], prefixes: vec![s("Private")], ..Default::default() };
+        for p in ["System/settings.json", "System/hooks/x.sh", "System/scripts/b.py", "system/hooks/x.sh", "System/Hooks/x.sh", "\u{17F}ystem/settings.json", "System/rulesx/a.md", "private/a.md"] { assert!(f.skips(p, false), "{p}"); }
+        for p in ["System/rules/a.md", "SYSTEM/Rules/a.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
+        assert!(!f.skips("System", true), "walked, to reach rules/");
+        assert!(f.skips("System/hooks", true));
+    }
+    #[test] fn no_links_stays_inside_the_root() {
+        let (t, out) = (Tmp::new("nolinks"), Tmp::new("nolinks-out"));
+        t.put("ok.md", "x");
+        out.put("secret.md", "s");
+        symlink(&out.0, t.0.join("linked")).unwrap();
+        symlink(out.0.join("secret.md"), t.0.join("lf.md")).unwrap();
+        let f = Filter { no_links: true, ..Default::default() };
+        assert_eq!(keys(&Walker::default().scan(&t.0, &f).unwrap().0), vec!["ok.md"], "nothing outside goes up");
+        // a remote file under the linked folder, or onto the linked file: refused, the outside stays as it was
+        let remote = Mem::default();
+        for p in ["linked/new.md", "lf.md"] { remote.put(p, b"from a member", 1, "").unwrap(); }
+        let (_, r) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert_eq!(r.errors.len(), 2, "{:?}", r.errors);
+        assert!(!out.0.join("new.md").exists());
+        assert_eq!(fs::read_to_string(out.0.join("secret.md")).unwrap(), "s");
     }
 
     // ---------- run

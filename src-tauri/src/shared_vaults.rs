@@ -58,21 +58,24 @@ fn base_path(data: &Path, id: &str) -> PathBuf { data.join("shared-base").join(f
 /// The server of a vault, reached with this Mac's own certificate.
 pub fn client(v: &Shared, me: &Identity) -> Client { Client::new(&v.host, v.port, &v.fp, me.clone()) }
 
-/// What a shared vault syncs: the vault's own filter, without the settings and hooks Claude Code would run for it. A
-/// member's `settings.json` or hook would otherwise run as plain code on every other member's Mac, outside the fence.
-/// `.claude` itself never goes (a link to System/ would send every file twice, and drift on a Mac where it is a real
-/// folder); where it links to a folder in the vault, that folder's settings and hooks stay here too.
+/// What a shared vault syncs. Claude Code runs what lies in a project's config folder (settings, hooks, and the
+/// scripts, skills and agents those point at) as plain code, so a member's file there would run on every other
+/// member's Mac, outside the fence. Of that folder only what the agent reads as notes goes: rules, reference, index,
+/// archive and reminders. `.claude` itself never goes (a link to System/ would send every file twice, and drift on a
+/// Mac where it is a real folder). The config folder is System/ as in a vault Relay makes, and where `.claude` links to
+/// when that is another folder in the vault; System/ also before the link resolves, on a join's first round. No round
+/// follows a symlink: one the user made in the folder would otherwise take a member's writes out of it.
 pub fn filter(folder: &Path) -> Filter {
     let mut f = Filter::vault_default();
     f.names.push(".claude".into());
+    f.no_links = true;
     let target = std::fs::read_link(folder.join(".claude")).ok().and_then(|t| {
         let full = if t.is_absolute() { t } else { folder.join(t) };
         let (real, root) = (std::fs::canonicalize(full).ok()?, std::fs::canonicalize(folder).ok()?);
         real.strip_prefix(&root).ok().map(|r| r.to_string_lossy().into_owned())
     });
-    if let Some(t) = target.filter(|t| !t.is_empty()) {
-        f.prefixes.extend(["settings.json", "settings.local.json", "hooks"].map(|x| format!("{t}/{x}")));
-    }
+    f.guarded = std::iter::once("System".to_string()).chain(target.filter(|t| !t.is_empty())).collect();
+    f.only = f.guarded.iter().flat_map(|g| ["rules", "reference", "index", "archive", "reminders.md"].map(|x| format!("{g}/{x}"))).collect();
     f
 }
 
@@ -108,6 +111,9 @@ impl Hub {
     pub fn round(&self, data: &Path, v: &Shared, me: &Identity, name: &str) -> Status {
         if !self.busy.lock().unwrap().insert(v.id.clone()) { return self.status.lock().unwrap().get(&v.id).cloned().unwrap_or_default(); }
         let mut st = Status { at: chrono::Utc::now().timestamp(), ..Default::default() };
+        // the walkers' lock before the key and the base are read: a leave (forget) either comes first, and the key is
+        // gone, or waits until this round's base is written, and removes it after
+        let mut walkers = self.walkers.lock().unwrap();
         match load_key(data, &v.id) {
             Err(e) => st.errors.push(e),
             Ok(key) => {
@@ -124,14 +130,11 @@ impl Hub {
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
-                let mut walkers = self.walkers.lock().unwrap();
                 let w = walkers.entry(v.id.clone()).or_default();
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, w, &filter(Path::new(&v.folder)), &remote, &copy, &|_| false, &guard, &|_, _| {});
                 let p = base_path(data, &v.id);
                 if let Some(d) = p.parent() { std::fs::create_dir_all(d).ok(); }
                 std::fs::write(p, serde_json::to_string(&next).unwrap_or_default()).ok();
-                // the base written under the walkers' lock: a leave (forget) waits for it and removes the base after
-                drop(walkers);
                 st.pushed = r.pushed.len() + r.deleted_remote.len();
                 st.pulled = r.pulled.len() + r.deleted_local.len();
                 st.conflicts = r.conflicts;
@@ -140,6 +143,7 @@ impl Hub {
                 st.bad = remote.bad().len();
             }
         }
+        drop(walkers);
         self.busy.lock().unwrap().remove(&v.id);
         let mut all = self.status.lock().unwrap();
         let prev = all.remove(&v.id).unwrap_or_default();
@@ -157,6 +161,9 @@ impl Hub {
     /// the side that still has it.
     pub fn restore_held(&self, data: &Path, id: &str, seen: &[String]) {
         let held: Vec<String> = { let mut all = self.status.lock().unwrap(); let Some(s) = all.get_mut(id) else { return }; s.held.retain(|h| !seen.contains(h)); seen.to_vec() };
+        // under the walkers' lock, as a round writes the base: a round running now would overwrite the restore, a leave
+        // would see it write a base back after removing it
+        let _walkers = self.walkers.lock().unwrap();
         let p = base_path(data, id);
         let Some(mut base) = std::fs::read_to_string(&p).ok().and_then(|s| serde_json::from_str::<Manifest>(&s).ok()) else { return };
         for h in &held { base.remove(h); }
@@ -247,6 +254,10 @@ pub async fn shared_vault_join(app: tauri::AppHandle, state: St<'_>, link: Strin
     let s = state.settings.lock().unwrap().clone();
     let folder = real_path(&folder)?;
     check_folder(&folder, &taken(&s), true)?;
+    // a vault this Mac is in already: joining again would wipe its key, base and trash below and leave its folder unsynced
+    if let Some(had) = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.vault).and_then(|id| find(&s, &id.to_ascii_lowercase()).ok()) {
+        return Err(format!("this Mac is in {} already, at {}", had.name, had.folder));
+    }
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
     let (line, joined, key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
     if !valid_id(&joined.id) { return Err(format!("not a vault id: {:?}", joined.id)); }
@@ -312,9 +323,14 @@ pub async fn shared_vault_remove(app: tauri::AppHandle, state: St<'_>, id: Strin
 
 /// The held deletes of a vault the user saw (`paths`): let them through in its next round, or put the files back.
 #[tauri::command]
-pub fn shared_vault_held(app: tauri::AppHandle, state: St, id: String, allow: bool, paths: Vec<String>) {
-    if allow { state.shared.allow_deletes(&id, paths); } else { state.shared.restore_held(&crate::data_dir(&app), &id, &paths); }
+pub async fn shared_vault_held(app: tauri::AppHandle, state: St<'_>, id: String, allow: bool, paths: Vec<String>) -> Result<(), String> {
+    if allow { state.shared.allow_deletes(&id, paths); } else {
+        // restore waits for a running round of this vault (the walkers' lock): not on the main thread
+        let a = app.clone();
+        tauri::async_runtime::spawn_blocking(move || tauri::Manager::state::<crate::App>(&a).shared.restore_held(&crate::data_dir(&a), &id, &paths)).await.map_err(|e| e.to_string())?;
+    }
     sync_now();
+    Ok(())
 }
 
 #[cfg(test)]
@@ -339,11 +355,17 @@ mod tests {
         std::fs::create_dir_all(tmp.join("System/hooks")).unwrap();
         std::os::unix::fs::symlink("System", tmp.join(".claude")).unwrap();
         let f = filter(&tmp);
-        for p in ["System/settings.json", "System/settings.local.json", "System/hooks/check.sh", ".claude/rules/x.md"] { assert!(f.skips(p, false), "{p}"); }
-        for p in ["System/rules/core/work-state.md", "System/skills/a/SKILL.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
-        // without a link: .claude still never goes
+        for p in ["System/settings.json", "System/settings.local.json", "System/hooks/check.sh", ".claude/rules/x.md", "System/scripts/build-index.py",
+            "System/skills/a/SKILL.md", "System/agents/a.md", "system/Hooks/check.sh", "System/Settings.json"] { assert!(f.skips(p, false), "{p}"); }
+        for p in ["System/rules/core/work-state.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
+        // a join's first round: the link points at a System/ that is not there yet, and System/ is still held back
+        let fresh = tmp.join("fresh");
+        std::fs::create_dir_all(&fresh).unwrap();
+        std::os::unix::fs::symlink("System", fresh.join(".claude")).unwrap();
+        assert!(filter(&fresh).skips("System/hooks/check.sh", false) && filter(&fresh).skips("System/settings.json", false));
+        // without a link: .claude still never goes, nor System/'s settings
         std::fs::remove_file(tmp.join(".claude")).unwrap();
-        assert!(filter(&tmp).skips(".claude/settings.json", false) && !filter(&tmp).skips("System/settings.json", false));
+        assert!(filter(&tmp).skips(".claude/settings.json", false) && filter(&tmp).skips("System/settings.json", false));
         std::fs::remove_dir_all(&tmp).ok();
     }
     #[test]

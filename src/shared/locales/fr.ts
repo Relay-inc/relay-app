@@ -883,7 +883,6 @@ export default {
     "{n} suppression retenue : beaucoup de fichiers partiraient d'un coup. Rien n'est supprimé avant votre choix :",
   "set.sharedHeld_other":
     "{n} suppressions retenues : beaucoup de fichiers partiraient d'un coup. Rien n'est supprimé avant votre choix :",
-  "set.sharedHeldMore": "et {n} de plus",
   "set.sharedHeldRestore": "Les remettre",
   "set.sharedHeldDelete": "Les supprimer",
   "set.sharedHeldAllowed": "Les fichiers partent au prochain tour.",
