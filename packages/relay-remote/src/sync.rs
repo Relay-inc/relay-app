@@ -45,9 +45,16 @@ impl Filter {
             || (!is_dir && rel.rsplit('/').next().is_some_and(|n| n.starts_with(TMP)))
     }
 }
-/// A name as APFS compares it, close enough for matching ASCII names: lowercase, and the two non-ASCII letters that fold
-/// into ASCII (ſ, the Kelvin sign) as the letter they fold to, so `ſystem/Settings.json` still is `System/settings.json`.
-fn fold(s: &str) -> String { s.chars().map(|c| match c { '\u{17F}' => 's', '\u{212A}' => 'k', c => c.to_ascii_lowercase() }).collect() }
+/// A name as APFS compares it, exact for ASCII names: lowercase, plus every character whose Unicode full case folding is
+/// ASCII (ſ, the Kelvin sign, ß and ẞ, the ff/fi/fl/ffi/ffl/st ligatures), so `Syﬆem/Settings.json` still is
+/// `System/settings.json`. Others fold to something non-ASCII, which no ASCII name can equal.
+fn fold(s: &str) -> String {
+    s.chars().map(|c| match c {
+        '\u{17F}' => "s", '\u{212A}' => "k", '\u{DF}' | '\u{1E9E}' => "ss", '\u{FB00}' => "ff", '\u{FB01}' => "fi", '\u{FB02}' => "fl",
+        '\u{FB03}' => "ffi", '\u{FB04}' => "ffl", '\u{FB05}' | '\u{FB06}' => "st",
+        c => return c.to_ascii_lowercase().to_string(),
+    }.to_string()).collect()
+}
 
 /// Scans a root, rehashing only files whose (size, mtime) changed since the last scan.
 #[derive(Default)]
@@ -254,11 +261,15 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
         if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
         else if !filter.skips(&p, false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
     }
-    if !base.is_empty() && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
+    // with no_links, a path behind a link here stays as it is on both sides: not followed, and not read as deleted
+    // either (a vault synced before no_links has such paths in its base, and the server would lose them)
+    let linked: BTreeSet<String> = if filter.no_links { base.keys().chain(rm.keys()).filter(|p| through_link(root, p)).cloned().collect() } else { BTreeSet::new() };
+    if base.keys().any(|p| !linked.contains(p)) && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
         rep.errors.push(format!("{} side is empty while the last sync had {} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }, base.len()));
         return (base.clone(), rep);
     }
     // too big or unsyncable on either side: out of this round on both, or a file grown past the limit would read as deleted
+    skipped.extend(linked);
     let hold: BTreeSet<String> = skipped.iter().cloned().collect();
     local.retain(|p, _| !hold.contains(p));
     rm.retain(|p, _| !hold.contains(p));
@@ -529,7 +540,7 @@ mod tests {
     }
     #[test] fn a_guarded_folder_lets_only_its_allowed_part_through_whatever_the_case() {
         let f = Filter { guarded: vec![s("System")], only: vec![s("System/rules"), s("System/reminders.md")], prefixes: vec![s("Private")], ..Default::default() };
-        for p in ["System/settings.json", "System/hooks/x.sh", "System/scripts/b.py", "system/hooks/x.sh", "System/Hooks/x.sh", "\u{17F}ystem/settings.json", "System/rulesx/a.md", "private/a.md"] { assert!(f.skips(p, false), "{p}"); }
+        for p in ["System/settings.json", "System/hooks/x.sh", "System/scripts/b.py", "system/hooks/x.sh", "System/Hooks/x.sh", "\u{17F}ystem/settings.json", "Sy\u{FB06}em/settings.json", "Sy\u{FB05}em/hooks/x.sh", "System/rulesx/a.md", "private/a.md"] { assert!(f.skips(p, false), "{p}"); }
         for p in ["System/rules/a.md", "SYSTEM/Rules/a.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
         assert!(!f.skips("System", true), "walked, to reach rules/");
         assert!(f.skips("System/hooks", true));
@@ -542,13 +553,28 @@ mod tests {
         symlink(out.0.join("secret.md"), t.0.join("lf.md")).unwrap();
         let f = Filter { no_links: true, ..Default::default() };
         assert_eq!(keys(&Walker::default().scan(&t.0, &f).unwrap().0), vec!["ok.md"], "nothing outside goes up");
-        // a remote file under the linked folder, or onto the linked file: refused, the outside stays as it was
+        // a remote file under the linked folder, or onto the linked file: held, the outside stays as it was
         let remote = Mem::default();
         for p in ["linked/new.md", "lf.md"] { remote.put(p, b"from a member", 1, "").unwrap(); }
         let (_, r) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
-        assert_eq!(r.errors.len(), 2, "{:?}", r.errors);
+        assert!(r.errors.is_empty() && r.pulled.is_empty(), "{r:?}");
+        assert!(["linked/new.md", "lf.md"].iter().all(|p| r.skipped.contains(&p.to_string())), "{:?}", r.skipped);
         assert!(!out.0.join("new.md").exists());
         assert_eq!(fs::read_to_string(out.0.join("secret.md")).unwrap(), "s");
+    }
+    #[test] fn no_links_keeps_what_synced_through_a_link_before() {
+        // a vault synced while links were followed: its base and the server hold linked/a.md
+        let (t, out) = (Tmp::new("nolinks-base"), Tmp::new("nolinks-base-out"));
+        t.put("ok.md", "x");
+        out.put("a.md", "a");
+        symlink(&out.0, t.0.join("linked")).unwrap();
+        let remote = Mem::default();
+        let (base, _) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &Filter::default(), &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(base.contains_key("linked/a.md") && remote.get("linked/a.md").is_ok());
+        let f = Filter { no_links: true, ..Default::default() };
+        let (next, r) = run(Mode::TwoWay, &t.0, &base, &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(r.deleted_remote.is_empty() && r.errors.is_empty(), "{r:?}");
+        assert!(remote.get("linked/a.md").is_ok() && next.contains_key("linked/a.md"), "left alone on both sides");
     }
 
     // ---------- run
