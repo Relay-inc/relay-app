@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.35] - 2026-10-26
+
 ### Added
 
 - **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder (#267)
@@ -24,7 +26,7 @@ a PR. Versions follow
 
 ### Fixed
 
-- **A vault note fills the drawer**: the note stayed 520 px wide in a wider drawer, and a table's narrow columns broke their words per letter ("Poi nts"). The note now takes the drawer's width and a column is never narrower than its longest word, also in a conversation's tables
+- **A vault note fills the drawer**: the note stayed 520 px wide in a wider drawer, and a table's narrow columns broke their words per letter ("Poi nts"). The note now takes the drawer's width and a column is never narrower than its longest word, also in a conversation's tables (#271)
 - **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead (#265)
 
 ## [0.0.34] - 2026-10-26
@@ -624,7 +626,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...HEAD
+[0.0.35]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32
