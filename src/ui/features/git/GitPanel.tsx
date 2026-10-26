@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { writtenPaths, type GitFile, type GitRepo } from "../../../domain/git/git";
 import type { OpenCommit } from "../../../domain/git/graph";
-import { anchorOf, parsePatch } from "../../../domain/pull-requests/diff";
+import { anchorOf, parsePatch, splitRows, type DiffLine } from "../../../domain/pull-requests/diff";
 import { useNavigationStore } from "../../../application/navigation/store";
 import { useConversationsStore } from "../../../application/conversations/store";
 import { selectedProject } from "../../../application/conversations/selectors";
@@ -27,6 +27,7 @@ import {
   stagedRepos,
   suggestMessage,
   toggleFold,
+  toggleSplit,
   toggleStaged,
 } from "../../../application/git/git";
 import { useDerived } from "../../hooks/useDerived";
@@ -135,6 +136,7 @@ export function GitPanel() {
                 first={at <= 0}
                 last={at >= all.length - 1}
                 onStep={step}
+                link={<SplitToggle />}
                 onClose={() => openFile("", "")}
               />
               <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-4 pb-6">
@@ -173,6 +175,7 @@ function CommitWindow({ open }: { open: OpenCommit }) {
         first={at <= 0}
         last={!files || at >= files.length - 1}
         onStep={by => showCommitFile(at + by)}
+        link={<SplitToggle />}
         onClose={closeCommit}
       />
       <div className="flex-1 min-h-0 flex">
@@ -492,7 +495,22 @@ function Group({
   );
 }
 
-/** A file's diff, every changed line open to a comment for the agent; `readOnly` (a commit of the log) without. */
+/** The header's switch between the diff side by side and as one column. */
+function SplitToggle() {
+  const { t } = useT();
+  const split = useGitStore(s => s.split);
+  return (
+    <button className="btn-icon" title={split ? t("git.unified") : t("git.split")} onClick={toggleSplit}>
+      <Icon name={split ? "rows" : "columns"} className="glyph size-4" />
+    </button>
+  );
+}
+
+// a line's number column, its sign and its text, as one column or as one side of the side-by-side view
+const SIGN = { add: "+", del: "−", ctx: "" };
+
+/** A file's diff, every changed line open to a comment for the agent; `readOnly` (a commit of the log) without. Side
+ *  by side the old file is on the left and the new one on the right, long lines wrap so the two sides stay level. */
 function FileDiff({
   repo,
   file,
@@ -504,8 +522,104 @@ function FileDiff({
 }) {
   const { t } = useT();
   const lines = useMemo(() => parsePatch(file.patch), [file.patch]);
+  const split = useGitStore(s => s.split);
+  const rows = useMemo(() => splitRows(lines), [lines]);
   const { line: picked, draft } = useGitStore();
   const comments = (useGitStore(s => s.comments[s.key]) ?? []).filter(c => c.repo === repo && c.path === file.path);
+  const keyOf = (line: DiffLine | null) => {
+    const anchor = line && !readOnly ? anchorOf(line) : null;
+    return anchor ? `${anchor.side}:${anchor.line}` : "";
+  };
+  const bgOf = (line: DiffLine | null) =>
+    line && keyOf(line) && picked === keyOf(line)
+      ? "bg-accent-soft shadow-[inset_3px_0_0_var(--color-accent)]"
+      : line?.kind === "add"
+        ? "bg-add-bg"
+        : line?.kind === "del"
+          ? "bg-del-bg"
+          : line?.kind === "hunk"
+            ? "bg-fill text-tertiary"
+            : line
+              ? ""
+              : "bg-fill";
+  // the comments on a line and, when it is the picked one, the box to write one
+  const thread = (line: DiffLine | null) => {
+    const anchor = line ? anchorOf(line) : null;
+    if (!line || !anchor) return null;
+    const key = keyOf(line);
+    const mine = comments.filter(c => c.side === anchor.side && c.line === anchor.line);
+    return (
+      <>
+        {mine.map(c => (
+          <div
+            key={c.id}
+            className="sticky left-0 w-[100cqw] flex items-start gap-2.5 py-2.5 pr-3.5 pl-22.5 bg-accent-soft border-y border-separator font-sans text-[13px] leading-normal"
+          >
+            <span className="flex-1 whitespace-pre-wrap">{c.body}</span>
+            <button
+              className="text-xs text-secondary cursor-pointer hover:text-label"
+              onClick={() => removeComment(c.id)}
+            >
+              {t("today.remove")}
+            </button>
+          </div>
+        ))}
+        {key && picked === key ? (
+          <div className="sticky left-0 w-[100cqw] flex flex-col gap-2 pt-2.5 pb-3 pr-3.5 pl-22.5 bg-accent-soft font-sans text-[13px]">
+            <textarea
+              autoFocus
+              rows={2}
+              value={draft}
+              onChange={e => setLineDraft(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  addComment(repo, file.path, anchor.side, anchor.line, line.text);
+                }
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  pickLine(key);
+                }
+              }}
+              placeholder={t("git.linePlaceholder", { n: anchor.line })}
+              className="px-2.5 py-1.5 rounded-lg border border-separator-strong bg-raised text-[13px] outline-0 resize-none"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                className="h-7 px-2.5 rounded-[7px] text-xs font-medium text-secondary cursor-pointer"
+                onClick={() => pickLine(key)}
+              >
+                {t("review.cancel")}
+              </button>
+              <button
+                disabled={!draft.trim()}
+                className="h-7 px-2.5 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer disabled:opacity-50"
+                onClick={() => addComment(repo, file.path, anchor.side, anchor.line, line.text)}
+              >
+                {t("git.add")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </>
+    );
+  };
+  // one side of a side-by-side row: the old (left) or new (right) number, the sign, the text
+  const half = (line: DiffLine | null, side: "old" | "new") => {
+    const key = keyOf(line);
+    return (
+      <div
+        onClick={() => key && pickLine(key)}
+        className={`grid grid-cols-[36px_18px_minmax(0,1fr)] ${key ? "cursor-pointer" : ""} ${bgOf(line)}`}
+      >
+        <span className="text-right pr-2 text-tertiary">{line && line.kind !== "hunk" ? (line[side] ?? "") : ""}</span>
+        <span className={line?.kind === "add" ? "text-add-fg" : "text-del-fg"}>
+          {line && line.kind !== "hunk" ? SIGN[line.kind] : ""}
+        </span>
+        <span className="whitespace-pre-wrap wrap-anywhere pr-3">{line && line.kind !== "hunk" ? line.text : ""}</span>
+      </div>
+    );
+  };
   return (
     <div className="flex flex-col gap-2 select-text">
       {file.binary || !lines.length ? (
@@ -516,91 +630,46 @@ function FileDiff({
           {/* long lines scroll sideways; every row is as wide as the widest, so the colours run through */}
           <div className="shrink-0 border border-separator rounded-[10px] overflow-x-auto overflow-y-hidden font-mono text-xs leading-5.5 [container-type:inline-size]">
             <div className="w-max min-w-full flex flex-col">
-              {lines.map((line, i) => {
-                const anchor = anchorOf(line);
-                const key = anchor && !readOnly ? `${anchor.side}:${anchor.line}` : "";
-                const on = !!key && picked === key;
-                const mine = anchor ? comments.filter(c => c.side === anchor.side && c.line === anchor.line) : [];
-                const bg = on
-                  ? "bg-accent-soft shadow-[inset_3px_0_0_var(--color-accent)]"
-                  : line.kind === "add"
-                    ? "bg-add-bg"
-                    : line.kind === "del"
-                      ? "bg-del-bg"
-                      : line.kind === "hunk"
-                        ? "bg-fill text-tertiary"
-                        : "";
-                return (
-                  <div key={i}>
-                    <div
-                      onClick={() => key && pickLine(key)}
-                      className={`grid grid-cols-[36px_36px_18px_minmax(0,1fr)] ${key ? "cursor-pointer" : ""} ${bg}`}
-                    >
-                      <span className="text-right pr-2 text-tertiary">
-                        {line.kind === "hunk" ? "" : (line.old ?? "")}
-                      </span>
-                      <span className="text-right pr-2 text-tertiary">
-                        {line.kind === "hunk" ? "" : (line.new ?? "")}
-                      </span>
-                      <span className={line.kind === "add" ? "text-add-fg" : "text-del-fg"}>
-                        {line.kind === "add" ? "+" : line.kind === "del" ? "−" : ""}
-                      </span>
-                      <span className="whitespace-pre pr-4">{line.text}</span>
-                    </div>
-                    {mine.map(c => (
-                      <div
-                        key={c.id}
-                        className="sticky left-0 w-[100cqw] flex items-start gap-2.5 py-2.5 pr-3.5 pl-22.5 bg-accent-soft border-y border-separator font-sans text-[13px] leading-normal"
-                      >
-                        <span className="flex-1 whitespace-pre-wrap">{c.body}</span>
-                        <button
-                          className="text-xs text-secondary cursor-pointer hover:text-label"
-                          onClick={() => removeComment(c.id)}
-                        >
-                          {t("today.remove")}
-                        </button>
+              {split
+                ? rows.map((row, i) =>
+                    row.kind === "hunk" ? (
+                      <div key={i} className="pl-3 bg-fill text-tertiary whitespace-pre-wrap wrap-anywhere w-[100cqw]">
+                        {row.text}
                       </div>
-                    ))}
-                    {on && anchor && line.kind !== "hunk" ? (
-                      <div className="sticky left-0 w-[100cqw] flex flex-col gap-2 pt-2.5 pb-3 pr-3.5 pl-22.5 bg-accent-soft font-sans text-[13px]">
-                        <textarea
-                          autoFocus
-                          rows={2}
-                          value={draft}
-                          onChange={e => setLineDraft(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              addComment(repo, file.path, anchor.side, anchor.line, line.text);
-                            }
-                            if (e.key === "Escape") {
-                              e.stopPropagation();
-                              pickLine(key);
-                            }
-                          }}
-                          placeholder={t("git.linePlaceholder", { n: anchor.line })}
-                          className="px-2.5 py-1.5 rounded-lg border border-separator-strong bg-raised text-[13px] outline-0 resize-none"
-                        />
-                        <div className="flex justify-end gap-2">
-                          <button
-                            className="h-7 px-2.5 rounded-[7px] text-xs font-medium text-secondary cursor-pointer"
-                            onClick={() => pickLine(key)}
-                          >
-                            {t("review.cancel")}
-                          </button>
-                          <button
-                            disabled={!draft.trim()}
-                            className="h-7 px-2.5 rounded-[7px] bg-accent text-on-accent text-xs font-medium cursor-pointer disabled:opacity-50"
-                            onClick={() => addComment(repo, file.path, anchor.side, anchor.line, line.text)}
-                          >
-                            {t("git.add")}
-                          </button>
+                    ) : (
+                      <div key={i} className="w-[100cqw]">
+                        <div className="grid grid-cols-2 divide-x divide-separator">
+                          {half(row.left, "old")}
+                          {half(row.right, "new")}
                         </div>
+                        {thread(row.left)}
+                        {row.right !== row.left ? thread(row.right) : null}
                       </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                    ),
+                  )
+                : lines.map((line, i) => {
+                    const key = keyOf(line);
+                    return (
+                      <div key={i}>
+                        <div
+                          onClick={() => key && pickLine(key)}
+                          className={`grid grid-cols-[36px_36px_18px_minmax(0,1fr)] ${key ? "cursor-pointer" : ""} ${bgOf(line)}`}
+                        >
+                          <span className="text-right pr-2 text-tertiary">
+                            {line.kind === "hunk" ? "" : (line.old ?? "")}
+                          </span>
+                          <span className="text-right pr-2 text-tertiary">
+                            {line.kind === "hunk" ? "" : (line.new ?? "")}
+                          </span>
+                          <span className={line.kind === "add" ? "text-add-fg" : "text-del-fg"}>
+                            {line.kind === "hunk" ? "" : SIGN[line.kind]}
+                          </span>
+                          <span className="whitespace-pre pr-4">{line.text}</span>
+                        </div>
+                        {line.kind === "hunk" ? null : thread(line)}
+                      </div>
+                    );
+                  })}
             </div>
           </div>
         </>
