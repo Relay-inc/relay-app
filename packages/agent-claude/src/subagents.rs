@@ -48,6 +48,14 @@ fn agent_row(path: &std::path::Path) -> Value {
             let stop = last["message"]["stop_reason"].as_str();
             row["ended"] = json!(last["type"] == "assistant" && stop.is_some_and(|s| s != "tool_use"));
         }
+        // the context of its latest request, and whether that answer hit the output limit
+        if let Some(a) = msgs.iter().rev().find(|e| e["type"] == "assistant") {
+            let u = &a["message"]["usage"];
+            let n = |k: &str| u[k].as_u64().unwrap_or(0);
+            let ctx = n("input_tokens") + n("cache_read_input_tokens") + n("cache_creation_input_tokens") + n("output_tokens");
+            if ctx > 0 { row["ctx"] = json!(ctx); }
+            row["cut"] = json!(a["message"]["stop_reason"] == "max_tokens");
+        }
         let step = msgs.iter().rev().filter(|e| e["type"] == "assistant")
             .flat_map(|e| e["message"]["content"].as_array().into_iter().flatten().rev())
             .find(|c| c["type"] == "tool_use" || (c["type"] == "text" && c["text"].as_str().is_some_and(|t| !t.trim().is_empty())));

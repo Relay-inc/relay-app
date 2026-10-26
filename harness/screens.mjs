@@ -406,6 +406,33 @@ const VIEWS = {
     await waitText("Compare these with the plan");
     await settle(page, 300);
   },
+  // the end of a turn says what the turn did and cost: edits, failed tools, agents, USD (PR: turn receipt)
+  "conversation-receipt": async () => {
+    await open(page, server.url, { sel: keys.switchTo });
+    await waitText(markers.switchEnd);
+    await page.evaluate(key => {
+      const h = window.__harness;
+      const call = (id, name, input) => h.emitAgent(key, { type: "tool_call", id, name, input });
+      const done = (id, error = false) => h.emitAgent(key, { type: "tool_result", id, error });
+      call("r1", "Edit", { file_path: "/Users/demo/projects/app/src/sync.ts" });
+      done("r1");
+      call("r2", "Write", { file_path: "/Users/demo/projects/app/src/sync.test.ts" });
+      done("r2");
+      call("r3", "Bash", { command: "pnpm test" });
+      done("r3", true);
+      call("r4", "Agent", { description: "Verify the totals", subagent_type: "verifier" });
+      done("r4");
+      h.emitAgent(key, { type: "text", text: "Fixed the double booking and added a test.", delta: false });
+      h.emitAgent(key, {
+        type: "turn_end",
+        ok: true,
+        usage: { input: 10, output: 900, cacheRead: 52000, cacheWrite: 4000, cost: 0.37 },
+        duration_ms: 84000,
+      });
+    }, keys.switchTo);
+    await waitText("Fixed the double booking and added a test.");
+    await settle(page, 300);
+  },
   // a message sent while Claude works waits under the conversation until Claude reads it (PR: waiting messages)
   "conversation-unread": async () => {
     await open(page, server.url, { sel: keys.switchTo });

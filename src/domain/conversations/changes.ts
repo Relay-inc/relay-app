@@ -24,7 +24,7 @@ export type LineComment = {
   body: string;
 };
 
-const FILE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+export const FILE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 
 /** The absolute paths a conversation's file tools wrote to: where to look for its repos. */
 export function writtenPaths(items: Item[] | undefined): string[] {

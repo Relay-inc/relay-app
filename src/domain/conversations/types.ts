@@ -51,6 +51,8 @@ export type Item = {
   end?: number;
   /** the change a file tool made, with line numbers, when the provider reports it (Claude Code) */
   hunks?: Hunk[];
+  /** the end of a turn: what the turn did, and what it cost when the provider says (USD) */
+  receipt?: { edits: number; errors: number; agents: number; cost?: number };
 };
 export type Chat = {
   key: string;
@@ -89,6 +91,9 @@ export type Sub = {
   tool?: string;
   input?: ToolInput;
   text?: string;
+  /** the context of its latest request, in tokens, and whether that answer stopped at the output limit (Claude Code) */
+  ctx?: number;
+  cut?: boolean;
 };
 /** A session open in the terminal (not started by the app), with the project snapshot.rs read from its transcript. */
 export type TerminalSession = {
