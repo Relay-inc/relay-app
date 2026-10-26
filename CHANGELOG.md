@@ -16,6 +16,13 @@ a PR. Versions follow
 ### Added
 
 - **Find in a conversation**: ⌘F (or ⌃F) opens a find bar above the open conversation. Every match is marked, ↵ and ⇧↵ walk them with a count like "3 of 12", Esc closes it. It searches what the conversation shows, so the text inside a folded step is left out until you open it. The keys are in Settings › Shortcuts (#261)
+### Changed
+
+- **The context meter stands out**: the percentage next to the model pick gets a ring that fills up. It turns orange from 70% and red from 90%, where it was grey until 90% (#262)
+
+### Fixed
+
+- **The context meter counts against the right window after a restart**: a conversation on a 1M model, read again from its transcript, counted against 200k until its next turn ended, so 300k showed as 100% in red. The conversation now keeps the window its last turn reported, and without one, more than 200k counts as a 1M window (#262)
 
 ## [0.0.33] - 2026-10-24
 
