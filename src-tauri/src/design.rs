@@ -343,8 +343,10 @@ const QUESTION: &str = r#"const q = () => {
   const submit = [...root.querySelectorAll("button")].filter(b => !opts.some(o => o.contains(b)) && (/^(submit|send|continue|next|done|answer|verstuur|verzend|doorgaan|volgende|klaar|beantwoord)/i.test(b.innerText.trim())
     // an icon-only button by its exact label: "Next question" pages a card, it does not submit it
     || /^(submit|send|verstuur|verzend)$/i.test(b.getAttribute("aria-label") || ""))).pop();
-  const step = (root.innerText.match(/Question \d+ of \d+/) || [])[0];
-  return { root, opts, submit, step, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
+  const step = (root.innerText.match(/\d+ of \d+/) || [])[0];
+  // which question this is: ticking an option changes the form's text ("2 selected"), not this
+  const key = groups.map(g => [g.question, ...g.options].join("|")).join("\n");
+  return { root, opts, submit, step, key, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
 };"#;
 
 /// What the chat shows now: the assistant's messages, whether a turn runs and the open question, if any.
@@ -352,7 +354,7 @@ fn state(view: &Webview) -> Result<Value, String> {
     let js = format!(r#"(() => {{ {QUESTION}
       const m = [...document.querySelectorAll('[data-testid="assistant-message"]')], o = q();
       return {{ count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"],button[aria-label="Stop response"]'), text: m.length ? m[m.length - 1].innerText : "",
-        question: o && {{ form: o.form, step: o.step, questions: o.groups, free_text: o.free_text, submit: o.submit && (o.submit.innerText.trim() || o.submit.getAttribute("aria-label")) }} }}; }})()"#);
+        question: o && {{ form: o.form, step: o.step, key: o.key, questions: o.groups, free_text: o.free_text, submit: o.submit && (o.submit.innerText.trim() || o.submit.getAttribute("aria-label")) }} }}; }})()"#);
     eval(view, &js)
 }
 
@@ -394,10 +396,10 @@ fn answer(view: &Webview, q: &Value, text: &str) -> Result<(), String> {
     // the submit button may take a moment to enable; a form without one (an option click advanced it) is left to the wait
     let submit = format!(r#"(() => {{ {QUESTION}
       const o = q();
-      if (!o || o.form !== {}) return "advanced";
+      if (!o || o.key !== {}) return "advanced";
       if (!o.submit) return "no button";
       if (o.submit.disabled || o.submit.getAttribute("aria-disabled") === "true") return "disabled";
-      o.submit.click(); return "sent"; }})()"#, json!(q["form"]));
+      o.submit.click(); return "sent"; }})()"#, json!(q["key"]));
     poll(Duration::from_secs(5), Duration::from_millis(250), "", || {
         Ok(matches!(eval(view, &submit)?.as_str(), Some("sent" | "advanced" | "no button")).then_some(()))
     }).map_err(|_| "Claude Design's submit button stayed disabled: the answer is incomplete".to_string())
@@ -429,7 +431,7 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
     let asked = state(view)?;
     let (before, answered) = if asked["question"].is_object() {
         answer(view, &asked["question"], text)?;
-        (asked["count"].as_u64().unwrap_or(0), asked["question"]["form"].as_str().map(String::from))
+        (asked["count"].as_u64().unwrap_or(0), asked["question"]["key"].as_str().map(String::from))
     } else {
         let fill = format!(r#"(() => {{
       const el = document.querySelector('[data-testid="chat-input"]'), text = {};
@@ -465,7 +467,7 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
         let r = state(view)?;
         let cut = |s: &Value| s.as_str().unwrap_or("").chars().take(ANSWER_CHARS).collect::<String>();
         if r["question"].is_object() {
-            if answered.as_deref() != r["question"]["form"].as_str() {
+            if answered.as_deref() != r["question"]["key"].as_str() {
                 return Ok(Some(json!({ "waiting_for_answer": true, "untrusted_question": r["question"], "untrusted_answer": cut(&r["text"]),
                     "note": "Claude Design asks a question and waits for the answer: call design_prompt with it (an option's label per line, and/or free text), it answers instead of sending a new message. With a step (Question 1 of 3), answer only this question: the next one comes back after." })));
             }
