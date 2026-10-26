@@ -36,6 +36,8 @@ import { QuickAskView } from "../features/navigation/QuickAskView";
 import { WorkspaceView } from "../features/workspace/WorkspaceView";
 import { useGitStore } from "../../application/git/store";
 import { askDiscard, closeCommit, openFile } from "../../application/git/git";
+import { useFilesStore } from "../../application/files/store";
+import { closeView } from "../../application/files/files";
 import { ColumnResize } from "../features/navigation/ColumnResize";
 
 /** Whether an event started in a text field, wherever it sits. */
@@ -45,7 +47,7 @@ const closest = <T extends HTMLElement>(e: Event, match: (node: HTMLElement) => 
   e.composedPath().find((node): node is T => node instanceof HTMLElement && match(node));
 
 // ---------- the shortcuts that work anywhere in the main window, registered once
-// Esc closes the image, then the ticket window, a changed file's or a commit's window, then the right drawer, then a project's board or PRs, then stops the
+// Esc closes the image, then the ticket window, a changed file's, a commit's or a file's window, then the right drawer, then a project's board or PRs, then stops the
 // running turn
 function onEscape(e: KeyboardEvent) {
   const { zoom: zoomed, panel, drawer, tool, projectPanel, quickAsk, selected } = useNavigationStore.getState();
@@ -72,6 +74,11 @@ function onEscape(e: KeyboardEvent) {
   if (useGitStore.getState().commit) {
     e.preventDefault();
     closeCommit();
+    return;
+  }
+  if (useFilesStore.getState().view) {
+    e.preventDefault();
+    closeView();
     return;
   }
   // Esc in a terminal or a note is theirs (vim, a shell prompt): it neither closes the drawer nor stops the turn

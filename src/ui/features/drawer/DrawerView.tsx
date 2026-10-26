@@ -11,6 +11,7 @@ import { TerminalsPanel } from "../terminals/TerminalsPanel";
 import { ScratchPanel } from "../scratch/ScratchPanel";
 import { WorkersColumn } from "../orchestrator/WorkersColumn";
 import { GitPanel } from "../git/GitPanel";
+import { FilesPanel } from "../files/FilesPanel";
 import { DesignPanel } from "../design/DesignPanel";
 import { AgentsColumn } from "../agents/AgentsColumn";
 import "../../styles/navigation.css";
@@ -22,11 +23,12 @@ const TITLES = {
   design: "drawer.design",
   workers: "nav.orch",
   git: "drawer.git",
+  files: "drawer.files",
   agents: "agents.column",
 } as const;
 
 /** The right drawer, open on demand: a note's detail, one of the project's tools (terminals, notes), the
- *  project's git repos, or the orchestrator's workers next to its coordinator. */
+ *  project's git repos or its folders, or the orchestrator's workers next to its coordinator. */
 export function DrawerView({ className, drawer }: { className: string; drawer: Exclude<Drawer, ""> }) {
   const { t } = useT();
   const escape = useKeyLabel("app.escape");
@@ -68,6 +70,7 @@ export function DrawerView({ className, drawer }: { className: string; drawer: E
           {drawer === "detail" ? <PanelDetail /> : null}
           {drawer === "workers" ? <WorkersColumn /> : null}
           {drawer === "git" ? <GitPanel /> : null}
+          {drawer === "files" ? <FilesPanel /> : null}
           {drawer === "agents" ? <AgentsColumn /> : null}
         </div>
       </div>

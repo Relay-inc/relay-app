@@ -311,6 +311,7 @@ export default {
   "note.linked": "Verlinkte Notizen",
   "note.properties": "Eigenschaften",
   "drawer.git": "Git",
+  "drawer.files": "Dateien",
   "git.noRepos":
     "Kein Git-Repo dieses Projekts auf diesem Mac. Worktrees, die das Gespräch anlegt, erscheinen hier auch.",
   "git.refresh": "Aktualisieren",
@@ -339,6 +340,9 @@ export default {
   "git.logEmpty": "Noch keine Commits.",
   "git.allBranches": "Alle Branches",
   "git.noFiles": "Keine Dateien geändert.",
+  "files.refresh": "Neu lesen",
+  "files.empty": "Leerer Ordner",
+  "files.cut": "Nur die ersten {n} Zeilen werden gezeigt.",
   "git.pull": "Pull (nur Fast-Forward)",
   "git.pullRepo": "Pull {repo}",
   "git.ahead": "Nicht gepusht: {n}",
