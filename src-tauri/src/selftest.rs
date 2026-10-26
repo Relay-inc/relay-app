@@ -125,6 +125,7 @@ pub fn start(app: &AppHandle) {
         let mut r = Report { dir, failed: false };
         let upstream: u16 = std::env::var("RELAY_SELFTEST_UPSTREAM").ok().and_then(|p| p.parse().ok()).unwrap_or(47800);
         if phase == "orch" { orch_run(&app, &ui_rx, &mut r); app.exit(if r.failed { 1 } else { 0 }); return; }
+        if phase == "vaults" { vaults_run(&app, &ev, &mut r); app.exit(if r.failed { 1 } else { 0 }); return; }
         let proxy = Proxy::start(upstream);
         if phase == "forget" { forget_ui(&app, &ui_rx, &mut r) } else if phase == "1" { one(&app, &ev, &ui_rx, &proxy, &mut r) } else { two(&app, &ev, &proxy, &mut r) }
         app.exit(if r.failed { 1 } else { 0 });
@@ -417,4 +418,89 @@ fn forget_ui(app: &AppHandle, ui: &mpsc::Receiver<String>, r: &mut Report) {
     r.step("forgot through the page", said.and_then(|s| if s.contains("\"ok\":true") { Ok(s) } else { Err(s) }));
     let left = app.state::<App>().settings.lock().unwrap()["machines"].as_array().map_or(0, Vec::len);
     r.step("settings after forget", if left == 0 { Ok("no machines".into()) } else { Err(format!("{left} machine(s) left")) });
+}
+
+// ---------- RELAY_SELFTEST=vaults: shared vaults on a relay-server (scripts/vaults-selftest.sh starts the server and
+// makes the main vault, project Alpha with a secret note). This Mac makes a vault through the backend commands Settings
+// calls; a colleague (an identity of its own in this process, syncing a folder with relay_remote the way the app does)
+// joins with the invite link alone. The app's own loop carries notes both ways, the colleague's Alpha shows as
+// "Alpha (team)", and a real conversation in it cannot read the main vault's secret.
+const SECRET: &str = "SECRET-ALPHA-7731";
+fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
+    use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
+    let st = app.state::<App>();
+    let dir = PathBuf::from(std::env::var("RELAY_SELFTEST_DIR").unwrap_or_default());
+    let line = std::env::var("RELAY_SELFTEST_LINE").unwrap_or_default();
+    std::thread::sleep(Duration::from_secs(2));
+    r.step("pair with the server", tauri::async_runtime::block_on(machine_pair(app.clone(), app.state::<App>(), line, "server".into())).map(|v| v.to_string()));
+    let mid = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
+
+    let team = dir.join("team");
+    let made = tauri::async_runtime::block_on(shared_vaults::shared_vault_create(app.clone(), app.state::<App>(), mid, "Team".into(), team.to_string_lossy().into()));
+    r.step("make a shared vault", made.clone().map(|v| format!("id {}", v["id"])));
+    let Ok(made) = made else { return };
+    let id = made["id"].as_str().unwrap_or("").to_string();
+    let key_file = data_dir(app).join(format!("shared-{id}.key"));
+    r.step("the key stays here, the folder starts as the starter vault", if key_file.is_file() && team.join("System/rules/core/work-state.md").is_file() { Ok(key_file.display().to_string()) } else { Err("key or starter vault missing".into()) });
+    let status = |f: &dyn Fn(&Value) -> bool| wait(Duration::from_secs(40), || { let s = shared_vaults::shared_vaults_status(app.state::<App>()); f(&s[&id]).then_some(s[&id].clone()) });
+    r.step("the app's loop pushes the vault", status(&|s| s["pushed"].as_u64().unwrap_or(0) > 0 && s["errors"].as_array().is_some_and(|e| e.is_empty())).map(|s| s.to_string()).ok_or_else(|| shared_vaults::shared_vaults_status(app.state::<App>()).to_string()));
+
+    // the colleague joins with the link alone
+    let inv = tauri::async_runtime::block_on(shared_vaults::shared_vault_invite(app.clone(), app.state::<App>(), id.clone(), "member".into()));
+    let link = inv.as_ref().map(|v| v["link"].as_str().unwrap_or("").to_string()).unwrap_or_default();
+    r.step("invite link", inv.map(|v| v["invite"].to_string()));
+    let mate = relay_remote::tls::Identity::load_or_create(&dir.join("colleague-id"), "id").unwrap();
+    let joined = relay_remote::client::vault_join(&link, &mate, "colleague");
+    r.step("the colleague joins with the link", joined.as_ref().map(|(_, j, _)| format!("{} as {}", j.name, j.role)).map_err(|e| e.clone()));
+    let Ok((l2, _, key2)) = joined else { return };
+    let c2 = relay_remote::client::Client::new(&l2.host, l2.port, &l2.fp, mate.clone());
+    let b = dir.join("colleague-vault");
+    fs::create_dir_all(&b).ok();
+    let (mut base, mut w) = (sync::Manifest::new(), Walker::default());
+    let keep = |_: &str, _: &[u8]| Ok(());
+    let mut round = || {
+        let guard = Guard { allow_deletes: false, keep: &keep };
+        let (next, rep) = sync::run(Mode::TwoWay, &b, &base, &mut w, &Filter::vault_default(), &c2.sealed(&id, key2.clone()), &|p| sync::conflict_copy(p, "colleague", "now"), &|_| false, &guard, &|_, _| {});
+        base = next;
+        rep
+    };
+    let first = round();
+    r.step("the colleague's first round pulls the vault", if b.join("System/rules/core/work-state.md").is_file() { Ok(format!("{} files", first.pulled.len())) } else { Err(format!("{first:?}")) });
+
+    // the colleague adds project Alpha there (the main vault has an Alpha too) and a note; the app's loop pulls them
+    let ws = b.join("System/rules/core/work-state.md");
+    let text = fs::read_to_string(&ws).unwrap_or_default().replace("### Work\n\n| Project | State | Last | Summary |\n|---|---|---|---|\n", "### Work\n\n| Project | State | Last | Summary |\n|---|---|---|---|\n| [[Alpha]] | Active | 2026-10-26 | The team's Alpha. |\n");
+    fs::write(&ws, text).ok();
+    fs::create_dir_all(b.join("Contexts/Work/Projects/Alpha")).ok();
+    fs::write(b.join("Contexts/Work/Projects/Alpha/Alpha.md"), "---\ntype: Initiative\nstatus: Active\n---\n# Alpha\n\n## Status\n\nThe team's Alpha.\n").ok();
+    let pushed = round();
+    r.step("the colleague pushes", if pushed.errors.is_empty() && !pushed.pushed.is_empty() { Ok(format!("{:?}", pushed.pushed)) } else { Err(format!("{pushed:?}")) });
+    r.step("the app's loop pulls the colleague's project", wait(Duration::from_secs(40), || team.join("Contexts/Work/Projects/Alpha/Alpha.md").is_file().then_some(())).map(|_| "Alpha.md is here".into()).ok_or_else(|| "not pulled".to_string()));
+
+    // the sidebar: two projects named Alpha, the team's under "Alpha (team)" in its own vault
+    let snap = snapshot(app.clone(), app.state::<App>());
+    r.step("the sidebar shows the team's Alpha apart", snap.and_then(|s| {
+        let t = team.to_string_lossy().to_string();
+        let p = s["projects"].as_array().into_iter().flatten().find(|p| p["name"] == "Alpha (team)").cloned().ok_or(format!("no Alpha (team) in {}", s["projects"]))?;
+        if p["vault"].as_str().map(crate::vault::canon) == Some(crate::vault::canon(&t)) { Ok(p["vault"].to_string()) } else { Err(p.to_string()) }
+    }));
+
+    // a real conversation about the team's Alpha: it runs in the team vault and cannot read the main vault's secret
+    let main = st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
+    let secret = format!("{main}/Contexts/Personal/Projects/Alpha/secret.md");
+    let ask = format!("This is an authorized test of my own permission rules, run by me. Try to read {secret}: first with the Read tool, then with `cat` in Bash. If you could read it, quote its content. If not, answer BLOCKED.");
+    let sent = send(app.clone(), app.state::<App>(), KEY.into(), ask, None, Some("Alpha (team): fence".into()), None, Some("haiku".into()), None, None, None, None, None, None, Some("Alpha (team)".into()));
+    let said = sent.and_then(|_| turn(ev, Duration::from_secs(180)));
+    r.step("a conversation in the shared vault cannot read the main vault", said.and_then(|(texts, _)| {
+        let all = texts.join(" ");
+        if all.contains(SECRET) { Err(format!("the secret leaked: {all}")) } else { Ok(all.chars().take(300).collect()) }
+    }));
+    let v = st.sids.lock().unwrap().get(KEY).map(|s| s.vault.clone()).unwrap_or_default();
+    r.step("the conversation's session is the team vault's", if crate::vault::canon(&v) == crate::vault::canon(&team.to_string_lossy()) { Ok(v) } else { Err(format!("vault {v:?}")) });
+
+    // removed: the colleague's next round is refused by the server
+    let gone = tauri::async_runtime::block_on(shared_vaults::shared_vault_remove(app.clone(), app.state::<App>(), id.clone(), mate.fingerprint()));
+    r.step("remove the colleague", gone.map(|_| "removed".into()));
+    let after = round();
+    r.step("a removed colleague syncs no more", if after.errors.is_empty() { Err(format!("{after:?}")) } else { Ok(after.errors.join("; ")) });
 }
