@@ -59,6 +59,8 @@ function openJoin(link: string) {
 export async function watchSharedVaults(show: () => void) {
   void backend.onSharedVaults(status => change(draft => void (draft.status = status)));
   void backend.onVaultInvite(link => {
+    // the backend also kept it for a window that was still starting: taken here, so a later open does not show it again
+    void backend.sharedVaultPendingInvite();
     openJoin(link);
     show();
   });

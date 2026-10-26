@@ -404,11 +404,22 @@ export function routeTo(name: string) {
   sendMsg(choice.text);
 }
 /** The bar that asks whether a general conversation is about a project: yes moves it, no hides the question. */
+/** Whether a conversation has a process in a vault already: its session, or a first message sent whose session id is
+ *  not back yet (a turn running, a message queued or in its log). Such a conversation stays in that vault. */
+function started(key: string) {
+  const c = cs();
+  return (
+    !!c.sidOf[key] ||
+    c.status[key] === "busy" ||
+    (c.queued[key] ?? 0) > 0 ||
+    (c.messages[key] ?? []).some(item => item.kind === "me")
+  );
+}
 export function moveTo(project: string | null) {
   const key = selected();
   // the offer comes after the first message: a conversation that runs cannot follow a project into another vault
   const from = cs().chats[key]?.project ?? null;
-  if (project && cs().sidOf[key] && changesVault(useWorkspaceStore.getState().snap, from, project)) {
+  if (project && started(key) && changesVault(useWorkspaceStore.getState().snap, from, project)) {
     toast(t("toast.otherVault"), undefined, undefined, 6000);
     return;
   }
@@ -434,7 +445,7 @@ export async function moveChat(key: string, project: string | null, folder: stri
   const conversation = cs().chats[key];
   if (!conversation || (conversation.project === project && (conversation.folder ?? "") === folder)) return true;
   // a started conversation keeps running in its vault: it cannot follow a project into another one
-  if (cs().sidOf[key] && changesVault(useWorkspaceStore.getState().snap, conversation.project, project)) {
+  if (started(key) && changesVault(useWorkspaceStore.getState().snap, conversation.project, project)) {
     toast(t("toast.otherVault"), undefined, undefined, 6000);
     return false;
   }
@@ -685,7 +696,7 @@ export async function saveProjectPanel(project: string | null, fields?: ProjectF
   // a started conversation keeps running in its vault: it cannot follow a project into another one (as moveChat)
   const key = selected();
   const from = cs().chats[key]?.project ?? null;
-  if (!isTerminal(key) && cs().sidOf[key] && changesVault(useWorkspaceStore.getState().snap, from, project))
+  if (!isTerminal(key) && started(key) && changesVault(useWorkspaceStore.getState().snap, from, project))
     return t("toast.otherVault");
   const next = structuredClone(settings());
   const iconProject = selectedProject(); // the project the icon fields belong to

@@ -183,6 +183,7 @@ impl Hub {
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
+                remote.know(&base);
                 let w = walkers.entry(v.id.clone()).or_default();
                 let kept = Kept::take(Path::new(&v.folder));
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, w, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
@@ -295,6 +296,9 @@ pub async fn shared_vault_create(app: tauri::AppHandle, state: St<'_>, machine: 
     }).await.map_err(|e| e.to_string())??;
     let (r, key) = made;
     if !valid_id(&r.id) { return Err(format!("the server answered an invalid vault id {:?}", r.id)); }
+    // keys, bases and trash go by id alone: a server answering with the id of a vault this Mac is in already would
+    // overwrite that vault's key and send its base against this folder
+    if list(&state.settings.lock().unwrap()).iter().any(|x| x.id == r.id) { return Err(format!("this Mac is in a vault with id {} already", r.id)); }
     let data = crate::data_dir(&app);
     save_key(&data, &r.id, &key)?;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,

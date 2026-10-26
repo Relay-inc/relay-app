@@ -124,11 +124,17 @@ struct Seen { name: String, etag: String, hash: String }
 
 /// sync::Remote over a shared vault: encrypts on put, decrypts on get, maps the plaintext hashes sync::run plans
 /// with to the server's etags (cached from the last manifest).
-pub struct SealedRemote { vault: String, key: VaultKey, call: Call, seen: Mutex<HashMap<String, Seen>>, bad: Mutex<Vec<String>> }
+pub struct SealedRemote { vault: String, key: VaultKey, call: Call, seen: Mutex<HashMap<String, Seen>>, bad: Mutex<Vec<String>>, known: Mutex<HashMap<String, Entry>> }
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> { m.lock().unwrap_or_else(|e| e.into_inner()) }
 impl SealedRemote {
     pub(crate) fn new(vault: &str, key: VaultKey, call: Call) -> SealedRemote {
-        SealedRemote { vault: vault.into(), key, call, seen: Default::default(), bad: Default::default() }
+        SealedRemote { vault: vault.into(), key, call, seen: Default::default(), bad: Default::default(), known: Default::default() }
+    }
+    /// The last round's base, so a record that will not open under a known path's name reads as that path unchanged:
+    /// left out, it would read as deleted there and be deleted on every member's Mac. A new write over it still goes
+    /// through (its etag is the broken record's).
+    pub fn know(&self, base: &Manifest) {
+        *lock(&self.known) = base.values().map(|e| (self.key.name(&e.path), e.clone())).collect();
     }
     /// The records the last manifest could not open or that sit under another path's name (`name: why`). They stay out
     /// of the sync, so one broken record never stops it; a member with the key wrote them, or the server broke them.
@@ -156,7 +162,13 @@ impl sync::Remote for SealedRemote {
         for b in blobs {
             match unhex(&b.meta).ok_or_else(|| "meta is not hex".to_string()).and_then(|meta| self.key.open_meta(&b.name, &meta)) {
                 Ok(e) => { seen.insert(e.path.clone(), Seen { name: b.name, etag: b.etag, hash: e.hash.clone() }); m.insert(e.path.clone(), e); }
-                Err(why) => bad.push(format!("{}: {why}", b.name)),
+                Err(why) => {
+                    if let Some(e) = lock(&self.known).get(&b.name).cloned() {
+                        seen.insert(e.path.clone(), Seen { name: b.name.clone(), etag: b.etag.clone(), hash: e.hash.clone() });
+                        m.insert(e.path.clone(), e);
+                    }
+                    bad.push(format!("{}: {why}", b.name));
+                }
             }
         }
         *lock(&self.seen) = seen;
@@ -373,6 +385,7 @@ mod tests {
     impl Mac {
         fn new(tag: &str, srv: &Arc<Server>, key: &VaultKey) -> Mac { Mac { t: Tmp::new(tag), base: Manifest::new(), w: Walker::default(), r: sealed(srv, key) } }
         fn round(&mut self) -> Report {
+            self.r.know(&self.base);
             let g = Guard { allow_deletes: true, allowed: &[], keep: &|_, _| Ok(()) };
             let (base, rep) = run(Mode::TwoWay, &self.t.0, &self.base, &mut self.w, &Filter::vault_default(), &self.r,
                                   &|p| conflict_copy(p, "mac-b", "2026-10-02 1530"), &|_| false, &g, &|_, _| {});
@@ -460,6 +473,24 @@ mod tests {
         assert_eq!(r.get("b.md").unwrap(), b"bb");
     }
 
+    #[test]
+    fn a_broken_record_of_a_known_file_deletes_nothing() {
+        let (srv, key) = (Arc::new(Server::default()), VaultKey::generate());
+        let (mut a, mut b) = (Mac::new("known-a", &srv, &key), Mac::new("known-b", &srv, &key));
+        a.t.put("a.md", "a");
+        a.round();
+        b.round();
+        // the server breaks a.md's record: both Macs keep their copy, nothing is deleted anywhere
+        lock(&srv.blobs).insert(key.name("a.md"), b"not a record".to_vec());
+        let r = b.round();
+        assert_eq!((r.deleted_local.len(), b.r.bad().len()), (0, 1));
+        assert_eq!(b.t.read("a.md").as_deref(), Some("a"));
+        // a new edit goes over the broken record, and the other Mac gets it
+        a.t.put("a.md", "a again");
+        assert!(a.round().errors.is_empty());
+        b.round();
+        assert_eq!(b.t.read("a.md").as_deref(), Some("a again"));
+    }
     #[test]
     fn a_broken_record_is_left_out_and_the_rest_syncs() {
         let (srv, key) = (Arc::new(Server::default()), VaultKey::generate());

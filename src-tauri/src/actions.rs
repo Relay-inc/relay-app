@@ -178,6 +178,9 @@ fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) 
     let all = items();
     let it = all.iter().find(|it| format!("{}.{}", it.ext, it.id) == action).ok_or_else(|| format!("no action '{action}', `relay help` lists them"))?;
     check_args(it.args, args)?;
+    // a shared vault's conversation reads none of the user's own mail, reminders or calendar (it may still write to them)
+    let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
+    if personal && !it.write && crate::in_shared_vault(&app.state::<crate::App>(), key) { return Err(crate::SHARED_NO_READ.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }

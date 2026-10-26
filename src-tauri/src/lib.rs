@@ -145,6 +145,12 @@ fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>) -
     }
     out
 }
+/// What Relay's data folder keeps of the shared vaults in plaintext or as keys: their trash (deleted and shrunk notes),
+/// bases (every path) and keys. A main-vault conversation may not read those either, the fence the other way round.
+fn shared_copies(data: &str) -> Vec<String> {
+    let d = data.trim_end_matches('/');
+    ["shared-trash/**", "shared-base/**", "shared-*.key"].iter().flat_map(|x| ["Read", "Edit"].map(|t| format!("{t}(/{d}/{x})"))).collect()
+}
 /// A conversation in `dir` fenced in, in its provider's opts: `deny` gets the fence's rules, and in a shared vault
 /// `strict_mcp`: none of the user's own MCP servers and claude.ai connectors (Slack, mail, Drive) run there, so nothing
 /// of theirs ends up in the team's vault. Relay's own tools come over the pipe and stay.
@@ -159,7 +165,8 @@ fn fence_in(app: &AppHandle, st: &App, opts: &mut Value, dir: &str) {
     configs.sort();
     configs.dedup();
     let data = data_dir(app).to_string_lossy().into_owned();
-    let rules = fence(dir, &all, &configs, shared.then_some(data.as_str()));
+    let mut rules = fence(dir, &all, &configs, shared.then_some(data.as_str()));
+    if !shared && all.len() > 1 { rules.extend(shared_copies(&data)); }
     if !rules.is_empty() {
         let mut deny = opts["deny"].as_array().cloned().unwrap_or_default();
         deny.extend(rules.into_iter().map(Value::from));
@@ -850,6 +857,12 @@ fn env_for(app: &AppHandle, st: &App, p: &dyn AgentProvider, key: &str) -> EnvBu
     let v = st.sids.lock().unwrap().get(key).map(|s| s.vault.clone()).unwrap_or_default();
     in_vault(env_of(app, st, p), v)
 }
+/// Whether a conversation runs in a shared vault (its session was started there). What it reads of the user's own mail,
+/// reminders and calendar could end up in the team's vault: a teammate's note can ask the agent for it, and no deny
+/// rule sees a read the app does for it.
+fn in_shared_vault(st: &App, key: &str) -> bool { st.sids.lock().unwrap().get(key).is_some_and(|s| !s.vault.is_empty()) }
+/// What such a conversation gets instead of a read of the user's own data.
+const SHARED_NO_READ: &str = "In a shared vault, reading the user's own mail, reminders and calendar is off: what a note there asks for could end up in the team's vault. Writing to the user (a reminder, a mail draft) still works.";
 fn in_vault(mut eb: EnvBuf, vault: String) -> EnvBuf { if !vault.is_empty() { eb.vault = vault; } eb }
 
 /// A provider's Env, owned, so it can go to a blocking thread.
@@ -2567,6 +2580,11 @@ mod vault_tests {
         for r in ["Read(//me/.claude/file-history/**)", "Read(//me/.claude/paste-cache/**)", "Read(//me/.claude/history.jsonl)"] { assert!(shared.contains(&r.to_string()), "{r}"); }
         assert!(!fence("/me/vault", &all, &configs, None).iter().any(|r| r.contains("file-history")), "the main vault keeps its own history");
         assert!(fence("/me/vault", &all[..1], &configs, None).is_empty(), "one vault, nothing to fence");
+        // and the other way round, in the main vault: the shared vaults' trash, bases and keys in Relay's data folder
+        let copies = shared_copies("/me/Library/Application Support/relay/");
+        for r in ["Read(//me/Library/Application Support/relay/shared-trash/**)", "Read(//me/Library/Application Support/relay/shared-base/**)", "Read(//me/Library/Application Support/relay/shared-*.key)"] {
+            assert!(copies.contains(&r.to_string()), "{r}");
+        }
         // a vault inside another would sit inside its fence: refused in the settings
         assert!(nested("/me/vault/team", "/me/vault") && nested("/me/vault", "/me/vault/team"));
         assert!(!nested("/me/vault", "/me/vault2"), "a folder name that starts the same is no parent");

@@ -68,6 +68,8 @@ pub struct Joined { pub id: String, pub name: String, pub role: String }
 /// the code. Returns the line and what the server says about itself, for the settings.
 pub fn pair(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Info), String> {
     let l = PairLine::parse(line).ok_or("not a pairing line (relay://host:port#fp=…&code=…)")?;
+    // an invite would burn one of the owner's pairing tries and answer with a meaningless error
+    if l.is_invite() { return Err("this is an invite to a shared vault: use Join with a link under Settings › General › Shared vaults".into()); }
     let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
     let proof = tls::proof(&l.code, &id.fingerprint(), &l.fp);
     c.call(json!({"op": "pair", "name": name, "proof": proof}))?;

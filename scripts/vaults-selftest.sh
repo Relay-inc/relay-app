@@ -42,9 +42,19 @@ sleep 1
 LINE=$(RELAY_SERVER_DATA="$DIR/server" target/selftest/debug/relay-server pair --host 127.0.0.1 --port $PORT | grep '^relay://')
 
 echo "== shared vaults (a minute or two)"
+# the app's own exit code counts (1 on a FAIL, else a panic), and a hung app is stopped after 15 minutes
 RELAY_AGENTS_DIR="$DIR/agents" RELAY_SELFTEST=vaults RELAY_SELFTEST_DIR="$DIR" RELAY_SELFTEST_LINE="$LINE" \
-  target/selftest/debug/relay 2>"$DIR/app.log" | grep '^selftest' || true
+  target/selftest/debug/relay 2>"$DIR/app.log" >"$DIR/app.out" &
+APP=$!
+( sleep 900 && kill $APP 2>/dev/null && echo "the app hung: stopped after 15 minutes" >>"$DIR/report.txt" ) &
+WATCH=$!
+set +e
+wait $APP
+CODE=$?
+set -e
+kill $WATCH 2>/dev/null || true
+grep '^selftest' "$DIR/app.out" || true
 
-echo "== report ($DIR/report.txt)"
+echo "== report ($DIR/report.txt), app exit $CODE"
 cat "$DIR/report.txt"
-! grep -q '^FAIL' "$DIR/report.txt"
+[ "$CODE" -eq 0 ] && ! grep -q '^FAIL' "$DIR/report.txt"
