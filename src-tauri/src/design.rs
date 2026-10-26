@@ -307,17 +307,20 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
 /// In the Design webview: `q()` finds the open question form of Claude Design's chat (null when there is none), which
 /// replaces the composer and has no send button. Found by what it is, not by class: visible radio/checkbox/option
 /// controls outside the composer, and the smallest ancestor holding all of them and a button of its own.
-/// ponytail: NOT verified against claude.ai's real question widget (see the `dom` option of design_snapshot): when the
-/// parsing is off, `form` (the form's whole text) still tells the agent what is asked.
+/// claude.ai's widget (checked with design_snapshot's `dom`, 26 Oct 2026): options are `button[aria-pressed]` in a
+/// `[role="group"]`, labelled by a `<bdi>` after their number; the question is a `<bdi>` above them; "Something else" is a
+/// text field in a `<form>` without a submit button (Enter submits it), next to "Skip", which is never clicked.
+/// ponytail: a multiple-choice form was not seen, `multiple` is only guessed from roles and its text.
 const QUESTION: &str = r#"const q = () => {
   const vis = e => e.getBoundingClientRect().width > 0 && !e.closest('[data-testid="chat-input"],[role="menu"]');
-  const opts = [...document.querySelectorAll('[role="radio"],[role="checkbox"],[role="option"],input[type="radio"],input[type="checkbox"]')].filter(vis);
+  const opts = [...document.querySelectorAll('[role="radio"],[role="checkbox"],[role="option"],input[type="radio"],input[type="checkbox"],[role="group"] button[aria-pressed]')].filter(vis);
   if (!opts.length) return null;
   const hasButton = r => [...r.querySelectorAll('button')].some(b => !opts.some(o => o.contains(b) || b.contains(o)));
+  const title = r => [...r.querySelectorAll('bdi,legend,[role="heading"],h1,h2,h3,h4')].find(e => !opts.some(o => o.contains(e)));
   let root = opts[0];
-  for (let i = 0; i < 12 && root.parentElement && !(root.contains(opts[opts.length - 1]) && hasButton(root)); i++) root = root.parentElement;
+  for (let i = 0; i < 16 && root.parentElement && !(root.contains(opts[opts.length - 1]) && hasButton(root) && title(root)); i++) root = root.parentElement;
   const line = s => (s || "").trim().split("\n")[0].trim();
-  const label = o => line(o.matches("input") ? (o.labels && o.labels[0] || o.parentElement).innerText : o.getAttribute("aria-label") || o.innerText);
+  const label = o => line(o.matches("input") ? (o.labels && o.labels[0] || o.parentElement).innerText : o.getAttribute("aria-label") || (o.querySelector("bdi") || o).innerText);
   const groups = [];
   for (const o of opts) {
     const host = o.closest('[role="radiogroup"],[role="group"],[role="listbox"],fieldset') || root;
@@ -325,11 +328,11 @@ const QUESTION: &str = r#"const q = () => {
     if (!g) {
       const by = host.getAttribute("aria-labelledby"), el = by && document.getElementById(by.split(" ")[0]);
       const before = host !== root && host.previousElementSibling;
-      g = { host, question: line(host.getAttribute("aria-label") || el && el.innerText || host.querySelector("legend") && host.querySelector("legend").innerText || before && before.innerText), options: [], multiple: false, free_text: !!host.querySelector('textarea,input[type="text"],input:not([type])') };
+      g = { host, question: line(host.getAttribute("aria-label") || el && el.innerText || host.querySelector("legend") && host.querySelector("legend").innerText || before && before.innerText || title(root) && title(root).innerText), options: [], multiple: false, free_text: !!host.querySelector('textarea,input[type="text"],input:not([type])') };
       groups.push(g);
     }
     g.options.push(label(o));
-    g.multiple ||= o.matches('[role="checkbox"],input[type="checkbox"]') || host.getAttribute("aria-multiselectable") === "true";
+    g.multiple ||= o.matches('[role="checkbox"],input[type="checkbox"]') || host.getAttribute("aria-multiselectable") === "true" || /one or more|all that apply|multiple/i.test(root.innerText.slice(0, 500));
   }
   const submit = [...root.querySelectorAll("button")].filter(b => !opts.some(o => o.contains(b)) && /^(submit|send|continue|next|done|answer|verstuur|verzend|doorgaan|volgende|klaar|beantwoord)/i.test(b.innerText.trim())).pop();
   return { root, opts, submit, form: root.innerText.trim().slice(0, 4000), groups: groups.map(({ host, ...g }) => g), free_text: !!root.querySelector('textarea,input[type="text"],input:not([type])') };
@@ -339,7 +342,7 @@ const QUESTION: &str = r#"const q = () => {
 fn state(view: &Webview) -> Result<Value, String> {
     let js = format!(r#"(() => {{ {QUESTION}
       const m = [...document.querySelectorAll('[data-testid="assistant-message"]')], o = q();
-      return {{ count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"]'), text: m.length ? m[m.length - 1].innerText : "",
+      return {{ count: m.length, working: !!document.querySelector('[data-testid="chat-input-stop"],button[aria-label="Stop response"]'), text: m.length ? m[m.length - 1].innerText : "",
         question: o && {{ form: o.form, questions: o.groups, free_text: o.free_text, submit: o.submit && o.submit.innerText.trim() }} }}; }})()"#);
     eval(view, &js)
 }
@@ -373,6 +376,7 @@ fn answer(view: &Webview, q: &Value, text: &str) -> Result<(), String> {
         const f = o.root.querySelector('textarea,input[type="text"],input:not([type])');
         if (!f) return "the form has no text field";
         f.focus(); f.select(); document.execCommand("insertText", false, free);
+        if (!o.submit && f.form) f.form.requestSubmit();
       }}
       return "ok"; }})()"#, json!(picks), json!(free));
     view.set_focus().ok();
@@ -433,7 +437,7 @@ fn prompt(view: &Webview, text: &str) -> Result<Value, String> {
         let r = eval(view, &fill)?;
         if r["typed"].as_u64().unwrap_or(0) == 0 { return Err("Claude Design's composer did not take the text".into()); }
         // "sent", or why not: the reason goes into the error, since a page we cannot see is otherwise a guess
-        let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"]');
+        let send = r#"(() => { const b = document.querySelector('button[data-testid="chat-input-send"],button[aria-label="Send message"]');
       const el = document.querySelector('[data-testid="chat-input"]');
       if (!b) return "no send button (composer " + (el ? el.innerText.trim().length + " characters" : "missing") + ")";
       if (b.disabled || b.getAttribute("aria-disabled") === "true") return "the send button is disabled";
@@ -476,7 +480,7 @@ fn dom(view: &Webview) -> Result<Value, String> {
         || (document.querySelector('[data-testid="chat-input"]') || document.body).closest('main,[role="complementary"],aside') || document.body;
       const out = [];
       const walk = (e, d) => {
-        if (d > 14 || out.length > 600 || e.tagName === "svg" || e.tagName === "SCRIPT" || e.tagName === "STYLE") return;
+        if (d > 24 || out.length > 600 || e.tagName === "svg" || e.tagName === "SCRIPT" || e.tagName === "STYLE") return;
         const a = n => e.getAttribute(n) ? ` ${n}=${JSON.stringify(e.getAttribute(n))}` : "";
         const own = [...e.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent.trim()).join(" ").slice(0, 80);
         out.push("  ".repeat(d) + "<" + e.tagName.toLowerCase() + a("role") + a("data-testid") + a("aria-label") + a("type") + a("aria-checked") + a("aria-pressed") + (e.disabled ? " disabled" : "") + ">" + (own ? " " + own : ""));
