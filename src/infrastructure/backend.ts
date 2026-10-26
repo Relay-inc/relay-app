@@ -7,6 +7,7 @@ import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
 import type { GitRepo } from "../domain/git/git";
 import type { CommitFile, GitCommit } from "../domain/git/graph";
+import type { FileEntry, FileRoot } from "../domain/files/files";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../domain/settings/updates";
 import type {
   AgentSession,
@@ -183,6 +184,11 @@ export const gitCommit = (key: string, project: string, repo: string, message: s
 /** The newest 200 commits of a repo: its branch and upstream, or every branch (`all`). */
 export const gitLog = (key: string, project: string, repo: string, all: boolean) =>
   invoke<GitCommit[]>("git_log", { key, project, repo, all });
+// the Files drawer (src-tauri/src/explorer.rs): a project's code folders and its vault folder, only inside those
+export const fileRoots = (project: string) => invoke<{ vault: string; roots: FileRoot[] }>("file_roots", { project });
+export const listDir = (project: string, path: string) => invoke<FileEntry[]>("list_dir", { project, path });
+/** A text file, rejected with "binary" for one to open in its own app. */
+export const readFileText = (project: string, path: string) => invoke<string>("read_file_text", { project, path });
 /** Pull a repo from its upstream, fast-forward only. */
 export const gitPull = (key: string, project: string, repo: string) => invoke<void>("git_pull", { key, project, repo });
 /** One commit's whole message and its files with their diffs, against its first parent. */

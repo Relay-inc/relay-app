@@ -66,7 +66,7 @@ export function ChatBar({
   onOpenTerminal: (external: boolean) => void;
   onOpenBoard: () => void;
   onOpenPrs: () => void;
-  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git") => void;
+  onToggleDrawer: (tool: "terminal" | "notes" | "design" | "git" | "files") => void;
   onShowInBrain?: () => void;
 }) {
   const { t } = useT();
@@ -210,10 +210,11 @@ export function ChatBar({
               icon={<Icon name="github" className="glyph size-4" />}
             />
           ) : null}
-          {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them */}
+          {/* the project's git repos, with the worktrees of the open conversation: only a conversation has them; its
+              folders as a tree next to them */}
           {(renamable && tools.git
-            ? (["git", "terminal", "notes", "design"] as const)
-            : (["terminal", "notes", "design"] as const)
+            ? (["git", "files", "terminal", "notes", "design"] as const)
+            : (["files", "terminal", "notes", "design"] as const)
           ).map(tool => (
             <ToolButton
               key={tool}
@@ -229,7 +230,13 @@ export function ChatBar({
   );
 }
 
-const DRAWER_ICONS = { git: "branch", terminal: "drawerTerm", notes: "notes", design: "design" } as const;
+const DRAWER_ICONS = {
+  git: "branch",
+  files: "folder",
+  terminal: "drawerTerm",
+  notes: "notes",
+  design: "design",
+} as const;
 
 // one button per tool, the one that is open lit: a second click goes back (a view) or closes the drawer
 function ToolButton({
