@@ -61,6 +61,8 @@ pub struct State {
     streamed: HashSet<String>,
     /// a text or thinking block began and has no piece yet
     fresh: bool,
+    /// `total_cost_usd` at the last turn end: Claude Code counts it over the process, not per turn
+    spent: f64,
 }
 
 impl State {
@@ -104,7 +106,15 @@ impl State {
                 assistant(&ev["message"]["content"], streamed, &mut out);
                 if ev["parent_tool_use_id"].is_null() { out.extend(context(&ev["message"]["usage"])); }
             }
-            _ => out.extend(parse(&ev)),
+            _ => {
+                let mut evs = parse(&ev);
+                for e in &mut evs {
+                    if let Event::TurnEnd { usage: Some(u), .. } = e {
+                        if let Some(total) = u.cost { u.cost = Some((total - self.spent).max(0.0)); self.spent = total; }
+                    }
+                }
+                out.extend(evs);
+            }
         }
         out
     }
@@ -406,6 +416,15 @@ mod tests {
         let end = go(json!({"type": "result", "subtype": "success", "usage": {}, "modelUsage": {"claude-haiku-4-5-20251001": {"contextWindow": 200000}}}));
         assert_eq!(end[0], Event::Context { used: None, window: Some(200000) });
         assert!(matches!(end[1], Event::TurnEnd { ok: true, .. }));
+    }
+
+    #[test]
+    fn a_turns_cost_is_what_it_added() {
+        let mut st = State::default();
+        let mut cost = |total: f64| st.parse(&json!({"type": "result", "subtype": "success", "usage": {}, "total_cost_usd": total}).to_string())
+            .into_iter().find_map(|e| match e { Event::TurnEnd { usage, .. } => usage.and_then(|u| u.cost), _ => None }).unwrap();
+        assert!((cost(0.0038) - 0.0038).abs() < 1e-9);
+        assert!((cost(0.0059) - 0.0021).abs() < 1e-9);
     }
 
     #[test]

@@ -147,7 +147,8 @@ window.addEventListener(
   true,
 );
 
-/** How full the context window is, quietly: only a conversation whose agent reports it (Claude Code) has one. */
+/** How full the context window is: a ring and the percentage, orange from 70% and red from 90%, when a new
+ *  conversation from the Session Log is worth it. Only a conversation whose agent reports it (Claude Code) has one. */
 function ContextUse() {
   const { t } = useT();
   const selected = useNavigationStore(s => s.selected);
@@ -155,11 +156,25 @@ function ContextUse() {
   if (!context?.used) return null;
   const pct = Math.min(100, Math.round((context.used / context.window) * 100));
   const tokens = (n: number) => n.toLocaleString();
+  const tone = pct >= 90 ? "text-late" : pct >= 70 ? "text-soon" : "text-secondary";
   return (
     <span
-      className={`px-1.5 text-xs whitespace-nowrap ${pct >= 90 ? "text-late" : "text-tertiary"}`}
+      className={`flex items-center gap-1 px-1.5 text-xs whitespace-nowrap ${tone}`}
       title={t("composer.contextHelp", { used: tokens(context.used), window: tokens(context.window) })}
     >
+      <svg viewBox="0 0 16 16" className="size-3.5 -rotate-90" aria-hidden="true">
+        <circle cx="8" cy="8" r="6" fill="none" stroke="var(--color-separator-strong)" strokeWidth="2.5" />
+        <circle
+          cx="8"
+          cy="8"
+          r="6"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          pathLength="100"
+          strokeDasharray={`${pct} 100`}
+        />
+      </svg>
       {t("composer.context", { pct })}
     </span>
   );

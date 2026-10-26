@@ -21,6 +21,7 @@ import {
   saveTimeFromSessions,
   saveCaptureOnClose,
   saveWorkerCrabs,
+  saveGitDrawer,
   saveFolders,
   saveSidebar,
   saveTerminal,
@@ -69,6 +70,7 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const timeFromSessions = useSettingsStore(s => s.settings.timeFromSessions !== false);
   const captureOnClose = useSettingsStore(s => s.settings.captureOnClose !== false);
   const workerCrabs = useSettingsStore(s => s.settings.workerCrabs !== false);
+  const gitDrawer = useSettingsStore(s => s.settings.gitDrawer === true);
   const message = useSettingsStore(s => s.message);
   const extraVaults = useSettingsStore(s => s.settings.extraVaults ?? NONE);
   const extraRead = useSettingsStore(s => s.extraVaults);
@@ -261,6 +263,9 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
         </Field>
         <Field label={t("set.workerCrabs")} id="crabs" hint={<Html html={th("set.workerCrabsHelp")} />}>
           <Switch id="crabs" on={workerCrabs} onToggle={saveWorkerCrabs} />
+        </Field>
+        <Field label={t("set.gitDrawer")} id="gitdrawer" hint={<Html html={th("set.gitDrawerHelp")} />}>
+          <Switch id="gitdrawer" on={gitDrawer} onToggle={saveGitDrawer} />
         </Field>
       </Section>
       <Section title={t("set.sec.sidebar")} rows>

@@ -5,7 +5,9 @@ import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import type { AgentEvent, AgentsStatus, Decision } from "../domain/agents/types";
 import type { SlashCommand } from "../domain/conversations/commands";
 import type { Related } from "../domain/related/rules";
-import type { RepoChanges } from "../domain/conversations/changes";
+import type { GitRepo } from "../domain/git/git";
+import type { CommitFile, GitCommit } from "../domain/git/graph";
+import type { FileEntry, FileRoot } from "../domain/files/files";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../domain/settings/updates";
 import type {
   AgentSession,
@@ -182,8 +184,27 @@ export const stop = (project: string) => invoke("stop", { project });
 export const dropWorktrees = (project: string) =>
   invoke<{ removed: number; kept: number }>("drop_worktrees", { project });
 /** What a conversation changed, per repo, from git: the repos of the paths it wrote and the worktrees it made. */
-export const conversationChanges = (key: string, paths: string[]) =>
-  invoke<RepoChanges[]>("conversation_changes", { key, paths });
+// the Git drawer (src-tauri/src/git.rs): a project's checkouts, open in conversation `key` (its worktrees count too)
+export const gitRepos = (key: string, project: string) => invoke<GitRepo[]>("git_repos", { key, project });
+export const gitStage = (key: string, project: string, repo: string, paths: string[], on: boolean) =>
+  invoke<void>("git_stage", { key, project, repo, paths, on });
+export const gitDiscard = (key: string, project: string, repo: string, path: string) =>
+  invoke<void>("git_discard", { key, project, repo, path });
+export const gitCommit = (key: string, project: string, repo: string, message: string, push: boolean) =>
+  invoke<void>("git_commit", { key, project, repo, message, push });
+/** The newest 200 commits of a repo: its branch and upstream, or every branch (`all`). */
+export const gitLog = (key: string, project: string, repo: string, all: boolean) =>
+  invoke<GitCommit[]>("git_log", { key, project, repo, all });
+// the Files drawer (src-tauri/src/explorer.rs): a project's code folders and its vault folder, only inside those
+export const fileRoots = (project: string) => invoke<{ vault: string; roots: FileRoot[] }>("file_roots", { project });
+export const listDir = (project: string, path: string) => invoke<FileEntry[]>("list_dir", { project, path });
+/** A text file, rejected with "binary" for one to open in its own app. */
+export const readFileText = (project: string, path: string) => invoke<string>("read_file_text", { project, path });
+/** Pull a repo from its upstream, fast-forward only. */
+export const gitPull = (key: string, project: string, repo: string) => invoke<void>("git_pull", { key, project, repo });
+/** One commit's whole message and its files with their diffs, against its first parent. */
+export const gitShow = (key: string, project: string, repo: string, hash: string) =>
+  invoke<{ body: string; files: CommitFile[] }>("git_show", { key, project, repo, hash });
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });

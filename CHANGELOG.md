@@ -17,6 +17,32 @@ a PR. Versions follow
 
 - **A shared vault syncs with the team**: switch on Sync under Settings › General › Shared vaults for a vault that is a clone of the team's repository. Every 5 minutes Relay commits what changed, puts it on top of what the team pushed and pushes; the sidebar reads the vaults again when the team's changes come in. A conflict stops the round, keeps your change and names the files under the vault in Settings
 - **Shared vaults**: Settings › General › Shared vaults adds other vaults, a team vault in git for example. Their projects show in the sidebar next to your own. A project in two vaults is one project: the newest work-state row gives its status, open items come from both, and a new conversation on it picks in the composer which vault it runs in, with that vault's rules; Claude Code gets the other vault as an extra folder. Repos, icon and Design link live in the shared vault, scratch notes in yours. Links to notes in a shared vault don't open in the side panel yet
+- **Files drawer**: the folder button next to Git shows the project's folders as a tree, as PhpStorm shows a project: its code folders from the vault's index and its folder in the vault. A folder opens on a click, files git sees changed show in its colour and ignored ones grey. A click on a file opens it: a vault note in the right drawer, a document or picture in its own app, code and text in a window over the app. A right-click shows it in Finder (#267)
+
+### Changed
+
+- **Git drawer replaces Changes**: a project conversation can show a Git drawer with every repo of the project on this Mac and the worktrees the conversation made. Per repo you see the branch, tick files to stage them, discard a file's changes (after a confirmation), fold a repo to its header, and write one commit message under all repos (or let the model suggest one): Commit or Commit & Push makes a commit with it in every repo with ticked files, as in JetBrains. Under the commit box a log per repo draws the branch as a graph, like Sourcetree: a row per commit with its subject, branches and tags, author and age. The colour squares pick the repo, All branches shows every branch, its top edge drags it higher. A click on a commit opens it over the app: its message, its files and each file's diff against the commit before. The arrow next to a repo's branch pulls it, fast-forward only: when the branch went its own way, git's message shows under the repo. Commit is blocked while a conversation of the project is working in that repo. Git's own error shows in the drawer when a push or hook fails. Off by default: switch it on in Settings › General › Git in project conversations (#266)
+
+### Fixed
+
+- **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead (#265)
+
+## [0.0.34] - 2026-10-26
+
+### Added
+
+- **The end of a turn says what the turn did**: next to its duration, the line under the answer counts the file edits, failed tools and agents of that turn, and what it cost when the agent reports it (Claude Code, OpenCode, pi). Claude Code reports its cost over the whole process, so Relay now takes the difference per turn (#260)
+- **Subagents show their context**: an agent's row, its line in the Agents column and its page show the context of its latest request ("42k context"), and "cut off" in red when its answer stopped at the output limit (Claude Code) (#260)
+- **Find in a conversation**: ⌘F (or ⌃F) opens a find bar above the open conversation. Every match is marked, ↵ and ⇧↵ walk them with a count like "3 of 12", Esc closes it. It searches what the conversation shows, so the text inside a folded step is left out until you open it. The keys are in Settings › Shortcuts (#261)
+
+### Changed
+
+- **The context meter stands out**: the percentage next to the model pick gets a ring that fills up. It turns orange from 70% and red from 90%, where it was grey until 90% (#262)
+
+### Fixed
+
+- **A conversation's title is in the language you wrote in**: the generated title came out in Dutch for English messages too, because the prompt asking for it was written in Dutch. The prompt is English now and names the rule (#263)
+- **The context meter counts against the right window after a restart**: a conversation on a 1M model, read again from its transcript, counted against 200k until its next turn ended, so 300k showed as 100% in red. The conversation now keeps the window its last turn reported, and without one, more than 200k counts as a 1M window (#262)
 
 ## [0.0.33] - 2026-10-24
 
@@ -598,7 +624,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...HEAD
+[0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
 [0.0.32]: https://github.com/Relay-inc/relay-app/compare/v0.0.31...v0.0.32
 [0.0.31]: https://github.com/Relay-inc/relay-app/compare/v0.0.30...v0.0.31

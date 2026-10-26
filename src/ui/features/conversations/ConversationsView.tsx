@@ -50,6 +50,7 @@ import { AgentBack } from "../agents/AgentBack";
 import { chatWidth, column } from "./layout";
 import { useT } from "../../hooks/useT";
 import { ToLatest, ToStart } from "./ScrollArrows";
+import { FindBar } from "./FindBar";
 
 /** The centre column: the title bar, the open conversation or view, the agents it spawned, the composer. */
 export function ConversationsView({ className }: { className: string }) {
@@ -187,6 +188,16 @@ export function ConversationsView({ className }: { className: string }) {
     <div className={`${className} flex flex-col relative bg-bg`}>
       {agentPage ? <AgentBack /> : workerPage ? <OrchestratorBack /> : chatBarEl}
       {projectPanel ? <ProjectPanel /> : null}
+      {onView ? null : (
+        <FindBar
+          className={`${column} mt-2`}
+          log={log}
+          msgs={msgs}
+          onJump={() => {
+            stick.current = false;
+          }}
+        />
+      )}
       <div
         id="log"
         ref={log}

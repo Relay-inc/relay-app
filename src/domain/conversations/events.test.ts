@@ -104,7 +104,12 @@ test("a turn that ends ok: done with its duration, idle, a banner with the last 
   );
   assert.equal(next.status["c:1"], "idle");
   assert.equal(next.queued["c:1"], 0);
-  assert.deepEqual(next.messages["c:1"].at(-1), { kind: "done", text: 'work.doneIn {"d":"3 s"}', at: 1000 });
+  assert.deepEqual(next.messages["c:1"].at(-1), {
+    kind: "done",
+    text: 'work.doneIn {"d":"3 s"}',
+    at: 1000,
+    receipt: { edits: 0, errors: 0, agents: 0 },
+  });
   assert.ok(next.unseen.has("c:1"));
   assert.equal(next.chats["c:1"].at, 1000);
   assert.deepEqual(effects, [
@@ -112,6 +117,22 @@ test("a turn that ends ok: done with its duration, idle, a banner with the last 
     { kind: "save-chats" },
     { kind: "snapshot" },
   ]);
+});
+
+test("the end of a turn counts what that turn did since the last end, and what it cost", () => {
+  const call = (id: string, name: string) => ({ type: "tool_call" as const, id, name, input: {} });
+  const { next } = run(
+    fresh(),
+    call("e0", "Edit"),
+    { type: "turn_end", ok: true },
+    call("e1", "Edit"),
+    call("w1", "Write"),
+    { type: "tool_result", id: "w1", error: true },
+    call("a1", "Agent"),
+    call("r1", "Read"),
+    { type: "turn_end", ok: true, usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, cost: 0.04 } },
+  );
+  assert.deepEqual(next.messages["c:1"].at(-1)?.receipt, { edits: 1, errors: 1, agents: 1, cost: 0.04 });
 });
 
 test("a turn end with more queued keeps the conversation busy and quiet", () => {
@@ -203,6 +224,18 @@ test("a transcript shows its compaction boundary and ends with the context it le
     [{ kind: "compact", text: "compact.done · 170k → 9k", state: "ok" }],
   );
   assert.deepEqual(contextOf(history), { used: 9_500, window: 200_000 });
+});
+
+test("a reported window stays with the conversation, and a transcript counts against it", () => {
+  const { next, effects } = run(fresh(), { type: "context", window: 1_000_000 });
+  assert.equal(next.chats["c:1"].window, 1_000_000);
+  assert.deepEqual(effects, [{ kind: "save-chats" }]);
+  assert.deepEqual(run(next, { type: "context", window: 1_000_000 }).effects, []); // the same window saves nothing
+  const history: Parameters<typeof toItems>[0] = [{ type: "context", used: 150_000 }];
+  assert.deepEqual(contextOf(history, 1_000_000), { used: 150_000, window: 1_000_000 });
+  // no window known: more than 200k can only be a 1M model's
+  assert.deepEqual(contextOf(history), { used: 150_000, window: 200_000 });
+  assert.deepEqual(contextOf([{ type: "context", used: 300_000 }]), { used: 300_000, window: 1_000_000 });
 });
 
 test("a transcript's message carries the time of its line, one without a time line has none", () => {

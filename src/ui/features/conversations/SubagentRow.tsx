@@ -1,5 +1,6 @@
 import type { Sub } from "../../../domain/conversations/types";
 import { openAgent } from "../../../application/navigation/navigation";
+import { subMeta } from "../../../domain/conversations/rules";
 import { useT } from "../../hooks/useT";
 import { ToolLine } from "../../components/ToolLine";
 
@@ -7,7 +8,7 @@ import { ToolLine } from "../../components/ToolLine";
 export function SubagentRow({ agent, duration }: { agent: Sub; duration: string }) {
   const { t } = useT();
   const running = agent.running;
-  const meta = [agent.agentType, agent.model].filter(Boolean).join(" · ");
+  const meta = subMeta(agent, t);
   // the step a running agent is on: a tool call, else what it said
   const step = !running ? "" : agent.tool ? <ToolLine name={agent.tool} input={agent.input} /> : (agent.text ?? "");
   return (
@@ -30,6 +31,7 @@ export function SubagentRow({ agent, duration }: { agent: Sub; duration: string 
         {agent.description}
       </span>
       <span className="flex-none text-xs whitespace-nowrap">{meta}</span>
+      {agent.cut ? <span className="flex-none text-xs whitespace-nowrap text-late">{t("agents.cut")}</span> : null}
       <span className="flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis text-xs [&_code]:font-mono [&_code]:text-xs">
         {step}
       </span>
