@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Updates without the GitHub CLI**: Relay finds and installs its updates without `gh` or a GitHub login, now that the repo is public. Settings › Updates said "gh not found" instead
+
 ## [0.0.34] - 2026-10-26
 
 ### Added

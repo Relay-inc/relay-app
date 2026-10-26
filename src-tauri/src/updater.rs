@@ -1,4 +1,4 @@
-// Updates from the private GitHub repo, with the user's own gh login: whoever can download a release can update, and
+// Updates from the public GitHub repo, anonymous or with the user's gh login when there is one (a higher rate limit),
 // no token ships in the app. scripts/release.sh writes latest.json to the `updates` branch, its download url is the
 // GitHub API url of the release's .app.tar.gz. An app updated this way gets no quarantine flag, only the first
 // install needs the xattr line. A check at start and every 12 hours, quietly: the main window's settings button gets a
@@ -62,16 +62,16 @@ fn releases(app: &AppHandle) -> Result<Vec<Value>, String> {
 }
 
 async fn find(app: &AppHandle) -> Result<Option<tauri_plugin_updater::Update>, String> {
-    let token = crate::gh(&app.state::<crate::App>(), &["auth", "token"])?.trim().to_string();
-    let auth = format!("Bearer {token}");
-    let updater = app.updater_builder()
-        .header("Authorization", auth.as_str()).map_err(|e| e.to_string())?
-        // latest.json raw from the contents API, not wrapped in JSON
-        .header("Accept", "application/vnd.github.raw").map_err(|e| e.to_string())?
-        .build().map_err(|e| e.to_string())?;
+    // latest.json raw from the contents API, not wrapped in JSON
+    let mut builder = app.updater_builder().header("Accept", "application/vnd.github.raw").map_err(|e| e.to_string())?;
+    // the repo is public: without gh (or its login) the check goes anonymous
+    if let Ok(token) = crate::gh(&app.state::<crate::App>(), &["auth", "token"]) {
+        builder = builder.header("Authorization", format!("Bearer {}", token.trim())).map_err(|e| e.to_string())?;
+    }
+    let updater = builder.build().map_err(|e| e.to_string())?;
     let mut update = updater.check().await.map_err(|e| e.to_string())?;
-    // the download keeps the token but takes the updater's own Accept (application/octet-stream): GitHub sends the
-    // asset's bytes for that, and its metadata for the raw type
+    // the download keeps the token (if any) but takes the updater's own Accept (application/octet-stream): GitHub
+    // sends the asset's bytes for that, and its metadata for the raw type
     if let Some(u) = update.as_mut() { u.headers.remove("accept"); }
     Ok(update)
 }
