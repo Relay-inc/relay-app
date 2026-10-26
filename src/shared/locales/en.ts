@@ -801,10 +801,10 @@ const en = {
   "rem.none": "No reminders.",
   "set.extraVaults": "Shared vaults",
   "set.extraVaultsHelp":
-    "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A project's conversations, terminal and notes run in the vault it comes from, with that vault's rules.",
+    "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A project in two vaults shows once, with its data from both; a new conversation on it asks which vault it runs in.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
-  "set.extraVaultSkipped": "Not shown, another vault already has a project with this name: {names}",
+  "set.extraVaultMerged": "Also in your own vault, shown as one project: {names}",
   "set.title": "Settings",
   "set.vaultHelp":
     "The folder with your Obsidian vault. Conversations start in it, and the sidebar reads work-state and reminders from it.",
@@ -1441,6 +1441,9 @@ const en = {
   "composer.moveHelp":
     "Where this conversation runs. Pick another place to move it there between two turns: its history goes along, files only on one side do not.",
   "composer.onMachineHelp": "This conversation runs on another machine and keeps running when this Mac is closed.",
+  "composer.vault": "Vault",
+  "composer.vaultHelp":
+    "The vault this conversation runs in, with its rules. The project's other vault goes along, to read and write.",
   "composer.runOn": "Runs on",
   "composer.thisMac": "This Mac",
   "composer.available": "available",

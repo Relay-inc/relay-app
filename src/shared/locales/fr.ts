@@ -815,10 +815,10 @@ export default {
   "rem.none": "Aucun rappel.",
   "set.extraVaults": "Vaults partagés",
   "set.extraVaultsHelp":
-    "D'autres vaults dont les projets s'affichent dans la barre latérale à côté des vôtres, par exemple un vault d'équipe dans git. Les conversations, le terminal et les notes d'un projet tournent dans le vault d'où il vient, avec les règles de ce vault.",
+    "D'autres vaults dont les projets s'affichent dans la barre latérale à côté des vôtres, par exemple un vault d'équipe dans git. Un projet présent dans deux vaults s'affiche une fois, avec les données des deux ; une nouvelle conversation demande dans quel vault elle tourne.",
   "set.extraVaultAdd": "Ajouter un vault…",
   "set.extraVaultRemove": "Retirer {name}",
-  "set.extraVaultSkipped": "Non affichés, un autre vault a déjà un projet de ce nom : {names}",
+  "set.extraVaultMerged": "Aussi dans votre propre vault, affichés comme un seul projet : {names}",
   "set.title": "Réglages",
   "set.vaultHelp":
     "Le dossier de votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",
@@ -1465,6 +1465,9 @@ export default {
   "composer.moveHelp":
     "Où cette conversation s'exécute. Choisissez un autre endroit pour l'y déplacer entre deux tours : l'historique suit, les fichiers présents d'un seul côté non.",
   "composer.onMachineHelp": "Cette conversation tourne sur une autre machine et continue quand ce Mac est fermé.",
+  "composer.vault": "Vault",
+  "composer.vaultHelp":
+    "Le vault où tourne cette conversation, avec ses règles. L'autre vault du projet suit, en lecture et écriture.",
   "composer.runOn": "S'exécute sur",
   "composer.thisMac": "Ce Mac",
   "composer.available": "disponible",

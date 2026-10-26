@@ -127,7 +127,8 @@ export const projects = P.map(p => ({
 }));
 export const projectNames = P.map(p => p.name);
 
-/** The shared fixture: a team vault next to the main one, with a project of the same name as one already shown. */
+/** The shared fixture: a team vault next to the main one. Northwind Portal lives in both: one project, a new
+ *  conversation on it picks the vault. */
 export const TEAM_VAULT = "/Users/me/Team vault";
 export const teamProjects = [
   {
@@ -140,7 +141,7 @@ export const teamProjects = [
     open_items: ["Review onboarding chapter", "Add the release checklist"],
     stand: null,
     aliases: [],
-    vault: TEAM_VAULT,
+    vaults: [TEAM_VAULT],
   },
   {
     name: "Hiring 2027",
@@ -152,10 +153,10 @@ export const teamProjects = [
     open_items: [],
     stand: null,
     aliases: [],
-    vault: TEAM_VAULT,
+    vaults: [TEAM_VAULT],
   },
 ];
-export const teamStatus = [{ vault: TEAM_VAULT, skipped: ["Northwind Portal"], error: null }];
+export const teamStatus = [{ vault: TEAM_VAULT, merged: ["Northwind Portal"], error: null }];
 
 const contextFolder = (context: string) => `Contexts/${context}`;
 export const notes = [

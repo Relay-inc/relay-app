@@ -164,10 +164,8 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
                   </button>
                 </div>
                 {read?.error && <p className="text-xs text-s-warn">{read.error}</p>}
-                {!!read?.skipped.length && (
-                  <p className="text-xs text-s-muted">
-                    {t("set.extraVaultSkipped", { names: read.skipped.join(", ") })}
-                  </p>
+                {!!read?.merged.length && (
+                  <p className="text-xs text-s-muted">{t("set.extraVaultMerged", { names: read.merged.join(", ") })}</p>
                 )}
               </div>
             );

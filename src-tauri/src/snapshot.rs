@@ -37,6 +37,29 @@ pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::Naive
     Ok(json!({ "today": today.format("%Y-%m-%d").to_string(), "projects": projs, "sessions": ses }))
 }
 
+/// A project another vault has too, `b` from `vault`, merged into `a`: one project with data in both. The newest
+/// work-state row gives the state, last touched and summary; open items, status sections and aliases come from both.
+pub fn merge(a: &mut Value, b: Value, vault: &str) {
+    if b["last"].as_str().unwrap_or("") > a["last"].as_str().unwrap_or("") {
+        for k in ["state", "last", "summary"] { a[k] = b[k].clone(); }
+    }
+    let mut items: Vec<Value> = a["open_items"].as_array().cloned().unwrap_or_default();
+    for i in b["open_items"].as_array().into_iter().flatten() { if !items.contains(i) { items.push(i.clone()); } }
+    if a["open"].is_number() || b["open"].is_number() { a["open"] = json!(items.len()); }
+    a["open_items"] = json!(items);
+    a["stand"] = match (a["stand"].as_str(), b["stand"].as_str()) {
+        (Some(x), Some(y)) if x != y => json!(format!("{x}\n\n{y}")),
+        (None, _) => b["stand"].clone(),
+        _ => a["stand"].clone(),
+    };
+    let mut aliases: Vec<Value> = a["aliases"].as_array().cloned().unwrap_or_default();
+    for x in b["aliases"].as_array().into_iter().flatten() { if !aliases.contains(x) { aliases.push(x.clone()); } }
+    a["aliases"] = json!(aliases);
+    let mut vaults = a["vaults"].as_array().cloned().unwrap_or_default();
+    vaults.push(json!(vault));
+    a["vaults"] = json!(vaults);
+}
+
 /// A vault's projects (its work-state rows with their notes' open items and status), and the folder of its notes.
 pub fn vault_projects(vault: &str, work_state: &str, notes: &str) -> Result<(Vec<Value>, PathBuf), String> {
     let cfg = crate::relay_config::load(vault).unwrap_or_else(|| json!({}));
@@ -247,6 +270,23 @@ fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn a_project_in_two_vaults_is_one() {
+        let mut a = json!({"name": "Spardex", "context": "Antenna", "state": "Active", "last": "2026-10-20", "summary": "mine",
+            "open": 1, "open_items": ["rate talk", "deploy"], "stand": "personal", "aliases": ["SPX"], "vaults": ["/me"]});
+        let b = json!({"name": "Spardex", "context": "Clients", "state": "Blocked", "last": "2026-10-24", "summary": "team",
+            "open": 2, "open_items": ["deploy", "review #158"], "stand": null, "aliases": [], "vaults": ["/team"]});
+        merge(&mut a, b, "/team");
+        assert_eq!((&a["state"], &a["last"], &a["summary"]), (&json!("Blocked"), &json!("2026-10-24"), &json!("team")), "the newest row wins");
+        assert_eq!(a["context"], "Antenna", "the main vault's context keeps its place in the sidebar");
+        assert_eq!(a["open_items"], json!(["rate talk", "deploy", "review #158"]));
+        assert_eq!(a["open"], 3);
+        assert_eq!(a["stand"], "personal");
+        assert_eq!(a["vaults"], json!(["/me", "/team"]));
+        // an older row from the other vault leaves the status alone
+        merge(&mut a, json!({"state": "Quiet", "last": "2026-01-01", "summary": "old", "open": null, "open_items": [], "stand": "x"}), "/old");
+        assert_eq!((&a["state"], &a["stand"]), (&json!("Blocked"), &json!("personal\n\nx")));
+    }
 
     #[test]
     fn reads_the_vault() {

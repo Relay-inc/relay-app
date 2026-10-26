@@ -19,7 +19,13 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { ORCH } from "../../../domain/orchestrator/rules";
 import { projectName as plainProject } from "../../../application/workspace/vault";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
-import { chatBar, commandsOf, machineChoice, machineRepo } from "../../../application/conversations/selectors";
+import {
+  chatBar,
+  commandsOf,
+  machineChoice,
+  machineRepo,
+  vaultChoice,
+} from "../../../application/conversations/selectors";
 import {
   attach,
   attachPaths,
@@ -29,6 +35,7 @@ import {
   setAgent,
   moveConversation,
   setMachine,
+  setVault,
   setTyped,
   typeInto,
   unattach,
@@ -198,6 +205,7 @@ export function Composer({ className }: { className: string }) {
   // where the conversation runs or is to start: the machines are asked every few seconds while it shows
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
+  const inVault = useDerived(() => vaultChoice(selected));
   // the repo the agent gets on that machine, next to the pick
   const repoThere = useDerived(() => machineRepo(selected));
   const [moving, setMoving] = useState(false);
@@ -425,6 +433,19 @@ export function Composer({ className }: { className: string }) {
                 value={view.agentId}
                 label={t("composer.agent")}
                 onPick={setAgent}
+              />
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : null}
+          {hasChat && inVault.value !== null ? (
+            <>
+              {/* a project in two vaults: which one a new conversation runs in, the other goes along */}
+              <PickMenu
+                options={inVault.vaults.map(vault => ({ id: vault, name: vault.split("/").pop() || vault }))}
+                value={inVault.value}
+                label={t("composer.vault")}
+                title={t("composer.vaultHelp")}
+                onPick={setVault}
               />
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>

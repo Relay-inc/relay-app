@@ -809,10 +809,10 @@ export default {
   "rem.none": "Keine Erinnerungen.",
   "set.extraVaults": "Geteilte Vaults",
   "set.extraVaultsHelp":
-    "Weitere Vaults, deren Projekte in der Seitenleiste neben deinen stehen, zum Beispiel ein Team-Vault in git. Gespräche, Terminal und Notizen eines Projekts laufen in dem Vault, aus dem es stammt, mit dessen Regeln.",
+    "Weitere Vaults, deren Projekte in der Seitenleiste neben deinen stehen, zum Beispiel ein Team-Vault in git. Ein Projekt in zwei Vaults erscheint einmal, mit Daten aus beiden; ein neues Gespräch fragt, in welchem Vault es läuft.",
   "set.extraVaultAdd": "Vault hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
-  "set.extraVaultSkipped": "Nicht angezeigt, ein anderer Vault hat schon ein Projekt mit diesem Namen: {names}",
+  "set.extraVaultMerged": "Auch in deinem eigenen Vault, als ein Projekt angezeigt: {names}",
   "set.title": "Einstellungen",
   "set.vaultHelp":
     "Der Ordner mit deinem Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",
@@ -1456,6 +1456,9 @@ export default {
     "Wo dieses Gespräch läuft. Wähle einen anderen Ort, um es zwischen zwei Runden dorthin zu verschieben: der Verlauf kommt mit, Dateien, die nur auf einer Seite liegen, nicht.",
   "composer.onMachineHelp":
     "Dieses Gespräch läuft auf einer anderen Maschine und läuft weiter, wenn dieser Mac zu ist.",
+  "composer.vault": "Vault",
+  "composer.vaultHelp":
+    "Der Vault, in dem dieses Gespräch läuft, mit seinen Regeln. Der andere Vault des Projekts kommt mit, zum Lesen und Schreiben.",
   "composer.runOn": "Läuft auf",
   "composer.thisMac": "Dieser Mac",
   "composer.available": "verfügbar",

@@ -73,24 +73,27 @@ struct Feed { frames: Box<dyn BufRead + Send>, backlog: usize, inherit: (bool, b
 /// What a process starts with, beyond its provider.
 struct Start<'a> {
     project: &'a str, name: &'a str, fork: Option<&'a str>, opts: (String, String), turn: Option<&'a Turn>,
-    from_mail: bool, account: &'a str, machine: Option<&'a str>, about: Option<&'a str>,
+    from_mail: bool, account: &'a str, machine: Option<&'a str>, about: Option<&'a str>, pick: Option<&'a str>,
 }
 
 /// A process started with a turn has it running, one started for later has none.
 fn start_turns(turn: Option<&Turn>) -> u32 { u32::from(turn.is_some()) }
 
 fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) -> Result<Proc, String> {
-    let Start { project, name, fork, opts, turn, from_mail, account, machine, about } = s;
+    let Start { project, name, fork, opts, turn, from_mail, account, machine, about, pick } = s;
     let main = need_vault(state)?;
     let saved = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).cloned();
     let resume = saved.as_ref().map(|s| s.sid.clone());
     // a resumed session runs in the vault it started in (the provider finds it by that folder), a new one in the vault
-    // of the project it is about
-    let dir = match (&saved, about) {
-        (Some(s), _) if !s.vault.is_empty() && Path::new(&s.vault).is_dir() => s.vault.clone(),
-        (Some(_), _) | (None, None) => main.clone(),
-        (None, Some(a)) => crate::vault_for(state, a)?,
+    // picked in the composer when the project lives there, else in the project's own
+    let vaults = about.map(|a| crate::vaults_of(state, a)).transpose()?.unwrap_or_else(|| vec![main.clone()]);
+    let dir = match &saved {
+        Some(s) if !s.vault.is_empty() && Path::new(&s.vault).is_dir() => s.vault.clone(),
+        Some(_) => main.clone(),
+        None => pick.filter(|v| vaults.iter().any(|x| x == v)).map_or_else(|| vaults[0].clone(), String::from),
     };
+    // the project's other vaults, so the conversation reads and writes there too
+    let others: Vec<&String> = vaults.iter().filter(|v| **v != dir).collect();
     let extra = if dir == main { "" } else { dir.as_str() };
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
@@ -142,6 +145,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
             }
         }
         let mut cmd = p.command(&eb.env(), &l)?;
+        // Claude Code reads and writes the other vaults of the project like its own folder
+        if p.id() == "claude" { for o in &others { cmd.arg("--add-dir").arg(o); } }
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
         cmd.current_dir(&dir).env("PATH", format!("{bin}{}", state.path)).env(actions::CONVERSATION, project);
@@ -169,12 +174,13 @@ pub(crate) struct Msg {
     pub project: String, pub text: String, pub images: Option<Vec<Value>>, pub name: Option<String>, pub fork: Option<String>,
     pub model: Option<String>, pub effort: Option<String>, pub provider: Option<String>, pub mail: Option<bool>,
     pub told: Option<String>, pub context: Option<String>, pub machine: Option<String>, pub about: Option<String>,
+    pub vault: Option<String>, // the vault a new conversation runs in, of the ones its project lives in
 }
 
 /// Sends a message to a conversation: starts its process, keeps it, switches its model or restarts it (plan.rs), and
 /// writes the turn to its stdin.
 pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
-    let Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about } = r;
+    let Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about, vault } = r;
     let p = provider_of(state, &project, provider.as_deref());
     // the orchestrator's conversations stay on this Mac, its tools are answered over this pipe (orch.rs)
     let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
@@ -200,7 +206,7 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: Some(&turn), from_mail: false, account: &account, machine: machine.as_deref(), about: about.as_deref() })?;
+        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: Some(&turn), from_mail: false, account: &account, machine: machine.as_deref(), about: about.as_deref(), pick: vault.as_deref() })?;
         procs.insert(project, x);
         return Ok(());
     }
@@ -217,7 +223,7 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
         }
     }
     if !procs.contains_key(&project) {
-        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: None, from_mail: mail.unwrap_or(false) || was_tainted || orch_taint, account: &account, machine: machine.as_deref(), about: about.as_deref() })?;
+        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: None, from_mail: mail.unwrap_or(false) || was_tainted || orch_taint, account: &account, machine: machine.as_deref(), about: about.as_deref(), pick: vault.as_deref() })?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -246,7 +252,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let mut procs = state.procs.lock().unwrap();
     if procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
     if !procs.contains_key(key) {
-        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None })?;
+        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None, pick: None })?;
         procs.insert(key.to_string(), x);
     }
     let x = procs.get_mut(key).unwrap();
@@ -266,7 +272,7 @@ pub(crate) fn ensure_local(app: &AppHandle, key: &str) -> Result<(), String> {
     let account = account_of(&state, p, key, "");
     let mut procs = state.procs.lock().unwrap();
     if procs.contains_key(key) { return Ok(()); }
-    let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None })?;
+    let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None, pick: None })?;
     procs.insert(key.into(), x);
     Ok(())
 }

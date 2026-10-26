@@ -350,7 +350,11 @@ function handle(cmd: string, a: Args): unknown {
       return String(a.path).includes("missing") ? Promise.reject("not found") : null;
     case "snapshot": {
       const snap = vault.snapshot(reminders);
-      return shared ? { ...snap, projects: [...snap.projects, ...vault.teamProjects], extraVaults: vault.teamStatus } : snap;
+      if (!shared) return snap;
+      const both = (p: { name: string }) =>
+        p.name === "Northwind Portal" ? [vault.VAULT, vault.TEAM_VAULT] : [vault.VAULT];
+      const own = snap.projects.map(p => ({ ...p, vaults: both(p) }));
+      return { ...snap, projects: [...own, ...vault.teamProjects], extraVaults: vault.teamStatus };
     }
     case "vault_notes":
       return { root: vault.VAULT, notes: vault.notes };
@@ -1064,7 +1068,7 @@ const harness = {
   autoReply: true,
   echo: true,
   /** What `extra_vaults_status` answers: the shared vaults as the last snapshot read them. */
-  extraVaults: (shared ? vault.teamStatus : []) as { vault: string; skipped: string[]; error: string | null }[],
+  extraVaults: (shared ? vault.teamStatus : []) as { vault: string; merged: string[]; error: string | null }[],
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,
   /** What `pick_files` answers (the + button's dialog): [] is cancelled. */

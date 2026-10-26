@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Shared vaults**: Settings › General › Shared vaults adds other vaults, a team vault in git for example. Their projects show in the sidebar next to your own, and a project's conversations, terminal, scratch notes, repos, icon and Design link live in the vault it comes from, so its conversations load that vault's rules. A project whose name another vault already has is left out and named in Settings. Links to notes in a shared vault don't open in the side panel yet
+- **Shared vaults**: Settings › General › Shared vaults adds other vaults, a team vault in git for example. Their projects show in the sidebar next to your own. A project in two vaults is one project: the newest work-state row gives its status, open items come from both, and a new conversation on it picks in the composer which vault it runs in, with that vault's rules; Claude Code gets the other vault as an extra folder. Repos, icon and Design link live in the shared vault, scratch notes in yours. Links to notes in a shared vault don't open in the side panel yet
 
 ## [0.0.33] - 2026-10-24
 

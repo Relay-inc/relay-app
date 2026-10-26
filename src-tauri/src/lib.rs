@@ -93,12 +93,23 @@ fn all_vaults(st: &App) -> Vec<String> {
     let s = st.settings.lock().unwrap();
     std::iter::once(s["vault"].as_str().unwrap_or("").to_string()).filter(|v| !v.is_empty()).chain(extra_vaults(&s)).collect()
 }
-/// The vault a project lives in: the extra vault the last snapshot found it in, else the main one. A project's
-/// conversations, terminal, scratch notes, repos, icon and Design link all live in that vault.
-fn vault_for(st: &App, project: &str) -> Result<String, String> {
-    let v = st.proj_vault.lock().unwrap().get(project).cloned();
-    match v { Some(v) if extra_vaults(&st.settings.lock().unwrap()).contains(&v) => Ok(v), _ => need_vault(st) }
+/// The vaults a project lives in as the last snapshot found them, the main one first; the main vault alone for a
+/// project it never saw. A project with the same name in two vaults is one project with data in both.
+fn vaults_of(st: &App, project: &str) -> Result<Vec<String>, String> {
+    let main = need_vault(st)?;
+    let all = all_vaults(st);
+    let found: Vec<String> = st.proj_vault.lock().unwrap().get(project).into_iter().flatten().filter(|v| all.contains(v)).cloned().collect();
+    Ok(if found.is_empty() { vec![main] } else { found })
 }
+/// Where a project's shared things live (repos, icon, Design link): its first extra vault, so the team has them too.
+fn team_vault(st: &App, project: &str) -> Result<String, String> {
+    let main = need_vault(st)?;
+    let vs = vaults_of(st, project)?;
+    Ok(vs.iter().find(|v| **v != main).unwrap_or(&vs[0]).clone())
+}
+/// Where a project's own things live (scratch notes, a new conversation unless picked, the terminal): the main vault
+/// when the project is there, else its vault.
+fn own_vault(st: &App, project: &str) -> Result<String, String> { Ok(vaults_of(st, project)?.remove(0)) }
 /// The reminders file (it may not exist yet), the action log and the UI language. Needs a usable vault.
 fn rem_ctx(app: &AppHandle) -> Result<(PathBuf, PathBuf, &'static str), String> {
     let (st, lang) = { let s = app.state::<App>().settings.lock().unwrap().clone(); (vault_of(&s), ui_lang_of(&s)) };
@@ -385,8 +396,8 @@ struct App {
     machines: machines::Machines,          // work machines, this Mac's certificate and which conversation runs where
     mirrors: mirror::Mirrors,              // what this Mac keeps in sync on each work machine (mirror.rs)
     orch: Mutex<()>,                       // one writer of orch.json at a time (orch.rs)
-    proj_vault: Mutex<HashMap<String, String>>, // project -> extra vault it lives in, from the last snapshot
-    extra: Mutex<Value>,                   // the last snapshot's extra vaults: [{vault, skipped, error}]
+    proj_vault: Mutex<HashMap<String, Vec<String>>>, // project -> the vaults it lives in (main first), from the last snapshot
+    extra: Mutex<Value>,                   // the last snapshot's extra vaults: [{vault, merged, error}]
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -432,27 +443,35 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     let mut snap = snapshot::snapshot(v, &mapped(&st, "workState"), &mapped(&st, "notes"), chrono::Local::now().date_naive(), &state.path,
         &data_dir(&app).join("topics.json"), &home())?;
     let projects = snap["projects"].as_array_mut().unwrap();
-    for p in projects.iter_mut() { p["vault"] = json!(v); }
-    // the extra vaults' projects after the main vault's; a name already shown stays out (a project is its name)
-    let (mut index, mut extra) = (HashMap::new(), vec![]);
+    let mut index: HashMap<String, Vec<String>> = HashMap::new();
+    for p in projects.iter_mut() {
+        p["vaults"] = json!([v]);
+        index.insert(p["name"].as_str().unwrap_or("").to_string(), vec![v.to_string()]);
+    }
+    // the extra vaults' projects after the main vault's; one with a name already shown is merged into it
+    let mut extra = vec![];
     let s = state.settings.lock().unwrap().clone();
     for e in extra_vaults(&s) {
         let es = vault::status(&e, &vault_map(&s, &e));
-        let (mut skipped, mut error) = (vec![], None);
+        let (mut merged, mut error) = (vec![], None);
         if es["ok"] == true {
             relay_config::ensure(&e, &es["map"]);
             match snapshot::vault_projects(&e, &mapped(&es, "workState"), &mapped(&es, "notes")) {
                 Ok((list, _)) => for mut p in list {
                     let name = p["name"].as_str().unwrap_or("").to_string();
-                    if projects.iter().any(|q| q["name"] == name.as_str()) { skipped.push(name); continue; }
-                    p["vault"] = json!(e);
-                    index.insert(name, e.clone());
-                    projects.push(p);
+                    index.entry(name.clone()).or_default().push(e.clone());
+                    if let Some(q) = projects.iter_mut().find(|q| q["name"] == name.as_str()) {
+                        snapshot::merge(q, p, &e);
+                        merged.push(name);
+                    } else {
+                        p["vaults"] = json!([e]);
+                        projects.push(p);
+                    }
                 },
                 Err(x) => error = Some(x),
             }
         } else { error = Some(tr_v(lang, "err.no_vault", &e)); }
-        extra.push(json!({"vault": e, "skipped": skipped, "error": error}));
+        extra.push(json!({"vault": e, "merged": merged, "error": error}));
     }
     *state.proj_vault.lock().unwrap() = index;
     *state.extra.lock().unwrap() = json!(extra);
@@ -531,11 +550,11 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
         fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&*s).unwrap()).ok();
         app.emit("settings-changed", &*s).ok();
     }
-    // an extra vault's icons for its own projects
+    // an extra vault's icons for its projects, over the main vault's: a project in both shows the team's icon
     let mut icons = relay_config::icons(&v);
     let index = state.proj_vault.lock().unwrap().clone();
     for e in extra_vaults(&state.settings.lock().unwrap()) {
-        icons.extend(relay_config::icons(&e).into_iter().filter(|(n, _)| index.get(n) == Some(&e)));
+        icons.extend(relay_config::icons(&e).into_iter().filter(|(n, _)| index.get(n).is_some_and(|vs| vs.contains(&e))));
     }
     Value::Object(icons)
 }
@@ -648,7 +667,7 @@ fn project_repos(state: State<App>) -> Value {
 /// A project's repos in the vault's .relay/config.json.
 #[tauri::command]
 fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
-    relay_config::set_repos(&crate::vault_for(&state, &project)?, &project, &repos)?;
+    relay_config::set_repos(&team_vault(&state, &project)?, &project, &repos)?;
     // the main window's title bar shows the PRs button by them
     app.emit("repos-changed", ()).ok();
     Ok(())
@@ -672,7 +691,7 @@ fn unlinked_repos(app: &AppHandle, key: &str, dirs: Vec<PathBuf>) -> Vec<String>
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
 fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: String, value: String) -> Result<(), String> {
-    let v = vault_for(&state, &project)?;
+    let v = team_vault(&state, &project)?;
     if project.is_empty() || project.len() > 120 { return Err("bad project".into()); }
     relay_config::set_icon(&v, &project, &kind, &value)?;
     app.emit("icons-changed", ()).ok();
@@ -681,14 +700,14 @@ fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: St
 
 /// A project's scratch notes, newest first: [{id, text, modified}].
 #[tauri::command]
-fn scratch_list(state: State<App>, project: String) -> Result<Value, String> { scratch::list(&crate::vault_for(&state, &project)?, &project) }
+fn scratch_list(state: State<App>, project: String) -> Result<Value, String> { scratch::list(&own_vault(&state, &project)?, &project) }
 /// Create (no id) or overwrite a scratch note; returns its id.
 #[tauri::command]
 fn scratch_save(state: State<App>, project: String, id: Option<String>, text: String) -> Result<String, String> {
-    scratch::save(&crate::vault_for(&state, &project)?, &project, id, &text)
+    scratch::save(&own_vault(&state, &project)?, &project, id, &text)
 }
 #[tauri::command]
-fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { scratch::delete(&crate::vault_for(&state, &project)?, &project, &id) }
+fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { scratch::delete(&own_vault(&state, &project)?, &project, &id) }
 
 /// A vault note a conversation links to, for the right panel: {path (relative to the vault), text}.
 #[tauri::command]
@@ -714,7 +733,7 @@ async fn related_notes(app: AppHandle, state: State<'_, App>, text: String) -> R
 }
 
 /// The configured vault: path, mapping, found per path, ok.
-/// The extra vaults as the last snapshot read them: [{vault, skipped (names already in another vault), error}].
+/// The extra vaults as the last snapshot read them: [{vault, merged (projects the main vault has too), error}].
 #[tauri::command]
 fn extra_vaults_status(state: State<App>) -> Value { state.extra.lock().unwrap().clone() }
 #[tauri::command]
@@ -815,8 +834,8 @@ fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>, about: Option<String>) -> Result<(), String> {
-    session::send(&app, &state, session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about })
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>, about: Option<String>, vault: Option<String>) -> Result<(), String> {
+    session::send(&app, &state, session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about, vault })
 }
 
 #[tauri::command]

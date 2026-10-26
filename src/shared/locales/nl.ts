@@ -808,10 +808,10 @@ export default {
   "rem.none": "Geen reminders.",
   "set.extraVaults": "Gedeelde vaults",
   "set.extraVaultsHelp":
-    "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. De gesprekken, terminal en notities van een project draaien in de vault waar het vandaan komt, met de regels van die vault.",
+    "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. Een project in twee vaults staat er één keer, met gegevens uit beide; een nieuw gesprek erover vraagt in welke vault het draait.",
   "set.extraVaultAdd": "Vault toevoegen…",
   "set.extraVaultRemove": "{name} verwijderen",
-  "set.extraVaultSkipped": "Niet getoond, een andere vault heeft al een project met deze naam: {names}",
+  "set.extraVaultMerged": "Ook in je eigen vault, getoond als één project: {names}",
   "set.title": "Instellingen",
   "set.vaultHelp":
     "De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",
@@ -1446,6 +1446,9 @@ export default {
   "composer.moveHelp":
     "Waar dit gesprek loopt. Kies een andere plaats om het tussen twee beurten te verhuizen: de geschiedenis gaat mee, bestanden die maar aan één kant staan niet.",
   "composer.onMachineHelp": "Dit gesprek loopt op een andere machine en blijft draaien als deze Mac dicht is.",
+  "composer.vault": "Vault",
+  "composer.vaultHelp":
+    "De vault waarin dit gesprek draait, met zijn regels. De andere vault van het project gaat mee, om te lezen en te schrijven.",
   "composer.runOn": "Loopt op",
   "composer.thisMac": "Deze Mac",
   "composer.available": "beschikbaar",

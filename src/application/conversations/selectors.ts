@@ -189,6 +189,16 @@ export function machineRepo(key: string) {
   const machine = (where.started ? bound?.machine : where.list.find(choice => choice.id === id)?.name) ?? id;
   return { slug, repo: slug.split("/").pop()!, id, machine, started: where.started };
 }
+/** The composer's vault pick, for a conversation without a session yet whose project lives in more than one vault: the
+ *  vaults (the main one first) and the one picked. `value` null: nothing to pick. The other vaults go along as extra
+ *  folders the agent may read and write. */
+export function vaultChoice(key: string) {
+  const name = cs().chats[key]?.project;
+  const vaults = useWorkspaceStore.getState().snap.projects.find(project => project.name === name)?.vaults ?? [];
+  if (vaults.length < 2 || cs().sidOf[key]) return { vaults, value: null };
+  const picked = useDraftsStore.getState().vault[key];
+  return { vaults, value: picked && vaults.includes(picked) ? picked : vaults[0] };
+}
 /** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
  *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
  *  it where it runs: picking another place then moves it (`moveConversation`). */
