@@ -799,6 +799,12 @@ const en = {
   "rem.toastWeek": "Moved a week: {text}",
   "rem.toastMoved": "Moved: {text}",
   "rem.none": "No reminders.",
+  "set.extraVaults": "Shared vaults",
+  "set.extraVaultsHelp":
+    "Other vaults whose projects show in the sidebar next to yours, a team vault in git for example. A project's conversations, terminal and notes run in the vault it comes from, with that vault's rules.",
+  "set.extraVaultAdd": "Add vault…",
+  "set.extraVaultRemove": "Remove {name}",
+  "set.extraVaultSkipped": "Not shown, another vault already has a project with this name: {names}",
   "set.title": "Settings",
   "set.vaultHelp":
     "The folder with your Obsidian vault. Conversations start in it, and the sidebar reads work-state and reminders from it.",

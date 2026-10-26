@@ -807,6 +807,12 @@ export default {
   "rem.toastWeek": "Um eine Woche verschoben: {text}",
   "rem.toastMoved": "Verschoben: {text}",
   "rem.none": "Keine Erinnerungen.",
+  "set.extraVaults": "Geteilte Vaults",
+  "set.extraVaultsHelp":
+    "Weitere Vaults, deren Projekte in der Seitenleiste neben deinen stehen, zum Beispiel ein Team-Vault in git. Gespräche, Terminal und Notizen eines Projekts laufen in dem Vault, aus dem es stammt, mit dessen Regeln.",
+  "set.extraVaultAdd": "Vault hinzufügen…",
+  "set.extraVaultRemove": "{name} entfernen",
+  "set.extraVaultSkipped": "Nicht angezeigt, ein anderer Vault hat schon ein Projekt mit diesem Namen: {names}",
   "set.title": "Einstellungen",
   "set.vaultHelp":
     "Der Ordner mit deinem Obsidian-Vault. Gespräche starten darin, und die Seitenleiste liest daraus work-state und Erinnerungen.",

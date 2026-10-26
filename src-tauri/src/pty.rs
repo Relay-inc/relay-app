@@ -30,7 +30,7 @@ fn size(cols: u16, rows: u16) -> PtySize { PtySize { rows: rows.max(1), cols: co
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, project: String, chat: Option<String>, name: Option<String>, cols: u16, rows: u16, on_data: Channel<InvokeResponseBody>) -> Result<u32, String> {
-    let vault = super::need_vault(&state)?;
+    let vault = super::vault_for(&state, &project)?;
     if project.trim().is_empty() { return Err("bad project".into()); }
     let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name)).transpose()?;
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;

@@ -813,6 +813,12 @@ export default {
   "rem.toastWeek": "Reporté d’une semaine : {text}",
   "rem.toastMoved": "Reporté : {text}",
   "rem.none": "Aucun rappel.",
+  "set.extraVaults": "Vaults partagés",
+  "set.extraVaultsHelp":
+    "D'autres vaults dont les projets s'affichent dans la barre latérale à côté des vôtres, par exemple un vault d'équipe dans git. Les conversations, le terminal et les notes d'un projet tournent dans le vault d'où il vient, avec les règles de ce vault.",
+  "set.extraVaultAdd": "Ajouter un vault…",
+  "set.extraVaultRemove": "Retirer {name}",
+  "set.extraVaultSkipped": "Non affichés, un autre vault a déjà un projet de ce nom : {names}",
   "set.title": "Réglages",
   "set.vaultHelp":
     "Le dossier de votre coffre Obsidian. Les conversations y démarrent, et la barre latérale y lit le work-state et les rappels.",

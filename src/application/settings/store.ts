@@ -25,7 +25,7 @@ import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
 import type { PluginTest } from "../../domain/plugins/types";
-import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
+import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
 export type SettingsTab =
@@ -40,6 +40,7 @@ export type SettingsState = {
   // ---------- the settings window
   loaded: boolean; // settings and vault status read
   vaultStatus: VaultStatus | null;
+  extraVaults: ExtraVault[]; // the extra vaults as the main window's last snapshot read them
   tab: SettingsTab;
   message: Message | null; // the last save's result on General and Projects
   agentsPage: { detected: AgentsStatus | null; message: Message | null };
@@ -132,6 +133,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   locale: "en",
   loaded: false,
   vaultStatus: null,
+  extraVaults: [],
   tab: "general",
   message: null,
   agentsPage: { detected: null, message: null },

@@ -806,6 +806,12 @@ export default {
   "rem.toastWeek": "Een week verplaatst: {text}",
   "rem.toastMoved": "Verplaatst: {text}",
   "rem.none": "Geen reminders.",
+  "set.extraVaults": "Gedeelde vaults",
+  "set.extraVaultsHelp":
+    "Andere vaults waarvan de projecten naast de jouwe in de zijbalk staan, bijvoorbeeld een teamvault in git. De gesprekken, terminal en notities van een project draaien in de vault waar het vandaan komt, met de regels van die vault.",
+  "set.extraVaultAdd": "Vault toevoegen…",
+  "set.extraVaultRemove": "{name} verwijderen",
+  "set.extraVaultSkipped": "Niet getoond, een andere vault heeft al een project met deze naam: {names}",
   "set.title": "Instellingen",
   "set.vaultHelp":
     "De map met je Obsidian-vault. Gesprekken starten daarin, en de zijbalk leest er work-state en reminders uit.",

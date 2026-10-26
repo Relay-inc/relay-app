@@ -84,6 +84,21 @@ fn need_vault(st: &App) -> Result<String, String> {
     let vs = vault_of(&s);
     if vs["ok"] == true { Ok(vs["vault"].as_str().unwrap().to_string()) } else { Err(tr(ui_lang_of(&s), "err.no_vault_set")) }
 }
+/// The extra vaults (Settings › General): shared vaults whose projects show next to the main vault's.
+fn extra_vaults(s: &Value) -> Vec<String> {
+    s["extraVaults"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
+}
+/// The main vault and the extra ones, the main one first.
+fn all_vaults(st: &App) -> Vec<String> {
+    let s = st.settings.lock().unwrap();
+    std::iter::once(s["vault"].as_str().unwrap_or("").to_string()).filter(|v| !v.is_empty()).chain(extra_vaults(&s)).collect()
+}
+/// The vault a project lives in: the extra vault the last snapshot found it in, else the main one. A project's
+/// conversations, terminal, scratch notes, repos, icon and Design link all live in that vault.
+fn vault_for(st: &App, project: &str) -> Result<String, String> {
+    let v = st.proj_vault.lock().unwrap().get(project).cloned();
+    match v { Some(v) if extra_vaults(&st.settings.lock().unwrap()).contains(&v) => Ok(v), _ => need_vault(st) }
+}
 /// The reminders file (it may not exist yet), the action log and the UI language. Needs a usable vault.
 fn rem_ctx(app: &AppHandle) -> Result<(PathBuf, PathBuf, &'static str), String> {
     let (st, lang) = { let s = app.state::<App>().settings.lock().unwrap().clone(); (vault_of(&s), ui_lang_of(&s)) };
@@ -103,6 +118,7 @@ fn norm(mut v: Value) -> Value {
     if !v.is_object() { v = json!({}); }
     if !v["vault"].is_string() { v["vault"] = json!(""); }
     for k in ["projects", "overrides", "vaults", "github", "mail"] { if !v[k].is_object() { v[k] = json!({}); } }
+    if !v["extraVaults"].is_array() { v["extraVaults"] = json!([]); }
     providers::migrate(&mut v); // integrations.<provider> and boards, from the old top-level "productive" too
     agents::migrate(&mut v);    // agents.default and agents.providers.<id>: on, bin
     plugins::norm(&mut v);      // plugins: the MCP servers (plugins.rs), checked in set_settings
@@ -369,6 +385,8 @@ struct App {
     machines: machines::Machines,          // work machines, this Mac's certificate and which conversation runs where
     mirrors: mirror::Mirrors,              // what this Mac keeps in sync on each work machine (mirror.rs)
     orch: Mutex<()>,                       // one writer of orch.json at a time (orch.rs)
+    proj_vault: Mutex<HashMap<String, String>>, // project -> extra vault it lives in, from the last snapshot
+    extra: Mutex<Value>,                   // the last snapshot's extra vaults: [{vault, skipped, error}]
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -396,6 +414,11 @@ fn login_path() -> String {
         .unwrap_or_else(|| "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin".into())
 }
 
+/// A mapped path of a vault status as an absolute one, "" when it is not there.
+fn mapped(st: &Value, k: &str) -> String {
+    if st["found"][k] != true { return String::new(); }
+    vault::resolve(st["vault"].as_str().unwrap_or(""), st["map"][k].as_str().unwrap_or("")).to_string_lossy().into_owned()
+}
 /// Everything the sidebar shows, read from the mapped paths (snapshot.rs). Also returns the vault
 /// status, so the UI can switch off what the vault lacks (e.g. reminder actions without a script).
 #[tauri::command]
@@ -406,9 +429,34 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     if st["ok"] != true { return Err(tr_v(lang, "err.no_vault", v)); }
     // the first time a vault is used, its .relay/config.json is written from what is detected
     relay_config::ensure(v, &st["map"]);
-    let path = |k: &str| if st["found"][k] == true { vault::resolve(v, st["map"][k].as_str().unwrap()).to_string_lossy().into_owned() } else { String::new() };
-    let mut snap = snapshot::snapshot(v, &path("workState"), &path("notes"), chrono::Local::now().date_naive(), &state.path,
+    let mut snap = snapshot::snapshot(v, &mapped(&st, "workState"), &mapped(&st, "notes"), chrono::Local::now().date_naive(), &state.path,
         &data_dir(&app).join("topics.json"), &home())?;
+    let projects = snap["projects"].as_array_mut().unwrap();
+    for p in projects.iter_mut() { p["vault"] = json!(v); }
+    // the extra vaults' projects after the main vault's; a name already shown stays out (a project is its name)
+    let (mut index, mut extra) = (HashMap::new(), vec![]);
+    let s = state.settings.lock().unwrap().clone();
+    for e in extra_vaults(&s) {
+        let es = vault::status(&e, &vault_map(&s, &e));
+        let (mut skipped, mut error) = (vec![], None);
+        if es["ok"] == true {
+            relay_config::ensure(&e, &es["map"]);
+            match snapshot::vault_projects(&e, &mapped(&es, "workState"), &mapped(&es, "notes")) {
+                Ok((list, _)) => for mut p in list {
+                    let name = p["name"].as_str().unwrap_or("").to_string();
+                    if projects.iter().any(|q| q["name"] == name.as_str()) { skipped.push(name); continue; }
+                    p["vault"] = json!(e);
+                    index.insert(name, e.clone());
+                    projects.push(p);
+                },
+                Err(x) => error = Some(x),
+            }
+        } else { error = Some(tr_v(lang, "err.no_vault", &e)); }
+        extra.push(json!({"vault": e, "skipped": skipped, "error": error}));
+    }
+    *state.proj_vault.lock().unwrap() = index;
+    *state.extra.lock().unwrap() = json!(extra);
+    snap["extraVaults"] = json!(extra);
     snap["vault"] = st;
     let (file, _, _) = rem_ctx(&app)?;
     snap["reminders"] = reminders::list(&file, chrono::Local::now().date_naive()).into();
@@ -483,7 +531,13 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
         fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&*s).unwrap()).ok();
         app.emit("settings-changed", &*s).ok();
     }
-    Value::Object(relay_config::icons(&v))
+    // an extra vault's icons for its own projects
+    let mut icons = relay_config::icons(&v);
+    let index = state.proj_vault.lock().unwrap().clone();
+    for e in extra_vaults(&state.settings.lock().unwrap()) {
+        icons.extend(relay_config::icons(&e).into_iter().filter(|(n, _)| index.get(n) == Some(&e)));
+    }
+    Value::Object(icons)
 }
 /// Websites for projects, found by Claude: one Sonnet call for all of them, outside the vault, without settings, MCP
 /// or a transcript, and with web search as its only tool. (Haiku searched too rarely: the same input gave a site
@@ -543,7 +597,7 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     let p = agents::enabled(&state.settings.lock().unwrap()).into_iter().find(|p| p.id() == "claude");
     let (Some(sid), Some(p)) = (sid, p) else { return Ok(()) };
     if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(()); }
-    let eb = env_of(&app, &state, p);
+    let eb = env_for(&app, &state, p, &key);
     if eb.vault.is_empty() { return Ok(()); }
     // on the account the session was recorded on, its transcript is there
     let account = account_of(&state, p, &key, "sonnet");
@@ -586,16 +640,15 @@ fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<PathBuf> {
 /// GitHub repos per project, as the PRs use them: {project: ["owner/repo", ...]}.
 #[tauri::command]
 fn project_repos(state: State<App>) -> Value {
-    let v = state.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
     let mut out: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-    for (r, p) in repo_projects(&v) { out.entry(p).or_default().push(r); }
+    for v in all_vaults(&state) { for (r, p) in repo_projects(&v) { out.entry(p).or_default().push(r); } }
     for list in out.values_mut() { list.sort(); }
     json!(out)
 }
 /// A project's repos in the vault's .relay/config.json.
 #[tauri::command]
 fn set_project_repos(app: AppHandle, state: State<App>, project: String, repos: Vec<String>) -> Result<(), String> {
-    relay_config::set_repos(&need_vault(&state)?, &project, &repos)?;
+    relay_config::set_repos(&crate::vault_for(&state, &project)?, &project, &repos)?;
     // the main window's title bar shows the PRs button by them
     app.emit("repos-changed", ()).ok();
     Ok(())
@@ -619,7 +672,7 @@ fn unlinked_repos(app: &AppHandle, key: &str, dirs: Vec<PathBuf>) -> Vec<String>
 /// Set a project's icon in the vault (see relay_config::set_icon); both windows hear "icons-changed".
 #[tauri::command]
 fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: String, value: String) -> Result<(), String> {
-    let v = need_vault(&state)?;
+    let v = vault_for(&state, &project)?;
     if project.is_empty() || project.len() > 120 { return Err("bad project".into()); }
     relay_config::set_icon(&v, &project, &kind, &value)?;
     app.emit("icons-changed", ()).ok();
@@ -628,14 +681,14 @@ fn set_project_icon(app: AppHandle, state: State<App>, project: String, kind: St
 
 /// A project's scratch notes, newest first: [{id, text, modified}].
 #[tauri::command]
-fn scratch_list(state: State<App>, project: String) -> Result<Value, String> { scratch::list(&need_vault(&state)?, &project) }
+fn scratch_list(state: State<App>, project: String) -> Result<Value, String> { scratch::list(&crate::vault_for(&state, &project)?, &project) }
 /// Create (no id) or overwrite a scratch note; returns its id.
 #[tauri::command]
 fn scratch_save(state: State<App>, project: String, id: Option<String>, text: String) -> Result<String, String> {
-    scratch::save(&need_vault(&state)?, &project, id, &text)
+    scratch::save(&crate::vault_for(&state, &project)?, &project, id, &text)
 }
 #[tauri::command]
-fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { scratch::delete(&need_vault(&state)?, &project, &id) }
+fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), String> { scratch::delete(&crate::vault_for(&state, &project)?, &project, &id) }
 
 /// A vault note a conversation links to, for the right panel: {path (relative to the vault), text}.
 #[tauri::command]
@@ -661,6 +714,9 @@ async fn related_notes(app: AppHandle, state: State<'_, App>, text: String) -> R
 }
 
 /// The configured vault: path, mapping, found per path, ok.
+/// The extra vaults as the last snapshot read them: [{vault, skipped (names already in another vault), error}].
+#[tauri::command]
+fn extra_vaults_status(state: State<App>) -> Value { state.extra.lock().unwrap().clone() }
 #[tauri::command]
 fn vault_status(state: State<App>) -> Value { vault_of(&state.settings.lock().unwrap()) }
 
@@ -691,6 +747,13 @@ fn check_vault(path: String, map: Value) -> Value { vault::status(&path, &vault:
 
 // ---------- Agent providers (agents.rs, packages/agent-*): the app owns the processes, sessions.json and the
 // pending folder; a provider builds the command, turns its output into agent_core::Event, reads its own logs.
+
+/// env_of for one conversation: in the extra vault its session runs in, where the provider keeps its transcripts.
+fn env_for(app: &AppHandle, st: &App, p: &dyn AgentProvider, key: &str) -> EnvBuf {
+    let v = st.sids.lock().unwrap().get(key).map(|s| s.vault.clone()).unwrap_or_default();
+    in_vault(env_of(app, st, p), v)
+}
+fn in_vault(mut eb: EnvBuf, vault: String) -> EnvBuf { if !vault.is_empty() { eb.vault = vault; } eb }
 
 /// A provider's Env, owned, so it can go to a blocking thread.
 struct EnvBuf { home: String, vault: String, path: String, bin: String, pending: PathBuf, opts: Value }
@@ -879,7 +942,7 @@ async fn history(app: AppHandle, state: State<'_, App>, project: String) -> Resu
         let c = state.machines.client(&m);
         return tauri::async_runtime::spawn_blocking(move || c.history(&s.sid, 0, &b.cwd).map(|(items, _)| items)).await.map_err(|e| e.to_string())?;
     }
-    Ok(json!(p.history(&env_of(&app, &state, p).env(), &s.sid, 0).0))
+    Ok(json!(p.history(&in_vault(env_of(&app, &state, p), s.vault.clone()).env(), &s.sid, 0).0))
 }
 
 /// "Nieuw gesprek": stop the process and forget the session, the next message starts fresh.
@@ -936,7 +999,7 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool, about: Option<&str>
     let up = |m: &Value| state.machines.info(m).map_err(|e| trc_v("err.machine_down", &format!("{}: {e}", m["name"].as_str().unwrap_or(""))));
     let p: &'static dyn AgentProvider = &agent_claude::PROVIDER;
     // this Mac's transcript folder for the session, on the account it was recorded on
-    let here = || { let mut eb = env_of(app, &state, p); eb.opts["account"] = json!(sess.account); eb };
+    let here = || { let mut eb = in_vault(env_of(app, &state, p), sess.vault.clone()); eb.opts["account"] = json!(sess.account); eb };
     let mac = [vault.clone(), format!("{}/.claude/projects/{}/memory", home(), agent_claude::slug(&vault))];
     // work in a repo there stays there: asked about (or pushed) while the agent still runs, so nothing changed yet
     if let (Some(b), true, Some(a)) = (&from, to.is_empty(), about) {
@@ -987,7 +1050,9 @@ fn app_sessions(state: State<App>) -> Value {
 fn history_sid(app: AppHandle, state: State<App>, sid: String, from: Option<u64>, provider: Option<String>) -> Value {
     let p = agents::get_or_first(provider.as_deref());
     if !p.valid_session(&sid) { return json!({"items": [], "next": 0}); }
-    let (items, next) = p.history(&env_of(&app, &state, p).env(), &sid, from.unwrap_or(0));
+    // the vault of the conversation with this session, where its transcript is
+    let v = state.sids.lock().unwrap().values().find(|s| s.sid == sid).map(|s| s.vault.clone()).unwrap_or_default();
+    let (items, next) = p.history(&in_vault(env_of(&app, &state, p), v).env(), &sid, from.unwrap_or(0));
     json!({"items": items, "next": next})
 }
 
@@ -1025,7 +1090,7 @@ fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
     let mut out = serde_json::Map::new();
     for k in keys {
         let Some((p, sid)) = sid_of(&state, &k).filter(|(p, _)| p.caps().subagents) else { continue };
-        let list = p.subagents(&env_of(&app, &state, p).env(), &sid);
+        let list = p.subagents(&env_for(&app, &state, p, &k).env(), &sid);
         if !list.is_empty() { out.insert(k, json!(list)); }
     }
     Value::Object(out)
@@ -1035,7 +1100,7 @@ fn subagents(app: AppHandle, state: State<App>, keys: Vec<String>) -> Value {
 #[tauri::command]
 fn agent_history(app: AppHandle, state: State<App>, key: String, id: String, from: Option<u64>) -> Value {
     let Some((p, sid)) = sid_of(&state, &key) else { return json!({"items": [], "next": 0}) };
-    let (items, next) = p.agent_history(&env_of(&app, &state, p).env(), &sid, &id, from.unwrap_or(0));
+    let (items, next) = p.agent_history(&env_for(&app, &state, p, &key).env(), &sid, &id, from.unwrap_or(0));
     json!({"items": items, "next": next})
 }
 
@@ -1126,7 +1191,7 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
     if let Some(mut p) = state.procs.lock().unwrap().remove(project) { p.child.kill().ok(); }
     need_vault(state)?;
     let p = provider_of(state, project, None);
-    let eb = env_of(app, state, p);
+    let eb = env_for(app, state, p, project);
     let sid = session.or_else(|| state.sids.lock().unwrap().get(project).map(|s| s.sid.clone()));
     sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
         .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(project))))
@@ -1285,6 +1350,14 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     if vault::status(&v, &map)["ok"] != true { return Err(tr_v(lang, "err.no_vault", &v)); }
     relay_config::set_paths(&v, &map).map_err(|e| format!(".relay/config.json: {e}"))?;
     s["vaults"].as_object_mut().unwrap().remove(&v);
+    // extra vaults by their real path, each usable, the main vault and doubles left out
+    let mut extra: Vec<String> = vec![];
+    for e in extra_vaults(&s).iter().map(|e| vault::canon(e)) {
+        if e.is_empty() || e == v || extra.contains(&e) { continue; }
+        if vault::status(&e, &vault_map(&s, &e))["ok"] != true { return Err(tr_v(lang, "err.no_vault", &e)); }
+        extra.push(e);
+    }
+    s["extraVaults"] = json!(extra);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
             ("icon", Some(t)) => t.chars().count() <= 4,
@@ -2133,7 +2206,7 @@ pub fn run() {
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()) });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])) });
             app.manage(pty::Ptys::default());
             app.manage(plugins::Plugins::default());
             app.manage(dictation::Dictation::default());
@@ -2194,7 +2267,7 @@ pub fn run() {
             app.deep_link().on_open_url(move |_| { windows::show_active(&handle); });
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
+        .invoke_handler(tauri::generate_handler![snapshot, webview_theme, ui_state_get, ui_state_init, ui_state_set, favicons, project_icons, set_project_icon, find_icon_sites, capture_vault, project_repos, set_project_repos, ignore_repo, open_settings_window, updater::updates_status, updater::updates_check, updater::updates_install, updater::agent_updates, updater::agent_update, usage_tokens, usage_limits, agents_status, agent_commands, chat_providers, send, ai_title, stop, orch_workers, orch_stop, orch_dispatch_ticket, orch_message, orch_answer, orch_ask_report, orch_restart, orch_pr, orch_board, drop_worktrees, conversation_changes, reset, move_chat, chats, bg, app_sids, activity, history_sid, history, running, subagents, agent_history, pending, answer, agents, app_sessions, open_terminal, get_settings, set_settings, pick_folder, pick_path, files::pick_files, files::read_image, files::open_file, files::pasted_files, files::copy_text, vault_status, extra_vaults_status, detect_vault, check_vault, create_default_vault, reminder, reminder_add, ui_lang, ui_locale, integration_status, integration_has_token, integration_token, integration_call, integration_upload, integration_thumb, open_viewer, ticket_pictures, integration_mcp, integration_import, read_note, vault_notes, related_notes, github_status, github_prs, github_pr, mail_list, mail_read, mail_seen, mail_move, mail_tool, ai_write, github_pr_files, github_pr_review, mail_test, mail_connect, calendar_connect, calendar_meetings, notify::notify, actions::action_config, actions::set_action_config, pty::pty_spawn, pty::pty_write, pty::pty_resize, pty::pty_kill, scratch_list, scratch_save, scratch_delete, machine_pair, machine_pair_phone, machine_status, machine_forget, chat_machines, set_machine_mirror, mirror_status, mirror_progress, move_conversation, server_setup, machine_update, machine_git::machine_github, machine_git::machine_github_connect, machine_git::machine_github_poll, machine_git::machine_github_disconnect, machine_git::machine_repos, machine_git::machine_repo_push, machine_git::machine_repo_to_mac, machine_git::machine_repo_ensure, host_status, host_set, host_pair, machines_list, set_machines_default, retry::retries, retry::retry_cancel, vaultsync::vault_sync, vaultsync::set_vault_sync, commonwealth_status, commonwealth_install, commonwealth_join, commonwealth_notes, commonwealth_act, brain_roots, brain_graph, brain_search, brain_note, brain_touches, dictation::dictation_models, dictation::dictation_model, dictation::dictation_download, dictation::dictation_delete, dictation::dictation_start, dictation::dictation_stop, dictation::dictation_cancel, meeting::meeting_record_start, meeting::meeting_record_stop, meeting::meeting_record_retry, meeting::meeting_record_cancel, anywhere::dictation_access, anywhere::dictation_ask_access, anywhere::dictation_pause_shortcuts, permissions::permissions, permissions::permissions_open, plugins::plugins_list, plugins::plugin_secret, plugins::plugin_forget, plugins::plugin_test, plugins::plugin_view, plugins::plugin_call, plugins::plugin_import_list, plugins::plugin_import, design::design_show, design::design_bounds, design::design_hide, design::design_link, design::set_design_link, design::design_opened, share::phone_share, share::phone_shared, windows::active_window])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")
         // a click on the Dock icon brings the window used last back (the main one may be hidden)

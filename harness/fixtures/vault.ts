@@ -127,6 +127,36 @@ export const projects = P.map(p => ({
 }));
 export const projectNames = P.map(p => p.name);
 
+/** The shared fixture: a team vault next to the main one, with a project of the same name as one already shown. */
+export const TEAM_VAULT = "/Users/me/Team vault";
+export const teamProjects = [
+  {
+    name: "Team Handbook",
+    context: "Team",
+    state: "Active",
+    last: ymd(NOW - DAY),
+    summary: "Onboarding chapter rewritten, review by the whole team on Thursday.",
+    open: 2,
+    open_items: ["Review onboarding chapter", "Add the release checklist"],
+    stand: null,
+    aliases: [],
+    vault: TEAM_VAULT,
+  },
+  {
+    name: "Hiring 2027",
+    context: "Team",
+    state: "Quiet",
+    last: ymd(NOW - 9 * DAY),
+    summary: "Job post for a medior developer drafted, waiting on budget.",
+    open: null,
+    open_items: [],
+    stand: null,
+    aliases: [],
+    vault: TEAM_VAULT,
+  },
+];
+export const teamStatus = [{ vault: TEAM_VAULT, skipped: ["Northwind Portal"], error: null }];
+
 const contextFolder = (context: string) => `Contexts/${context}`;
 export const notes = [
   ...P.map(p => `${contextFolder(p.context)}/Projects/${p.name}/${p.name}.md`),

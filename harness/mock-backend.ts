@@ -47,6 +47,8 @@ document.head.append(material);
 let settings = vault.settings(fixture);
 // orch-plain: the orchestrator with the workers' crabs switched off (Settings › General)
 if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
+const shared = fixture === "shared";
+if (shared) settings = { ...settings, extraVaults: [vault.TEAM_VAULT] };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 let reminders = [...vault.reminders];
@@ -316,6 +318,8 @@ function handle(cmd: string, a: Args): unknown {
       return "en-GB";
     case "vault_status":
       return vault.vaultStatus(vaultOk);
+    case "extra_vaults_status":
+      return harness.extraVaults ?? [];
     case "detect_vault":
     case "check_vault":
       return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
@@ -344,8 +348,10 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "open_file":
       return String(a.path).includes("missing") ? Promise.reject("not found") : null;
-    case "snapshot":
-      return vault.snapshot(reminders);
+    case "snapshot": {
+      const snap = vault.snapshot(reminders);
+      return shared ? { ...snap, projects: [...snap.projects, ...vault.teamProjects], extraVaults: vault.teamStatus } : snap;
+    }
     case "vault_notes":
       return { root: vault.VAULT, notes: vault.notes };
     case "read_note":
@@ -1057,6 +1063,8 @@ const harness = {
   unmocked,
   autoReply: true,
   echo: true,
+  /** What `extra_vaults_status` answers: the shared vaults as the last snapshot read them. */
+  extraVaults: (shared ? vault.teamStatus : []) as { vault: string; skipped: string[]; error: string | null }[],
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,
   /** What `pick_files` answers (the + button's dialog): [] is cancelled. */

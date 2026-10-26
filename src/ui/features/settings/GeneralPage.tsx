@@ -10,6 +10,8 @@ import {
   checkMap,
   pickMappedFile,
   pickVaultFolder,
+  addExtraVault,
+  removeExtraVault,
   saveFavicons,
   saveKeepAwake,
   saveAutoRetry,
@@ -39,6 +41,7 @@ import { Segmented } from "./Segmented";
 import { Switch } from "./Switch";
 import { VaultSyncSection } from "./VaultSyncSection";
 
+const NONE: string[] = [];
 const trimmed = (map: VaultMap) => Object.fromEntries(KEYS.map(([key]) => [key, map[key].trim()])) as VaultMap;
 
 // Relay blue is the fixed brand colour (it must not follow the current accent); graphite is the text colour
@@ -63,6 +66,8 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
   const captureOnClose = useSettingsStore(s => s.settings.captureOnClose !== false);
   const workerCrabs = useSettingsStore(s => s.settings.workerCrabs !== false);
   const message = useSettingsStore(s => s.message);
+  const extraVaults = useSettingsStore(s => s.settings.extraVaults ?? NONE);
+  const extraRead = useSettingsStore(s => s.extraVaults);
   // the vault mapping as it is being edited, back to what the backend says whenever the vault status changes
   const [map, setMap] = useState(vaultStatus.map);
   const [mapOf, setMapOf] = useState(vaultStatus);
@@ -139,6 +144,40 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
           pickTip={t("vault.pickPath")}
           onPick={pickVaultFolder}
         />
+      </Section>
+      <Section title={t("set.extraVaults")} desc={<Html html={th("set.extraVaultsHelp")} />}>
+        <div className="flex flex-col gap-2">
+          {extraVaults.map(vault => {
+            const read = extraRead.find(x => x.vault === vault);
+            return (
+              <div key={vault} className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate text-xs text-s-fg" title={vault}>
+                    {vault}
+                  </code>
+                  <button
+                    className={buttonClass("ghost")}
+                    aria-label={t("set.extraVaultRemove", { name: vault })}
+                    onClick={() => removeExtraVault(vault)}
+                  >
+                    {t("ag.remove")}
+                  </button>
+                </div>
+                {read?.error && <p className="text-xs text-s-warn">{read.error}</p>}
+                {!!read?.skipped.length && (
+                  <p className="text-xs text-s-muted">
+                    {t("set.extraVaultSkipped", { names: read.skipped.join(", ") })}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+          <div>
+            <button className={buttonClass()} onClick={addExtraVault}>
+              {t("set.extraVaultAdd")}
+            </button>
+          </div>
+        </div>
       </Section>
       <Section
         title={t("vault.map")}

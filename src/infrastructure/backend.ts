@@ -34,7 +34,15 @@ import type {
   MailAcct,
   Settings,
 } from "../domain/settings/types";
-import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus } from "../domain/workspace/types";
+import type {
+  ExtraVault,
+  IconKind,
+  ProjectIcon,
+  Snapshot,
+  VaultMap,
+  VaultNotes,
+  VaultStatus,
+} from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
@@ -99,6 +107,7 @@ export const notify = (key: string, title: string, body: string, slot?: string) 
 
 // ---------- the vault
 export const vaultStatus = () => invoke<VaultStatus>("vault_status");
+export const extraVaultsStatus = () => invoke<ExtraVault[]>("extra_vaults_status");
 export const snapshot = () => invoke<Snapshot>("snapshot");
 export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });

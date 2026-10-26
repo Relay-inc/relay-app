@@ -847,6 +847,19 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
+  // a shared vault under General: its path, Remove, and the project left out because the main vault has one by that name
+  "settings-shared-vaults": async () => {
+    await settingsPage("General", undefined, "shared");
+    await intoView("Shared vaults");
+  },
+  // the shared vault's projects in the sidebar, in their own context (found by the search)
+  "sidebar-shared": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    // a project shows once it has conversations; the search finds both of the team vault's
+    await page.getByPlaceholder("Search").fill("h");
+    await waitText("Team Handbook");
+    await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
+  },
   "settings-interface": async () => {
     await settingsPage("General");
     await intoView("Accent");

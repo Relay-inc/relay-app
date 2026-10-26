@@ -157,7 +157,7 @@ impl Local for Mac {
         let st = self.app.state::<App>();
         let Some(s) = st.sids.lock().unwrap().get(key).cloned() else { return Ok(json!({"items": [], "next": 0})) };
         let p = agents::get_or_first(Some(&s.provider));
-        let (items, next) = p.history(&env_of(&self.app, &st, p).env(), &s.sid, 0);
+        let (items, next) = p.history(&crate::in_vault(env_of(&self.app, &st, p), s.vault.clone()).env(), &s.sid, 0);
         Ok(json!({"items": items, "next": next}))
     }
     fn admit(&self, pk: &str, proof: &str) -> bool { update(&self.app, |f| f.phones.get_mut(&self.machine).is_some_and(|p| p.admit(pk, proof))) }

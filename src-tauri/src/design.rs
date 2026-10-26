@@ -141,14 +141,14 @@ pub fn design_hide(app: AppHandle) -> Result<(), String> {
 /// A project's saved Design link, "" for none.
 #[tauri::command]
 pub fn design_link(state: State<App>, project: String) -> Result<String, String> {
-    Ok(relay_config::design(&need_vault(&state)?, &project))
+    Ok(relay_config::design(&crate::vault_for(&state, &project)?, &project))
 }
 /// Save a project's Design link ("" removes it).
 #[tauri::command]
 pub fn set_design_link(state: State<App>, project: String, url: String) -> Result<(), String> {
     let url = url.trim();
     if !url.is_empty() { claude_url(url)?; }
-    relay_config::set_design(&need_vault(&state)?, &project, url)
+    relay_config::set_design(&crate::vault_for(&state, &project)?, &project, url)
 }
 
 // ---------- the relay-design MCP server: tools for a conversation's agent on the Design drawer's canvas
@@ -455,7 +455,7 @@ fn run(app: &AppHandle, key: &str, pid: u32, name: &str, args: &Value) -> Result
     match name {
         "design_read" | "design_snapshot" | "design_prompt" => {
             let (project, view) = open(app, key, None)?;
-            if relay_config::design(&need_vault(&st)?, &project).is_empty() {
+            if relay_config::design(&crate::vault_for(&st, &project)?, &project).is_empty() {
                 return Err(format!("{project} has no Design link yet: design_create starts a design, or the user pastes a claude.ai link in the Design drawer"));
             }
             match name {

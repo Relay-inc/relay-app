@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The messages a process has not answered yet. `running`: sent and not answered, also in the broker's file so a
@@ -81,8 +81,17 @@ fn start_turns(turn: Option<&Turn>) -> u32 { u32::from(turn.is_some()) }
 
 fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) -> Result<Proc, String> {
     let Start { project, name, fork, opts, turn, from_mail, account, machine, about } = s;
-    let dir = need_vault(state)?;
-    let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
+    let main = need_vault(state)?;
+    let saved = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).cloned();
+    let resume = saved.as_ref().map(|s| s.sid.clone());
+    // a resumed session runs in the vault it started in (the provider finds it by that folder), a new one in the vault
+    // of the project it is about
+    let dir = match (&saved, about) {
+        (Some(s), _) if !s.vault.is_empty() && Path::new(&s.vault).is_dir() => s.vault.clone(),
+        (Some(_), _) | (None, None) => main.clone(),
+        (None, Some(a)) => crate::vault_for(state, a)?,
+    };
+    let extra = if dir == main { "" } else { dir.as_str() };
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let caps = p.caps();
@@ -117,6 +126,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         (c, false, true)
     } else {
         let mut eb = env_of(app, state, p);
+        eb.vault = dir.clone();
         if p.caps().accounts { eb.opts["account"] = json!(account); }
         if orch::is_orch(project) { eb.opts["design"] = json!(false); }
         if caps.control && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
@@ -148,7 +158,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
     let pid = agent.id();
     let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: Turns::new(start_turns(turn)), account: account.into(), remote };
-    tauri_sink::read_agent(app, project, p, pid, Feed { frames, backlog, inherit }, account);
+    tauri_sink::read_agent(app, project, p, pid, Feed { frames, backlog, inherit }, account, extra);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if from_mail { proc.mark_tainted(); }
     Ok(proc)
@@ -292,7 +302,7 @@ fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32
             Ok(Some(c)) if c.agent.id() == pid => {
                 let broker::Conn { agent, stdin, frames, backlog } = c;
                 if let Some(x) = st.procs.lock().unwrap().get_mut(key) { x.stdin = stdin; x.child = agent; }
-                tauri_sink::read_agent(app, key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "");
+                tauri_sink::read_agent(app, key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "", "");
                 return true;
             }
             Ok(_) => return false,
@@ -325,7 +335,7 @@ pub(crate) fn reattach_remote(app: &AppHandle) {
                     let (Some(sid), Ok(info)) = (sids.get(&meta.key), st.machines.info(&m)) else { continue };
                     st.machines.set_bind(&meta.key, machines::Bind { machine: id.clone(), cwd: machines::cwd_or_vault(String::new(), &info) });
                     let mut all = st.sids.lock().unwrap();
-                    all.insert(meta.key.clone(), agents::Sess { provider: meta.provider.clone(), sid: sid.clone(), account: String::new() });
+                    all.insert(meta.key.clone(), agents::Sess { provider: meta.provider.clone(), sid: sid.clone(), ..Default::default() });
                     crate::save_sids(app, &all);
                     drop(all);
                     app.emit("remote-chat", json!({"key": meta.key, "title": titles.get(&meta.key), "provider": meta.provider})).ok();
@@ -336,7 +346,7 @@ pub(crate) fn reattach_remote(app: &AppHandle) {
             let pid = agent.id();
             let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: Turns::new(1), account: String::new(), remote: true };
             st.procs.lock().unwrap().insert(meta.key.clone(), x);
-            tauri_sink::read_agent(app, &meta.key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "");
+            tauri_sink::read_agent(app, &meta.key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "", "");
         }
     }
 }
@@ -354,6 +364,8 @@ pub(crate) fn reattach(app: &AppHandle) {
         let (key, account) = (m.key.clone(), m.account.clone());
         let x = Proc::of_meta(agent, stdin, m, p.id());
         app.state::<App>().procs.lock().unwrap().insert(key.clone(), x);
-        tauri_sink::read_agent(app, &key, p, pid, Feed { frames, backlog, inherit: (false, false) }, &account);
+        // the vault it runs in, as its session was saved before the restart
+        let vault = app.state::<App>().sids.lock().unwrap().get(&key).map(|s| s.vault.clone()).unwrap_or_default();
+        tauri_sink::read_agent(app, &key, p, pid, Feed { frames, backlog, inherit: (false, false) }, &account, &vault);
     }
 }

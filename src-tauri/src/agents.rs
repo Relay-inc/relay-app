@@ -112,26 +112,28 @@ pub fn full<'a>(limits: &'a Value, model: &str) -> impl Iterator<Item = &'a Valu
 /// Limits read without a login: the account was never signed in (an expired token the CLI refreshes itself).
 pub fn no_login(limits: &Value) -> bool { limits["ok"] == false && limits["reason"] == "no-login" }
 
-/// A conversation's session: which provider, its session id there, and the account (config folder, "" the CLI's own).
-#[derive(Clone, Debug, PartialEq)]
-pub struct Sess { pub provider: String, pub sid: String, pub account: String }
+/// A conversation's session: which provider, its session id there, the account (config folder, "" the CLI's own) and
+/// the extra vault it runs in ("" the main one): a provider finds a session to resume by the folder it started in.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Sess { pub provider: String, pub sid: String, pub account: String, pub vault: String }
 
 /// sessions.json: `{key: "<sid>"}` is Claude's on its own account (every file from before the providers),
-/// `{key: {provider, sid, account?}}` the rest. Those stay strings, so an older build still reads the file.
+/// `{key: {provider, sid, account?, vault?}}` the rest. Those stay strings, so an older build still reads the file.
 pub fn load_sessions(raw: &str) -> HashMap<String, Sess> {
     let m: Map<String, Value> = serde_json::from_str(raw).unwrap_or_default();
     m.into_iter().filter_map(|(k, v)| match v {
-        Value::String(sid) => Some((k, Sess { provider: FIRST.into(), sid, account: String::new() })),
+        Value::String(sid) => Some((k, Sess { provider: FIRST.into(), sid, ..Default::default() })),
         Value::Object(o) => Some((k, Sess { provider: o.get("provider")?.as_str()?.into(), sid: o.get("sid")?.as_str()?.into(),
-            account: o.get("account").and_then(Value::as_str).unwrap_or("").into() })),
+            account: o.get("account").and_then(Value::as_str).unwrap_or("").into(), vault: o.get("vault").and_then(Value::as_str).unwrap_or("").into() })),
         _ => None,
     }).collect()
 }
 pub fn save_sessions(m: &HashMap<String, Sess>) -> String {
-    let o: Map<String, Value> = m.iter().map(|(k, s)| (k.clone(), match (s.provider == FIRST, s.account.is_empty()) {
-        (true, true) => json!(s.sid),
-        (_, true) => json!({"provider": s.provider, "sid": s.sid}),
-        _ => json!({"provider": s.provider, "sid": s.sid, "account": s.account}),
+    let o: Map<String, Value> = m.iter().map(|(k, s)| (k.clone(), if s.provider == FIRST && s.account.is_empty() && s.vault.is_empty() { json!(s.sid) } else {
+        let mut o = json!({"provider": s.provider, "sid": s.sid});
+        if !s.account.is_empty() { o["account"] = json!(s.account); }
+        if !s.vault.is_empty() { o["vault"] = json!(s.vault); }
+        o
     })).collect();
     serde_json::to_string_pretty(&Value::Object(o)).unwrap()
 }
@@ -150,15 +152,17 @@ mod tests {
     use super::*;
     #[test]
     fn sessions_json_stays_readable_both_ways() {
-        let m = load_sessions(r#"{"c:1": "36099ce4-d17c", "p": {"provider": "codex", "sid": "abc"}, "w": {"provider": "claude", "sid": "d1", "account": "/h/.claude-work"}, "bad": 3}"#);
-        assert_eq!(m["c:1"], Sess { provider: "claude".into(), sid: "36099ce4-d17c".into(), account: "".into() });
+        let m = load_sessions(r#"{"c:1": "36099ce4-d17c", "p": {"provider": "codex", "sid": "abc"}, "w": {"provider": "claude", "sid": "d1", "account": "/h/.claude-work"}, "v": {"provider": "claude", "sid": "d2", "vault": "/h/shared"}, "bad": 3}"#);
+        assert_eq!(m["c:1"], Sess { provider: "claude".into(), sid: "36099ce4-d17c".into(), ..Default::default() });
         assert_eq!(m["p"].provider, "codex");
         assert_eq!(m["w"].account, "/h/.claude-work");
-        assert_eq!(m.len(), 3);
+        assert_eq!(m["v"].vault, "/h/shared");
+        assert_eq!(m.len(), 4);
         let back: Value = serde_json::from_str(&save_sessions(&m)).unwrap();
         assert_eq!(back["c:1"], "36099ce4-d17c");
         assert_eq!(back["p"], json!({"provider": "codex", "sid": "abc"}));
         assert_eq!(back["w"], json!({"provider": "claude", "sid": "d1", "account": "/h/.claude-work"}));
+        assert_eq!(back["v"], json!({"provider": "claude", "sid": "d2", "vault": "/h/shared"}));
         assert!(load_sessions("").is_empty());
     }
     #[test]

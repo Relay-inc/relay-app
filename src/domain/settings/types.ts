@@ -101,6 +101,7 @@ export type HostStatus = {
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
+  extraVaults?: string[]; // shared vaults whose projects show next to the main vault's
   projects: Record<string, { icon?: string; img?: string; label?: string }>;
   overrides: Record<string, string | null>; // a terminal session's project, by session id
   integrations: Record<string, IntegrationConfig>;
