@@ -308,7 +308,7 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
 /// replaces the composer and has no send button. Found by what it is, not by class: visible radio/checkbox/option
 /// controls outside the composer, and the smallest ancestor holding all of them and a button of its own.
 /// claude.ai's widget (checked with design_snapshot's `dom`, 26 Oct 2026): options are `button[aria-pressed]` in a
-/// `[role="group"]`, labelled by a `<bdi>` after their number; the question is a `<bdi>` above them; "Something else" is a
+/// `[role="group"]` of the chat column (the sidebar's Chat/Code switch is one too), labelled by a `<bdi>` after their number; the question is a `<bdi>` above them; "Something else" is a
 /// text field in a `<form>` without a submit button (Enter submits it), next to "Skip", which is never clicked.
 /// A multi-select form has `span[role="checkbox"]` options, each with a hidden checkbox input beside it (skipped), and an
 /// icon-only `button[aria-label="Submit"]`. A card with several questions shows one at a time ("Question 1 of 3", Previous and
@@ -316,7 +316,7 @@ fn read(view: &Webview, paths: &Value) -> Result<Value, String> {
 /// ponytail: `step` matches claude.ai's English text only.
 const QUESTION: &str = r#"const q = () => {
   const vis = e => e.getBoundingClientRect().width > 0 && !e.closest('[data-testid="chat-input"],[role="menu"]');
-  const opts = [...document.querySelectorAll('[role="radio"],[role="checkbox"],[role="option"],input[type="radio"],input[type="checkbox"],[role="group"] button[aria-pressed]')].filter(vis)
+  const opts = [...document.querySelectorAll('[role="radio"],[role="checkbox"],[role="option"],input[type="radio"],input[type="checkbox"],[data-testid="chat-column-body"] [role="group"] button[aria-pressed]')].filter(vis)
     .filter(o => !(o.matches("input") && o.parentElement.querySelector('[role="checkbox"],[role="radio"]')));
   if (!opts.length) return null;
   const hasButton = r => [...r.querySelectorAll('button')].some(b => !opts.some(o => o.contains(b) || b.contains(o)));
