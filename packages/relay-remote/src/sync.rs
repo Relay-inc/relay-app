@@ -46,12 +46,15 @@ impl Filter {
     }
 }
 /// A name as APFS compares it, exact for ASCII names: lowercase, plus every character whose Unicode full case folding is
-/// ASCII (ſ, the Kelvin sign, ß and ẞ, the ff/fi/fl/ffi/ffl/st ligatures), so `Syﬆem/Settings.json` still is
-/// `System/settings.json`. Others fold to something non-ASCII, which no ASCII name can equal.
+/// ASCII (ſ, the Kelvin sign, ß and ẞ, the ff/fi/fl/ffi/ffl/st ligatures) or that NFD turns into ASCII, so
+/// `Syﬆem/Settings.json` still is `System/settings.json`. Others stay non-ASCII, which no ASCII name can equal; a
+/// non-ASCII name is not matched as APFS would, so callers guard only ASCII ones.
 fn fold(s: &str) -> String {
     s.chars().map(|c| match c {
         '\u{17F}' => "s", '\u{212A}' => "k", '\u{DF}' | '\u{1E9E}' => "ss", '\u{FB00}' => "ff", '\u{FB01}' => "fi", '\u{FB02}' => "fl",
         '\u{FB03}' => "ffi", '\u{FB04}' => "ffl", '\u{FB05}' | '\u{FB06}' => "st",
+        // NFD singletons APFS also takes for the ASCII character
+        '\u{37E}' => ";", '\u{1FEF}' => "`",
         c => return c.to_ascii_lowercase().to_string(),
     }.to_string()).collect()
 }

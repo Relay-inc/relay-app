@@ -25,7 +25,8 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   `.claude` never syncs, and of the folder it links to (`System/` in a vault Relay makes; `System/` also before the
   link resolves, on a join's first round) only `rules/`, `reference/`, `index/`, `archive/` and `reminders.md` go, in
   both directions (`shared_vaults::filter`). Settings, hooks, scripts, skills and agents stay on each Mac. Paths match
-  case-folded, as APFS compares them, so `System/Hooks/x.sh` is held back too. A round follows no symlink, so a link
+  case-folded, as APFS compares them, so `System/Hooks/x.sh` and `Syﬆem/hooks/x.sh` are held back too; a vault whose
+  `.claude` links to a folder with a non-ASCII name does not sync until that folder is renamed. A round follows no symlink, so a link
   someone made inside the folder does not take a member's writes out of it. Project MCP servers (`.mcp.json`) do not
   start: shared-vault conversations run with `--strict-mcp-config`.
 - **Not reach your other vaults through your agent.** A conversation in a shared vault gets Read and Edit denies on

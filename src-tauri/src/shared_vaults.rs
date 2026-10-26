@@ -64,8 +64,10 @@ pub fn client(v: &Shared, me: &Identity) -> Client { Client::new(&v.host, v.port
 /// archive and reminders. `.claude` itself never goes (a link to System/ would send every file twice, and drift on a
 /// Mac where it is a real folder). The config folder is System/ as in a vault Relay makes, and where `.claude` links to
 /// when that is another folder in the vault; System/ also before the link resolves, on a join's first round. No round
-/// follows a symlink: one the user made in the folder would otherwise take a member's writes out of it.
-pub fn filter(folder: &Path) -> Filter {
+/// follows a symlink: one the user made in the folder would otherwise take a member's writes out of it. A link to a
+/// folder with a name `fold` cannot match as APFS does (not plain ASCII) is refused: a member's `MÉTA/settings.json`
+/// would otherwise pass for another file than `Méta/settings.json` and land in it.
+pub fn filter(folder: &Path) -> Result<Filter, String> {
     let mut f = Filter::vault_default();
     f.names.push(".claude".into());
     f.no_links = true;
@@ -74,9 +76,12 @@ pub fn filter(folder: &Path) -> Filter {
         let (real, root) = (std::fs::canonicalize(full).ok()?, std::fs::canonicalize(folder).ok()?);
         real.strip_prefix(&root).ok().map(|r| r.to_string_lossy().into_owned())
     });
+    if let Some(t) = target.as_deref().filter(|t| !t.chars().all(|c| c.is_ascii_alphanumeric() || " ._-/".contains(c))) {
+        return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this vault"));
+    }
     f.guarded = std::iter::once("System".to_string()).chain(target.filter(|t| !t.is_empty())).collect();
     f.only = f.guarded.iter().flat_map(|g| ["rules", "reference", "index", "archive", "reminders.md"].map(|x| format!("{g}/{x}"))).collect();
-    f
+    Ok(f)
 }
 
 /// A folder by its real path, also one that does not exist yet: the nearest folder that does, resolved (links, `..`),
@@ -114,9 +119,9 @@ impl Hub {
         // the walkers' lock before the key and the base are read: a leave (forget) either comes first, and the key is
         // gone, or waits until this round's base is written, and removes it after
         let mut walkers = self.walkers.lock().unwrap();
-        match load_key(data, &v.id) {
+        match load_key(data, &v.id).and_then(|k| Ok((k, filter(Path::new(&v.folder))?))) {
             Err(e) => st.errors.push(e),
-            Ok(key) => {
+            Ok((key, f)) => {
                 let stamp = chrono::Local::now().format("%Y-%m-%d %H%M").to_string();
                 let cutoff = (chrono::Local::now() - chrono::Duration::days(TRASH_DAYS)).format("%Y-%m-%d").to_string();
                 for e in std::fs::read_dir(trash(data, &v.id)).into_iter().flatten().flatten() {
@@ -131,7 +136,7 @@ impl Hub {
                 let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
                 let w = walkers.entry(v.id.clone()).or_default();
-                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, w, &filter(Path::new(&v.folder)), &remote, &copy, &|_| false, &guard, &|_, _| {});
+                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, w, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
                 let p = base_path(data, &v.id);
                 if let Some(d) = p.parent() { std::fs::create_dir_all(d).ok(); }
                 std::fs::write(p, serde_json::to_string(&next).unwrap_or_default()).ok();
@@ -354,7 +359,7 @@ mod tests {
         std::fs::remove_dir_all(&tmp).ok();
         std::fs::create_dir_all(tmp.join("System/hooks")).unwrap();
         std::os::unix::fs::symlink("System", tmp.join(".claude")).unwrap();
-        let f = filter(&tmp);
+        let f = filter(&tmp).unwrap();
         for p in ["System/settings.json", "System/settings.local.json", "System/hooks/check.sh", ".claude/rules/x.md", "System/scripts/build-index.py",
             "System/skills/a/SKILL.md", "System/agents/a.md", "system/Hooks/check.sh", "System/Settings.json"] { assert!(f.skips(p, false), "{p}"); }
         for p in ["System/rules/core/work-state.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
@@ -362,10 +367,16 @@ mod tests {
         let fresh = tmp.join("fresh");
         std::fs::create_dir_all(&fresh).unwrap();
         std::os::unix::fs::symlink("System", fresh.join(".claude")).unwrap();
-        assert!(filter(&fresh).skips("System/hooks/check.sh", false) && filter(&fresh).skips("System/settings.json", false));
+        assert!(filter(&fresh).unwrap().skips("System/hooks/check.sh", false) && filter(&fresh).unwrap().skips("System/settings.json", false));
+        // a link to a name fold cannot match as APFS does: refused rather than guessed
+        std::fs::create_dir_all(fresh.join("M\u{e9}ta")).unwrap();
+        std::fs::remove_file(fresh.join(".claude")).unwrap();
+        std::os::unix::fs::symlink("M\u{e9}ta", fresh.join(".claude")).unwrap();
+        assert!(filter(&fresh).is_err());
         // without a link: .claude still never goes, nor System/'s settings
         std::fs::remove_file(tmp.join(".claude")).unwrap();
-        assert!(filter(&tmp).skips(".claude/settings.json", false) && filter(&tmp).skips("System/settings.json", false));
+        let f = filter(&tmp).unwrap();
+        assert!(f.skips(".claude/settings.json", false) && f.skips("System/settings.json", false));
         std::fs::remove_dir_all(&tmp).ok();
     }
     #[test]
