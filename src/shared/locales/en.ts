@@ -341,6 +341,8 @@ const en = {
   "git.pullRepo": "Pull {repo}",
   "git.ahead": "Not pushed: {n}",
   "git.behind": "To pull: {n}",
+  "git.split": "Side by side",
+  "git.unified": "One column",
   "git.binary": "Binary file, no diff to show.",
   "git.clickLine": "Click a line to comment on it. Comments go to the agent together.",
   "git.linePlaceholder": "Comment on line {n}…",

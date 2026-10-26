@@ -16,6 +16,7 @@ type GitState = {
   open: string; // the file shown, "repo\npath", "" for the list
   line: string; // the line a comment is being written on, "side:line", "" for none
   draft: string;
+  split: boolean; // a diff side by side, old left and new right, else as one column
   comments: Record<string, LineComment[]>; // per conversation, until sent
   logRepo: string; // the repo the log shows, "" (or one no longer listed) for the first
   logAll: boolean; // every branch in the log, else the branch checked out and its upstream
@@ -40,6 +41,7 @@ export const useGitStore = makeStore<GitState>(() => ({
   open: "",
   line: "",
   draft: "",
+  split: true,
   comments: {},
   logRepo: "",
   logAll: false,

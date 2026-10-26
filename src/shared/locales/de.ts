@@ -347,6 +347,8 @@ export default {
   "git.pullRepo": "Pull {repo}",
   "git.ahead": "Nicht gepusht: {n}",
   "git.behind": "Zu pullen: {n}",
+  "git.split": "Nebeneinander",
+  "git.unified": "Eine Spalte",
   "git.binary": "Binärdatei, kein Diff.",
   "git.clickLine": "Klicke auf eine Zeile, um sie zu kommentieren. Die Kommentare gehen gesammelt an den Agenten.",
   "git.linePlaceholder": "Kommentar zu Zeile {n}…",

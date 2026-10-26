@@ -346,6 +346,8 @@ export default {
   "git.pullRepo": "Pull {repo}",
   "git.ahead": "Niet gepusht: {n}",
   "git.behind": "Te pullen: {n}",
+  "git.split": "Naast elkaar",
+  "git.unified": "Eén kolom",
   "git.binary": "Binair bestand, geen diff.",
   "git.clickLine": "Klik op een regel om erop te reageren. De opmerkingen gaan samen naar de agent.",
   "git.linePlaceholder": "Opmerking bij regel {n}…",
