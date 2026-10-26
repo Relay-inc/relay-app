@@ -39,6 +39,7 @@ import { PathField } from "./PathField";
 import { PermissionsSection } from "./PermissionsSection";
 import { Section } from "./Section";
 import { Segmented } from "./Segmented";
+import { SharedVaults } from "./SharedVaults";
 import { Switch } from "./Switch";
 import { VaultSyncSection } from "./VaultSyncSection";
 
@@ -147,7 +148,8 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
           onPick={pickVaultFolder}
         />
       </Section>
-      <Section title={t("set.extraVaults")} desc={<Html html={th("set.extraVaultsHelp")} />}>
+      <SharedVaults />
+      <Section title={t("set.sharedOther")} desc={<Html html={th("set.extraVaultsHelp")} />}>
         <div className="flex flex-col gap-2">
           {extraVaults.map(vault => {
             const read = extraRead.find(x => x.vault === vault);

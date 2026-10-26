@@ -48,8 +48,15 @@ document.head.append(material);
 let settings = vault.settings(fixture);
 // orch-plain: the orchestrator with the workers' crabs switched off (Settings › General)
 if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
-const shared = fixture === "shared";
-if (shared) settings = { ...settings, extraVaults: [vault.TEAM_VAULT] };
+// shared-invite: the same, opened by an invite link (shared_vault_pending_invite)
+const shared = fixture === "shared" || fixture === "shared-invite";
+if (shared)
+  settings = {
+    ...settings,
+    extraVaults: [vault.TEAM_VAULT],
+    machines: structuredClone(vault.hubMachines),
+    sharedVaults: structuredClone(vault.sharedVaults),
+  };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
 const gitRepos = structuredClone(git.repos);
@@ -70,6 +77,13 @@ let vaultSync = {
 };
 const movedMails = new Set<string>(); // "account:id" archived or deleted, gone from mail_list
 const phoneShared = new Set<string>(); // conversation keys shared with the phone (/share-phone)
+// the shared vaults on a relay-server (fixture "shared"): the last rounds, and the one vault's members and open invites
+let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(Date.now() / 1000)) : {};
+let sharedMembers = structuredClone(vault.sharedMembers);
+let sharedInvites = [{ id: "4d2e8a1b6c3f9e70", role: "member", expires: Math.floor(Date.now() / 1000) + 20 * 3600 }];
+let pendingInvite: string | null = fixture === "shared-invite" ? vault.inviteLink("b81c0e5f2a7d3946") : null;
+const hex = (n: number, seed: number) =>
+  Array.from({ length: n }, (_, i) => ((i * 7 + seed) % 16).toString(16)).join("");
 // the orchestrator's workers (fixture "orch"), changed by orch_stop
 const orchOn = fixture === "orch" || fixture === "orch-plain" || fixture === "orch-empty" || fixture === "orch-closed";
 // orch-empty: the orchestrator before its first task, no workers and an empty conversation
@@ -320,6 +334,65 @@ function handle(cmd: string, a: Args): unknown {
       return fixture === "github"
         ? { supported: false, on: false, running: false, ram: false, fingerprint: "", clients: [] }
         : null;
+    // shared vaults on a relay-server (src-tauri/src/shared_vaults.rs), fixture "shared"
+    case "shared_vaults_status":
+      return structuredClone(sharedStatus);
+    case "shared_vault_pending_invite": {
+      const link = pendingInvite;
+      pendingInvite = null;
+      return link;
+    }
+    case "shared_vault_create": {
+      if (!(settings.machines ?? []).some((m: { id: string }) => m.id === a.machine))
+        return Promise.reject("pick a paired machine for the vault");
+      const machine = settings.machines.find((m: { id: string }) => m.id === a.machine);
+      const id = hex(16, 3);
+      const { host, port, fp } = machine;
+      settings.sharedVaults = [
+        ...(settings.sharedVaults ?? []),
+        { id, name: a.name.trim(), host, port, fp, folder: a.folder, role: "admin" },
+      ];
+      return { id, recovery: hex(64, 5) };
+    }
+    case "shared_vault_join": {
+      const id = /vault=([0-9a-f]{16})/.exec(a.link)?.[1];
+      if (!id) return Promise.reject("not an invite link");
+      const v = { id, name: "Northwind", host: "192.168.1.2", port: 47800, fp: "", folder: a.folder, role: "member" };
+      settings.sharedVaults = [...(settings.sharedVaults ?? []).filter((x: { id: string }) => x.id !== id), v];
+      return { id, name: v.name };
+    }
+    case "shared_vault_invite": {
+      const invite = {
+        id: hex(16, sharedInvites.length + 1),
+        role: a.role,
+        expires: Math.floor(Date.now() / 1000) + 86400,
+      };
+      sharedInvites = [...sharedInvites, invite];
+      return { link: vault.inviteLink(invite.id), invite };
+    }
+    case "shared_vault_info": {
+      const v = (settings.sharedVaults ?? []).find((x: { id: string }) => x.id === a.id);
+      if (!v) return Promise.reject(`no shared vault ${a.id}`);
+      const invites = v.role === "admin" ? structuredClone(sharedInvites) : [];
+      return {
+        vault: { id: v.id, name: v.name, role: v.role, members: structuredClone(sharedMembers), invites },
+        me: vault.SHARED_ME,
+      };
+    }
+    case "shared_vault_invite_revoke":
+      sharedInvites = sharedInvites.filter(i => i.id !== a.invite);
+      return null;
+    case "shared_vault_remove":
+      if (a.fp === vault.SHARED_ME) {
+        settings.sharedVaults = (settings.sharedVaults ?? []).filter((x: { id: string }) => x.id !== a.id);
+        delete sharedStatus[a.id];
+      } else sharedMembers = sharedMembers.filter(m => m.fp !== a.fp);
+      return null;
+    case "shared_vault_held":
+      // the next round: the held deletes went through or the files came back
+      if (sharedStatus[a.id]) sharedStatus = { ...sharedStatus, [a.id]: { ...sharedStatus[a.id], held: [] } };
+      setTimeout(() => emit("shared-vaults", structuredClone(sharedStatus)), 300);
+      return null;
     case "machines_list":
       return fixture === "github" ? [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }] : [];
     // fixture "github": the Harbor CRM conversation that asks a question runs on Server
@@ -332,7 +405,8 @@ function handle(cmd: string, a: Args): unknown {
     case "get_settings":
       return structuredClone(settings);
     case "set_settings":
-      settings = structuredClone(a.settings);
+      // the shared vaults are the backend's own: what the window sends for them is ignored
+      settings = { ...structuredClone(a.settings), sharedVaults: settings.sharedVaults };
       if (settings.vault) vaultOk = true;
       return structuredClone(settings);
     case "ui_lang":

@@ -170,6 +170,44 @@ export const teamProjects = [
 ];
 export const teamStatus = [{ vault: TEAM_VAULT, renamed: ["Northwind Portal (Team vault)"], error: null }];
 
+/** The shared fixture's vault on a relay-server (Settings › General › Shared vaults): made on the paired Team server,
+ *  this Mac its admin. Its last round two minutes ago made a conflict copy and holds two deletes back. */
+const HUB_FP = "0f9534960dd3570a".padEnd(64, "0");
+export const hubMachines = [{ id: "a1b2c3d4e5f6", name: "Team server", host: "192.168.1.2", port: 47800, fp: HUB_FP }];
+export const SHARED_ID = "0123456789abcdef";
+export const sharedVaults = [
+  {
+    id: SHARED_ID,
+    name: "Northwind",
+    host: "192.168.1.2",
+    port: 47800,
+    fp: HUB_FP,
+    folder: "/Users/me/Shared/Northwind",
+    role: "admin",
+  },
+];
+export const sharedStatus = (nowS: number) => ({
+  [SHARED_ID]: {
+    at: nowS - 120,
+    pushed: 4,
+    pulled: 17,
+    conflicts: ["Projects/Launch Plan/Launch Plan (conflict Studio Mac 2026-10-01 0912).md"],
+    errors: [],
+    held: ["Projects/Launch Plan/Documents/Old brief.md", "Projects/Launch Plan/Documents/Old timeline.md"],
+    bad: 0,
+  },
+});
+/** This Mac's fingerprint, and the vault's other members: an admin on a Studio Mac, a member on a laptop. */
+export const SHARED_ME = "5e1d".padEnd(64, "a");
+export const sharedMembers = [
+  { name: "This MacBook", fp: SHARED_ME, role: "admin", added: 1790000000 },
+  { name: "Studio Mac", fp: "7c2b".padEnd(64, "b"), role: "admin", added: 1790100000 },
+  { name: "Design laptop", fp: "9a4f".padEnd(64, "c"), role: "member", added: 1790200000 },
+];
+/** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
+export const inviteLink = (invite: string) =>
+  `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;
+
 const contextFolder = (context: string) => `Contexts/${context}`;
 export const notes = [
   ...P.map(p => `${contextFolder(p.context)}/Projects/${p.name}/${p.name}.md`),

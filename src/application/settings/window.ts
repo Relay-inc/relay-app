@@ -7,6 +7,7 @@ import { loadBrainStatus } from "../brain/brain";
 import { initLanguage } from "./settings";
 import { watchUpdates } from "./updates-page";
 import { watchVaultSync } from "./vault-sync";
+import { watchSharedVaults } from "./shared-vaults";
 import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
@@ -50,6 +51,8 @@ export async function initSettingsWindow() {
   void loadBrainStatus();
   void watchUpdates();
   void watchVaultSync();
+  // an invite link that opened Relay brings General with the join form
+  void watchSharedVaults(() => go("general"));
   showTitle();
   void backend.onSettingsGo(to => {
     const tab = TABS.find(x => x[0] === to)?.[0];

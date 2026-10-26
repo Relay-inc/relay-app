@@ -1003,10 +1003,45 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // a shared vault under General: its path, Remove, and the project shown under another name (the main vault has one)
+  // a vault shared on a relay-server under General: its last round (a conflict copy, two deletes held), the members
+  // open (this Mac, an admin, a member, an open invite) and a new invite link made
   "settings-shared-vaults": async () => {
     await settingsPage("General", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1100 });
+    await waitText("Put them back");
+    await button("Members").click();
+    await waitText("Design laptop");
+    await button("Invite…").click();
+    await button("Create link").click();
+    await waitText("Single use, valid until");
     await intoView("Shared vaults");
+  },
+  // New shared vault… filled in and created: the recovery key, shown once
+  "settings-shared-new": async () => {
+    await settingsPage("General", undefined, "shared");
+    await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
+    await button("New shared vault…").click();
+    await page.locator("#shared-name").fill("Launch");
+    await page
+      .locator("div.justify-between", { has: page.getByText("Folder", { exact: true }) })
+      .getByTitle("Choose…")
+      .click();
+    await button("Create").click();
+    await waitText("Recovery key");
+    await intoView("Recovery key");
+  },
+  // Relay opened by an invite link: General with the join form, the link in it
+  "settings-shared-join": async () => {
+    await settingsPage("General", undefined, "shared-invite");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Join a shared vault");
+    await intoView("Join a shared vault");
+  },
+  // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
+  // has one)
+  "settings-other-vaults": async () => {
+    await settingsPage("General", undefined, "shared");
+    await intoView("Other vault folders");
   },
   // the shared vault's projects in the sidebar, in their own context (found by the search)
   "sidebar-shared": async () => {

@@ -18,6 +18,9 @@ import {
   type PhonePairing,
   type Message,
   type Settings,
+  type SharedInfo,
+  type SharedInvite,
+  type SharedStatus,
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
@@ -93,6 +96,16 @@ export type SettingsState = {
   actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
   // the vault's git backup as saved (null until read) and why the last save failed
   vaultSync: { saved: VaultSync | null; message: Message | null };
+  // the shared vaults on General (application/settings/shared-vaults.ts)
+  shared: {
+    status: Record<string, SharedStatus>; // the last round per vault
+    info: Record<string, SharedInfo | null>; // per vault whose members are open: what the server said, null while asked
+    links: Record<string, { link: string; invite: SharedInvite } | null>; // per vault: the invite link just made
+    messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
+    busy: string; // what runs: "<id>:<action>", "create" or "join", "" nothing
+    // the form under the list: a new vault or joining one; `recovery` the new vault's key, shown once
+    form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string; recovery: string };
+  };
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -174,6 +187,14 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   },
   actions: { list: [], entries: {}, errors: {} },
   vaultSync: { saved: null, message: null },
+  shared: {
+    status: {},
+    info: {},
+    links: {},
+    messages: {},
+    busy: "",
+    form: { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" },
+  },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

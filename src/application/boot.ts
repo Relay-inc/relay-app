@@ -127,6 +127,7 @@ function listenToBackend() {
     if (event.type === "worker") onPipelineWorker(event.worker);
   });
   backend.onRetry(onRetryEvent);
+  backend.onVaultPulled(loadSnapshot); // the team's changes came into a shared vault
   backend.onDictatedChat(chatFromDictation);
   listenToPill(); // the sidebar shows dictation from any app too
   listenToFileDrops();
