@@ -267,6 +267,9 @@ export const MAIL_ACCOUNT_2 = "studio@example.org";
  * calendars switched on, the second one failing), accounts
  * (Claude Code on two extra logins, the work one active, auto-switch on), mailexp (the experimental mail flag:
  * archive, delete, Inbox/Other) */
+/** The Linear team of the linear fixture (integrations.ts answers its queries). */
+const LINEAR_TEAM = "b0000000-0000-4000-8000-000000000001";
+
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
@@ -292,8 +295,17 @@ export function settings(fixture: string) {
     vaults: {},
     projects: { "Beacon Billing": { label: "Beacon" } },
     overrides: {},
-    integrations: { productive: { on: true, org: "40001", user: "70001" } },
-    boards: { "Northwind Portal": { provider: "productive", project: "p1", board: "f1" } },
+    // linear: a Linear team with cycles next to Productive, Beacon Billing on its current cycle
+    integrations: {
+      productive: { on: true, org: "40001", user: "70001" },
+      ...(fixture === "linear" ? { linear: { on: true, done: false } } : {}),
+    },
+    boards: {
+      "Northwind Portal": { provider: "productive", project: "p1", board: "f1" },
+      ...(fixture === "linear"
+        ? { "Beacon Billing": { provider: "linear", project: LINEAR_TEAM, board: `cycle_${LINEAR_TEAM}` } }
+        : {}),
+    },
     // off: a running pipeline would move the board's cards in every view
     pipelines: {
       "Northwind Portal": {

@@ -1,11 +1,11 @@
 import { translator, type BoardOpt, type BoardProvider, type Ctx, type Opt } from "@relay/board-core";
-import { CLOSED, CREATE, ISSUES, ISSUE_URL, MOVE, SEARCH, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapIssues, mapStates, mapTeams } from "./map";
+import { ACTIVE_CYCLE, CLOSED, CREATE, ISSUES, ISSUE_URL, MOVE, SEARCH, STATES, TEAMS, VIEWER, allIssues, issueFilter, mapIssues, mapStates, mapTeams, scopeOf } from "./map";
 import { linearTicket } from "./detail";
 import strings, { type Key } from "./locales";
 
 const t = translator<Key>("linear");
 
-// Linear: a project is a team, a board the whole team or one of its Linear projects, its columns the team's
+// Linear: a project is a team, a board the whole team, one of its cycles or one of its Linear projects, its columns the team's
 // workflow states, its cards the issues. The personal API key is in the keychain (vault-app.linear), the backend
 // sends it and turns GraphQL errors (also those answered with 200) and the rate limit into a message.
 // Config: integrations.linear.done, also show the completed and canceled states.
@@ -14,7 +14,7 @@ let teams: { projects: Opt[]; boards: BoardOpt[] } | null = null;
 const links = new Map<string, string>();
 const gql = (c: Ctx, query: string, variables?: Record<string, unknown>) =>
   c.call("POST", "/graphql", variables ? { query, variables } : { query }).then((r: any) => r?.data);
-const all = async (c: Ctx) => teams ??= mapTeams(await gql(c, TEAMS), t("allIssues"));
+const all = async (c: Ctx) => teams ??= mapTeams(await gql(c, TEAMS), { all: t("allIssues"), current: t("currentCycle"), cycle: n => t("cycle", { number: n }) });
 
 const linear: BoardProvider<Key> = {
   id: "linear",
@@ -39,9 +39,11 @@ const linear: BoardProvider<Key> = {
     if (!r?.success) throw new Error(t("moveRefused"));
     return typeof r.issue?.sortOrder === "number" ? r.issue.sortOrder : undefined;
   },
-  // in the lane's workflow state, in the board's Linear project when it is one
+  // in the lane's workflow state, in the board's Linear project or cycle when it is one (the active cycle asked for now)
   create: async (c, ref, { title, description, column }) => {
-    const r = (await gql(c, CREATE, { teamId: ref.project, stateId: column, title, description, projectId: ref.board && ref.board !== ref.project ? ref.board : null }))?.issueCreate;
+    const { project, cycle } = scopeOf(ref);
+    const cycleId = cycle === "active" ? (await gql(c, ACTIVE_CYCLE, { id: ref.project }))?.team?.activeCycle?.id ?? null : cycle ?? null;
+    const r = (await gql(c, CREATE, { teamId: ref.project, stateId: column, title, description, projectId: project ?? null, cycleId }))?.issueCreate;
     if (!r?.success || !r.issue) throw new Error(t("createRefused"));
     const made = mapIssues({ issues: { nodes: [r.issue] } });
     for (const [id, url] of made.urls) links.set(id, url);
