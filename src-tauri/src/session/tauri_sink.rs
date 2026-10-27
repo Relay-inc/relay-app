@@ -26,7 +26,9 @@ impl Sink for TauriSink {
     fn session(&self, sid: &str) {
         let st = self.app.state::<App>();
         let mut sids = st.sids.lock().unwrap();
-        sids.insert(self.key.clone(), agents::Sess { provider: self.p.id().into(), sid: sid.into(), account: self.account.clone(), vault: self.vault.clone() });
+        // a reader that does not know the vault (a reattach) keeps the one the same session was saved with
+        let vault = if self.vault.is_empty() { sids.get(&self.key).filter(|s| s.sid == sid).map(|s| s.vault.clone()).unwrap_or_default() } else { self.vault.clone() };
+        sids.insert(self.key.clone(), agents::Sess { provider: self.p.id().into(), sid: sid.into(), account: self.account.clone(), vault });
         save_sids(&self.app, &sids);
     }
     fn permission(&self, req: &pending::Request) {

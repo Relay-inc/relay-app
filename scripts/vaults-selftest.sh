@@ -37,12 +37,14 @@ TAURI_CONFIG="{\"identifier\":\"$ID\",\"productName\":\"Relay Vaultstest\"}" CAR
 echo "== relay-server on 127.0.0.1:$PORT"
 RELAY_SERVER_DATA="$DIR/server" RELAY_AGENTS_DIR="$DIR/server-agents" target/selftest/debug/relay-server serve --port $PORT --bind 127.0.0.1 2>"$DIR/server.log" &
 SERVER=$!
-trap 'kill $SERVER 2>/dev/null || true; pkill -f "$DIR/agents" 2>/dev/null || true' EXIT
+APP=""; WATCH=""
+trap 'kill $SERVER $APP $WATCH 2>/dev/null || true; pkill -f "$DIR/agents" 2>/dev/null || true' EXIT
 sleep 1
 LINE=$(RELAY_SERVER_DATA="$DIR/server" target/selftest/debug/relay-server pair --host 127.0.0.1 --port $PORT | grep '^relay://')
 
 echo "== shared vaults (a minute or two)"
-# the app's own exit code counts (1 on a FAIL, else a panic), and a hung app is stopped after 15 minutes
+# the app's own exit code counts (1 on a FAIL), and a hung app is stopped after 15 minutes: a panic in this debug build
+# does not abort, it hangs until then
 RELAY_AGENTS_DIR="$DIR/agents" RELAY_SELFTEST=vaults RELAY_SELFTEST_DIR="$DIR" RELAY_SELFTEST_LINE="$LINE" \
   target/selftest/debug/relay 2>"$DIR/app.log" >"$DIR/app.out" &
 APP=$!

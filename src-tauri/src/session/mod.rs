@@ -96,6 +96,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     // Codex and OpenCode get no fence (fence below): a shared vault's conversation is Claude Code's only
     if shared && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
     let extra = if shared { dir.as_str() } else { "" };
+    state.started_in.lock().unwrap().insert(project.to_string(), extra.to_string());
     // a fork carries the other conversation's transcript: only one from this same vault
     let fork_vault = |f: &str| state.sids.lock().unwrap().values().find(|s| s.sid == f).map(|s| s.vault.clone()).unwrap_or_default();
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f) && fork_vault(f) == extra);

@@ -181,8 +181,8 @@ export const removeMember = (id: string, fp: string) =>
 /** This Mac leaves the vault: it goes from the list, the folder stays as it is. */
 export const leaveShared = (id: string) =>
   run(`${id}:leave`, id, async () => {
-    const me = st().info[id]?.me ?? (await backend.sharedVaultInfo(id)).me;
-    await backend.sharedVaultRemove(id, me);
+    // "" is this Mac to the backend: a member that was removed, or whose vault is gone, cannot ask the server who it is
+    await backend.sharedVaultRemove(id, st().info[id]?.me ?? "");
     change(draft => {
       delete draft.info[id];
       delete draft.links[id];

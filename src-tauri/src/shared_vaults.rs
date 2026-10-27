@@ -79,7 +79,9 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
     if let Some(t) = target.as_deref().filter(|t| !t.chars().all(|c| c.is_ascii_alphanumeric() || " ._-/".contains(c))) {
         return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this vault"));
     }
-    f.guarded = std::iter::once("System".to_string()).chain(target.filter(|t| !t.is_empty())).collect();
+    // a link to the vault itself would guard nothing: its settings, hooks and skills would sync like notes
+    if target.as_deref() == Some("") { return Err(".claude links to the vault folder itself: link it to a folder inside it (System) to sync this vault".into()); }
+    f.guarded = std::iter::once("System".to_string()).chain(target).collect();
     f.only = f.guarded.iter().flat_map(|g| ["rules", "reference", "index", "archive", "reminders.md"].map(|x| format!("{g}/{x}"))).collect();
     Ok(f)
 }
@@ -152,6 +154,7 @@ pub fn real_path(p: &str) -> Result<String, String> {
 /// holding one, so the fence around one never covers the other.
 pub fn check_folder(folder: &str, others: &[String], must_be_empty: bool) -> Result<(), String> {
     if folder.is_empty() || !folder.starts_with('/') { return Err("pick a folder for the vault".into()); }
+    if !crate::fenceable(folder) { return Err(format!("{folder}: a vault folder may not have [ ] * ? or \\ in its path, Relay could not keep conversations out of it")); }
     if let Some(o) = others.iter().find(|o| crate::nested(folder, o)) { return Err(format!("{folder} lies inside {o} or holds it: pick a folder of its own")); }
     let full = std::fs::read_dir(folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
     if must_be_empty && full { return Err(format!("{folder} is not empty: a joined vault starts in an empty folder")); }
@@ -367,9 +370,13 @@ pub async fn shared_vault_invite_revoke(state: St<'_>, id: String, invite: Strin
 pub async fn shared_vault_remove(app: tauri::AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
     let v = find(&state.settings.lock().unwrap(), &id)?;
     let (c, me) = (client(&v, &state.machines.id), state.machines.id.fingerprint());
+    // "" is this Mac: a member that was removed, or whose vault is gone, cannot ask the server who it is any more
+    let fp = if fp.is_empty() { me.clone() } else { fp };
     let (vid, who) = (v.id.clone(), fp.clone());
-    tauri::async_runtime::spawn_blocking(move || c.vault_remove(&vid, &who)).await.map_err(|e| e.to_string())??;
-    if fp != me { return Ok(()); }
+    let gone = tauri::async_runtime::spawn_blocking(move || c.vault_remove(&vid, &who)).await.map_err(|e| e.to_string())?;
+    if fp != me { return gone; }
+    // leaving: what the server says when this Mac is out already does not keep the vault here
+    if let Err(e) = gone { if !left_already(&e) { return Err(e); } }
     // forget waits for a running round of this vault (the walkers' lock): not on an async worker
     let (a, vid) = (app.clone(), id.clone());
     tauri::async_runtime::spawn_blocking(move || tauri::Manager::state::<crate::App>(&a).shared.forget(&crate::data_dir(&a), &vid)).await.map_err(|e| e.to_string())?;
@@ -379,6 +386,16 @@ pub async fn shared_vault_remove(app: tauri::AppHandle, state: St<'_>, id: Strin
         s.clone()
     };
     crate::save_settings(&app, &s)
+}
+
+/// Whether a server error means this Mac is no member any more: removed, the vault gone, or the device unpaired.
+fn left_already(e: &str) -> bool { ["no such vault", "not paired", "not a member", "CertificateUnknown", "certificate unknown"].iter().any(|x| e.contains(x)) }
+
+/// A vault's key as hex, to show it again (Settings): it is on this Mac in shared-<id>.key anyway, the recovery key.
+#[tauri::command]
+pub fn shared_vault_recovery(app: tauri::AppHandle, id: String) -> Result<String, String> {
+    if !valid_id(&id) { return Err("not a vault id".into()); }
+    load_key(&crate::data_dir(&app), &id).map(|k| k.to_hex())
 }
 
 /// The held deletes of a vault the user saw (`paths`): let them through in its next round, or put the files back.
@@ -423,6 +440,12 @@ mod tests {
         std::fs::create_dir_all(&fresh).unwrap();
         std::os::unix::fs::symlink("System", fresh.join(".claude")).unwrap();
         assert!(filter(&fresh).unwrap().skips("System/hooks/check.sh", false) && filter(&fresh).unwrap().skips("System/settings.json", false));
+        // a link to the vault itself: refused, it would guard nothing
+        std::fs::remove_file(fresh.join(".claude")).unwrap();
+        std::os::unix::fs::symlink(".", fresh.join(".claude")).unwrap();
+        assert!(filter(&fresh).is_err());
+        std::fs::remove_file(fresh.join(".claude")).unwrap();
+        std::os::unix::fs::symlink("System", fresh.join(".claude")).unwrap();
         // a link to a name fold cannot match as APFS does: refused rather than guessed
         std::fs::create_dir_all(fresh.join("M\u{e9}ta")).unwrap();
         std::fs::remove_file(fresh.join(".claude")).unwrap();

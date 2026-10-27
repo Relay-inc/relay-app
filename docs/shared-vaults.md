@@ -1,7 +1,7 @@
 # Shared vaults on a relay-server
 
-A vault several people share through a relay-server. The server stores only ciphertext and never has the vault key;
-access is by device certificate (the mTLS pin every Relay already has). Relay syncs the vault into a plain folder on
+A vault several people share through a relay-server. The server stores only ciphertext and never has the vault key.
+Access is by device certificate (the mTLS pin every Relay already has). Relay syncs the vault into a plain folder on
 each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
 
 ## Trust
@@ -10,23 +10,32 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   when they change. It cannot read paths or contents.
 - The server is trusted for availability and freshness, not for confidentiality: it could serve an older version of a
   blob (rollback) or drop one. Swapping one blob for another is caught (the name is bound in the AEAD).
-- The vault key travels inside the invite link, after `#`, encrypted on the server under a secret only the link holds.
-  Whoever has an unused link gets in: links are single use, expire after 24 h, and the admin sees who joined.
-- v1 has no key rotation. Removing a member stops their device at the server at once; they keep what they already
+- The invite link carries a secret, after `#`, that unwraps the vault key. The server keeps the key only encrypted under
+  that secret, which it never sees. Whoever has an unused link gets in: links are single use, expire after 24 h, and the admin sees who joined.
+- v1 has no key rotation. Removing a member stops their device at the server at once. They keep what they already
   synced and the key. Rotation needs a static X25519 key per device (`x25519-dalek`, `ring` has only ephemeral
   agreement) and is a follow-up.
 
 ### What members can and cannot do to each other
 
+**The fence is a guard, not a sandbox.** It is built from Claude Code permission rules, a sync filter and checks in
+the app. It keeps a conversation from crossing into another vault by accident, and Claude Code's file tools and file
+commands out of other vaults. It is not a boundary against a member who sets out to reach your Mac: with a note that
+steers an agent in auto mode, there is always one more route (a script in Bash, a local socket). A hard boundary needs
+isolation from the operating system (Claude Code's sandbox, or a separate macOS user). Share a vault with people you
+would let read what your agent can read.
+
+
 - **Write notes in the vault.** Everything a member syncs, every other member's agent may read. A note can carry
-  instructions aimed at an agent (prompt injection); the fence below limits what such an agent can reach.
+  instructions aimed at an agent (prompt injection). The fence below limits what such an agent can reach.
 - **Not run code on another Mac.** Claude Code runs what is in a project's config folder as plain code: the
   `settings.json` (hooks, `env`, `apiKeyHelper`, `statusLine`), and through hooks and skills the scripts they point at.
-  `.claude` never syncs, and of the folder it links to (`System/` in a vault Relay makes; `System/` also before the
+  `.claude` never syncs, and of the folder it links to (`System/` in a vault Relay makes, and `System/` also before the
   link resolves, on a join's first round) only `rules/`, `reference/`, `index/`, `archive/` and `reminders.md` go, in
   both directions (`shared_vaults::filter`). Settings, hooks, scripts, skills and agents stay on each Mac. Paths match
-  case-folded, as APFS compares them, so `System/Hooks/x.sh` and `Syﬆem/hooks/x.sh` are held back too; a vault whose
-  `.claude` links to a folder with a non-ASCII name does not sync until that folder is renamed. A round follows no symlink, so a link
+  case-folded, as APFS compares them, so `System/Hooks/x.sh` and `Syﬆem/hooks/x.sh` are held back too, and so are names with the characters HFS+
+  ignores. A vault whose `.claude` links to a folder with characters other than letters, digits, space, `.`, `-` or
+  `_`, or to the vault folder itself, does not sync until that is changed. A round follows no symlink, so a link
   someone made inside the folder does not take a member's writes out of it. Project MCP servers (`.mcp.json`) do not
   start: shared-vault conversations run with `--strict-mcp-config`.
 - **Two more layers against a member's code.** Each round takes this Mac's `.claude` settings and `hooks/` and puts
@@ -35,8 +44,11 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   there, also one in a skill's or agent's frontmatter. The user's own hooks don't run in a shared vault either.
 - **Not reach your other vaults through your agent.** A conversation in a shared vault gets Read and Edit denies on
   every other vault, on their transcripts and auto memory in each Claude config folder (also of an account removed
-  from the list), on what those folders keep per session (`file-history`, `history.jsonl`, `paste-cache`), and on
-  Relay's data folder (keys, certificate, trash, bases). It runs in auto mode whatever the account's default mode, in
+  from the list), on every other project's transcripts there, on what those folders keep per session (`file-history`,
+  `history.jsonl`, `paste-cache`, `plans`, `todos`, `tasks`, `sessions`, `debug`, `shell-snapshots`, `session-env`), and on
+  Relay's data folder (keys, certificate, trash, bases). It may not edit what Claude Code runs for the next
+  conversations: the settings, `CLAUDE.md`, hooks, skills, agents and commands of each config folder, and its own
+  vault's `.claude`. It runs in auto mode whatever the account's default mode, in
   the terminal too, because the auto
   classifier is what stops a script in Bash that no deny rule covers. That classifier is a model's judgement, not a
   sandbox: the fence is strong for Claude Code's file tools and file commands, weaker for arbitrary scripts.
@@ -44,7 +56,16 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
   and the sync would carry the answer to the team, and no deny rule sees a read the app does for the agent. So a
   shared vault's conversation gets an error for `relay mail.search|read|thread|attachment`, `relay reminders.list`,
   `relay calendar.meetings` and the relay-mail tools' reads. Writing to you still works: a reminder, a mail draft.
-- **Not keep a removed member in.** The server refuses their device at the next connection; they keep what they
+  `relay` answers for the conversation its caller runs under (traced from the socket's peer process up to the agent),
+  not the one it names, so naming a main-vault conversation does not help.
+- **Read your integrations, on purpose.** Productive, GitHub, Trello and the other boards stay readable from a shared
+  vault: that is shared work data a team vault is for. What an agent reads there can end up in the team's vault.
+- **The same lockdown in your own other vault folders.** Relay treats every vault but the main one this way, also a
+  folder you added under Other vault folders: no own MCP servers or connectors, no hooks, auto mode, no reads of your
+  mail, reminders or calendar.
+- **A main-vault conversation stays out too.** It may not read the shared vaults' trash, bases and keys in Relay's data
+  folder.
+- **Not keep a removed member in.** The server refuses their device at the next connection. They keep what they
   had synced (see key rotation above). Their open invites die with them.
 
 ## Wire protocol
@@ -68,15 +89,15 @@ blob name 64 lowercase hex. Anything else is refused.
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
 | `vault_list` | any client | `{vaults: [{id, name, role, members}]}`, the vaults the caller is a member of |
 | `vault_info {vault}` | member | `{vault: {id, name, role, members: [{name, fp, role, added}], invites: [{id, role, expires}]}}`, invites only for admins (else `[]`) |
-| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}, fp}`; `role` admin or member, `wrapped` hex at most 512 chars, expires in 24 h |
+| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}, fp}`, `role` admin or member, `wrapped` hex at most 512 chars, expires in 24 h |
 | `vault_invite_revoke {vault, invite}` | admin | `{}` |
-| `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`; `proof` = `tls::proof(code, client_fp, server_fp)`; 5 wrong proofs drop the invite; success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
-| `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`; refused when it would leave members without an admin; a vaults_only client with no vault left is removed from `clients.json` |
-| `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta}]}`; `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes |
+| `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
+| `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json` |
+| `vault_manifest {vault}` | member | `{blobs: [{name, etag, size, meta}]}`, `meta` hex of the record's meta part, `etag` sha256 hex of the whole record file, `size` its bytes |
 | `vault_get {vault, name}` | member | reply line `{ok, len, etag}`, then `len` bytes: the record |
-| `vault_put {vault, name, len, expect}` + `len` bytes | member | `{etag}`; written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
+| `vault_put {vault, name, len, expect}` + `len` bytes | member | `{etag}`, written only if the current record's etag is `expect` (`""`: it must not exist), else `changed meanwhile` |
 | `vault_put_many {vault, files: [{name, len, expect}]}` + the bodies one after the other | member | `{etags: {name: etag}, errors: {name: why}}` |
-| `vault_delete {vault, name, expect}` | member | `{}`; only if the current etag is `expect`, else `changed meanwhile` |
+| `vault_delete {vault, name, expect}` | member | `{}`, only if the current etag is `expect`, else `changed meanwhile` |
 
 `revoke` of a client also removes its memberships.
 
@@ -104,7 +125,7 @@ The server only parses `meta_len` (to list `meta` in the manifest) and checks it
 - Vault key: 32 random bytes. HKDF-SHA256 with salt `relay shared vault v1` derives `enc` (ChaCha20-Poly1305) and
   `name` (HMAC-SHA256). `name(path)` = hex HMAC(name, path).
 - Invite: the link secret is 32 random bytes. HKDF-SHA256 with salt `relay vault invite v1` and info `wrap` derives a
-  ChaCha20-Poly1305 key; `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, vault key)`).
+  ChaCha20-Poly1305 key, and `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, vault key)`).
 - On the Mac the vault key lives in Relay's data folder as `shared-<id>.key` (hex, 0600), like the mirror keys. It is
   also the recovery key Relay shows once when the vault is made.
 
@@ -112,7 +133,7 @@ The server only parses `meta_len` (to list `meta` in the manifest) and checks it
 
 The pairing line with three more fields:
 `relay://<host>:<port>#fp=<64 hex>&code=<32 hex>&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>`.
-`PairLine` parses them as optional `vault`, `invite`, `secret`; a line with all three is an invite.
+`PairLine` parses them as optional `vault`, `invite`, `secret`. A line with all three is an invite.
 
 ## Client API (relay-remote)
 
