@@ -8,10 +8,11 @@ use relay_remote::sync::{self, Filter, Guard, Manifest, Mode, Walker};
 use relay_remote::tls::Identity;
 use relay_remote::vault::VaultKey;
 use serde_json::Value;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use tauri::{AppHandle, Manager};
 
 /// A shared vault as the settings keep it: the server it lives on (pinned by its fingerprint), its folder here and this
 /// device's role there ("admin" or "member").
@@ -31,9 +32,6 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone).
 #[derive(Default, Clone, serde::Serialize)]
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize }
-
-#[derive(Default)]
-pub struct Hub { walkers: Mutex<HashMap<String, Walker>>, pub status: Mutex<HashMap<String, Status>>, busy: Mutex<HashSet<String>>, allow: Mutex<HashMap<String, Vec<String>>> }
 
 /// Run the rounds now, without waiting for the interval: a vault was just made or joined.
 static NOW: AtomicBool = AtomicBool::new(false);
@@ -86,59 +84,11 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
     Ok(f)
 }
 
-/// What Claude Code would run for a vault on this Mac, as it was before a round: the settings files and hooks of the
-/// folder `.claude` resolves to, or that there was no `.claude`. A round puts it back as it was (`restore`), whatever a
-/// member pushed: on a case-insensitive disk `System/Settings.json` from the server is this Mac's `System/settings.json`,
-/// which no filter by name sees, and a Unicode spelling can slip past a lowercase compare too.
-pub struct Kept { link: PathBuf, had: bool, dir: Option<PathBuf>, files: HashMap<PathBuf, Vec<u8>> }
-impl Kept {
-    pub fn take(folder: &Path) -> Kept {
-        let link = folder.join(".claude");
-        let had = std::fs::symlink_metadata(&link).is_ok();
-        let dir = std::fs::canonicalize(&link).ok().filter(|d| d.is_dir());
-        let mut files = HashMap::new();
-        if let Some(d) = &dir { for f in Self::guarded(d) { if let Ok(b) = std::fs::read(&f) { files.insert(f, b); } } }
-        Kept { link, had, dir, files }
-    }
-    /// The settings files and every file under hooks/ there now.
-    fn guarded(d: &Path) -> Vec<PathBuf> {
-        let mut out: Vec<PathBuf> = ["settings.json", "settings.local.json"].iter().map(|f| d.join(f)).filter(|f| f.is_file()).collect();
-        let mut stack = vec![d.join("hooks")];
-        while let Some(p) = stack.pop() {
-            for e in std::fs::read_dir(&p).into_iter().flatten().flatten() {
-                let path = e.path();
-                if e.file_type().is_ok_and(|t| t.is_dir()) { stack.push(path) } else { out.push(path) }
-            }
-        }
-        out
-    }
-    /// Put it back: a `.claude` the round made goes, a guarded file it changed or made is restored or removed. Returns
-    /// what was undone, for the round's errors.
-    pub fn restore(self) -> Vec<String> {
-        let mut undone = vec![];
-        if !self.had {
-            if std::fs::symlink_metadata(&self.link).is_ok() {
-                std::fs::remove_dir_all(&self.link).or_else(|_| std::fs::remove_file(&self.link)).ok();
-                undone.push(".claude".to_string());
-            }
-            return undone;
-        }
-        let Some(d) = self.dir else { return undone };
-        for f in Self::guarded(&d) {
-            if !self.files.contains_key(&f) { std::fs::remove_file(&f).ok(); undone.push(f.display().to_string()); }
-        }
-        for (f, b) in &self.files {
-            if std::fs::read(f).ok().as_deref() != Some(b.as_slice()) { sync::write_atomic(f, b, None).ok(); undone.push(f.display().to_string()); }
-        }
-        undone
-    }
-}
-
 /// A folder by its real path, also one that does not exist yet: the nearest folder that does, resolved (links, `..`),
 /// with the rest put back. A rest with `.` or `..` is refused, it could climb out of the folder checked.
 pub fn real_path(p: &str) -> Result<String, String> {
     let path = Path::new(p.trim());
-    if !path.is_absolute() { return Err("pick a folder for the vault".into()); }
+    if !path.is_absolute() { return Err(crate::trc("err.vault_pick")); }
     let (mut at, mut rest) = (path, vec![]);
     loop {
         if let Ok(mut real) = std::fs::canonicalize(at) {
@@ -146,30 +96,27 @@ pub fn real_path(p: &str) -> Result<String, String> {
             return Ok(real.to_string_lossy().into_owned());
         }
         rest.push(at.file_name().ok_or_else(|| format!("{p}: use a folder path without . or .."))?.to_os_string());
-        at = at.parent().ok_or("pick a folder for the vault")?;
+        at = at.parent().ok_or_else(|| crate::trc("err.vault_pick"))?;
     }
 }
 
-/// A folder a vault may be made or joined in: empty or not there yet (joining), and not inside another vault or
-/// holding one, so the fence around one never covers the other.
-pub fn check_folder(folder: &str, others: &[String], must_be_empty: bool) -> Result<(), String> {
-    if folder.is_empty() || !folder.starts_with('/') { return Err("pick a folder for the vault".into()); }
-    if !crate::fenceable(folder) { return Err(format!("{folder}: a vault folder may not have [ ] * ? or \\ in its path, Relay could not keep conversations out of it")); }
-    if let Some(o) = others.iter().find(|o| crate::nested(folder, o)) { return Err(format!("{folder} lies inside {o} or holds it: pick a folder of its own")); }
-    let full = std::fs::read_dir(folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
-    if must_be_empty && full { return Err(format!("{folder} is not empty: a joined vault starts in an empty folder")); }
-    Ok(())
-}
+/// One vault's sync state: its walker and the held deletes the user let through. Each vault has its own lock, held for
+/// its whole round: a slow server holds up only that vault, and a leave of it waits for the round to end.
+#[derive(Default)]
+struct One { walker: Walker, allowed: Vec<String> }
+#[derive(Default)]
+pub struct Hub { vaults: Mutex<HashMap<String, Arc<Mutex<One>>>>, pub status: Mutex<HashMap<String, Status>> }
 
 impl Hub {
+    fn one(&self, id: &str) -> Arc<Mutex<One>> { self.vaults.lock().unwrap().entry(id.into()).or_default().clone() }
+
     /// One round for a vault: the folder here against the server, both ways. A file changed on both sides keeps both,
     /// the server's as "Name (conflict <this Mac> <date>).md"; more deletes than the brake allows wait for the user.
+    /// Returns this round's status; Settings gets the counts since the app started.
     pub fn round(&self, data: &Path, v: &Shared, me: &Identity, name: &str) -> Status {
-        if !self.busy.lock().unwrap().insert(v.id.clone()) { return self.status.lock().unwrap().get(&v.id).cloned().unwrap_or_default(); }
+        let one = self.one(&v.id);
+        let mut one = one.lock().unwrap();
         let mut st = Status { at: chrono::Utc::now().timestamp(), ..Default::default() };
-        // the walkers' lock before the key and the base are read: a leave (forget) either comes first, and the key is
-        // gone, or waits until this round's base is written, and removes it after
-        let mut walkers = self.walkers.lock().unwrap();
         match load_key(data, &v.id).and_then(|k| Ok((k, filter(Path::new(&v.folder))?))) {
             Err(e) => st.errors.push(e),
             Ok((key, f)) => {
@@ -180,81 +127,88 @@ impl Hub {
                 }
                 std::fs::create_dir_all(&v.folder).ok();
                 let base: Manifest = std::fs::read_to_string(base_path(data, &v.id)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-                let allowed = self.allow.lock().unwrap().remove(&v.id).unwrap_or_default();
+                let allowed = std::mem::take(&mut one.allowed);
                 let copy = |p: &str| sync::conflict_copy(p, name, &stamp);
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
                 let remote = client(v, me).sealed(&v.id, key);
                 remote.know(&base);
-                let w = walkers.entry(v.id.clone()).or_default();
-                let kept = Kept::take(Path::new(&v.folder));
-                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, w, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
-                let p = base_path(data, &v.id);
-                if let Some(d) = p.parent() { std::fs::create_dir_all(d).ok(); }
-                std::fs::write(p, serde_json::to_string(&next).unwrap_or_default()).ok();
-                st.pushed = r.pushed.len() + r.deleted_remote.len();
-                st.pulled = r.pulled.len() + r.deleted_local.len();
-                st.conflicts = r.conflicts;
-                st.errors = r.errors;
-                let undone = kept.restore();
-                if !undone.is_empty() { st.errors.push(format!("a pull tried to change what Claude Code runs on this Mac, put back: {}", undone.join(", "))); }
-                st.held = r.held;
-                st.bad = remote.bad().len();
+                let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // the next round plans against this base: one not written is an error, not a quiet success
+                if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); }
+                st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
+                    conflicts: r.conflicts, errors: [st.errors, r.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
             }
         }
-        drop(walkers);
-        self.busy.lock().unwrap().remove(&v.id);
+        drop(one);
         let mut all = self.status.lock().unwrap();
         let prev = all.remove(&v.id).unwrap_or_default();
         let mut conflicts = prev.conflicts;
-        for c in st.conflicts.drain(..) { if !conflicts.contains(&c) { conflicts.push(c); } }
-        let st = Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, ..st };
-        all.insert(v.id.clone(), st.clone());
+        for c in &st.conflicts { if !conflicts.contains(c) { conflicts.push(c.clone()); } }
+        all.insert(v.id.clone(), Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, ..st.clone() });
         st
     }
 
     /// The held deletes the user saw go through in the next round; any others the brake still holds. Another member
     /// can delete more meanwhile, so it is the list shown, not "everything held next time".
-    pub fn allow_deletes(&self, id: &str, seen: Vec<String>) { self.allow.lock().unwrap().insert(id.into(), seen); }
-    /// The held deletes the user saw are undone instead: out of the base, so the next round copies each file back from
-    /// the side that still has it.
-    pub fn restore_held(&self, data: &Path, id: &str, seen: &[String]) {
-        let held: Vec<String> = { let mut all = self.status.lock().unwrap(); let Some(s) = all.get_mut(id) else { return }; s.held.retain(|h| !seen.contains(h)); seen.to_vec() };
-        // under the walkers' lock, as a round writes the base: a round running now would overwrite the restore, a leave
-        // would see it write a base back after removing it
-        let _walkers = self.walkers.lock().unwrap();
-        let p = base_path(data, id);
-        let Some(mut base) = std::fs::read_to_string(&p).ok().and_then(|s| serde_json::from_str::<Manifest>(&s).ok()) else { return };
-        for h in &held { base.remove(h); }
-        std::fs::write(p, serde_json::to_string(&base).unwrap_or_default()).ok();
+    pub fn allow_deletes(&self, id: &str, seen: Vec<String>) { self.one(id).lock().unwrap().allowed = seen; }
+    /// The held deletes the user saw are undone instead: out of the base (under the vault's lock, as a round writes
+    /// it), so the next round copies each file back from the side that still has it.
+    pub fn restore_held(&self, data: &Path, id: &str, seen: &[String]) -> Result<(), String> {
+        let one = self.one(id);
+        let _one = one.lock().unwrap();
+        if let Some(s) = self.status.lock().unwrap().get_mut(id) { s.held.retain(|h| !seen.contains(h)); }
+        let Some(mut base) = std::fs::read_to_string(base_path(data, id)).ok().and_then(|s| serde_json::from_str::<Manifest>(&s).ok()) else { return Ok(()) };
+        for h in seen { base.remove(h); }
+        write_base(data, id, &base)
     }
-    /// This Mac leaves a vault: its key, base, trash and status go; the folder stays as it is.
+    /// This Mac leaves a vault: its key, base, trash and status go, after a running round of it; the folder stays.
     pub fn forget(&self, data: &Path, id: &str) {
-        // the walkers' lock first: a round still running writes its base under it, so the base goes after that round
-        let mut walkers = self.walkers.lock().unwrap();
-        walkers.remove(id);
+        let one = self.one(id);
+        let _one = one.lock().unwrap();
         std::fs::remove_file(key_path(data, id)).ok();
         std::fs::remove_file(base_path(data, id)).ok();
         std::fs::remove_dir_all(trash(data, id)).ok();
         self.status.lock().unwrap().remove(id);
-        self.allow.lock().unwrap().remove(id);
+        self.vaults.lock().unwrap().remove(id);
     }
+}
+fn write_base(data: &Path, id: &str, base: &Manifest) -> Result<(), String> {
+    let b = serde_json::to_vec(base).map_err(|e| e.to_string())?;
+    sync::write_atomic(&base_path(data, id), &b, None).map_err(|e| e.to_string())
 }
 
 // ---------- commands for Settings › General › Shared vaults
 
 type St<'a> = tauri::State<'a, crate::App>;
 
-/// The folders a new vault must stay clear of: the main vault and the other extra ones.
-fn taken(s: &Value) -> Vec<String> {
-    std::iter::once(s["vault"].as_str().unwrap_or("").to_string()).filter(|v| !v.is_empty()).chain(crate::extra_vaults(s)).collect()
+/// A call to a shared vault's server, off the async worker: the vault from the settings, this Mac's client to it.
+async fn on_server<T: Send + 'static>(state: &St<'_>, id: &str, call: impl FnOnce(Shared, Client) -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    let v = find(&state.settings.lock().unwrap(), id)?;
+    let c = client(&v, &state.machines.id);
+    tauri::async_runtime::spawn_blocking(move || call(v, c)).await.map_err(|e| e.to_string())?
 }
-/// A vault added to the settings (or replaced, by id), saved and told to both windows; its first round runs at once.
-fn add(app: &tauri::AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
-    // the conversations running now were fenced without this folder: they start again with it, before the first round
-    crate::refence(app, false)?;
+/// Work on the Hub off the async worker: it waits for a running round of that vault.
+async fn on_hub<T: Send + 'static>(app: &AppHandle, f: impl FnOnce(&Hub, &Path) -> T + Send + 'static) -> Result<T, String> {
+    let a = app.clone();
+    tauri::async_runtime::spawn_blocking(move || f(&a.state::<crate::App>().shared, &crate::data_dir(&a))).await.map_err(|e| e.to_string())
+}
+/// Where a new vault may go: its real path, checked against the other vaults and the folders no vault may touch.
+fn new_folder(app: &AppHandle, state: &St<'_>, folder: &str, empty: bool) -> Result<String, String> {
+    let folder = real_path(folder)?;
+    let s = state.settings.lock().unwrap().clone();
+    let protected = agents_claude(app, state).map(|eb| crate::policy::protected(app, &eb)).unwrap_or_default();
+    crate::policy::check_folder(&folder, &crate::all_vaults(&s), &protected, empty)?;
+    Ok(folder)
+}
+fn agents_claude(app: &AppHandle, state: &St<'_>) -> Option<crate::EnvBuf> { crate::agents::get("claude").ok().map(|p| crate::env_of(app, state, p)) }
+
+/// A vault added to the settings (or replaced, by id): the agents here stop under the vault lock and the change is
+/// written before it is let go (policy::hold_for_vault), then saved and told to both windows; its first round runs.
+fn add(app: &AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
     let s = {
+        let _gate = crate::policy::hold_for_vault(app);
         let mut s = state.settings.lock().unwrap();
         let mut all: Vec<Value> = s["sharedVaults"].as_array().cloned().unwrap_or_default();
         all.retain(|x| x["id"] != v.id.as_str());
@@ -262,54 +216,45 @@ fn add(app: &tauri::AppHandle, state: &crate::App, v: &Shared) -> Result<(), Str
         s["sharedVaults"] = Value::Array(all);
         s.clone()
     };
-    // and once more now the vault is in the settings: an agent that started in between was fenced without it
-    crate::refence(app, false)?;
     crate::save_settings(app, &s)?;
     sync_now();
     Ok(())
 }
 
-/// An invite link that opened Relay (lib.rs on_open_url), until Settings takes it: a settings window that is only
-/// starting would miss the event.
+/// An invite link that opened Relay (lib.rs on_open_url), until Settings takes it on the `vault-invite` ping or when
+/// it opens: the one place the link is kept.
 static INVITE: Mutex<Option<String>> = Mutex::new(None);
 pub fn invite_opened(link: String) { *INVITE.lock().unwrap() = Some(link); }
 #[tauri::command]
 pub fn shared_vault_pending_invite() -> Option<String> { INVITE.lock().unwrap().take() }
 
-/// The shared vaults' last rounds: {id: Status}.
+/// The shared vaults' rounds so far: {id: Status}.
 #[tauri::command]
 pub fn shared_vaults_status(state: St) -> Value { serde_json::to_value(&*state.shared.status.lock().unwrap()).unwrap_or_default() }
 
 /// Make a shared vault on a paired machine: the server keeps it, this Mac makes the key. A folder that is not there
-/// or empty starts as Relay's starter vault; one with notes is uploaded as it is. Returns {id, recovery}: the key as
-/// hex, shown once to keep somewhere safe (without it and without a member's Mac the vault cannot be read).
+/// or empty starts as Relay's starter vault; one with notes is uploaded as it is. Returns {id, recovery}.
 #[tauri::command]
-pub async fn shared_vault_create(app: tauri::AppHandle, state: St<'_>, machine: String, name: String, folder: String) -> Result<Value, String> {
-    use tauri::Manager;
+pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
     let m = crate::machines::Machines::find(&s, &machine).ok_or("pick a paired machine for the vault")?;
     let name: String = name.trim().chars().filter(|c| !c.is_control()).take(60).collect();
     if name.is_empty() { return Err("give the vault a name".into()); }
-    let folder = real_path(&folder)?;
-    check_folder(&folder, &taken(&s), false)?;
-    // asked first: a conversation in a turn would be cut off by the restart that adding the vault needs
-    crate::refence(&app, true)?;
+    let folder = new_folder(&app, &state, &folder, false)?;
+    // asked before anything is made: adding the vault restarts every conversation, none may be in a turn
+    crate::policy::may_add_vault(&app)?;
     let template = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let (c, at) = (state.machines.client(&m), folder.clone());
-    let made = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
+    let (r, key) = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
         // the folder first: a vault that could not get its notes is not made on the server at all
-        if !Path::new(&folder).join("System/rules/core/work-state.md").is_file() && check_folder(&folder, &[], true).is_ok() {
-            crate::vault::create_default(&template, Path::new(&folder))?;
-        }
+        let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
+        if empty { crate::vault::create_default(&template, Path::new(&folder))?; }
         Ok((c.vault_create(&name)?, VaultKey::generate()))
     }).await.map_err(|e| e.to_string())??;
-    let (r, key) = made;
     if !valid_id(&r.id) { return Err(format!("the server answered an invalid vault id {:?}", r.id)); }
-    // keys, bases and trash go by id alone: a server answering with the id of a vault this Mac is in already would
-    // overwrite that vault's key and send its base against this folder
+    // keys, bases and trash go by id alone: an id this Mac is in already would overwrite that vault's key
     if list(&state.settings.lock().unwrap()).iter().any(|x| x.id == r.id) { return Err(format!("this Mac is in a vault with id {} already", r.id)); }
-    let data = crate::data_dir(&app);
-    save_key(&data, &r.id, &key)?;
+    save_key(&crate::data_dir(&app), &r.id, &key)?;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
     add(&app, &state, &v)?;
@@ -319,25 +264,23 @@ pub async fn shared_vault_create(app: tauri::AppHandle, state: St<'_>, machine: 
 /// Join a shared vault with an invite link: this Mac pairs with the server as a vault-only device (when it is not
 /// paired yet), gets the key out of the link and syncs the vault into `folder`, which must be empty.
 #[tauri::command]
-pub async fn shared_vault_join(app: tauri::AppHandle, state: St<'_>, link: String, folder: String) -> Result<Value, String> {
+pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, folder: String) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
-    let folder = real_path(&folder)?;
-    check_folder(&folder, &taken(&s), true)?;
-    crate::refence(&app, true)?;
-    // a vault this Mac is in already: joining again would wipe its key, base and trash below and leave its folder unsynced
+    let folder = new_folder(&app, &state, &folder, true)?;
+    // a vault this Mac is in already: joining again would wipe its key, base and trash and leave its folder unsynced
     if let Some(had) = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.vault).and_then(|id| find(&s, &id.to_ascii_lowercase()).ok()) {
         return Err(format!("this Mac is in {} already, at {}", had.name, had.folder));
     }
+    crate::policy::may_add_vault(&app)?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
     let (line, joined, key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
     if !valid_id(&joined.id) { return Err(format!("not a vault id: {:?}", joined.id)); }
     // a vault this Mac had before: its old base would make the new, empty folder look like a mass delete
-    let (a, vid) = (app.clone(), joined.id.clone());
-    tauri::async_runtime::spawn_blocking(move || tauri::Manager::state::<crate::App>(&a).shared.forget(&crate::data_dir(&a), &vid)).await.map_err(|e| e.to_string())?;
+    let vid = joined.id.clone();
+    on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
     save_key(&crate::data_dir(&app), &joined.id, &key)?;
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    // `.claude -> System` as in a vault Relay makes, before the first round: the rules and skills load from the synced
-    // System/, and filter() keeps whatever settings or hooks are on the server out of it from the start
+    // `.claude -> System` as in a vault Relay makes, before the first round: the rules load from the synced System/
     std::os::unix::fs::symlink("System", Path::new(&folder).join(".claude")).ok();
     let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role };
     add(&app, &state, &v)?;
@@ -346,47 +289,40 @@ pub async fn shared_vault_join(app: tauri::AppHandle, state: St<'_>, link: Strin
 
 /// An invite link for a vault (admins): single use, 24 h. {link, invite: {id, role, expires}}.
 #[tauri::command]
-pub async fn shared_vault_invite(app: tauri::AppHandle, state: St<'_>, id: String, role: String) -> Result<Value, String> {
-    let v = find(&state.settings.lock().unwrap(), &id)?;
-    let (c, key) = (client(&v, &state.machines.id), load_key(&crate::data_dir(&app), &id)?);
+pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String) -> Result<Value, String> {
+    let key = load_key(&crate::data_dir(&app), &id)?;
     let role = if role == "admin" { "admin" } else { "member" };
-    let (link, invite) = tauri::async_runtime::spawn_blocking(move || c.vault_invite(&v.id, role, &key, &v.host, v.port)).await.map_err(|e| e.to_string())??;
+    let (link, invite) = on_server(&state, &id, move |v, c| c.vault_invite(&v.id, role, &key, &v.host, v.port)).await?;
     Ok(serde_json::json!({"link": link, "invite": invite}))
 }
 
 /// The members and open invites of a vault, and this Mac's fingerprint so the list can mark it: {vault, me}.
 #[tauri::command]
 pub async fn shared_vault_info(state: St<'_>, id: String) -> Result<Value, String> {
-    let v = find(&state.settings.lock().unwrap(), &id)?;
-    let (c, me) = (client(&v, &state.machines.id), state.machines.id.fingerprint());
-    let info = tauri::async_runtime::spawn_blocking(move || c.vault_info(&v.id)).await.map_err(|e| e.to_string())??;
+    let me = state.machines.id.fingerprint();
+    let info = on_server(&state, &id, |v, c| c.vault_info(&v.id)).await?;
     Ok(serde_json::json!({"vault": info, "me": me}))
 }
 
 /// Withdraw an invite that was not used yet (admins).
 #[tauri::command]
 pub async fn shared_vault_invite_revoke(state: St<'_>, id: String, invite: String) -> Result<(), String> {
-    let v = find(&state.settings.lock().unwrap(), &id)?;
-    let c = client(&v, &state.machines.id);
-    tauri::async_runtime::spawn_blocking(move || c.vault_invite_revoke(&v.id, &invite)).await.map_err(|e| e.to_string())?
+    on_server(&state, &id, move |v, c| c.vault_invite_revoke(&v.id, &invite)).await
 }
 
-/// Remove a member (admins), or leave the vault when `fp` is this Mac's: then the vault goes from the settings, with
-/// its key and sync state; the folder stays as it is.
+/// Remove a member (admins), or leave the vault when `fp` is this Mac's or "" (a removed member cannot ask the server
+/// who it is): the vault goes from the settings with its key and sync state, the folder stays as it is.
 #[tauri::command]
-pub async fn shared_vault_remove(app: tauri::AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
-    let v = find(&state.settings.lock().unwrap(), &id)?;
-    let (c, me) = (client(&v, &state.machines.id), state.machines.id.fingerprint());
-    // "" is this Mac: a member that was removed, or whose vault is gone, cannot ask the server who it is any more
+pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
+    let me = state.machines.id.fingerprint();
     let fp = if fp.is_empty() { me.clone() } else { fp };
-    let (vid, who) = (v.id.clone(), fp.clone());
-    let gone = tauri::async_runtime::spawn_blocking(move || c.vault_remove(&vid, &who)).await.map_err(|e| e.to_string())?;
+    let who = fp.clone();
+    let gone = on_server(&state, &id, move |v, c| c.vault_remove(&v.id, &who)).await;
     if fp != me { return gone; }
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }
-    // forget waits for a running round of this vault (the walkers' lock): not on an async worker
-    let (a, vid) = (app.clone(), id.clone());
-    tauri::async_runtime::spawn_blocking(move || tauri::Manager::state::<crate::App>(&a).shared.forget(&crate::data_dir(&a), &vid)).await.map_err(|e| e.to_string())?;
+    let vid = id.clone();
+    on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
     let s = {
         let mut s = state.settings.lock().unwrap();
         if let Some(a) = s["sharedVaults"].as_array_mut() { a.retain(|x| x["id"] != id.as_str()); }
@@ -394,25 +330,20 @@ pub async fn shared_vault_remove(app: tauri::AppHandle, state: St<'_>, id: Strin
     };
     crate::save_settings(&app, &s)
 }
-
 /// Whether a server error means this Mac is no member any more: removed, the vault gone, or the device unpaired.
 fn left_already(e: &str) -> bool { ["no such vault", "not paired", "not a member", "CertificateUnknown", "certificate unknown"].iter().any(|x| e.contains(x)) }
 
 /// A vault's key as hex, to show it again (Settings): it is on this Mac in shared-<id>.key anyway, the recovery key.
 #[tauri::command]
-pub fn shared_vault_recovery(app: tauri::AppHandle, id: String) -> Result<String, String> {
+pub fn shared_vault_recovery(app: AppHandle, id: String) -> Result<String, String> {
     if !valid_id(&id) { return Err("not a vault id".into()); }
     load_key(&crate::data_dir(&app), &id).map(|k| k.to_hex())
 }
 
 /// The held deletes of a vault the user saw (`paths`): let them through in its next round, or put the files back.
 #[tauri::command]
-pub async fn shared_vault_held(app: tauri::AppHandle, state: St<'_>, id: String, allow: bool, paths: Vec<String>) -> Result<(), String> {
-    if allow { state.shared.allow_deletes(&id, paths); } else {
-        // restore waits for a running round of this vault (the walkers' lock): not on the main thread
-        let a = app.clone();
-        tauri::async_runtime::spawn_blocking(move || tauri::Manager::state::<crate::App>(&a).shared.restore_held(&crate::data_dir(&a), &id, &paths)).await.map_err(|e| e.to_string())?;
-    }
+pub async fn shared_vault_held(app: AppHandle, id: String, allow: bool, paths: Vec<String>) -> Result<(), String> {
+    on_hub(&app, move |hub, data| if allow { hub.allow_deletes(&id, paths); Ok(()) } else { hub.restore_held(data, &id, &paths) }).await??;
     sync_now();
     Ok(())
 }
@@ -465,31 +396,6 @@ mod tests {
         std::fs::remove_dir_all(&tmp).ok();
     }
     #[test]
-    fn a_round_puts_this_macs_settings_and_hooks_back() {
-        let tmp = std::env::temp_dir().join(format!("relay-shared-kept-{}", std::process::id()));
-        std::fs::remove_dir_all(&tmp).ok();
-        std::fs::create_dir_all(tmp.join("System/hooks")).unwrap();
-        std::fs::write(tmp.join("System/settings.json"), "mine").unwrap();
-        std::fs::write(tmp.join("System/hooks/check.sh"), "mine").unwrap();
-        std::os::unix::fs::symlink("System", tmp.join(".claude")).unwrap();
-        let kept = Kept::take(&tmp);
-        // what a pull could do on a case-insensitive disk: change the settings, add a hook
-        std::fs::write(tmp.join("System/Settings.json"), "theirs").unwrap();
-        std::fs::write(tmp.join("System/hooks/evil.sh"), "theirs").unwrap();
-        assert_eq!(kept.restore().len(), 2);
-        assert_eq!(std::fs::read_to_string(tmp.join("System/settings.json")).unwrap(), "mine");
-        assert!(!tmp.join("System/hooks/evil.sh").exists() && tmp.join("System/hooks/check.sh").is_file());
-        // a vault without .claude: one a round makes goes again
-        let bare = tmp.join("bare");
-        std::fs::create_dir_all(&bare).unwrap();
-        let kept = Kept::take(&bare);
-        std::fs::create_dir_all(bare.join(".Claude")).unwrap();
-        std::fs::write(bare.join(".Claude/settings.json"), "theirs").unwrap();
-        assert_eq!(kept.restore(), vec![".claude".to_string()]);
-        assert!(std::fs::symlink_metadata(bare.join(".claude")).is_err());
-        std::fs::remove_dir_all(&tmp).ok();
-    }
-    #[test]
     fn a_new_folder_by_its_real_path() {
         let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("relay-shared-real-{}", std::process::id()));
         std::fs::remove_dir_all(&tmp).ok();
@@ -506,15 +412,22 @@ mod tests {
     }
     #[test]
     fn a_vault_folder_stands_alone() {
-        let tmp = std::env::temp_dir().join(format!("relay-shared-{}", std::process::id()));
+        use crate::policy::check_folder;
+        let tmp = std::fs::canonicalize(std::env::temp_dir()).unwrap().join(format!("relay-shared-{}", std::process::id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        let (t, others) = (tmp.to_string_lossy().into_owned(), vec!["/Users/me/Vault".to_string()]);
-        assert!(check_folder(&t, &others, true).is_ok(), "an empty folder");
+        let (t, others, none) = (tmp.to_string_lossy().into_owned(), vec!["/Users/me/Vault".to_string()], Vec::<String>::new());
+        assert!(check_folder(&t, &others, &none, true).is_ok(), "an empty folder");
         std::fs::write(tmp.join("note.md"), "x").unwrap();
-        assert!(check_folder(&t, &others, true).is_err(), "a joined vault starts empty");
-        assert!(check_folder(&t, &others, false).is_ok(), "a made one may start from what is there");
-        assert!(check_folder("/Users/me/Vault/Team", &others, false).is_err());
-        assert!(check_folder("relative", &others, false).is_err());
+        assert!(check_folder(&t, &others, &none, true).is_err(), "a joined vault starts empty");
+        assert!(check_folder(&t, &others, &none, false).is_ok(), "a made one may start from what is there");
+        assert!(check_folder("/Users/me/Vault/Team", &others, &none, false).is_err());
+        assert!(check_folder("relative", &others, &none, false).is_err());
+        // Relay's data or a Claude folder inside, or the vault inside one of them: refused, all of it would sync
+        let data = vec!["/Users/me/Library/Application Support/relay".to_string()];
+        assert!(check_folder("/Users/me/Library", &others, &data, false).is_err());
+        assert!(check_folder("/Users/me/Library/Application Support/relay/x", &others, &data, false).is_err());
+        let home = crate::home();
+        assert!(check_folder(&home, &none, &none, false).is_err(), "the home folder itself");
         std::fs::remove_dir_all(&tmp).ok();
     }
 }

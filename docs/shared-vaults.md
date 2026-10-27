@@ -6,74 +6,39 @@ each Mac with `sync::run` (TwoWay, conflict copies, never a merge).
 
 ## Trust
 
-- The server sees: vault ids and names, member device names and fingerprints, blob names (HMACs of paths), blob sizes,
-  when they change. It cannot read paths or contents.
-- The server is trusted for availability and freshness, not for confidentiality: it could serve an older version of a
-  blob (rollback) or drop one. Swapping one blob for another is caught (the name is bound in the AEAD).
-- The invite link carries a secret, after `#`, that unwraps the vault key. The server keeps the key only encrypted under
-  that secret, which it never sees. Whoever has an unused link gets in: links are single use, expire after 24 h, and the admin sees who joined.
-- v1 has no key rotation. Removing a member stops their device at the server at once. They keep what they already
-  synced and the key. Rotation needs a static X25519 key per device (`x25519-dalek`, `ring` has only ephemeral
-  agreement) and is a follow-up.
+**What the server sees:** vault ids and names, member device names and fingerprints, blob names (HMACs of paths) and
+sizes, and when they change. Not paths, not contents. It is trusted to keep the files, not to keep them secret: it could
+serve an old version or drop one, but a swapped blob is caught (the name is bound in the AEAD), and a record it cannot
+read is shown as damaged, never as deleted.
 
-### What members can and cannot do to each other
+**Invites:** the link carries a secret, after `#`, that unwraps the vault key. The server keeps the key only encrypted
+under that secret, which it never sees. Links are single use, last 24 h, and die with the admin who made them.
 
-**The fence is a guard, not a sandbox.** It is built from Claude Code permission rules, a sync filter and checks in
-the app. It keeps a conversation from crossing into another vault by accident, and Claude Code's file tools and file
-commands out of other vaults. It is not a boundary against a member who sets out to reach your Mac: with a note that
-steers an agent in auto mode, there is always one more route (a script in Bash, a local socket). A hard boundary needs
-isolation from the operating system (Claude Code's sandbox, or a separate macOS user). Share a vault with people you
-would let read what your agent can read.
+**Removing a member** stops their device at the server at once. They keep what they synced and the key: v1 has no key
+rotation (it needs a static X25519 key per device, `ring` has only ephemeral agreement).
 
+**The fence is a guard, not a sandbox.** It keeps a conversation in its vault and Claude Code's file tools and file
+commands out of the others. It is not a boundary against a member who sets out to reach your Mac through a note that
+steers your agent: a script in Bash or a local socket can still get out, and only the auto-mode classifier judges
+those. Share a vault with people you would let read what your agent can read. What it does:
 
-- **Write notes in the vault.** Everything a member syncs, every other member's agent may read. A note can carry
-  instructions aimed at an agent (prompt injection). The fence below limits what such an agent can reach.
-- **Not run code on another Mac.** Claude Code runs what is in a project's config folder as plain code: the
-  `settings.json` (hooks, `env`, `apiKeyHelper`, `statusLine`), and through hooks and skills the scripts they point at.
-  `.claude` never syncs, and of the folder it links to (`System/` in a vault Relay makes, and `System/` also before the
-  link resolves, on a join's first round) only `rules/`, `reference/`, `index/`, `archive/` and `reminders.md` go, in
-  both directions (`shared_vaults::filter`). Settings, hooks, scripts, skills and agents stay on each Mac. Paths match
-  case-folded, as APFS compares them, so `System/Hooks/x.sh` and `Syﬆem/hooks/x.sh` are held back too, and so are names with the characters HFS+
-  ignores. A vault whose `.claude` links to a folder with characters other than letters, digits, space, `.`, `-` or
-  `_`, or to the vault folder itself, does not sync until that is changed. A round follows no symlink, so a link
-  someone made inside the folder does not take a member's writes out of it. Project MCP servers (`.mcp.json`) do not
-  start: shared-vault conversations run with `--strict-mcp-config`.
-- **Two more layers against a member's code.** Each round takes this Mac's `.claude` settings and `hooks/` and puts
-  them back after (`shared_vaults::Kept`): what a pull changed there is restored, what it added removed, a `.claude` a
-  round made goes again. And shared-vault conversations and their terminal run with `disableAllHooks`, so no hook runs
-  there, also one in a skill's or agent's frontmatter. The user's own hooks don't run in a shared vault either.
-- **Not reach your other vaults through your agent.** A conversation in a shared vault gets Read and Edit denies on
-  every other vault, on their transcripts and auto memory in each Claude config folder (also of an account removed
-  from the list), on every other project's transcripts there, on what those folders keep per session (`file-history`,
-  `history.jsonl`, `paste-cache`, `plans`, `todos`, `tasks`, `sessions`, `debug`, `shell-snapshots`, `session-env`), and on
-  Relay's data folder (keys, certificate, trash, bases). It may not edit what Claude Code runs for the next
-  conversations: the settings, `CLAUDE.md`, hooks, skills, agents and commands of each config folder, and its own
-  vault's `.claude`. It runs in auto mode whatever the account's default mode, in
-  the terminal too, because the auto
-  classifier is what stops a script in Bash that no deny rule covers. That classifier is a model's judgement, not a
-  sandbox: the fence is strong for Claude Code's file tools and file commands, weaker for arbitrary scripts.
-- **Not read your own mail, reminders or calendar through your agent.** A teammate's note can ask the agent for them
-  and the sync would carry the answer to the team, and no deny rule sees a read the app does for the agent. So a
-  shared vault's conversation gets an error for `relay mail.search|read|thread|attachment`, `relay reminders.list`,
-  `relay calendar.meetings` and the relay-mail tools' reads. Writing to you still works: a reminder, a mail draft.
-  `relay` answers for the conversation its caller runs under (traced from the socket's peer process up to the agent),
-  not the one it names, so naming a main-vault conversation does not help.
-- **Read your integrations, on purpose.** Productive, GitHub, Trello and the other boards stay readable from a shared
-  vault: that is shared work data a team vault is for. What an agent reads there can end up in the team's vault.
-- **The same lockdown in your own other vault folders.** Relay treats every vault but the main one this way, also a
-  folder you added under Other vault folders: no own MCP servers or connectors, no hooks, auto mode, no reads of your
-  mail, reminders or calendar.
-- **New vaults reach running conversations too.** A conversation's fence is fixed when its agent starts. Adding a
-  vault (made, joined, or a folder under Other vault folders) stops every agent running on this Mac and every
-  terminal tab that runs one, so the next message starts it again with the new fence. While one is in a turn, Relay
-  asks to wait instead of cutting it off. A conversation opened in an outside terminal (iTerm, Terminal) keeps its
-  old rules until it is started again.
-- **A project's key never moves.** A project of another vault than the main one is always "Name (folder)", clash or
-  not, so its conversations stay with it when the main vault gets or loses a project of that name.
-- **A main-vault conversation stays out too.** It may not read the shared vaults' trash, bases and keys in Relay's data
-  folder.
-- **Not keep a removed member in.** The server refuses their device at the next connection. They keep what they
-  had synced (see key rotation above). Their open invites die with them.
+- **A conversation stays in its vault.** It runs in its project's vault and may not read or edit the other vaults or
+  their transcripts. In any vault but the main one it also may not touch Relay's data folder or Claude's config
+  folders (with their `.claude.json`), and runs with no own MCP servers or connectors, no hooks, no auto memory, in auto
+  mode. A main-vault conversation may not read the shared vaults' trash, bases and keys. Codex and OpenCode run in the
+  main vault only.
+- **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
+  the notes go (`rules/`, `reference/`, `index/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
+  follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.
+- **Your own mail, reminders and calendar stay out.** A conversation in another vault gets an error for reading them
+  through `relay` or the mail tools. Writing to you (a reminder, a draft) still works. `relay` answers for the
+  conversation its caller really runs under, traced from the calling process. Integrations (Productive, GitHub, Trello)
+  stay readable on purpose: that is the team's work.
+- **A vault added reaches running conversations.** Relay first checks that none is in a turn and no terminal tab runs
+  one, then stops them and writes the change under one lock that also holds back new starts. Their next message starts
+  them with the new fence. A conversation in an outside terminal (iTerm) keeps its old rules until it starts again.
+- **A project's key never moves.** It is its name in the main vault, else its name and its vault's id. The sidebar shows
+  a label, with the folder only when two vaults have the name.
 
 ## Wire protocol
 
@@ -84,7 +49,7 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 (unexpired) invite. A device that is not paired may only send `pair` or `vault_join`.
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
-`VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_list`, `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
+`VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
 `vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror, pairs
 further devices or sees `info` (the server's paths). A linked device (a phone) gets no vault ops.
 
@@ -94,9 +59,8 @@ blob name 64 lowercase hex. Anything else is refused.
 | Request | Who | Reply |
 |---|---|---|
 | `vault_create {name}` | a full device (not vaults_only, not linked) | `{vault: {id, name}}`, the caller is its admin |
-| `vault_list` | any client | `{vaults: [{id, name, role, members}]}`, the vaults the caller is a member of |
 | `vault_info {vault}` | member | `{vault: {id, name, role, members: [{name, fp, role, added}], invites: [{id, role, expires}]}}`, invites only for admins (else `[]`) |
-| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}, fp}`, `role` admin or member, `wrapped` hex at most 512 chars, expires in 24 h |
+| `vault_invite {vault, role, wrapped}` | admin | `{invite: {id, code, expires}}`, `role` admin or member, `wrapped` hex at most 512 chars, expires in 24 h |
 | `vault_invite_revoke {vault, invite}` | admin | `{}` |
 | `vault_join {vault, invite, name, proof}` | anyone with a valid link | `{vault: {id, name}, role, wrapped}`, `proof` = `tls::proof(code, client_fp, server_fp)`, 5 wrong proofs drop the invite, success consumes it, adds the device to `clients.json` as vaults_only when it is new (name deduplicated as in `pair`) and as a member |
 | `vault_remove {vault, fp}` | admin, or the member itself (leave) | `{}`, refused when it would leave members without an admin, a vaults_only client with no vault left is removed from `clients.json` |
@@ -142,37 +106,4 @@ The pairing line with three more fields:
 `relay://<host>:<port>#fp=<64 hex>&code=<32 hex>&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>`.
 `PairLine` parses them as optional `vault`, `invite`, `secret`. A line with all three is an invite.
 
-## Client API (relay-remote)
-
-```rust
-// vault.rs
-pub struct VaultKey([u8; 32]);
-impl VaultKey {
-    pub fn generate() -> VaultKey;
-    pub fn from_hex(s: &str) -> Option<VaultKey>;
-    pub fn to_hex(&self) -> String;
-    pub fn name(&self, path: &str) -> String;
-    pub fn record(&self, path: &str, data: &[u8], mtime: i64) -> Result<Vec<u8>, String>;
-    pub fn open_meta(&self, name: &str, meta: &[u8]) -> Result<sync::Entry, String>; // checks name(path) == name
-    pub fn open_data(&self, name: &str, record: &[u8]) -> Result<Vec<u8>, String>;
-}
-pub fn wrap(key: &VaultKey, secret_hex: &str, vault: &str) -> Result<String, String>;
-pub fn unwrap(wrapped_hex: &str, secret_hex: &str, vault: &str) -> Result<VaultKey, String>;
-
-/// sync::Remote over a shared vault: encrypts on put, decrypts on get, maps the plaintext hashes sync::run plans
-/// with to the server's etags (cached from the last manifest).
-pub struct SealedRemote { .. }
-
-// client.rs
-pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Joined, VaultKey), String>;
-pub struct Joined { pub id: String, pub name: String, pub role: String }
-impl Client {
-    pub fn vault_create(&self, name: &str) -> Result<VaultRef, String>;            // VaultRef { id, name }
-    pub fn vault_list(&self) -> Result<Vec<VaultSummary>, String>;                  // { id, name, role, members }
-    pub fn vault_info(&self, vault: &str) -> Result<VaultInfo, String>;            // { id, name, role, members, invites }
-    pub fn vault_invite(&self, vault: &str, role: &str, key: &VaultKey, host: &str, port: u16) -> Result<(String, Invite), String>; // the link, and { id, role, expires }
-    pub fn vault_invite_revoke(&self, vault: &str, invite: &str) -> Result<(), String>;
-    pub fn vault_remove(&self, vault: &str, fp: &str) -> Result<(), String>;
-    pub fn sealed(&self, vault: &str, key: VaultKey) -> SealedRemote;
-}
-```
+The client side lives in `packages/relay-remote` (`vault.rs`, `client.rs`), the server side in `packages/relay-server/src/vaults.rs`.

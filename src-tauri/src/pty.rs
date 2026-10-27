@@ -14,6 +14,9 @@ struct Pty { master: Box<dyn MasterPty + Send>, writer: Box<dyn Write + Send>, c
 #[derive(Default)]
 pub struct Ptys { map: Mutex<HashMap<u32, Pty>>, next: AtomicU32 }
 impl Ptys {
+    /// How many terminals run an agent: a vault is added only when none does (policy::may_add_vault), since what one is
+    /// in the middle of cannot be seen from here.
+    pub fn agents(&self) -> usize { self.map.lock().unwrap().values().filter(|p| p.agent).count() }
     /// Stop the terminals that run an agent: they were started with a fence that misses a vault added since.
     pub fn stop_agents(&self) -> usize {
         let mut map = self.map.lock().unwrap();

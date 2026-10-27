@@ -87,7 +87,9 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     // a conversation runs in one vault and only there: a resumed one in the vault it started in (the provider finds
     // it by that folder), a new one in its project's, the orchestrator's in the main vault
     let dir = match &saved {
-        Some(s) if !s.vault.is_empty() && Path::new(&s.vault).is_dir() => s.vault.clone(),
+        // its vault's folder gone (moved, a disk not mounted): refused, not resumed with the main vault's rules
+        Some(s) if !s.vault.is_empty() && !Path::new(&s.vault).is_dir() => return Err(format!("this conversation's vault is not here: {}", s.vault)),
+        Some(s) if !s.vault.is_empty() => s.vault.clone(),
         Some(_) => main.clone(),
         None if orch::is_orch(project) => main.clone(),
         None => about.map(|a| crate::project_home(state, a)).transpose()?.map_or_else(|| main.clone(), |(v, _)| v),
@@ -96,7 +98,6 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     // Codex and OpenCode get no fence (fence below): a shared vault's conversation is Claude Code's only
     if shared && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
     let extra = if shared { dir.as_str() } else { "" };
-    state.started_in.lock().unwrap().insert(project.to_string(), extra.to_string());
     // a fork carries the other conversation's transcript: only one from this same vault
     let fork_vault = |f: &str| state.sids.lock().unwrap().values().find(|s| s.sid == f).map(|s| s.vault.clone()).unwrap_or_default();
     let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f) && fork_vault(f) == extra);
@@ -142,14 +143,18 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
         if caps.brain && !from_mail && cw_on(state) {
             if let Some(a) = about {
-                if let Some((b, repo)) = commonwealth::session(&home(), &repo_projects(&dir), a) {
+                // the project by its name in its vault, which is what the brain's registry knows
+                let name = crate::project_home(state, a).map(|(_, n)| n).unwrap_or_else(|_| a.to_string());
+                if let Some((b, repo)) = commonwealth::session(&home(), &repo_projects(&dir), &name) {
                     eb.opts["commonwealth_brain"] = json!(b);
                     eb.opts["commonwealth_source"] = json!(repo);
                     eb.opts["commonwealth_project"] = json!(a);
                 }
             }
         }
-        crate::fence_in(app, state, &mut eb.opts, &dir);
+        // fenced and started under the vault lock: a vault added meanwhile (policy::hold_for_vault) waits for this
+        let _gate = state.vault_gate.lock().unwrap();
+        crate::fence_in(app, state, &mut eb);
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();

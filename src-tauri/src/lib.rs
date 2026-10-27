@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -48,8 +48,10 @@ mod reminders;
 mod retry;
 mod scratch;
 mod session;
+mod policy;
 mod share;
 mod shared_vaults;
+pub(crate) use policy::{all_vaults, extra_vaults, fence_in, in_shared_vault, own_extra, project_home, SHARED_NO_READ};
 #[cfg(feature = "selftest")]
 mod selftest;
 mod snapshot;
@@ -85,136 +87,6 @@ fn need_vault(st: &App) -> Result<String, String> {
     let s = st.settings.lock().unwrap();
     let vs = vault_of(&s);
     if vs["ok"] == true { Ok(vs["vault"].as_str().unwrap().to_string()) } else { Err(tr(ui_lang_of(&s), "err.no_vault_set")) }
-}
-/// The extra vaults (Settings › General): shared vaults whose projects show next to the main vault's.
-/// With the folders of the shared vaults on a server (shared_vaults.rs), which count as extra vaults too.
-fn extra_vaults(s: &Value) -> Vec<String> {
-    let mut all = own_extra(s);
-    for v in shared_vaults::list(s) { if !all.contains(&v.folder) { all.push(v.folder); } }
-    all
-}
-/// The extra vault folders the user added in Settings, without the shared ones.
-fn own_extra(s: &Value) -> Vec<String> {
-    s["extraVaults"].as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect()).unwrap_or_default()
-}
-/// The main vault and the extra ones, the main one first.
-fn all_vaults(st: &App) -> Vec<String> {
-    let s = st.settings.lock().unwrap();
-    std::iter::once(s["vault"].as_str().unwrap_or("").to_string()).filter(|v| !v.is_empty()).chain(extra_vaults(&s)).collect()
-}
-/// Where a project lives as the last snapshot found it: (its vault, its name in that vault). A project lives in one
-/// vault: its conversations, scratch notes, terminal, repos, icon and Design link are there and nowhere else. One the
-/// snapshot never saw is the main vault's.
-fn project_home(st: &App, project: &str) -> Result<(String, String), String> {
-    let main = need_vault(st)?;
-    let all = all_vaults(st);
-    Ok(st.proj_vault.lock().unwrap().get(project).filter(|(v, _)| all.contains(v)).cloned().unwrap_or((main, project.to_string())))
-}
-/// The key a project of another vault than the main one goes by: always "Name (folder)", whether or not a vault read
-/// before has that name too. A key that changed when a clash came or went would move that project's conversations to
-/// another project while their sessions stay in this vault. Two such vaults with one folder name get a number, in the
-/// order of the settings.
-fn shared_key(taken: &HashMap<String, (String, String)>, name: &str, vault: &str) -> String {
-    let folder = Path::new(vault).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| vault.to_string());
-    let base = format!("{name} ({folder})");
-    (1..).map(|i| if i == 1 { base.clone() } else { format!("{name} ({folder} {i})") }).find(|k| !taken.contains_key(k)).unwrap()
-}
-/// The key of a vault's project by its name there (shared_key's inverse); its name when the snapshot never saw it.
-fn key_in(index: &HashMap<String, (String, String)>, vault: &str, name: &str) -> String {
-    index.iter().find(|(_, (v, n))| v == vault && n == name).map_or_else(|| name.to_string(), |(k, _)| k.clone())
-}
-/// What a conversation in `dir` may not touch, as Claude Code permission rules (`//` is an absolute path; Edit covers
-/// Write and the other editing tools): Read and Edit on every other vault, and on its transcripts and auto memory in
-/// each Claude config folder (`<config>/projects/<slug>`, which hold copies of what was read there). `data`, for a
-/// shared vault: Relay's data folder, with the other shared vaults' keys, this Mac's certificate, their trash and bases;
-/// and what each config folder keeps per session rather than per vault: edited files' backups (`file-history`), the
-/// prompts (`history.jsonl`) and pastes (`paste-cache`).
-fn fence(dir: &str, vaults: &[String], configs: &[String], data: Option<&str>) -> Vec<String> {
-    let rule = |p: &str| ["Read", "Edit"].map(|t| format!("{t}(/{}/**)", p.trim_end_matches('/')));
-    let mut out = vec![];
-    for v in vaults.iter().filter(|v| v.trim_end_matches('/') != dir.trim_end_matches('/')) {
-        out.extend(rule(v));
-        for c in configs { out.extend(rule(&format!("{}/projects/{}", c.trim_end_matches('/'), agent_claude::slug(v.trim_end_matches('/'))))); }
-    }
-    if let Some(d) = data {
-        out.extend(rule(d));
-        let edit = |p: &str| format!("Edit(/{p})");
-        for c in configs {
-            let c = c.trim_end_matches('/');
-            for x in ["file-history", "paste-cache", "plans", "todos", "tasks", "sessions", "debug", "shell-snapshots", "session-env"] { out.extend(rule(&format!("{c}/{x}"))); }
-            out.extend(["Read", "Edit"].map(|t| format!("{t}(/{c}/history.jsonl)")));
-            // every other project's transcripts (repos, worktrees, sessions of main-vault projects), not only the vaults'
-            let own = agent_claude::slug(dir.trim_end_matches('/'));
-            for e in std::fs::read_dir(format!("{c}/projects")).into_iter().flatten().flatten() {
-                let n = e.file_name().to_string_lossy().into_owned();
-                if n != own && !out.iter().any(|r| r.ends_with(&format!("/projects/{n}/**)"))) { out.extend(rule(&format!("{c}/projects/{n}"))); }
-            }
-            // what Claude Code runs for every conversation: an agent here may not change it for the next ones
-            for x in ["settings.json", "settings.local.json", "CLAUDE.md"] { out.push(edit(&format!("{c}/{x}"))); }
-            for x in ["hooks", "skills", "agents", "commands"] { out.push(edit(&format!("{c}/{x}/**"))); }
-        }
-        // nor for the next conversations in this vault: its own config, and the folder `.claude` links to
-        let dir = dir.trim_end_matches('/');
-        out.push(edit(&format!("{dir}/.claude/**")));
-        if let Some(t) = std::fs::canonicalize(format!("{dir}/.claude")).ok().filter(|t| t.starts_with(dir) && t != std::path::Path::new(dir)) {
-            let t = t.to_string_lossy();
-            for x in ["settings.json", "settings.local.json"] { out.push(edit(&format!("{t}/{x}"))); }
-            for x in ["hooks", "skills", "agents", "commands"] { out.push(edit(&format!("{t}/{x}/**"))); }
-        }
-    }
-    out
-}
-/// Whether a folder can be fenced: a permission rule reads `[`, `*`, `?` and `\` in a path as a pattern, so a deny on
-/// `Team [x]` would not cover that folder at all.
-fn fenceable(p: &str) -> bool { !p.contains(['[', ']', '*', '?', '\\']) }
-/// What Relay's data folder keeps of the shared vaults in plaintext or as keys: their trash (deleted and shrunk notes),
-/// bases (every path) and keys. A main-vault conversation may not read those either, the fence the other way round.
-fn shared_copies(data: &str) -> Vec<String> {
-    let d = data.trim_end_matches('/');
-    ["shared-trash/**", "shared-base/**", "shared-*.key"].iter().flat_map(|x| ["Read", "Edit"].map(|t| format!("{t}(/{d}/{x})"))).collect()
-}
-/// A conversation in `dir` fenced in, in its provider's opts: `deny` gets the fence's rules, and in a shared vault
-/// `strict_mcp`: none of the user's own MCP servers and claude.ai connectors (Slack, mail, Drive) run there, so nothing
-/// of theirs ends up in the team's vault. Relay's own tools come over the pipe and stay.
-fn fence_in(app: &AppHandle, st: &App, opts: &mut Value, dir: &str) {
-    let all = all_vaults(st);
-    let shared = all.first().is_some_and(|main| main != dir);
-    let mut configs = vec![format!("{}/.claude", home())];
-    let s = st.settings.lock().unwrap().clone();
-    configs.extend(s["agents"]["providers"]["claude"]["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).filter(|d| !d.is_empty()).map(String::from));
-    // also an account removed from the list since, as env_of has it: its transcripts are still there
-    configs.extend(st.sids.lock().unwrap().values().filter(|x| x.provider == "claude" && !x.account.is_empty()).map(|x| x.account.clone()));
-    configs.sort();
-    configs.dedup();
-    let data = data_dir(app).to_string_lossy().into_owned();
-    let mut rules = fence(dir, &all, &configs, shared.then_some(data.as_str()));
-    if !shared && all.len() > 1 { rules.extend(shared_copies(&data)); }
-    if !rules.is_empty() {
-        let mut deny = opts["deny"].as_array().cloned().unwrap_or_default();
-        deny.extend(rules.into_iter().map(Value::from));
-        opts["deny"] = json!(deny);
-    }
-    if shared { opts["strict_mcp"] = json!(true); }
-}
-/// Before a vault is added (made, joined, or a folder under Other vault folders), every agent running here was fenced
-/// without it and could read it: stop them, so their next message starts them again with the new fence. `wait`: refuse
-/// while one is in a turn instead (asked first, so nothing is cut off); the second call, right before the change, stops
-/// all. Agents on a work machine see only the main vault's mirror there and stay. A conversation opened in an outside
-/// terminal (iTerm, Terminal) cannot be stopped from here.
-fn refence(app: &AppHandle, wait: bool) -> Result<(), String> {
-    let st = app.state::<App>();
-    let mut procs = st.procs.lock().unwrap();
-    if wait && procs.values().any(|p| !p.remote && p.turns.busy()) { return Err(trc("err.refence_busy")); }
-    let keys: Vec<String> = procs.iter().filter(|(_, p)| !p.remote).map(|(k, _)| k.clone()).collect();
-    for k in keys { if let Some(mut p) = procs.remove(&k) { p.child.kill().ok(); } }
-    drop(procs);
-    app.state::<pty::Ptys>().stop_agents();
-    Ok(())
-}
-/// Whether one vault folder is the other or lies inside it: a fence around one would then cover the other too.
-fn nested(a: &str, b: &str) -> bool {
-    let (a, b) = (Path::new(a), Path::new(b));
-    a.starts_with(b) || b.starts_with(a)
 }
 /// The reminders file (it may not exist yet), the action log and the UI language. Needs a usable vault.
 fn rem_ctx(app: &AppHandle) -> Result<(PathBuf, PathBuf, &'static str), String> {
@@ -317,6 +189,13 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("run_setup", ["Set Up Vault…", "Vault instellen…", "Configurer la vault…", "Vault einrichten…"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
         "Pas de coffre : work-state.md introuvable dans {v}", "Kein Vault: work-state.md nicht gefunden in {v}"]),
+    ("err.refence_terminals", ["{v} terminal tab(s) run a conversation: close them first, adding a vault restarts every conversation", "{v} terminaltab(s) draaien een gesprek: sluit ze eerst, een vault toevoegen herstart elk gesprek",
+        "{v} onglet(s) de terminal font tourner une conversation : fermez-les d'abord, ajouter un coffre redémarre chaque conversation", "{v} Terminal-Tab(s) führen ein Gespräch aus: schließe sie zuerst, einen Vault hinzuzufügen startet jedes Gespräch neu"]),
+    ("err.vault_pick", ["Pick a folder for the vault", "Kies een map voor de vault", "Choisissez un dossier pour le coffre", "Wähle einen Ordner für den Vault"]),
+    ("err.vault_protected", ["A vault folder may not hold Relay's data, a Claude folder or your home folder, nor lie inside them: {v}", "Een vaultmap mag Relays gegevens, een Claude-map of je thuismap niet bevatten en er niet in liggen: {v}",
+        "Un dossier de coffre ne peut pas contenir les données de Relay, un dossier Claude ou votre dossier personnel, ni s'y trouver : {v}", "Ein Vault-Ordner darf weder Relays Daten, einen Claude-Ordner noch deinen Benutzerordner enthalten oder darin liegen: {v}"]),
+    ("err.vault_not_empty", ["{v} is not empty: a joined vault starts in an empty folder", "{v} is niet leeg: een vault waar je lid van wordt, begint in een lege map",
+        "{v} n'est pas vide : un coffre rejoint commence dans un dossier vide", "{v} ist nicht leer: Ein beigetretener Vault beginnt in einem leeren Ordner"]),
     ("err.refence_busy", ["A conversation is still working: adding a vault restarts every conversation, try again when its turn has ended", "Een gesprek is nog bezig: een vault toevoegen herstart elk gesprek, probeer opnieuw als de beurt klaar is",
         "Une conversation travaille encore : ajouter un coffre redémarre chaque conversation, réessayez quand son tour est fini", "Ein Gespräch arbeitet noch: Einen Vault hinzuzufügen startet jedes Gespräch neu, versuche es nach dem Ende seiner Runde erneut"]),
     ("err.unfenceable_vault", ["A vault folder may not have [ ] * ? or \\ in its path: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * ? of \\ in het pad hebben: {v}. Relay kan gesprekken er dan niet buiten houden",
@@ -517,7 +396,7 @@ struct App {
     proj_vault: Mutex<HashMap<String, (String, String)>>, // project key -> (its vault, its name there), from the last snapshot
     extra: Mutex<Value>,                   // the last snapshot's extra vaults: [{vault, renamed, error}]
     shared: shared_vaults::Hub,            // the shared vaults' sync rounds (shared_vaults.rs)
-    started_in: Mutex<HashMap<String, String>>, // conversation key -> the vault its process was started in ("" the main one)
+    vault_gate: Mutex<()>,                 // held while an agent is fenced and started, and while a vault is added (policy.rs)
 }
 
 fn data_dir(app: &AppHandle) -> PathBuf {
@@ -562,37 +441,35 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
     relay_config::ensure(v, &st["map"]);
     let mut snap = snapshot::snapshot(v, &mapped(&st, "workState"), &mapped(&st, "notes"), chrono::Local::now().date_naive(), &state.path,
         &data_dir(&app).join("topics.json"), &home())?;
-    let projects = snap["projects"].as_array_mut().unwrap();
-    let mut index: HashMap<String, (String, String)> = HashMap::new();
-    for p in projects.iter_mut() {
-        p["vault"] = json!(v);
-        let name = p["name"].as_str().unwrap_or("").to_string();
-        index.insert(name.clone(), (v.to_string(), name));
-    }
-    // the extra vaults' projects after the main vault's, each its own project: a name already shown gets the folder
-    let mut extra = vec![];
+    // every vault's projects, each by its lasting key (policy::project_key), shown by its label
     let s = state.settings.lock().unwrap().clone();
+    let mut all: Vec<(String, Value)> = snap["projects"].as_array().cloned().unwrap_or_default().into_iter().map(|p| (v.to_string(), p)).collect();
+    let mut extra = vec![];
     for e in extra_vaults(&s) {
         let es = vault::status(&e, &vault_map(&s, &e));
-        let (mut renamed, mut error) = (vec![], None);
+        let mut error = None;
         if es["ok"] == true {
             relay_config::ensure(&e, &es["map"]);
             match snapshot::vault_projects(&e, &mapped(&es, "workState"), &mapped(&es, "notes")) {
-                Ok((list, _)) => for mut p in list {
-                    let name = p["name"].as_str().unwrap_or("").to_string();
-                    let key = shared_key(&index, &name, &e);
-                    // the main vault (or a vault read before) has this name too: Settings says which ones
-                    if index.contains_key(&name) { renamed.push(key.clone()); }
-                    p["name"] = json!(key);
-                    p["vault"] = json!(e);
-                    index.insert(key, (e.clone(), name));
-                    projects.push(p);
-                },
+                Ok((list, _)) => all.extend(list.into_iter().map(|p| (e.clone(), p))),
                 Err(x) => error = Some(x),
             }
         } else { error = Some(tr_v(lang, "err.no_vault", &e)); }
-        extra.push(json!({"vault": e, "renamed": renamed, "error": error}));
+        extra.push(json!({"vault": e, "error": error}));
     }
+    let mut count: HashMap<String, usize> = HashMap::new();
+    for (_, p) in &all { *count.entry(p["name"].as_str().unwrap_or("").to_string()).or_default() += 1; }
+    let mut index: HashMap<String, (String, String)> = HashMap::new();
+    let projects: Vec<Value> = all.into_iter().map(|(vault, mut p)| {
+        let name = p["name"].as_str().unwrap_or("").to_string();
+        let key = policy::project_key(&s, &vault, &name);
+        p["label"] = json!(policy::label(&name, &vault, vault != v && count[&name] > 1));
+        p["name"] = json!(key);
+        p["vault"] = json!(vault);
+        index.insert(key, (vault, name));
+        p
+    }).collect();
+    snap["projects"] = json!(projects);
     *state.proj_vault.lock().unwrap() = index;
     *state.extra.lock().unwrap() = json!(extra);
     snap["extraVaults"] = json!(extra);
@@ -670,11 +547,11 @@ fn project_icons(app: AppHandle, state: State<App>) -> Value {
         fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&*s).unwrap()).ok();
         app.emit("settings-changed", &*s).ok();
     }
-    // each project's icon from its own vault, by the key it shows under
-    let index = state.proj_vault.lock().unwrap().clone();
+    // each project's icon from its own vault, by its key
+    let s = state.settings.lock().unwrap().clone();
     let mut icons = serde_json::Map::new();
-    for e in std::iter::once(v).chain(extra_vaults(&state.settings.lock().unwrap())) {
-        for (n, i) in relay_config::icons(&e) { icons.insert(key_in(&index, &e, &n), i); }
+    for e in std::iter::once(v).chain(extra_vaults(&s)) {
+        for (n, i) in relay_config::icons(&e) { icons.insert(policy::project_key(&s, &e, &n), i); }
     }
     Value::Object(icons)
 }
@@ -739,8 +616,7 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     let mut eb = env_for(&app, &state, p, &key);
     if eb.vault.is_empty() { return Ok(()); }
     // fenced in like the conversation it closes: it runs unasked, in that conversation's vault, on what was said there
-    let dir = eb.vault.clone();
-    fence_in(&app, &state, &mut eb.opts, &dir);
+    fence_in(&app, &state, &mut eb);
     let deny: Vec<String> = eb.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
     // on the account the session was recorded on, its transcript is there
     let account = account_of(&state, p, &key, "sonnet");
@@ -751,7 +627,7 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
                 "--tools", "Read,Glob,Grep,Edit,Write", "--allowedTools", "Read,Glob,Grep,Edit,Write"])
             .args(if deny.is_empty() { vec![] } else { std::iter::once("--disallowedTools".to_string()).chain(deny).collect() })
             // in a shared vault no hook runs here either, as in the conversation it closes
-            .args(if eb.opts["strict_mcp"] == true { vec!["--settings", r#"{"disableAllHooks":true}"#] } else { vec![] })
+            .args(if eb.opts["fenced"] == true { vec!["--settings", agent_claude::fenced_settings()] } else { vec![] })
             .current_dir(&eb.vault).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
@@ -787,8 +663,8 @@ fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<PathBuf> {
 #[tauri::command]
 fn project_repos(state: State<App>) -> Value {
     let mut out: std::collections::BTreeMap<String, Vec<String>> = Default::default();
-    let index = state.proj_vault.lock().unwrap().clone();
-    for v in all_vaults(&state) { for (r, p) in repo_projects(&v) { out.entry(key_in(&index, &v, &p)).or_default().push(r); } }
+    let s = state.settings.lock().unwrap().clone();
+    for v in all_vaults(&s) { for (r, p) in repo_projects(&v) { out.entry(policy::project_key(&s, &v, &p)).or_default().push(r); } }
     for list in out.values_mut() { list.sort(); }
     json!(out)
 }
@@ -863,7 +739,7 @@ async fn related_notes(app: AppHandle, state: State<'_, App>, text: String) -> R
 }
 
 /// The configured vault: path, mapping, found per path, ok.
-/// The extra vaults as the last snapshot read them: [{vault, renamed (projects shown as "Name (folder)"), error}].
+/// The extra vaults as the last snapshot read them: [{vault, error}].
 #[tauri::command]
 fn extra_vaults_status(state: State<App>) -> Value { state.extra.lock().unwrap().clone() }
 #[tauri::command]
@@ -902,16 +778,6 @@ fn env_for(app: &AppHandle, st: &App, p: &dyn AgentProvider, key: &str) -> EnvBu
     let v = st.sids.lock().unwrap().get(key).map(|s| s.vault.clone()).unwrap_or_default();
     in_vault(env_of(app, st, p), v)
 }
-/// Whether a conversation runs in a shared vault (its session was started there). What it reads of the user's own mail,
-/// reminders and calendar could end up in the team's vault: a teammate's note can ask the agent for it, and no deny
-/// rule sees a read the app does for it.
-/// Fails closed: shared when either the process was started there or its session says so, also before the session's
-/// first id comes back.
-fn in_shared_vault(st: &App, key: &str) -> bool {
-    st.started_in.lock().unwrap().get(key).is_some_and(|v| !v.is_empty()) || st.sids.lock().unwrap().get(key).is_some_and(|s| !s.vault.is_empty())
-}
-/// What such a conversation gets instead of a read of the user's own data.
-const SHARED_NO_READ: &str = "In a shared vault, reading the user's own mail, reminders and calendar is off: what a note there asks for could end up in the team's vault. Writing to the user (a reminder, a mail draft) still works.";
 fn in_vault(mut eb: EnvBuf, vault: String) -> EnvBuf { if !vault.is_empty() { eb.vault = vault; } eb }
 
 /// A provider's Env, owned, so it can go to a blocking thread.
@@ -1442,9 +1308,9 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
     let started = state.sids.lock().unwrap().contains_key(project);
     if let (false, Some(a)) = (started, about) { eb.vault = project_home(state, a)?.0; }
     // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only
-    let dir = eb.vault.clone();
-    if dir != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
-    fence_in(app, state, &mut eb.opts, &dir);
+    if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    let _gate = state.vault_gate.lock().unwrap();
+    fence_in(app, state, &mut eb);
     let sid = session.or_else(|| state.sids.lock().unwrap().get(project).map(|s| s.sid.clone()));
     sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
         .or_else(|| p.terminal(&eb.env(), Terminal::New(name.as_deref().unwrap_or(project))))
@@ -1607,23 +1473,21 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     // the shared vaults are this app's to write (shared_vaults.rs): what the window sends back is ignored
     s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
     let shared: Vec<String> = shared_vaults::list(&s).into_iter().map(|x| x.folder).collect();
-    if !fenceable(&v) { return Err(tr_v(lang, "err.unfenceable_vault", &v)); }
+    if !policy::fenceable(&v) { return Err(tr_v(lang, "err.unfenceable_vault", &v)); }
     // the main vault may not hold a shared vault's folder or lie inside one either
-    if let Some(o) = shared.iter().find(|o| nested(&v, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{v}, {o}"))); }
+    if let Some(o) = shared.iter().find(|o| policy::nested(&v, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{v}, {o}"))); }
+    let protected = { let p = agents::get("claude").ok(); p.map(|p| policy::protected(&app, &env_of(&app, &state, p))).unwrap_or_default() };
     let mut extra: Vec<String> = vec![];
     for e in own_extra(&s).iter().map(|e| vault::canon(e)) {
-        if shared.contains(&e) { continue; }
-        if e.is_empty() || e == v || extra.contains(&e) { continue; }
+        if shared.contains(&e) || e.is_empty() || e == v || extra.contains(&e) { continue; }
         if vault::status(&e, &vault_map(&s, &e))["ok"] != true { return Err(tr_v(lang, "err.no_vault", &e)); }
-        if !fenceable(&e) { return Err(tr_v(lang, "err.unfenceable_vault", &e)); }
-        // a vault inside another: the other's conversations would see it, and the fence around one covers both
-        if let Some(o) = std::iter::once(&v).chain(extra.iter()).chain(shared.iter()).find(|o| nested(&e, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{e}, {o}"))); }
+        let others: Vec<String> = std::iter::once(v.clone()).chain(extra.iter().cloned()).chain(shared.iter().cloned()).collect();
+        policy::check_folder(&e, &others, &protected, false)?;
         extra.push(e);
     }
-    // a folder added: the conversations running now were fenced without it
-    let before = own_extra(&state.settings.lock().unwrap());
-    let added = extra.iter().any(|e| !before.contains(e));
-    if added { refence(&app, true)?; refence(&app, false)?; }
+    // a folder added: the conversations running now were fenced without it, asked here and stopped at the write below
+    let added = extra.iter().any(|e| !own_extra(&state.settings.lock().unwrap()).contains(e));
+    if added { policy::may_add_vault(&app)?; }
     s["extraVaults"] = json!(extra);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
@@ -1648,13 +1512,15 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         return Err(tr(lang, "err.gh_owners"));
     }
     if !mail_settings_ok(&s["mail"]) { return Err(tr(lang, "err.mail_account")); }
+    // all checked: a folder added stops the agents here under the vault lock, held until the new list is in
+    let _gate = added.then(|| policy::hold_for_vault(&app));
+    // the shared vaults as they are now: a join or leave that finished meanwhile stays
+    s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
     fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     let rekey = state.settings.lock().unwrap()["shortcuts"] != s["shortcuts"];
     *state.settings.lock().unwrap() = s.clone();
-    // and once more now the new list is in: an agent that started in between was fenced without the new folder
-    if added { refence(&app, false)?; }
     plugins::sync(&app); // a plugin switched off or removed stops
     anywhere::apply(&app); // the shortcut follows Settings › Voice
     set_cur_lang(lang);
@@ -2481,7 +2347,7 @@ pub fn run() {
             app.set_menu(build_menu(app.handle(), ui_lang_of(&settings), Some(&settings["shortcuts"]))?)?;
             let worktrees = worktrees::load(&fs::read_to_string(data_dir(app.handle()).join("worktrees.json")).unwrap_or_default());
             let machines = machines::Machines::load(&data_dir(app.handle()))?;
-            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default(), started_in: Default::default() });
+            app.manage(App { procs: Mutex::new(HashMap::new()), sids: Mutex::new(sids), worktrees: Mutex::new(worktrees), path: login_path(), settings: Mutex::new(settings), limits: Default::default(), asked: Default::default(), spent: Default::default(), mail: mail::Mail::new(), machines, mirrors: Default::default(), orch: Mutex::new(()), proj_vault: Default::default(), extra: Mutex::new(json!([])), shared: Default::default(), vault_gate: Mutex::new(()) });
             app.manage(pty::Ptys::default());
             app.manage(plugins::Plugins::default());
             app.manage(dictation::Dictation::default());
@@ -2550,10 +2416,7 @@ pub fn run() {
                     let s = st.settings.lock().unwrap().clone();
                     let name = sys_name();
                     let mut pulled = false;
-                    for v in shared_vaults::list(&s) {
-                        let before = st.shared.status.lock().unwrap().get(&v.id).map_or(0, |x| x.pulled);
-                        pulled |= st.shared.round(&data_dir(&h), &v, &st.machines.id, &name).pulled > before;
-                    }
+                    for v in shared_vaults::list(&s) { pulled |= st.shared.round(&data_dir(&h), &v, &st.machines.id, &name).pulled > 0; }
                     if !shared_vaults::list(&s).is_empty() { h.emit("shared-vaults", serde_json::to_value(&*st.shared.status.lock().unwrap()).unwrap_or_default()).ok(); }
                     if pulled { h.emit("vault-pulled", ()).ok(); }
                 }
@@ -2564,9 +2427,10 @@ pub fn run() {
             app.deep_link().on_open_url(move |e| {
                 windows::show_active(&handle);
                 if let Some(link) = e.urls().iter().map(|u| u.to_string()).find(|u| relay_remote::proto::PairLine::parse(u).is_some_and(|l| l.is_invite())) {
-                    shared_vaults::invite_opened(link.clone());
+                    shared_vaults::invite_opened(link);
                     open_settings(&handle, Some("general"));
-                    handle.emit("vault-invite", link).ok();
+                    // a ping: Settings takes the link from shared_vault_pending_invite, the one place it is kept
+                    handle.emit("vault-invite", ()).ok();
                 }
             });
             Ok(())
@@ -2603,57 +2467,6 @@ mod lang_tests {
     }
 }
 
-
-#[cfg(test)]
-mod vault_tests {
-    use super::*;
-    #[test]
-    fn a_name_in_two_vaults_is_two_projects() {
-        let mut index: HashMap<String, (String, String)> = HashMap::new();
-        index.insert("Northwind".into(), ("/me/vault".into(), "Northwind".into()));
-        // always qualified, clash or not: the key stays when the main vault gets or loses a project of that name
-        assert_eq!(shared_key(&index, "Acme", "/team/shared"), "Acme (shared)");
-        assert_eq!(shared_key(&index, "Northwind", "/team/shared"), "Northwind (shared)");
-        index.insert("Northwind (shared)".into(), ("/team/shared".into(), "Northwind".into()));
-        assert_eq!(shared_key(&index, "Northwind", "/other/shared"), "Northwind (shared 2)");
-        // back from its name in a vault to the key it shows under
-        assert_eq!(key_in(&index, "/team/shared", "Northwind"), "Northwind (shared)");
-        assert_eq!(key_in(&index, "/me/vault", "Northwind"), "Northwind");
-        assert_eq!(key_in(&index, "/team/shared", "Unseen"), "Unseen");
-    }
-    #[test]
-    fn a_conversation_may_not_read_or_edit_another_vault() {
-        let all = ["/me/vault".to_string(), "/team/shared/".to_string()];
-        let configs = ["/me/.claude".to_string()];
-        let slug = |v: &str| agent_claude::slug(v);
-        assert_eq!(fence("/me/vault", &all, &configs, None), [
-            "Read(//team/shared/**)".to_string(), "Edit(//team/shared/**)".into(),
-            format!("Read(//me/.claude/projects/{}/**)", slug("/team/shared")), format!("Edit(//me/.claude/projects/{}/**)", slug("/team/shared"))]);
-        // in a shared vault: the main vault, its transcripts, and Relay's data folder with the keys
-        let shared = fence("/team/shared/", &all, &configs, Some("/me/Library/Application Support/relay"));
-        assert!(shared.contains(&"Read(//me/vault/**)".to_string()) && shared.contains(&format!("Read(//me/.claude/projects/{}/**)", slug("/me/vault"))));
-        assert!(shared.contains(&"Read(//me/Library/Application Support/relay/**)".to_string()) && shared.contains(&"Edit(//me/Library/Application Support/relay/**)".to_string()));
-        assert!(!shared.iter().any(|r| r.contains(&slug("/team/shared"))), "its own transcripts stay readable");
-        // what the config folder keeps per session: backups of edited main-vault notes, prompts, pastes
-        for r in ["Read(//me/.claude/file-history/**)", "Read(//me/.claude/paste-cache/**)", "Read(//me/.claude/history.jsonl)"] { assert!(shared.contains(&r.to_string()), "{r}"); }
-        assert!(!fence("/me/vault", &all, &configs, None).iter().any(|r| r.contains("file-history")), "the main vault keeps its own history");
-        // nothing it changes runs for the next conversations: not the config folder's settings and hooks, nor its own vault's
-        for r in ["Edit(//me/.claude/settings.json)", "Edit(//me/.claude/CLAUDE.md)", "Edit(//me/.claude/hooks/**)", "Edit(//me/.claude/skills/**)", "Edit(//team/shared/.claude/**)", "Read(//me/.claude/plans/**)"] {
-            assert!(shared.contains(&r.to_string()), "{r}");
-        }
-        assert!(!fence("/me/vault", &all, &configs, None).iter().any(|r| r.contains("settings.json")), "the main vault may change the user's own settings");
-        assert!(fenceable("/me/Team vault") && !fenceable("/me/Team [x]") && !fenceable("/me/a*b"));
-        assert!(fence("/me/vault", &all[..1], &configs, None).is_empty(), "one vault, nothing to fence");
-        // and the other way round, in the main vault: the shared vaults' trash, bases and keys in Relay's data folder
-        let copies = shared_copies("/me/Library/Application Support/relay/");
-        for r in ["Read(//me/Library/Application Support/relay/shared-trash/**)", "Read(//me/Library/Application Support/relay/shared-base/**)", "Read(//me/Library/Application Support/relay/shared-*.key)"] {
-            assert!(copies.contains(&r.to_string()), "{r}");
-        }
-        // a vault inside another would sit inside its fence: refused in the settings
-        assert!(nested("/me/vault/team", "/me/vault") && nested("/me/vault", "/me/vault/team"));
-        assert!(!nested("/me/vault", "/me/vault2"), "a folder name that starts the same is no parent");
-    }
-}
 
 #[cfg(test)]
 mod shortcut_tests {
