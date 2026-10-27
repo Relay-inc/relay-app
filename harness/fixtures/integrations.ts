@@ -917,3 +917,42 @@ export const calendarErrors = (feeds: string[]) =>
   feeds.includes(MAIL_ACCOUNT_2)
     ? [`${MAIL_ACCOUNT_2}: Calendar unreachable: curl: (22) The requested URL returned error: 404`]
     : [];
+
+// ---------- Linear (fixture "linear"): one team with cycles, its workflow states and the issues of its active cycle.
+// `linear` answers the GraphQL body the provider sends, by the query's operation name.
+export const LINEAR_TEAM = "b0000000-0000-4000-8000-000000000001";
+const LINEAR_STATES = [
+  ["Backlog", "backlog"],
+  ["Todo", "unstarted"],
+  ["In Progress", "started"],
+  ["In Review", "started"],
+  ["Done", "completed"],
+].map(([name, type], i) => ({ id: `e0000000-0000-4000-8000-00000000000${i + 1}`, name, type, position: i }));
+const LINEAR_ISSUES = [
+  ["Export invoices as UBL", 2, "In Progress", "Jana Vos"],
+  ["Retry failed Peppol deliveries", 1, "Todo", "Tom Peeters"],
+  ["Show the VAT number on the credit note", 3, "Todo", null],
+  ["Payment reminder after 14 days", 2, "In Review", "Jana Vos"],
+  ["Match bank transfers on the structured reference", 3, "Backlog", "Tom Peeters"],
+  ["Archive paid invoices after a year", 4, "Backlog", null],
+].map(([title, priority, state, who], i) => {
+  const s = LINEAR_STATES.find(x => x.name === state)!;
+  return { id: `f0000000-0000-4000-8000-00000000000${i + 1}`, identifier: `BEA-${41 + i}`, title, priority, sortOrder: i,
+    url: `https://linear.app/example/issue/BEA-${41 + i}`, dueDate: null, updatedAt: "2026-10-27T09:00:00Z",
+    state: { id: s.id, name: s.name, type: s.type }, labels: { nodes: [] },
+    assignee: who ? { name: who, displayName: String(who).split(" ")[0].toLowerCase() } : null };
+});
+export function linear(body: unknown): unknown {
+  const q = String((body as { query?: string })?.query ?? "");
+  const op = q.match(/^\s*(?:query|mutation)\s+(\w+)/)?.[1];
+  if (op === "Teams")
+    return { data: { teams: { nodes: [{ id: LINEAR_TEAM, name: "Beacon", key: "BEA", cyclesEnabled: true,
+      cycles: { nodes: [{ id: "c0000000-0000-4000-8000-000000000042", number: 42, name: null },
+        { id: "c0000000-0000-4000-8000-000000000041", number: 41, name: null }] },
+      projects: { nodes: [{ id: "d0000000-0000-4000-8000-000000000001", name: "Billing API" },
+        { id: "d0000000-0000-4000-8000-000000000002", name: "Onboarding" }] } }] } } };
+  if (op === "States") return { data: { team: { states: { nodes: LINEAR_STATES } } } };
+  if (op === "Issues") return { data: { issues: { nodes: LINEAR_ISSUES, pageInfo: { hasNextPage: false, endCursor: null } } } };
+  if (op === "Viewer") return { data: { viewer: { id: "v1", name: "Demo User", displayName: "demo" } } };
+  throw new Error(`Linear query ${op} is not set up in the harness`);
+}

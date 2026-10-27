@@ -7,18 +7,22 @@ import { toneOf } from "@relay/board-core/tone";
 /** The one mutation the backend lets through (src/lib.rs, MOVE): an issue to another workflow state. */
 export const MOVE = "mutation Move($id: String!, $stateId: String!) { issueUpdate(id: $id, input: { stateId: $stateId }) { success issue { id sortOrder } } }";
 export const VIEWER = "query Viewer { viewer { id name displayName } }";
-export const TEAMS = "query Teams { teams(first: 100) { nodes { id name key projects(first: 50) { nodes { id name } } } } }";
+export const TEAMS = "query Teams { teams(first: 100) { nodes { id name key cyclesEnabled projects(first: 50) { nodes { id name } } cycles(first: 20, filter: { isPast: { eq: false } }) { nodes { id number name } } } } }";
+export const ACTIVE_CYCLE = "query Active($id: String!) { team(id: $id) { activeCycle { id } } }";
 export const STATES = "query States($id: String!) { team(id: $id) { states(first: 100) { nodes { id name type position } } } }";
 export const ISSUES = "query Issues($filter: IssueFilter, $after: String) { issues(first: 100, after: $after, filter: $filter) { nodes { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } pageInfo { hasNextPage endCursor } } }";
-/** A new issue in a team's workflow state, in a Linear project when the board is one (projectId null otherwise). It
+/** A new issue in a team's workflow state, in a Linear project or cycle when the board is one (null otherwise). It
  *  answers with the issue as ISSUES does. The backend lets only this exact mutation through (src/lib.rs, CREATE). */
-export const CREATE = "mutation Create($teamId: String!, $stateId: String!, $title: String!, $description: String!, $projectId: String) { issueCreate(input: { teamId: $teamId, stateId: $stateId, title: $title, description: $description, projectId: $projectId }) { success issue { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } } }";
+export const CREATE = "mutation Create($teamId: String!, $stateId: String!, $title: String!, $description: String!, $projectId: String, $cycleId: String) { issueCreate(input: { teamId: $teamId, stateId: $stateId, title: $title, description: $description, projectId: $projectId, cycleId: $cycleId }) { success issue { id identifier title priority url sortOrder dueDate updatedAt state { id name type } labels { nodes { name } } assignee { name displayName } } } }";
 export const SEARCH = "query Search($term: String!, $filter: IssueFilter) { searchIssues(term: $term, filter: $filter, first: 5) { nodes { id identifier title url team { id name } project { id } } } }";
 export const ISSUE_URL = "query Url($id: String!) { issue(id: $id) { url } }";
 
 /** Workflow state types in board order: triage first when a team uses it, closed states last. */
 export const TYPES = ["triage", "backlog", "unstarted", "started", "completed", "canceled"];
 export const CLOSED = ["completed", "canceled"];
+/** A cycle board's id: this prefix and the cycle's id, or the team's id for whichever cycle is active (the backend
+ *  allows only letters, digits, - and _ in a board id). */
+export const CYCLE = "cycle_";
 /** At most this many pages of 100 issues per board. */
 export const MAX_PAGES = 10;
 
@@ -28,14 +32,26 @@ const stateOf = (type: string): State => (CLOSED.includes(type) ? "done" : type 
 export const toneFor = (type: string, name: string): Tone => toneOf(stateOf(type), name, type !== "unstarted");
 const byName = (a: Opt, b: Opt) => a.name.localeCompare(b.name);
 
-/** `teams` as projects, and per team the whole team (board id = team id) followed by its Linear projects. */
-export function mapTeams(data: any, allIssues: string): { projects: Opt[]; boards: BoardOpt[] } {
-  const teams = (data?.teams?.nodes || []).map((t: any) => ({ id: t.id, name: t.name, projects: t.projects?.nodes || [] })).sort(byName);
+/** `teams` as projects, and per team the whole team (board id = team id), then when it uses cycles the active cycle
+ *  and each cycle not yet over by number, then its Linear projects. */
+export function mapTeams(data: any, label: { all: string; current: string; cycle: (n: number) => string }): { projects: Opt[]; boards: BoardOpt[] } {
+  const teams = (data?.teams?.nodes || []).map((t: any) => ({ id: t.id, name: t.name, projects: t.projects?.nodes || [],
+    cycles: t.cyclesEnabled ? [...(t.cycles?.nodes || [])].sort((a: any, b: any) => a.number - b.number) : null })).sort(byName);
   return {
     projects: teams.map((t: any) => ({ id: t.id, name: t.name })),
-    boards: teams.flatMap((t: any) => [{ id: t.id, name: allIssues, project: t.id, group: t.name },
+    boards: teams.flatMap((t: any) => [{ id: t.id, name: label.all, project: t.id, group: t.name },
+      ...(t.cycles ? [{ id: CYCLE + t.id, name: label.current, project: t.id, group: t.name },
+        ...t.cycles.map((c: any) => ({ id: CYCLE + c.id, name: c.name || label.cycle(c.number), project: t.id, group: t.name }))] : []),
       ...t.projects.map((p: any) => ({ id: p.id, name: p.name, project: t.id, group: t.name })).sort(byName)]),
   };
+}
+
+/** What a board narrows to beyond its team: a Linear project, a cycle (`active` for the team's current one), or neither. */
+export function scopeOf(ref: BoardRef): { project?: string; cycle?: string } {
+  if (!ref.board || ref.board === ref.project) return {};
+  if (!ref.board.startsWith(CYCLE)) return { project: ref.board };
+  const id = ref.board.slice(CYCLE.length);
+  return { cycle: id === ref.project ? "active" : id };
 }
 
 /** A team's workflow states by type (TYPES) then position; completed and canceled only with `done`. */
@@ -46,10 +62,12 @@ export function mapStates(data: any, done: boolean): Column[] {
     .map((s: any, i: number) => ({ id: s.id, name: s.name, placement: i, ...(s.type ? { state: stateOf(s.type), tone: toneFor(s.type, s.name) } : {}) }));
 }
 
-/** The issue filter for a board: the team, the Linear project unless the board is the whole team, open states unless `done`. */
+/** The issue filter for a board: the team, its Linear project or cycle unless the board is the whole team, open states unless `done`. */
 export function issueFilter(ref: BoardRef, done: boolean): Record<string, unknown> {
   const f: Record<string, unknown> = { team: { id: { eq: ref.project } } };
-  if (ref.board && ref.board !== ref.project) f.project = { id: { eq: ref.board } };
+  const { project, cycle } = scopeOf(ref);
+  if (project) f.project = { id: { eq: project } };
+  if (cycle) f.cycle = cycle === "active" ? { isActive: { eq: true } } : { id: { eq: cycle } };
   if (!done) f.state = { type: { nin: CLOSED } };
   return f;
 }

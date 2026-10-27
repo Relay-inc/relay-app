@@ -154,17 +154,32 @@ const denial = (request: Pending): Decision => ({
   behavior: "deny",
   message: isQuestion(request) ? SKIPPED_QUESTION : "Geweigerd in de app.",
 });
-// the picked labels and the typed "other" per question; null when nothing is answered
-function questionAnswers(request: Pending, choice: { picked: string[][]; other: string[] }): Decision | null {
+// the picked labels and the typed "other" per question; null when nothing is answered. Annotations, per question:
+// the preview of the one option picked, and the note on the choice
+function questionAnswers(
+  request: Pending,
+  choice: { picked: string[][]; other: string[]; notes?: string[] },
+): Decision | null {
   const answers: Record<string, string> = {};
+  const annotations: Record<string, { preview?: string; notes?: string }> = {};
   (request.input.questions || []).forEach((question, i) => {
     const labels = [...(choice.picked[i] || [])];
     const other = (choice.other[i] || "").trim();
     if (other) labels.push(other);
-    if (labels.length) answers[question.question] = labels.join(", ");
+    if (!labels.length) return;
+    answers[question.question] = labels.join(", ");
+    const preview =
+      choice.picked[i]?.length === 1
+        ? question.options?.find(option => option.label === choice.picked[i][0])?.preview
+        : undefined;
+    const notes = (choice.notes?.[i] || "").trim();
+    if (preview || notes) annotations[question.question] = { ...(preview && { preview }), ...(notes && { notes }) };
   });
   if (!Object.keys(answers).length) return null;
-  return { behavior: "allow", updatedInput: { ...request.input, answers } };
+  return {
+    behavior: "allow",
+    updatedInput: { ...request.input, answers, ...(Object.keys(annotations).length && { annotations }) },
+  };
 }
 /** What a card's answer tells the agent; null for a question with nothing answered. */
 export function decisionOf(request: Pending, choice: CardChoice): Decision | null {

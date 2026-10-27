@@ -88,9 +88,12 @@ export function PermissionCard({
       changed();
     };
   }, [busy, question]);
-  // the options picked per question, and what is typed in its "other" field
+  // the options picked per question, what is typed in its "other" field, the note on its choice, and the option whose
+  // preview shows (the one last pointed at or picked)
   const [picked, setPicked] = useState<Record<number, Set<string>>>({});
   const [other, setOther] = useState<Record<number, string>>({});
+  const [notes, setNotes] = useState<Record<number, string>>({});
+  const [shown, setShown] = useState<Record<number, string>>({});
 
   const pick = (questionIndex: number, option: string, multiple: boolean) => {
     const current = picked[questionIndex];
@@ -98,6 +101,7 @@ export function PermissionCard({
     if (next.has(option)) next.delete(option);
     else next.add(option);
     setPicked({ ...picked, [questionIndex]: next });
+    setShown({ ...shown, [questionIndex]: option });
   };
   const questions = request.input.questions || [];
   // Answer waits for something picked or typed
@@ -108,6 +112,7 @@ export function PermissionCard({
         (question.options || []).map(option => option.label).filter(label => picked[qi]?.has(label)),
       ),
       other: questions.map((_, qi) => other[qi] ?? ""),
+      notes: questions.map((_, qi) => notes[qi] ?? ""),
     });
 
   // the question the number keys answer: the first one nothing is picked for yet, else the last
@@ -136,38 +141,58 @@ export function PermissionCard({
     return () => window.removeEventListener("keydown", listener);
   }, [keys, question]);
 
-  const renderQuestion = (question: Question, qi: number) => (
-    <Fragment key={qi}>
-      <div className="text-[15px] leading-[1.4] font-semibold text-label">{question.question}</div>
-      <div className="flex flex-wrap gap-2">
-        {(question.options || []).map((option, oi) => (
-          <button
-            key={option.label}
-            className={`${picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"} cursor-pointer inline-flex items-center gap-2`}
-            title={option.description || ""}
-            disabled={busy}
-            onClick={() => pick(qi, option.label, !!question.multiSelect)}
-          >
-            {option.label}
-            {keys && qi === current && oi < 9 ? (
-              <span
-                className="font-mono text-[11px] opacity-60 px-1 rounded border border-current leading-4"
-                aria-hidden="true"
-              >
-                {oi + 1}
-              </span>
-            ) : null}
-          </button>
-        ))}
-      </div>
-      <input
-        className="h-8 rounded-lg border border-separator-strong bg-transparent px-2.5 text-[13px] text-label placeholder:text-secondary outline-none"
-        placeholder={t("card.other")}
-        value={other[qi] ?? ""}
-        onChange={e => setOther({ ...other, [qi]: e.target.value })}
-      />
-    </Fragment>
-  );
+  const renderQuestion = (question: Question, qi: number) => {
+    const options = question.options || [];
+    const preview = (options.find(option => option.label === shown[qi]) ?? options.find(option => option.preview))
+      ?.preview;
+    return (
+      <Fragment key={qi}>
+        <div className="text-[15px] leading-[1.4] font-semibold text-label">{question.question}</div>
+        <div className="flex flex-wrap gap-2">
+          {(question.options || []).map((option, oi) => (
+            <button
+              key={option.label}
+              className={`${picked[qi]?.has(option.label) ? "btn btn-primary" : "btn"} cursor-pointer inline-flex items-center gap-2`}
+              title={option.description || ""}
+              disabled={busy}
+              onClick={() => pick(qi, option.label, !!question.multiSelect)}
+              onMouseEnter={() => option.preview && setShown({ ...shown, [qi]: option.label })}
+              onFocus={() => option.preview && setShown({ ...shown, [qi]: option.label })}
+            >
+              {option.label}
+              {keys && qi === current && oi < 9 ? (
+                <span
+                  className="font-mono text-[11px] opacity-60 px-1 rounded border border-current leading-4"
+                  aria-hidden="true"
+                >
+                  {oi + 1}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </div>
+        <input
+          className="h-8 rounded-lg border border-separator-strong bg-transparent px-2.5 text-[13px] text-label placeholder:text-secondary outline-none"
+          placeholder={t("card.other")}
+          value={other[qi] ?? ""}
+          onChange={e => setOther({ ...other, [qi]: e.target.value })}
+        />
+        {preview ? (
+          <pre className="max-h-64 overflow-auto rounded-lg border border-separator bg-well px-2.5 py-2 font-mono text-xs leading-normal text-label whitespace-pre select-text">
+            {preview}
+          </pre>
+        ) : null}
+        {picked[qi]?.size ? (
+          <input
+            className="h-8 rounded-lg border border-separator-strong bg-transparent px-2.5 text-[13px] text-label placeholder:text-secondary outline-none"
+            placeholder={t("card.note")}
+            value={notes[qi] ?? ""}
+            onChange={e => setNotes({ ...notes, [qi]: e.target.value })}
+          />
+        ) : null}
+      </Fragment>
+    );
+  };
 
   if (question)
     return (

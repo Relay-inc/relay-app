@@ -2,16 +2,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { allIssues, issueFilter, mapIssues, mapStates, mapTeams, MAX_PAGES } from "../src/map.ts";
+import { allIssues, CYCLE, issueFilter, mapIssues, mapStates, mapTeams, MAX_PAGES } from "../src/map.ts";
 
 const fx = (n: string) => JSON.parse(readFileSync(new URL(`./fixtures/${n}.json`, import.meta.url), "utf8"));
 const T1 = "b0000000-0000-4000-8000-000000000001";
 
-test("teams are projects, each with the whole team first and then its projects", () => {
-  const r = mapTeams(fx("teams").data, "All issues");
+test("teams are projects, each with the whole team first, then its cycles when it uses them, then its projects", () => {
+  const r = mapTeams(fx("teams").data, { all: "All issues", current: "Current cycle", cycle: n => `Cycle ${n}` });
   assert.deepEqual(r.projects.map(p => p.name), ["Antenna", "Website"]);
   assert.deepEqual(r.boards.map(b => [b.group, b.name, b.id === b.project]), [
-    ["Antenna", "All issues", true], ["Antenna", "Onboarding", false], ["Antenna", "Vault app", false], ["Website", "All issues", true]]);
+    ["Antenna", "All issues", true], ["Antenna", "Current cycle", false], ["Antenna", "Launch", false], ["Antenna", "Cycle 13", false],
+    ["Antenna", "Onboarding", false], ["Antenna", "Vault app", false], ["Website", "All issues", true]]);
+  assert.equal(r.boards[1].id, CYCLE + T1);
+  assert.equal(r.boards[2].id, CYCLE + "e0000000-0000-4000-8000-000000000012");
+  assert.ok(r.boards.every(b => /^[A-Za-z0-9_-]+$/.test(b.id)));
 });
 
 test("columns are workflow states by type then position, closed ones only on request", () => {
@@ -25,6 +29,8 @@ test("the filter narrows to a project and to open states", () => {
   assert.deepEqual(issueFilter({ provider: "linear", project: T1, board: T1 }, true), { team: { id: { eq: T1 } } });
   assert.deepEqual(issueFilter({ provider: "linear", project: T1, board: "c1" }, false),
     { team: { id: { eq: T1 } }, project: { id: { eq: "c1" } }, state: { type: { nin: ["completed", "canceled"] } } });
+  assert.deepEqual(issueFilter({ provider: "linear", project: T1, board: CYCLE + T1 }, true), { team: { id: { eq: T1 } }, cycle: { isActive: { eq: true } } });
+  assert.deepEqual(issueFilter({ provider: "linear", project: T1, board: CYCLE + "e1" }, true), { team: { id: { eq: T1 } }, cycle: { id: { eq: "e1" } } });
 });
 
 test("issues carry identifier, state, assignee's first and full name, priority and url", () => {

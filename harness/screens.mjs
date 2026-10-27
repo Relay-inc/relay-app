@@ -579,6 +579,14 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.question });
     await waitText("Which sync strategy should the contact import use?");
   },
+  // an option picked: its preview under the options, and the note on the choice (PR question-card-preview-notes)
+  "conversation-question-preview": async () => {
+    await open(page, server.url, { sel: keys.question });
+    await waitText("Which sync strategy should the contact import use?");
+    await page.getByRole("button", { name: "Incremental" }).first().click();
+    await page.getByPlaceholder("Note on your choice…").first().fill("Keep the nightly full run as a fallback");
+    await settle(page);
+  },
   "new-general-draft": async () => {
     await open(page, server.url);
     await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-Option-T
@@ -719,6 +727,17 @@ const VIEWS = {
     await waitText(markers.card);
     await click(markers.card);
     await waitText("Build with agent");
+  },
+  // a Linear team's current cycle as a board, and the board picker offering the cycles (PR linear-cycles)
+  "board-linear-cycle": async () => {
+    await open(page, server.url, { fixture: "linear" });
+    await click("Linear");
+    await waitText("Export invoices as UBL");
+  },
+  "board-linear-picker": async () => {
+    await VIEWS["board-linear-cycle"]();
+    await click("Current cycle");
+    await waitText("Cycle 42");
   },
   "board-list": async () => {
     await VIEWS.board();
