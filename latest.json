@@ -1,11 +1,11 @@
 {
-  "version": "0.0.37",
-  "notes": "### Added\n\n- **A machine for shared vaults only**: pairing a machine in Settings › Machines can tick \"Only for shared vaults\". Your own vault, Claude context and memory never go to that machine, and conversations do not run there, so a team vault can live on a company server that never sees your private vault (#284)",
-  "pub_date": "2026-10-27T12:25:24.918Z",
+  "version": "0.0.38",
+  "notes": "### Added\n\n- **A vault admin keeps the server**: when you are admin of a shared vault (from an admin invite, or made admin because the last one left), its server shows under Settings › Machines for shared vaults only, and you can update it there, to an official Relay release only (the server checks its signature). It runs no conversations for you and keeps no mirror, the server refuses those too. It goes from the list once you are admin of no vault there (#288)\n- **Pick the vault of a new conversation**: with more than one vault, a new conversation's composer has a Vault pick next to the agent and model. A general conversation runs in the vault you pick and stays there, shown in the sidebar with its vault's name. In another vault than your main one it runs on this Mac with Claude Code. A conversation about a project runs in that project's vault (#286)\n\n### Changed\n\n- **Shared vaults moved to Settings › Machines**: a vault shows under the machine that keeps it, with New shared vault on this machine next to it. A vault you joined with an invite link, on a server that is not one of your machines, shows under Shared vaults at the top of the page, where Join with a link is too. An invite link that opens Relay now opens Machines with the join form filled in. General keeps Other vault folders (#287)",
+  "pub_date": "2026-10-27T15:06:53.545Z",
   "platforms": {
     "darwin-aarch64": {
-      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnBXVHVIUFdCNU5aY2xRREFZQVk3d1F3L2NoSWZsYmRRdFlkRnV2ZWx0U2o0VVBOTlBrdjRIaTlIYzlxa3ZETkdsSWY4WG9tZnl4TU94OURWOER4ZHd3PQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMTAzODI5CWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4zNwo3RW91YVVjdis4Q1Y4UU4xUWdMVFhxaUtVVlRxU2pIbWZxT2t6d09OMW1DNDVCc3FURlgySm1YV1I5alVpakptTWZzSUJXcVZKRTl2cWVtYVVrVjVCZz09Cg==",
-      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/681527755"
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVRb3MxVVpVZnkxWnFWdkhtb25ZOEhaNy9iWjF0OHpOUWh6M0hJbkxPZ0w0Z2ZQNmZUVm11RE5KMkhZK2hyVVp3bGF0Ym96aGFBb21qeEE4R0xuSjVjWUhtakJpSWlvZ1FvPQp0cnVzdGVkIGNvbW1lbnQ6IHRpbWVzdGFtcDoxNzkzMTEzNTMxCWZpbGU6UmVsYXkuYXBwLnRhci5negl2ZXJzaW9uOjAuMC4zOApRNzd4UUVjUDdKajhVdXlPQnJUcnBPeWpiUkVTdVFNQ0dvc01TaU1OQzlwTVNpTmFBUFQyeVFuVjdjYitZeHNQNkg5Mkw0UThsN0Q0TzN6RDVxUmtBdz09Cg==",
+      "url": "https://api.github.com/repos/Relay-inc/relay-app/releases/assets/681945476"
     }
   }
 }
