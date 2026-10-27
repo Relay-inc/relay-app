@@ -35,6 +35,10 @@ function seedStorage() {
   localStorage.setItem("sel", JSON.stringify(query.get("sel") || "__wait"));
   localStorage.setItem("pvProject", "p1");
   localStorage.setItem("pvBoard", "f1");
+  if (fixture === "linear") {
+    localStorage.setItem("linearProject", integ.LINEAR_TEAM);
+    localStorage.setItem("linearBoard", `cycle_${integ.LINEAR_TEAM}`);
+  }
 }
 seedStorage();
 
@@ -996,12 +1000,13 @@ function handle(cmd: string, a: Args): unknown {
       };
     case "integration_status":
     case "integration_has_token":
-      return a.provider === "productive";
+      return a.provider === "productive" || (fixture === "linear" && a.provider === "linear");
     case "integration_mcp":
       return { supported: a.provider === "productive", found: false };
     case "integration_token":
       return null;
     case "integration_call":
+      if (fixture === "linear" && a.provider === "linear") return integ.linear(a.body);
       if (a.provider !== "productive") throw new Error(`${a.provider} is not set up in the harness`);
       return integ.productive(a.method, a.path, a.body);
     case "integration_upload":

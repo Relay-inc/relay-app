@@ -709,6 +709,17 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Build with agent");
   },
+  // a Linear team's current cycle as a board, and the board picker offering the cycles (PR linear-cycles)
+  "board-linear-cycle": async () => {
+    await open(page, server.url, { fixture: "linear" });
+    await click("Linear");
+    await waitText("Export invoices as UBL");
+  },
+  "board-linear-picker": async () => {
+    await VIEWS["board-linear-cycle"]();
+    await click("Current cycle");
+    await waitText("Cycle 42");
+  },
   "board-list": async () => {
     await VIEWS.board();
     await button("List").click();
