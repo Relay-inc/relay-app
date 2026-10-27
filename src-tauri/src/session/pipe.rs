@@ -17,8 +17,13 @@ pub(crate) fn control(app: &AppHandle, p: &'static dyn AgentProvider, key: &str,
     match mail::rpc(message) {
         mail::Rpc::Reply(r) => pipe_reply(app, key, pid, rid, Ok(r)),
         mail::Rpc::Call { id, name, args } => {
+            let read = ["search", "read", "thread", "attachment"].contains(&name.as_str());
+            // a shared vault's conversation reads none of the user's mail (a draft still goes)
+            if read && crate::in_shared_vault(&app.state::<App>(), key) {
+                return pipe_reply(app, key, pid, rid, Ok(mail::rpc_result(id, json!({"content": [{"type": "text", "text": crate::SHARED_NO_READ}], "isError": true}))));
+            }
             // mail text is about to enter this session: marked before the tool runs
-            if ["search", "read", "thread", "attachment"].contains(&name.as_str()) {
+            if read {
                 let st = app.state::<App>();
                 let mut procs = st.procs.lock().unwrap();
                 if let Some(p) = procs.get_mut(key).filter(|p| p.child.id() == pid && !p.tainted) { Proc::mark_tainted(p); }

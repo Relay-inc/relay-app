@@ -9,9 +9,22 @@ use std::sync::Mutex;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, State};
 
-struct Pty { master: Box<dyn MasterPty + Send>, writer: Box<dyn Write + Send>, child: Box<dyn Child + Send + Sync> }
+/// `agent`: the shell runs a conversation's agent, started with that conversation's fence (lib.rs `refence` stops it).
+struct Pty { master: Box<dyn MasterPty + Send>, writer: Box<dyn Write + Send>, child: Box<dyn Child + Send + Sync>, agent: bool }
 #[derive(Default)]
 pub struct Ptys { map: Mutex<HashMap<u32, Pty>>, next: AtomicU32 }
+impl Ptys {
+    /// How many terminals run an agent: a vault is added only when none does (policy::may_add_vault), since what one is
+    /// in the middle of cannot be seen from here.
+    pub fn agents(&self) -> usize { self.map.lock().unwrap().values().filter(|p| p.agent).count() }
+    /// Stop the terminals that run an agent: they were started with a fence that misses a vault added since.
+    pub fn stop_agents(&self) -> usize {
+        let mut map = self.map.lock().unwrap();
+        let ids: Vec<u32> = map.iter().filter(|(_, p)| p.agent).map(|(id, _)| *id).collect();
+        for id in &ids { if let Some(mut p) = map.remove(id) { p.child.kill().ok(); } }
+        ids.len()
+    }
+}
 
 /// Where a project's shell starts: its first checkout in the brain's index/repos.json (dir -> note), else the vault.
 fn start_dir(vault: &str, project: &str) -> String {
@@ -30,23 +43,26 @@ fn size(cols: u16, rows: u16) -> PtySize { PtySize { rows: rows.max(1), cols: co
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, project: String, chat: Option<String>, name: Option<String>, cols: u16, rows: u16, on_data: Channel<InvokeResponseBody>) -> Result<u32, String> {
-    let vault = super::need_vault(&state)?;
+    let (vault, in_vault) = super::project_home(&state, &project)?;
     if project.trim().is_empty() { return Err("bad project".into()); }
-    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name)).transpose()?;
+    // an agent's terminal is fenced, started and listed under the vault lock: a vault added meanwhile stops it
+    let _gate = chat.is_some().then(|| state.vault_gate.lock().unwrap());
+    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name, Some(&project))).transpose()?;
+    let agent = run.is_some();
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
     let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     let mut cmd = CommandBuilder::new(&shell);
     cmd.arg("-l");
     // the shell stays after the agent quits, as in the external terminal
     if let Some(run) = run { cmd.args(["-c", &format!("{run}; exec {shell} -l")]); }
-    cmd.cwd(start_dir(&vault, &project));
+    cmd.cwd(start_dir(&vault, &in_vault));
     cmd.env("TERM", "xterm-256color");
     cmd.env("PATH", &state.path);
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     let id = ptys.next.fetch_add(1, Ordering::Relaxed) + 1;
-    ptys.map.lock().unwrap().insert(id, Pty { master: pair.master, writer, child });
+    ptys.map.lock().unwrap().insert(id, Pty { master: pair.master, writer, child, agent });
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         while let Ok(n) = reader.read(&mut buf) {

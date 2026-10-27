@@ -19,7 +19,13 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { ORCH } from "../../../domain/orchestrator/rules";
 import { projectName as plainProject } from "../../../application/workspace/vault";
 import { matchCommands, type SlashCommand } from "../../../domain/conversations/commands";
-import { chatBar, commandsOf, machineChoice, machineRepo } from "../../../application/conversations/selectors";
+import {
+  chatBar,
+  commandsOf,
+  machineChoice,
+  machineRepo,
+  sharedVault,
+} from "../../../application/conversations/selectors";
 import {
   attach,
   attachPaths,
@@ -213,6 +219,7 @@ export function Composer({ className }: { className: string }) {
   // where the conversation runs or is to start: the machines are asked every few seconds while it shows
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
+  const inShared = useDerived(() => sharedVault(selected));
   // the repo the agent gets on that machine, next to the pick
   const repoThere = useDerived(() => machineRepo(selected));
   const [moving, setMoving] = useState(false);
@@ -323,7 +330,7 @@ export function Composer({ className }: { className: string }) {
       : workerPage
         ? t("orch.ph.worker", { name: plainProject(view.projectName) })
         : view.projectName
-          ? t("ph.project", { name: view.projectName })
+          ? t("ph.project", { name: plainProject(view.projectName) })
           : t("ph.general");
   return (
     <div className={`relay-composer flex-none ${className}`}>
@@ -434,13 +441,31 @@ export function Composer({ className }: { className: string }) {
           {/* with one agent there is nothing to pick */}
           {view.agents.length > 1 && !isTerminal(selected) && !agentFixed && !inOrchestrator ? (
             <>
+              {/* another vault than the main one runs Claude Code only (its fence is Claude Code's rules) */}
               <PickMenu
                 pill
-                options={view.agents.map(option => ({ ...option, icon: glyphOf(option.id) }))}
+                options={view.agents.map(option => ({
+                  ...option,
+                  icon: glyphOf(option.id),
+                  disabled: !!inShared && option.id !== "claude",
+                }))}
                 value={view.agentId}
                 label={t("composer.agent")}
+                title={inShared ? t("composer.agentSharedVault") : t("composer.agent")}
                 onPick={setAgent}
               />
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : null}
+          {hasChat && inShared ? (
+            <>
+              {/* a shared vault's project: the conversation runs in that vault and stays there, no pick */}
+              <span
+                className="px-1.5 py-0.5 rounded-md bg-fill-2 text-xs text-secondary whitespace-nowrap"
+                title={t("composer.vaultHelp")}
+              >
+                {`${t("composer.vault")}: ${inShared}`}
+              </span>
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}

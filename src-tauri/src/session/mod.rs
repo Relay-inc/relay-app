@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, Manager};
 
 /// The messages a process has not answered yet. `running`: sent and not answered, also in the broker's file so a
@@ -81,14 +81,32 @@ fn start_turns(turn: Option<&Turn>) -> u32 { u32::from(turn.is_some()) }
 
 fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) -> Result<Proc, String> {
     let Start { project, name, fork, opts, turn, from_mail, account, machine, about } = s;
-    let dir = need_vault(state)?;
-    let resume = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).map(|s| s.sid.clone());
-    let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f));
+    let main = need_vault(state)?;
+    let saved = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).cloned();
+    let resume = saved.as_ref().map(|s| s.sid.clone());
+    // a conversation runs in one vault and only there: a resumed one in the vault it started in (the provider finds
+    // it by that folder), a new one in its project's, the orchestrator's in the main vault
+    let dir = match &saved {
+        // its vault's folder gone (moved, a disk not mounted): refused, not resumed with the main vault's rules
+        Some(s) if !s.vault.is_empty() && !Path::new(&s.vault).is_dir() => return Err(format!("this conversation's vault is not here: {}", s.vault)),
+        Some(s) if !s.vault.is_empty() => s.vault.clone(),
+        Some(_) => main.clone(),
+        None if orch::is_orch(project) => main.clone(),
+        None => about.map(|a| crate::project_home(state, a)).transpose()?.map_or_else(|| main.clone(), |(v, _)| v),
+    };
+    let shared = dir != main;
+    // Codex and OpenCode get no fence (fence below): a shared vault's conversation is Claude Code's only
+    if shared && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
+    let extra = if shared { dir.as_str() } else { "" };
+    // a fork carries the other conversation's transcript: only one from this same vault
+    let fork_vault = |f: &str| state.sids.lock().unwrap().values().find(|s| s.sid == f).map(|s| s.vault.clone()).unwrap_or_default();
+    let fork = fork.filter(|f| resume.is_none() && p.caps().fork && p.valid_session(f) && fork_vault(f) == extra);
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let caps = p.caps();
     let settings = state.settings.lock().unwrap().clone();
     // where the composer or Settings › Machines says (machines.rs); a fork copies a session of this Mac, so stays
-    let remote = if caps.remote && fork.is_none() { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
+    // a shared vault's conversation stays on this Mac: a machine has the main vault's mirror only
+    let remote = if caps.remote && fork.is_none() && !shared { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
     // a work machine has its own login: no account of this Mac goes along
     let account = if remote.is_some() { "" } else { account };
     let meta = broker::Meta { key: project.into(), provider: p.id().into(), model: opts.0.clone(), effort: opts.1.clone(), tainted: false, pid: 0, account: account.into(), turns: start_turns(turn) };
@@ -117,12 +135,15 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
         (c, false, true)
     } else {
         let mut eb = env_of(app, state, p);
+        eb.vault = dir.clone();
         if p.caps().accounts { eb.opts["account"] = json!(account); }
         if orch::is_orch(project) { eb.opts["design"] = json!(false); }
         if caps.control && orch::is_orch(project) { orch::flags(&mut eb.opts, project, &dir, &orch::shared(app, &dir)); } // the orchestrator's coordinator and workers (orch.rs)
         // the brain of the project this conversation is about, when Commonwealth's registry routes it (commonwealth.rs).
-        // Only on this Mac (a brain is a local path), and not for a chat that starts out holding a mail
-        if caps.brain && !from_mail && cw_on(state) {
+        // Only on this Mac (a brain is a local path), not for a chat that starts out holding a mail, and only in the
+        // main vault: a brain holds the user's own notes, another vault's conversation could write them into that vault
+        let main = crate::all_vaults(&state.settings.lock().unwrap()).first() == Some(&dir);
+        if caps.brain && !from_mail && main && cw_on(state) {
             if let Some(a) = about {
                 if let Some((b, repo)) = commonwealth::session(&home(), &repo_projects(&dir), a) {
                     eb.opts["commonwealth_brain"] = json!(b);
@@ -131,6 +152,9 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
                 }
             }
         }
+        // fenced and started under the vault lock, which the caller holds (taken before `procs`, policy.rs): a vault
+        // added meanwhile (policy::hold_for_vault) waits for this
+        crate::fence_in(app, state, &mut eb);
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
         let bin = actions::bin_dir(app).map(|b| format!("{}:", b.display())).unwrap_or_default();
@@ -148,7 +172,7 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let inherit = (fresh && opts.0.is_empty(), fresh && opts.1.is_empty());
     let pid = agent.id();
     let mut proc = Proc { child: agent, stdin, opts, provider: p.id(), tainted: false, key: project.into(), turns: Turns::new(start_turns(turn)), account: account.into(), remote };
-    tauri_sink::read_agent(app, project, p, pid, Feed { frames, backlog, inherit }, account);
+    tauri_sink::read_agent(app, project, p, pid, Feed { frames, backlog, inherit }, account, extra);
     // a chat about a mail, or one that read mail before a restart, starts restricted
     if from_mail { proc.mark_tainted(); }
     Ok(proc)
@@ -169,7 +193,9 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     // the orchestrator's conversations stay on this Mac, its tools are answered over this pipe (orch.rs)
     let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
     // the project the agent is told about: the line in front of the message (agent_core::envelope)
-    let text = match told.filter(|t| !t.is_empty()) { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
+    // a shared vault's project by its name in that vault, not by the "Name (folder)" it shows under
+    let told = told.filter(|t| !t.is_empty()).map(|t| if about.as_deref() == Some(t.as_str()) { crate::project_home(state, &t).map_or(t, |(_, n)| n) } else { t });
+    let text = match told { Some(t) => agent_core::envelope::wrap(&t, context.as_deref().unwrap_or(""), &text), None => text };
     // pasted images, only the types the webview allows, for a provider that takes them
     let images: Vec<Image> = if !p.caps().images { vec![] } else {
         images.unwrap_or_default().into_iter().filter_map(|i| Some(Image { media_type: i["media_type"].as_str()?.into(), data: i["data"].as_str()?.into() }))
@@ -185,7 +211,10 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     // an orchestrator conversation that heard a stranger's text stays restricted, also in a new process (orch.rs)
     let orch_taint = orch::is_orch(&project) && orch::tainted(app, &project);
     let mut account = account_of(state, p, &project, &opts.0);
+    let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
+    // a vault being added stops every agent once the server answered: a turn sent now would be cut off
+    if crate::policy::adding() { return Err(trc("err.vault_adding")); }
     account = plan::account_for(account, procs.get(&project).map(Proc::running).as_ref(), p.id());
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
@@ -233,8 +262,9 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
     let account = account_of(&state, p, key, &model);
     let taint = taint || orch::tainted(app, key);
+    let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
-    if procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
+    if crate::policy::adding() || procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
     if !procs.contains_key(key) {
         let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None })?;
         procs.insert(key.to_string(), x);
@@ -254,6 +284,9 @@ pub(crate) fn ensure_local(app: &AppHandle, key: &str) -> Result<(), String> {
     let p = provider_of(&state, key, None);
     if !p.caps().persistent { return Err(format!("{}: a turn at a time, not from the phone", p.name())); }
     let account = account_of(&state, p, key, "");
+    let _gate = state.vault_gate.lock().unwrap();
+    // the phone writes its turns past `send`: none while a vault is being added, which stops every agent after
+    if crate::policy::adding() { return Err(trc("err.vault_adding")); }
     let mut procs = state.procs.lock().unwrap();
     if procs.contains_key(key) { return Ok(()); }
     let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None })?;
@@ -292,7 +325,7 @@ fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32
             Ok(Some(c)) if c.agent.id() == pid => {
                 let broker::Conn { agent, stdin, frames, backlog } = c;
                 if let Some(x) = st.procs.lock().unwrap().get_mut(key) { x.stdin = stdin; x.child = agent; }
-                tauri_sink::read_agent(app, key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "");
+                tauri_sink::read_agent(app, key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "", "");
                 return true;
             }
             Ok(_) => return false,
@@ -325,7 +358,7 @@ pub(crate) fn reattach_remote(app: &AppHandle) {
                     let (Some(sid), Ok(info)) = (sids.get(&meta.key), st.machines.info(&m)) else { continue };
                     st.machines.set_bind(&meta.key, machines::Bind { machine: id.clone(), cwd: machines::cwd_or_vault(String::new(), &info) });
                     let mut all = st.sids.lock().unwrap();
-                    all.insert(meta.key.clone(), agents::Sess { provider: meta.provider.clone(), sid: sid.clone(), account: String::new() });
+                    all.insert(meta.key.clone(), agents::Sess { provider: meta.provider.clone(), sid: sid.clone(), ..Default::default() });
                     crate::save_sids(app, &all);
                     drop(all);
                     app.emit("remote-chat", json!({"key": meta.key, "title": titles.get(&meta.key), "provider": meta.provider})).ok();
@@ -336,7 +369,7 @@ pub(crate) fn reattach_remote(app: &AppHandle) {
             let pid = agent.id();
             let x = Proc { child: agent, stdin, opts: (meta.model, meta.effort), provider: p.id(), tainted: false, key: meta.key.clone(), turns: Turns::new(1), account: String::new(), remote: true };
             st.procs.lock().unwrap().insert(meta.key.clone(), x);
-            tauri_sink::read_agent(app, &meta.key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "");
+            tauri_sink::read_agent(app, &meta.key, p, pid, Feed { frames, backlog, inherit: (false, false) }, "", "");
         }
     }
 }
@@ -354,6 +387,8 @@ pub(crate) fn reattach(app: &AppHandle) {
         let (key, account) = (m.key.clone(), m.account.clone());
         let x = Proc::of_meta(agent, stdin, m, p.id());
         app.state::<App>().procs.lock().unwrap().insert(key.clone(), x);
-        tauri_sink::read_agent(app, &key, p, pid, Feed { frames, backlog, inherit: (false, false) }, &account);
+        // the vault it runs in, as its session was saved before the restart
+        let vault = app.state::<App>().sids.lock().unwrap().get(&key).map(|s| s.vault.clone()).unwrap_or_default();
+        tauri_sink::read_agent(app, &key, p, pid, Feed { frames, backlog, inherit: (false, false) }, &account, &vault);
     }
 }

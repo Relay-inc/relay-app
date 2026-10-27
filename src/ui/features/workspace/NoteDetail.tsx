@@ -46,6 +46,12 @@ export function NoteDetail({ panelKey }: { panelKey: string }) {
     : "";
   const summary = [prop("type"), linkLabel(prop("context")), date].filter(Boolean);
   const links = note ? noteLinks(index, settings().vault, path, note.text) : [];
+  // another vault's note (an absolute path): a shared vault's name or the folder's name in front, not "Vault"
+  const inFolder = (folder: string) => path.startsWith(folder + "/");
+  const other = !path.startsWith("/")
+    ? undefined
+    : (settings().sharedVaults?.find(vault => inFolder(vault.folder))?.name ??
+      settings().extraVaults?.find(inFolder)?.split("/").pop());
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -55,12 +61,12 @@ export function NoteDetail({ panelKey }: { panelKey: string }) {
         data-tauri-drag-region
       >
         <Icon name="file" className="glyph size-3.75 text-tertiary" />
-        {/* where the note lives: the last two folders, the whole path on hover */}
+        {/* where the note lives: its vault and the last two folders, the whole path on hover */}
         <div
           title={path}
           className="flex-1 min-w-0 flex items-center gap-1.25 ml-1.5 text-[13px] text-tertiary whitespace-nowrap overflow-hidden"
         >
-          <span>Vault</span>
+          <span>{other ?? "Vault"}</span>
           {path
             .split("/")
             .slice(0, -1)

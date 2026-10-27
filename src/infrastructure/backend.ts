@@ -35,8 +35,20 @@ import type {
   PhonePairing,
   MailAcct,
   Settings,
+  SharedInfo,
+  SharedInvite,
+  SharedRole,
+  SharedStatus,
 } from "../domain/settings/types";
-import type { IconKind, ProjectIcon, Snapshot, VaultMap, VaultNotes, VaultStatus } from "../domain/workspace/types";
+import type {
+  ExtraVault,
+  IconKind,
+  ProjectIcon,
+  Snapshot,
+  VaultMap,
+  VaultNotes,
+  VaultStatus,
+} from "../domain/workspace/types";
 import type { Mail, MailBody } from "../domain/mail/types";
 import type { Meetings } from "../domain/calendar/types";
 import type { PrDetail, PRs } from "../domain/pull-requests/types";
@@ -101,6 +113,7 @@ export const notify = (key: string, title: string, body: string, slot?: string) 
 
 // ---------- the vault
 export const vaultStatus = () => invoke<VaultStatus>("vault_status");
+export const extraVaultsStatus = () => invoke<ExtraVault[]>("extra_vaults_status");
 export const snapshot = () => invoke<Snapshot>("snapshot");
 export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });
@@ -197,8 +210,10 @@ export const gitShow = (key: string, project: string, repo: string, hash: string
 export const answer = (id: string, decision: Decision) => invoke("answer", { id, decision });
 /** A background or terminal session: hide is the app's own, stop and attach (open in iTerm) go to the backend. */
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });
-export const openTerminal = (project: string, session: string | null, name: string) =>
-  invoke("open_terminal", { project, session, name });
+/** A conversation (`project`: its key) resumed in iTerm; `about` its vault project, null for a general one: a new
+ *  conversation runs in that project's vault. */
+export const openTerminal = (project: string, session: string | null, name: string, about: string | null) =>
+  invoke("open_terminal", { project, session, name, about });
 export const aiTitle = (text: string, provider: string) => invoke<string>("ai_title", { text, provider });
 export const agentHistory = (key: string, id: string, from: number) =>
   invoke<Transcript<AgentEvent>>("agent_history", { key, id, from });
@@ -439,6 +454,36 @@ export const setVaultSync = (remote: string, on: boolean, minutes: number) =>
 /** A sync round ended. */
 export const onVaultSync = (handler: (last: NonNullable<VaultSync["last"]>) => void) =>
   listen<NonNullable<VaultSync["last"]>>("vault-sync", e => handler(e.payload));
+
+// ---------- shared vaults on a relay-server (src-tauri/src/shared_vaults.rs)
+/** The last round of every shared vault, by id; then every round as it ends. */
+export const sharedVaultsStatus = () => invoke<Record<string, SharedStatus>>("shared_vaults_status");
+export const onSharedVaults = (handler: (status: Record<string, SharedStatus>) => void) =>
+  listen<Record<string, SharedStatus>>("shared-vaults", e => handler(e.payload));
+/** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`. */
+export const sharedVaultCreate = (machine: string, name: string, folder: string) =>
+  invoke<{ id: string; recovery: string }>("shared_vault_create", { machine, name, folder });
+/** Join with an invite link into an empty folder. */
+export const sharedVaultJoin = (link: string, folder: string) =>
+  invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
+export const sharedVaultInvite = (id: string, role: SharedRole) =>
+  invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
+/** The vault's key as this Mac holds it (64 hex), for any member: what the create gave. */
+export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_recovery", { id });
+export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
+export const sharedVaultInviteRevoke = (id: string, invite: string) =>
+  invoke("shared_vault_invite_revoke", { id, invite });
+/** Remove a member, or leave the vault with this Mac's own fingerprint (the folder stays). */
+export const sharedVaultRemove = (id: string, fp: string) => invoke("shared_vault_remove", { id, fp });
+/** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
+export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
+  invoke("shared_vault_held", { id, allow, paths });
+/** The invite link that opened Relay, taken: the backend keeps it until then. */
+export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
+/** A new invite link waits in the backend (`sharedVaultPendingInvite`): a ping, no payload. */
+export const onVaultInvite = (handler: () => void) => listen("vault-invite", () => handler());
+/** The team's changes came into a shared vault's folder. */
+export const onVaultPulled = (handler: () => void) => listen("vault-pulled", () => handler());
 
 // ---------- the embedded terminals (src-tauri/src/pty.rs) and the scratch notes (scratch.rs)
 /** A shell in the project's vault folder, first continuing the conversation `chat` when given. `onData` gets its

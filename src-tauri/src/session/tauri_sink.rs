@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 
-struct TauriSink { app: AppHandle, key: String, p: &'static dyn AgentProvider, pid: u32, account: String, pending: PathBuf }
+struct TauriSink { app: AppHandle, key: String, p: &'static dyn AgentProvider, pid: u32, account: String, vault: String, pending: PathBuf }
 
 impl TauriSink {
     /// This conversation's process, when it is still the one in its slot.
@@ -26,7 +26,9 @@ impl Sink for TauriSink {
     fn session(&self, sid: &str) {
         let st = self.app.state::<App>();
         let mut sids = st.sids.lock().unwrap();
-        sids.insert(self.key.clone(), agents::Sess { provider: self.p.id().into(), sid: sid.into(), account: self.account.clone() });
+        // a reader that does not know the vault (a reattach) keeps the one the same session was saved with
+        let vault = if self.vault.is_empty() { sids.get(&self.key).filter(|s| s.sid == sid).map(|s| s.vault.clone()).unwrap_or_default() } else { self.vault.clone() };
+        sids.insert(self.key.clone(), agents::Sess { provider: self.p.id().into(), sid: sid.into(), account: self.account.clone(), vault });
         save_sids(&self.app, &sids);
     }
     fn permission(&self, req: &pending::Request) {
@@ -65,8 +67,8 @@ fn retry_args<'a>(end: &'a TurnEnd) -> (&'a str, bool, Option<i64>, bool) { (&en
 
 /// The agent's output, from its broker: each stdout line through the provider's parser to the webview as `agent`
 /// events, stderr collected for when it ends (frames.rs). `account`: the one the process runs on.
-pub(super) fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32, feed: Feed, account: &str) {
-    let sink = TauriSink { app: app.clone(), key: key.into(), p, pid, account: account.into(), pending: pending_dir(app) };
+pub(super) fn read_agent(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32, feed: Feed, account: &str, vault: &str) {
+    let sink = TauriSink { app: app.clone(), key: key.into(), p, pid, account: account.into(), vault: vault.into(), pending: pending_dir(app) };
     std::thread::spawn(move || Reader::new(p, feed.backlog, feed.inherit, PathBuf::from(home()).join("projects")).run(&sink, feed.frames));
 }
 

@@ -9,7 +9,8 @@ const USAGE: &str = "relay-server: runs Relay conversations on this machine
                                                         run (a launchd or systemd service, see `service`)
   relay-server pair [--host <ip>] [--port <port>]      a one-time line to paste in Relay › Settings › Machines
   relay-server clients                                  the paired devices
-  relay-server revoke <name | fingerprint>              unpair a device, at once
+  relay-server revoke <name | fingerprint>              unpair a device, at once (and take it out of its shared vaults)
+  relay-server vaults                                   the shared vaults: members and open invites
   relay-server service                                  a service file that keeps `serve` running
   relay-server info                                     this server's fingerprint and data folder
   relay-server version                                  this binary's version (Relay's)
@@ -57,6 +58,14 @@ pub fn run(a: &[String]) {
             let gone = revoke(&data, who).unwrap_or_else(|e| fail(e));
             if gone.is_empty() { fail(format!("no paired device {who:?}")); }
             for c in gone { println!("Revoked {} ({}…). New connections from it fail.", c.name, &c.fp[..16]); }
+        }
+        Some("vaults") => {
+            let all = crate::vaults::all(&data);
+            if all.is_empty() { println!("No shared vaults."); }
+            for v in &all {
+                println!("{}  {}  {} member(s), {} open invite(s)", v.name, v.id, v.members.len(), v.invites.len());
+                for m in &v.members { println!("  {}  {}  {}…", m.name, m.role, &m.fp[..16]); }
+            }
         }
         Some("info") => {
             let id = crate::identity(&data).unwrap_or_else(|e| fail(e));

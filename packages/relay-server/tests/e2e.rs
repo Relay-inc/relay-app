@@ -199,7 +199,7 @@ fn update_goes_on_in_the_binary_sent() {
 fn linked(parent: &Client, tag: &str) -> Client {
     let code = parent.pair_device().unwrap();
     let (host, port) = parent.addr.rsplit_once(':').unwrap();
-    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None, link: None }.format();
+    let line = relay_remote::proto::PairLine { host: host.into(), port: port.parse().unwrap(), fp: parent.fp.clone(), code, key: None, link: None, ..Default::default() }.format();
     let id = device(tag);
     let (l, _) = client::pair(&line, &id, tag).unwrap();
     Client::new(&l.host, l.port, &l.fp, id)
@@ -544,7 +544,7 @@ fn mirror_sealed_locked_and_synced() {
     let mut w = Walker::default();
     let copy = |p: &str| sync::conflict_copy(p, "server", "2026-10-02 1200");
     let merge = |p: &str| p.ends_with("MEMORY.md");
-    let guard = sync::Guard { allow_deletes: false, keep: &|_, _| Ok(()) };
+    let guard = sync::Guard { allow_deletes: false, allowed: &[], keep: &|_, _| Ok(()) };
     let (base, r) = sync::run(Mode::TwoWay, &local, &Default::default(), &mut w, &Filter::default(), &vault, &copy, &merge, &guard, &|_, _| {});
     assert!(r.errors.is_empty(), "{:?}", r.errors);
     assert_eq!(r.pushed.len(), 2);
@@ -815,4 +815,123 @@ fn repos_clone_snapshot_and_push() {
     assert_eq!(c.repo_push("empty").unwrap().unpushed, 0);
     assert!(git(&repos.join("empty"), &["rev-parse", "--abbrev-ref", "@{u}"]).trim() == "origin/main");
     std::fs::remove_dir_all(&tmp).ok();
+}
+
+/// The walls around a shared vault on the real binary: the handshake while an invite is open, a vault-only device,
+/// a linked one, and the CLI. What the records do over the wire is `two_macs_share_a_vault_through_the_server`.
+#[test]
+fn a_shared_vault_invite_join_and_walls() {
+    use serde_json::json;
+    let s = start("vaults");
+    // identities of this test's own: the other tests make their own "laptop" and "stranger" at the same time
+    let lid = device("vault-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid);
+    let port: u16 = laptop.addr.rsplit(':').next().unwrap().parse().unwrap();
+    let id = laptop.call(json!({"op": "vault_create", "name": "Team"})).unwrap()["vault"]["id"].as_str().unwrap().to_string();
+    let inv = laptop.call(json!({"op": "vault_invite", "vault": id, "role": "member", "wrapped": "ab".repeat(32)})).unwrap();
+    let (invite, code) = (inv["invite"]["id"].as_str().unwrap(), inv["invite"]["code"].as_str().unwrap());
+
+    // a stranger with a wrong code gets through the handshake (an invite is open) and no further
+    let sid = device("vault-stranger");
+    let stranger = Client::new("127.0.0.1", port, &laptop.fp, sid.clone());
+    let wrong = relay_remote::tls::proof(&"0".repeat(32), &sid.fingerprint(), &laptop.fp);
+    assert!(stranger.call(json!({"op": "vault_join", "vault": id, "invite": invite, "name": "stranger", "proof": wrong})).unwrap_err().contains("wrong invite code"));
+    assert!(stranger.call(json!({"op": "vault_info", "vault": id})).unwrap_err().contains("not paired"));
+
+    // the colleague joins with the link's code and becomes a vault-only client
+    let cid = device("vault-colleague");
+    let colleague = Client::new("127.0.0.1", port, &laptop.fp, cid.clone());
+    let proof = relay_remote::tls::proof(code, &cid.fingerprint(), &laptop.fp);
+    let j = colleague.call(json!({"op": "vault_join", "vault": id, "invite": invite, "name": "colleague", "proof": proof})).unwrap();
+    assert_eq!((j["role"].as_str(), j["wrapped"].as_str()), (Some("member"), Some("ab".repeat(32).as_str())));
+    let out = bin().arg("clients").env("RELAY_SERVER_DATA", &s.data).output().unwrap();
+    assert!(String::from_utf8_lossy(&out.stdout).contains("colleague"));
+
+    // a vault-only device: nothing else here, and no vaults of its own
+    for op in ["list", "sync_manifest", "launch", "pair_device", "vault_create"] {
+        assert!(colleague.call(json!({"op": op, "name": "Mine"})).unwrap_err().contains("not allowed"), "{op}");
+    }
+    // the invite is used up: a third device with the right code is refused, and fails in the handshake now
+    let tid = device("vault-third");
+    let third = Client::new("127.0.0.1", port, &laptop.fp, tid.clone());
+    assert!(third.call(json!({"op": "vault_join", "vault": id, "invite": invite, "name": "third", "proof": relay_remote::tls::proof(code, &tid.fingerprint(), &laptop.fp)})).is_err());
+    // another paired laptop is no member, a phone gets no vault ops
+    let other = paired(&s, "vault-other");
+    assert_eq!(other.call(json!({"op": "vault_info", "vault": id})).unwrap_err(), "no such vault");
+    assert!(linked(&laptop, "vault-phone").call(json!({"op": "vault_info", "vault": id})).unwrap_err().contains("not allowed from a linked device"));
+
+    let out = String::from_utf8_lossy(&bin().arg("vaults").env("RELAY_SERVER_DATA", &s.data).output().unwrap().stdout).into_owned();
+    assert!(out.contains("Team") && out.contains("laptop  admin") && out.contains("colleague  member"), "{out}");
+    // revoked: out of the vault, and the next connection fails
+    assert!(bin().args(["revoke", "colleague"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap().status.success());
+    assert_eq!(laptop.call(json!({"op": "vault_info", "vault": id})).unwrap()["vault"]["members"].as_array().unwrap().len(), 1);
+    assert!(colleague.call(json!({"op": "vault_info", "vault": id})).is_err());
+}
+
+/// The whole way a team shares a vault, with the app's own calls against the real binary: the laptop makes a vault
+/// and an invite link, a colleague joins with the link alone, and two folders stay the same through the server, which
+/// holds only ciphertext. Then the colleague is removed and syncs no more.
+#[test]
+fn two_macs_share_a_vault_through_the_server() {
+    use relay_remote::sync::{self, Filter, Guard, Mode, Walker};
+    use relay_remote::vault::VaultKey;
+    let s = start("vaultsync");
+    let lid = device("share-laptop");
+    let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid);
+    let vault = laptop.vault_create("Team").unwrap().id;
+    let key = VaultKey::generate();
+    let (link, _) = laptop.vault_invite(&vault, "member", &key, &l.host, l.port).unwrap();
+    let cid = device("share-colleague");
+    let (line, joined, theirs) = client::vault_join(&link, &cid, "colleague").unwrap();
+    assert_eq!((joined.id.as_str(), joined.role.as_str(), theirs.to_hex()), (vault.as_str(), "member", key.to_hex()));
+    let colleague = Client::new(&line.host, line.port, &line.fp, cid.clone());
+    assert!(client::vault_join(&link, &device("share-late"), "late").is_err(), "a link works once");
+
+    let dir = |t: &str| { let d = std::env::temp_dir().join(format!("relay-share-{t}-{}", std::process::id())); std::fs::remove_dir_all(&d).ok(); std::fs::create_dir_all(&d).unwrap(); d };
+    let (a, b) = (dir("a"), dir("b"));
+    let keep = |_: &str, _: &[u8]| Ok(());
+    let guard = Guard { allow_deletes: false, allowed: &[], keep: &keep };
+    let round = |c: &Client, k: &VaultKey, root: &std::path::Path, base: &mut sync::Manifest, w: &mut Walker| {
+        let (next, r) = sync::run(Mode::TwoWay, root, base, w, &Filter::vault_default(), &c.sealed(&vault, k.clone()), &|p| sync::conflict_copy(p, "mac", "now"), &|_| false, &guard, &|_, _| {});
+        *base = next;
+        r
+    };
+    let (mut ba, mut bb, mut wa, mut wb) = (sync::Manifest::new(), sync::Manifest::new(), Walker::default(), Walker::default());
+    std::fs::create_dir_all(a.join("Projects")).unwrap();
+    std::fs::write(a.join("Projects/Acme.md"), "secret plan").unwrap();
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa).pushed, vec!["Projects/Acme.md"]);
+    // on the server's disk: neither the path nor the content
+    for e in std::fs::read_dir(s.data.join("vaults").join(&vault).join("blobs")).unwrap().flatten() {
+        let b = std::fs::read(e.path()).unwrap();
+        assert!(!String::from_utf8_lossy(&b).contains("secret") && !String::from_utf8_lossy(&b).contains("Acme"));
+    }
+    assert_eq!(round(&colleague, &theirs, &b, &mut bb, &mut wb).pulled, vec!["Projects/Acme.md"]);
+    assert_eq!(std::fs::read_to_string(b.join("Projects/Acme.md")).unwrap(), "secret plan");
+    // both edit the same note: both versions stay, on both Macs
+    std::fs::write(a.join("Projects/Acme.md"), "laptop's version").unwrap();
+    std::fs::write(b.join("Projects/Acme.md"), "colleague's version").unwrap();
+    round(&laptop, &key, &a, &mut ba, &mut wa);
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb);
+    assert_eq!(r.conflicts.len(), 1, "{r:?}");
+    // the laptop gets both, deletes the copy, and the delete reaches the colleague
+    let copy = r.conflicts[0].clone();
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa).pulled.len(), 2);
+    std::fs::remove_file(a.join(&copy)).unwrap();
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa).deleted_remote, vec![copy.clone()]);
+    assert_eq!(round(&colleague, &theirs, &b, &mut bb, &mut wb).deleted_local, vec![copy]);
+    // the server breaks a record both Macs have: it still lists it, and no Mac deletes the note
+    std::fs::write(s.data.join("vaults").join(&vault).join("blobs").join(key.name("Projects/Acme.md")), b"garbage").unwrap();
+    let (ra, rb) = (round(&laptop, &key, &a, &mut ba, &mut wa), round(&colleague, &theirs, &b, &mut bb, &mut wb));
+    assert!([&ra, &rb].iter().all(|r| r.deleted_local.is_empty() && r.deleted_remote.is_empty()), "{ra:?} {rb:?}");
+    assert!(a.join("Projects/Acme.md").is_file() && b.join("Projects/Acme.md").is_file());
+
+    // removed: the server refuses the colleague's next round, their folder stays as it was
+    laptop.vault_remove(&vault, &cid.fingerprint()).unwrap();
+    let r = round(&colleague, &theirs, &b, &mut bb, &mut wb);
+    assert!(!r.errors.is_empty(), "{r:?}");
+    assert!(b.join("Projects/Acme.md").is_file());
+    std::fs::remove_dir_all(&a).ok();
+    std::fs::remove_dir_all(&b).ok();
 }

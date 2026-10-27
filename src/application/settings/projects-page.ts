@@ -28,8 +28,12 @@ async function loadProjectsPage() {
   page({
     icons,
     repos,
-    projects: projects.map(({ name, context, summary }) => ({ name, context, summary })),
-    names: projects.map(project => String(project.name)).sort((a, b) => a.localeCompare(b)),
+    projects: projects.map(({ name, label, context, summary }) => ({ name, label, context, summary })),
+    // by the name shown: another vault's project has an opaque key
+    names: projects
+      .map(project => ({ name: String(project.name), shown: project.label || String(project.name) }))
+      .sort((a, b) => a.shown.localeCompare(b.shown))
+      .map(project => project.name),
   });
 }
 /** Called when the page shows: loads once, then follows icons-changed. */

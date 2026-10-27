@@ -40,6 +40,8 @@ export function ProjectsPage({ active }: { active: boolean }) {
   };
   const row = (name: string) => {
     const label = labels[name]?.label;
+    // the snapshot's label: another vault's project has an opaque key
+    const shown = projects.find(project => project.name === name)?.label || name;
     const open = folds.isOpen(name);
     return (
       <SettingsFold
@@ -51,10 +53,10 @@ export function ProjectsPage({ active }: { active: boolean }) {
         name={
           label ? (
             <>
-              {label} <span className={`${OPTIONAL_TEXT} ml-1 font-normal`}>{name}</span>
+              {label} <span className={`${OPTIONAL_TEXT} ml-1 font-normal`}>{shown}</span>
             </>
           ) : (
-            name
+            shown
           )
         }
         status={summary(name)}

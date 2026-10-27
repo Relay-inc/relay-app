@@ -32,6 +32,7 @@ import { toast } from "../navigation/navigation";
 import { onOrchEvent } from "../orchestrator/orchestrator";
 import { useOrchestratorStore } from "../orchestrator/store";
 import { settings } from "../settings/settings";
+import { projectName } from "../workspace/vault";
 
 // The board pipeline, while the app runs: every few minutes and when a pipeline worker changes, per switched-on
 // pipeline (settings.pipelines): put ended runs on the board, follow the PRs in review, start on the tickets in the
@@ -50,7 +51,7 @@ const lastError: Record<string, string> = {};
 // why a pipeline takes no new tickets right now, so it is said once and not every five minutes
 const holding: Record<string, string> = {};
 function hold(project: string, why: "" | "pl.usedUp" | "pl.stalled") {
-  if (why && holding[project] !== why) toast(t(why, { project }));
+  if (why && holding[project] !== why) toast(t(why, { project: projectName(project) }));
   holding[project] = why;
 }
 
@@ -68,7 +69,7 @@ export function runPipelines() {
       } catch (e) {
         const msg = String((e as Error)?.message ?? e);
         // once per new error, not every five minutes
-        if (lastError[project] !== msg) toast(t("pl.error", { project, error: msg }));
+        if (lastError[project] !== msg) toast(t("pl.error", { project: projectName(project), error: msg }));
         lastError[project] = msg;
       }
     }

@@ -13,4 +13,5 @@ test("only an agent that can run remotely may go to a work machine, and not with
   assert.equal(machineBlock({ remote: true }, true), "composer.machineNoMail");
   assert.equal(machineBlock({ remote: false }, true), "composer.machineOnlyClaude");
   assert.equal(machineBlock(undefined, false), "composer.machineOnlyClaude");
+  assert.equal(machineBlock({ remote: true }, false, true), "composer.machineSharedVault");
 });

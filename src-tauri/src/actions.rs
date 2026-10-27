@@ -148,13 +148,33 @@ fn serve(app: &AppHandle, c: UnixStream) {
     let mut line = String::new();
     if BufReader::new(&c).read_line(&mut line).is_err() { return; }
     let req: Value = serde_json::from_str(&line).unwrap_or_default();
-    let res = match req["cmd"].as_str() {
-        Some("list") => list(app, req["conversation"].as_str().unwrap_or("")),
-        Some("call") => call(app, &c, req["conversation"].as_str().unwrap_or(""), req["action"].as_str().unwrap_or(""), &req["args"]),
+    let named = req["conversation"].as_str().unwrap_or("");
+    // the conversation is the one the caller runs under, not the one it names: RELAY_CONVERSATION is readable and
+    // settable by any process of the user (`ps -E`), so an agent could name a main-vault conversation from a shared one
+    let from = caller(app, &c);
+    let res = match (&from, req["cmd"].as_str()) {
+        (Some(k), _) if !named.is_empty() && named != k => Err("relay answers for the conversation it runs in".into()),
+        (_, Some("list")) => list(app, from.as_deref().unwrap_or(named)),
+        (_, Some("call")) => call(app, &c, from.as_deref().unwrap_or(named), from.is_some(), req["action"].as_str().unwrap_or(""), &req["args"]),
         _ => Err("unknown command".into()),
     };
     let out = match res { Ok(v) => json!({ "ok": true, "result": v }), Err(e) => json!({ "ok": false, "error": e }) };
     (&c).write_all(format!("{out}\n").as_bytes()).ok();
+}
+
+/// The app conversation a request on the socket comes from: up from the calling process to an agent the app runs.
+/// None when it descends from none (a terminal of the user's own) or the platform cannot tell.
+fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
+    use std::os::fd::AsRawFd;
+    let agents: std::collections::HashMap<u32, String> = app.state::<crate::App>().procs.lock().unwrap().iter()
+        // a remote agent's pid is one on the work machine: it could match a process here
+        .filter(|(_, p)| !p.remote).map(|(k, p)| (p.child.id(), k.clone())).collect();
+    let mut pid = agent_core::peer::peer_pid(c.as_raw_fd())?;
+    for _ in 0..64 {
+        if let Some(k) = agents.get(&pid) { return Some(k.clone()); }
+        pid = agent_core::peer::parent(pid).filter(|p| *p > 1)?;
+    }
+    None
 }
 
 /// The conversation's provider; None when it is not one of the app's running ones.
@@ -173,11 +193,15 @@ fn list(app: &AppHandle, key: &str) -> Result<Value, String> {
 }
 const NOT_IN_APP: &str = "relay only works inside a conversation of the Relay app";
 
-fn call(app: &AppHandle, c: &UnixStream, key: &str, action: &str, args: &Value) -> Result<Value, String> {
+/// `known`: the caller was traced to `key`'s agent (`caller`); a key it only named gets none of the user's own reads.
+fn call(app: &AppHandle, c: &UnixStream, key: &str, known: bool, action: &str, args: &Value) -> Result<Value, String> {
     let provider = conversation(app, key).ok_or(NOT_IN_APP)?;
     let all = items();
     let it = all.iter().find(|it| format!("{}.{}", it.ext, it.id) == action).ok_or_else(|| format!("no action '{action}', `relay help` lists them"))?;
     check_args(it.args, args)?;
+    // a shared vault's conversation reads none of the user's own mail, reminders or calendar (it may still write to them)
+    let personal = matches!(it.ext, "mail" | "reminders" | "calendar");
+    if personal && !it.write && (!known || crate::in_shared_vault(&app.state::<crate::App>(), key)) { return Err(crate::SHARED_NO_READ.into()); }
     let s = acts(app);
     if !access(&s, it.ext) { return Err(format!("the user switched off agent access to {}", it.ext)); }
     if !ready(app, it.ext) { return Err(format!("{} is not set up in Relay (Settings)", it.ext)); }

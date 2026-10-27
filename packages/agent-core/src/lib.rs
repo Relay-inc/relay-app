@@ -17,6 +17,7 @@ pub const WRITE_MAX: usize = 20_000;
 pub mod discover;
 pub use discover::{discover_commands, http_get, Probe};
 pub mod envelope;
+pub mod peer;
 pub mod pending;
 pub mod prompt;
 pub mod usage;

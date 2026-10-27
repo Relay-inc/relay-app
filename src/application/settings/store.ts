@@ -18,6 +18,9 @@ import {
   type PhonePairing,
   type Message,
   type Settings,
+  type SharedInfo,
+  type SharedInvite,
+  type SharedStatus,
   type VaultSync,
 } from "../../domain/settings/types";
 import { SETUP_FOLDERS, type SetupPlatform } from "../../domain/settings/machines";
@@ -25,7 +28,7 @@ import type { AgentsStatus } from "../../domain/agents/types";
 import type { AgentUpdate, UpdateProgress, UpdatesStatus } from "../../domain/settings/updates";
 import type { BoardOpt } from "../../domain/board/types";
 import type { PluginTest } from "../../domain/plugins/types";
-import type { ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
+import type { ExtraVault, ProjectIcon, Project, VaultStatus } from "../../domain/workspace/types";
 import { makeStore } from "../make-store";
 
 export type SettingsTab =
@@ -40,6 +43,7 @@ export type SettingsState = {
   // ---------- the settings window
   loaded: boolean; // settings and vault status read
   vaultStatus: VaultStatus | null;
+  extraVaults: ExtraVault[]; // the extra vaults as the main window's last snapshot read them
   tab: SettingsTab;
   message: Message | null; // the last save's result on General and Projects
   agentsPage: { detected: AgentsStatus | null; message: Message | null };
@@ -56,7 +60,7 @@ export type SettingsState = {
     icons: Record<string, ProjectIcon> | null; // null until the page first shows
     loading: boolean; // the first load started
     names: string[]; // every project, sorted
-    projects: Pick<Project, "name" | "context" | "summary">[];
+    projects: Pick<Project, "name" | "label" | "context" | "summary">[];
     repos: Record<string, string[]>;
     message: Message | null;
     finding: boolean;
@@ -92,6 +96,18 @@ export type SettingsState = {
   actions: { list: ActionMeta[]; entries: Record<string, ActionEntry>; errors: Record<string, string> };
   // the vault's git backup as saved (null until read) and why the last save failed
   vaultSync: { saved: VaultSync | null; message: Message | null };
+  // the shared vaults on General (application/settings/shared-vaults.ts)
+  shared: {
+    status: Record<string, SharedStatus>; // the last round per vault
+    info: Record<string, SharedInfo | null>; // per vault whose members are open: what the server said, null while asked
+    links: Record<string, { link: string; invite: SharedInvite }>; // per vault: the invite link just made
+    // per vault whose recovery key shows: the key, from the create or shared_vault_recovery (any time again)
+    keys: Record<string, string>;
+    messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
+    busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
+    // the form under the list: a new vault or joining one
+    form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string };
+  };
   pluginsPage: {
     loaded: boolean; // the secrets are known
     secrets: Record<string, Record<string, boolean>>; // per plugin: which of its secrets sit in the keychain
@@ -132,6 +148,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   locale: "en",
   loaded: false,
   vaultStatus: null,
+  extraVaults: [],
   tab: "general",
   message: null,
   agentsPage: { detected: null, message: null },
@@ -172,6 +189,15 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
   },
   actions: { list: [], entries: {}, errors: {} },
   vaultSync: { saved: null, message: null },
+  shared: {
+    status: {},
+    info: {},
+    links: {},
+    keys: {},
+    messages: {},
+    busy: {},
+    form: { mode: "", machine: "", name: "", folder: "", link: "" },
+  },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {
     loaded: false,

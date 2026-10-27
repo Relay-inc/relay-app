@@ -3,6 +3,8 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { aboutItems } from "../../../application/conversations/selectors";
 import { moveTo } from "../../../application/conversations/actions";
+import { mainVaultProjects } from "../../../domain/conversations/rules";
+import { projectName } from "../../../application/workspace/vault";
 import { useT } from "../../hooks/useT";
 import { Html } from "../../components/Html";
 import { strip } from "./layout";
@@ -23,6 +25,7 @@ export function MoveBar({
   // the items only while the bar can show: a stream into a busy conversation does not redraw it
   const items = useConversationsStore(s => (asked || session ? undefined : s.messages[selected]));
   const projects = useWorkspaceStore(s => s.snap.projects);
+  const vault = useWorkspaceStore(s => s.snap.vault);
   if (session)
     return (
       <div className={className}>
@@ -31,19 +34,21 @@ export function MoveBar({
         </div>
       </div>
     );
-  // scores every message: only when the bar can show, and memoised on the items
-  const about = asked ? null : aboutItems(items, projects);
+  // scores every message: only when the bar can show, and memoised on the items. The bar shows for a general
+  // conversation that sent something, so a started one in the main vault: it keeps running there (src-tauri `fence`)
+  const about = asked ? null : aboutItems(items, mainVaultProjects({ projects, vault }));
   if (!about) return null;
+  const name = projectName(about);
   return (
     <div className={className}>
       <div className={`${strip} border border-separator bg-fill`}>
-        <Html html={th("move.about", { name: about })} />
+        <Html html={th("move.about", { name })} />
         <span className="flex-1"></span>
         <button className="btn" onClick={() => moveTo(null)}>
           {t("move.no")}
         </button>
         <button className="btn btn-primary" onClick={() => moveTo(about)}>
-          {t("move.yes", { name: about })}
+          {t("move.yes", { name })}
         </button>
       </div>
     </div>

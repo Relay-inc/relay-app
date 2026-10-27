@@ -132,6 +132,17 @@ const VIEWS = {
     await waitText("ABCD-1234");
     await intoView("Waiting for GitHub…");
   },
+  // a new conversation about the team vault's Northwind Portal: the Vault label, no pick (it stays in that vault)
+  "composer-vault": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByPlaceholder("Search").fill("northwind");
+    await byText(page, "Northwind Portal (Team vault)").hover();
+    await page
+      .getByRole("button", { name: "New conversation about Northwind Portal (Team vault)", exact: true })
+      .click();
+    await settle(page);
+    await waitText("Vault: Team vault");
+  },
   // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
   // "harbor-crm · on Server" next to the control (PR #217)
   "composer-repo-chip": async () => {
@@ -898,6 +909,18 @@ const VIEWS = {
     await waitText("Archive: old repo");
     await settle(page, 300);
   },
+  // a note of the team vault, linked from a conversation, in the drawer: its absolute path in the bar
+  "drawer-note-shared": async () => {
+    await open(page, server.url, { fixture: "shared", sel: keys.long });
+    await page.evaluate(key => {
+      window.__harness.emitAgent(key, { type: "text", text: "The handbook is in [[Team Handbook]].", delta: true });
+      window.__harness.emitAgent(key, { type: "turn_end" });
+    }, keys.long);
+    await waitText("The handbook is in");
+    await page.locator("a.vlink", { hasText: "Team Handbook" }).last().click();
+    await waitText("Archive: old repo");
+    await settle(page, 300);
+  },
   // the same note with its properties unfolded under the title (the doc panel design)
   "drawer-note-properties": async () => {
     await VIEWS["drawer-note"]();
@@ -1017,6 +1040,56 @@ const VIEWS = {
   "settings-voice-models": async () => {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
+  },
+  // a vault shared on a relay-server under General: its last round (a conflict copy, two deletes held), the members
+  // open (this Mac, an admin, a member, an open invite), a new invite link made and the recovery key shown again
+  "settings-shared-vaults": async () => {
+    await settingsPage("General", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1400 });
+    await waitText("Put them back");
+    await button("Members").click();
+    await waitText("Design laptop");
+    await button("Invite…").click();
+    await button("Create link").click();
+    await waitText("Single use, valid until");
+    await button("Show recovery key").click();
+    await waitText("Keep this key in your password manager");
+    await intoView("Shared vaults");
+  },
+  // New shared vault… filled in and created: the form closes, the new vault's row shows its recovery key
+  "settings-shared-new": async () => {
+    await settingsPage("General", undefined, "shared");
+    await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
+    await button("New shared vault…").click();
+    await page.locator("#shared-name").fill("Launch");
+    await page
+      .locator("div.justify-between", { has: page.getByText("Folder", { exact: true }) })
+      .getByTitle("Choose…")
+      .click();
+    await button("Create").click();
+    await waitText("Keep this key in your password manager");
+    await intoView("Keep this key in your password manager");
+  },
+  // Relay opened by an invite link: General with the join form, the link in it
+  "settings-shared-join": async () => {
+    await settingsPage("General", undefined, "shared-invite");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await waitText("Join a shared vault");
+    await intoView("Join a shared vault");
+  },
+  // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
+  // has one)
+  "settings-other-vaults": async () => {
+    await settingsPage("General", undefined, "shared");
+    await intoView("Other vault folders");
+  },
+  // the shared vault's projects in the sidebar, in their own context (found by the search)
+  "sidebar-shared": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    // a project shows once it has conversations; the search finds both of the team vault's
+    await page.getByPlaceholder("Search").fill("h");
+    await waitText("Team Handbook");
+    await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
   },
   "settings-interface": async () => {
     await settingsPage("General");

@@ -17,6 +17,13 @@
 //! A laptop's conversations shared with its phone (share.rs): `share {convs}` stays open and gets `{"open":token}` lines,
 //! each answered with a new connection `share_open {token}` that the server joins to the phone's request; such a request
 //! (`attach`, `kill`, `history {key}`) is answered with `{"challenge"}` first, then takes only signed lines.
+//! Shared vaults (docs/shared-vaults.md), ciphertext only: `vault_create {name}`, `vault_info {vault}`,
+//! `vault_invite {vault,role,wrapped}`, `vault_invite_revoke {vault,invite}`, `vault_join {vault,invite,name,proof}` (also
+//! from a device that is not paired, which then becomes a vault-only client), `vault_remove {vault,fp}`, `vault_manifest
+//! {vault}`, `vault_get {vault,name}` (len, etag and bytes like sync_get), `vault_put {vault,name,len,expect}` (the record
+//! follows; `expect` the etag the record there must still have, "" absent), `vault_put_many {vault,files:[{name,len,
+//! expect}]}` (the records follow, the reply has `etags` and `errors` per name) and `vault_delete {vault,name,expect}`.
+//! A vault-only client may send only these (no `info`), a linked device none of them.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -113,35 +120,46 @@ pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8
 /// `relay://192.168.1.2:47800#fp=<64 hex>&code=<32 hex>`. A line Relay makes for a phone (pair_device) also carries the
 /// key to the laptop's mirror there, `&key=<64 hex>`, so the phone can open it while the laptop is closed, and a secret
 /// only the laptop and the phone know, `&link=<64 hex>`, with which the phone proves its signing key to the laptop
-/// (share.rs). The server never sees `link`.
-#[derive(Clone, Debug, PartialEq)]
-pub struct PairLine { pub host: String, pub port: u16, pub fp: String, pub code: String, pub key: Option<String>, pub link: Option<String> }
+/// (share.rs). The server never sees `link`. An invite to a shared vault (docs/shared-vaults.md) carries the vault,
+/// the invite and the secret that unwraps the vault key, `&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>`; the server
+/// never sees `secret` either.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PairLine {
+    pub host: String, pub port: u16, pub fp: String, pub code: String, pub key: Option<String>, pub link: Option<String>,
+    pub vault: Option<String>, pub invite: Option<String>, pub secret: Option<String>,
+}
 impl PairLine {
     pub fn parse(s: &str) -> Option<PairLine> {
         let (addr, frag) = s.trim().strip_prefix("relay://")?.split_once('#')?;
         let (host, port) = addr.rsplit_once(':')?;
         let host = host.trim_start_matches('[').trim_end_matches(']');
         let hex = |v: &str, n: usize| v.len() == n && v.chars().all(|c| c.is_ascii_hexdigit());
-        let (mut fp, mut code, mut key, mut link) = (None, None, None, None);
+        let (mut fp, mut code, mut key, mut link, mut vault, mut invite, mut secret) = (None, None, None, None, None, None, None);
         for kv in frag.split('&') {
             match kv.split_once('=') {
                 Some(("fp", v)) if hex(v, 64) => fp = Some(v.to_lowercase()),
                 Some(("code", v)) if hex(v, 32) => code = Some(v.to_lowercase()),
                 Some(("key", v)) if hex(v, 64) => key = Some(v.to_lowercase()),
                 Some(("link", v)) if hex(v, 64) => link = Some(v.to_lowercase()),
+                Some(("vault", v)) if hex(v, 16) => vault = Some(v.to_lowercase()),
+                Some(("invite", v)) if hex(v, 16) => invite = Some(v.to_lowercase()),
+                Some(("secret", v)) if hex(v, 64) => secret = Some(v.to_lowercase()),
                 _ => {}
             }
         }
         let ok_host = !host.is_empty() && host.len() <= 253 && host.chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c));
         ok_host.then_some(())?;
-        Some(PairLine { host: host.into(), port: port.parse().ok()?, fp: fp?, code: code?, key, link })
+        Some(PairLine { host: host.into(), port: port.parse().ok()?, fp: fp?, code: code?, key, link, vault, invite, secret })
     }
     pub fn format(&self) -> String {
         let host = if self.host.contains(':') { format!("[{}]", self.host) } else { self.host.clone() };
-        let key = self.key.as_ref().map(|k| format!("&key={k}")).unwrap_or_default();
-        let link = self.link.as_ref().map(|k| format!("&link={k}")).unwrap_or_default();
-        format!("relay://{host}:{}#fp={}&code={}{key}{link}", self.port, self.fp, self.code)
+        let opt = |name: &str, v: &Option<String>| v.as_ref().map(|v| format!("&{name}={v}")).unwrap_or_default();
+        let (key, link) = (opt("key", &self.key), opt("link", &self.link));
+        let (vault, invite, secret) = (opt("vault", &self.vault), opt("invite", &self.invite), opt("secret", &self.secret));
+        format!("relay://{host}:{}#fp={}&code={}{key}{link}{vault}{invite}{secret}", self.port, self.fp, self.code)
     }
+    /// A line with a vault, an invite and its secret: an invite to a shared vault, not a pairing.
+    pub fn is_invite(&self) -> bool { self.vault.is_some() && self.invite.is_some() && self.secret.is_some() }
     /// "host:port" for a TCP connect, IPv6 in brackets.
     pub fn addr(&self) -> String { addr(&self.host, self.port) }
 }
@@ -163,6 +181,12 @@ mod tests {
         let phone = PairLine { key: Some("b".repeat(64)), link: Some("c".repeat(64)), ..l.clone() };
         assert_eq!(PairLine::parse(&phone.format()), Some(phone.clone()));
         assert_eq!(PairLine::parse(&format!("{}&key=short", l.format())).unwrap().key, None);
+        assert!(!l.is_invite() && !phone.is_invite());
+        let inv = PairLine { vault: Some("0123456789abcdef".into()), invite: Some("fedcba9876543210".into()), secret: Some("d".repeat(64)), ..l.clone() };
+        assert_eq!(PairLine::parse(&inv.format()), Some(inv.clone()));
+        assert!(inv.is_invite());
+        assert_eq!(PairLine::parse(&format!("{}&vault=0123456789ABCDEF&invite=short&secret={}", l.format(), "e".repeat(64))).map(|x| (x.is_invite(), x.vault, x.invite)),
+                   Some((false, Some("0123456789abcdef".into()), None)));
         for bad in ["relay://h:1#fp=abc&code=0123456789abcdef0123456789abcdef", "http://h:1#fp=&code=", &format!("relay://h x:1#fp={fp}&code={code}"),
                     &format!("relay://h:99999#fp={fp}&code={code}"), &format!("relay://h:1#fp={fp}")] {
             assert!(PairLine::parse(bad).is_none(), "{bad}");

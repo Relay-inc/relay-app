@@ -26,19 +26,51 @@ const NS: i64 = 1_000_000_000;
 
 /// What to skip: directory or file names matched anywhere (e.g. ".obsidian", ".git", ".trash", ".relay", "node_modules"),
 /// path prefixes relative to the root (e.g. "Communication/transcripts"), and a size limit (bigger files are skipped and
-/// listed, 0 = none).
+/// listed, 0 = none). Under a `guarded` folder only what lies under one of `only` goes. `no_links`: a symlink is neither
+/// followed nor written through, so a round stays inside the root. Names and prefixes match as APFS does, case-folded.
 #[derive(Clone, Debug, Default)]
-pub struct Filter { pub names: Vec<String>, pub prefixes: Vec<String>, pub max_size: u64 }
+pub struct Filter { pub names: Vec<String>, pub prefixes: Vec<String>, pub max_size: u64, pub guarded: Vec<String>, pub only: Vec<String>, pub no_links: bool }
 impl Filter {
     pub fn vault_default() -> Filter {
-        Filter { names: [".obsidian", ".git", ".trash", ".relay", "node_modules", ".DS_Store"].map(String::from).to_vec(), prefixes: vec![], max_size: 20 << 20 }
+        Filter { names: [".obsidian", ".git", ".trash", ".relay", "node_modules", ".DS_Store"].map(String::from).to_vec(), max_size: 20 << 20, ..Default::default() }
     }
     /// Every segment is checked, not only the last, so a server can judge a single incoming path the same way a walk does.
-    pub fn skips(&self, rel: &str, is_dir: bool) -> bool {
+    /// Without regard to case: on a Mac's disk `.Git` or `System/Settings.json` from the other side is the very file
+    /// a name here keeps out.
+    pub fn skips(&self, rel: &str, is_dir: bool) -> bool { self.folded().skips_folded(&fold(rel), is_dir) }
+    /// This filter with its names and paths folded (and the paths without a trailing '/'): once per scan or round, not
+    /// for every segment of every path.
+    fn folded(&self) -> Filter {
+        let paths = |v: &[String]| v.iter().map(|p| fold(p.trim_end_matches('/'))).collect();
+        Filter { names: self.names.iter().map(|n| fold(n)).collect(), prefixes: paths(&self.prefixes), guarded: paths(&self.guarded), only: paths(&self.only), ..self.clone() }
+    }
+    /// `skips` for a folded filter and a folded path.
+    fn skips_folded(&self, rel: &str, is_dir: bool) -> bool {
+        let under = |p: &str, r: &str| r == p || r.strip_prefix(p).is_some_and(|x| x.starts_with('/'));
         rel.split('/').any(|s| self.names.iter().any(|n| n == s))
-            || self.prefixes.iter().map(|p| p.trim_end_matches('/')).any(|p| rel == p || rel.strip_prefix(p).is_some_and(|r| r.starts_with('/')))
+            || self.prefixes.iter().any(|p| under(p, rel))
+            // a folder above an allowed one is walked, to reach it
+            || (self.guarded.iter().any(|g| under(g, rel)) && !self.only.iter().any(|o| under(o, rel) || (is_dir && under(rel, o))))
             || (!is_dir && rel.rsplit('/').next().is_some_and(|n| n.starts_with(TMP)))
     }
+}
+/// A name as APFS compares it, exact for ASCII names: lowercase (any letter), plus every character whose Unicode full case folding is
+/// ASCII (ſ, the Kelvin sign, ß and ẞ, the ff/fi/fl/ffi/ffl/st ligatures) or that NFD turns into ASCII, so
+/// `Syﬆem/Settings.json` still is `System/settings.json`. The format characters HFS+ ignores in a name (zero-width
+/// joiners, bidi marks, BOM) are dropped, so they cannot slip a guarded name past on a Mac OS Extended disk. Others stay non-ASCII, which no ASCII name can equal; a
+/// non-ASCII name is not matched as APFS would, so callers guard only ASCII ones.
+pub fn fold(s: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    // canonical decomposition first: `Caf\u{E9}` and `Cafe\u{301}` are one name on APFS and HFS+
+    s.nfd().map(|c| match c {
+        '\u{17F}' => "s", '\u{212A}' => "k", '\u{DF}' | '\u{1E9E}' => "ss", '\u{FB00}' => "ff", '\u{FB01}' => "fi", '\u{FB02}' => "fl",
+        '\u{FB03}' => "ffi", '\u{FB04}' => "ffl", '\u{FB05}' | '\u{FB06}' => "st",
+        // NFD singletons APFS also takes for the ASCII character
+        '\u{37E}' => ";", '\u{1FEF}' => "`",
+        // HFS+ resolves a name without these, so `.g\u{200C}it` is `.git` there
+        '\u{200C}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}' => "",
+        c => return c.to_lowercase().to_string(),
+    }.to_string()).collect()
 }
 
 /// Scans a root, rehashing only files whose (size, mtime) changed since the last scan.
@@ -62,11 +94,11 @@ impl Walker {
             Err(e) => return Err(e),
         };
         let mut out = Out { m: Manifest::new(), skipped: vec![], cache: HashMap::new() };
-        self.walk(root, "", filter, &mut vec![top], &mut out)?;
+        self.walk(root, "", &filter.folded(), &mut vec![top], &mut out)?;
         self.cache = out.cache; // deleted files leave the cache
         Ok((out.m, out.skipped))
     }
-    // stack: the canonical paths of the directories being walked, to catch a link back up
+    // f: folded; stack: the canonical paths of the directories being walked, to catch a link back up
     fn walk(&mut self, dir: &Path, prefix: &str, f: &Filter, stack: &mut Vec<PathBuf>, out: &mut Out) -> io::Result<()> {
         for ent in fs::read_dir(dir)? {
             let ent = ent?;
@@ -74,6 +106,7 @@ impl Walker {
             let Some(name) = ent.file_name().to_str().map(str::to_owned) else { out.skipped.push(format!("{prefix}{}", ent.file_name().to_string_lossy())); continue };
             let rel = format!("{prefix}{name}");
             let link = ent.file_type()?.is_symlink();
+            if link && f.no_links { continue; }
             let meta = match fs::metadata(&path) {
                 Ok(m) => m,
                 Err(_) if link => continue, // dangling or looping link: nothing to sync
@@ -81,14 +114,14 @@ impl Walker {
                 Err(e) => return Err(e),
             };
             if meta.is_dir() {
-                if f.skips(&rel, true) { continue; }
+                if f.skips_folded(&fold(&rel), true) { continue; }
                 let canon = if link { fs::canonicalize(&path)? } else { stack.last().unwrap().join(&name) };
                 if stack.contains(&canon) { continue; } // following it would never end
                 stack.push(canon);
                 self.walk(&path, &format!("{rel}/"), f, stack, out)?;
                 stack.pop();
             } else if meta.is_file() {
-                if f.skips(&rel, false) { continue; }
+                if f.skips_folded(&fold(&rel), false) { continue; }
                 if !safe_rel(&rel) || (f.max_size > 0 && meta.len() > f.max_size) { out.skipped.push(rel); continue; }
                 let (size, mt) = (meta.len(), nanos(meta.modified()?));
                 let hash = match self.cache.get(&rel) {
@@ -140,11 +173,12 @@ fn target(a: &Action) -> &str {
 
 /// Pure planning, by hash only. TwoWay: a change on one side goes to the other (a delete included), a delete against a
 /// modification keeps the modification, a change on both is a Merge when `mergeable(path)` and a Conflict otherwise.
-/// Replica: push what differs, delete on the remote what the local side lacks. In both modes paths that differ only in
-/// case (either side) are skipped and returned: on a case-insensitive disk they are one file, either would clobber the other.
+/// Replica: push what differs, delete on the remote what the local side lacks. In both modes paths that are one file on
+/// a Mac's disk (`fold`, as the filter compares: `a.md` and `A.md`, `first.md` and `ﬁrst.md`) are skipped and returned:
+/// either would clobber the other.
 pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, copy_name: &dyn Fn(&str) -> String, mergeable: &dyn Fn(&str) -> bool) -> (Vec<Action>, Vec<String>) {
     let mut folded: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
-    for p in local.keys().chain(remote.keys()) { folded.entry(p.to_lowercase()).or_default().insert(p); }
+    for p in local.keys().chain(remote.keys()) { folded.entry(fold(p)).or_default().insert(p); }
     let clash: BTreeSet<&str> = folded.into_values().filter(|s| s.len() > 1).flatten().collect();
     let paths: BTreeSet<&String> = base.keys().chain(local.keys()).chain(remote.keys()).collect();
     let mut acts = vec![];
@@ -223,7 +257,8 @@ pub struct Report {
 /// the user, both directions, unless `allow_deletes`: an agent's `rm -rf` or a checkout there would otherwise empty a
 /// folder here (a Replica's remote is only a copy, nothing to brake). Before a file here is deleted, or a pull leaves at
 /// most a fifth of it (of 200 bytes or more), `keep` gets the old content; when that fails the file stays.
-pub struct Guard<'a> { pub allow_deletes: bool, pub keep: &'a dyn Fn(&str, &[u8]) -> io::Result<()> }
+/// `allowed`: deletes the user saw held and let through; they pass the brake, every other delete is still counted.
+pub struct Guard<'a> { pub allow_deletes: bool, pub allowed: &'a [String], pub keep: &'a dyn Fn(&str, &[u8]) -> io::Result<()> }
 fn delete_cap(base: &Manifest) -> usize { base.len().div_ceil(5).max(5) }
 fn shrinks(old: &[u8], new: &[u8]) -> bool { old.len() >= 200 && new.len() * 5 <= old.len() }
 
@@ -239,23 +274,29 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     let mut rep = Report::default();
     let (mut local, mut skipped) = match walker.scan(root, filter) { Ok(x) => x, Err(e) => { rep.errors.push(format!("scan: {e}")); return (base.clone(), rep); } };
     let all = match remote.manifest() { Ok(m) => m, Err(e) => { rep.errors.push(format!("remote manifest: {e}")); return (base.clone(), rep); } };
-    let mut rm = Manifest::new();
+    let (mut rm, folded) = (Manifest::new(), filter.folded());
     for (p, e) in all {
         if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
-        else if !filter.skips(&p, false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
+        else if !folded.skips_folded(&fold(&p), false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
     }
-    if !base.is_empty() && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
-        rep.errors.push(format!("{} side is empty while the last sync had {} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }, base.len()));
+    // with no_links, a path behind a link here stays as it is on both sides: not followed, and not read as deleted
+    // either (a vault synced before no_links has such paths in its base, and the server would lose them)
+    let linked: BTreeSet<String> = if filter.no_links { base.keys().chain(rm.keys()).filter(|p| through_link(root, p)).cloned().collect() } else { BTreeSet::new() };
+    let had = base.keys().filter(|p| !linked.contains(*p)).count();
+    if had > 0 && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
+        rep.errors.push(format!("{} side is empty while the last sync had {had} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }));
         return (base.clone(), rep);
     }
     // too big or unsyncable on either side: out of this round on both, or a file grown past the limit would read as deleted
+    skipped.extend(linked);
     let hold: BTreeSet<String> = skipped.iter().cloned().collect();
     local.retain(|p, _| !hold.contains(p));
     rm.retain(|p, _| !hold.contains(p));
     let (mut acts, clashes) = plan(mode, base, &local, &rm, copy_name, mergeable);
-    let deletes = acts.iter().filter(|a| matches!(a, Action::DeleteLocal(_) | Action::DeleteRemote(_))).count();
+    let braked = |a: &Action| match a { Action::DeleteLocal(p) | Action::DeleteRemote(p) => !guard.allowed.contains(p), _ => false };
+    let deletes = acts.iter().filter(|a| braked(a)).count();
     if mode == Mode::TwoWay && !guard.allow_deletes && deletes > delete_cap(base) {
-        acts.retain(|a| match a { Action::DeleteLocal(p) | Action::DeleteRemote(p) => { rep.held.push(p.clone()); false } _ => true });
+        acts.retain(|a| { if braked(a) { rep.held.push(target(a).into()); } !braked(a) });
     }
     let mut next = Manifest::new();
     for p in base.keys().chain(local.keys()).chain(rm.keys()) {
@@ -293,7 +334,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     }
     for (i, a) in acts.iter().filter(|a| !matches!(a, Action::Push(_))).enumerate() {
         progress(done + i, acts.len());
-        match exec(root, &local, &rm, remote, walker, guard.keep, a) {
+        match exec(root, filter.no_links, &local, &rm, remote, walker, guard.keep, a) {
             Ok(ups) => {
                 for (p, e) in ups { match e { Some(e) => { next.insert(p, e); } None => { next.remove(&p); } } }
                 let (list, p) = match a {
@@ -314,7 +355,8 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
 
 // One action; Ok holds its base updates (None = the path is gone on both sides).
 type Ups = Vec<(String, Option<Entry>)>;
-fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walker: &mut Walker, keep: &dyn Fn(&str, &[u8]) -> io::Result<()>, a: &Action) -> Result<Ups, String> {
+#[allow(clippy::too_many_arguments)]
+fn exec(root: &Path, no_links: bool, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walker: &mut Walker, keep: &dyn Fn(&str, &[u8]) -> io::Result<()>, a: &Action) -> Result<Ups, String> {
     let abs = |p: &str| root.join(p);
     let io = |e: io::Error| e.to_string();
     let keep = |p: &str, d: &[u8]| keep(p, d).map_err(|e| format!("keeping the old copy: {e}"));
@@ -331,7 +373,9 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
         if d.as_deref().map(sha256_hex).as_deref() != local.get(p).map(|e| e.hash.as_str()) { return Err("changed locally during the sync".into()); }
         Ok(d)
     };
-    let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
+    // with no_links, a link already on the disk (one the user made) is not a way out of the root
+    let inside = |p: &str| if no_links && through_link(root, p) { Err(format!("{p}: a symlink on the way, not followed")) } else { Ok(()) };
+    let mut put_local = |e: &Entry, d: &[u8]| -> Result<(), String> { inside(&e.path)?; write_atomic(&abs(&e.path), d, Some(e.mtime)).map_err(io)?; walker.note(e); Ok(()) };
     match a {
         Action::Push(_) => unreachable!("pushes go in batches, in run()"),
         Action::Pull(p) => {
@@ -342,6 +386,7 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
         }
         Action::DeleteRemote(p) => { remote.delete(p, &rm[p].hash)?; Ok(vec![(p.clone(), None)]) }
         Action::DeleteLocal(p) => {
+            inside(p)?;
             if let Some(old) = same(p)? { keep(p, &old)?; }
             let f = abs(p);
             fs::remove_file(&f).map_err(io)?;
@@ -374,6 +419,16 @@ fn exec(root: &Path, local: &Manifest, rm: &Manifest, remote: &dyn Remote, walke
     }
 }
 
+/// Whether `rel` under `root`, or a folder on its way, is a symlink (a part that does not exist yet is none).
+fn through_link(root: &Path, rel: &str) -> bool {
+    let mut at = root.to_path_buf();
+    for seg in rel.split('/') {
+        at.push(seg);
+        match fs::symlink_metadata(&at) { Ok(m) if m.file_type().is_symlink() => return true, Ok(_) => {} Err(_) => return false }
+    }
+    false
+}
+
 /// Write via a temp file in the same directory (".relay-sync-…"), fsync, rename: a reader or a crash sees the old file or
 /// the new one, never half. Creates parent dirs, keeps an existing file's permissions, writes through a symlinked file
 /// to its target (the link stays), and sets the mtime when given.
@@ -402,7 +457,7 @@ pub fn safe_rel(rel: &str) -> bool {
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
-    ring::digest::digest(&ring::digest::SHA256, data).as_ref().iter().map(|b| format!("{b:02x}")).collect()
+    crate::tls::hex(ring::digest::digest(&ring::digest::SHA256, data).as_ref())
 }
 
 #[cfg(test)]
@@ -462,6 +517,11 @@ mod tests {
         let (acts, skipped) = plan(Mode::TwoWay, &man(&[]), &man(&[("Notes/a.md", "1"), ("b", "1")]), &man(&[("Notes/A.md", "2")]), &|p| p.into(), &|_| false);
         assert_eq!(acts, vec![Push(s("b"))]);
         assert_eq!(skipped, vec![s("Notes/A.md"), s("Notes/a.md")]);
+        // one file on a Mac's disk too, as the filter compares names: a ligature, and a letter beyond ASCII
+        for (l, r) in [("first.md", "\u{FB01}rst.md"), ("System/a.md", "Sy\u{FB06}em/a.md"), ("\u{C9}t\u{E9}.md", "\u{E9}t\u{E9}.md"), ("Caf\u{E9}.md", "Cafe\u{301}.md")] {
+            let (acts, skipped) = plan(Mode::TwoWay, &man(&[]), &man(&[(l, "1")]), &man(&[(r, "2")]), &|p| p.into(), &|_| false);
+            assert_eq!((acts, skipped.len()), (vec![], 2), "{l} {r}");
+        }
     }
 
     // ---------- walker
@@ -487,7 +547,7 @@ mod tests {
         let t = Tmp::new("filter");
         for p in [".git/config", "x/.obsidian/w.json", "Communication/transcripts/t.md", "Communication/n.md", "ok.md", ".relay-sync-1-0"] { t.put(p, "x"); }
         t.put("big.bin", &"x".repeat(100));
-        let f = Filter { names: vec![s(".git"), s(".obsidian")], prefixes: vec![s("Communication/transcripts/")], max_size: 50 };
+        let f = Filter { names: vec![s(".git"), s(".obsidian")], prefixes: vec![s("Communication/transcripts/")], max_size: 50, ..Default::default() };
         let (m, skipped) = Walker::default().scan(&t.0, &f).unwrap();
         assert_eq!(keys(&m), vec!["Communication/n.md", "ok.md"]);
         assert_eq!(skipped, vec![s("big.bin")]);
@@ -501,6 +561,48 @@ mod tests {
         symlink(t.0.join("nowhere"), t.0.join("dangling")).unwrap();
         let (m, _) = Walker::default().scan(&t.0, &Filter::vault_default()).unwrap();
         assert_eq!(keys(&m), vec!["lf.md", "link/f.md", "real/f.md"]);
+    }
+    #[test] fn a_guarded_folder_lets_only_its_allowed_part_through_whatever_the_case() {
+        let f = Filter { guarded: vec![s("System")], only: vec![s("System/rules"), s("System/reminders.md")], prefixes: vec![s("Private")], ..Default::default() };
+        for p in ["System/settings.json", "System/hooks/x.sh", "System/scripts/b.py", "system/hooks/x.sh", "System/Hooks/x.sh", "\u{17F}ystem/settings.json", "Sy\u{FB06}em/settings.json", "Sy\u{FB05}em/hooks/x.sh", "System/rulesx/a.md", "private/a.md",
+            "Sys\u{200C}tem/hooks/x.sh", "\u{FEFF}System/settings.json", "Sys\u{202E}tem/x.md", "System\u{206F}/x.md", "Pri\u{200F}vate/a.md"] { assert!(f.skips(p, false), "{p}"); }
+        let f = Filter { names: vec![s(".obsidian"), s(".git")], guarded: vec![s("System/skills")], ..Default::default() };
+        for p in ["Sys\u{200C}tem/skills/x.md", ".obsi\u{200C}dian/plugins/x.js", ".g\u{200C}it/hooks/x", "Notes/.\u{200D}git/x"] { assert!(f.skips(p, false), "{p}"); }
+        let f = Filter { guarded: vec![s("System")], only: vec![s("System/rules"), s("System/reminders.md")], prefixes: vec![s("Private")], ..Default::default() };
+        for p in ["System/rules/a.md", "SYSTEM/Rules/a.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
+        assert!(!f.skips("System", true), "walked, to reach rules/");
+        assert!(f.skips("System/hooks", true));
+    }
+    #[test] fn no_links_stays_inside_the_root() {
+        let (t, out) = (Tmp::new("nolinks"), Tmp::new("nolinks-out"));
+        t.put("ok.md", "x");
+        out.put("secret.md", "s");
+        symlink(&out.0, t.0.join("linked")).unwrap();
+        symlink(out.0.join("secret.md"), t.0.join("lf.md")).unwrap();
+        let f = Filter { no_links: true, ..Default::default() };
+        assert_eq!(keys(&Walker::default().scan(&t.0, &f).unwrap().0), vec!["ok.md"], "nothing outside goes up");
+        // a remote file under the linked folder, or onto the linked file: held, the outside stays as it was
+        let remote = Mem::default();
+        for p in ["linked/new.md", "lf.md"] { remote.put(p, b"from a member", 1, "").unwrap(); }
+        let (_, r) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(r.errors.is_empty() && r.pulled.is_empty(), "{r:?}");
+        assert!(["linked/new.md", "lf.md"].iter().all(|p| r.skipped.contains(&p.to_string())), "{:?}", r.skipped);
+        assert!(!out.0.join("new.md").exists());
+        assert_eq!(fs::read_to_string(out.0.join("secret.md")).unwrap(), "s");
+    }
+    #[test] fn no_links_keeps_what_synced_through_a_link_before() {
+        // a vault synced while links were followed: its base and the server hold linked/a.md
+        let (t, out) = (Tmp::new("nolinks-base"), Tmp::new("nolinks-base-out"));
+        t.put("ok.md", "x");
+        out.put("a.md", "a");
+        symlink(&out.0, t.0.join("linked")).unwrap();
+        let remote = Mem::default();
+        let (base, _) = run(Mode::TwoWay, &t.0, &Manifest::new(), &mut Walker::default(), &Filter::default(), &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(base.contains_key("linked/a.md") && remote.get("linked/a.md").is_ok());
+        let f = Filter { no_links: true, ..Default::default() };
+        let (next, r) = run(Mode::TwoWay, &t.0, &base, &mut Walker::default(), &f, &remote, &|p| p.into(), &|_| false, OPEN, &|_, _| {});
+        assert!(r.deleted_remote.is_empty() && r.errors.is_empty(), "{r:?}");
+        assert!(remote.get("linked/a.md").is_ok() && next.contains_key("linked/a.md"), "left alone on both sides");
     }
 
     // ---------- run
@@ -560,7 +662,7 @@ mod tests {
     }
 
     const COPY: &str = "a (conflict srv 2026-10-02 1530).md";
-    const OPEN: &Guard = &Guard { allow_deletes: true, keep: &|_, _| Ok(()) };
+    const OPEN: &Guard = &Guard { allow_deletes: true, allowed: &[], keep: &|_, _| Ok(()) };
     fn round_with(t: &Tmp, base: &Manifest, w: &mut Walker, mem: &Mem, g: &Guard) -> (Manifest, Report) {
         run(Mode::TwoWay, &t.0, base, w, &Filter::vault_default(), mem, &|p| conflict_copy(p, "srv", "2026-10-02 1530"), &|p| p.ends_with("MEMORY.md"), g, &|_, _| {})
     }
@@ -668,7 +770,7 @@ mod tests {
         let (base, _) = round(&t, &Manifest::new(), &mut w, &mem);
         let kept = RefCell::new(vec![]);
         let keep = |p: &str, d: &[u8]| { kept.borrow_mut().push((p.to_string(), d.to_vec())); Ok(()) };
-        let shut = Guard { allow_deletes: false, keep: &keep };
+        let shut = Guard { allow_deletes: false, allowed: &[], keep: &keep };
         // 6 of 30 gone there: a fifth, under the cap of 6, goes through, each kept first
         for i in 0..6 { mem.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
         let (base, r) = round_with(&t, &base, &mut w, &mem, &shut);
@@ -681,22 +783,26 @@ mod tests {
         assert!(t.read("n/06.md").is_some());
         let (base, r) = round_with(&t, &base, &mut w, &mem, &shut);
         assert_eq!(r.held.len(), 7);
-        // the user lets them through
-        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: true, keep: &keep });
-        assert_eq!((r.deleted_local.len(), r.held.len(), t.read("n/06.md")), (7, 0, None));
+        let seen = r.held.clone();
+        // the user lets those 7 through; meanwhile 7 more go there: only the ones the user saw pass, the rest stay held
+        for i in 13..20 { mem.files.borrow_mut().remove(&format!("n/{i:02}.md")); }
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &seen, keep: &keep });
+        assert_eq!((r.deleted_local.len(), r.held.len(), t.read("n/06.md"), t.read("n/13.md").is_some()), (7, 7, None, true));
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: true, allowed: &[], keep: &keep });
+        assert_eq!((r.deleted_local.len(), r.held.len()), (7, 0));
         noop(&t, &base, &mut w, &mem);
         // a Replica is not braked: its remote is only a copy
-        for i in 13..30 { fs::remove_file(t.0.join(format!("n/{i:02}.md"))).unwrap(); }
+        for i in 20..30 { fs::remove_file(t.0.join(format!("n/{i:02}.md"))).unwrap(); }
         t.put("left.md", "x");
         let (_, r) = run(Mode::Replica, &t.0, &base, &mut w, &Filter::vault_default(), &mem, &|p| p.into(), &|_| false, &shut, &|_, _| {});
-        assert_eq!((r.deleted_remote.len(), r.held.len()), (17, 0));
+        assert_eq!((r.deleted_remote.len(), r.held.len()), (10, 0));
     }
     #[test] fn restoring_held_deletes_is_dropping_them_from_the_base() {
         let (t, mut w, mem) = (Tmp::new("restore"), Walker::default(), Mem::default());
         for i in 0..10 { t.put(&format!("{i}.md"), "x"); }
         let (mut base, _) = round(&t, &Manifest::new(), &mut w, &mem);
         for i in 0..8 { mem.files.borrow_mut().remove(&format!("{i}.md")); }
-        let shut = Guard { allow_deletes: false, keep: &|_, _| Ok(()) };
+        let shut = Guard { allow_deletes: false, allowed: &[], keep: &|_, _| Ok(()) };
         let (b2, r) = round_with(&t, &base, &mut w, &mem, &shut);
         assert_eq!(r.held.len(), 8);
         base = b2;
@@ -713,18 +819,18 @@ mod tests {
         let kept = RefCell::new(vec![]);
         let keep = |p: &str, d: &[u8]| { kept.borrow_mut().push((p.to_string(), d.to_vec())); Ok(()) };
         mem.set("c.md", "short");
-        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, keep: &keep });
+        let (base, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], keep: &keep });
         assert_eq!((r.pulled, t.read("c.md").as_deref()), (vec![s("c.md")], Some("short")));
         assert_eq!(kept.borrow().as_slice(), [(s("c.md"), long.as_bytes().to_vec())]);
         // an ordinary edit there is no reason to keep anything
         mem.set("c.md", "short, and a bit longer");
-        round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, keep: &keep });
+        round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], keep: &keep });
         assert_eq!(kept.borrow().len(), 1);
     }
     #[test] fn a_copy_that_cannot_be_kept_keeps_the_file() {
         let (t, mut w, mem, base) = synced("nokeep");
         mem.files.borrow_mut().remove("c.md");
-        let (b2, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, keep: &|_, _| Err(io::Error::other("disk full")) });
+        let (b2, r) = round_with(&t, &base, &mut w, &mem, &Guard { allow_deletes: false, allowed: &[], keep: &|_, _| Err(io::Error::other("disk full")) });
         assert_eq!((r.errors, t.read("c.md").as_deref()), (vec![s("c.md: keeping the old copy: disk full")], Some("c")));
         assert_eq!(b2["c.md"], base["c.md"], "retried next round");
     }

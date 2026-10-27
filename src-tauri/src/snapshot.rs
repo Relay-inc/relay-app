@@ -29,6 +29,16 @@ fn read(p: &Path) -> Option<String> { fs::read_to_string(p).ok().map(|s| s.repla
 struct Notes { root: PathBuf, skip: Vec<String>, open: Regex, status: Regex, status_line: Regex }
 
 pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::NaiveDate, path: &str, cache: &Path, home: &str) -> Result<Value, String> {
+    let (projs, root) = vault_projects(vault, work_state, notes)?;
+    let mut ses = sessions(path);
+    if let Some(items) = ses["items"].as_array_mut() {
+        topics(items, &projs, &root, vault, cache, home);
+    }
+    Ok(json!({ "today": today.format("%Y-%m-%d").to_string(), "projects": projs, "sessions": ses }))
+}
+
+/// A vault's projects (its work-state rows with their notes' open items and status), and the folder of its notes.
+pub fn vault_projects(vault: &str, work_state: &str, notes: &str) -> Result<(Vec<Value>, PathBuf), String> {
     let cfg = crate::relay_config::load(vault).unwrap_or_else(|| json!({}));
     let root = if Path::new(notes).is_dir() { PathBuf::from(notes) } else { PathBuf::from(vault) };
     let (open_h, status_h) = (alt(&list(&cfg, &["headings", "open"], &["Open"])), alt(&list(&cfg, &["headings", "status"], &["Status", "Stand van zaken"])));
@@ -45,12 +55,7 @@ pub fn snapshot(vault: &str, work_state: &str, notes: &str, today: chrono::Naive
         let name = e.file_name().to_string_lossy().into_owned();
         if !name.starts_with('.') && e.path().is_dir() { contexts.insert(name); }
     }
-    let projs = projects(work_state, &contexts, &n)?;
-    let mut ses = sessions(path);
-    if let Some(items) = ses["items"].as_array_mut() {
-        topics(items, &projs, &n.root, vault, cache, home);
-    }
-    Ok(json!({ "today": today.format("%Y-%m-%d").to_string(), "projects": projs, "sessions": ses }))
+    Ok((projects(work_state, &contexts, &n)?, n.root))
 }
 
 fn projects(work_state: &str, contexts: &HashSet<String>, n: &Notes) -> Result<Vec<Value>, String> {
@@ -242,7 +247,6 @@ fn topics(items: &mut [Value], projs: &[Value], notes: &Path, vault: &str, cache
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn reads_the_vault() {
         let d = std::env::temp_dir().join(format!("relay-snap-{}", std::process::id()));

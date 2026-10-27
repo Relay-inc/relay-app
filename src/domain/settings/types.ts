@@ -100,9 +100,48 @@ export type HostStatus = {
   fingerprint: string;
   clients: string[]; // names of the paired devices
 };
+/** What a member may do in a shared vault: an admin also invites and removes members. */
+export type SharedRole = "admin" | "member";
+/** A shared vault on a relay-server (src-tauri/src/shared_vaults.rs): the server it lives on (pinned by `fp`), its
+ *  folder on this Mac and this Mac's role there. Only the backend writes the list. */
+export type SharedVault = {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  fp: string;
+  folder: string;
+  role: SharedRole;
+};
+/** The last sync round of a shared vault (`shared_vaults_status`): `at` in epoch seconds, the counts since the app
+ *  started, the conflict copies made, the deletes held for the user, and `bad` files that do not open with the key. */
+export type SharedStatus = {
+  at: number;
+  pushed: number;
+  pulled: number;
+  conflicts: string[];
+  errors: string[];
+  held: string[];
+  bad: number;
+};
+/** An open invite of a shared vault: single use, `expires` in epoch seconds. */
+export type SharedInvite = { id: string; role: SharedRole; expires: number };
+/** A shared vault's members and open invites (`shared_vault_info`), and `me`: this Mac's fingerprint. */
+export type SharedInfo = {
+  vault: {
+    id: string;
+    name: string;
+    role: SharedRole;
+    members: { name: string; fp: string; role: SharedRole; added: number }[];
+    invites: SharedInvite[];
+  };
+  me: string;
+};
 export type Settings = {
   vault: string;
   vaults?: Record<string, VaultMap>; // the mapping per vault folder
+  extraVaults?: string[]; // other vault folders whose projects show next to the main vault's
+  sharedVaults?: SharedVault[]; // the vaults shared on a relay-server, kept by the backend (set_settings ignores them)
   projects: Record<string, { icon?: string; img?: string; label?: string }>;
   overrides: Record<string, string | null>; // a terminal session's project, by session id
   integrations: Record<string, IntegrationConfig>;

@@ -169,6 +169,11 @@ def build(vault, today):
     return files, warnings, cards
 
 
+def unreadable(cards, warnings):
+    """Cards there, none read: other card fields than this script knows. Writing would empty the index."""
+    return not cards and any(w.endswith("skipped") for w in warnings)
+
+
 def selftest():
     import tempfile
     with tempfile.TemporaryDirectory() as v:
@@ -199,6 +204,12 @@ def selftest():
         assert "[[C]]" not in ws and not warns
         repos = json.loads(files[os.path.join(v, "System/index/repos.json")])
         assert repos[os.path.expanduser("~/code/x/b")] == "Contexts/Work/Projects/B/B.md", repos
+        assert not unreadable(cards, warns)
+    with tempfile.TemporaryDirectory() as v:
+        os.makedirs(os.path.join(v, "Contexts/Work/Projects/A"))
+        open(os.path.join(v, "Contexts/Work/Projects/A/A.md"), "w").write('---\ncontext: "[[Work]]"\nstatus: Active\nlaatst: 2026-09-01\n---\n')
+        _, warns, cards = build(v, "2026-09-30")
+        assert unreadable(cards, warns), "a vault with other card fields keeps its index"
     print("selftest ok")
 
 
@@ -207,6 +218,11 @@ def main():
         return selftest()
     check = "--check" in sys.argv
     files, warnings, cards = build(VAULT, dt.date.today().isoformat())
+    if unreadable(cards, warnings):
+        for w in warnings:
+            print("warning:", w, file=sys.stderr)
+        print("no card read: the index stays as it is (other card fields than this script reads)", file=sys.stderr)
+        return 1
     changed = False
     for path, new in files.items():
         old = open(path, encoding="utf-8").read() if os.path.exists(path) else ""

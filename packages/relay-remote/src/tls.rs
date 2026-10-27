@@ -59,7 +59,12 @@ impl Identity {
 
 /// Lowercase hex SHA-256 of a DER certificate, 64 chars.
 pub fn fingerprint(cert_der: &[u8]) -> String { hex(digest::digest(&digest::SHA256, cert_der).as_ref()) }
-fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
+/// Bytes as lowercase hex, and back (any case; None for an odd length or a non-hex character).
+pub fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
+pub fn unhex(s: &str) -> Option<Vec<u8>> {
+    if !s.len().is_multiple_of(2) { return None; }
+    (0..s.len()).step_by(2).map(|i| s.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect()
+}
 
 // a bad_certificate alert to the peer, with our reason in the local error
 fn refused(why: &str) -> rustls::Error { rustls::Error::InvalidCertificate(CertificateError::Other(OtherError(Arc::new(io::Error::other(why.to_string()))))) }
@@ -244,8 +249,7 @@ impl Writer {
 pub fn proof(secret: &str, client_fp: &str, server_fp: &str) -> String { hex(hmac::sign(&pair_key(secret), pair_msg(client_fp, server_fp).as_bytes()).as_ref()) }
 /// Constant-time check of a proof.
 pub fn verify_proof(secret: &str, client_fp: &str, server_fp: &str, proof_hex: &str) -> bool {
-    let tag: Option<Vec<u8>> = (0..proof_hex.len()).step_by(2).map(|i| proof_hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect();
-    tag.is_some_and(|t| hmac::verify(&pair_key(secret), pair_msg(client_fp, server_fp).as_bytes(), &t).is_ok())
+    unhex(proof_hex).is_some_and(|t| hmac::verify(&pair_key(secret), pair_msg(client_fp, server_fp).as_bytes(), &t).is_ok())
 }
 fn pair_key(secret: &str) -> hmac::Key { hmac::Key::new(hmac::HMAC_SHA256, secret.as_bytes()) }
 fn pair_msg(client_fp: &str, server_fp: &str) -> String { format!("{}\n{}", client_fp.to_ascii_lowercase(), server_fp.to_ascii_lowercase()) }
@@ -260,7 +264,7 @@ pub fn random_secret() -> String {
 pub fn random_key() -> String {
     let mut k = [0u8; 32];
     ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut k).expect("system randomness");
-    k.iter().map(|b| format!("{b:02x}")).collect()
+    hex(&k)
 }
 
 #[cfg(test)]

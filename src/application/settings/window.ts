@@ -7,6 +7,7 @@ import { loadBrainStatus } from "../brain/brain";
 import { initLanguage } from "./settings";
 import { watchUpdates } from "./updates-page";
 import { watchVaultSync } from "./vault-sync";
+import { watchSharedVaults } from "./shared-vaults";
 import { useSettingsStore, type SettingsTab } from "./store";
 
 // The settings window, laid out like bb's: the pages in a sidebar on the left, the window title follows the page.
@@ -32,6 +33,7 @@ const set = useSettingsStore.setState;
 export async function initSettingsWindow() {
   const saved = await backend.getSettings();
   const vaultStatus = await backend.vaultStatus();
+  const extraVaults = await backend.extraVaultsStatus();
   await initLanguage();
   applyTheme(saved.theme, saved.accent);
   // Relay › Check for Updates opens the window on Updates (src-tauri/src/lib.rs open_settings), else the last page
@@ -40,6 +42,7 @@ export async function initSettingsWindow() {
   set(draft => {
     draft.settings = saved;
     draft.vaultStatus = vaultStatus;
+    draft.extraVaults = extraVaults;
     draft.tab = TABS.find(x => x[0] === stored)?.[0] ?? "general";
     draft.integrations.mail.edit = { ...saved.mail, accounts: saved.mail?.accounts ?? [] };
     draft.loaded = true;
@@ -48,6 +51,8 @@ export async function initSettingsWindow() {
   void loadBrainStatus();
   void watchUpdates();
   void watchVaultSync();
+  // an invite link that opened Relay: the join form (the backend opens the window on General)
+  void watchSharedVaults();
   showTitle();
   void backend.onSettingsGo(to => {
     const tab = TABS.find(x => x[0] === to)?.[0];
@@ -75,9 +80,11 @@ export async function save(next: Settings, done = "") {
   try {
     const saved = await backend.setSettings(next);
     const vaultStatus = await backend.vaultStatus();
+    const extraVaults = await backend.extraVaultsStatus();
     set(draft => {
       draft.settings = saved;
       draft.vaultStatus = vaultStatus;
+      draft.extraVaults = extraVaults;
       draft.message = done ? { text: done, ok: true } : null;
     });
   } catch (e) {

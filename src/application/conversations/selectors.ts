@@ -14,7 +14,7 @@ import { boardOf } from "../navigation/navigation";
 import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
-import { projectLabel } from "../workspace/vault";
+import { otherVaultOf, projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
@@ -190,6 +190,9 @@ export function machineRepo(key: string) {
   const machine = (where.started ? bound?.machine : where.list.find(choice => choice.id === id)?.name) ?? id;
   return { slug, repo: slug.split("/").pop()!, id, machine, started: where.started };
 }
+/** The shared vault a conversation runs in, by its project: its folder name, null for the main vault. The
+ *  conversation stays in it (src-tauri `fence`). */
+export const sharedVault = (key: string) => otherVaultOf(cs().chats[key]?.project ?? null);
 /** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
  *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
  *  it where it runs: picking another place then moves it (`moveConversation`). */
@@ -199,7 +202,7 @@ export function machineChoice(key: string) {
   const started = !!cs().sidOf[key];
   // the orchestrator's conversations run on this Mac in this version: nothing to pick
   if (isOrchKey(key)) return { list, value: null, why: null, started };
-  const why = rules.machineBlock(chatCaps(key), !!conversation?.fromMail);
+  const why = rules.machineBlock(chatCaps(key), !!conversation?.fromMail, !!sharedVault(key));
   if (started) return { list, value: list.length ? (cs().machines[key]?.id ?? "") : null, why, started };
   return { list, value: machinePick(list, useDraftsStore.getState().machine[key], !why), why, started };
 }

@@ -7,6 +7,8 @@ use crate::proto::{self, DeviceCode, Github, Info, PairLine, RepoStatus, Snapsho
 use crate::share;
 use crate::sync::{self, Manifest};
 use crate::tls::{self, Identity};
+use crate::vault::{self, SealedRemote, VaultKey};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read};
 use std::sync::mpsc;
@@ -22,10 +24,48 @@ const ANSWER: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct Client { pub addr: String, pub fp: String, id: Identity, link: Option<String> }
 
+/// Join a shared vault with an invite link (docs/shared-vaults.md): connect pinned to the link's server with this
+/// device's identity, prove the link's code, and unwrap the vault key the server kept for the invite with the link's
+/// secret, which never went to the server. Returns the line, the vault and the role, and the key.
+pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Joined, VaultKey), String> {
+    let l = PairLine::parse(line).filter(PairLine::is_invite).ok_or("not an invite link (relay://host:port#fp=…&vault=…&invite=…&secret=…)")?;
+    let (vault, invite, secret) = (l.vault.clone().unwrap_or_default(), l.invite.clone().unwrap_or_default(), l.secret.clone().unwrap_or_default());
+    let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
+    let proof = tls::proof(&l.code, &id.fingerprint(), &l.fp);
+    let v = c.call(json!({"op": "vault_join", "vault": vault, "invite": invite, "name": name, "proof": proof}))?;
+    let r: VaultRef = field(v.clone(), "vault")?;
+    if r.id != vault { return Err("the server answered for another vault".into()); }
+    let key = vault::unwrap(v["wrapped"].as_str().unwrap_or_default(), &secret, &vault)?;
+    Ok((l, Joined { id: r.id, name: r.name, role: v["role"].as_str().unwrap_or_default().into() }, key))
+}
+
+/// A shared vault: its id (16 hex) and name.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct VaultRef { pub id: String, pub name: String }
+/// A shared vault in full: its members and, for an admin, the invites still open.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct VaultInfo { pub id: String, pub name: String, pub role: String, pub members: Vec<Member>, pub invites: Vec<Invite> }
+/// A device in a shared vault: its name, its certificate's fingerprint, its role and when it was added (unix seconds).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Member { pub name: String, pub fp: String, pub role: String, pub added: u64 }
+/// An open invite: the role it gives and when it expires (unix seconds).
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Invite { pub id: String, pub role: String, pub expires: u64 }
+/// The vault an invite joined, and the role it gave.
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+#[serde(default)]
+pub struct Joined { pub id: String, pub name: String, pub role: String }
+
 /// Pair with the line `relay-server pair` printed: connect, check the server's certificate against the line, prove
 /// the code. Returns the line and what the server says about itself, for the settings.
 pub fn pair(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Info), String> {
     let l = PairLine::parse(line).ok_or("not a pairing line (relay://host:port#fp=…&code=…)")?;
+    // an invite would burn one of the owner's pairing tries and answer with a meaningless error
+    if l.is_invite() { return Err("this is an invite to a shared vault: use Join with a link under Settings › General › Shared vaults".into()); }
     let c = Client { addr: l.addr(), fp: l.fp.clone(), id: id.clone(), link: None };
     let proof = tls::proof(&l.code, &id.fingerprint(), &l.fp);
     c.call(json!({"op": "pair", "name": name, "proof": proof}))?;
@@ -129,6 +169,40 @@ impl Client {
 
     /// One mirrored folder there, as the other side of a sync round.
     pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
+
+    // ---------- shared vaults there (docs/shared-vaults.md): ciphertext only, the key stays with the members
+    /// A new shared vault there, with this device as its admin.
+    pub fn vault_create(&self, name: &str) -> Result<VaultRef, String> { field(self.call(json!({"op": "vault_create", "name": name}))?, "vault") }
+    pub fn vault_info(&self, vault: &str) -> Result<VaultInfo, String> { field(self.call(json!({"op": "vault_info", "vault": vault}))?, "vault") }
+    /// An invite to `vault` with `role` (`admin` or `member`): the link to hand over, for the server at `host:port` as the
+    /// other device reaches it. The vault key goes to the server wrapped under a fresh secret that only the link holds.
+    pub fn vault_invite(&self, vault: &str, role: &str, key: &VaultKey, host: &str, port: u16) -> Result<(String, Invite), String> {
+        let secret = tls::random_key();
+        let v = self.call(json!({"op": "vault_invite", "vault": vault, "role": role, "wrapped": vault::wrap(key, &secret, vault)?}))?;
+        // the link pins the certificate this connection checked
+        let inv = &v["invite"];
+        let s = |k: &str| inv[k].as_str().map(String::from);
+        let l = PairLine { host: host.into(), port, fp: self.fp.clone(), code: s("code").unwrap_or_default(), vault: Some(vault.into()), invite: s("id"), secret: Some(secret), ..Default::default() };
+        // parsed back, so a malformed id or code from the server never makes a link that cannot be joined
+        let line = l.format();
+        PairLine::parse(&line).filter(|p| p.is_invite() && *p == l).ok_or("the server's invite is malformed")?;
+        Ok((line, Invite { id: s("id").unwrap_or_default(), role: role.into(), expires: inv["expires"].as_u64().unwrap_or_default() }))
+    }
+    pub fn vault_invite_revoke(&self, vault: &str, invite: &str) -> Result<(), String> {
+        self.call(json!({"op": "vault_invite_revoke", "vault": vault, "invite": invite})).map(|_| ())
+    }
+    /// Take the device `fp` out of `vault` (an admin), or leave it (`fp` this device's own).
+    pub fn vault_remove(&self, vault: &str, fp: &str) -> Result<(), String> { self.call(json!({"op": "vault_remove", "vault": vault, "fp": fp})).map(|_| ()) }
+    /// A shared vault there, as the other side of a sync round. A record (up to 64 MiB) or a manifest after a restart
+    /// there (every record hashed again) comes back with no body to size the wait by, so those two wait `longer`, as
+    /// long as `slow`: the usual wait fails them every round over a slow link. A put's wait already grows with its body.
+    pub fn sealed(&self, vault: &str, key: VaultKey) -> SealedRemote {
+        let c = self.clone();
+        SealedRemote::new(vault, key, Box::new(move |req, body, want| {
+            let longer = if matches!(req["op"].as_str(), Some("vault_get" | "vault_manifest")) { Duration::from_secs(300) } else { Duration::ZERO };
+            c.call_bin(req, body, want, longer)
+        }))
+    }
 
     pub fn info(&self) -> Result<Info, String> {
         let info = self.info_any()?;

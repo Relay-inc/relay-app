@@ -5,7 +5,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { chatBar } from "../../../application/conversations/selectors";
 import { answerAsk, routeTo } from "../../../application/conversations/actions";
 import { chatAgent } from "../../../application/agents/agents";
-import { project } from "../../../application/workspace/vault";
+import { project, projectName as shownProject } from "../../../application/workspace/vault";
 import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { ConversationItem } from "./ConversationItem";
@@ -47,7 +47,7 @@ export function ConversationView({ cards = true, empty }: { cards?: boolean; emp
     const { session, projectName, coordinator } = chatBar(selected);
     const id = chatAgent(selected);
     return {
-      name: project(projectName) ? projectName : null,
+      name: project(projectName) ? shownProject(projectName) : null,
       coordinator,
       writing: !!session?.busy,
       agent: agent(id)?.name ?? id,

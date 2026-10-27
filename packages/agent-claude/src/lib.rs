@@ -67,10 +67,14 @@ pub fn slug(vault: &str) -> String { vault.chars().map(|c| if c.is_ascii_alphanu
 fn account<'a>(env: &'a Env) -> &'a str { env.opt("account") }
 fn config_dir(home: &str, account: &str) -> String { if account.is_empty() { format!("{home}/.claude") } else { account.to_string() } }
 /// Every account's config folder, ~/.claude first.
-fn config_dirs(env: &Env) -> Vec<String> {
+pub fn config_dirs(env: &Env) -> Vec<String> {
     let extra = env.opts["accounts"].as_array().into_iter().flatten().filter_map(|a| a["dir"].as_str()).filter(|d| !d.is_empty()).map(String::from);
     std::iter::once(config_dir(env.home, "")).chain(extra).collect()
 }
+/// The `--settings` of a fenced conversation (opts.fenced: a shared vault, or another vault than the main one): no hook
+/// runs, wherever it is defined (settings, a skill's or agent's frontmatter), since a member could have put one in the
+/// vault for every other member's Mac, and no auto memory is loaded or written there.
+pub fn fenced_settings() -> &'static str { r#"{"disableAllHooks":true,"autoMemoryEnabled":false}"# }
 fn transcripts_in(dir: &str, vault: &str) -> String {
     if vault.is_empty() { return String::new(); } // no vault: never fall back to <config>/projects itself
     format!("{dir}/projects/{}", slug(vault))
@@ -174,6 +178,7 @@ impl AgentProvider for Claude {
         if !brain.is_empty() { allowed.extend(COMMONWEALTH_TOOLS.iter().map(|t| t.to_string())); }
         let denied: Vec<String> = DENIED.iter().map(|d| d.to_string()).chain(strs("deny")).collect();
         let system = match env.opts["system"].as_str() { Some(s) => format!("{}\n\n{s}", agent_core::envelope::HINT), None => agent_core::envelope::HINT.to_string() };
+        let fenced = env.opts["fenced"] == true;
         let mut cmd = Command::new(env.bin);
         cmd.args(["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                   "--permission-prompt-tool", "stdio", "--thinking-display", "summarized"])
@@ -182,6 +187,8 @@ impl AgentProvider for Claude {
             // each message echoed when Claude takes it up: one sent during a turn often joins that turn
             .arg("--replay-user-messages");
         if !mcp["mcpServers"].as_object().is_some_and(|m| m.is_empty()) { cmd.arg("--mcp-config").arg(mcp.to_string()); }
+        // opts.fenced, set by the app in a shared vault: only the servers above, none of the user's own or claude.ai's
+        if fenced { cmd.arg("--strict-mcp-config"); }
         if !brain.is_empty() { cmd.env("COMMONWEALTH_BRAIN_DIR", brain); }
         // and which project its notes belong to: Commonwealth stamps `source` from the cwd, which is the vault. The
         // project name is matched against the brain's registry (Commonwealth 0.7, ADR-0047); the repo is the fallback
@@ -191,10 +198,14 @@ impl AgentProvider for Claude {
         let project = env.opt("commonwealth_project");
         if !brain.is_empty() && !project.is_empty() { cmd.env("COMMONWEALTH_PROJECT", project); }
         let ask = strs("ask");
-        if !ask.is_empty() { cmd.arg("--settings").arg(json!({"permissions": {"ask": ask}}).to_string()); }
+        let mut settings: serde_json::Map<String, Value> = if fenced { serde_json::from_str(fenced_settings()).unwrap() } else { Default::default() };
+        if !ask.is_empty() { settings.insert("permissions".into(), json!({"ask": ask})); }
+        if !settings.is_empty() { cmd.arg("--settings").arg(Value::Object(settings).to_string()); }
         // no mode set: auto, as a terminal window starts; `-p` would start in manual and ask for every edit. A work
         // machine (opts.machine) gets the mode with this Mac's mirrored settings (src-tauri mirror.rs)
-        if env.opts["machine"] != true && !mode_set(env) { cmd.args(["--permission-mode", "auto"]); }
+        // a shared vault (opts.fenced) always: a mode like bypassPermissions has no auto classifier, and that is
+        // what stops a script reading another vault where no deny rule reaches (Bash)
+        if env.opts["machine"] != true && (fenced || !mode_set(env)) { cmd.args(["--permission-mode", "auto"]); }
         if !l.model.is_empty() { cmd.args(["--model", l.model]); }
         if !l.effort.is_empty() { cmd.args(["--effort", l.effort]); }
         if let Some(sid) = l.resume { carry(env, sid)?; cmd.args(["--resume", sid]); }
@@ -251,10 +262,15 @@ impl AgentProvider for Claude {
         let bin = if env.bin == self.default_bin(env.home) { "claude".to_string() } else { q(env.bin) };
         // on another account than ~/.claude: the terminal's claude gets its config folder too
         let on = |dir: &str| if dir == config_dir(env.home, "") { bin.clone() } else { format!("CLAUDE_CONFIG_DIR={} {bin}", q(dir)) };
+        // the fence the app set (opts.deny, opts.fenced) goes along, so the terminal reaches no further than Relay
+        let deny: Vec<String> = env.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(q).collect();
+        let fence = format!("{}{}", if deny.is_empty() { String::new() } else { format!(" --disallowedTools {}", deny.join(" ")) },
+            // a shared vault runs in auto whatever the account's default mode, as in command(): bypass has no classifier
+            if env.opts["fenced"] == true { format!(" --strict-mcp-config --permission-mode auto --settings '{}'", fenced_settings()) } else { String::new() });
         Some(match t {
-            Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}", q(env.vault), on(&session_dir(env, s))),
+            Terminal::Resume(s) if agent_core::safe_id(s) => format!("cd {} && {} --resume {s}{fence}", q(env.vault), on(&session_dir(env, s))),
             Terminal::Resume(_) => return None,
-            Terminal::New(name) => format!("cd {} && {} -n {}", q(env.vault), on(&config_dir(env.home, account(env))), q(name)),
+            Terminal::New(name) => format!("cd {} && {} -n {}{fence}", q(env.vault), on(&config_dir(env.home, account(env))), q(name)),
             Terminal::Attach(id) if id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') => format!("{bin} attach {id}"),
             Terminal::Attach(_) => return None,
         })
@@ -402,6 +418,15 @@ mod tests {
         assert_eq!(args[at("--disallowedTools") + 1..at("--append-system-prompt")].last().unwrap(), "Edit(//v/x)");
         assert!(args[at("--append-system-prompt") + 1].starts_with(agent_core::envelope::HINT) && args[at("--append-system-prompt") + 1].ends_with("be a worker"));
         assert_eq!(args[at("--settings") + 1], r#"{"permissions":{"ask":["Bash(git push*)"]}}"#);
+        assert!(!args.contains(&"--strict-mcp-config".to_string()));
+        // in a shared vault: the fence's rules among the denies, and only Relay's own MCP servers
+        let opts = json!({"mail": true, "deny": ["Read(//Users/me/my vault/**)"], "fenced": true, "ask": ["Bash(git push*)"]});
+        let args: Vec<String> = PROVIDER.command(&Env { opts: &opts, ..env(&p) }, &l).unwrap().get_args().map(|a| a.to_string_lossy().into_owned()).collect();
+        assert!(args.contains(&"Read(//Users/me/my vault/**)".to_string()) && args.contains(&"--strict-mcp-config".to_string()));
+        assert_eq!(args[args.iter().position(|a| a == "--permission-mode").unwrap() + 1], "auto", "a shared vault runs in auto, whatever the account says");
+        let settings: Value = serde_json::from_str(&args[args.iter().position(|a| a == "--settings").unwrap() + 1]).unwrap();
+        assert_eq!(settings, json!({"disableAllHooks": true, "autoMemoryEnabled": false, "permissions": {"ask": ["Bash(git push*)"]}}), "no hook and no auto memory there, the asks kept");
+        assert!(args[args.iter().position(|a| a == "--mcp-config").unwrap() + 1].contains("relay-mail"));
     }
     #[test]
     fn a_routed_project_gets_its_brain_and_the_commonwealth_tools() {
@@ -445,6 +470,11 @@ mod tests {
         assert_eq!(PROVIDER.terminal(&env(&p), Terminal::New("It's")).unwrap(), "cd '/Users/me/my vault' && claude -n 'It'\\''s'");
         assert_eq!(PROVIDER.terminal(&env(&p), Terminal::Attach("bg1")).unwrap(), "claude attach bg1");
         assert!(PROVIDER.terminal(&env(&p), Terminal::Resume("x; rm")).is_none());
+        // a fenced conversation's terminal gets the same fence
+        let opts = json!({"deny": ["Read(//Users/me/team/**)"], "fenced": true});
+        let e = Env { opts: &opts, ..env(&p) };
+        assert_eq!(PROVIDER.terminal(&e, Terminal::Resume("ab-12")).unwrap(),
+            "cd '/Users/me/my vault' && claude --resume ab-12 --disallowedTools 'Read(//Users/me/team/**)' --strict-mcp-config --permission-mode auto --settings '{\"disableAllHooks\":true,\"autoMemoryEnabled\":false}'");
         assert_eq!(transcripts(&env(&p)), "/Users/me/.claude/projects/-Users-me-my-vault");
         let opts = json!({"account": "/Users/me/.claude-work"});
         let work = Env { opts: &opts, ..env(&p) };

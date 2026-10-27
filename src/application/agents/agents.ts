@@ -6,6 +6,7 @@ import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
 import { useNavigationStore } from "../navigation/store";
 import { loadCommands } from "../conversations/commands";
+import { otherVaultOf } from "../workspace/vault";
 import { seenKey, useAgentsStore } from "./store";
 
 // The agent providers as the backend reports them, and the composer's agent, model and effort for the open conversation.
@@ -25,11 +26,13 @@ export const loadAgents = () =>
     .catch(e => console.error(e));
 export const onAgents = () => as().status.providers.filter(x => x.on);
 export const agentOf = (id: string) => as().status.providers.find(x => x.id === id);
-/** A conversation's agent: its own, else the default; terminal sessions are Claude Code's. */
-export const chatAgent = (chatKey: string) =>
-  isTerminal(chatKey)
-    ? "claude"
-    : useConversationsStore.getState().chats[chatKey]?.provider || as().status.default || "claude";
+/** A conversation's agent: its own, else the default. Terminal sessions are Claude Code's, and so is a conversation in
+ *  another vault than the main one: its fence is made of Claude Code's permission rules (src-tauri `fence`). */
+export function chatAgent(chatKey: string) {
+  const conversation = useConversationsStore.getState().chats[chatKey];
+  if (isTerminal(chatKey) || otherVaultOf(conversation?.project ?? null)) return "claude";
+  return conversation?.provider || as().status.default || "claude";
+}
 /** What a conversation's agent can do; before the providers are known, what the built-in ones are known for. */
 export const chatCaps = (chatKey: string) => agentOf(chatAgent(chatKey))?.caps ?? knownCaps(chatAgent(chatKey));
 /** The slash commands of a conversation's agent that take no attachments. */

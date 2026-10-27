@@ -127,6 +127,97 @@ export const projects = P.map(p => ({
 }));
 export const projectNames = P.map(p => p.name);
 
+/** The shared fixture: a team vault next to the main one. Its projects' names are keys (the name and the vault's id,
+ *  never shown), their `label` what shows. Both vaults have a Northwind Portal: two projects, the team's labelled
+ *  "Northwind Portal (Team vault)", each conversation in its own vault. */
+export const TEAM_VAULT = "/Users/me/Team vault";
+const teamKey = (name: string) => `${name}\u001f5f2c8e91a7d04b36`;
+export const teamProjects = [
+  {
+    name: teamKey("Team Handbook"),
+    label: "Team Handbook",
+    context: "Team",
+    state: "Active",
+    last: ymd(NOW - DAY),
+    summary: "Onboarding chapter rewritten, review by the whole team on Thursday.",
+    open: 2,
+    open_items: ["Review onboarding chapter", "Add the release checklist"],
+    stand: null,
+    aliases: [],
+    vault: TEAM_VAULT,
+  },
+  {
+    name: teamKey("Northwind Portal"),
+    label: "Northwind Portal (Team vault)",
+    context: "Team",
+    state: "Active",
+    last: ymd(NOW - DAY),
+    summary: "Release notes for the portal's next version, written with the whole team.",
+    open: 1,
+    open_items: ["Collect the release notes"],
+    stand: null,
+    aliases: [],
+    vault: TEAM_VAULT,
+  },
+  {
+    name: teamKey("Hiring 2027"),
+    label: "Hiring 2027",
+    context: "Team",
+    state: "Quiet",
+    last: ymd(NOW - 9 * DAY),
+    summary: "Job post for a medior developer drafted, waiting on budget.",
+    open: null,
+    open_items: [],
+    stand: null,
+    aliases: [],
+    vault: TEAM_VAULT,
+  },
+];
+export const teamStatus = [{ vault: TEAM_VAULT, error: null }];
+
+/** The shared fixture's vault on a relay-server (Settings › General › Shared vaults): made on the paired Team server,
+ *  this Mac its admin. Its last round two minutes ago made a conflict copy and holds two deletes back. */
+const HUB_FP = "0f9534960dd3570a".padEnd(64, "0");
+export const hubMachines = [{ id: "a1b2c3d4e5f6", name: "Team server", host: "192.168.1.2", port: 47800, fp: HUB_FP }];
+export const SHARED_ID = "0123456789abcdef";
+export const sharedVaults = [
+  {
+    id: SHARED_ID,
+    name: "Northwind",
+    host: "192.168.1.2",
+    port: 47800,
+    fp: HUB_FP,
+    folder: "/Users/me/Shared/Northwind",
+    role: "admin",
+  },
+];
+export const sharedStatus = (nowS: number) => ({
+  [SHARED_ID]: {
+    at: nowS - 120,
+    pushed: 4,
+    pulled: 17,
+    conflicts: ["Projects/Launch Plan/Launch Plan (conflict Studio Mac 2026-10-01 0912).md"],
+    errors: [],
+    held: ["Projects/Launch Plan/Documents/Old brief.md", "Projects/Launch Plan/Documents/Old timeline.md"],
+    bad: 0,
+  },
+});
+/** This Mac's fingerprint, and the vault's other members: an admin on a Studio Mac, a member on a laptop. */
+export const SHARED_ME = "5e1d".padEnd(64, "a");
+export const sharedMembers = [
+  { name: "This MacBook", fp: SHARED_ME, role: "admin", added: 1790000000 },
+  { name: "Studio Mac", fp: "7c2b".padEnd(64, "b"), role: "admin", added: 1790100000 },
+  { name: "Design laptop", fp: "9a4f".padEnd(64, "c"), role: "member", added: 1790200000 },
+];
+/** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
+export const inviteLink = (invite: string) =>
+  `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;
+/** The team vault's notes, absolute as `vault_notes` gives another vault's. */
+export const teamNotes = [
+  `${TEAM_VAULT}/Contexts/Team/Projects/Team Handbook.md`,
+  `${TEAM_VAULT}/Calendar/2026-10-01 Standup.md`,
+];
+
 const contextFolder = (context: string) => `Contexts/${context}`;
 export const notes = [
   ...P.map(p => `${contextFolder(p.context)}/Projects/${p.name}/${p.name}.md`),

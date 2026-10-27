@@ -17,8 +17,9 @@ export const CLAUDE_INSTALL = "curl -fsSL https://claude.ai/install.sh | bash";
 const PLATFORM_NAMES: Record<SetupPlatform, string> = { mac: "Mac", linux: "Linux", unraid: "Unraid" };
 const platforms = SETUP_PLATFORMS.map(id => [id, PLATFORM_NAMES[id]] as const);
 
-/** Commands to run on a machine, with a button that copies them. */
-export function CommandBlock({ hint, command }: { hint: string; command: string }) {
+/** Commands to run on a machine, with a button that copies them. `wrap`: one long word (a link, a key) breaks over
+ *  lines instead of scrolling under the button. */
+export function CommandBlock({ hint, command, wrap = false }: { hint: string; command: string; wrap?: boolean }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
   return (
@@ -26,7 +27,9 @@ export function CommandBlock({ hint, command }: { hint: string; command: string 
     <div className="grid min-w-0 grid-cols-1 gap-1">
       <span className={HINT_IN_ROW}>{hint}</span>
       <div className="relative min-w-0">
-        <pre className="overflow-x-auto rounded-lg bg-fill px-3 py-2 pr-10 font-mono text-xs leading-relaxed text-s-fg">
+        <pre
+          className={`overflow-x-auto rounded-lg bg-fill px-3 py-2 pr-10 font-mono text-xs leading-relaxed text-s-fg ${wrap ? "break-all whitespace-pre-wrap" : ""}`}
+        >
           {command}
         </pre>
         <button
