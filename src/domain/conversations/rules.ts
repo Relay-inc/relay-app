@@ -203,22 +203,73 @@ export const machineBlock = (caps: Pick<Caps, "remote"> | undefined, fromMail: b
       : shared
         ? "composer.machineSharedVault"
         : null;
-/** Whether a conversation moved from project `from` to `to` (null: a general one, the main vault) changes vault. One
- *  with a session keeps running in the vault it started in (src-tauri `fence`), so it may not. A project the snapshot
- *  does not have is in an unknown vault: a move from or into it counts as a change. */
-export function changesVault(snap: Pick<Snapshot, "projects" | "vault">, from: string | null, to: string | null) {
+/** Whether a conversation moved from project `from` to `to` (null: a general one, in `general`, the vault picked for it,
+ *  else the main vault) changes vault. One with a session keeps running in the vault it started in (src-tauri
+ *  `fence`), so it may not. A project the snapshot does not have is in an unknown vault: a move from or into it counts
+ *  as a change. */
+export function changesVault(
+  snap: Pick<Snapshot, "projects" | "vault">,
+  from: string | null,
+  to: string | null,
+  general?: string,
+) {
   if (from === to) return false;
   const vaultOf = (name: string | null) => {
-    if (!name) return snap.vault?.vault;
+    if (!name) return general || snap.vault?.vault;
     const project = snap.projects.find(candidate => candidate.name === name);
     return project ? project.vault || snap.vault?.vault : null; // no `vault` from an older backend: the main one
   };
   const [a, b] = [vaultOf(from), vaultOf(to)];
   return a === null || b === null || a !== b;
 }
-/** The main vault's projects: the ones a general conversation may move to once it started. */
-export const mainVaultProjects = (snap: Pick<Snapshot, "projects" | "vault">) =>
-  snap.projects.filter(project => !changesVault(snap, null, project.name));
+/** The projects of a general conversation's vault (`general`, else the main one): the ones it may move to once it
+ *  started, and the ones its first message is routed to. */
+export const sameVaultProjects = (snap: Pick<Snapshot, "projects" | "vault">, general?: string) =>
+  snap.projects.filter(project => !changesVault(snap, null, project.name, general));
+
+/** A vault a conversation may run in: its folder, the name it shows by (a shared vault's own name, else its folder's)
+ *  and whether it is the main vault. */
+export type VaultChoice = { folder: string; name: string; main: boolean };
+/** Every vault here, the main one first, then the folders the user added and the shared vaults (src-tauri
+ *  `all_vaults`). */
+export function vaultChoices(s: Pick<Settings, "vault" | "extraVaults" | "sharedVaults">): VaultChoice[] {
+  const shared = s.sharedVaults ?? [];
+  const folders = [...new Set([s.vault, ...(s.extraVaults ?? []), ...shared.map(v => v.folder)].filter(Boolean))];
+  return folders.map(folder => ({
+    folder,
+    name: shared.find(v => v.folder === folder)?.name || folder.replace(/\/+$/, "").split("/").pop() || folder,
+    main: folder === s.vault,
+  }));
+}
+/** The vault folder a conversation runs in: its project's, else the one picked for it (a general one), else the main
+ *  vault. */
+export function chatVault(
+  chat: Pick<Chat, "project" | "vault"> | undefined,
+  snap: Pick<Snapshot, "projects" | "vault">,
+) {
+  const main = snap.vault?.vault ?? "";
+  if (!chat?.project) return chat?.vault || main;
+  return snap.projects.find(project => project.name === chat.project)?.vault || main;
+}
+/** The composer's vault pick for a conversation not started yet: the vaults offered (none when there is only one), the
+ *  one it runs in, and whether that is fixed (a project's conversation runs in its project's vault, pick a general one
+ *  for another) or another vault than the main one (it runs on this Mac, with Claude Code only). */
+export function vaultPick(
+  chat: Pick<Chat, "project" | "vault"> | undefined,
+  s: Pick<Settings, "vault" | "extraVaults" | "sharedVaults">,
+  snap: Pick<Snapshot, "projects" | "vault">,
+) {
+  const list = vaultChoices(s);
+  const value = chatVault(chat, snap);
+  return {
+    list: list.length > 1 ? list : [],
+    value,
+    fixed: !!chat?.project,
+    other: !!value && value !== snap.vault?.vault,
+  };
+}
+/** What a pick in the composer stores on a general conversation: the folder, nothing for the main vault. */
+export const pickedVault = (folder: string, main: string) => (folder && folder !== main ? folder : undefined);
 /** Whether a conversation has a process in a vault already: its session, or a first message sent whose session id is
  *  not back yet (a turn running, a message queued or in its log). Such a conversation stays in that vault. */
 export const hasStarted = (s: Pick<ConversationsState, "sidOf" | "status" | "queued" | "messages">, key: string) =>

@@ -1,6 +1,14 @@
 import { t, tn } from "../../shared/i18n";
 import type { Img, Item, Pending, CardChoice } from "../../domain/conversations/types";
-import { NEW, changesVault, decisionOf, hasStarted, waitsForPickup } from "../../domain/conversations/rules";
+import {
+  NEW,
+  changesVault,
+  decisionOf,
+  hasStarted,
+  pickedVault,
+  sameVaultProjects,
+  waitsForPickup,
+} from "../../domain/conversations/rules";
 import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
 import { fileName, withFiles } from "../../domain/conversations/files";
@@ -141,7 +149,9 @@ function routeFirstMessage(key: string, text: string, forced?: string): boolean 
   const conversation = cs().chats[key];
   const first = !forced && key !== ORCH && !conversation.project && !(cs().messages[key] || []).length;
   if (!first) return false;
-  const hits = findProjects(text);
+  // only a project of the vault it runs in: the vault picked for it stays the one it runs in
+  const here = sameVaultProjects(useWorkspaceStore.getState().snap, conversation.vault).map(project => project.name);
+  const hits = findProjects(text).filter(name => here.includes(name));
   if (hits.length === 1)
     set(draft => {
       draft.chats[key].project = hits[0];
@@ -236,6 +246,8 @@ async function deliver(key: string, text: string, images: Img[], files: string[]
       told: told || null,
       about: conversation?.project ?? null,
       context: context || null,
+      // the vault picked for a general conversation, a project's runs in its project's vault
+      vault: (!conversation?.project && conversation?.vault) || null,
     });
     if (told && cs().chats[key]) {
       set(draft => {
@@ -374,6 +386,19 @@ export async function answerRepoWork(choice: "push" | "move" | null) {
     if (draft.repoWork[key]?.busy) delete draft.repoWork[key];
   });
 }
+/** The vault the open general conversation is to run in, before it starts (a vault folder). A project's conversation
+ *  runs in its project's vault: the pick is fixed there. */
+export function setVault(folder: string) {
+  const key = selected();
+  const conversation = cs().chats[key];
+  if (!conversation || conversation.project || hasStarted(cs(), key)) return;
+  set(draft => {
+    const vault = pickedVault(folder, useWorkspaceStore.getState().snap.vault?.vault ?? "");
+    if (vault) draft.chats[key].vault = vault;
+    else delete draft.chats[key].vault;
+  });
+  saveChats();
+}
 /** Where the open conversation is to run, before it starts: "" this Mac, or a machine id. */
 export function setMachine(id: string) {
   const key = selected();
@@ -409,7 +434,7 @@ export function routeTo(name: string) {
 const leavesVault = (key: string, to: string | null) =>
   !isTerminal(key) &&
   hasStarted(cs(), key) &&
-  changesVault(useWorkspaceStore.getState().snap, cs().chats[key]?.project ?? null, to);
+  changesVault(useWorkspaceStore.getState().snap, cs().chats[key]?.project ?? null, to, cs().chats[key]?.vault);
 const refuseMove = () => toast(t("toast.otherVault"), undefined, undefined, 6000);
 /** The bar that asks whether a general conversation is about a project: yes moves it, no hides the question. */
 export function moveTo(project: string | null) {
@@ -505,7 +530,8 @@ export function openTerminal(external = false) {
   }
   const project = projectOf(key);
   const name = `${projectName(project)}: ${label(key)}`;
-  if (external || !project) backend.openTerminal(key, null, name, project);
+  if (external || !project)
+    backend.openTerminal(key, null, name, project, (!project && cs().chats[key]?.vault) || null);
   else {
     useNavigationStore.setState(draft => {
       draft.drawer = "terminal";

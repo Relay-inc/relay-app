@@ -149,7 +149,7 @@ const VIEWS = {
     await waitText("ABCD-1234");
     await intoView("Waiting for GitHub…");
   },
-  // a new conversation about the team vault's Northwind Portal: the Vault label, no pick (it stays in that vault)
+  // a new conversation about the team vault's Northwind Portal: the Vault pick fixed on that vault (it stays there)
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.getByPlaceholder("Search").fill("northwind");
@@ -158,7 +158,27 @@ const VIEWS = {
       .getByRole("button", { name: "New conversation about Northwind Portal (Team vault)", exact: true })
       .click();
     await settle(page);
-    await waitText("Vault: Team vault");
+    // before the first message the Vault pick shows the project's vault, fixed
+    await waitText("Team vault");
+  },
+  // a new general conversation with a team vault and a shared vault next to the main one: the Vault pick open on every
+  // vault, Runs on next to it
+  "composer-vault-pick": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.evaluate(() => window.__harness.emit("menu", "new-general"));
+    await settle(page);
+    await page.getByRole("button", { name: "Vault" }).locator("visible=true").first().click();
+    await waitText("Northwind");
+  },
+  // the shared vault Northwind picked there: no Runs on, and Claude Code is the only agent to pick
+  "composer-vault-picked": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.evaluate(() => window.__harness.emit("menu", "new-general"));
+    await settle(page);
+    await page.getByRole("button", { name: "Vault" }).locator("visible=true").first().click();
+    await click("Northwind");
+    await page.getByRole("button", { name: "Agent" }).locator("visible=true").first().click();
+    await settle(page);
   },
   // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
   // "harbor-crm · on Server" next to the control (PR #217)

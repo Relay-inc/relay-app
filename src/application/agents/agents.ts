@@ -30,7 +30,7 @@ export const agentOf = (id: string) => as().status.providers.find(x => x.id === 
  *  another vault than the main one: its fence is made of Claude Code's permission rules (src-tauri `fence`). */
 export function chatAgent(chatKey: string) {
   const conversation = useConversationsStore.getState().chats[chatKey];
-  if (isTerminal(chatKey) || otherVaultOf(conversation?.project ?? null)) return "claude";
+  if (isTerminal(chatKey) || otherVaultOf(conversation)) return "claude";
   return conversation?.provider || as().status.default || "claude";
 }
 /** What a conversation's agent can do; before the providers are known, what the built-in ones are known for. */

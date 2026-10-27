@@ -25,6 +25,7 @@ import {
   machineChoice,
   machineRepo,
   sharedVault,
+  vaultChoice,
 } from "../../../application/conversations/selectors";
 import {
   attach,
@@ -36,6 +37,7 @@ import {
   moveConversation,
   setMachine,
   setTyped,
+  setVault,
   typeInto,
   unattach,
   unattachFile,
@@ -220,6 +222,8 @@ export function Composer({ className }: { className: string }) {
   const hasChat = useConversationsStore(s => !!s.chats[selected]);
   const where = useDerived(() => machineChoice(selected));
   const inShared = useDerived(() => sharedVault(selected));
+  // which vault a new conversation runs in: its project's, else the one picked
+  const vaults = useDerived(() => vaultChoice(selected));
   // the repo the agent gets on that machine, next to the pick
   const repoThere = useDerived(() => machineRepo(selected));
   const [moving, setMoving] = useState(false);
@@ -457,9 +461,23 @@ export function Composer({ className }: { className: string }) {
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
-          {hasChat && inShared ? (
+          {hasChat && !agentFixed && !inOrchestrator && !isTerminal(selected) && vaults.list.length ? (
             <>
-              {/* a shared vault's project: the conversation runs in that vault and stays there, no pick */}
+              {/* before the first message: the vault it runs in, fixed for a project's conversation */}
+              <Icon name="folder" className="glyph size-3.5 ml-1 text-tertiary" />
+              <PickMenu
+                options={vaults.list.map(option => ({ id: option.folder, name: option.name }))}
+                value={vaults.value}
+                label={t("composer.vault")}
+                title={t(vaults.fixed ? "composer.vaultProject" : "composer.vaultPick")}
+                disabled={vaults.fixed}
+                onPick={setVault}
+              />
+              <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
+            </>
+          ) : hasChat && inShared ? (
+            <>
+              {/* started in another vault than the main one: it runs there and stays there, no pick */}
               <span
                 className="px-1.5 py-0.5 rounded-md bg-fill-2 text-xs text-secondary whitespace-nowrap"
                 title={t("composer.vaultHelp")}
@@ -469,7 +487,8 @@ export function Composer({ className }: { className: string }) {
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>
             </>
           ) : null}
-          {hasChat && where.value !== null ? (
+          {/* another vault than the main one runs on this Mac: a machine has the main vault's mirror only */}
+          {hasChat && !inShared && where.value !== null ? (
             <>
               {/* before the first message: where it starts. After it: where it runs, and another pick moves it */}
               <PickMenu

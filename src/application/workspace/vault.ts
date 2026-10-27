@@ -1,6 +1,8 @@
 import { t } from "../../shared/i18n";
 import { setNoteCheck, noteOf } from "../../shared/markdown";
 import type { Project } from "../../domain/workspace/types";
+import type { Chat } from "../../domain/conversations/types";
+import { chatVault, vaultChoices } from "../../domain/conversations/rules";
 import {
   findProjects as findIn,
   contexts as contextsOf,
@@ -30,11 +32,14 @@ export const projectLabel = (name: string | null) =>
 /** The project's name without its icon, where a crab already marks the row (the orchestrator's workers). */
 export const projectName = (name: string | null) =>
   name ? settings().projects[name]?.label || shownName(name) : t("general");
-/** The folder name of the vault a project lives in when that is not the main vault, else null. */
-export function otherVaultOf(name: string | null) {
-  const vault = name ? project(name)?.vault : undefined;
-  const main = ws().snap.vault?.vault;
-  return vault && vault !== main ? vault.split("/").pop() || vault : null;
+/** The name a vault folder shows by: a shared vault's own name, else its folder's. */
+export const vaultName = (folder: string) =>
+  vaultChoices(settings()).find(choice => choice.folder === folder)?.name ?? (folder.split("/").pop() || folder);
+/** The name of the vault a conversation runs in (its project's, else the one picked for it) when that is not the main
+ *  vault, else null. */
+export function otherVaultOf(chat: Pick<Chat, "project" | "vault"> | undefined) {
+  const vault = chatVault(chat, ws().snap);
+  return vault && vault !== ws().snap.vault?.vault ? vaultName(vault) : null;
 }
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>

@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **Pick the vault of a new conversation**: with more than one vault, a new conversation's composer has a Vault pick next to the agent and model. A general conversation runs in the vault you pick and stays there, shown in the sidebar with its vault's name. In another vault than your main one it runs on this Mac with Claude Code. A conversation about a project runs in that project's vault (#286)
+
 ### Changed
 
 - **Shared vaults moved to Settings › Machines**: a vault shows under the machine that keeps it, with New shared vault on this machine next to it. A vault you joined with an invite link, on a server that is not one of your machines, shows under Shared vaults at the top of the page, where Join with a link is too. An invite link that opens Relay now opens Machines with the join form filled in. General keeps Other vault folders (#287)

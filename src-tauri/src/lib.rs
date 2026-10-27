@@ -196,6 +196,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Un dossier de coffre ne peut pas contenir les données de Relay, un dossier Claude ou votre dossier personnel, ni s'y trouver : {v}", "Ein Vault-Ordner darf weder Relays Daten, einen Claude-Ordner noch deinen Benutzerordner enthalten oder darin liegen: {v}"]),
     ("err.vault_not_empty", ["{v} is not empty: a joined vault starts in an empty folder", "{v} is niet leeg: een vault waar je lid van wordt, begint in een lege map",
         "{v} n'est pas vide : un coffre rejoint commence dans un dossier vide", "{v} ist nicht leer: Ein beigetretener Vault beginnt in einem leeren Ordner"]),
+    ("err.vault_unknown", ["{v} is not one of the vaults here", "{v} is geen van de vaults hier",
+        "{v} n'est pas un des coffres ici", "{v} ist keiner der Vaults hier"]),
     ("err.vault_adding", ["A vault is being added: send again in a moment", "Er wordt een vault toegevoegd: stuur zo meteen opnieuw",
         "Un coffre est en cours d'ajout : renvoyez dans un instant", "Ein Vault wird gerade hinzugefügt: sende gleich noch einmal"]),
     ("err.refence_busy", ["A conversation is still working: adding a vault restarts every conversation, try again when its turn has ended", "Een gesprek is nog bezig: een vault toevoegen herstart elk gesprek, probeer opnieuw als de beurt klaar is",
@@ -863,8 +865,8 @@ fn in_terminal(st: &App, cmd: &str) -> Result<(), String> {
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 fn send(app: AppHandle, state: State<App>, project: String, text: String, images: Option<Vec<Value>>, name: Option<String>, fork: Option<String>,
-        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>, about: Option<String>) -> Result<(), String> {
-    session::send(&app, &state, session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about })
+        model: Option<String>, effort: Option<String>, provider: Option<String>, mail: Option<bool>, told: Option<String>, context: Option<String>, machine: Option<String>, about: Option<String>, vault: Option<String>) -> Result<(), String> {
+    session::send(&app, &state, session::Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about, vault })
 }
 
 #[tauri::command]
@@ -1322,9 +1324,10 @@ fn runs_for_server(agent: &Value, server_work: &std::path::Path) -> bool {
 
 /// The shell command that continues a conversation in a terminal, external or embedded (pty.rs). The app's own
 /// process for it stops first, so two processes never write the same session.
-/// `about`: the conversation's project, for one without a session yet, which runs in that project's vault.
+/// `about`: the conversation's project, for one without a session yet, which runs in that project's vault. `vault`: the
+/// vault picked for a general one without a session yet (session::send checks it the same way).
 /// The caller holds `vault_gate` until the terminal runs: a vault added meanwhile then sees it and stops it.
-fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<String>, name: Option<String>, about: Option<&str>) -> Result<String, String> {
+fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<String>, name: Option<String>, about: Option<&str>, vault: Option<&str>) -> Result<String, String> {
     if let Some(b) = state.machines.bind_of(project) {
         let m = machines::Machines::find(&state.settings.lock().unwrap(), &b.machine).map(|m| m["name"].as_str().unwrap_or("").to_string()).unwrap_or_default();
         return Err(trc_v("err.machine_terminal", &m));
@@ -1333,9 +1336,14 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
     need_vault(state)?;
     let p = provider_of(state, project, None);
     let mut eb = env_for(app, state, p, project);
-    // a conversation without a session yet: its project's vault, as spawn picks it
+    // a conversation without a session yet: its project's vault, else the one picked for it, as spawn picks it
     let started = state.sids.lock().unwrap().contains_key(project);
-    if let (false, Some(a)) = (started, about) { eb.vault = project_home(state, a)?.0; }
+    let picked = policy::picked_vault(&state.settings.lock().unwrap(), vault)?;
+    match (started, about, picked) {
+        (false, Some(a), _) => eb.vault = project_home(state, a)?.0,
+        (false, None, Some(v)) => eb.vault = v,
+        _ => {}
+    }
     // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only
     if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
     if policy::adding() { return Err(trc("err.vault_adding")); }
@@ -1348,9 +1356,9 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
 
 /// Continue a conversation in iTerm.
 #[tauri::command]
-fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>, about: Option<String>) -> Result<(), String> {
+fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>, about: Option<String>, vault: Option<String>) -> Result<(), String> {
     let _gate = state.vault_gate.lock().unwrap();
-    let cmd = terminal_cmd(&app, &state, &project, session, name, about.as_deref())?;
+    let cmd = terminal_cmd(&app, &state, &project, session, name, about.as_deref(), vault.as_deref())?;
     in_terminal(&state, &cmd)
 }
 
