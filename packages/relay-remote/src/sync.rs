@@ -60,7 +60,9 @@ impl Filter {
 /// joiners, bidi marks, BOM) are dropped, so they cannot slip a guarded name past on a Mac OS Extended disk. Others stay non-ASCII, which no ASCII name can equal; a
 /// non-ASCII name is not matched as APFS would, so callers guard only ASCII ones.
 pub fn fold(s: &str) -> String {
-    s.chars().map(|c| match c {
+    use unicode_normalization::UnicodeNormalization;
+    // canonical decomposition first: `Caf\u{E9}` and `Cafe\u{301}` are one name on APFS and HFS+
+    s.nfd().map(|c| match c {
         '\u{17F}' => "s", '\u{212A}' => "k", '\u{DF}' | '\u{1E9E}' => "ss", '\u{FB00}' => "ff", '\u{FB01}' => "fi", '\u{FB02}' => "fl",
         '\u{FB03}' => "ffi", '\u{FB04}' => "ffl", '\u{FB05}' | '\u{FB06}' => "st",
         // NFD singletons APFS also takes for the ASCII character
@@ -516,7 +518,7 @@ mod tests {
         assert_eq!(acts, vec![Push(s("b"))]);
         assert_eq!(skipped, vec![s("Notes/A.md"), s("Notes/a.md")]);
         // one file on a Mac's disk too, as the filter compares names: a ligature, and a letter beyond ASCII
-        for (l, r) in [("first.md", "\u{FB01}rst.md"), ("System/a.md", "Sy\u{FB06}em/a.md"), ("\u{C9}t\u{E9}.md", "\u{E9}t\u{E9}.md")] {
+        for (l, r) in [("first.md", "\u{FB01}rst.md"), ("System/a.md", "Sy\u{FB06}em/a.md"), ("\u{C9}t\u{E9}.md", "\u{E9}t\u{E9}.md"), ("Caf\u{E9}.md", "Cafe\u{301}.md")] {
             let (acts, skipped) = plan(Mode::TwoWay, &man(&[]), &man(&[(l, "1")]), &man(&[(r, "2")]), &|p| p.into(), &|_| false);
             assert_eq!((acts, skipped.len()), (vec![], 2), "{l} {r}");
         }

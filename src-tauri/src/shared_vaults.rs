@@ -267,8 +267,12 @@ fn change(app: &AppHandle, state: &crate::App, f: impl FnOnce(&mut Vec<Value>) -
     let mut s = state.settings.lock().unwrap();
     let mut all: Vec<Value> = s["sharedVaults"].as_array().cloned().unwrap_or_default();
     if !f(&mut all) { return Ok(()); }
-    s["sharedVaults"] = Value::Array(all);
-    crate::save_settings(app, &s)
+    // saved first: the app follows only a change that is on disk
+    let mut next = s.clone();
+    next["sharedVaults"] = Value::Array(all);
+    crate::save_settings(app, &next)?;
+    *s = next;
+    Ok(())
 }
 
 /// An invite link that opened Relay (lib.rs on_open_url), until Settings takes it on the `vault-invite` ping or when

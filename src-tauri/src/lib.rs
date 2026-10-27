@@ -1546,7 +1546,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     let (relang, rekey) = {
         let mut cur = state.settings.lock().unwrap();
         s["sharedVaults"] = cur["sharedVaults"].clone();
-        fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
+        relay_remote::sync::write_atomic(&data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
         let changed = (ui_lang_of(&cur) != lang, cur["shortcuts"] != s["shortcuts"]);
         *cur = s.clone();
         changed
@@ -2078,7 +2078,8 @@ async fn calendar_meetings(state: State<'_, App>) -> Result<Value, String> {
 
 /// Save settings changed here (not by the settings window), and tell both windows.
 fn save_settings(app: &AppHandle, s: &Value) -> Result<(), String> {
-    fs::write(data_dir(app).join("settings.json"), serde_json::to_string_pretty(s).unwrap()).map_err(|e| e.to_string())?;
+    // atomic: a crash mid-write leaves the old settings, never half a file
+    relay_remote::sync::write_atomic(&data_dir(app).join("settings.json"), serde_json::to_string_pretty(s).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
     app.emit("settings-changed", s).ok();
     Ok(())
 }

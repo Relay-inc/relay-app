@@ -43,6 +43,8 @@ those. Share a vault with people you would let read what your agent can read. Wh
 - **A vault added reaches running conversations.** Relay first checks that none is in a turn and no terminal tab runs
   one, then stops them and writes the change under one lock that also holds back new starts. Their next message starts
   them with the new fence. A conversation in an outside terminal (iTerm) keeps its old rules until it starts again.
+  While a vault is being made or joined, a new turn waits. A turn typed on a phone that already follows a conversation
+  goes to the agent directly, past that check, and is cut off if it lands in those few seconds.
 - **A project's key never moves.** It is its name in the main vault, else its name and its vault's id. The sidebar shows
   a label, with the folder only when two vaults have the name.
 
