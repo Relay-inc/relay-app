@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.38] - 2026-10-27
+
 ### Added
 
 - **A vault admin keeps the server**: when you are admin of a shared vault (from an admin invite, or made admin because the last one left), its server shows under Settings › Machines for shared vaults only, and you can update it there, to an official Relay release only (the server checks its signature). It runs no conversations for you and keeps no mirror, the server refuses those too. It goes from the list once you are admin of no vault there (#288)
@@ -657,7 +659,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.37...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.38...HEAD
+[0.0.38]: https://github.com/Relay-inc/relay-app/compare/v0.0.37...v0.0.38
 [0.0.37]: https://github.com/Relay-inc/relay-app/compare/v0.0.36...v0.0.37
 [0.0.36]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...v0.0.36
 [0.0.35]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...v0.0.35
