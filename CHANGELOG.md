@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.39] - 2026-10-27
+
 ### Changed
 
 - **Shared vaults are now called workspaces**: Settings › Machines, the composer and the sidebar speak of workspaces, the team space a relay-server syncs into a folder on each member's Mac. Your own vault stays your vault, and the composer's pick now reads Runs in, with Your vault as its first entry (#290)
@@ -665,7 +667,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.38...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.39...HEAD
+[0.0.39]: https://github.com/Relay-inc/relay-app/compare/v0.0.38...v0.0.39
 [0.0.38]: https://github.com/Relay-inc/relay-app/compare/v0.0.37...v0.0.38
 [0.0.37]: https://github.com/Relay-inc/relay-app/compare/v0.0.36...v0.0.37
 [0.0.36]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...v0.0.36
