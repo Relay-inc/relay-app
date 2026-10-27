@@ -20,7 +20,7 @@ import {
 } from "../../../application/settings/shared-vaults";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL, ROW_ACTIONS, ROW_DETAILS, ROW_HEAD } from "./blocks";
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { CommandBlock } from "./MachineSetup";
@@ -81,46 +81,49 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const until = (expires: number) => sentAt(expires * 1000, locale);
   return (
     <div className={ROW}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-[13px] font-semibold text-s-fg">{vault.name}</span>
-        <span className={PILL}>{roleName(vault.role)}</span>
-        <span className="font-mono text-xs text-s-muted">{vault.host}</span>
-        <span className="flex-1"></span>
-        {admin && !inviting && !link ? (
-          <button className={buttonClass("ghost")} onClick={() => setInviting(true)}>
-            {t("set.sharedInvite")}
+      <div className={ROW_HEAD}>
+        <div className={ROW_DETAILS}>
+          <span className="text-[13px] font-semibold text-s-fg">{vault.name}</span>
+          <span className={PILL}>{roleName(vault.role)}</span>
+          <span className="font-mono text-xs text-s-muted">{vault.host}</span>
+        </div>
+        <div className={ROW_ACTIONS}>
+          {admin && !inviting && !link ? (
+            <button className={buttonClass("ghost")} onClick={() => setInviting(true)}>
+              {t("set.sharedInvite")}
+            </button>
+          ) : null}
+          <button
+            className={buttonClass("ghost")}
+            aria-expanded={membersOpen}
+            disabled={busy}
+            onClick={() => toggleMembers(vault.id)}
+          >
+            {t("set.sharedMembers")}
           </button>
-        ) : null}
-        <button
-          className={buttonClass("ghost")}
-          aria-expanded={membersOpen}
-          disabled={busy}
-          onClick={() => toggleMembers(vault.id)}
-        >
-          {t("set.sharedMembers")}
-        </button>
-        {leaving ? (
-          <>
-            <span className="text-xs text-s-muted">{t("set.sharedLeaveSure")}</span>
-            <button
-              className={buttonClass("dangerSolid")}
-              disabled={busy}
-              onClick={async () => {
-                await leaveShared(vault.id);
-                setLeaving(false);
-              }}
-            >
+          {leaving ? (
+            <>
+              <span className="text-xs text-s-muted">{t("set.sharedLeaveSure")}</span>
+              <button
+                className={buttonClass("dangerSolid")}
+                disabled={busy}
+                onClick={async () => {
+                  await leaveShared(vault.id);
+                  setLeaving(false);
+                }}
+              >
+                {t("set.sharedLeave")}
+              </button>
+              <button className={buttonClass("ghost")} onClick={() => setLeaving(false)}>
+                {t("mc.cancel")}
+              </button>
+            </>
+          ) : (
+            <button className={buttonClass("danger")} disabled={busy} onClick={() => setLeaving(true)}>
               {t("set.sharedLeave")}
             </button>
-            <button className={buttonClass("ghost")} onClick={() => setLeaving(false)}>
-              {t("mc.cancel")}
-            </button>
-          </>
-        ) : (
-          <button className={buttonClass("danger")} disabled={busy} onClick={() => setLeaving(true)}>
-            {t("set.sharedLeave")}
-          </button>
-        )}
+          )}
+        </div>
       </div>
       <div className="flex min-w-0 items-center gap-2">
         <code className="min-w-0 flex-1 truncate font-mono text-xs text-s-fg" title={vault.folder}>

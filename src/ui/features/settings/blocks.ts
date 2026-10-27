@@ -46,6 +46,12 @@ export const AREA = `${FIELD_BASE} min-h-16 w-65 resize-y py-1.5 font-mono text-
 export const SELECT =
   " h-7 w-50 max-w-full appearance-none overflow-hidden rounded-md border border-s-input bg-transparent bg-[url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%2714%27%20height=%2714%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27%23888%27%20stroke-width=%272%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27m6%209%206%206%206-6%27/%3E%3C/svg%3E)] bg-position-[right_--spacing(2)_center] bg-no-repeat pr-6 pl-2 text-xs text-ellipsis whitespace-nowrap text-s-fg focus-visible:ring-1 ring-s-primary focus-visible:outline-none";
 
+/** The head of a list row: its name and details on the left, its buttons on the right. Each wraps as a whole, so a
+ *  narrow window puts the buttons on a line of their own, still on the right. */
+export const ROW_HEAD = "flex flex-wrap items-center gap-x-3 gap-y-2";
+export const ROW_DETAILS = "flex min-w-0 flex-[1_1_12rem] flex-wrap items-center gap-x-3 gap-y-1";
+export const ROW_ACTIONS = "ml-auto flex flex-wrap items-center justify-end gap-2";
+
 export const FOOTER = "flex flex-wrap items-center gap-2";
 /** The footer of a section inside a folded-open row */
 export const FOOTER_IN_ROW = `${FOOTER} mt-0.5`;

@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Fixed
+
+- **Settings › Machines keeps its buttons together**: on a machine or a workspace, Update, Add phone, Forget, Invite, Members and Leave stay as one group on the right of the name, also when the window is too narrow for one line, instead of falling one by one under the name and leaving the fingerprint on a line of its own
+
 ## [0.0.39] - 2026-10-27
 
 ### Changed
