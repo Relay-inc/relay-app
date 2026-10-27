@@ -2489,6 +2489,7 @@ pub fn run() {
                             let st = h.state::<App>();
                             let listed = || shared_vaults::find(&st.settings.lock().unwrap(), &v.id).is_ok();
                             let Some(r) = st.shared.round(&data_dir(&h), &v, &st.machines.id, &sys_name(), &listed) else { return };
+                            shared_vaults::skills_shared(&h, &v.folder);
                             // a card came in or went out: the index here follows (it does not sync)
                             if r.pulled + r.pushed > 0 || !std::path::Path::new(&v.folder).join("System/rules/core/work-state.md").is_file() {
                                 shared_vaults::index_shared(&h, &v.folder);

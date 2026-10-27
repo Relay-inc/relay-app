@@ -516,6 +516,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
         (false, _) => Err(format!("{first:?}")),
     });
     // skills never sync: what the app does after a member's round that moved files puts Relay's own there
+    shared_vaults::skills_shared(app, &b.to_string_lossy());
     shared_vaults::index_shared(app, &b.to_string_lossy());
     let setup = fs::read_to_string(b.join("System/skills/setup/SKILL.md")).unwrap_or_default();
     r.step("the colleague's Mac gets Relay's team skills locally", if setup.contains("team.md") && b.join("System/skills/setup/.relay-skill").is_file() { Ok("System/skills/setup, the team's".into()) } else { Err(format!("setup skill: {:?}", setup.chars().take(80).collect::<String>())) });

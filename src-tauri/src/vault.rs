@@ -166,7 +166,13 @@ const SKILL_MARK: (&str, &str) = (".relay-skill", "Relay's copy of this skill, r
 /// Writes files only, nothing here runs anything from the vault.
 pub fn place_skills(template: &Path, overlay: &Path, vault: &Path) -> std::io::Result<()> {
     let (personal, team, skills) = (template.join("System/skills"), overlay.join("System/skills"), vault.join("System/skills"));
-    if fs::symlink_metadata(&skills).is_ok_and(|m| m.file_type().is_symlink()) { return Ok(()); }
+    // no link anywhere from the vault down to what is written: a conversation in the vault could aim one out of it
+    let linked = |p: &Path| p.strip_prefix(vault).is_ok_and(|r| {
+        let mut at = vault.to_path_buf();
+        r.components().any(|c| { at.push(c); fs::symlink_metadata(&at).is_ok_and(|m| m.file_type().is_symlink()) })
+    });
+    let write = |p: &Path, d: &[u8]| -> std::io::Result<()> { if linked(p) { return Ok(()); } relay_remote::sync::write_atomic(p, d, None) };
+    if linked(&skills) { return Ok(()); }
     let dirs = |d: &Path| fs::read_dir(d).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).map(|e| e.file_name());
     let names: std::collections::BTreeSet<_> = dirs(&personal).chain(dirs(&team)).collect();
     for name in names {
@@ -174,16 +180,15 @@ pub fn place_skills(template: &Path, overlay: &Path, vault: &Path) -> std::io::R
         let mut want = base.clone();
         want.extend(files(&team.join(&name)));
         let dir = skills.join(&name);
-        if fs::symlink_metadata(&dir).is_ok_and(|m| m.file_type().is_symlink()) { continue; }
+        if linked(&dir) { continue; }
         let have = files(&dir);
-        if !dir.join(SKILL_MARK.0).is_file() && !have.is_empty() && have != want && have != base { continue; }
+        let marked = fs::symlink_metadata(dir.join(SKILL_MARK.0)).is_ok_and(|m| m.is_file());
+        if !marked && !have.is_empty() && have != want && have != base { continue; }
         for (rel, data) in &want {
             if have.get(rel) == Some(data) { continue; }
-            let p = dir.join(rel);
-            if let Some(up) = p.parent() { fs::create_dir_all(up)?; }
-            fs::write(p, data)?;
+            write(&dir.join(rel), data)?;
         }
-        if !dir.join(SKILL_MARK.0).is_file() { fs::write(dir.join(SKILL_MARK.0), SKILL_MARK.1)?; }
+        if !marked { write(&dir.join(SKILL_MARK.0), SKILL_MARK.1.as_bytes())?; }
     }
     Ok(())
 }
@@ -410,5 +415,17 @@ mod tests {
         place_skills(&tpl, &team, &u).unwrap();
         assert_eq!(fs::read_to_string(u.join("System/skills/setup/SKILL.md")).unwrap(), "mine");
         assert!(!u.join("System/skills/setup/.relay-skill").exists() && u.join("System/skills/stress-test/SKILL.md").is_file());
+        // a link a conversation put in the vault is never written through: not at the file, not at a folder above it
+        let out = tmp("skills-outside");
+        fs::write(out.join("target"), "untouched").unwrap();
+        let l = tmp("skills-link");
+        place_skills(&tpl, &team, &l).unwrap();
+        fs::remove_file(l.join("System/skills/setup/SKILL.md")).unwrap();
+        std::os::unix::fs::symlink(out.join("target"), l.join("System/skills/setup/SKILL.md")).unwrap();
+        fs::remove_dir_all(l.join("System/skills/stress-test")).unwrap();
+        std::os::unix::fs::symlink(&out, l.join("System/skills/stress-test")).unwrap();
+        place_skills(&tpl, &team, &l).unwrap();
+        assert_eq!(fs::read_to_string(out.join("target")).unwrap(), "untouched");
+        assert!(!out.join("SKILL.md").exists() && !out.join(".relay-skill").exists());
     }
 }

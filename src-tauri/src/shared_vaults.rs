@@ -126,17 +126,20 @@ fn conflict_copy(f: &Filter, p: &str, machine: &str, stamp: &str) -> String {
     copy
 }
 
-/// What a shared vault keeps on each Mac only: Relay's skills in its System/skills (vault::place_skills), and the
-/// project index (work-state.md, System/index/repos.json), rebuilt here from its cards with the app's own
-/// build-index.py, which also goes into the vault's System/scripts for its conversations. Relay never runs a
-/// script from the vault: a conversation there may write one, and Relay runs outside its fence. A vault with a script
-/// of its own (other card fields than the starter's) is left alone: the app's copy would find no cards and empty its
-/// index, and that script runs only where the vault's conversations run it.
-pub fn index_shared(app: &AppHandle, folder: &str) {
+/// Relay's team skills in a shared vault's System/skills (vault::place_skills), every round: a vault made before them, or
+/// joined, has them after its next round, not only after one that moved a file. Writes only what differs.
+pub fn skills_shared(app: &AppHandle, folder: &str) {
     let res = |p: &str| app.path().resolve(p, tauri::path::BaseDirectory::Resource);
     if let (Ok(t), Ok(o)) = (res("default-vault"), res("team-vault")) {
         if let Err(e) = crate::vault::place_skills(&t, &o, Path::new(folder)) { eprintln!("skills {folder}: {e}"); }
     }
+}
+/// The project index of a shared vault (work-state.md, System/index/repos.json), kept on each Mac only and rebuilt
+/// here from its cards with the app's own build-index.py, which also goes into the vault's System/scripts for its
+/// conversations. Relay never runs a script from the vault: a conversation there may write one, and Relay runs outside its fence. A vault with a script
+/// of its own (other card fields than the starter's) is left alone: the app's copy would find no cards and empty its
+/// index, and that script runs only where the vault's conversations run it.
+pub fn index_shared(app: &AppHandle, folder: &str) {
     let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
     let own = Path::new(folder).join("System/scripts/build-index.py");
     if crate::index_script(own.clone(), Some(script.clone())).is_some_and(|s| s == own) { return; }
