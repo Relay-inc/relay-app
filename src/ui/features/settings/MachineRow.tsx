@@ -5,7 +5,7 @@ import { useSettingsStore } from "../../../application/settings/store";
 import { forgetMachine, pairPhone, updateMachine } from "../../../application/settings/machines-page";
 import { Html } from "../../components/Html";
 import { useT } from "../../hooks/useT";
-import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, PILL } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, HINT_IN_ROW, PILL, ROW_ACTIONS, ROW_DETAILS, ROW_HEAD } from "./blocks";
 import { MachineGithub } from "./MachineGithub";
 import { MachineMirror } from "./MachineMirror";
 import { MachineRepos } from "./MachineRepos";
@@ -54,47 +54,50 @@ export function MachineRow({ machine }: { machine: Machine }) {
     );
   return (
     <div className="grid min-w-0 grid-cols-1 gap-2.5 border-b border-s-border px-3.5 py-3 last:border-b-0">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <span className="text-[13px] font-semibold text-s-fg">{machine.name}</span>
-        <span className="font-mono text-xs text-s-muted">
-          {machine.host}:{machine.port}
-        </span>
-        {statusLine}
-        <span className={`${PILL} font-mono`} title={t("mc.fingerprint")}>
-          {(machine.fp ?? "").slice(0, 16)}
-        </span>
-        <span className="flex-1"></span>
-        {canUpdate || updating ? (
-          <button className={buttonClass("primary")} disabled={updating} onClick={() => updateMachine(machine.id)}>
-            {updating ? t("mc.updating") : t("mc.update", { version: setup!.version })}
-          </button>
-        ) : null}
-        {status && status !== "checking" && status.ok && !machine.sharedOnly ? (
-          <button className={buttonClass("ghost")} onClick={() => pairPhone(machine.id, !!phone)}>
-            {phone ? t("mc.phoneClose") : t("mc.phoneAdd")}
-          </button>
-        ) : null}
-        {machine.auto ? null : confirming ? (
-          <>
-            <span className="text-xs text-s-muted">{t("mc.forgetSure")}</span>
-            <button
-              className={buttonClass("dangerSolid")}
-              onClick={() => {
-                setConfirming(false);
-                forgetMachine(machine.id);
-              }}
-            >
+      <div className={ROW_HEAD}>
+        <div className={ROW_DETAILS}>
+          <span className="text-[13px] font-semibold text-s-fg">{machine.name}</span>
+          <span className="font-mono text-xs text-s-muted">
+            {machine.host}:{machine.port}
+          </span>
+          {statusLine}
+          <span className={`${PILL} font-mono`} title={t("mc.fingerprint")}>
+            {(machine.fp ?? "").slice(0, 16)}
+          </span>
+        </div>
+        <div className={ROW_ACTIONS}>
+          {canUpdate || updating ? (
+            <button className={buttonClass("primary")} disabled={updating} onClick={() => updateMachine(machine.id)}>
+              {updating ? t("mc.updating") : t("mc.update", { version: setup!.version })}
+            </button>
+          ) : null}
+          {status && status !== "checking" && status.ok && !machine.sharedOnly ? (
+            <button className={buttonClass("ghost")} onClick={() => pairPhone(machine.id, !!phone)}>
+              {phone ? t("mc.phoneClose") : t("mc.phoneAdd")}
+            </button>
+          ) : null}
+          {machine.auto ? null : confirming ? (
+            <>
+              <span className="text-xs text-s-muted">{t("mc.forgetSure")}</span>
+              <button
+                className={buttonClass("dangerSolid")}
+                onClick={() => {
+                  setConfirming(false);
+                  forgetMachine(machine.id);
+                }}
+              >
+                {t("mc.forget")}
+              </button>
+              <button className={buttonClass("ghost")} onClick={() => setConfirming(false)}>
+                {t("mc.cancel")}
+              </button>
+            </>
+          ) : (
+            <button className={buttonClass("danger")} onClick={() => setConfirming(true)}>
               {t("mc.forget")}
             </button>
-            <button className={buttonClass("ghost")} onClick={() => setConfirming(false)}>
-              {t("mc.cancel")}
-            </button>
-          </>
-        ) : (
-          <button className={buttonClass("danger")} onClick={() => setConfirming(true)}>
-            {t("mc.forget")}
-          </button>
-        )}
+          )}
+        </div>
       </div>
       {confirming ? <Html as="p" className={HINT_IN_ROW} html={th("mc.forgetHelp", { name: machine.name })} /> : null}
       {status && status !== "checking" && (status.outdated === "server" || (behind && !status.update)) && setup ? (
