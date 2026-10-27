@@ -1,4 +1,4 @@
-// Shared vaults on a relay-server (docs/shared-vaults.md): a vault several people share, synced both ways into a plain
+// Shared vaults on a relay-server (docs/workspaces.md): a vault several people share, synced both ways into a plain
 // folder here. The server keeps only ciphertext; the vault key is shared-<id>.key in the app data and never goes there.
 // The folder is one of the extra vaults (lib.rs `extra_vaults`), so a conversation in it stays in it (lib.rs `fence`).
 // The settings keep the list (`sharedVaults`); only this module writes it, set_settings keeps what is there.
@@ -26,7 +26,7 @@ pub fn list(s: &Value) -> Vec<Shared> {
 /// A vault id as the server makes them: 16 lowercase hex. It names files here (the key, the base), so nothing else
 /// a server answers ever reaches a path.
 pub fn valid_id(id: &str) -> bool { id.len() == 16 && id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)) }
-/// The servers this Mac keeps as a vault admin (docs/shared-vaults.md, Trust): one it is admin of a vault on, that is not
+/// The servers this Mac keeps as a vault admin (docs/workspaces.md, Trust): one it is admin of a vault on, that is not
 /// one of its machines, becomes one for shared vaults only and `auto`, so Settings › Machines shows it with its Update.
 /// An `auto` one goes again once this Mac is admin of no vault there. A machine the user paired is never touched.
 /// Whether the machines changed.
@@ -46,7 +46,7 @@ pub fn keepers(s: &mut Value) -> bool {
     }
     changed
 }
-pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter().find(|v| v.id == id).ok_or_else(|| format!("no shared vault {id}")) }
+pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter().find(|v| v.id == id).ok_or_else(|| format!("no workspace {id}")) }
 
 /// What the last round of a vault did, for Settings: counts since the app started, the conflict copies made, and the
 /// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone).
@@ -66,7 +66,7 @@ pub fn save_key(data: &Path, id: &str, key: &VaultKey) -> Result<(), String> {
         .and_then(|mut f| std::io::Write::write_all(&mut f, key.to_hex().as_bytes())).map_err(|e| e.to_string())
 }
 pub fn load_key(data: &Path, id: &str) -> Result<VaultKey, String> {
-    std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| VaultKey::from_hex(k.trim())).ok_or_else(|| format!("the key of shared vault {id} is missing on this Mac"))
+    std::fs::read_to_string(key_path(data, id)).ok().and_then(|k| VaultKey::from_hex(k.trim())).ok_or_else(|| format!("the key of workspace {id} is missing on this Mac"))
 }
 /// Where a round keeps what it deletes or mostly empties here: <data>/shared-trash/<id>/<round's minute>/<path>.
 fn trash(data: &Path, id: &str) -> PathBuf { data.join("shared-trash").join(id) }
@@ -97,13 +97,13 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
     });
     // a link that does not resolve guards nothing it points at: only `System` (a join's first round) is guarded anyway
     if let (Some(l), None) = (&link, &target) {
-        if l.as_os_str() != "System" { return Err(format!(".claude links to {:?}, which is not in the vault: fix the link to sync this vault", l)); }
+        if l.as_os_str() != "System" { return Err(format!(".claude links to {:?}, which is not in the workspace: fix the link to sync this workspace", l)); }
     }
     if let Some(t) = target.as_deref().filter(|t| !t.chars().all(|c| c.is_ascii_alphanumeric() || " ._-/".contains(c))) {
-        return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this vault"));
+        return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this workspace"));
     }
     // a link to the vault itself would guard nothing: its settings, hooks and skills would sync like notes
-    if target.as_deref() == Some("") { return Err(".claude links to the vault folder itself: link it to a folder inside it (System) to sync this vault".into()); }
+    if target.as_deref() == Some("") { return Err(".claude links to the workspace folder itself: link it to a folder inside it (System) to sync this workspace".into()); }
     f.guarded = std::iter::once("System".to_string()).chain(target).collect();
     f.only = f.guarded.iter().flat_map(|g| ["rules", "reference", "archive", "reminders.md", CONFLICTS].map(|x| format!("{g}/{x}"))).collect();
     // generated from the project cards on each Mac (index_shared): every session rewrites them, and repos.json holds
@@ -126,9 +126,17 @@ fn conflict_copy(f: &Filter, p: &str, machine: &str, stamp: &str) -> String {
     copy
 }
 
-/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards with the
-/// app's own build-index.py, which also goes into the vault's System/scripts for its conversations. Relay never runs a
-/// script from the vault: a conversation there may write one, and Relay runs outside its fence. A vault with a script
+/// Relay's team skills in a shared vault's System/skills (vault::place_skills), every round: a vault made before them, or
+/// joined, has them after its next round, not only after one that moved a file. Writes only what differs.
+pub fn skills_shared(app: &AppHandle, folder: &str) {
+    let res = |p: &str| app.path().resolve(p, tauri::path::BaseDirectory::Resource);
+    if let (Ok(t), Ok(o)) = (res("default-vault"), res("team-vault")) {
+        if let Err(e) = crate::vault::place_skills(&t, &o, Path::new(folder)) { eprintln!("skills {folder}: {e}"); }
+    }
+}
+/// The project index of a shared vault (work-state.md, System/index/repos.json), kept on each Mac only and rebuilt
+/// here from its cards with the app's own build-index.py, which also goes into the vault's System/scripts for its
+/// conversations. Relay never runs a script from the vault: a conversation there may write one, and Relay runs outside its fence. A vault with a script
 /// of its own (other card fields than the starter's) is left alone: the app's copy would find no cards and empty its
 /// index, and that script runs only where the vault's conversations run it.
 pub fn index_shared(app: &AppHandle, folder: &str) {
@@ -245,7 +253,7 @@ fn write_base(data: &Path, id: &str, base: &Manifest) -> Result<(), String> {
     sync::write_atomic(&base_path(data, id), &b, None).map_err(|e| e.to_string())
 }
 
-// ---------- commands for Settings › General › Shared vaults
+// ---------- commands for Settings › Machines › Workspaces
 
 type St<'a> = tauri::State<'a, crate::App>;
 
@@ -308,27 +316,28 @@ pub fn shared_vault_pending_invite() -> Option<String> { INVITE.lock().unwrap().
 pub fn shared_vaults_status(state: St) -> Value { serde_json::to_value(&*state.shared.status.lock().unwrap()).unwrap_or_default() }
 
 /// Make a shared vault on a paired machine: the server keeps it, this Mac makes the key. A folder that is not there
-/// or empty starts as Relay's starter vault; one with notes is uploaded as it is. Returns {id, recovery}.
+/// or empty starts as Relay's team starter (vault::create_team); one with notes is uploaded as it is. Returns {id, recovery}.
 #[tauri::command]
 pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
     let m = crate::machines::Machines::find(&s, &machine).ok_or("pick a paired machine for the vault")?;
     let name: String = name.trim().chars().filter(|c| !c.is_control()).take(60).collect();
-    if name.is_empty() { return Err("give the vault a name".into()); }
+    if name.is_empty() { return Err("give the workspace a name".into()); }
     let folder = new_folder(&app, &state, &folder, false)?;
     // asked before anything is made: adding the vault restarts every conversation, none may be in a turn
     let _adding = crate::policy::may_add_vault(&app)?;
     let template = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
+    let overlay = app.path().resolve("team-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let (c, at) = (state.machines.client(&m), folder.clone());
     let (r, key) = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
         // the folder first: a vault that could not get its notes is not made on the server at all
         let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
-        if empty { crate::vault::create_default(&template, Path::new(&folder))?; }
+        if empty { crate::vault::create_team(&template, &overlay, Path::new(&folder))?; }
         Ok((c.vault_create(&name)?, VaultKey::generate()))
     }).await.map_err(|e| e.to_string())??;
-    if !valid_id(&r.id) { return Err(format!("the server answered an invalid vault id {:?}", r.id)); }
+    if !valid_id(&r.id) { return Err(format!("the server answered an invalid workspace id {:?}", r.id)); }
     // keys, bases and trash go by id alone: an id this Mac is in already would overwrite that vault's key
-    if list(&state.settings.lock().unwrap()).iter().any(|x| x.id == r.id) { return Err(format!("this Mac is in a vault with id {} already", r.id)); }
+    if list(&state.settings.lock().unwrap()).iter().any(|x| x.id == r.id) { return Err(format!("this Mac is in a workspace with id {} already", r.id)); }
     save_key(&crate::data_dir(&app), &r.id, &key)?;
     let v = Shared { id: r.id.clone(), name: r.name, host: m["host"].as_str().unwrap_or("").into(), port: m["port"].as_u64().unwrap_or(0) as u16,
         fp: m["fp"].as_str().unwrap_or("").into(), folder: at, role: "admin".into() };
@@ -351,7 +360,7 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
     let (line, joined, key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
-    if !valid_id(&joined.id) { return Err(format!("not a vault id: {:?}", joined.id)); }
+    if !valid_id(&joined.id) { return Err(format!("not a workspace id: {:?}", joined.id)); }
     // a vault this Mac had before: its old base would make the new, empty folder look like a mass delete
     let vid = joined.id.clone();
     on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
@@ -412,7 +421,7 @@ fn left_already(e: &str) -> bool { ["no such vault", "not paired", "not a member
 /// A vault's key as hex, to show it again (Settings): it is on this Mac in shared-<id>.key anyway, the recovery key.
 #[tauri::command]
 pub fn shared_vault_recovery(app: AppHandle, id: String) -> Result<String, String> {
-    if !valid_id(&id) { return Err("not a vault id".into()); }
+    if !valid_id(&id) { return Err("not a workspace id".into()); }
     load_key(&crate::data_dir(&app), &id).map(|k| k.to_hex())
 }
 

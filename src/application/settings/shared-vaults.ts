@@ -4,8 +4,8 @@ import * as backend from "../../infrastructure/backend";
 import { checkMachine } from "./machines-page";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › Machines: vaults a team shares on a relay-server, each synced into a folder here
-// (src-tauri/src/shared_vaults.rs), under the machine that keeps it or, joined with a link, in Shared vaults. The backend keeps the list in the settings and runs the rounds; a round's result
+// Settings › Machines: workspaces a team shares on a relay-server, each synced into a folder here
+// (src-tauri/src/shared_vaults.rs), under the machine that keeps it or, joined with a link, in Workspaces. The backend keeps the list in the settings and runs the rounds; a round's result
 // comes in as an event. Invites, members and leaving go to the server through the backend.
 type Shared = SettingsState["shared"];
 const st = () => useSettingsStore.getState().shared;
@@ -76,7 +76,7 @@ export async function watchSharedVaults() {
 }
 
 /** The one form, "new", "join" or closed (""), and where it shows with its message: under the machine `machine`
- *  (a new vault there), or in Shared vaults when "" (joining). */
+ *  (a new vault there), or in Workspaces when "" (joining). */
 export function openForm(mode: Shared["form"]["mode"], machine = st().form.machine) {
   change(draft => {
     draft.form = { ...draft.form, mode, machine };

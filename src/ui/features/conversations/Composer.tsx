@@ -466,7 +466,10 @@ export function Composer({ className }: { className: string }) {
               {/* before the first message: the vault it runs in, fixed for a project's conversation */}
               <Icon name="folder" className="glyph size-3.5 ml-1 text-tertiary" />
               <PickMenu
-                options={vaults.list.map(option => ({ id: option.folder, name: option.name }))}
+                options={vaults.list.map(option => ({
+                  id: option.folder,
+                  name: option.main ? t("composer.yourVault") : option.name,
+                }))}
                 value={vaults.value}
                 label={t("composer.vault")}
                 title={t(vaults.fixed ? "composer.vaultProject" : "composer.vaultPick")}

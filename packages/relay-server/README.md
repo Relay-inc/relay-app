@@ -85,7 +85,7 @@ image: the first start installs it with Anthropic's installer into the `.local` 
 **Update from Relay:** when Relay is newer than the server, Settings › Machines shows Update to <version>. Relay
 downloads relay-server's Linux binary for the server's CPU from its own GitHub release (with `gh`, the repo is
 private), and its `.sig`, and sends them over the connection. The server checks the signature against Relay's release
-key, built into it: required from a vault admin (below), checked when sent by a paired device, which may also send an
+key, built into it: required from a workspace admin (below), checked when sent by a paired device, which may also send an
 unsigned binary it built itself. Then the checksum and that the binary runs and is that version, keeps it as
 `data/bin/relay-server` and goes on in it in the same process. Conversations keep running, the mirror locks until
 Relay's next sync round a few seconds later. Every start prefers that binary while it is newer than the image's, so
@@ -118,7 +118,7 @@ and takes the conversation back after a restart. The report is in `/tmp/relay-se
 
 Every paired machine gets the mirror: Relay keeps four folders in sync on it, so a conversation there knows what
 Claude Code knows on the laptop. Every conversation there starts in the mirrored vault. The one exception is a machine
-paired with "Only for shared vaults" ticked (`sharedOnly` in Relay's settings): it holds shared vaults only, gets
+paired with "Only for workspaces" ticked (`sharedOnly` in Relay's settings): it holds workspaces only, gets
 nothing of the laptop and runs none of its conversations. Forget it and pair it again to change that.
 
 | Folder | From the laptop | Direction |
@@ -206,28 +206,31 @@ What the server still can: see what passes (the shared conversation's lines and 
 follows it), drop or delay it, and know which conversations are shared and their titles. A phone paired before this
 needs Add phone again to sign. The laptop must have Relay open; when it does not answer, the phone says so.
 
-## Shared vaults
+## Workspaces
 
-A vault several people keep in sync through this server, each in a plain folder on their own Mac (the protocol and the
-crypto: `docs/shared-vaults.md`). The server stores it per vault in `data/vaults/<id>/`: `vault.json` (its name, the
-members' device names and fingerprints, open invites) and one record per file in `blobs/`.
+A workspace is a team space several people keep in sync through this server, each in a plain folder on their own Mac
+(the protocol and the crypto: `docs/workspaces.md`). The protocol and the server call it a vault, hence the `vault_*`
+ops and `relay-server vaults`. The server stores each one in `data/vaults/<id>/`: `vault.json` (its name, the members'
+device names and fingerprints, open invites) and one record per file in `blobs/`.
 
-- **Only ciphertext.** Every record is sealed on the Mac with the vault key, its name an HMAC of the path. The server
-  never has the key: it sees how many files there are, their sizes, when they change and who the members are. Not a
-  path, not a byte of content. It could hold back a newer version or drop one; it cannot swap one file for another.
-- **Invites.** An admin makes a link that works once, for 24 hours, and closes after 5 wrong tries. The vault key travels
-  in the link, sealed under a secret the server never sees. Whoever joins proves the link's code bound to both
+- **Only ciphertext.** Every record is sealed on the Mac with the workspace key, its name an HMAC of the path. The
+  server never has the key: it sees how many files there are, their sizes, when they change and who the members are.
+  Not a path, not a byte of content. It could hold back a newer version or drop one, but it cannot swap one file for
+  another.
+- **Invites.** An admin makes a link that works once, for 24 hours, and closes after 5 wrong tries. The workspace key
+  travels in the link, sealed under a secret the server never sees. Whoever joins proves the link's code bound to both
   certificates, like pairing.
-- **Vault-only devices.** A device that came in through an invite may only work with the vaults it is a member of: no
-  agents, no mirror, no pairing, no vaults of its own. Leaving its last vault unpairs it. A linked device (a phone)
-  gets no vaults at all.
-- **A vault admin keeps the server.** A vault-only device that is admin of a vault here may also ask `info` and send an
-  `update`, to an official release only: a binary without Relay's release signature, or with a bad one, is refused. Conversations, the mirror, phones and GitHub stay
-  refused. It is read from the vaults at every request, so a promotion or a removal counts at once.
+- **Workspace-only devices.** A device that came in through an invite may only work with the workspaces it is a member
+  of: no agents, no mirror, no pairing, no workspaces of its own. Leaving its last workspace unpairs it. A linked
+  device (a phone) gets no workspaces at all.
+- **A workspace admin keeps the server.** A workspace-only device that is admin of a workspace here may also ask `info`
+  and send an `update`, to an official release only: a binary without Relay's release signature, or with a bad one, is
+  refused. Conversations, the mirror, phones and GitHub stay refused. It is read from the workspaces at every request,
+  so a promotion or a removal counts at once.
 - **Removing someone** stops their device here at once. They keep what they already synced and the key (no key rotation
-  yet). The last admin cannot leave while others stay. `relay-server revoke` also takes a device out of its vaults.
+  yet). The last admin cannot leave while others stay. `relay-server revoke` also takes a device out of its workspaces.
 
-`relay-server vaults` lists the vaults with their members (name, role, fingerprint) and how many invites are open.
+`relay-server vaults` lists the workspaces with their members (name, role, fingerprint) and how many invites are open.
 
 ## Moving a conversation
 
@@ -269,8 +272,8 @@ app of Relay-inc. `RELAY_GITHUB_CLIENT_ID` points a server at another app.
 | `relay-server serve [--port 47800] [--bind 0.0.0.0] [--ram-disk]` | Run, on a Mac with the working copy on a RAM disk |
 | `relay-server pair [--host <ip>] [--port <port>]` | Print a one-time pairing line |
 | `relay-server clients` | The paired devices |
-| `relay-server revoke <name or fingerprint>` | Unpair a device, and take it out of its shared vaults |
-| `relay-server vaults` | The shared vaults, their members and open invites |
+| `relay-server revoke <name or fingerprint>` | Unpair a device, and take it out of its workspaces |
+| `relay-server vaults` | The workspaces, their members and open invites |
 | `relay-server service` | A service file that keeps `serve` running |
 | `relay-server info` | This server's fingerprint and data folder |
 | `relay-server version` | This binary's version, the same as Relay's |
@@ -283,12 +286,12 @@ In `~/Library/Application Support/relay-server` (Mac) or `~/.local/share/relay-s
 | File | Content |
 |---|---|
 | `identity.crt.der`, `identity.key.der` | The server's certificate and key (0600) |
-| `clients.json` | Paired devices: name, fingerprint, date, and whether it only shares vaults |
+| `clients.json` | Paired devices: name, fingerprint, date, and whether it only shares workspaces |
 | `pairing.json` | The open pairing code, while there is one |
 | `serve.json` | The port the running server listens on |
 | `pending/<device>/` | Open permission cards, per device |
 | `mirror/<device>/` | The device's sealed mirror and GitHub token |
-| `vaults/<id>/` | A shared vault: `vault.json` (members, invites, 0600) and its sealed records in `blobs/` |
+| `vaults/<id>/` | A workspace: `vault.json` (members, invites, 0600) and its sealed records in `blobs/` |
 
 The agents' transcripts are Claude Code's own, in `~/.claude/projects/` (sealed for conversations in the vault, see The
 mirror). The brokers' sockets are in

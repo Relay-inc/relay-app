@@ -35,7 +35,7 @@ export async function pickMappedFile(key: MapKey, map: VaultMap) {
 export async function checkMap(map: VaultMap) {
   setStatus(await checkMapping(st().vaultStatus!.vault, map));
 }
-/** Add a shared vault (a folder with its own work-state): its projects show in the sidebar next to the main vault's. */
+/** Add another vault folder (a folder with its own work-state): its projects show in the sidebar next to the main vault's. */
 export async function addExtraVault() {
   const picked = await pickVault();
   if (picked)

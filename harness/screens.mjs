@@ -107,7 +107,7 @@ const VIEWS = {
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
-  // Settings › Machines, pairing a machine for shared vaults only: the line pasted, the checkbox ticked
+  // Settings › Machines, pairing a machine for workspaces only: the line pasted, the checkbox ticked
   "settings-machines-pair-shared": async () => {
     await settingsPage("Machines", null, "nomirror");
     await page
@@ -115,14 +115,14 @@ const VIEWS = {
       .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
     await page.locator("#mcname").fill("Team server");
     await page.locator("#mcshared").check();
-    await intoView("Only for shared vaults: no mirror of this Mac's vault");
+    await intoView("Only for workspaces: no mirror of this Mac's vault");
   },
-  // the same page further down: Team server, paired for shared vaults only, says so where Server shows its mirror
+  // the same page further down: Team server, paired for workspaces only, says so where Server shows its mirror
   "settings-machines-shared-only": async () => {
     await settingsPage("Machines", null, "nomirror");
-    await waitText("For shared vaults only.");
-    // the intro says "for shared vaults only." too (text matches ignore case): the row's own words
-    await intoView("For shared vaults only. This Mac's vault");
+    await waitText("For workspaces only.");
+    // the intro says "for workspaces only." too (text matches ignore case): the row's own words
+    await intoView("For workspaces only. This Mac's vault");
   },
   // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
@@ -149,33 +149,33 @@ const VIEWS = {
     await waitText("ABCD-1234");
     await intoView("Waiting for GitHub…");
   },
-  // a new conversation about the team vault's Northwind Portal: the Vault pick fixed on that vault (it stays there)
+  // a new conversation about the side vault's Northwind Portal: the Runs in pick fixed on that vault (it stays there)
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.getByPlaceholder("Search").fill("northwind");
-    await byText(page, "Northwind Portal (Team vault)").hover();
+    await byText(page, "Northwind Portal (Side vault)").hover();
     await page
-      .getByRole("button", { name: "New conversation about Northwind Portal (Team vault)", exact: true })
+      .getByRole("button", { name: "New conversation about Northwind Portal (Side vault)", exact: true })
       .click();
     await settle(page);
-    // before the first message the Vault pick shows the project's vault, fixed
-    await waitText("Team vault");
+    // before the first message the Runs in pick shows the project's vault, fixed
+    await waitText("Side vault");
   },
-  // a new general conversation with a team vault and a shared vault next to the main one: the Vault pick open on every
-  // vault, Runs on next to it
+  // a new general conversation with a side vault and a workspace next to the main one: the Runs in pick open on Your
+  // vault, the side vault and the workspace, Runs on next to it
   "composer-vault-pick": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));
     await settle(page);
-    await page.getByRole("button", { name: "Vault" }).locator("visible=true").first().click();
+    await page.getByRole("button", { name: "Runs in", exact: true }).locator("visible=true").first().click();
     await waitText("Northwind");
   },
-  // the shared vault Northwind picked there: no Runs on, and Claude Code is the only agent to pick
+  // the workspace Northwind picked there: no Runs on, and Claude Code is the only agent to pick
   "composer-vault-picked": async () => {
     await open(page, server.url, { fixture: "shared" });
     await page.evaluate(() => window.__harness.emit("menu", "new-general"));
     await settle(page);
-    await page.getByRole("button", { name: "Vault" }).locator("visible=true").first().click();
+    await page.getByRole("button", { name: "Runs in", exact: true }).locator("visible=true").first().click();
     await click("Northwind");
     await page.getByRole("button", { name: "Agent" }).locator("visible=true").first().click();
     await settle(page);
@@ -1078,7 +1078,7 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // Settings › Machines of the vault's admin: Team server, paired for shared vaults only, with the vault under it: its
+  // Settings › Machines of the workspace's admin: Team server, paired for workspaces only, with the workspace under it: its
   // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
   // new invite link made and the recovery key shown again
   "settings-shared-vaults": async () => {
@@ -1094,12 +1094,12 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Team server");
   },
-  // New shared vault on this machine… under Team server, filled in and created: the form closes, the new vault's row
+  // New workspace on this machine… under Team server, filled in and created: the form closes, the new workspace's row
   // under the machine shows its recovery key
   "settings-shared-new": async () => {
     await settingsPage("Machines", undefined, "shared");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
-    await button("New shared vault on this machine…").click();
+    await button("New workspace on this machine…").click();
     await page.locator("#shared-name").fill("Launch");
     await page
       .locator("div.justify-between", { has: page.getByText("Folder", { exact: true }) })
@@ -1109,14 +1109,14 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // a member's Settings › Machines: no machine, the vault they joined with a link under Shared vaults
+  // a member's Settings › Machines: no machine, the workspace they joined with a link under Workspaces
   "settings-shared-member": async () => {
     await settingsPage("Machines", undefined, "shared-member");
     await waitText("Put them back");
-    await intoView("Shared vaults");
+    await intoView("Workspaces");
   },
   // fixture shared-keeper: that member, made admin on the server, opens Members: the server shows under Machines,
-  // for shared vaults only, with its vault under it, an Update button and no Forget or New shared vault
+  // for workspaces only, with its workspace under it, an Update button and no Forget or New workspace
   "settings-shared-keeper": async () => {
     await settingsPage("Machines", undefined, "shared-keeper");
     await page.setViewportSize({ width: 900, height: 1300 });
@@ -1126,12 +1126,12 @@ const VIEWS = {
     await waitText("Update to");
     await intoView("You keep this server");
   },
-  // Relay opened by an invite link: Machines with the join form under Shared vaults, the link in it
+  // Relay opened by an invite link: Machines with the join form under Workspaces, the link in it
   "settings-shared-join": async () => {
     await settingsPage("Machines", undefined, "shared-invite");
     await page.setViewportSize({ width: 900, height: 1000 });
-    await waitText("Join a shared vault");
-    await intoView("Join a shared vault");
+    await waitText("Join a workspace");
+    await intoView("Join a workspace");
   },
   // the other vault folders under General: a path, Remove, and the project shown under another name (the main vault
   // has one)
@@ -1139,10 +1139,10 @@ const VIEWS = {
     await settingsPage("General", undefined, "shared");
     await intoView("Other vault folders");
   },
-  // the shared vault's projects in the sidebar, in their own context (found by the search)
+  // the side vault's and the workspace's projects in the sidebar, in their own context (found by the search)
   "sidebar-shared": async () => {
     await open(page, server.url, { fixture: "shared" });
-    // a project shows once it has conversations; the search finds both of the team vault's
+    // a project shows once it has conversations; the search finds both of the side vault's
     await page.getByPlaceholder("Search").fill("h");
     await waitText("Team Handbook");
     await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
