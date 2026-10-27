@@ -32,9 +32,9 @@ those. Share a vault with people you would let read what your agent can read. Wh
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.
 - **The project index is each Mac's own.** `work-state.md` and `System/index/` are generated from the project cards,
   so they do not sync: Relay rebuilds them after every round that moved a file. `System/scripts/` does not sync either,
-  so the script is this Mac's: a `build-index.py` of your own (other card fields) stays and runs, else Relay's, which
-  it also puts there for the vault's conversations. A Mac that joins a vault with its own script needs that script
-  copied in by hand. Two people only clash on a card they both changed. A conflict copy of a rule lands in
+  and Relay only ever runs its own `build-index.py`, which it also puts there for the vault's conversations. A vault
+  with a script of its own (other card fields) is left alone: its conversations rebuild the index with it, and a Mac
+  that joins such a vault needs that script copied in by hand. Two people only clash on a card they both changed. A conflict copy of a rule lands in
   `System/conflicts/rules/`, out of what every conversation loads.
 - **Your own mail, reminders and calendar stay out.** A conversation in another vault gets an error for reading them
   through `relay` or the mail tools. Writing to you (a reminder, a draft) still works. `relay` answers for the

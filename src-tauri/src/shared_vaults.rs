@@ -106,20 +106,17 @@ fn conflict_copy(f: &Filter, p: &str, machine: &str, stamp: &str) -> String {
     copy
 }
 
-/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards. System/
-/// scripts does not sync, so what runs is this Mac's: a script of the user's own (other card fields than the starter's)
-/// stays and runs, else the app's copy, which also goes there for the vault's conversations to run after their work.
+/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards with the
+/// app's own build-index.py, which also goes into the vault's System/scripts for its conversations. Relay never runs a
+/// script from the vault: a conversation there may write one, and Relay runs outside its fence. A vault with a script
+/// of its own (other card fields than the starter's) is left alone: the app's copy would find no cards and empty its
+/// index, and that script runs only where the vault's conversations run it.
 pub fn index_shared(app: &AppHandle, folder: &str) {
-    let Ok(bundled) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
+    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
     let own = Path::new(folder).join("System/scripts/build-index.py");
-    let script = match crate::index_script(own.clone(), Some(bundled.clone())) {
-        Some(s) if s == own => s,
-        _ => {
-            let Ok(code) = std::fs::read(&bundled) else { return };
-            if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
-            bundled
-        }
-    };
+    if crate::index_script(own.clone(), Some(script.clone())).is_some_and(|s| s == own) { return; }
+    let Ok(code) = std::fs::read(&script) else { return };
+    if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
     let path = app.state::<crate::App>().path.clone();
     match std::process::Command::new("python3").arg(&script).env("VAULT", folder).env("PATH", path).output() {
         Ok(o) if o.status.success() => {}
