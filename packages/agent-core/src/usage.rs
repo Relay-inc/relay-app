@@ -199,7 +199,7 @@ pub fn vault_activity(touches: &[Touch], vault: &str, today: i64, week: i64) -> 
     fs.sort_by(|a, b| (b.1 .0 + b.1 .1).cmp(&(a.1 .0 + a.1 .1)).then(a.0.cmp(&b.0)));
     json!({
         "today": t.json(), "week": w.json(), "topRead": top(read), "topChanged": top(changed),
-        "folders": fs.iter().take(8).map(|(f, (r, c))| json!({ "folder": f, "read": r, "changed": c })).collect::<Vec<_>>(),
+        "folders": fs.iter().map(|(f, (r, c))| json!({ "folder": f, "read": r, "changed": c })).collect::<Vec<_>>(),
     })
 }
 

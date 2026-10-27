@@ -173,8 +173,39 @@ pub fn parse_chunk(path: &Path, text: &str, seen: &mut HashSet<String>, meta: &m
     out
 }
 
+/// The files a patch adds (a write) or updates or deletes (an edit).
+fn patch_touches(patch: &str, cwd: &str) -> Vec<(Act, String)> {
+    patch.lines().filter_map(|l| {
+        let (act, f) = l.strip_prefix("*** Add File: ").map(|f| (Act::Write, f))
+            .or_else(|| l.strip_prefix("*** Update File: ").or_else(|| l.strip_prefix("*** Delete File: ")).map(|f| (Act::Edit, f)))?;
+        Some((act, resolve(f.trim(), cwd)))
+    }).collect()
+}
+/// The double-quoted string literal right after `key` in JavaScript source.
+fn js_string(src: &str, key: &str) -> Option<String> {
+    let rest = src[src.find(key)? + key.len()..].trim_start();
+    if !rest.starts_with('"') { return None; }
+    serde_json::Deserializer::from_str(rest).into_iter::<String>().next()?.ok()
+}
+/// Code mode (codex-cli 0.16x): one `exec` call runs JavaScript that calls the tools, `tools.exec_command({cmd, workdir})`
+/// and `tools.apply_patch("…")`.
+// ponytail: double-quoted literals only; a template literal (`cmd:` with backticks) or a variable is left out.
+fn exec_touches(js: &str, cwd: &str) -> Vec<(Act, String)> {
+    let mut out = vec![];
+    for call in js.split("tools.").skip(1) {
+        if let Some(args) = call.strip_prefix("exec_command(") {
+            let dir = js_string(args, "\"workdir\":").or_else(|| js_string(args, "workdir:")).unwrap_or_else(|| cwd.into());
+            if let Some(cmd) = js_string(args, "cmd:").or_else(|| js_string(args, "\"cmd\":")) { out.extend(shell_touches(&cmd, &dir)); }
+        } else if let Some(patch) = call.strip_prefix("apply_patch(").and_then(|a| js_string(a, "")) {
+            out.extend(patch_touches(&patch, cwd));
+        }
+    }
+    out
+}
+
 /// The files the tool calls in whole new lines of one rollout touched: shell commands by the notes they read and the
-/// folders they search, apply_patch by every file it adds (a write) or updates or deletes (an edit). `cwd` is the
+/// folders they search, apply_patch by every file it adds (a write) or updates or deletes (an edit), and both inside
+/// code mode's `exec`. `cwd` is the
 /// rollout's folder so far (its turn_context); a call's own workdir wins. `seen` holds call ids already counted.
 pub fn parse_touches(text: &str, cwd: &mut String, since: i64, seen: &mut HashSet<String>) -> Vec<Touch> {
     let mut out = vec![];
@@ -194,11 +225,8 @@ pub fn parse_touches(text: &str, cwd: &mut String, since: i64, seen: &mut HashSe
                 let dir = a["workdir"].as_str().unwrap_or(cwd);
                 shell_touches(&shell_command(&a), dir)
             }
-            ("custom_tool_call", "apply_patch") => p["input"].as_str().unwrap_or("").lines().filter_map(|l| {
-                let (act, f) = l.strip_prefix("*** Add File: ").map(|f| (Act::Write, f))
-                    .or_else(|| l.strip_prefix("*** Update File: ").or_else(|| l.strip_prefix("*** Delete File: ")).map(|f| (Act::Edit, f)))?;
-                Some((act, resolve(f.trim(), cwd)))
-            }).collect(),
+            ("custom_tool_call", "apply_patch") => patch_touches(p["input"].as_str().unwrap_or(""), cwd),
+            ("custom_tool_call", "exec") => exec_touches(p["input"].as_str().unwrap_or(""), cwd),
             _ => vec![],
         };
         out.extend(acts.into_iter().map(|(act, path)| Touch { at, act, path }));
@@ -310,6 +338,34 @@ mod tests {
         let got: Vec<(Act, String)> = parse_touches(&text, &mut cwd, 1790640000000, &mut HashSet::new()).into_iter().map(|t| (t.act, t.path)).collect();
         assert_eq!(got, vec![(Act::Read, "/v/Plan - A.md".into()), (Act::Search, "/v".into()), (Act::Read, "/v/Notes/B.md".into()),
             (Act::Write, "/v/New.md".into()), (Act::Edit, "/v/Inbox.md".into())]);
+    }
+
+    /// cargo test -p agent-codex real_touches -- --ignored --nocapture: this Mac's Codex rollouts, the ones in ~/vault
+    #[test]
+    #[ignore]
+    fn real_touches() {
+        let home = std::env::var("HOME").unwrap();
+        let mut l = Logs::default();
+        l.refresh(&PathBuf::from(format!("{home}/.codex/sessions")), &format!("{home}/vault"), 0);
+        let t = l.touches.records();
+        let vault: Vec<_> = t.iter().filter(|x| x.path.starts_with(&format!("{home}/vault/"))).map(|x| (x.act, x.path.as_str())).collect();
+        println!("{} touches, {} in the vault: {vault:?}", t.len(), vault.len());
+    }
+
+    #[test]
+    fn code_mode_exec_calls_as_touches() {
+        // codex-cli 0.164: every tool call is JavaScript in one `exec` custom tool call
+        let exec = |id: &str, js: &str| json!({"timestamp": "2026-09-30T08:00:01Z", "type": "response_item",
+            "payload": {"type": "custom_tool_call", "name": "exec", "call_id": id, "input": js}}).to_string();
+        let text = [
+            json!({"timestamp": "2026-09-30T08:00:00Z", "type": "turn_context", "payload": {"cwd": "/v"}}).to_string(),
+            exec("c1", r#"text(await tools.exec_command({cmd:"cat 'Contexts/A.md'; rg -n x","max_output_tokens":3000}))"#),
+            exec("c2", r#"text(await tools.exec_command({cmd:"head B.md","workdir":"/v/Notes"})); text(await tools.exec_command({cmd:`ls`}))"#),
+            exec("c3", r#"text(await tools.apply_patch("*** Begin Patch\n*** Update File: /v/Inbox.md\n@@\n-a\n+b\n*** End Patch"))"#),
+        ].join("\n");
+        let got: Vec<(Act, String)> = parse_touches(&text, &mut String::new(), 0, &mut HashSet::new()).into_iter().map(|t| (t.act, t.path)).collect();
+        assert_eq!(got, vec![(Act::Read, "/v/Contexts/A.md".into()), (Act::Search, "/v".into()), (Act::Read, "/v/Notes/B.md".into()),
+            (Act::Edit, "/v/Inbox.md".into())]);
     }
 
     #[test]
