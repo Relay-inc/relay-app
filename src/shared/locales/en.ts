@@ -1575,7 +1575,7 @@ const en = {
   "composer.machineSharedVault":
     "A conversation in a shared vault stays on this Mac: a work machine has your main vault only.",
   "mc.intro":
-    "A conversation can run on a machine and keeps running when this Mac is closed: pick the machine next to the model before its first message, or make it the default below. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here.",
+    "A conversation can run on a machine and keeps running when this Mac is closed: pick the machine next to the model before its first message, or make it the default below. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here, except one paired for shared vaults only.",
   "mc.runDefaultTitle": "Where conversations run",
   "mc.runDefault": "New conversations run on",
   "mc.runDefaultHelp": "Each new conversation can still pick another place next to the model.",

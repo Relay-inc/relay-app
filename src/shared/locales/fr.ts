@@ -1605,7 +1605,7 @@ export default {
   "composer.machineSharedVault":
     "Une conversation dans un coffre partagé reste sur ce Mac : une machine de travail n'a que votre coffre principal.",
   "mc.intro":
-    "Une conversation peut s'exécuter sur une machine et continue quand ce Mac est fermé : choisissez la machine à côté du modèle avant son premier message, ou faites-en la valeur par défaut ci-dessous. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici.",
+    "Une conversation peut s'exécuter sur une machine et continue quand ce Mac est fermé : choisissez la machine à côté du modèle avant son premier message, ou faites-en la valeur par défaut ci-dessous. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici, sauf une machine appairée uniquement pour les coffres partagés.",
   "mc.runDefaultTitle": "Où s'exécutent les conversations",
   "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
   "mc.runDefaultHelp": "Chaque nouvelle conversation peut encore choisir un autre endroit à côté du modèle.",
