@@ -727,14 +727,23 @@ fn scratch_delete(state: State<App>, project: String, id: String) -> Result<(), 
 #[tauri::command]
 fn read_note(state: State<App>, target: String) -> Result<Value, String> {
     let v = need_vault(&state)?;
-    vault::note(&v, &target).map(|(path, text)| json!({"path": path, "text": text}))
+    // the main vault first, then the shared ones; a shared vault's note by its absolute path
+    let found = vault::note(&v, &target).or_else(|| extra_vaults(&state.settings.lock().unwrap()).iter().find_map(|e| {
+        vault::note(e, &target).map(|(path, text)| (vault::resolve(&vault::canon(e), &path).to_string_lossy().into_owned(), text))
+    }));
+    found.map(|(path, text)| json!({"path": path, "text": text}))
         .ok_or_else(|| tr_v(ui_lang_of(&state.settings.lock().unwrap()), "err.note", &target))
 }
 
-/// The vault's notes, {root (canonical), notes (relative paths)}: what a conversation may link to.
+/// The notes a conversation may link to, {root (the main vault, canonical), notes}: the main vault's relative to it,
+/// the shared vaults' as absolute paths.
 #[tauri::command]
 fn vault_notes(state: State<App>) -> Result<Value, String> {
-    let (root, notes) = vault::notes(&need_vault(&state)?);
+    let (root, mut notes) = vault::notes(&need_vault(&state)?);
+    for e in extra_vaults(&state.settings.lock().unwrap()) {
+        let (r, list) = vault::notes(&e);
+        notes.extend(list.into_iter().map(|n| format!("{r}/{n}")));
+    }
     Ok(json!({"root": root, "notes": notes}))
 }
 

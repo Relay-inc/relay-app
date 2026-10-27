@@ -212,6 +212,11 @@ export const sharedMembers = [
 /** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
 export const inviteLink = (invite: string) =>
   `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;
+/** The team vault's notes, absolute as `vault_notes` gives another vault's. */
+export const teamNotes = [
+  `${TEAM_VAULT}/Contexts/Team/Projects/Team Handbook.md`,
+  `${TEAM_VAULT}/Calendar/2026-10-01 Standup.md`,
+];
 
 const contextFolder = (context: string) => `Contexts/${context}`;
 export const notes = [
