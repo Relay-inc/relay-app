@@ -262,6 +262,8 @@ fn add(app: &tauri::AppHandle, state: &crate::App, v: &Shared) -> Result<(), Str
         s["sharedVaults"] = Value::Array(all);
         s.clone()
     };
+    // and once more now the vault is in the settings: an agent that started in between was fenced without it
+    crate::refence(app, false)?;
     crate::save_settings(app, &s)?;
     sync_now();
     Ok(())

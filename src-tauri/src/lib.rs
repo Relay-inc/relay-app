@@ -1622,7 +1622,8 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     }
     // a folder added: the conversations running now were fenced without it
     let before = own_extra(&state.settings.lock().unwrap());
-    if extra.iter().any(|e| !before.contains(e)) { refence(&app, true)?; refence(&app, false)?; }
+    let added = extra.iter().any(|e| !before.contains(e));
+    if added { refence(&app, true)?; refence(&app, false)?; }
     s["extraVaults"] = json!(extra);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
@@ -1652,6 +1653,8 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
     let rekey = state.settings.lock().unwrap()["shortcuts"] != s["shortcuts"];
     *state.settings.lock().unwrap() = s.clone();
+    // and once more now the new list is in: an agent that started in between was fenced without the new folder
+    if added { refence(&app, false)?; }
     plugins::sync(&app); // a plugin switched off or removed stops
     anywhere::apply(&app); // the shortcut follows Settings › Voice
     set_cur_lang(lang);
