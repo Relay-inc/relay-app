@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **Pick the vault of a new conversation**: with more than one vault, a new conversation's composer has a Vault pick next to the agent and model. A general conversation runs in the vault you pick and stays there, shown in the sidebar with its vault's name. In another vault than your main one it runs on this Mac with Claude Code. A conversation about a project runs in that project's vault
+- **Pick the vault of a new conversation**: with more than one vault, a new conversation's composer has a Vault pick next to the agent and model. A general conversation runs in the vault you pick and stays there, shown in the sidebar with its vault's name. In another vault than your main one it runs on this Mac with Claude Code. A conversation about a project runs in that project's vault (#286)
 
 ## [0.0.37] - 2026-10-27
 
