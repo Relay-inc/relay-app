@@ -4,10 +4,11 @@
 //! that came in through an invite link is a vault-only client that may do nothing else here.
 //!
 //! On disk, per vault: `vaults/<id>/vault.json` (0600: name, members, open invites) and `vaults/<id>/blobs/<name>`.
-//! A record is `u32 meta_len || meta || data`; only `meta_len` is read here, to list `meta` in the manifest. Every write
-//! is a compare-and-swap on the record's etag (sha256 of the file), under a lock per vault.
+//! A record is `u32 meta_len || meta || data` (`relay_remote::vault::split`); only `meta_len` is read here, to list `meta`
+//! in the manifest. Every write is a compare-and-swap on the record's etag (sha256 of the file), under a lock per vault.
 
-use crate::{clients, now, save_clients, write_private, Client, CLIENTS};
+use crate::{clients, device_name, now, save_clients, write_private, Client, CLIENTS};
+use relay_remote::vault::{split, MAX_RECORD};
 use relay_remote::{sync, tls};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -19,9 +20,6 @@ use std::{fs, io};
 /// How long an invite link works, and how many wrong proofs drop it.
 const INVITE_SECS: u64 = 24 * 3600;
 const INVITE_TRIES: u32 = 5;
-/// A record's meta part at most, and a record at most: the mirror's biggest file plus that.
-const MAX_META: usize = 64 << 10;
-pub const MAX_RECORD: u64 = crate::mirror::MAX_FILE + MAX_META as u64;
 /// A vault's name at most, in characters; a wrapped vault key at most, in hex characters.
 const MAX_NAME: usize = 100;
 const MAX_WRAPPED: usize = 512;
@@ -41,7 +39,6 @@ impl Vault {
 
 /// Exactly `n` lowercase hex characters: every id, code and blob name. Anything else never reaches a path.
 fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) }
-fn to_hex(b: &[u8]) -> String { b.iter().map(|b| format!("{b:02x}")).collect() }
 fn dir(data: &Path) -> PathBuf { data.join("vaults") }
 
 /// A vault's file, its expired and used-up invites left out. None when there is no such vault.
@@ -78,12 +75,6 @@ pub(crate) fn forget(data: &Path, fps: &[String]) {
     }
 }
 
-/// The meta part of a record: what the 4-byte length in front says, at most MAX_META and inside the record.
-fn meta_of(record: &[u8]) -> Option<&[u8]> {
-    let n = u32::from_be_bytes(record.get(..4)?.try_into().ok()?) as usize;
-    if n > MAX_META { return None; }
-    record.get(4..4 + n)
-}
 /// The etag of the record at `p`, "" when there is none.
 fn etag_at(p: &Path) -> Result<String, String> {
     match fs::read(p) { Ok(b) => Ok(sync::sha256_hex(&b)), Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(String::new()), Err(e) => Err(e.to_string()) }
@@ -92,9 +83,11 @@ fn etag_at(p: &Path) -> Result<String, String> {
 /// A blob as the manifest last listed it, by (inode, size, mtime): a manifest reads only what changed since. Writes
 /// never trust it, they hash the file under the vault's lock.
 type Stamp = (u64, u64, i64, i64);
+type Listed = HashMap<String, (Stamp, Value)>;
 
 /// `fp`: this server's certificate, which an invite's proof is bound to. `locks`: one per vault, for every write.
-pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<Mutex<()>>>>, seen: Mutex<HashMap<PathBuf, (Stamp, Value)>> }
+/// `seen`: per vault, its records as the last manifest listed them, by name.
+pub struct Vaults { data: PathBuf, fp: String, locks: Mutex<HashMap<String, Arc<Mutex<()>>>>, seen: Mutex<HashMap<String, Listed>> }
 
 impl Vaults {
     pub fn new(data: &Path, fp: &str) -> Vaults { Vaults { data: data.into(), fp: fp.into(), locks: Mutex::default(), seen: Mutex::default() } }
@@ -128,10 +121,6 @@ impl Vaults {
         save(&self.data, &v)?;
         Ok(json!({"vault": {"id": id, "name": v.name}}))
     }
-    pub fn list(&self, fp: &str) -> Value {
-        let mine: Vec<Value> = all(&self.data).iter().filter_map(|v| Some(json!({"id": v.id, "name": v.name, "role": v.role(fp)?, "members": v.members.len()}))).collect();
-        json!({"vaults": mine})
-    }
     /// Its members, and its open invites for an admin.
     pub fn info(&self, fp: &str, id: &str) -> Result<Value, String> {
         let v = self.member(id, fp)?;
@@ -141,14 +130,14 @@ impl Vaults {
         Ok(json!({"vault": {"id": v.id, "name": v.name, "role": role, "members": members, "invites": invites}}))
     }
 
-    /// An admin opens an invite: its code goes into the link, with this server's fingerprint.
+    /// An admin opens an invite: its code goes into the link.
     pub fn invite(&self, fp: &str, id: &str, role: &str, wrapped: &str) -> Result<Value, String> {
         if role != "admin" && role != "member" { return Err("role is admin or member".into()); }
         if wrapped.is_empty() || wrapped.len() > MAX_WRAPPED || !hex(wrapped, wrapped.len()) { return Err("bad wrapped key".into()); }
         self.with(id, fp, |v, me| {
             if me != "admin" { return Err("only an admin can invite".into()); }
             let i = Invite { id: tls::random_secret()[..16].into(), code: tls::random_secret(), role: role.into(), wrapped: wrapped.into(), expires: now() + INVITE_SECS, fails: 0, by: fp.into() };
-            let out = json!({"invite": {"id": i.id, "code": i.code, "expires": i.expires}, "fp": self.fp});
+            let out = json!({"invite": {"id": i.id, "code": i.code, "expires": i.expires}});
             v.invites.push(i);
             save(&self.data, v)?;
             Ok(out)
@@ -182,14 +171,7 @@ impl Vaults {
             let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
             let mut list = clients(&self.data);
             let known = list.iter().find(|c| c.fp == fp).map(|c| c.name.clone());
-            let who = known.clone().unwrap_or_else(|| {
-                // the name as `pair` takes it, a number on a name that is taken
-                let name: String = name.trim().chars().filter(|c| !c.is_control()).take(60).collect();
-                let name = if name.is_empty() { format!("device-{}", &fp[..8]) } else { name };
-                let (mut n, mut k) = (name.clone(), 2);
-                while list.iter().any(|c| c.name == n) { n = format!("{name} {k}"); k += 1; }
-                n
-            });
+            let who = known.clone().unwrap_or_else(|| device_name(&list, name, fp));
             match v.members.iter_mut().find(|m| m.fp == fp) {
                 Some(m) => if inv.role == "admin" { m.role = "admin".into(); },
                 None => v.members.push(Member { fp: fp.into(), name: who.clone(), role: inv.role.clone(), added: now() }),
@@ -226,22 +208,33 @@ impl Vaults {
         Ok(())
     }
 
-    /// Every record: its name, etag, size and meta part (hex).
+    /// Every record: its name, etag, size and meta part (hex). One that cannot be read or is no record is listed too,
+    /// with an empty meta (and an empty etag when unreadable): left out, it would read as deleted, and every member would
+    /// delete that file. With an empty meta a member's Relay keeps it as it was (`SealedRemote::know`).
     pub fn manifest(&self, fp: &str, id: &str) -> Result<Vec<Value>, String> {
         self.member(id, fp)?;
-        let mut out = vec![];
+        let (mut out, mut listed) = (vec![], Listed::new());
+        let seen = {
+            let mut all = self.seen.lock().unwrap();
+            // a vault gone (its last member left, or `revoke` in another process) leaves nothing behind here
+            all.retain(|v, _| dir(&self.data).join(v).is_dir());
+            all.remove(id).unwrap_or_default()
+        };
         for e in fs::read_dir(self.blobs(id)).into_iter().flatten().flatten() {
             // a write's temp file is no record
-            if !e.file_name().to_str().is_some_and(|n| hex(n, 64)) { continue; }
+            let Some(name) = e.file_name().to_str().filter(|n| hex(n, 64)).map(String::from) else { continue };
             let (p, Ok(m)) = (e.path(), e.metadata()) else { continue };
             let stamp = (m.ino(), m.len(), m.mtime(), m.mtime_nsec());
-            if let Some((s, v)) = self.seen.lock().unwrap().get(&p) { if *s == stamp { out.push(v.clone()); continue; } }
-            let Ok(b) = fs::read(&p) else { continue };
-            let Some(meta) = meta_of(&b) else { continue };
-            let v = json!({"name": e.file_name().to_string_lossy(), "etag": sync::sha256_hex(&b), "size": b.len(), "meta": to_hex(meta)});
-            self.seen.lock().unwrap().insert(p, (stamp, v.clone()));
+            if let Some((s, v)) = seen.get(&name).filter(|(s, _)| *s == stamp) { out.push(v.clone()); listed.insert(name, (*s, v.clone())); continue; }
+            let v = match fs::read(&p) {
+                Ok(b) => json!({"name": name, "etag": sync::sha256_hex(&b), "size": b.len(), "meta": split(&b).map(|(m, _)| tls::hex(m)).unwrap_or_default()}),
+                // not cached: the next manifest reads it again
+                Err(_) => { out.push(json!({"name": name, "etag": "", "size": m.len(), "meta": ""})); continue; }
+            };
+            listed.insert(name, (stamp, v.clone()));
             out.push(v);
         }
+        self.seen.lock().unwrap().insert(id.into(), listed);
         Ok(out)
     }
     /// A record and its etag.
@@ -255,7 +248,7 @@ impl Vaults {
     /// Write a record while the one there still has etag `expect` ("": none). Returns the new etag.
     pub fn put(&self, fp: &str, id: &str, name: &str, record: &[u8], expect: Option<&str>) -> Result<String, String> {
         if !hex(name, 64) { return Err("bad name".into()); }
-        if record.len() as u64 > MAX_RECORD || meta_of(record).is_none() { return Err("not a record".into()); }
+        if record.len() as u64 > MAX_RECORD || split(record).is_none() { return Err("not a record".into()); }
         let expect = expect.ok_or("expect missing")?;
         self.with(id, fp, |_, _| {
             let p = self.blobs(id).join(name);
@@ -272,7 +265,6 @@ impl Vaults {
             let p = self.blobs(id).join(name);
             if etag_at(&p)? != expect { return Err("changed meanwhile".into()); }
             if !expect.is_empty() { fs::remove_file(&p).map_err(|e| e.to_string())?; }
-            self.seen.lock().unwrap().remove(&p);
             Ok(())
         })
     }
@@ -281,16 +273,21 @@ impl Vaults {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use relay_remote::vault::MAX_META;
 
     const ADMIN: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
     const OTHER: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
     const SERVER: &str = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
-    fn store(tag: &str) -> Vaults {
+    /// A store in a temp folder of its own, gone with it when the test ends, also when it fails.
+    struct Store(Vaults);
+    impl std::ops::Deref for Store { type Target = Vaults; fn deref(&self) -> &Vaults { &self.0 } }
+    impl Drop for Store { fn drop(&mut self) { fs::remove_dir_all(&self.0.data).ok(); } }
+    fn store(tag: &str) -> Store {
         let d = std::env::temp_dir().join(format!("relay-vaults-{tag}-{}", std::process::id()));
         fs::remove_dir_all(&d).ok();
         fs::create_dir_all(&d).unwrap();
-        Vaults::new(&d, SERVER)
+        Store(Vaults::new(&d, SERVER))
     }
     /// A record the server accepts: a meta part of `meta` bytes, then `data`. Never decrypted here.
     fn record(meta: &[u8], data: &[u8]) -> Vec<u8> { [&(meta.len() as u32).to_be_bytes()[..], meta, data].concat() }
@@ -322,7 +319,6 @@ mod tests {
         s.delete(ADMIN, &id, &name('1'), Some(&e2)).unwrap();
         assert!(s.get(ADMIN, &id, &name('1')).is_err());
         assert!(s.delete(ADMIN, &id, &name('1'), Some(&e2)).unwrap_err().contains("changed meanwhile"), "already gone");
-        fs::remove_dir_all(&s.data).ok();
     }
 
     #[test]
@@ -344,7 +340,18 @@ mod tests {
         }
         assert!(s.put(ADMIN, &id, &name('b'), &record(&vec![0; MAX_META], b""), Some("")).is_ok(), "64 KiB of meta is fine");
         for bad in ["../vault.json", &name('A'), &"a".repeat(63)] { assert!(s.put(ADMIN, &id, bad, &r, Some("")).unwrap_err().contains("bad name"), "{bad}"); }
-        fs::remove_dir_all(&s.data).ok();
+    }
+
+    #[test]
+    fn a_record_that_is_no_record_is_still_listed() {
+        // left out, the members would read the file as deleted and delete it everywhere
+        let s = store("garbage");
+        let id = made(&s);
+        for (c, b) in [('c', &b"garbage"[..]), ('d', &[0, 0][..]), ('e', &[0, 0, 0, 9, 1][..])] { fs::write(s.blobs(&id).join(name(c)), b).unwrap(); }
+        let mut m = s.manifest(ADMIN, &id).unwrap();
+        m.sort_by_key(|v| v["name"].as_str().unwrap().to_string());
+        assert_eq!(m, [('c', &b"garbage"[..]), ('d', &[0, 0][..]), ('e', &[0, 0, 0, 9, 1][..])].map(|(c, b)| json!({"name": name(c), "etag": sync::sha256_hex(b), "size": b.len(), "meta": ""})));
+        assert_eq!(s.manifest(ADMIN, &id).unwrap().len(), 3, "from the cache too");
     }
 
     #[test]
@@ -360,7 +367,6 @@ mod tests {
         assert!(s.info(ADMIN, &id.to_uppercase()).is_err());
         assert!(s.info(ADMIN, "../../clients.js").is_err());
         assert!(s.join(OTHER, &id, "nothex", "x", "00").unwrap_err().contains("bad invite"));
-        fs::remove_dir_all(&s.data).ok();
     }
 
     #[test]
@@ -387,7 +393,6 @@ mod tests {
         let (inv, code) = invite(&s, &id, "member");
         s.invite_revoke(ADMIN, &id, &inv).unwrap();
         assert!(s.join(OTHER, &id, &inv, "x", &tls::proof(&code, OTHER, SERVER)).is_err());
-        fs::remove_dir_all(&s.data).ok();
     }
 
     #[test]
@@ -404,7 +409,6 @@ mod tests {
         assert!(c.vaults_only);
         assert_eq!(c.name, "colleague 2", "deduplicated as pair does");
         assert!(s.join(OTHER, &id, &inv, "colleague", &tls::proof(&code, OTHER, SERVER)).is_err(), "single use");
-        assert_eq!(s.list(OTHER)["vaults"], json!([{"id": id, "name": "Team", "role": "member", "members": 2}]));
         // a member sees the members, not the invites
         invite(&s, &id, "member");
         let info = s.info(OTHER, &id).unwrap();
@@ -415,9 +419,8 @@ mod tests {
         assert!(s.invite(OTHER, &id, "member", "ab").unwrap_err().contains("only an admin"));
         join(&s, OTHER, &id, "admin");
         join(&s, OTHER, &id, "member");
-        assert_eq!(s.list(OTHER)["vaults"][0]["role"], "admin");
+        assert_eq!(s.info(OTHER, &id).unwrap()["vault"]["role"], "admin");
         assert_eq!(clients(&s.data).len(), 2, "a known device is not added twice");
-        fs::remove_dir_all(&s.data).ok();
     }
 
     #[test]
@@ -437,9 +440,7 @@ mod tests {
         no(s.put(OTHER, &id, &name('2'), &record(b"m", b"x"), Some("")).map(|e| json!(e)));
         no(s.delete(OTHER, &id, &name('1'), Some(&e1)).map(|_| json!({})));
         no(s.info(OTHER, "0123456789abcdef"));
-        assert_eq!(s.list(OTHER)["vaults"], json!([]));
         assert_eq!(s.get(ADMIN, &id, &name('1')).unwrap().1, e1, "untouched");
-        fs::remove_dir_all(&s.data).ok();
     }
 
     #[test]
@@ -461,7 +462,6 @@ mod tests {
         // the last member leaving takes the vault along
         s.remove(ADMIN, &id, ADMIN).unwrap();
         assert!(!dir(&s.data).join(&id).exists());
-        fs::remove_dir_all(&s.data).ok();
     }
 
     #[test]
@@ -497,6 +497,5 @@ mod tests {
         assert!(s.manifest(OTHER, &id).is_err());
         crate::revoke(&s.data, "laptop").unwrap();
         assert!(all(&s.data).is_empty(), "nobody left in either: {solo} and {id} are gone");
-        fs::remove_dir_all(&s.data).ok();
     }
 }

@@ -43,10 +43,6 @@ pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Jo
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct VaultRef { pub id: String, pub name: String }
-/// A shared vault this device is a member of: its role there (`admin` or `member`) and how many members it has.
-#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
-#[serde(default)]
-pub struct VaultSummary { pub id: String, pub name: String, pub role: String, pub members: u32 }
 /// A shared vault in full: its members and, for an admin, the invites still open.
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
@@ -177,15 +173,13 @@ impl Client {
     // ---------- shared vaults there (docs/shared-vaults.md): ciphertext only, the key stays with the members
     /// A new shared vault there, with this device as its admin.
     pub fn vault_create(&self, name: &str) -> Result<VaultRef, String> { field(self.call(json!({"op": "vault_create", "name": name}))?, "vault") }
-    pub fn vault_list(&self) -> Result<Vec<VaultSummary>, String> { field(self.call(json!({"op": "vault_list"}))?, "vaults") }
     pub fn vault_info(&self, vault: &str) -> Result<VaultInfo, String> { field(self.call(json!({"op": "vault_info", "vault": vault}))?, "vault") }
     /// An invite to `vault` with `role` (`admin` or `member`): the link to hand over, for the server at `host:port` as the
     /// other device reaches it. The vault key goes to the server wrapped under a fresh secret that only the link holds.
     pub fn vault_invite(&self, vault: &str, role: &str, key: &VaultKey, host: &str, port: u16) -> Result<(String, Invite), String> {
         let secret = tls::random_key();
         let v = self.call(json!({"op": "vault_invite", "vault": vault, "role": role, "wrapped": vault::wrap(key, &secret, vault)?}))?;
-        // the link pins the certificate this connection checked; a server naming another one is wrong
-        if !v["fp"].as_str().unwrap_or_default().eq_ignore_ascii_case(&self.fp) { return Err("the server named another certificate than its own".into()); }
+        // the link pins the certificate this connection checked
         let inv = &v["invite"];
         let s = |k: &str| inv[k].as_str().map(String::from);
         let l = PairLine { host: host.into(), port, fp: self.fp.clone(), code: s("code").unwrap_or_default(), vault: Some(vault.into()), invite: s("id"), secret: Some(secret), ..Default::default() };
@@ -200,8 +194,8 @@ impl Client {
     /// Take the device `fp` out of `vault` (an admin), or leave it (`fp` this device's own).
     pub fn vault_remove(&self, vault: &str, fp: &str) -> Result<(), String> { self.call(json!({"op": "vault_remove", "vault": vault, "fp": fp})).map(|_| ()) }
     /// A shared vault there, as the other side of a sync round. A record (up to 64 MiB) or a manifest after a restart
-    /// there (every record hashed again) comes back with no body to size the wait by, so those two get as long as `slow`:
-    /// the usual wait fails them every round over a slow link. A put's wait already grows with its body.
+    /// there (every record hashed again) comes back with no body to size the wait by, so those two wait `longer`, as
+    /// long as `slow`: the usual wait fails them every round over a slow link. A put's wait already grows with its body.
     pub fn sealed(&self, vault: &str, key: VaultKey) -> SealedRemote {
         let c = self.clone();
         SealedRemote::new(vault, key, Box::new(move |req, body, want| {

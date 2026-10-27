@@ -817,32 +817,19 @@ fn repos_clone_snapshot_and_push() {
     std::fs::remove_dir_all(&tmp).ok();
 }
 
-/// One request with `body` after its line, and the reply with the bytes after it when it has a `len` (vault_get): the
-/// raw protocol, the client's vault calls are relay-remote's.
-fn raw(c: &Client, id: &Identity, req: serde_json::Value, body: &[u8]) -> (serde_json::Value, Vec<u8>) {
-    use relay_remote::proto;
-    let (r, mut w) = relay_remote::tls::connect(&c.addr, id, &c.fp, Duration::from_secs(5)).unwrap().split();
-    let mut r = std::io::BufReader::new(r);
-    proto::write_json(&mut w, &req).unwrap();
-    w.write_all(body).unwrap();
-    w.flush().unwrap();
-    let v = proto::read_json(&mut r, proto::MAX_LINE).unwrap();
-    let b = match v["len"].as_u64() { Some(n) if v["ok"] == true => proto::read_body(&mut r, n, n).unwrap(), _ => vec![] };
-    (v, b)
-}
-
+/// The walls around a shared vault on the real binary: the handshake while an invite is open, a vault-only device,
+/// a linked one, and the CLI. What the records do over the wire is `two_macs_share_a_vault_through_the_server`.
 #[test]
-fn a_shared_vault_invite_join_put_get_and_walls() {
+fn a_shared_vault_invite_join_and_walls() {
     use serde_json::json;
     let s = start("vaults");
     // identities of this test's own: the other tests make their own "laptop" and "stranger" at the same time
     let lid = device("vault-laptop");
     let (l, _) = client::pair(&pair_line(&s), &lid, "laptop").unwrap();
-    let laptop = Client::new(&l.host, l.port, &l.fp, lid.clone());
+    let laptop = Client::new(&l.host, l.port, &l.fp, lid);
     let port: u16 = laptop.addr.rsplit(':').next().unwrap().parse().unwrap();
     let id = laptop.call(json!({"op": "vault_create", "name": "Team"})).unwrap()["vault"]["id"].as_str().unwrap().to_string();
     let inv = laptop.call(json!({"op": "vault_invite", "vault": id, "role": "member", "wrapped": "ab".repeat(32)})).unwrap();
-    assert_eq!(inv["fp"].as_str(), Some(laptop.fp.as_str()));
     let (invite, code) = (inv["invite"]["id"].as_str().unwrap(), inv["invite"]["code"].as_str().unwrap());
 
     // a stranger with a wrong code gets through the handshake (an invite is open) and no further
@@ -850,7 +837,7 @@ fn a_shared_vault_invite_join_put_get_and_walls() {
     let stranger = Client::new("127.0.0.1", port, &laptop.fp, sid.clone());
     let wrong = relay_remote::tls::proof(&"0".repeat(32), &sid.fingerprint(), &laptop.fp);
     assert!(stranger.call(json!({"op": "vault_join", "vault": id, "invite": invite, "name": "stranger", "proof": wrong})).unwrap_err().contains("wrong invite code"));
-    assert!(stranger.call(json!({"op": "vault_list"})).unwrap_err().contains("not paired"));
+    assert!(stranger.call(json!({"op": "vault_info", "vault": id})).unwrap_err().contains("not paired"));
 
     // the colleague joins with the link's code and becomes a vault-only client
     let cid = device("vault-colleague");
@@ -860,22 +847,6 @@ fn a_shared_vault_invite_join_put_get_and_walls() {
     assert_eq!((j["role"].as_str(), j["wrapped"].as_str()), (Some("member"), Some("ab".repeat(32).as_str())));
     let out = bin().arg("clients").env("RELAY_SERVER_DATA", &s.data).output().unwrap();
     assert!(String::from_utf8_lossy(&out.stdout).contains("colleague"));
-
-    // a record: fake ciphertext behind a valid header, the server never opens it
-    let record = [&3u32.to_be_bytes()[..], b"metciphertext"].concat();
-    let name = "1".repeat(64);
-    let (v, _) = raw(&colleague, &cid, json!({"op": "vault_put", "vault": id, "name": name, "len": record.len(), "expect": ""}), &record);
-    assert_eq!(v["ok"], true, "{v}");
-    let etag = v["etag"].as_str().unwrap().to_string();
-    let (v, b) = raw(&laptop, &lid, json!({"op": "vault_get", "vault": id, "name": name}), &[]);
-    assert_eq!((v["etag"].as_str(), b), (Some(etag.as_str()), record.clone()));
-    let m = laptop.call(json!({"op": "vault_manifest", "vault": id})).unwrap();
-    assert_eq!(m["blobs"], json!([{"name": name, "etag": etag, "size": record.len(), "meta": "6d6574"}]));
-    let two = [&0u32.to_be_bytes()[..], b"x"].concat();
-    let (v, _) = raw(&colleague, &cid, json!({"op": "vault_put_many", "vault": id, "files": [{"name": name, "len": 1, "expect": ""}, {"name": "2".repeat(64), "len": two.len(), "expect": ""}]}), &[&b"z"[..], &two].concat());
-    assert_eq!(v["errors"].as_object().unwrap().len(), 1, "{v}");
-    assert_eq!(v["etags"].as_object().unwrap().len(), 1, "{v}");
-    assert!(colleague.call(json!({"op": "vault_delete", "vault": id, "name": name, "expect": "00"})).unwrap_err().contains("changed meanwhile"));
 
     // a vault-only device: nothing else here, and no vaults of its own
     for op in ["list", "sync_manifest", "launch", "pair_device", "vault_create"] {
@@ -888,14 +859,14 @@ fn a_shared_vault_invite_join_put_get_and_walls() {
     // another paired laptop is no member, a phone gets no vault ops
     let other = paired(&s, "vault-other");
     assert_eq!(other.call(json!({"op": "vault_info", "vault": id})).unwrap_err(), "no such vault");
-    assert!(linked(&laptop, "vault-phone").call(json!({"op": "vault_list"})).unwrap_err().contains("not allowed from a linked device"));
+    assert!(linked(&laptop, "vault-phone").call(json!({"op": "vault_info", "vault": id})).unwrap_err().contains("not allowed from a linked device"));
 
     let out = String::from_utf8_lossy(&bin().arg("vaults").env("RELAY_SERVER_DATA", &s.data).output().unwrap().stdout).into_owned();
     assert!(out.contains("Team") && out.contains("laptop  admin") && out.contains("colleague  member"), "{out}");
     // revoked: out of the vault, and the next connection fails
     assert!(bin().args(["revoke", "colleague"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap().status.success());
-    assert_eq!(laptop.call(json!({"op": "vault_list"})).unwrap()["vaults"][0]["members"], 1);
-    assert!(colleague.call(json!({"op": "vault_list"})).is_err());
+    assert_eq!(laptop.call(json!({"op": "vault_info", "vault": id})).unwrap()["vault"]["members"].as_array().unwrap().len(), 1);
+    assert!(colleague.call(json!({"op": "vault_info", "vault": id})).is_err());
 }
 
 /// The whole way a team shares a vault, with the app's own calls against the real binary: the laptop makes a vault
@@ -944,6 +915,17 @@ fn two_macs_share_a_vault_through_the_server() {
     round(&laptop, &key, &a, &mut ba, &mut wa);
     let r = round(&colleague, &theirs, &b, &mut bb, &mut wb);
     assert_eq!(r.conflicts.len(), 1, "{r:?}");
+    // the laptop gets both, deletes the copy, and the delete reaches the colleague
+    let copy = r.conflicts[0].clone();
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa).pulled.len(), 2);
+    std::fs::remove_file(a.join(&copy)).unwrap();
+    assert_eq!(round(&laptop, &key, &a, &mut ba, &mut wa).deleted_remote, vec![copy.clone()]);
+    assert_eq!(round(&colleague, &theirs, &b, &mut bb, &mut wb).deleted_local, vec![copy]);
+    // the server breaks a record both Macs have: it still lists it, and no Mac deletes the note
+    std::fs::write(s.data.join("vaults").join(&vault).join("blobs").join(key.name("Projects/Acme.md")), b"garbage").unwrap();
+    let (ra, rb) = (round(&laptop, &key, &a, &mut ba, &mut wa), round(&colleague, &theirs, &b, &mut bb, &mut wb));
+    assert!([&ra, &rb].iter().all(|r| r.deleted_local.is_empty() && r.deleted_remote.is_empty()), "{ra:?} {rb:?}");
+    assert!(a.join("Projects/Acme.md").is_file() && b.join("Projects/Acme.md").is_file());
 
     // removed: the server refuses the colleague's next round, their folder stays as it was
     laptop.vault_remove(&vault, &cid.fingerprint()).unwrap();

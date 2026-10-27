@@ -43,7 +43,7 @@ fn derive(raw: &[u8]) -> (LessSafeKey, hmac::Key) {
     (LessSafeKey::new(enc), names)
 }
 fn blob_name(names: &hmac::Key, root: &str, rel: &str) -> String {
-    hmac::sign(names, format!("{root}\0{rel}").as_bytes()).as_ref().iter().map(|b| format!("{b:02x}")).collect()
+    relay_remote::tls::hex(hmac::sign(names, format!("{root}\0{rel}").as_bytes()).as_ref())
 }
 
 /// Reseal a v1 store (raw key for both sealing and naming) with the derived keys, blob by blob. The new blob is
@@ -111,8 +111,7 @@ impl Mirror {
         if self.is_open(ns) { return Ok(()); }
         let _one = self.unlocking.lock().unwrap_or_else(|e| e.into_inner());
         if self.is_open(ns) { return Ok(()); } // the unlock this one waited for opened it
-        let raw: Vec<u8> = (0..key_hex.len()).step_by(2).filter_map(|i| key_hex.get(i..i + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect();
-        if raw.len() != 32 { return Err("bad mirror key".into()); }
+        let raw = relay_remote::tls::unhex(key_hex).filter(|k| k.len() == 32).ok_or("bad mirror key")?;
         let (key, names) = derive(&raw);
         let store = self.store(ns);
         fs::create_dir_all(&store).map_err(|e| e.to_string())?;
@@ -335,7 +334,7 @@ mod tests {
 
     const RAW: [u8; 32] = [7; 32];
 
-    fn hex(k: &[u8]) -> String { k.iter().map(|b| format!("{b:02x}")).collect() }
+    use relay_remote::tls::hex;
     // built by hand, not with new(), so no env var is read and no flush thread runs
     fn mirror(name: &str) -> Mirror {
         let base = std::env::temp_dir().join(format!("relay-mirror-{name}-{}", std::process::id()));

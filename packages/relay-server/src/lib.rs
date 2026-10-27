@@ -77,13 +77,22 @@ pub struct Client { pub name: String, pub fp: String, pub added: u64, #[serde(de
 const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answer", "history", "exists", "launch", "attach", "start"];
 /// What a vault-only device may ask: its shared vaults, nothing else. It never runs agents, reads a mirror or pairs
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
-const VAULT_OPS: &[&str] = &["pair", "vault_list", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
+const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete"];
 /// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
 static CLIENTS: Mutex<()> = Mutex::new(());
 
 pub fn clients(data: &Path) -> Vec<Client> {
     fs::read_to_string(data.join("clients.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default()
+}
+/// The name a new device gets from the one it gave: one line of at most 60 characters, `device-<fp>` when empty, and a
+/// number on a name `list` already has, so revoke by name stays unambiguous. For `pair` and a vault's join alike.
+pub(crate) fn device_name(list: &[Client], raw: &str, fp: &str) -> String {
+    let name: String = raw.trim().chars().filter(|c| !c.is_control()).take(60).collect();
+    let name = if name.is_empty() { format!("device-{}", &fp[..8]) } else { name };
+    let (mut n, mut k) = (name.clone(), 2);
+    while list.iter().any(|c| c.name == n) { n = format!("{name} {k}"); k += 1; }
+    n
 }
 fn save_clients(data: &Path, c: &[Client]) -> io::Result<()> { write_private(&data.join("clients.json"), &serde_json::to_string_pretty(c).unwrap()) }
 /// Remove the clients whose name is `who`, or whose fingerprint starts with it (at least 8 characters), and the devices
@@ -321,7 +330,6 @@ impl Server {
             "share" => self.share(ns, &req, r, w),
             // shared vaults (vaults.rs): only ciphertext passes here, by member
             "vault_create" => reply(&mut w, self.vaults.create(&fp, &my_name, s("name"))),
-            "vault_list" => reply(&mut w, Ok(self.vaults.list(&fp))),
             "vault_info" => reply(&mut w, self.vaults.info(&fp, s("vault"))),
             "vault_invite" => reply(&mut w, self.vaults.invite(&fp, s("vault"), s("role"), s("wrapped"))),
             "vault_invite_revoke" => reply(&mut w, self.vaults.invite_revoke(&fp, s("vault"), s("invite")).map(|_| json!({}))),
@@ -337,13 +345,13 @@ impl Server {
                 Err(e) => reply(&mut w, Err(e)),
             },
             "vault_put" => {
-                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), vaults::MAX_RECORD)?;
+                let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), relay_remote::vault::MAX_RECORD)?;
                 reply(&mut w, self.vaults.put(&fp, s("vault"), s("name"), &body, req["expect"].as_str()).map(|etag| json!({"etag": etag})))
             }
             "vault_put_many" => {
                 let (mut etags, mut errors) = (serde_json::Map::new(), serde_json::Map::new());
                 for f in req["files"].as_array().into_iter().flatten() {
-                    let body = proto::read_body(&mut r, f["len"].as_u64().unwrap_or(0), vaults::MAX_RECORD)?;
+                    let body = proto::read_body(&mut r, f["len"].as_u64().unwrap_or(0), relay_remote::vault::MAX_RECORD)?;
                     let name = f["name"].as_str().unwrap_or("");
                     match self.vaults.put(&fp, s("vault"), name, &body, f["expect"].as_str()) { Ok(e) => { etags.insert(name.into(), json!(e)); } Err(e) => { errors.insert(name.into(), json!(e)); } }
                 }
@@ -426,8 +434,6 @@ impl Server {
     fn pair(&self, fp: &str, req: &Value) -> Result<Value, String> {
         let _c = CLIENTS.lock().unwrap_or_else(|e| e.into_inner());
         let Some(mut p) = pairing(&self.data) else { return Err("no pairing code open, run `relay-server pair` on the server".into()) };
-        let name: String = req["name"].as_str().unwrap_or("").trim().chars().filter(|c| !c.is_control()).take(60).collect();
-        let name = if name.is_empty() { format!("device-{}", &fp[..8]) } else { name };
         if !tls::verify_proof(&p.secret, fp, &self.fp, req["proof"].as_str().unwrap_or("")) {
             p.fails += 1;
             write_private(&self.data.join("pairing.json"), &serde_json::to_string(&p).unwrap()).ok();
@@ -438,10 +444,7 @@ impl Server {
         // the device that opened the pairing was revoked meanwhile: nothing to link to
         if p.parent.as_ref().is_some_and(|pf| !list.iter().any(|c| &c.fp == pf)) { return Err("the device this pairing was for is no longer paired".into()); }
         list.retain(|c| c.fp != fp);
-        // a second device with the same name gets a number, so revoke by name stays unambiguous
-        let mut n = name.clone();
-        let mut i = 2;
-        while list.iter().any(|c| c.name == n) { n = format!("{name} {i}"); i += 1; }
+        let n = device_name(&list, req["name"].as_str().unwrap_or(""), fp);
         // a vault-only device that pairs becomes a full one
         list.push(Client { name: n.clone(), fp: fp.into(), added: now(), parent: p.parent, vaults_only: false });
         save_clients(&self.data, &list).map_err(|e| e.to_string())?;

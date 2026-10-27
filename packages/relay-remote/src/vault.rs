@@ -3,7 +3,7 @@
 //! HMAC of its path, and both seals bind that name, so the server can neither read a record nor pass one off as
 //! another. `SealedRemote` puts this behind `sync::Remote`, so `sync::run` syncs a shared vault like the mirror.
 
-use crate::share::{hex, unhex};
+use crate::tls::{hex, unhex};
 use crate::sync::{self, Entry, Manifest};
 use ring::aead::{Aad, LessSafeKey, Nonce, UnboundKey, CHACHA20_POLY1305};
 use ring::rand::{SecureRandom, SystemRandom};
@@ -15,46 +15,45 @@ use std::sync::{Mutex, MutexGuard};
 
 const SALT: &[u8] = b"relay shared vault v1";
 const INVITE_SALT: &[u8] = b"relay vault invite v1";
-/// A record's meta part at most; the server refuses more too.
-const MAX_META: usize = 64 << 10;
-/// A whole record at most: the server's limit, mirror::MAX_FILE plus 64 KiB.
-const MAX_RECORD: u64 = (64 << 20) + (64 << 10);
+/// A record's meta part at most, and a whole record at most: the mirror's biggest file (64 MiB) plus that. The server
+/// holds records to the same limits.
+pub const MAX_META: usize = 64 << 10;
+pub const MAX_RECORD: u64 = (64 << 20) + MAX_META as u64;
 
-/// A shared vault's key: 32 random bytes, kept by every member and never sent to the server in the clear.
+/// A shared vault's key: 32 random bytes, kept by every member and never sent to the server in the clear. The sealing
+/// key and the naming key are derived from it once, not for every record.
 #[derive(Clone)]
-pub struct VaultKey([u8; 32]);
+pub struct VaultKey { raw: [u8; 32], enc: LessSafeKey, names: hmac::Key }
 /// Never the bytes, so a key cannot end up in a log.
 impl std::fmt::Debug for VaultKey { fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str("VaultKey(..)") } }
 impl VaultKey {
+    fn new(raw: [u8; 32]) -> VaultKey {
+        let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, SALT).extract(&raw);
+        // expand only fails above 255 hash lengths, 32 bytes never does
+        let enc = LessSafeKey::new(UnboundKey::from(prk.expand(&[b"enc"], &CHACHA20_POLY1305).unwrap()));
+        VaultKey { raw, enc, names: hmac::Key::from(prk.expand(&[b"name"], hmac::HMAC_SHA256).unwrap()) }
+    }
     pub fn generate() -> VaultKey {
         let mut k = [0u8; 32];
         SystemRandom::new().fill(&mut k).expect("system randomness");
-        VaultKey(k)
+        VaultKey::new(k)
     }
     /// 64 hex chars, any case; anything else is None.
-    pub fn from_hex(s: &str) -> Option<VaultKey> { unhex(s.trim())?.try_into().ok().map(VaultKey) }
-    pub fn to_hex(&self) -> String { hex(&self.0) }
+    pub fn from_hex(s: &str) -> Option<VaultKey> { unhex(s.trim())?.try_into().ok().map(VaultKey::new) }
+    pub fn to_hex(&self) -> String { hex(&self.raw) }
 
-    /// The sealing key and the naming key, both derived from the vault key.
-    fn keys(&self) -> (LessSafeKey, hmac::Key) {
-        let prk = hkdf::Salt::new(hkdf::HKDF_SHA256, SALT).extract(&self.0);
-        // expand only fails above 255 hash lengths, 32 bytes never does
-        let enc = UnboundKey::from(prk.expand(&[b"enc"], &CHACHA20_POLY1305).unwrap());
-        (LessSafeKey::new(enc), hmac::Key::from(prk.expand(&[b"name"], hmac::HMAC_SHA256).unwrap()))
-    }
     /// The record's name on the server: hex HMAC of the path, the same on every member's Mac.
-    pub fn name(&self, path: &str) -> String { name(&self.keys().1, path) }
+    pub fn name(&self, path: &str) -> String { name(&self.names, path) }
 
     /// The record for one file: `u32 BE meta_len || meta || data`, each part `nonce || ciphertext+tag`.
     pub fn record(&self, path: &str, data: &[u8], mtime: i64) -> Result<Vec<u8>, String> {
-        let (enc, names) = self.keys();
-        let n = name(&names, path);
+        let n = self.name(path);
         let meta = json!({"p": path, "h": sync::sha256_hex(data), "s": data.len(), "m": mtime}).to_string();
-        let meta = seal(&enc, format!("meta:{n}").as_bytes(), meta.as_bytes())?;
+        let meta = seal(&self.enc, format!("meta:{n}").as_bytes(), meta.as_bytes())?;
         if meta.len() > MAX_META { return Err("path too long".into()); }
         let mut out = (meta.len() as u32).to_be_bytes().to_vec();
         out.extend(meta);
-        out.extend(seal(&enc, format!("data:{n}").as_bytes(), data)?);
+        out.extend(seal(&self.enc, format!("data:{n}").as_bytes(), data)?);
         Ok(out)
     }
     /// What a record's meta says about its file (path, plaintext size, mtime, plaintext hash), refused when it was not
@@ -62,22 +61,23 @@ impl VaultKey {
     pub fn open_meta(&self, name: &str, meta: &[u8]) -> Result<Entry, String> {
         #[derive(Deserialize)]
         struct Meta { p: String, h: String, s: u64, m: i64 }
-        let (enc, names) = self.keys();
-        let plain = open(&enc, format!("meta:{name}").as_bytes(), meta).ok_or("meta does not open with this vault's key")?;
+        let plain = open(&self.enc, format!("meta:{name}").as_bytes(), meta).ok_or("meta does not open with this vault's key")?;
         let m: Meta = serde_json::from_slice(&plain).map_err(|e| format!("meta: {e}"))?;
-        if self::name(&names, &m.p) != name { return Err("record is filed under another name".into()); }
+        if self.name(&m.p) != name { return Err("record is filed under another name".into()); }
         Ok(Entry { path: m.p, size: m.s, mtime: m.m, hash: m.h })
     }
     /// A whole record's content.
     pub fn open_data(&self, name: &str, record: &[u8]) -> Result<Vec<u8>, String> {
         let (_, data) = split(record).ok_or("not a record")?;
-        open(&self.keys().0, format!("data:{name}").as_bytes(), data).ok_or_else(|| "content does not open with this vault's key".into())
+        open(&self.enc, format!("data:{name}").as_bytes(), data).ok_or_else(|| "content does not open with this vault's key".into())
     }
 }
 fn name(names: &hmac::Key, path: &str) -> String { hex(hmac::sign(names, path.as_bytes()).as_ref()) }
-/// A record's (meta, data).
-fn split(record: &[u8]) -> Option<(&[u8], &[u8])> {
+/// A record's (meta, data): `u32 BE meta_len || meta || data`. None when it is no record, its meta past MAX_META or
+/// past its end. The server lists and checks records with this too.
+pub fn split(record: &[u8]) -> Option<(&[u8], &[u8])> {
     let n = u32::from_be_bytes(record.get(..4)?.try_into().ok()?) as usize;
+    if n > MAX_META { return None; }
     Some((record.get(4..4 + n)?, record.get(4 + n..)?))
 }
 /// nonce (12) || ciphertext+tag, a fresh random nonce every time.
@@ -105,13 +105,13 @@ fn invite_key(secret_hex: &str) -> Result<LessSafeKey, String> {
 }
 /// The vault key sealed for an invite: hex(nonce || ciphertext+tag) under the link's secret, bound to the vault id.
 pub fn wrap(key: &VaultKey, secret_hex: &str, vault: &str) -> Result<String, String> {
-    Ok(hex(&seal(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &key.0)?))
+    Ok(hex(&seal(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &key.raw)?))
 }
 /// The vault key back from an invite; refused for another secret, another vault or a changed byte.
 pub fn unwrap(wrapped_hex: &str, secret_hex: &str, vault: &str) -> Result<VaultKey, String> {
     let blob = unhex(wrapped_hex).ok_or("the wrapped key is not hex")?;
     let key = open(&invite_key(secret_hex)?, format!("invite:{vault}").as_bytes(), &blob).ok_or("the invite does not open with this link")?;
-    key.try_into().map(VaultKey).map_err(|_| "the wrapped key is not a vault key".into())
+    key.try_into().map(VaultKey::new).map_err(|_| "the wrapped key is not a vault key".into())
 }
 
 /// One request to the server and its answer: the request line, the bytes after it, and at most how many bytes may
@@ -273,9 +273,8 @@ mod tests {
     fn a_meta_under_its_own_name_with_another_path_is_refused() {
         // a member with the key could seal a meta for path X under the name of Y: the AEAD passes, the name check not
         let k = VaultKey::generate();
-        let (enc, _) = k.keys();
         let ny = k.name("y.md");
-        let meta = seal(&enc, format!("meta:{ny}").as_bytes(), json!({"p": "x.md", "h": "", "s": 0, "m": 0}).to_string().as_bytes()).unwrap();
+        let meta = seal(&k.enc, format!("meta:{ny}").as_bytes(), json!({"p": "x.md", "h": "", "s": 0, "m": 0}).to_string().as_bytes()).unwrap();
         assert_eq!(k.open_meta(&ny, &meta).unwrap_err(), "record is filed under another name");
     }
     #[test]
@@ -481,13 +480,12 @@ mod tests {
         let (srv, key) = (Arc::new(Server::default()), VaultKey::generate());
         let r = sealed(&srv, &key);
         // a member with the key seals a big file with "s": 1, its hash right, so the filter sees one byte
-        let (big, (enc, names)) = (vec![b'x'; 4096], key.keys());
-        let n = name(&names, "big.md");
+        let (big, n) = (vec![b'x'; 4096], key.name("big.md"));
         let meta = json!({"p": "big.md", "h": sync::sha256_hex(&big), "s": 1, "m": 1}).to_string();
-        let meta = seal(&enc, format!("meta:{n}").as_bytes(), meta.as_bytes()).unwrap();
+        let meta = seal(&key.enc, format!("meta:{n}").as_bytes(), meta.as_bytes()).unwrap();
         let mut rec = (meta.len() as u32).to_be_bytes().to_vec();
         rec.extend(meta);
-        rec.extend(seal(&enc, format!("data:{n}").as_bytes(), &big).unwrap());
+        rec.extend(seal(&key.enc, format!("data:{n}").as_bytes(), &big).unwrap());
         lock(&srv.blobs).insert(n, rec);
         assert_eq!(r.manifest().unwrap()["big.md"].size, 1);
         assert_eq!(r.get("big.md").unwrap_err(), "remote content is not the size its manifest says");
@@ -502,11 +500,17 @@ mod tests {
         a.t.put("a.md", "a");
         a.round();
         b.round();
-        // the server breaks a.md's record: both Macs keep their copy, nothing is deleted anywhere
+        // the server breaks a.md's record (it lists it with an empty meta): both Macs keep their copy, nothing is
+        // deleted anywhere, round after round
         lock(&srv.blobs).insert(key.name("a.md"), b"not a record".to_vec());
-        let r = b.round();
-        assert_eq!((r.deleted_local.len(), b.r.bad().len()), (0, 1));
-        assert_eq!(b.t.read("a.md").as_deref(), Some("a"));
+        for _ in 0..2 {
+            for m in [&mut a, &mut b] {
+                let r = m.round();
+                assert_eq!((r.deleted_local.len(), r.deleted_remote.len(), m.r.bad().len()), (0, 0, 1), "{r:?}");
+                assert_eq!(m.t.read("a.md").as_deref(), Some("a"));
+            }
+        }
+        assert_eq!(lock(&srv.blobs)[&key.name("a.md")], b"not a record");
         // a new edit goes over the broken record, and the other Mac gets it
         a.t.put("a.md", "a again");
         assert!(a.round().errors.is_empty());

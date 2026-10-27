@@ -17,7 +17,7 @@
 //! A laptop's conversations shared with its phone (share.rs): `share {convs}` stays open and gets `{"open":token}` lines,
 //! each answered with a new connection `share_open {token}` that the server joins to the phone's request; such a request
 //! (`attach`, `kill`, `history {key}`) is answered with `{"challenge"}` first, then takes only signed lines.
-//! Shared vaults (docs/shared-vaults.md), ciphertext only: `vault_create {name}`, `vault_list`, `vault_info {vault}`,
+//! Shared vaults (docs/shared-vaults.md), ciphertext only: `vault_create {name}`, `vault_info {vault}`,
 //! `vault_invite {vault,role,wrapped}`, `vault_invite_revoke {vault,invite}`, `vault_join {vault,invite,name,proof}` (also
 //! from a device that is not paired, which then becomes a vault-only client), `vault_remove {vault,fp}`, `vault_manifest
 //! {vault}`, `vault_get {vault,name}` (len, etag and bytes like sync_get), `vault_put {vault,name,len,expect}` (the record

@@ -37,17 +37,24 @@ impl Filter {
     /// Every segment is checked, not only the last, so a server can judge a single incoming path the same way a walk does.
     /// Without regard to case: on a Mac's disk `.Git` or `System/Settings.json` from the other side is the very file
     /// a name here keeps out.
-    pub fn skips(&self, rel: &str, is_dir: bool) -> bool {
-        let rel = fold(rel);
-        let under = |p: &str, r: &str| { let (p, r) = (fold(p.trim_end_matches('/')), fold(r)); r == p || r.strip_prefix(&p).is_some_and(|x| x.starts_with('/')) };
-        rel.split('/').any(|s| self.names.iter().any(|n| fold(n) == s))
-            || self.prefixes.iter().any(|p| under(p, &rel))
+    pub fn skips(&self, rel: &str, is_dir: bool) -> bool { self.folded().skips_folded(&fold(rel), is_dir) }
+    /// This filter with its names and paths folded (and the paths without a trailing '/'): once per scan or round, not
+    /// for every segment of every path.
+    fn folded(&self) -> Filter {
+        let paths = |v: &[String]| v.iter().map(|p| fold(p.trim_end_matches('/'))).collect();
+        Filter { names: self.names.iter().map(|n| fold(n)).collect(), prefixes: paths(&self.prefixes), guarded: paths(&self.guarded), only: paths(&self.only), ..self.clone() }
+    }
+    /// `skips` for a folded filter and a folded path.
+    fn skips_folded(&self, rel: &str, is_dir: bool) -> bool {
+        let under = |p: &str, r: &str| r == p || r.strip_prefix(p).is_some_and(|x| x.starts_with('/'));
+        rel.split('/').any(|s| self.names.iter().any(|n| n == s))
+            || self.prefixes.iter().any(|p| under(p, rel))
             // a folder above an allowed one is walked, to reach it
-            || (self.guarded.iter().any(|g| under(g, &rel)) && !self.only.iter().any(|o| under(o, &rel) || (is_dir && under(&rel, o))))
+            || (self.guarded.iter().any(|g| under(g, rel)) && !self.only.iter().any(|o| under(o, rel) || (is_dir && under(rel, o))))
             || (!is_dir && rel.rsplit('/').next().is_some_and(|n| n.starts_with(TMP)))
     }
 }
-/// A name as APFS compares it, exact for ASCII names: lowercase, plus every character whose Unicode full case folding is
+/// A name as APFS compares it, exact for ASCII names: lowercase (any letter), plus every character whose Unicode full case folding is
 /// ASCII (ſ, the Kelvin sign, ß and ẞ, the ff/fi/fl/ffi/ffl/st ligatures) or that NFD turns into ASCII, so
 /// `Syﬆem/Settings.json` still is `System/settings.json`. The format characters HFS+ ignores in a name (zero-width
 /// joiners, bidi marks, BOM) are dropped, so they cannot slip a guarded name past on a Mac OS Extended disk. Others stay non-ASCII, which no ASCII name can equal; a
@@ -60,7 +67,7 @@ fn fold(s: &str) -> String {
         '\u{37E}' => ";", '\u{1FEF}' => "`",
         // HFS+ resolves a name without these, so `.g\u{200C}it` is `.git` there
         '\u{200C}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}' => "",
-        c => return c.to_ascii_lowercase().to_string(),
+        c => return c.to_lowercase().to_string(),
     }.to_string()).collect()
 }
 
@@ -85,11 +92,11 @@ impl Walker {
             Err(e) => return Err(e),
         };
         let mut out = Out { m: Manifest::new(), skipped: vec![], cache: HashMap::new() };
-        self.walk(root, "", filter, &mut vec![top], &mut out)?;
+        self.walk(root, "", &filter.folded(), &mut vec![top], &mut out)?;
         self.cache = out.cache; // deleted files leave the cache
         Ok((out.m, out.skipped))
     }
-    // stack: the canonical paths of the directories being walked, to catch a link back up
+    // f: folded; stack: the canonical paths of the directories being walked, to catch a link back up
     fn walk(&mut self, dir: &Path, prefix: &str, f: &Filter, stack: &mut Vec<PathBuf>, out: &mut Out) -> io::Result<()> {
         for ent in fs::read_dir(dir)? {
             let ent = ent?;
@@ -105,14 +112,14 @@ impl Walker {
                 Err(e) => return Err(e),
             };
             if meta.is_dir() {
-                if f.skips(&rel, true) { continue; }
+                if f.skips_folded(&fold(&rel), true) { continue; }
                 let canon = if link { fs::canonicalize(&path)? } else { stack.last().unwrap().join(&name) };
                 if stack.contains(&canon) { continue; } // following it would never end
                 stack.push(canon);
                 self.walk(&path, &format!("{rel}/"), f, stack, out)?;
                 stack.pop();
             } else if meta.is_file() {
-                if f.skips(&rel, false) { continue; }
+                if f.skips_folded(&fold(&rel), false) { continue; }
                 if !safe_rel(&rel) || (f.max_size > 0 && meta.len() > f.max_size) { out.skipped.push(rel); continue; }
                 let (size, mt) = (meta.len(), nanos(meta.modified()?));
                 let hash = match self.cache.get(&rel) {
@@ -164,11 +171,12 @@ fn target(a: &Action) -> &str {
 
 /// Pure planning, by hash only. TwoWay: a change on one side goes to the other (a delete included), a delete against a
 /// modification keeps the modification, a change on both is a Merge when `mergeable(path)` and a Conflict otherwise.
-/// Replica: push what differs, delete on the remote what the local side lacks. In both modes paths that differ only in
-/// case (either side) are skipped and returned: on a case-insensitive disk they are one file, either would clobber the other.
+/// Replica: push what differs, delete on the remote what the local side lacks. In both modes paths that are one file on
+/// a Mac's disk (`fold`, as the filter compares: `a.md` and `A.md`, `first.md` and `ﬁrst.md`) are skipped and returned:
+/// either would clobber the other.
 pub fn plan(mode: Mode, base: &Manifest, local: &Manifest, remote: &Manifest, copy_name: &dyn Fn(&str) -> String, mergeable: &dyn Fn(&str) -> bool) -> (Vec<Action>, Vec<String>) {
     let mut folded: BTreeMap<String, BTreeSet<&str>> = BTreeMap::new();
-    for p in local.keys().chain(remote.keys()) { folded.entry(p.to_lowercase()).or_default().insert(p); }
+    for p in local.keys().chain(remote.keys()) { folded.entry(fold(p)).or_default().insert(p); }
     let clash: BTreeSet<&str> = folded.into_values().filter(|s| s.len() > 1).flatten().collect();
     let paths: BTreeSet<&String> = base.keys().chain(local.keys()).chain(remote.keys()).collect();
     let mut acts = vec![];
@@ -264,16 +272,17 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     let mut rep = Report::default();
     let (mut local, mut skipped) = match walker.scan(root, filter) { Ok(x) => x, Err(e) => { rep.errors.push(format!("scan: {e}")); return (base.clone(), rep); } };
     let all = match remote.manifest() { Ok(m) => m, Err(e) => { rep.errors.push(format!("remote manifest: {e}")); return (base.clone(), rep); } };
-    let mut rm = Manifest::new();
+    let (mut rm, folded) = (Manifest::new(), filter.folded());
     for (p, e) in all {
         if !safe_rel(&p) || (filter.max_size > 0 && e.size > filter.max_size) { skipped.push(p); }
-        else if !filter.skips(&p, false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
+        else if !folded.skips_folded(&fold(&p), false) { rm.insert(p.clone(), Entry { path: p, ..e }); }
     }
     // with no_links, a path behind a link here stays as it is on both sides: not followed, and not read as deleted
     // either (a vault synced before no_links has such paths in its base, and the server would lose them)
     let linked: BTreeSet<String> = if filter.no_links { base.keys().chain(rm.keys()).filter(|p| through_link(root, p)).cloned().collect() } else { BTreeSet::new() };
-    if base.keys().any(|p| !linked.contains(p)) && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
-        rep.errors.push(format!("{} side is empty while the last sync had {} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }, base.len()));
+    let had = base.keys().filter(|p| !linked.contains(*p)).count();
+    if had > 0 && (local.is_empty() || (mode == Mode::TwoWay && rm.is_empty())) {
+        rep.errors.push(format!("{} side is empty while the last sync had {had} files: refusing to mirror that", if local.is_empty() { "local" } else { "remote" }));
         return (base.clone(), rep);
     }
     // too big or unsyncable on either side: out of this round on both, or a file grown past the limit would read as deleted
@@ -285,7 +294,7 @@ pub fn run(mode: Mode, root: &Path, base: &Manifest, walker: &mut Walker, filter
     let braked = |a: &Action| match a { Action::DeleteLocal(p) | Action::DeleteRemote(p) => !guard.allowed.contains(p), _ => false };
     let deletes = acts.iter().filter(|a| braked(a)).count();
     if mode == Mode::TwoWay && !guard.allow_deletes && deletes > delete_cap(base) {
-        acts.retain(|a| match a { Action::DeleteLocal(p) | Action::DeleteRemote(p) if !guard.allowed.contains(p) => { rep.held.push(p.clone()); false } _ => true });
+        acts.retain(|a| { if braked(a) { rep.held.push(target(a).into()); } !braked(a) });
     }
     let mut next = Manifest::new();
     for p in base.keys().chain(local.keys()).chain(rm.keys()) {
@@ -446,7 +455,7 @@ pub fn safe_rel(rel: &str) -> bool {
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
-    ring::digest::digest(&ring::digest::SHA256, data).as_ref().iter().map(|b| format!("{b:02x}")).collect()
+    crate::tls::hex(ring::digest::digest(&ring::digest::SHA256, data).as_ref())
 }
 
 #[cfg(test)]
@@ -506,6 +515,11 @@ mod tests {
         let (acts, skipped) = plan(Mode::TwoWay, &man(&[]), &man(&[("Notes/a.md", "1"), ("b", "1")]), &man(&[("Notes/A.md", "2")]), &|p| p.into(), &|_| false);
         assert_eq!(acts, vec![Push(s("b"))]);
         assert_eq!(skipped, vec![s("Notes/A.md"), s("Notes/a.md")]);
+        // one file on a Mac's disk too, as the filter compares names: a ligature, and a letter beyond ASCII
+        for (l, r) in [("first.md", "\u{FB01}rst.md"), ("System/a.md", "Sy\u{FB06}em/a.md"), ("\u{C9}t\u{E9}.md", "\u{E9}t\u{E9}.md")] {
+            let (acts, skipped) = plan(Mode::TwoWay, &man(&[]), &man(&[(l, "1")]), &man(&[(r, "2")]), &|p| p.into(), &|_| false);
+            assert_eq!((acts, skipped.len()), (vec![], 2), "{l} {r}");
+        }
     }
 
     // ---------- walker
