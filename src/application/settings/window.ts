@@ -51,8 +51,8 @@ export async function initSettingsWindow() {
   void loadBrainStatus();
   void watchUpdates();
   void watchVaultSync();
-  // an invite link that opened Relay brings General with the join form
-  void watchSharedVaults(() => go("general"));
+  // an invite link that opened Relay: the join form (the backend opens the window on General)
+  void watchSharedVaults();
   showTitle();
   void backend.onSettingsGo(to => {
     const tab = TABS.find(x => x[0] === to)?.[0];

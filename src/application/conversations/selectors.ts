@@ -14,7 +14,7 @@ import { boardOf } from "../navigation/navigation";
 import { provider } from "../../shared/plugins";
 import { contextTint } from "../navigation/sidebar";
 import { agentOf, chatAgent, chatCaps } from "../agents/agents";
-import { projectLabel } from "../workspace/vault";
+import { otherVaultOf, projectLabel } from "../workspace/vault";
 import { soonMeetings } from "../calendar/calendar";
 import { machinePick } from "../../domain/settings/machines";
 import { ORCH, isOrchKey } from "../../domain/orchestrator/rules";
@@ -192,12 +192,7 @@ export function machineRepo(key: string) {
 }
 /** The shared vault a conversation runs in, by its project: its folder name, null for the main vault. The
  *  conversation stays in it (src-tauri `fence`). */
-export function sharedVault(key: string) {
-  const name = cs().chats[key]?.project;
-  const { snap } = useWorkspaceStore.getState();
-  const vault = snap.projects.find(project => project.name === name)?.vault;
-  return vault && vault !== snap.vault?.vault ? vault.split("/").pop() || vault : null;
-}
+export const sharedVault = (key: string) => otherVaultOf(cs().chats[key]?.project ?? null);
 /** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
  *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
  *  it where it runs: picking another place then moves it (`moveConversation`). */

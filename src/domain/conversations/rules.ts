@@ -189,15 +189,21 @@ export const machineBlock = (caps: Pick<Caps, "remote"> | undefined, fromMail: b
         ? "composer.machineSharedVault"
         : null;
 /** Whether a conversation moved from project `from` to `to` (null: a general one, the main vault) changes vault. One
- *  with a session keeps running in the vault it started in (src-tauri `fence`), so it may not. */
+ *  with a session keeps running in the vault it started in (src-tauri `fence`), so it may not. A project the snapshot
+ *  does not have is in an unknown vault: a move from or into it counts as a change. */
 export function changesVault(snap: Pick<Snapshot, "projects" | "vault">, from: string | null, to: string | null) {
-  const vaultOf = (name: string | null) =>
-    (name && snap.projects.find(project => project.name === name)?.vault) || snap.vault?.vault;
-  return vaultOf(from) !== vaultOf(to);
+  if (from === to) return false;
+  const vaultOf = (name: string | null) => {
+    if (!name) return snap.vault?.vault;
+    const project = snap.projects.find(candidate => candidate.name === name);
+    return project ? project.vault || snap.vault?.vault : null; // no `vault` from an older backend: the main one
+  };
+  const [a, b] = [vaultOf(from), vaultOf(to)];
+  return a === null || b === null || a !== b;
 }
-/** The projects a started conversation in project `from` may still move to: the ones in its own vault. */
-export const projectsInVault = (snap: Pick<Snapshot, "projects" | "vault">, from: string | null) =>
-  snap.projects.filter(project => !changesVault(snap, from, project.name));
+/** The main vault's projects: the ones a general conversation may move to once it started. */
+export const mainVaultProjects = (snap: Pick<Snapshot, "projects" | "vault">) =>
+  snap.projects.filter(project => !changesVault(snap, null, project.name));
 /** Whether a conversation has a process in a vault already: its session, or a first message sent whose session id is
  *  not back yet (a turn running, a message queued or in its log). Such a conversation stays in that vault. */
 export const hasStarted = (s: Pick<ConversationsState, "sidOf" | "status" | "queued" | "messages">, key: string) =>

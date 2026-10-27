@@ -83,6 +83,8 @@ export default {
   "usage.none": "Kein Agent ist eingeschaltet. Schalte einen unter Einstellungen › Agenten ein.",
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
+  "composer.agentSharedVault":
+    "Ein Gespräch in einem geteilten Vault oder einem anderen Vault-Ordner läuft mit Claude Code: Seine Grenzen dort beruhen auf den Berechtigungsregeln von Claude Code.",
   "set.tab.agents": "Agenten",
   "ag.default": "Standard-Agent",
   "ag.defaultHelp":
@@ -849,13 +851,12 @@ export default {
   "rem.toastWeek": "Um eine Woche verschoben: {text}",
   "rem.toastMoved": "Verschoben: {text}",
   "rem.none": "Keine Erinnerungen.",
-  "set.extraVaults": "Geteilte Vaults",
+  "set.sharedTitle": "Geteilte Vaults",
   "set.extraVaultsHelp":
     "Andere Ordner mit einem Vault, deren Projekte in der Seitenleiste neben deinen stehen. Ein Gespräch bleibt im Vault seines Projekts: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Vaults gesperrt. Ein Gespräch in einem dieser Ordner hat dieselben Grenzen wie in einem geteilten Vault: Deine eigenen MCP-Server, claude.ai-Konnektoren und Hooks sind aus, Claude Code läuft immer im Auto-Modus, und deine Mails, Erinnerungen und dein Kalender bleiben außer Reichweite.",
   "set.extraVaultAdd": "Vault hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
-  "set.extraVaultRenamed": "Gleicher Name wie ein Projekt in einem anderen Vault, angezeigt als: {names}",
-  "set.sharedOther": "Andere Vault-Ordner",
+  "set.extraVaultsTitle": "Andere Vault-Ordner",
   "set.sharedHelp":
     "Ein Vault, den dein Team auf einem relay-server teilt. Der Server speichert nur verschlüsselte Dateien. Jeder Mac synchronisiert den Vault in einen eigenen Ordner.",
   "set.sharedAdmin": "Admin",
@@ -907,9 +908,8 @@ export default {
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":
-    "Bewahre diesen Schlüssel in deinem Passwortmanager auf. Verliert der Mac jedes Mitglieds den Vault, öffnet nur dieser Schlüssel noch eine Sicherung der Dateien auf dem Server. Du kannst ihn später in der Zeile des Vaults wieder anzeigen.",
+    "Bewahre diesen Schlüssel in deinem Passwortmanager auf. Verliert der Mac jedes Mitglieds den Vault, öffnet nur dieser Schlüssel noch eine Sicherung der Dateien auf dem Server.",
   "set.sharedShowRecovery": "Wiederherstellungsschlüssel anzeigen",
-  "set.sharedRecoveryAgainHelp": "Das ist der Schlüssel des Vaults. Bewahre ihn in deinem Passwortmanager auf.",
   "set.sharedJoinTitle": "Einem geteilten Vault beitreten",
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",

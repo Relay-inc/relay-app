@@ -24,6 +24,7 @@ import { ProjectIcon } from "./ProjectIcon";
 export function ProjectSettings({ name, icon }: { name: string; icon: Icon | undefined }) {
   const { t } = useT();
   const label = useSettingsStore(s => s.settings.projects[name]?.label ?? "");
+  const shown = useSettingsStore(s => s.projectsPage.projects.find(project => project.name === name)?.label) || name;
   const repos = useSettingsStore(s => s.projectsPage.repos[name]) ?? [];
   const hint = useDerived(() => iconHint(name));
   // one input for an emoji or a website; the buttons for an image, none and guessing again
@@ -47,7 +48,7 @@ export function ProjectSettings({ name, icon }: { name: string; icon: Icon | und
         <ChangeInput
           className={FIELD}
           value={label}
-          placeholder={name}
+          placeholder={shown}
           spellCheck={false}
           onCommit={value => setLabel(name, value.trim())}
         />

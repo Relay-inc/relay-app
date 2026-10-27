@@ -132,8 +132,6 @@ const VIEWS = {
     await waitText("ABCD-1234");
     await intoView("Waiting for GitHub…");
   },
-  // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
-  // "harbor-crm · on Server" next to the control (PR #217)
   // a new conversation about the team vault's Northwind Portal: the Vault label, no pick (it stays in that vault)
   "composer-vault": async () => {
     await open(page, server.url, { fixture: "shared" });
@@ -145,6 +143,8 @@ const VIEWS = {
     await settle(page);
     await waitText("Vault: Team vault");
   },
+  // a new conversation about Harbor CRM with Server chosen in "Runs on" before the first message: the chip
+  // "harbor-crm · on Server" next to the control (PR #217)
   "composer-repo-chip": async () => {
     await open(page, server.url, { fixture: "github" });
     await byText(page, "Harbor CRM").hover();
@@ -1004,19 +1004,21 @@ const VIEWS = {
     await intoView("Whisper Large v3 Turbo");
   },
   // a vault shared on a relay-server under General: its last round (a conflict copy, two deletes held), the members
-  // open (this Mac, an admin, a member, an open invite) and a new invite link made
+  // open (this Mac, an admin, a member, an open invite), a new invite link made and the recovery key shown again
   "settings-shared-vaults": async () => {
     await settingsPage("General", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1100 });
+    await page.setViewportSize({ width: 900, height: 1400 });
     await waitText("Put them back");
     await button("Members").click();
     await waitText("Design laptop");
     await button("Invite…").click();
     await button("Create link").click();
     await waitText("Single use, valid until");
+    await button("Show recovery key").click();
+    await waitText("Keep this key in your password manager");
     await intoView("Shared vaults");
   },
-  // New shared vault… filled in and created: the recovery key, shown once
+  // New shared vault… filled in and created: the form closes, the new vault's row shows its recovery key
   "settings-shared-new": async () => {
     await settingsPage("General", undefined, "shared");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
@@ -1027,16 +1029,8 @@ const VIEWS = {
       .getByTitle("Choose…")
       .click();
     await button("Create").click();
-    await waitText("You can show it again");
-    await intoView("You can show it again");
-  },
-  // Show recovery key on the vault's row: its key shown again, with Copy
-  "settings-shared-recovery": async () => {
-    await settingsPage("General", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1000 });
-    await button("Show recovery key").click();
-    await waitText("This is the vault's key");
-    await intoView("Shared vaults");
+    await waitText("Keep this key in your password manager");
+    await intoView("Keep this key in your password manager");
   },
   // Relay opened by an invite link: General with the join form, the link in it
   "settings-shared-join": async () => {
@@ -1057,7 +1051,7 @@ const VIEWS = {
     // a project shows once it has conversations; the search finds both of the team vault's
     await page.getByPlaceholder("Search").fill("h");
     await waitText("Team Handbook");
-    await page.getByText("Hiring 2027 (Team vault)", { exact: true }).scrollIntoViewIfNeeded();
+    await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
   },
   "settings-interface": async () => {
     await settingsPage("General");

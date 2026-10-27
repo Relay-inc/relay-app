@@ -127,12 +127,15 @@ export const projects = P.map(p => ({
 }));
 export const projectNames = P.map(p => p.name);
 
-/** The shared fixture: a team vault next to the main one. Both have a Northwind Portal: two projects, the team's shown
- *  as "Northwind Portal (Team vault)", each conversation in its own vault. */
+/** The shared fixture: a team vault next to the main one. Its projects' names are keys (the name and the vault's id,
+ *  never shown), their `label` what shows. Both vaults have a Northwind Portal: two projects, the team's labelled
+ *  "Northwind Portal (Team vault)", each conversation in its own vault. */
 export const TEAM_VAULT = "/Users/me/Team vault";
+const teamKey = (name: string) => `${name}\u001f5f2c8e91a7d04b36`;
 export const teamProjects = [
   {
-    name: "Team Handbook (Team vault)",
+    name: teamKey("Team Handbook"),
+    label: "Team Handbook",
     context: "Team",
     state: "Active",
     last: ymd(NOW - DAY),
@@ -144,7 +147,8 @@ export const teamProjects = [
     vault: TEAM_VAULT,
   },
   {
-    name: "Northwind Portal (Team vault)",
+    name: teamKey("Northwind Portal"),
+    label: "Northwind Portal (Team vault)",
     context: "Team",
     state: "Active",
     last: ymd(NOW - DAY),
@@ -156,7 +160,8 @@ export const teamProjects = [
     vault: TEAM_VAULT,
   },
   {
-    name: "Hiring 2027 (Team vault)",
+    name: teamKey("Hiring 2027"),
+    label: "Hiring 2027",
     context: "Team",
     state: "Quiet",
     last: ymd(NOW - 9 * DAY),
@@ -168,7 +173,7 @@ export const teamProjects = [
     vault: TEAM_VAULT,
   },
 ];
-export const teamStatus = [{ vault: TEAM_VAULT, renamed: ["Northwind Portal (Team vault)"], error: null }];
+export const teamStatus = [{ vault: TEAM_VAULT, error: null }];
 
 /** The shared fixture's vault on a relay-server (Settings › General › Shared vaults): made on the paired Team server,
  *  this Mac its admin. Its last round two minutes ago made a conflict copy and holds two deletes back. */

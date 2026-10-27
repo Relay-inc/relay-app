@@ -42,7 +42,7 @@ export function SharedVaults() {
   const { t } = useT();
   const vaults = useSettingsStore(s => s.settings.sharedVaults ?? NONE);
   return (
-    <Section title={t("set.extraVaults")} desc={t("set.sharedHelp")} list>
+    <Section title={t("set.sharedTitle")} desc={t("set.sharedHelp")} list>
       {vaults.map(vault => (
         <SharedRow key={vault.id} vault={vault} />
       ))}
@@ -59,7 +59,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const link = useSettingsStore(s => s.shared.links[vault.id]);
   const recovery = useSettingsStore(s => s.shared.keys[vault.id]);
   const message = useSettingsStore(s => s.shared.messages[vault.id]);
-  const busy = useSettingsStore(s => s.shared.busy);
+  const busy = useSettingsStore(s => !!s.shared.busy[vault.id]);
   const [inviting, setInviting] = useState(false);
   const [role, setRole] = useState<SharedRole>("member");
   const [leaving, setLeaving] = useState(false);
@@ -83,7 +83,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
         <button
           className={buttonClass("ghost")}
           aria-expanded={membersOpen}
-          disabled={busy[`${vault.id}:members`]}
+          disabled={busy}
           onClick={() => toggleMembers(vault.id)}
         >
           {t("set.sharedMembers")}
@@ -93,7 +93,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             <span className="text-xs text-s-muted">{t("set.sharedLeaveSure")}</span>
             <button
               className={buttonClass("dangerSolid")}
-              disabled={busy[`${vault.id}:leave`]}
+              disabled={busy}
               onClick={async () => {
                 await leaveShared(vault.id);
                 setLeaving(false);
@@ -106,7 +106,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
             </button>
           </>
         ) : (
-          <button className={buttonClass("danger")} onClick={() => setLeaving(true)}>
+          <button className={buttonClass("danger")} disabled={busy} onClick={() => setLeaving(true)}>
             {t("set.sharedLeave")}
           </button>
         )}
@@ -116,11 +116,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
           {vault.folder}
         </code>
         {recovery ? null : (
-          <button
-            className={buttonClass("ghost")}
-            disabled={busy[`${vault.id}:recovery`]}
-            onClick={() => showRecovery(vault.id)}
-          >
+          <button className={buttonClass("ghost")} disabled={busy} onClick={() => showRecovery(vault.id)}>
             {t("set.sharedShowRecovery")}
           </button>
         )}
@@ -168,14 +164,14 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                 <div className="flex items-center gap-2">
                   <button
                     className={buttonClass()}
-                    disabled={busy[`${vault.id}:held`]}
+                    disabled={busy}
                     onClick={() => settleShared(vault.id, false, status.held)}
                   >
                     {t("set.sharedHeldRestore")}
                   </button>
                   <button
                     className={buttonClass("danger")}
-                    disabled={busy[`${vault.id}:held`]}
+                    disabled={busy}
                     onClick={() => settleShared(vault.id, true, status.held)}
                   >
                     {t("set.sharedHeldDelete")}
@@ -192,7 +188,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
       {recovery ? (
         <div className="grid gap-1.5">
           <span className={LABEL}>{t("set.sharedRecovery")}</span>
-          <CommandBlock hint={t("set.sharedRecoveryAgainHelp")} command={recovery} wrap />
+          <CommandBlock hint={t("set.sharedRecoveryHelp")} command={recovery} wrap />
           <div>
             <button className={`${buttonClass("ghost")} -ml-3`} onClick={() => hideRecovery(vault.id)}>
               {t("set.sharedDone")}
@@ -229,7 +225,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
           </button>
           <button
             className={buttonClass("primary")}
-            disabled={busy[`${vault.id}:invite`]}
+            disabled={busy}
             onClick={async () => {
               await inviteToShared(vault.id, role);
               setInviting(false);
@@ -258,7 +254,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                       <span className="text-xs text-s-muted">{t("set.sharedRemoveSure")}</span>
                       <button
                         className={buttonClass("dangerSolid")}
-                        disabled={busy[`${vault.id}:remove`]}
+                        disabled={busy}
                         aria-label={t("set.extraVaultRemove", { name: member.name })}
                         onClick={async () => {
                           await removeMember(vault.id, member.fp);
@@ -292,7 +288,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
                       </span>
                       <button
                         className={buttonClass("ghost")}
-                        disabled={busy[`${vault.id}:withdraw`]}
+                        disabled={busy}
                         onClick={() => withdrawInvite(vault.id, invite.id)}
                       >
                         {t("set.sharedWithdraw")}
@@ -317,7 +313,7 @@ function SharedForm() {
   const { t } = useT();
   const form = useSettingsStore(s => s.shared.form);
   const message = useSettingsStore(s => s.shared.messages.form);
-  const busy = useSettingsStore(s => s.shared.busy);
+  const busy = useSettingsStore(s => !!s.shared.busy.form);
   const machines = useSettingsStore(s => s.settings.machines ?? NO_MACHINES);
   const machine = form.machine || machines[0]?.id || "";
   const folder = (
@@ -348,18 +344,6 @@ function SharedForm() {
     </div>
   );
 
-  if (form.mode === "new" && form.recovery)
-    return (
-      <div className={ROW}>
-        <span className={LABEL}>{t("set.sharedRecovery")}</span>
-        <CommandBlock hint={t("set.sharedRecoveryHelp")} command={form.recovery} wrap />
-        <div className="flex justify-end">
-          <button className={buttonClass("primary")} onClick={() => openForm("")}>
-            {t("set.sharedDone")}
-          </button>
-        </div>
-      </div>
-    );
   if (form.mode === "new")
     return (
       <div className={ROW}>
@@ -387,7 +371,7 @@ function SharedForm() {
           />
         </Field>
         {folder}
-        {footer(t("set.sharedCreate"), busy.create || !machine || !form.name.trim() || !form.folder, () =>
+        {footer(t("set.sharedCreate"), busy || !machine || !form.name.trim() || !form.folder, () =>
           createSharedVault(machine),
         )}
       </div>
@@ -407,17 +391,19 @@ function SharedForm() {
           />
         </Field>
         {folder}
-        {footer(t("set.sharedJoinButton"), busy.join || !form.link.trim() || !form.folder, joinSharedVault)}
+        {footer(t("set.sharedJoinButton"), busy || !form.link.trim() || !form.folder, joinSharedVault)}
       </div>
     );
+  // a create or join that ends closes the form: what its reload said shows here
   return (
     <div className={`flex flex-wrap items-center gap-2 ${EDGE}`}>
-      <button className={buttonClass()} onClick={() => openForm("new")}>
+      <button className={buttonClass()} disabled={busy} onClick={() => openForm("new")}>
         {t("set.sharedNew")}
       </button>
-      <button className={buttonClass()} onClick={() => openForm("join")}>
+      <button className={buttonClass()} disabled={busy} onClick={() => openForm("join")}>
         {t("set.sharedJoin")}
       </button>
+      {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
     </div>
   );
 }

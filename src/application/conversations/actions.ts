@@ -18,7 +18,7 @@ import { request } from "../navigation/requests";
 import { chatAgent, chatCaps, chatTextOnly, picks } from "../agents/agents";
 import { saveMainSettings, settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
-import { findProjects, project as vaultProject } from "../workspace/vault";
+import { findProjects, project as vaultProject, projectName } from "../workspace/vault";
 import { setIcon } from "../workspace/icons";
 import { useConversationsStore } from "./store";
 import { useDraftsStore } from "./drafts";
@@ -145,7 +145,7 @@ function routeFirstMessage(key: string, text: string, forced?: string): boolean 
   if (hits.length === 1)
     set(draft => {
       draft.chats[key].project = hits[0];
-      push(draft, key, { kind: "note", text: t("note.moved", { name: hits[0] }) });
+      push(draft, key, { kind: "note", text: t("note.moved", { name: projectName(hits[0]) }) });
     });
   else if (hits.length > 1) {
     set(draft => {
@@ -164,7 +164,8 @@ function startConversation(key: string, text: string, files: string[]) {
       conversation.title = (text || (files[0] ? fileName(files[0]) : t("chat.image"))).slice(0, 48);
     conversation.draft = false;
     conversation.at = Date.now();
-    conversation.provider ||= provider;
+    // chatAgent's pick, also over one made before the draft moved into a vault that runs Claude Code only
+    conversation.provider = provider;
   });
   saveChats();
 }
@@ -398,25 +399,26 @@ export function routeTo(name: string) {
     draft.routeChoice = null;
     if (name) {
       draft.chats[choice.key].project = name;
-      push(draft, choice.key, { kind: "note", text: t("note.moved", { name }) });
+      push(draft, choice.key, { kind: "note", text: t("note.moved", { name: projectName(name) }) });
     }
   });
   sendMsg(choice.text);
 }
+/** Whether moving conversation `key` to project `to` takes it into another vault after it started: refused, it keeps
+ *  running in the vault it started in (src-tauri `fence`). */
+const leavesVault = (key: string, to: string | null) =>
+  !isTerminal(key) &&
+  hasStarted(cs(), key) &&
+  changesVault(useWorkspaceStore.getState().snap, cs().chats[key]?.project ?? null, to);
+const refuseMove = () => toast(t("toast.otherVault"), undefined, undefined, 6000);
 /** The bar that asks whether a general conversation is about a project: yes moves it, no hides the question. */
-const started = (key: string) => hasStarted(cs(), key);
 export function moveTo(project: string | null) {
   const key = selected();
-  // the bar offers only projects in the conversation's own vault once it started (MoveBar): this guards the rest
-  const from = cs().chats[key]?.project ?? null;
-  if (project && started(key) && changesVault(useWorkspaceStore.getState().snap, from, project)) {
-    toast(t("toast.otherVault"), undefined, undefined, 6000);
-    return;
-  }
+  if (leavesVault(key, project)) return refuseMove();
   set(draft => {
     if (project) {
       draft.chats[key].project = project;
-      push(draft, key, { kind: "note", text: t("note.moved", { name: project }) });
+      push(draft, key, { kind: "note", text: t("note.moved", { name: projectName(project) }) });
     } else draft.dismissed.add(key);
   });
   if (project) saveChats();
@@ -434,15 +436,14 @@ export async function moveChat(key: string, project: string | null, folder: stri
   }
   const conversation = cs().chats[key];
   if (!conversation || (conversation.project === project && (conversation.folder ?? "") === folder)) return true;
-  // a started conversation keeps running in its vault: it cannot follow a project into another one
-  if (started(key) && changesVault(useWorkspaceStore.getState().snap, conversation.project, project)) {
-    toast(t("toast.otherVault"), undefined, undefined, 6000);
+  if (leavesVault(key, project)) {
+    refuseMove();
     return false;
   }
   set(draft => {
     const moved = draft.chats[key];
     if (moved.project !== project)
-      push(draft, key, { kind: "note", text: t("note.moved", { name: project ?? t("general") }) });
+      push(draft, key, { kind: "note", text: t("note.moved", { name: projectName(project) }) });
     moved.project = project;
     if (folder) moved.folder = folder;
     else delete moved.folder;
@@ -503,7 +504,7 @@ export function openTerminal(external = false) {
     return;
   }
   const project = projectOf(key);
-  const name = `${project || t("general")}: ${label(key)}`;
+  const name = `${projectName(project)}: ${label(key)}`;
   if (external || !project) backend.openTerminal(key, null, name, project);
   else {
     useNavigationStore.setState(draft => {
@@ -683,11 +684,7 @@ async function saveProjectFields(next: Settings, project: string, fields: Projec
 /** The open conversation to `project`, and the icon and name of the project it was under. `img` an image data url,
  *  else `emoji`; empty both resets the icon so the favicon run guesses again. Resolves with an error to show, or "". */
 export async function saveProjectPanel(project: string | null, fields?: ProjectFields): Promise<string> {
-  // a started conversation keeps running in its vault: it cannot follow a project into another one (as moveChat)
-  const key = selected();
-  const from = cs().chats[key]?.project ?? null;
-  if (!isTerminal(key) && started(key) && changesVault(useWorkspaceStore.getState().snap, from, project))
-    return t("toast.otherVault");
+  if (leavesVault(selected(), project)) return t("toast.otherVault");
   const next = structuredClone(settings());
   const iconProject = selectedProject(); // the project the icon fields belong to
   assignProject(next, project);

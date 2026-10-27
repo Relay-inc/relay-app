@@ -8,7 +8,8 @@ const namesText = (name: string, text: string) =>
 export function findProjects(projects: Project[], text: string): string[] {
   const hits = new Set<string>();
   for (const candidate of projects)
-    for (const name of [candidate.name, ...(candidate.aliases || [])]) {
+    // the label too: another vault's project has an opaque key as its name
+    for (const name of [candidate.name, candidate.label ?? "", ...(candidate.aliases || [])]) {
       if (name.length < 3) continue;
       if (namesText(name, text)) hits.add(candidate.name);
     }
@@ -23,11 +24,12 @@ export function projectLabel(
   settings: Settings,
   icons: Record<string, ProjectIcon>,
   general: string,
+  shown = name, // the snapshot's label
 ) {
   if (!name) return general;
   const own = settings.projects[name] || {};
   const emoji = icons[name]?.icon;
-  return `${emoji ? emoji + " " : ""}${own.label || name}`;
+  return `${emoji ? emoji + " " : ""}${own.label || shown || name}`;
 }
 /** A website value: the favicon run fetches it and replaces it with the file. */
 export const isSite = (value: string) => value.includes(".") && !/\s/.test(value) && !value.startsWith("icons/");

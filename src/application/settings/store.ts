@@ -60,7 +60,7 @@ export type SettingsState = {
     icons: Record<string, ProjectIcon> | null; // null until the page first shows
     loading: boolean; // the first load started
     names: string[]; // every project, sorted
-    projects: Pick<Project, "name" | "context" | "summary">[];
+    projects: Pick<Project, "name" | "label" | "context" | "summary">[];
     repos: Record<string, string[]>;
     message: Message | null;
     finding: boolean;
@@ -100,15 +100,13 @@ export type SettingsState = {
   shared: {
     status: Record<string, SharedStatus>; // the last round per vault
     info: Record<string, SharedInfo | null>; // per vault whose members are open: what the server said, null while asked
-    links: Record<string, { link: string; invite: SharedInvite } | null>; // per vault: the invite link just made
-    keys: Record<string, string>; // per vault whose recovery key is shown again: the key (shared_vault_recovery)
+    links: Record<string, { link: string; invite: SharedInvite }>; // per vault: the invite link just made
+    // per vault whose recovery key shows: the key, from the create or shared_vault_recovery (any time again)
+    keys: Record<string, string>;
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
-    busy: Record<string, boolean>; // what runs, each on its own: "<id>:<action>", "create" or "join"
-    // an invite link that came while a new vault's key was on screen or a create or join ran: the join form opens with it
-    // after. The backend keeps its copy until then, so a closed window's next open still finds it.
-    invite: string;
-    // the form under the list: a new vault or joining one; `recovery` the new vault's key, shown once
-    form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string; recovery: string };
+    busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
+    // the form under the list: a new vault or joining one
+    form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string };
   };
   pluginsPage: {
     loaded: boolean; // the secrets are known
@@ -198,8 +196,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     keys: {},
     messages: {},
     busy: {},
-    invite: "",
-    form: { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" },
+    form: { mode: "", machine: "", name: "", folder: "", link: "" },
   },
   pluginsPage: { loaded: false, secrets: {}, imports: [], messages: {}, tests: {} },
   integrations: {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changesVault, followChats, hasStarted, projectsInVault, terminalSessions } from "./rules.ts";
+import { changesVault, followChats, hasStarted, mainVaultProjects, terminalSessions } from "./rules.ts";
 import type { AgentSession, Chat, Item } from "./types";
 import type { SessionItem } from "../workspace/types";
 
@@ -67,10 +67,15 @@ test("a conversation changes vault only when its old and new project live in dif
   assert.equal(changesVault(snap, "Old", null), false); // no vault from an older backend: the main one
   assert.equal(changesVault(snap, "Alpha", "Team"), true);
   assert.equal(changesVault(snap, "Team", null), true);
-  // the move bar's offer for a started conversation: only its own vault's projects
-  const names = (from: string | null) => projectsInVault(snap, from).map(project => project.name);
-  assert.deepEqual(names(null), ["Alpha", "Beta", "Old"]);
-  assert.deepEqual(names("Team"), ["Team"]);
+  // a project the snapshot lacks is in an unknown vault: no move from or into it, a folder move within it is fine
+  assert.equal(changesVault(snap, "Gone", null), true);
+  assert.equal(changesVault(snap, "Alpha", "Gone"), true);
+  assert.equal(changesVault(snap, "Gone", "Gone"), false);
+  // the move bar's offer (a general conversation, started): the main vault's projects
+  assert.deepEqual(
+    mainVaultProjects(snap).map(project => project.name),
+    ["Alpha", "Beta", "Old"],
+  );
 });
 
 test("a conversation started once a message went out or a session runs", () => {

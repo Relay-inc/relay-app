@@ -14,6 +14,9 @@ export type Project = {
   stand: string | null; // the note's status section, markdown
   aliases: string[];
   vault?: string; // the vault folder it lives in: its conversations run there and stay there
+  // the name to show: `name` is the project's key, opaque for another vault's project. "Name (folder)" when another
+  // vault has that name too
+  label?: string;
 };
 /** A Claude Code session in the transcripts, with the project snapshot.rs guessed from what was asked in it. */
 export type SessionItem = { sessionId: string; project: string | null; last_user: string; last_at: string };
@@ -24,11 +27,9 @@ export type Snapshot = {
   sessions: { error?: string | null; items: SessionItem[] };
   reminders: Reminder[];
   vault?: VaultStatus;
-  extraVaults?: ExtraVault[];
 };
-/** An extra (shared) vault as the last snapshot read it: its projects shown as "Name (folder)" because a vault read
- *  before has that name too, and why it could not be read. */
-export type ExtraVault = { vault: string; renamed: string[]; error: string | null };
+/** An extra vault folder as the last snapshot read it: why it could not be read. */
+export type ExtraVault = { vault: string; error: string | null };
 export const EMPTY_SNAPSHOT: Snapshot = { projects: [], reminders: [], sessions: { items: [] } };
 
 // Project icons live in the vault's .relay/config.json (src-tauri/src/relay_config.rs, `icons`): an image file in

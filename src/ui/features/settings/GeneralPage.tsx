@@ -149,7 +149,7 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
         />
       </Section>
       <SharedVaults />
-      <Section title={t("set.sharedOther")} desc={<Html html={th("set.extraVaultsHelp")} />}>
+      <Section title={t("set.extraVaultsTitle")} desc={<Html html={th("set.extraVaultsHelp")} />}>
         <div className="flex flex-col gap-2">
           {extraVaults.map(vault => {
             const read = extraRead.find(x => x.vault === vault);
@@ -168,11 +168,6 @@ export function GeneralPage({ vaultStatus, active }: { vaultStatus: VaultStatus;
                   </button>
                 </div>
                 {read?.error && <p className="text-xs text-s-warn">{read.error}</p>}
-                {!!read?.renamed.length && (
-                  <p className="text-xs text-s-muted">
-                    {t("set.extraVaultRenamed", { names: read.renamed.join(", ") })}
-                  </p>
-                )}
               </div>
             );
           })}

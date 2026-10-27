@@ -53,7 +53,11 @@ export function ProjectPanel() {
     setErr(await saveProjectPanel(projectName, edited));
   };
 
-  const names = projects.map(x => x.name).sort((a, b) => a.localeCompare(b));
+  // by the name shown: another vault's project has an opaque key
+  const options = projects
+    .map(x => ({ name: x.name, label: x.label || x.name }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const shown = projects.find(x => x.name === current)?.label || current || "";
   return (
     <div className="absolute z-5 top-14 right-4 w-[340px] grid grid-cols-1 gap-3 bg-bg border border-separator rounded-lg shadow-lg p-3.5">
       {err ? <div className="err-box">{err}</div> : null}
@@ -66,15 +70,17 @@ export function ProjectPanel() {
           onChange={e => setProjectName(e.target.value || null)}
         >
           <option value="">{t("general")}</option>
-          {names.map(name => (
-            <option key={name}>{name}</option>
+          {options.map(option => (
+            <option key={option.name} value={option.name}>
+              {option.label}
+            </option>
           ))}
         </select>
       </label>
       {/* the sidebar entry of the project: its image or emoji, and its label */}
       {current ? (
         <div className={fieldLabel}>
-          {t("pop.sidebar", { name: current })}
+          {t("pop.sidebar", { name: shown })}
           <div className="flex gap-2 items-center">
             <label className="btn inline-flex items-center flex-none" title={t("pop.imgPick")}>
               {isImg(img) ? (
@@ -96,7 +102,7 @@ export function ProjectPanel() {
             />
             <input
               className="field flex-1 min-w-0 placeholder:text-secondary"
-              placeholder={current}
+              placeholder={shown}
               value={label}
               onChange={e => setLabel(e.target.value)}
             />

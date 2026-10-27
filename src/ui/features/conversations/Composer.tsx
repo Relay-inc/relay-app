@@ -330,7 +330,7 @@ export function Composer({ className }: { className: string }) {
       : workerPage
         ? t("orch.ph.worker", { name: plainProject(view.projectName) })
         : view.projectName
-          ? t("ph.project", { name: view.projectName })
+          ? t("ph.project", { name: plainProject(view.projectName) })
           : t("ph.general");
   return (
     <div className={`relay-composer flex-none ${className}`}>
@@ -441,11 +441,17 @@ export function Composer({ className }: { className: string }) {
           {/* with one agent there is nothing to pick */}
           {view.agents.length > 1 && !isTerminal(selected) && !agentFixed && !inOrchestrator ? (
             <>
+              {/* another vault than the main one runs Claude Code only (its fence is Claude Code's rules) */}
               <PickMenu
                 pill
-                options={view.agents.map(option => ({ ...option, icon: glyphOf(option.id) }))}
+                options={view.agents.map(option => ({
+                  ...option,
+                  icon: glyphOf(option.id),
+                  disabled: !!inShared && option.id !== "claude",
+                }))}
                 value={view.agentId}
                 label={t("composer.agent")}
+                title={inShared ? t("composer.agentSharedVault") : t("composer.agent")}
                 onPick={setAgent}
               />
               <span className="w-px h-3.5 bg-separator-strong mx-1"></span>

@@ -84,6 +84,8 @@ export default {
   "usage.none": "Er staat geen agent aan. Zet er een aan bij Instellingen › Agents.",
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
+  "composer.agentSharedVault":
+    "Een gesprek in een gedeelde vault of een andere vaultmap loopt op Claude Code: de beperkingen daar zijn gebouwd op de permissieregels van Claude Code.",
   "set.tab.agents": "Agents",
   "ag.default": "Standaardagent",
   "ag.defaultHelp":
@@ -845,13 +847,12 @@ export default {
   "rem.toastWeek": "Een week verplaatst: {text}",
   "rem.toastMoved": "Verplaatst: {text}",
   "rem.none": "Geen reminders.",
-  "set.extraVaults": "Gedeelde vaults",
+  "set.sharedTitle": "Gedeelde vaults",
   "set.extraVaultsHelp":
     "Andere mappen met een vault, waarvan de projecten naast de jouwe in de zijbalk staan. Een gesprek blijft in de vault van zijn project: de bestandstools en bestandscommando's van Claude Code zijn geblokkeerd voor je andere vaults. Een gesprek in een van deze mappen krijgt dezelfde beperkingen als in een gedeelde vault: je eigen MCP-servers, claude.ai-connectors en hooks staan uit, Claude Code draait altijd in auto mode, en je mail, herinneringen en agenda blijven buiten bereik.",
   "set.extraVaultAdd": "Vault toevoegen…",
   "set.extraVaultRemove": "{name} verwijderen",
-  "set.extraVaultRenamed": "Zelfde naam als een project in een andere vault, getoond als: {names}",
-  "set.sharedOther": "Andere vaultmappen",
+  "set.extraVaultsTitle": "Andere vaultmappen",
   "set.sharedHelp":
     "Een vault die je team deelt op een relay-server. De server bewaart enkel versleutelde bestanden. Elke Mac synchroniseert de vault naar een eigen map.",
   "set.sharedAdmin": "Beheerder",
@@ -901,9 +902,8 @@ export default {
   "set.sharedCreate": "Maken",
   "set.sharedRecovery": "Herstelsleutel",
   "set.sharedRecoveryHelp":
-    "Bewaar deze sleutel in je wachtwoordbeheerder. Raakt de Mac van elk lid de vault kwijt, dan opent enkel deze sleutel nog een back-up van de bestanden op de server. Je kunt hem later opnieuw tonen vanuit de rij van de vault.",
+    "Bewaar deze sleutel in je wachtwoordbeheerder. Raakt de Mac van elk lid de vault kwijt, dan opent enkel deze sleutel nog een back-up van de bestanden op de server.",
   "set.sharedShowRecovery": "Herstelsleutel tonen",
-  "set.sharedRecoveryAgainHelp": "Dit is de sleutel van de vault. Bewaar hem in je wachtwoordbeheerder.",
   "set.sharedJoinTitle": "Deelnemen aan een gedeelde vault",
   "set.sharedLinkLabel": "Uitnodigingslink",
   "set.sharedLinkLabelHelp": "De relay://-link die een beheerder je stuurde.",

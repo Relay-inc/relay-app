@@ -21,10 +21,21 @@ const ws = () => useWorkspaceStore.getState();
 
 // ---------- reading
 export const project = (name: string | null) => (name ? ws().snap.projects.find(x => x.name === name) : undefined);
+/** The name a project is shown by, before the user's own: its `label` ("Name (folder)" when another vault has that
+ *  name too). `name` is its key, opaque for a project of another vault than the main one: never shown. */
+export const shownName = (name: string) => project(name)?.label || name;
 /** How a project is shown: its own icon and name from the settings, else the note name; "Algemeen" for none. */
-export const projectLabel = (name: string | null) => labelOf(name, settings(), ws().icons, t("general"));
+export const projectLabel = (name: string | null) =>
+  labelOf(name, settings(), ws().icons, t("general"), name && shownName(name));
 /** The project's name without its icon, where a crab already marks the row (the orchestrator's workers). */
-export const projectName = (name: string | null) => (name ? settings().projects[name]?.label || name : t("general"));
+export const projectName = (name: string | null) =>
+  name ? settings().projects[name]?.label || shownName(name) : t("general");
+/** The folder name of the vault a project lives in when that is not the main vault, else null. */
+export function otherVaultOf(name: string | null) {
+  const vault = name ? project(name)?.vault : undefined;
+  const main = ws().snap.vault?.vault;
+  return vault && vault !== main ? vault.split("/").pop() || vault : null;
+}
 /** Vault projects by their label, for a picker. */
 export const projectsByLabel = (locale: string) =>
   ws()

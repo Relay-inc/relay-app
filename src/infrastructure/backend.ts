@@ -468,7 +468,7 @@ export const sharedVaultJoin = (link: string, folder: string) =>
   invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
 export const sharedVaultInvite = (id: string, role: SharedRole) =>
   invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
-/** The vault's key as this Mac holds it (64 hex), for any member: what the create form showed. */
+/** The vault's key as this Mac holds it (64 hex), for any member: what the create gave. */
 export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_recovery", { id });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
 export const sharedVaultInviteRevoke = (id: string, invite: string) =>
@@ -478,11 +478,10 @@ export const sharedVaultRemove = (id: string, fp: string) => invoke("shared_vaul
 /** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
 export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
   invoke("shared_vault_held", { id, allow, paths });
-/** The invite link that opened Relay, taken: the backend keeps it until the join form opens with it. Every link
- *  also comes as `vault-invite`. */
+/** The invite link that opened Relay, taken: the backend keeps it until then. */
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
-export const onVaultInvite = (handler: (link: string) => void) =>
-  listen<string>("vault-invite", e => handler(e.payload));
+/** A new invite link waits in the backend (`sharedVaultPendingInvite`): a ping, no payload. */
+export const onVaultInvite = (handler: () => void) => listen("vault-invite", () => handler());
 /** The team's changes came into a shared vault's folder. */
 export const onVaultPulled = (handler: () => void) => listen("vault-pulled", () => handler());
 

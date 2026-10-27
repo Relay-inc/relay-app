@@ -82,6 +82,8 @@ const en = {
   "usage.none": "No agent is switched on. Switch one on under Settings › Agents.",
   "usage.limitTop": "{name}: {label}",
   "composer.agent": "Agent",
+  "composer.agentSharedVault":
+    "A conversation in a shared vault or another vault folder runs on Claude Code: its limits there are built from Claude Code's permission rules.",
   "set.tab.agents": "Agents",
   "ag.default": "Default agent",
   "ag.defaultHelp":
@@ -838,13 +840,12 @@ const en = {
   "rem.toastWeek": "Moved a week: {text}",
   "rem.toastMoved": "Moved: {text}",
   "rem.none": "No reminders.",
-  "set.extraVaults": "Shared vaults",
+  "set.sharedTitle": "Shared vaults",
   "set.extraVaultsHelp":
     "Other folders with a vault, whose projects show in the sidebar next to yours. A conversation stays in the vault of its project: Claude Code's file tools and file commands are blocked from your other vaults. A conversation in one of these folders gets the limits of a shared vault: your own MCP servers, claude.ai connectors and hooks are off, Claude Code always runs in auto mode, and your mail, reminders and calendar stay out of reach.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
-  "set.extraVaultRenamed": "Same name as a project in another vault, shown as: {names}",
-  "set.sharedOther": "Other vault folders",
+  "set.extraVaultsTitle": "Other vault folders",
   "set.sharedHelp":
     "A vault your team shares on a relay-server. The server only keeps encrypted files. Each Mac syncs the vault into a folder of its own.",
   "set.sharedAdmin": "Admin",
@@ -892,9 +893,8 @@ const en = {
   "set.sharedCreate": "Create",
   "set.sharedRecovery": "Recovery key",
   "set.sharedRecoveryHelp":
-    "Keep this key in your password manager. If every member's Mac loses the vault, only this key opens a backup of the server's files. You can show it again from the vault's row.",
+    "Keep this key in your password manager. If every member's Mac loses the vault, only this key opens a backup of the server's files.",
   "set.sharedShowRecovery": "Show recovery key",
-  "set.sharedRecoveryAgainHelp": "This is the vault's key. Keep it in your password manager.",
   "set.sharedJoinTitle": "Join a shared vault",
   "set.sharedLinkLabel": "Invite link",
   "set.sharedLinkLabelHelp": "The relay:// link an admin sent you.",

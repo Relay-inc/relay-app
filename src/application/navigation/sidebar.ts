@@ -42,7 +42,7 @@ import {
 } from "../conversations/selectors";
 import { chatAgent } from "../agents/agents";
 import { useWorkspaceStore } from "../workspace/store";
-import { contexts, projectLabel } from "../workspace/vault";
+import { contexts, projectLabel, projectName, shownName } from "../workspace/vault";
 import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
@@ -221,8 +221,6 @@ const termRow = (session: TerminalSession): ConvRow => ({
   orch: false,
 });
 
-// the label without the emoji projectLabel puts in front: the row draws the project's icon next to it already
-const blockLabel = (name: string) => settings().projects[name]?.label || name;
 const foldLabel = (total: number, unfolded: boolean) => {
   if (total <= SHOWN_CONVERSATIONS) return "";
   return unfolded ? t("nav.less") : t("nav.more", { n: total - SHOWN_CONVERSATIONS });
@@ -270,8 +268,9 @@ function projectBlock(project: Project, allSessions: TerminalSession[]): Project
     context: project.context,
     unseen: keys.some(key => cs().unseen.has(key)),
     trail: trailOf(keys),
-    addTitle: t("nav.newChatAbout", { name: project.name }),
-    label: blockLabel(project.name),
+    addTitle: t("nav.newChatAbout", { name: shownName(project.name) }),
+    // the label without the emoji projectLabel puts in front: the row draws the project's icon next to it already
+    label: projectName(project.name),
     img: icon?.img,
     emoji: icon?.icon,
     folders: folderBlocks(project.name, inside),
@@ -417,7 +416,7 @@ const lastActivity = (name: string, sessions: TerminalSession[]) =>
     ...sessions.filter(session => session.project === name).map(session => session.mtime),
   );
 const matchesQuery = (project: Project, query: string) =>
-  project.name.toLowerCase().includes(query) || projectLabel(project.name).toLowerCase().includes(query);
+  shownName(project.name).toLowerCase().includes(query) || projectLabel(project.name).toLowerCase().includes(query);
 
 function contextSection(
   context: string,

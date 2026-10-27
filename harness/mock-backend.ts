@@ -424,7 +424,7 @@ function handle(cmd: string, a: Args): unknown {
     case "vault_status":
       return vault.vaultStatus(vaultOk);
     case "extra_vaults_status":
-      return harness.extraVaults ?? [];
+      return shared ? vault.teamStatus : [];
     case "detect_vault":
     case "check_vault":
       return { ...vault.vaultStatus(true), vault: a.path, ...(a.map ? { map: a.map } : {}) };
@@ -456,8 +456,8 @@ function handle(cmd: string, a: Args): unknown {
     case "snapshot": {
       const snap = vault.snapshot(reminders);
       if (!shared) return snap;
-      const own = snap.projects.map(p => ({ ...p, vault: vault.VAULT }));
-      return { ...snap, projects: [...own, ...vault.teamProjects], extraVaults: vault.teamStatus };
+      const own = snap.projects.map(p => ({ ...p, vault: vault.VAULT, label: p.name }));
+      return { ...snap, projects: [...own, ...vault.teamProjects] };
     }
     case "vault_notes":
       return { root: vault.VAULT, notes: vault.notes };
@@ -1203,8 +1203,6 @@ const harness = {
   unmocked,
   autoReply: true,
   echo: true,
-  /** What `extra_vaults_status` answers: the shared vaults as the last snapshot read them. */
-  extraVaults: (shared ? vault.teamStatus : []) as { vault: string; renamed: string[]; error: string | null }[],
   /** What `pick_folder` answers: null is cancelled. */
   pickFolder: null as string | null,
   /** What `pick_files` answers (the + button's dialog): [] is cancelled. */
