@@ -121,7 +121,8 @@ const VIEWS = {
   "settings-machines-shared-only": async () => {
     await settingsPage("Machines", null, "nomirror");
     await waitText("For shared vaults only.");
-    await intoView("For shared vaults only.");
+    // the intro says "for shared vaults only." too (text matches ignore case): the row's own words
+    await intoView("For shared vaults only. This Mac's vault");
   },
   // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
@@ -1077,11 +1078,12 @@ const VIEWS = {
     await settingsPage("Voice");
     await intoView("Whisper Large v3 Turbo");
   },
-  // a vault shared on a relay-server under General: its last round (a conflict copy, two deletes held), the members
-  // open (this Mac, an admin, a member, an open invite), a new invite link made and the recovery key shown again
+  // Settings › Machines of the vault's admin: Team server, paired for shared vaults only, with the vault under it: its
+  // last round (a conflict copy, two deletes held), the members open (this Mac, an admin, a member, an open invite), a
+  // new invite link made and the recovery key shown again
   "settings-shared-vaults": async () => {
-    await settingsPage("General", undefined, "shared");
-    await page.setViewportSize({ width: 900, height: 1400 });
+    await settingsPage("Machines", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1600 });
     await waitText("Put them back");
     await button("Members").click();
     await waitText("Design laptop");
@@ -1090,13 +1092,14 @@ const VIEWS = {
     await waitText("Single use, valid until");
     await button("Show recovery key").click();
     await waitText("Keep this key in your password manager");
-    await intoView("Shared vaults");
+    await intoView("Team server");
   },
-  // New shared vault… filled in and created: the form closes, the new vault's row shows its recovery key
+  // New shared vault on this machine… under Team server, filled in and created: the form closes, the new vault's row
+  // under the machine shows its recovery key
   "settings-shared-new": async () => {
-    await settingsPage("General", undefined, "shared");
+    await settingsPage("Machines", undefined, "shared");
     await page.evaluate(() => (window.__harness.pickFolder = "/Users/me/Shared/Launch"));
-    await button("New shared vault…").click();
+    await button("New shared vault on this machine…").click();
     await page.locator("#shared-name").fill("Launch");
     await page
       .locator("div.justify-between", { has: page.getByText("Folder", { exact: true }) })
@@ -1106,9 +1109,15 @@ const VIEWS = {
     await waitText("Keep this key in your password manager");
     await intoView("Keep this key in your password manager");
   },
-  // Relay opened by an invite link: General with the join form, the link in it
+  // a member's Settings › Machines: no machine, the vault they joined with a link under Shared vaults
+  "settings-shared-member": async () => {
+    await settingsPage("Machines", undefined, "shared-member");
+    await waitText("Put them back");
+    await intoView("Shared vaults");
+  },
+  // Relay opened by an invite link: Machines with the join form under Shared vaults, the link in it
   "settings-shared-join": async () => {
-    await settingsPage("General", undefined, "shared-invite");
+    await settingsPage("Machines", undefined, "shared-invite");
     await page.setViewportSize({ width: 900, height: 1000 });
     await waitText("Join a shared vault");
     await intoView("Join a shared vault");

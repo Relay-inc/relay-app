@@ -105,7 +105,7 @@ export type SettingsState = {
     keys: Record<string, string>;
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
     busy: Record<string, boolean>; // what runs: a vault's id (one action per row at a time), or "form"
-    // the form under the list: a new vault or joining one
+    // the one form, a new vault on `machine` or joining one (machine ""): where it and the "form" message show
     form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string };
   };
   pluginsPage: {

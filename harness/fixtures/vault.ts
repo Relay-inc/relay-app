@@ -175,10 +175,13 @@ export const teamProjects = [
 ];
 export const teamStatus = [{ vault: TEAM_VAULT, error: null }];
 
-/** The shared fixture's vault on a relay-server (Settings › General › Shared vaults): made on the paired Team server,
- *  this Mac its admin. Its last round two minutes ago made a conflict copy and holds two deletes back. */
+/** The shared fixture's vault on a relay-server (Settings › Machines, under its machine): made on the Team server,
+ *  paired for shared vaults only, this Mac its admin. Its last round two minutes ago made a conflict copy and holds two
+ *  deletes back. */
 const HUB_FP = "0f9534960dd3570a".padEnd(64, "0");
-export const hubMachines = [{ id: "a1b2c3d4e5f6", name: "Team server", host: "192.168.1.2", port: 47800, fp: HUB_FP }];
+export const hubMachines = [
+  { id: "a1b2c3d4e5f6", name: "Team server", host: "192.168.1.2", port: 47800, fp: HUB_FP, sharedOnly: true },
+];
 export const SHARED_ID = "0123456789abcdef";
 export const sharedVaults = [
   {
@@ -191,6 +194,9 @@ export const sharedVaults = [
     role: "admin",
   },
 ];
+/** shared-member: the same vault on a Mac that joined it with a link, a member there. Its server is not one of this
+ *  Mac's machines, so the vault shows in Settings › Machines › Shared vaults. */
+export const memberVaults = [{ ...sharedVaults[0], role: "member", folder: "/Users/me/Shared/Team vault" }];
 export const sharedStatus = (nowS: number) => ({
   [SHARED_ID]: {
     at: nowS - 120,

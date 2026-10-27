@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import type { Machine } from "../../../domain/settings/types";
+import { Fragment, useEffect, useState } from "react";
+import type { Machine, SharedVault } from "../../../domain/settings/types";
+import { vaultsByMachine } from "../../../domain/settings/machines";
 import { useSettingsStore } from "../../../application/settings/store";
 import {
   checkAll,
@@ -17,14 +18,20 @@ import { MachineHost } from "./MachineHost";
 import { MachineRow } from "./MachineRow";
 import { MachineSetup } from "./MachineSetup";
 import { Section } from "./Section";
+import { MachineVaults, SharedVaults } from "./SharedVaults";
 
 const NO_MACHINES: Machine[] = [];
+const NO_VAULTS: SharedVault[] = [];
 
 /** Machines: other computers in the LAN running relay-server. Pairing, the online check and the project folders on
- *  each machine. The projects are read and every machine is checked the first time the page shows. */
+ *  each machine, the shared vaults under the machine that keeps them. Shared vaults on top lists the ones on a server
+ *  that is not one of these machines (joined with a link) and joins one. The projects are read and every machine is
+ *  checked the first time the page shows. */
 export function MachinesPage({ active }: { active: boolean }) {
   const { t, th } = useT();
   const machines = useSettingsStore(s => s.settings.machines ?? NO_MACHINES);
+  const sharedVaults = useSettingsStore(s => s.settings.sharedVaults ?? NO_VAULTS);
+  const vaults = vaultsByMachine(machines, sharedVaults);
   const pairing = useSettingsStore(s => s.machinesPage.pairing);
   const pairError = useSettingsStore(s => s.machinesPage.pairError);
   const runDefault = useSettingsStore(s => s.settings.machines_default ?? "");
@@ -61,6 +68,8 @@ export function MachinesPage({ active }: { active: boolean }) {
   return (
     <>
       <Html as="p" className={HINT} html={th("mc.intro")} />
+      {/* first, so an invite link that opened Relay shows its join form without scrolling */}
+      <SharedVaults vaults={vaults.elsewhere} />
       {runners.length ? (
         <Section title={t("mc.runDefaultTitle")}>
           <Field label={t("mc.runDefault")} hint={t("mc.runDefaultHelp")} id="mcdefault">
@@ -124,7 +133,12 @@ export function MachinesPage({ active }: { active: boolean }) {
         }
       >
         {machines.length ? (
-          machines.map(machine => <MachineRow key={machine.id} machine={machine} />)
+          machines.map(machine => (
+            <Fragment key={machine.id}>
+              <MachineRow machine={machine} />
+              <MachineVaults machine={machine} vaults={vaults.on[machine.id]} />
+            </Fragment>
+          ))
         ) : (
           <div className={`${EMPTY_LIST} px-3.5`}>{t("mc.empty")}</div>
         )}

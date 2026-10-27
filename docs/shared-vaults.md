@@ -108,12 +108,15 @@ The server only parses `meta_len` (to list `meta` in the manifest) and checks it
 - Invite: the link secret is 32 random bytes. HKDF-SHA256 with salt `relay vault invite v1` and info `wrap` derives a
   ChaCha20-Poly1305 key, and `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, vault key)`).
 - On the Mac the vault key lives in Relay's data folder as `shared-<id>.key` (hex, 0600), like the mirror keys. It is
-  also the recovery key Relay shows when the vault is made, and again on its row in Settings.
+  also the recovery key Relay shows when the vault is made, and again on its row in Settings › Machines.
 
 ## Invite link
 
 The pairing line with three more fields:
 `relay://<host>:<port>#fp=<64 hex>&code=<32 hex>&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>`.
 `PairLine` parses them as optional `vault`, `invite`, `secret`. A line with all three is an invite.
+A link that opens Relay opens Settings › Machines with it in the join form. That page shows a vault under the machine
+that keeps it (the vault's `fp` is the machine's), and under Shared vaults when its server is not one of this Mac's
+machines, as for a member who joined with a link.
 
 The client side lives in `packages/relay-remote` (`vault.rs`, `client.rs`), the server side in `packages/relay-server/src/vaults.rs`.
