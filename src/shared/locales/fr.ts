@@ -1605,7 +1605,7 @@ export default {
   "composer.machineSharedVault":
     "Une conversation dans un coffre partagé reste sur ce Mac : une machine de travail n'a que votre coffre principal.",
   "mc.intro":
-    "Une conversation peut s'exécuter sur une machine et continue quand ce Mac est fermé : choisissez la machine à côté du modèle avant son premier message, ou faites-en la valeur par défaut ci-dessous. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici.",
+    "Une conversation peut s'exécuter sur une machine et continue quand ce Mac est fermé : choisissez la machine à côté du modèle avant son premier message, ou faites-en la valeur par défaut ci-dessous. Le courrier reste sur ce Mac. Chaque machine reçoit un miroir de votre vault, pour que les conversations qui s'y déroulent sachent ce que Claude sait ici, sauf une machine appairée uniquement pour les coffres partagés.",
   "mc.runDefaultTitle": "Où s'exécutent les conversations",
   "mc.runDefault": "Les nouvelles conversations s'exécutent sur",
   "mc.runDefaultHelp": "Chaque nouvelle conversation peut encore choisir un autre endroit à côté du modèle.",
@@ -1615,6 +1615,9 @@ export default {
     "Lancez <code>relay-server pair</code> sur la machine et collez la ligne ici. Le code ne fonctionne qu'une fois, pendant 10 minutes.",
   "mc.name": "Nom",
   "mc.namePh": "Vide : le nom d'hôte de la machine",
+  "mc.sharedOnly": "Uniquement pour les vaults partagés : pas de miroir du vault de ce Mac",
+  "mc.sharedOnlyRow":
+    "Uniquement pour les vaults partagés. Le vault, le contexte Claude et la mémoire de ce Mac ne vont pas ici, et aucune conversation n'y tourne. Pour changer cela, oubliez la machine et associez-la à nouveau.",
   "mc.pair": "Associer",
   "mc.pairing": "Association…",
   "mc.setupTitle": "Configurer une machine",

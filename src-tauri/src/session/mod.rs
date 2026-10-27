@@ -104,6 +104,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
     let l = Launch { key: project, name, model: &opts.0, effort: &opts.1, resume: resume.as_deref(), fork, turn };
     let caps = p.caps();
     let settings = state.settings.lock().unwrap().clone();
+    // a machine for shared vaults only runs nothing (machines.rs), also when picked anyway
+    if machine.and_then(|id| machines::Machines::find(&settings, id)).is_some_and(|m| machines::shared_only(&m)) { return Err(trc("err.machine_shared_only")); }
     // where the composer or Settings › Machines says (machines.rs); a fork copies a session of this Mac, so stays
     // a shared vault's conversation stays on this Mac: a machine has the main vault's mirror only
     let remote = if caps.remote && fork.is_none() && !shared { state.machines.bind_for(&settings, project, resume.is_some(), machine) } else { None };
@@ -341,7 +343,7 @@ fn reconnect(app: &AppHandle, key: &str, p: &'static dyn AgentProvider, pid: u32
 /// go there like any of this Mac's. Off the setup thread, a machine that does not answer only delays its own.
 pub(crate) fn reattach_remote(app: &AppHandle) {
     let st = app.state::<App>();
-    let list = st.settings.lock().unwrap()["machines"].as_array().cloned().unwrap_or_default();
+    let list: Vec<Value> = machines::runners(&st.settings.lock().unwrap()).cloned().collect();
     for m in list {
         let id = m["id"].as_str().unwrap_or("").to_string();
         let c = st.machines.client(&m);

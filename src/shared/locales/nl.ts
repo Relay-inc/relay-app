@@ -1582,7 +1582,7 @@ export default {
   "composer.machineSharedVault":
     "Een gesprek in een gedeelde vault blijft op deze Mac: een werkmachine heeft enkel je hoofdvault.",
   "mc.intro":
-    "Een gesprek kan op een machine lopen en blijft draaien als deze Mac dicht is: kies de machine naast het model vóór het eerste bericht, of maak ze hieronder de standaard. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je vault, zodat gesprekken daar weten wat Claude hier weet.",
+    "Een gesprek kan op een machine lopen en blijft draaien als deze Mac dicht is: kies de machine naast het model vóór het eerste bericht, of maak ze hieronder de standaard. Mail blijft op deze Mac. Elke machine krijgt een spiegel van je vault, zodat gesprekken daar weten wat Claude hier weet, behalve een machine die enkel voor gedeelde vaults gekoppeld is.",
   "mc.runDefaultTitle": "Waar gesprekken draaien",
   "mc.runDefault": "Nieuwe gesprekken draaien op",
   "mc.runDefaultHelp": "Elk nieuw gesprek kan nog een andere plek kiezen naast het model.",
@@ -1592,6 +1592,9 @@ export default {
     "Draai <code>relay-server pair</code> op de machine en plak de regel hier. De code werkt één keer, 10 minuten lang.",
   "mc.name": "Naam",
   "mc.namePh": "Leeg gebruikt de hostnaam van de machine",
+  "mc.sharedOnly": "Enkel voor gedeelde vaults: geen spiegel van de vault van deze Mac",
+  "mc.sharedOnlyRow":
+    "Enkel voor gedeelde vaults. De vault, Claude-context en memory van deze Mac gaan hier niet heen, en hier loopt geen gesprek. Om dat te veranderen: vergeet de machine en koppel ze opnieuw.",
   "mc.pair": "Koppelen",
   "mc.pairing": "Koppelen…",
   "mc.setupTitle": "Machine opzetten",

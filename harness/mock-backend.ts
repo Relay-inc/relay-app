@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -261,9 +261,9 @@ function handle(cmd: string, a: Args): unknown {
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
-    // work machines (fixture "machines": one that speaks an older protocol; "phone": the same one online)
+    // work machines (fixture "machines": one that speaks an older protocol, "phone" and "nomirror": online)
     case "machine_status":
-      if (fixture === "phone" || fixture === "mirror")
+      if (fixture === "phone" || fixture === "mirror" || fixture === "nomirror")
         return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };

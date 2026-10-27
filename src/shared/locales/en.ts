@@ -1575,7 +1575,7 @@ const en = {
   "composer.machineSharedVault":
     "A conversation in a shared vault stays on this Mac: a work machine has your main vault only.",
   "mc.intro":
-    "A conversation can run on a machine and keeps running when this Mac is closed: pick the machine next to the model before its first message, or make it the default below. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here.",
+    "A conversation can run on a machine and keeps running when this Mac is closed: pick the machine next to the model before its first message, or make it the default below. Mail stays on this Mac. Every machine gets a mirror of your vault, so conversations there know what Claude knows here, except one paired for shared vaults only.",
   "mc.runDefaultTitle": "Where conversations run",
   "mc.runDefault": "New conversations run on",
   "mc.runDefaultHelp": "Each new conversation can still pick another place next to the model.",
@@ -1585,6 +1585,9 @@ const en = {
     "Run <code>relay-server pair</code> on the machine and paste the line here. The code works once, for 10 minutes.",
   "mc.name": "Name",
   "mc.namePh": "Empty uses the machine's host name",
+  "mc.sharedOnly": "Only for shared vaults: no mirror of this Mac's vault",
+  "mc.sharedOnlyRow":
+    "For shared vaults only. This Mac's vault, Claude context and memory do not go here, and no conversation runs here. To change that, forget it and pair it again.",
   "mc.pair": "Pair",
   "mc.pairing": "Pairing…",
   "mc.setupTitle": "Set up a machine",

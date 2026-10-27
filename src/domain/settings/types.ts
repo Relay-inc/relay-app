@@ -37,6 +37,7 @@ export type Machine = {
   port: number;
   fp: string;
   mirror?: { exclude: string[] }; // vault folders that stay on this Mac, out of the machine's mirror
+  sharedOnly?: boolean; // paired for shared vaults only: no mirror and no conversations there
 };
 /** A machine in the composer's pick (`machines_list`): `default` when the project runs there without a pick. */
 export type MachineChoice = { id: string; name: string; online: boolean; default: boolean };

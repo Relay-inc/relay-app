@@ -110,14 +110,15 @@ export async function checkMachine(id: string) {
 }
 export const checkAll = () => machines().forEach(machine => checkMachine(machine.id));
 
-/** Pair with the line `relay-server pair` printed; true when it worked, so the page empties its fields. */
-export async function pairMachine(line: string, name: string) {
+/** Pair with the line `relay-server pair` printed, `sharedOnly` for shared vaults only. True when it worked, so the
+ *  page empties its fields. */
+export async function pairMachine(line: string, name: string, sharedOnly: boolean) {
   change(draft => {
     draft.pairing = true;
     draft.pairError = "";
   });
   try {
-    const machine = await backend.machinePair(line, name);
+    const machine = await backend.machinePair(line, name, sharedOnly);
     await reload();
     checkMachine(machine.id);
     return true;
@@ -184,7 +185,7 @@ const mirrorMessage = (id: string, text: string, ok = false) =>
   });
 /** Reads the last mirror round and the running one of every machine; a failing command keeps what was there. */
 export async function pollMirrors() {
-  for (const machine of machines()) {
+  for (const machine of machines().filter(machine => !machine.sharedOnly)) {
     const [status, progress] = await Promise.all([
       backend.mirrorStatus(machine.id).catch(() => undefined),
       backend.mirrorProgress(machine.id).catch(() => undefined),
@@ -253,7 +254,8 @@ export const setSetupFolder = (folder: string) =>
 // page's slow poll and after each action. Connecting asks GitHub's code, then where it stands every few seconds.
 const hasRepos = (id: string) => {
   const status = st().machinesPage.status[id];
-  return !!status && status !== "checking" && status.ok && !!status.repos;
+  const sharedOnly = machines().some(machine => machine.id === id && machine.sharedOnly);
+  return !!status && status !== "checking" && status.ok && !!status.repos && !sharedOnly;
 };
 /** Reads GitHub and the repos of one machine; a failing read keeps what was there. */
 export async function readMachineGit(id: string) {

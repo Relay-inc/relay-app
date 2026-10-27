@@ -1597,7 +1597,7 @@ export default {
   "composer.machineSharedVault":
     "Ein Gespräch in einem geteilten Vault bleibt auf diesem Mac: Eine Arbeitsmaschine hat nur deinen Haupt-Vault.",
   "mc.intro":
-    "Ein Gespräch kann auf einer Maschine laufen und läuft weiter, wenn dieser Mac zu ist: Wähle die Maschine neben dem Modell vor der ersten Nachricht, oder mache sie unten zum Standard. Mail bleibt auf diesem Mac. Jede Maschine bekommt einen Spiegel deines Vaults, damit Gespräche dort wissen, was Claude hier weiß.",
+    "Ein Gespräch kann auf einer Maschine laufen und läuft weiter, wenn dieser Mac zu ist: Wähle die Maschine neben dem Modell vor der ersten Nachricht, oder mache sie unten zum Standard. Mail bleibt auf diesem Mac. Jede Maschine bekommt einen Spiegel deines Vaults, damit Gespräche dort wissen, was Claude hier weiß, außer einer, die nur für geteilte Vaults gekoppelt ist.",
   "mc.runDefaultTitle": "Wo Gespräche laufen",
   "mc.runDefault": "Neue Gespräche laufen auf",
   "mc.runDefaultHelp": "Jedes neue Gespräch kann neben dem Modell noch einen anderen Ort wählen.",
@@ -1607,6 +1607,9 @@ export default {
     "Führe <code>relay-server pair</code> auf der Maschine aus und füge die Zeile hier ein. Der Code funktioniert einmal, 10 Minuten lang.",
   "mc.name": "Name",
   "mc.namePh": "Leer nimmt den Hostnamen der Maschine",
+  "mc.sharedOnly": "Nur für geteilte Vaults: kein Spiegel des Vaults dieses Macs",
+  "mc.sharedOnlyRow":
+    "Nur für geteilte Vaults. Vault, Claude-Kontext und Memory dieses Macs gehen nicht hierher, und hier läuft kein Gespräch. Um das zu ändern, vergiss die Maschine und kopple sie neu.",
   "mc.pair": "Koppeln",
   "mc.pairing": "Koppeln…",
   "mc.setupTitle": "Maschine einrichten",
