@@ -505,17 +505,29 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
         rep
     };
     let first = round();
-    r.step("the colleague's first round pulls the vault", if b.join("System/rules/core/work-state.md").is_file() { Ok(format!("{} files", first.pulled.len())) } else { Err(format!("{first:?}")) });
+    let rules = b.join("System/rules/core/hard-walls.md").is_file();
+    r.step("the colleague's first round pulls the vault, not its index", match (rules, b.join("System/rules/core/work-state.md").exists()) {
+        (true, false) => Ok(format!("{} files", first.pulled.len())),
+        (_, true) => Err("work-state.md came along: it is generated on each Mac".into()),
+        (false, _) => Err(format!("{first:?}")),
+    });
 
-    // the colleague adds project Alpha there (the main vault has an Alpha too) and a note; the app's loop pulls them
-    let ws = b.join("System/rules/core/work-state.md");
-    let text = fs::read_to_string(&ws).unwrap_or_default().replace("### Work\n\n| Project | State | Last | Summary |\n|---|---|---|---|\n", "### Work\n\n| Project | State | Last | Summary |\n|---|---|---|---|\n| [[Alpha]] | Active | 2026-10-26 | The team's Alpha. |\n");
-    fs::write(&ws, text).ok();
+    // the colleague adds project Alpha there (the main vault has an Alpha too). It also writes a work-state of its own,
+    // as a client without the filter could: the app keeps its index, built from the cards
+    fs::create_dir_all(b.join("System/rules/core")).ok();
+    fs::write(b.join("System/rules/core/work-state.md"), "# Work State\n\n| [[Planted]] | Active | 2026-10-26 | not from a card |\n").ok();
     fs::create_dir_all(b.join("Contexts/Work/Projects/Alpha")).ok();
-    fs::write(b.join("Contexts/Work/Projects/Alpha/Alpha.md"), "---\ntype: Initiative\nstatus: Active\n---\n# Alpha\n\n## Status\n\nThe team's Alpha.\n").ok();
+    let today = chrono::Local::now().format("%Y-%m-%d");
+    fs::write(b.join("Contexts/Work/Projects/Alpha/Alpha.md"), format!("---\ntype: Initiative\ncontext: \"[[Work]]\"\nstatus: Active\nlast: {today}\nindex: The team's Alpha.\n---\n# Alpha\n\n## Status\n\nThe team's Alpha.\n")).ok();
     let pushed = round();
     r.step("the colleague pushes", if pushed.errors.is_empty() && !pushed.pushed.is_empty() { Ok(format!("{:?}", pushed.pushed)) } else { Err(format!("{pushed:?}")) });
     r.step("the app's loop pulls the colleague's project", wait(Duration::from_secs(40), || team.join("Contexts/Work/Projects/Alpha/Alpha.md").is_file().then_some(())).map(|_| "Alpha.md is here".into()).ok_or_else(|| "not pulled".to_string()));
+    let ws = team.join("System/rules/core/work-state.md");
+    r.step("the index here is rebuilt from the cards, the member's is not taken", match wait(Duration::from_secs(20), || fs::read_to_string(&ws).ok().filter(|t| t.contains("[[Alpha]]"))) {
+        Some(t) if t.contains("Planted") => Err("the member's work-state came in".into()),
+        Some(_) => Ok("[[Alpha]] from its card".into()),
+        None => Err(format!("no Alpha row in {}", fs::read_to_string(&ws).unwrap_or_default())),
+    });
 
     // a member's hook and settings never reach another Mac: Claude Code would run them there as plain code
     fs::create_dir_all(b.join("System/hooks")).ok();

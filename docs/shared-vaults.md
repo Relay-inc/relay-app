@@ -28,8 +28,12 @@ those. Share a vault with people you would let read what your agent can read. Wh
   mode. A main-vault conversation may not read the shared vaults' trash, bases and keys. Codex and OpenCode run in the
   main vault only.
 - **Nothing a member writes runs on your Mac.** `.claude` never syncs, and of the folder it links to (`System/`) only
-  the notes go (`rules/`, `reference/`, `index/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
+  the notes go (`rules/`, `reference/`, `archive/`, `reminders.md`). Names compare as APFS and HFS+ do, a round
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.
+- **The project index is each Mac's own.** `work-state.md` and `System/index/` are generated from the project cards,
+  so they do not sync: Relay rebuilds them after every round that moved a file, with its own `build-index.py`, and
+  puts that script in the vault's `System/scripts/` for its conversations. Two people only clash on a card they both
+  changed. A conflict copy of a rule lands in `System/conflicts/rules/`, out of what every conversation loads.
 - **Your own mail, reminders and calendar stay out.** A conversation in another vault gets an error for reading them
   through `relay` or the mail tools. Writing to you (a reminder, a draft) still works. `relay` answers for the
   conversation its caller really runs under, traced from the calling process. Integrations (Productive, GitHub, Trello)

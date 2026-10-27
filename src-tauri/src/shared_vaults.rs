@@ -80,8 +80,36 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
     // a link to the vault itself would guard nothing: its settings, hooks and skills would sync like notes
     if target.as_deref() == Some("") { return Err(".claude links to the vault folder itself: link it to a folder inside it (System) to sync this vault".into()); }
     f.guarded = std::iter::once("System".to_string()).chain(target).collect();
-    f.only = f.guarded.iter().flat_map(|g| ["rules", "reference", "index", "archive", "reminders.md"].map(|x| format!("{g}/{x}"))).collect();
+    f.only = f.guarded.iter().flat_map(|g| ["rules", "reference", "archive", "reminders.md", CONFLICTS].map(|x| format!("{g}/{x}"))).collect();
+    // generated from the project cards on each Mac (index_shared): every session rewrites them, and repos.json holds
+    // this Mac's paths, so synced they would only clash. System/index stays out as it is not in `only`
+    f.prefixes = f.guarded.iter().map(|g| format!("{g}/rules/core/work-state.md")).collect();
     Ok(f)
+}
+/// Where a conflict copy of a rule goes: out of `rules/`, whose every file loads into each conversation of the vault.
+const CONFLICTS: &str = "conflicts";
+fn conflict_copy(f: &Filter, p: &str, machine: &str, stamp: &str) -> String {
+    let copy = sync::conflict_copy(p, machine, stamp);
+    for g in &f.guarded {
+        if let Some(rest) = copy.strip_prefix(&format!("{g}/rules/")) { return format!("{g}/{CONFLICTS}/rules/{rest}"); }
+    }
+    copy
+}
+
+/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards with the
+/// app's own build-index.py, never one from the vault (a member's script would run here). The same copy goes into the
+/// vault's System/scripts, where its conversations run it after their work: that folder does not sync.
+pub fn index_shared(app: &AppHandle, folder: &str) {
+    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
+    let Ok(code) = std::fs::read(&script) else { return };
+    let own = Path::new(folder).join("System/scripts/build-index.py");
+    if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
+    let path = app.state::<crate::App>().path.clone();
+    match std::process::Command::new("python3").arg(&script).env("VAULT", folder).env("PATH", path).output() {
+        Ok(o) if o.status.success() => {}
+        Ok(o) => eprintln!("build-index {folder}: {}", String::from_utf8_lossy(&o.stderr).trim()),
+        Err(e) => eprintln!("build-index {folder}: {e}"),
+    }
 }
 
 /// A folder by its real path, also one that does not exist yet: the nearest folder that does, resolved (links, `..`),
@@ -131,7 +159,7 @@ impl Hub {
                 std::fs::create_dir_all(&v.folder).ok();
                 let base: Manifest = std::fs::read_to_string(base_path(data, &v.id)).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
                 let allowed = std::mem::take(&mut one.allowed);
-                let copy = |p: &str| sync::conflict_copy(p, name, &stamp);
+                let copy = |p: &str| conflict_copy(&f, p, name, &stamp);
                 let to = trash(data, &v.id).join(&stamp);
                 let keep = |p: &str, d: &[u8]| sync::write_atomic(&to.join(p), d, None);
                 let guard = Guard { allow_deletes: false, allowed: &allowed, keep: &keep };
@@ -386,7 +414,12 @@ mod tests {
         let f = filter(&tmp).unwrap();
         for p in ["System/settings.json", "System/settings.local.json", "System/hooks/check.sh", ".claude/rules/x.md", "System/scripts/build-index.py",
             "System/skills/a/SKILL.md", "System/agents/a.md", "system/Hooks/check.sh", "System/Settings.json"] { assert!(f.skips(p, false), "{p}"); }
-        for p in ["System/rules/core/work-state.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
+        for p in ["System/rules/core/memory.md", "System/reminders.md", "Notes/settings.json", "System/conflicts/rules/core/memory (conflict m s).md"] { assert!(!f.skips(p, false), "{p}"); }
+        // generated on each Mac from the cards, never synced
+        for p in ["System/rules/core/work-state.md", "System/index/repos.json"] { assert!(f.skips(p, false), "{p}"); }
+        // a rule's conflict copy goes out of rules/, which loads into every conversation; a note's stays beside it
+        assert_eq!(conflict_copy(&f, "System/rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
+        assert_eq!(conflict_copy(&f, "Notes/a.md", "m", "s"), "Notes/a (conflict m s).md");
         // a join's first round: the link points at a System/ that is not there yet, and System/ is still held back
         let fresh = tmp.join("fresh");
         std::fs::create_dir_all(&fresh).unwrap();
