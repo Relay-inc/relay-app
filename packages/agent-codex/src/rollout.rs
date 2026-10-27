@@ -2,7 +2,7 @@
 //! `{timestamp, type, payload}` per line (session_meta, turn_context, response_item, event_msg, compacted). They give
 //! the history of a thread, the token records (event_msg token_count) and the rate limits (its rate_limits).
 
-use agent_core::usage::{parse_ts, shell_touches, Act, Limits, Record, Tail, Touch, Window};
+use agent_core::usage::{parse_ts, resolve, shell_touches, Act, Limits, Record, Tail, Touch, Window};
 use agent_core::{Event, Image, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -197,8 +197,7 @@ pub fn parse_touches(text: &str, cwd: &mut String, since: i64, seen: &mut HashSe
             ("custom_tool_call", "apply_patch") => p["input"].as_str().unwrap_or("").lines().filter_map(|l| {
                 let (act, f) = l.strip_prefix("*** Add File: ").map(|f| (Act::Write, f))
                     .or_else(|| l.strip_prefix("*** Update File: ").or_else(|| l.strip_prefix("*** Delete File: ")).map(|f| (Act::Edit, f)))?;
-                let f = f.trim();
-                Some((act, if f.starts_with('/') { f.to_string() } else { format!("{cwd}/{f}") }))
+                Some((act, resolve(f.trim(), cwd)))
             }).collect(),
             _ => vec![],
         };

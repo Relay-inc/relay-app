@@ -109,9 +109,10 @@ pub enum Act { Read, Write, Edit, Search }
 pub struct Touch { pub at: i64, pub act: Act, pub path: String }
 
 fn under(path: &str, dir: &str) -> bool { !dir.is_empty() && (path == dir || path.starts_with(&format!("{dir}/"))) }
-fn resolve(path: &str, cwd: &str) -> String { if path.starts_with('/') { path.into() } else { format!("{cwd}/{path}") } }
+/// `path` as an absolute path, a relative one taken from `cwd`.
+pub fn resolve(path: &str, cwd: &str) -> String { if path.starts_with('/') { path.into() } else { format!("{cwd}/{path}") } }
 
-/// The notes a shell command reads (cat, sed, head, …) or edits (`sed -i`), and the folders it searches (rg, grep,
+/// The notes a shell command reads (cat, sed, head, …), writes (`>`) or edits (`sed -i`, `>>`), and the folders it searches (rg, grep,
 /// find, fd): what a provider without its own Read and Grep tools does instead. Relative paths are taken from `cwd`,
 /// moved by a `cd` in the command; paths and `cd`s it cannot tell (`~`, `$VAR`, `-`) are left out. A
 /// grep behind a pipe filters the pipe and searches no folder.
@@ -132,7 +133,14 @@ pub fn shell_touches(cmd: &str, cwd: &str) -> Vec<(Act, String)> {
             p if p.starts_with(['~', '$']) => None,
             p => cwd.as_ref().map(|c| resolve(p, c)),
         };
-        if let Some((prog, args)) = seg.split_first() {
+        // `> note.md` writes it whole, `>> note.md` adds to it, whichever command runs; the rest are the arguments
+        let mut args_only = vec![];
+        let mut words = seg.iter();
+        while let Some(&w) = words.next() {
+            let act = match w { ">" => Act::Write, ">>" => Act::Edit, _ => { args_only.push(w); continue } };
+            if let Some(f) = words.next().filter(|f| f.ends_with(".md")).and_then(|f| at(f)) { out.push((act, f)); }
+        }
+        if let Some((prog, args)) = args_only.split_first() {
             match prog.rsplit('/').next().unwrap_or(prog) {
                 "cd" => cwd = args.first().filter(|d| !d.starts_with(['~', '$', '-'])).and_then(|d| at(d)),
                 p @ ("cat" | "head" | "tail" | "sed" | "nl" | "less" | "more" | "bat") => {
@@ -168,8 +176,11 @@ pub fn vault_activity(touches: &[Touch], vault: &str, today: i64, week: i64) -> 
     let (mut t, mut w) = (Count::default(), Count::default());
     let (mut read, mut changed): (HashMap<String, u64>, HashMap<String, u64>) = Default::default();
     let mut folders: HashMap<String, (u64, u64)> = HashMap::new();
-    for x in touches.iter().filter(|x| x.at >= week.min(today) && under(&x.path, vault)) {
-        let rel = x.path[vault.len()..].trim_start_matches('/');
+    // a tool call names the vault as given or by its real path (a symlinked folder, /tmp is /private/tmp)
+    let real = fs::canonicalize(vault).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    for x in touches.iter().filter(|x| x.at >= week.min(today)) {
+        let Some(root) = [vault, real.as_str()].into_iter().find(|r| under(&x.path, r)) else { continue };
+        let rel = x.path[root.len()..].trim_start_matches('/');
         if x.act != Act::Search && !rel.ends_with(".md") { continue; }
         if x.at >= today { t.add(x.act, rel); }
         if x.at < week { continue; }
@@ -307,6 +318,8 @@ mod tests {
         assert_eq!(t("cd ~/repo && cat CLAUDE.md; cd /w && rg x"), vec![(Act::Search, "/w".into())]);
         assert_eq!(t("cd Notes && head -3 D.md | grep -c x"), vec![(Act::Read, "/v/Notes/D.md".into())]);
         assert_eq!(t("cat ~/.claude/A.md $d/B.md"), vec![]);
+        assert_eq!(t("cat > New.md <<'EOF'"), vec![(Act::Write, "/v/New.md".into())]);
+        assert_eq!(t("cat A.md >> B.md"), vec![(Act::Edit, "/v/B.md".into()), (Act::Read, "/v/A.md".into())]);
     }
 
     #[test]
