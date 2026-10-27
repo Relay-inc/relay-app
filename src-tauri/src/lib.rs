@@ -2486,12 +2486,12 @@ pub fn run() {
             });
             tray::init(app.handle())?;
             let handle = app.handle().clone();
-            // an invite to a shared vault (relay://…&vault=…) opens Settings › General with the link filled in
+            // an invite to a shared vault (relay://…&vault=…) opens Settings › Machines with the link filled in
             app.deep_link().on_open_url(move |e| {
                 windows::show_active(&handle);
                 if let Some(link) = e.urls().iter().map(|u| u.to_string()).find(|u| relay_remote::proto::PairLine::parse(u).is_some_and(|l| l.is_invite())) {
                     shared_vaults::invite_opened(link);
-                    open_settings(&handle, Some("general"));
+                    open_settings(&handle, Some("machines"));
                     // a ping: Settings takes the link from shared_vault_pending_invite, the one place it is kept
                     handle.emit("vault-invite", ()).ok();
                 }

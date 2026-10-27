@@ -3,8 +3,8 @@ import type { SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
 import { useSettingsStore, type SettingsState } from "./store";
 
-// Settings › General › Shared vaults: vaults a team shares on a relay-server, each synced into a folder here
-// (src-tauri/src/shared_vaults.rs). The backend keeps the list in the settings and runs the rounds; a round's result
+// Settings › Machines: vaults a team shares on a relay-server, each synced into a folder here
+// (src-tauri/src/shared_vaults.rs), under the machine that keeps it or, joined with a link, in Shared vaults. The backend keeps the list in the settings and runs the rounds; a round's result
 // comes in as an event. Invites, members and leaving go to the server through the backend.
 type Shared = SettingsState["shared"];
 const st = () => useSettingsStore.getState().shared;
@@ -39,13 +39,13 @@ async function reload() {
 }
 
 /** The invite link the backend keeps (the one that opened Relay, or came since) into the join form. While a create or
- *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows General. */
+ *  join runs it stays there: their end takes it, or the next Settings window. `open_settings` shows Machines. */
 export async function takeInvite() {
   if (st().busy.form) return;
   const link = await backend.sharedVaultPendingInvite().catch(() => null);
   if (!link) return;
   change(draft => {
-    draft.form = { ...draft.form, mode: "join", link };
+    draft.form = { ...draft.form, mode: "join", machine: "", link };
     draft.messages.form = null;
   });
 }
@@ -71,29 +71,30 @@ export async function watchSharedVaults() {
   await takeInvite();
 }
 
-/** The form under the list: "new", "join" or closed (""). */
-export function openForm(mode: Shared["form"]["mode"]) {
+/** The one form, "new", "join" or closed (""), and where it shows with its message: under the machine `machine`
+ *  (a new vault there), or in Shared vaults when "" (joining). */
+export function openForm(mode: Shared["form"]["mode"], machine = st().form.machine) {
   change(draft => {
-    draft.form = { ...draft.form, mode };
+    draft.form = { ...draft.form, mode, machine };
     draft.messages.form = null;
   });
 }
-export const editForm = (patch: Partial<Pick<Shared["form"], "machine" | "name" | "link">>) =>
+export const editForm = (patch: Partial<Pick<Shared["form"], "name" | "link">>) =>
   change(draft => void Object.assign(draft.form, patch));
 export async function pickSharedFolder() {
   const folder = await backend.pickFolder();
   if (folder) change(draft => void (draft.form.folder = folder));
 }
 
-/** Make the vault on the machine: the form closes and its row shows the recovery key (a failed reload leaves it to
- *  Show recovery key). */
-export async function createSharedVault(machine: string) {
-  const { name, folder } = st().form;
+/** Make the vault on the form's machine: the form closes and its row shows the recovery key (a failed reload leaves
+ *  it to Show recovery key). */
+export async function createSharedVault() {
+  const { machine, name, folder } = st().form;
   await run("form", async () => {
     const { id, recovery } = await backend.sharedVaultCreate(machine, name, folder);
     change(draft => {
       draft.keys[id] = recovery;
-      draft.form = CLOSED;
+      draft.form = { ...CLOSED, machine }; // what the reload says shows under that machine
     });
     await reload();
   });

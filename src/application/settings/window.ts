@@ -51,7 +51,7 @@ export async function initSettingsWindow() {
   void loadBrainStatus();
   void watchUpdates();
   void watchVaultSync();
-  // an invite link that opened Relay: the join form (the backend opens the window on General)
+  // an invite link that opened Relay: the join form (the backend opens the window on Machines)
   void watchSharedVaults();
   showTitle();
   void backend.onSettingsGo(to => {

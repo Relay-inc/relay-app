@@ -1,7 +1,7 @@
 // The Tauri backend, mocked at the IPC boundary: every command the frontend invokes, the event plugin, the window.
 // Loaded as the first script of index.html and settings.html (harness/vite.config.ts), before the app's entry.
 // Nothing here knows the app's internals: it answers commands with the shapes src-tauri/src/*.rs returns and emits the
-// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|brain|plugins|plugins-dark, ?sel=<selection key> (what the window
+// events the backend emits. Query: ?fixture=default|dark|graphite|icons|onboarding|calendar|accounts|mailexp|machines|phone|mirror|nomirror|orch|brain|plugins|plugins-dark|shared|shared-invite|shared-member, ?sel=<selection key> (what the window
 // opens on), ?link=<relay:// url> (the deep link the app was launched with), ?window=<label> (main-2: a window Cmd-N opened).
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { NOW, pngBase64 } from "./fixtures/util";
@@ -52,14 +52,15 @@ document.head.append(material);
 let settings = vault.settings(fixture);
 // orch-plain: the orchestrator with the workers' crabs switched off (Settings › General)
 if (fixture === "orch-plain") settings = { ...settings, workerCrabs: false };
-// shared-invite: the same, opened by an invite link (shared_vault_pending_invite)
-const shared = fixture === "shared" || fixture === "shared-invite";
+// shared-invite: the same, opened by an invite link (shared_vault_pending_invite); shared-member: a Mac that joined
+// the vault with a link, its server not one of its machines
+const shared = fixture === "shared" || fixture === "shared-invite" || fixture === "shared-member";
 if (shared)
   settings = {
     ...settings,
     extraVaults: [vault.TEAM_VAULT],
-    machines: structuredClone(vault.hubMachines),
-    sharedVaults: structuredClone(vault.sharedVaults),
+    machines: fixture === "shared-member" ? [] : structuredClone(vault.hubMachines),
+    sharedVaults: structuredClone(fixture === "shared-member" ? vault.memberVaults : vault.sharedVaults),
   };
 let vaultOk = !onboarding;
 let pending = [...conv.pending];
@@ -261,9 +262,9 @@ function handle(cmd: string, a: Args): unknown {
       ];
     case "agent_update":
       return new Promise(resolve => setTimeout(() => resolve(null), 400));
-    // work machines (fixture "machines": one that speaks an older protocol, "phone" and "nomirror": online)
+    // work machines (fixture "machines": one that speaks an older protocol, "phone", "nomirror" and shared: online)
     case "machine_status":
-      if (fixture === "phone" || fixture === "mirror" || fixture === "nomirror")
+      if (fixture === "phone" || fixture === "mirror" || fixture === "nomirror" || shared)
         return { ok: true, version: "0.0.14", os: "linux", host: "server", update: true };
       if (fixture === "github")
         return { ok: true, version: "0.0.25", os: "linux", host: "server", update: true, repos: true };
