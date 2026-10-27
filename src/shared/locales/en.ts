@@ -840,7 +840,7 @@ const en = {
   "rem.none": "No reminders.",
   "set.extraVaults": "Shared vaults",
   "set.extraVaultsHelp":
-    "Other folders with a vault, whose projects show in the sidebar next to yours. A conversation stays in the vault of its project: Claude Code's file tools and file commands are blocked from your other vaults.",
+    "Other folders with a vault, whose projects show in the sidebar next to yours. A conversation stays in the vault of its project: Claude Code's file tools and file commands are blocked from your other vaults. A conversation in one of these folders gets the limits of a shared vault: your own MCP servers, claude.ai connectors and hooks are off, Claude Code always runs in auto mode, and your mail, reminders and calendar stay out of reach.",
   "set.extraVaultAdd": "Add vault…",
   "set.extraVaultRemove": "Remove {name}",
   "set.extraVaultRenamed": "Same name as a project in another vault, shown as: {names}",
@@ -892,7 +892,9 @@ const en = {
   "set.sharedCreate": "Create",
   "set.sharedRecovery": "Recovery key",
   "set.sharedRecoveryHelp":
-    "Keep this key in your password manager. If every member's Mac loses the vault, only this key opens a backup of the server's files. Relay shows it only this once.",
+    "Keep this key in your password manager. If every member's Mac loses the vault, only this key opens a backup of the server's files. You can show it again from the vault's row.",
+  "set.sharedShowRecovery": "Show recovery key",
+  "set.sharedRecoveryAgainHelp": "This is the vault's key. Keep it in your password manager.",
   "set.sharedJoinTitle": "Join a shared vault",
   "set.sharedLinkLabel": "Invite link",
   "set.sharedLinkLabelHelp": "The relay:// link an admin sent you.",

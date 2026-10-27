@@ -1,6 +1,6 @@
 import { t, tn } from "../../shared/i18n";
 import type { Img, Item, Pending, CardChoice } from "../../domain/conversations/types";
-import { NEW, changesVault, decisionOf, waitsForPickup } from "../../domain/conversations/rules";
+import { NEW, changesVault, decisionOf, hasStarted, waitsForPickup } from "../../domain/conversations/rules";
 import { push, releaseWaiting } from "../../domain/conversations/events";
 import { outgoing, planSend, refusesImages } from "../../domain/conversations/send";
 import { fileName, withFiles } from "../../domain/conversations/files";
@@ -404,20 +404,10 @@ export function routeTo(name: string) {
   sendMsg(choice.text);
 }
 /** The bar that asks whether a general conversation is about a project: yes moves it, no hides the question. */
-/** Whether a conversation has a process in a vault already: its session, or a first message sent whose session id is
- *  not back yet (a turn running, a message queued or in its log). Such a conversation stays in that vault. */
-function started(key: string) {
-  const c = cs();
-  return (
-    !!c.sidOf[key] ||
-    c.status[key] === "busy" ||
-    (c.queued[key] ?? 0) > 0 ||
-    (c.messages[key] ?? []).some(item => item.kind === "me")
-  );
-}
+const started = (key: string) => hasStarted(cs(), key);
 export function moveTo(project: string | null) {
   const key = selected();
-  // the offer comes after the first message: a conversation that runs cannot follow a project into another vault
+  // the bar offers only projects in the conversation's own vault once it started (MoveBar): this guards the rest
   const from = cs().chats[key]?.project ?? null;
   if (project && started(key) && changesVault(useWorkspaceStore.getState().snap, from, project)) {
     toast(t("toast.otherVault"), undefined, undefined, 6000);

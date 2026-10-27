@@ -460,7 +460,7 @@ export const onVaultSync = (handler: (last: NonNullable<VaultSync["last"]>) => v
 export const sharedVaultsStatus = () => invoke<Record<string, SharedStatus>>("shared_vaults_status");
 export const onSharedVaults = (handler: (status: Record<string, SharedStatus>) => void) =>
   listen<Record<string, SharedStatus>>("shared-vaults", e => handler(e.payload));
-/** A new vault on a paired machine; `recovery` is its key, shown once. */
+/** A new vault on a paired machine; `recovery` is its key (64 hex), shown again with `sharedVaultRecovery`. */
 export const sharedVaultCreate = (machine: string, name: string, folder: string) =>
   invoke<{ id: string; recovery: string }>("shared_vault_create", { machine, name, folder });
 /** Join with an invite link into an empty folder. */
@@ -468,6 +468,8 @@ export const sharedVaultJoin = (link: string, folder: string) =>
   invoke<{ id: string; name: string }>("shared_vault_join", { link, folder });
 export const sharedVaultInvite = (id: string, role: SharedRole) =>
   invoke<{ link: string; invite: SharedInvite }>("shared_vault_invite", { id, role });
+/** The vault's key as this Mac holds it (64 hex), for any member: what the create form showed. */
+export const sharedVaultRecovery = (id: string) => invoke<string>("shared_vault_recovery", { id });
 export const sharedVaultInfo = (id: string) => invoke<SharedInfo>("shared_vault_info", { id });
 export const sharedVaultInviteRevoke = (id: string, invite: string) =>
   invoke("shared_vault_invite_revoke", { id, invite });
@@ -476,7 +478,8 @@ export const sharedVaultRemove = (id: string, fp: string) => invoke("shared_vaul
 /** The held deletes of a vault the user saw (`paths`): through in its next round, or the files put back. */
 export const sharedVaultHeld = (id: string, allow: boolean, paths: string[]) =>
   invoke("shared_vault_held", { id, allow, paths });
-/** The invite link that opened Relay, once; later ones come as `vault-invite`. */
+/** The invite link that opened Relay, taken: the backend keeps it until the join form opens with it. Every link
+ *  also comes as `vault-invite`. */
 export const sharedVaultPendingInvite = () => invoke<string | null>("shared_vault_pending_invite");
 export const onVaultInvite = (handler: (link: string) => void) =>
   listen<string>("vault-invite", e => handler(e.payload));

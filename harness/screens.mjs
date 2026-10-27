@@ -1027,8 +1027,16 @@ const VIEWS = {
       .getByTitle("Choose…")
       .click();
     await button("Create").click();
-    await waitText("Recovery key");
-    await intoView("Recovery key");
+    await waitText("You can show it again");
+    await intoView("You can show it again");
+  },
+  // Show recovery key on the vault's row: its key shown again, with Copy
+  "settings-shared-recovery": async () => {
+    await settingsPage("General", undefined, "shared");
+    await page.setViewportSize({ width: 900, height: 1000 });
+    await button("Show recovery key").click();
+    await waitText("This is the vault's key");
+    await intoView("Shared vaults");
   },
   // Relay opened by an invite link: General with the join form, the link in it
   "settings-shared-join": async () => {

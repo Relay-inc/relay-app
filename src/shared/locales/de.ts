@@ -851,7 +851,7 @@ export default {
   "rem.none": "Keine Erinnerungen.",
   "set.extraVaults": "Geteilte Vaults",
   "set.extraVaultsHelp":
-    "Andere Ordner mit einem Vault, deren Projekte in der Seitenleiste neben deinen stehen. Ein Gespräch bleibt im Vault seines Projekts: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Vaults gesperrt.",
+    "Andere Ordner mit einem Vault, deren Projekte in der Seitenleiste neben deinen stehen. Ein Gespräch bleibt im Vault seines Projekts: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Vaults gesperrt. Ein Gespräch in einem dieser Ordner hat dieselben Grenzen wie in einem geteilten Vault: Deine eigenen MCP-Server, claude.ai-Konnektoren und Hooks sind aus, Claude Code läuft immer im Auto-Modus, und deine Mails, Erinnerungen und dein Kalender bleiben außer Reichweite.",
   "set.extraVaultAdd": "Vault hinzufügen…",
   "set.extraVaultRemove": "{name} entfernen",
   "set.extraVaultRenamed": "Gleicher Name wie ein Projekt in einem anderen Vault, angezeigt als: {names}",
@@ -907,7 +907,9 @@ export default {
   "set.sharedCreate": "Erstellen",
   "set.sharedRecovery": "Wiederherstellungsschlüssel",
   "set.sharedRecoveryHelp":
-    "Bewahre diesen Schlüssel in deinem Passwortmanager auf. Verliert der Mac jedes Mitglieds den Vault, öffnet nur dieser Schlüssel noch eine Sicherung der Dateien auf dem Server. Relay zeigt ihn nur dieses eine Mal.",
+    "Bewahre diesen Schlüssel in deinem Passwortmanager auf. Verliert der Mac jedes Mitglieds den Vault, öffnet nur dieser Schlüssel noch eine Sicherung der Dateien auf dem Server. Du kannst ihn später in der Zeile des Vaults wieder anzeigen.",
+  "set.sharedShowRecovery": "Wiederherstellungsschlüssel anzeigen",
+  "set.sharedRecoveryAgainHelp": "Das ist der Schlüssel des Vaults. Bewahre ihn in deinem Passwortmanager auf.",
   "set.sharedJoinTitle": "Einem geteilten Vault beitreten",
   "set.sharedLinkLabel": "Einladungslink",
   "set.sharedLinkLabelHelp": "Der relay://-Link, den dir ein Admin geschickt hat.",

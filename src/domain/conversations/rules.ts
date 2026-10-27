@@ -195,3 +195,13 @@ export function changesVault(snap: Pick<Snapshot, "projects" | "vault">, from: s
     (name && snap.projects.find(project => project.name === name)?.vault) || snap.vault?.vault;
   return vaultOf(from) !== vaultOf(to);
 }
+/** The projects a started conversation in project `from` may still move to: the ones in its own vault. */
+export const projectsInVault = (snap: Pick<Snapshot, "projects" | "vault">, from: string | null) =>
+  snap.projects.filter(project => !changesVault(snap, from, project.name));
+/** Whether a conversation has a process in a vault already: its session, or a first message sent whose session id is
+ *  not back yet (a turn running, a message queued or in its log). Such a conversation stays in that vault. */
+export const hasStarted = (s: Pick<ConversationsState, "sidOf" | "status" | "queued" | "messages">, key: string) =>
+  !!s.sidOf[key] ||
+  s.status[key] === "busy" ||
+  (s.queued[key] ?? 0) > 0 ||
+  (s.messages[key] ?? []).some(item => item.kind === "me");

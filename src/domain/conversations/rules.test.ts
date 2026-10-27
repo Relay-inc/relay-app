@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changesVault, followChats, terminalSessions } from "./rules.ts";
-import type { AgentSession, Chat } from "./types";
+import { changesVault, followChats, hasStarted, projectsInVault, terminalSessions } from "./rules.ts";
+import type { AgentSession, Chat, Item } from "./types";
 import type { SessionItem } from "../workspace/types";
 
 const agent = (sessionId: string, app?: boolean): AgentSession => ({
@@ -67,4 +67,20 @@ test("a conversation changes vault only when its old and new project live in dif
   assert.equal(changesVault(snap, "Old", null), false); // no vault from an older backend: the main one
   assert.equal(changesVault(snap, "Alpha", "Team"), true);
   assert.equal(changesVault(snap, "Team", null), true);
+  // the move bar's offer for a started conversation: only its own vault's projects
+  const names = (from: string | null) => projectsInVault(snap, from).map(project => project.name);
+  assert.deepEqual(names(null), ["Alpha", "Beta", "Old"]);
+  assert.deepEqual(names("Team"), ["Team"]);
+});
+
+test("a conversation started once a message went out or a session runs", () => {
+  const s = (kind: Item["kind"], queued = 0) => ({
+    sidOf: {},
+    status: {},
+    queued: { a: queued },
+    messages: { a: [{ kind, text: "x" }] },
+  });
+  assert.equal(hasStarted(s("ai"), "a"), false);
+  assert.equal(hasStarted(s("ai", 1), "a"), true);
+  assert.equal(hasStarted(s("me"), "a"), true);
 });

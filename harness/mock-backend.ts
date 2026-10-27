@@ -354,6 +354,11 @@ function handle(cmd: string, a: Args): unknown {
       ];
       return { id, recovery: hex(64, 5) };
     }
+    // the key this Mac holds, the same one `shared_vault_create` gave
+    case "shared_vault_recovery":
+      if (!(settings.sharedVaults ?? []).some((x: { id: string }) => x.id === a.id))
+        return Promise.reject(`no shared vault ${a.id}`);
+      return hex(64, 5);
     case "shared_vault_join": {
       const id = /vault=([0-9a-f]{16})/.exec(a.link)?.[1];
       if (!id) return Promise.reject("not an invite link");

@@ -41,17 +41,26 @@ async function reload() {
   });
 }
 
-/** The join form opened with an invite link in it. A new vault's recovery key on screen stays: it is shown only
- *  once, so the link waits until Done closes that form. */
+/** The join form opens with an invite link, and only then is the backend's copy taken. While a new vault's key is
+ *  on screen or a create or join runs, the link waits (`invite`) and the backend keeps it: Done or the end of that run
+ *  opens it here, or the next Settings window does when this one closes first. */
 function openJoin(link: string) {
+  const { form, busy } = st();
+  if (form.recovery || busy.create || busy.join) {
+    change(draft => void (draft.invite = link));
+    return;
+  }
   change(draft => {
-    if (draft.form.recovery) {
-      draft.invite = link;
-      return;
-    }
     draft.form = { ...draft.form, mode: "join", link, recovery: "" };
+    draft.invite = "";
     draft.messages.form = null;
   });
+  void backend.sharedVaultPendingInvite();
+}
+/** The invite that waited for a create or join to end opens now. */
+function openWaiting() {
+  const link = st().invite;
+  if (link) openJoin(link);
 }
 
 /** The rounds so far and then each one as it ends, and the invite link that opened Relay (now or later): the join
@@ -59,8 +68,6 @@ function openJoin(link: string) {
 export async function watchSharedVaults(show: () => void) {
   void backend.onSharedVaults(status => change(draft => void (draft.status = status)));
   void backend.onVaultInvite(link => {
-    // the backend also kept it for a window that was still starting: taken here, so a later open does not show it again
-    void backend.sharedVaultPendingInvite();
     openJoin(link);
     show();
   });
@@ -78,13 +85,13 @@ export async function watchSharedVaults(show: () => void) {
 }
 
 /** The form under the list: "new", "join" or closed (""). Closing the recovery key opens the invite that waited. */
-export const openForm = (mode: Shared["form"]["mode"]) =>
+export function openForm(mode: Shared["form"]["mode"]) {
   change(draft => {
-    const link = !mode && draft.invite;
-    draft.form = link ? { ...draft.form, mode: "join", link, recovery: "" } : { ...draft.form, mode, recovery: "" };
-    draft.invite = "";
+    draft.form = { ...draft.form, mode, recovery: "" };
     draft.messages.form = null;
   });
+  if (!mode) openWaiting();
+}
 export const editForm = (patch: Partial<Pick<Shared["form"], "machine" | "name" | "link">>) =>
   change(draft => void Object.assign(draft.form, patch));
 export async function pickSharedFolder() {
@@ -92,16 +99,16 @@ export async function pickSharedFolder() {
   if (folder) change(draft => void (draft.form.folder = folder));
 }
 
-/** Make the vault on the machine; the form then shows its recovery key, once. */
+/** Make the vault on the machine; the form then shows its recovery key (the vault's row can show it again). */
 export async function createSharedVault(machine: string) {
   const { name, folder } = st().form;
   let recovery = "";
   await run("create", "form", async () => {
     recovery = (await backend.sharedVaultCreate(machine, name, folder)).recovery;
   });
-  if (!recovery) return;
-  // the key first: it is shown only once, so a failed reload below must not hide it. An invite that opened the join
-  // form meanwhile waits for Done.
+  if (!recovery) return openWaiting();
+  // the key first, so a failed reload below does not hide it. A link typed into the join form meanwhile, and an invite
+  // that came during the create, wait for Done.
   change(draft => {
     if (draft.form.mode === "join" && draft.form.link) draft.invite = draft.form.link;
     draft.form = { mode: "new", machine: "", name: "", folder: "", link: "", recovery };
@@ -111,12 +118,16 @@ export async function createSharedVault(machine: string) {
 export async function joinSharedVault() {
   const { link, folder } = st().form;
   const joined = await run("join", "form", () => backend.sharedVaultJoin(link.trim(), folder));
-  if (!joined) return;
-  // joined: the invite is spent, so the form closes even when the reload fails
-  change(draft => {
-    draft.form = { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" };
-  });
-  await run("join", "form", reload);
+  if (joined) {
+    // the invite is spent, so the form closes even when the reload fails
+    change(draft => {
+      if (draft.form.mode === "join")
+        draft.form = { mode: "", machine: "", name: "", folder: "", link: "", recovery: "" };
+    });
+    await run("join", "form", reload);
+  }
+  // an invite link that came during the join went to `invite`, not into this form: it opens now
+  openWaiting();
 }
 
 /** The members and open invites read again, when they show. */
@@ -146,6 +157,14 @@ export async function inviteToShared(id: string, role: SharedRole) {
   });
 }
 export const closeInvite = (id: string) => change(draft => void delete draft.links[id]);
+
+/** The vault's recovery key shown again, for any member: this Mac holds it. */
+export const showRecovery = (id: string) =>
+  run(`${id}:recovery`, id, async () => {
+    const key = await backend.sharedVaultRecovery(id);
+    change(draft => void (draft.keys[id] = key));
+  });
+export const hideRecovery = (id: string) => change(draft => void delete draft.keys[id]);
 export const withdrawInvite = (id: string, invite: string) =>
   run(`${id}:withdraw`, id, async () => {
     await backend.sharedVaultInviteRevoke(id, invite);
@@ -167,6 +186,7 @@ export const leaveShared = (id: string) =>
     change(draft => {
       delete draft.info[id];
       delete draft.links[id];
+      delete draft.keys[id];
       delete draft.status[id];
     });
     await reload();

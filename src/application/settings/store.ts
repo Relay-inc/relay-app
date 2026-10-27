@@ -101,9 +101,12 @@ export type SettingsState = {
     status: Record<string, SharedStatus>; // the last round per vault
     info: Record<string, SharedInfo | null>; // per vault whose members are open: what the server said, null while asked
     links: Record<string, { link: string; invite: SharedInvite } | null>; // per vault: the invite link just made
+    keys: Record<string, string>; // per vault whose recovery key is shown again: the key (shared_vault_recovery)
     messages: Record<string, Message | null>; // per vault, "form" for the new and join forms
     busy: Record<string, boolean>; // what runs, each on its own: "<id>:<action>", "create" or "join"
-    invite: string; // an invite link that came while the recovery key was on screen: the join form opens with it after
+    // an invite link that came while a new vault's key was on screen or a create or join ran: the join form opens with it
+    // after. The backend keeps its copy until then, so a closed window's next open still finds it.
+    invite: string;
     // the form under the list: a new vault or joining one; `recovery` the new vault's key, shown once
     form: { mode: "" | "new" | "join"; machine: string; name: string; folder: string; link: string; recovery: string };
   };
@@ -192,6 +195,7 @@ export const useSettingsStore = makeStore<SettingsState>(() => ({
     status: {},
     info: {},
     links: {},
+    keys: {},
     messages: {},
     busy: {},
     invite: "",

@@ -6,6 +6,7 @@ import {
   closeInvite,
   createSharedVault,
   editForm,
+  hideRecovery,
   inviteToShared,
   joinSharedVault,
   leaveShared,
@@ -13,6 +14,7 @@ import {
   pickSharedFolder,
   removeMember,
   settleShared,
+  showRecovery,
   toggleMembers,
   withdrawInvite,
 } from "../../../application/settings/shared-vaults";
@@ -55,6 +57,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const info = useSettingsStore(s => s.shared.info[vault.id]);
   const membersOpen = useSettingsStore(s => vault.id in s.shared.info);
   const link = useSettingsStore(s => s.shared.links[vault.id]);
+  const recovery = useSettingsStore(s => s.shared.keys[vault.id]);
   const message = useSettingsStore(s => s.shared.messages[vault.id]);
   const busy = useSettingsStore(s => s.shared.busy);
   const [inviting, setInviting] = useState(false);
@@ -108,9 +111,20 @@ function SharedRow({ vault }: { vault: SharedVault }) {
           </button>
         )}
       </div>
-      <code className="min-w-0 truncate font-mono text-xs text-s-fg" title={vault.folder}>
-        {vault.folder}
-      </code>
+      <div className="flex min-w-0 items-center gap-2">
+        <code className="min-w-0 flex-1 truncate font-mono text-xs text-s-fg" title={vault.folder}>
+          {vault.folder}
+        </code>
+        {recovery ? null : (
+          <button
+            className={buttonClass("ghost")}
+            disabled={busy[`${vault.id}:recovery`]}
+            onClick={() => showRecovery(vault.id)}
+          >
+            {t("set.sharedShowRecovery")}
+          </button>
+        )}
+      </div>
       {leaving ? <p className={HINT_IN_ROW}>{t("set.sharedLeaveHelp")}</p> : null}
 
       <div className="grid gap-1">
@@ -174,6 +188,18 @@ function SharedRow({ vault }: { vault: SharedVault }) {
           <span className="text-xs text-s-muted">{t("set.sharedNever")}</span>
         )}
       </div>
+
+      {recovery ? (
+        <div className="grid gap-1.5">
+          <span className={LABEL}>{t("set.sharedRecovery")}</span>
+          <CommandBlock hint={t("set.sharedRecoveryAgainHelp")} command={recovery} wrap />
+          <div>
+            <button className={`${buttonClass("ghost")} -ml-3`} onClick={() => hideRecovery(vault.id)}>
+              {t("set.sharedDone")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {link ? (
         <div className="grid gap-1.5">

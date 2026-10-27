@@ -857,7 +857,7 @@ export default {
   "rem.none": "Aucun rappel.",
   "set.extraVaults": "Vaults partagés",
   "set.extraVaultsHelp":
-    "D'autres dossiers avec un coffre, dont les projets s'affichent dans la barre latérale à côté des vôtres. Une conversation reste dans le coffre de son projet : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres coffres.",
+    "D'autres dossiers avec un coffre, dont les projets s'affichent dans la barre latérale à côté des vôtres. Une conversation reste dans le coffre de son projet : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres coffres. Une conversation dans l'un de ces dossiers a les mêmes limites que dans un coffre partagé : vos propres serveurs MCP, connecteurs claude.ai et hooks sont désactivés, Claude Code tourne toujours en auto mode, et vos e-mails, rappels et agenda restent hors de portée.",
   "set.extraVaultAdd": "Ajouter un vault…",
   "set.extraVaultRemove": "Retirer {name}",
   "set.extraVaultRenamed": "Même nom qu'un projet d'un autre coffre, affiché comme : {names}",
@@ -912,7 +912,9 @@ export default {
   "set.sharedCreate": "Créer",
   "set.sharedRecovery": "Clé de récupération",
   "set.sharedRecoveryHelp":
-    "Gardez cette clé dans votre gestionnaire de mots de passe. Si le Mac de chaque membre perd le vault, seule cette clé ouvre une sauvegarde des fichiers du serveur. Relay ne l'affiche qu'une seule fois.",
+    "Gardez cette clé dans votre gestionnaire de mots de passe. Si le Mac de chaque membre perd le vault, seule cette clé ouvre une sauvegarde des fichiers du serveur. Vous pouvez l'afficher à nouveau depuis la ligne du vault.",
+  "set.sharedShowRecovery": "Afficher la clé de récupération",
+  "set.sharedRecoveryAgainHelp": "C'est la clé du vault. Gardez-la dans votre gestionnaire de mots de passe.",
   "set.sharedJoinTitle": "Rejoindre un vault partagé",
   "set.sharedLinkLabel": "Lien d'invitation",
   "set.sharedLinkLabelHelp": "Le lien relay:// qu'un admin vous a envoyé.",
