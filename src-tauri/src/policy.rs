@@ -27,6 +27,15 @@ pub fn all_vaults(s: &Value) -> Vec<String> {
     std::iter::once(s["vault"].as_str().unwrap_or("").to_string()).filter(|v| !v.is_empty()).chain(extra_vaults(s)).collect()
 }
 
+/// The vault picked for a new general conversation, checked against the vaults here: `None` for the main vault (none
+/// picked, or the main one picked), an error for anything else. The webview never names a folder of its own.
+pub fn picked_vault(s: &Value, asked: Option<&str>) -> Result<Option<String>, String> {
+    let Some(v) = asked.filter(|v| !v.is_empty()) else { return Ok(None) };
+    let all = all_vaults(s);
+    if !all.iter().any(|x| x == v) { return Err(trc_v("err.vault_unknown", v)); }
+    Ok((all.first().map(String::as_str) != Some(v)).then(|| v.to_string()))
+}
+
 /// A vault's lasting id: a shared vault's id on its server, else (a folder of the user's own) a hash of its path.
 pub fn vault_id(s: &Value, vault: &str) -> String {
     shared_vaults::list(s).into_iter().find(|v| v.folder == vault).map(|v| v.id)
@@ -209,6 +218,17 @@ mod tests {
         // a main-vault project named like a label is no other project's key
         assert_ne!(project_key(&s, "/me/vault", "Alpha (shared)"), project_key(&s, "/teams/a/shared", "Alpha"));
         assert_eq!((label("Alpha", "/teams/a/shared", false), label("Alpha", "/teams/a/shared", true)), ("Alpha".to_string(), "Alpha (shared)".to_string()));
+    }
+    #[test]
+    fn a_picked_vault_is_one_of_the_vaults_here() {
+        let s = json!({"vault": "/me/vault", "extraVaults": ["/me/other"], "sharedVaults": [{"id": "0123456789abcdef", "name": "Team", "host": "h", "port": 1, "fp": "ab", "folder": "/teams/a/shared"}]});
+        assert_eq!(picked_vault(&s, None), Ok(None));
+        assert_eq!(picked_vault(&s, Some("")), Ok(None));
+        assert_eq!(picked_vault(&s, Some("/me/vault")), Ok(None), "the main vault is no pick");
+        assert_eq!(picked_vault(&s, Some("/teams/a/shared")), Ok(Some("/teams/a/shared".into())));
+        assert_eq!(picked_vault(&s, Some("/me/other")), Ok(Some("/me/other".into())));
+        // a folder that is no vault here, also one inside a vault or written another way, is refused
+        for bad in ["/etc", "/me/vault/Contexts", "/teams/a/shared/", "/teams/a/../a/shared", "relative"] { assert!(picked_vault(&s, Some(bad)).is_err(), "{bad}"); }
     }
     #[test]
     fn a_conversation_may_not_read_or_edit_another_vault() {

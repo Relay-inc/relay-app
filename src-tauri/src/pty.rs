@@ -47,7 +47,7 @@ pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, pr
     if project.trim().is_empty() { return Err("bad project".into()); }
     // an agent's terminal is fenced, started and listed under the vault lock: a vault added meanwhile stops it
     let _gate = chat.is_some().then(|| state.vault_gate.lock().unwrap());
-    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name, Some(&project))).transpose()?;
+    let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name, Some(&project), None)).transpose()?;
     let agent = run.is_some();
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
     let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());

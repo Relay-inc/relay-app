@@ -415,7 +415,9 @@ function handle(cmd: string, a: Args): unknown {
       setTimeout(() => emit("shared-vaults", structuredClone(sharedStatus)), 300);
       return null;
     case "machines_list":
-      return fixture === "github" ? [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }] : [];
+      if (fixture === "github") return [{ id: "a1b2c3d4e5f6", name: "Server", online: true, default: false }];
+      // shared: its Team server, so a new main-vault conversation's Runs on shows next to the Vault pick
+      return shared ? [{ id: "a1b2c3d4e5f6", name: "Team server", online: true, default: false }] : [];
     // fixture "github": the Harbor CRM conversation that asks a question runs on Server
     case "chat_machines":
       return fixture === "github"
@@ -703,6 +705,16 @@ function handle(cmd: string, a: Args): unknown {
       pending = pending.filter(x => x.id !== a.id);
       return null;
     case "send":
+      // a picked vault is one of the vaults here, as the backend checks (policy::picked_vault)
+      if (
+        a.vault &&
+        ![
+          settings.vault,
+          ...(settings.extraVaults ?? []),
+          ...(settings.sharedVaults ?? []).map((v: { folder: string }) => v.folder),
+        ].includes(a.vault)
+      )
+        return Promise.reject(`${a.vault} is not one of the vaults here`);
       // Claude Code echoes a message when it takes it up (--replay-user-messages); `echo: false` keeps it unread
       if (harness.echo && (a.provider ?? "claude") === "claude")
         setTimeout(() => emitAgent(a.project, { type: "picked", text: a.text }), 0);

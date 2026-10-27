@@ -3,7 +3,7 @@ import { useNavigationStore } from "../../../application/navigation/store";
 import { useWorkspaceStore } from "../../../application/workspace/store";
 import { aboutItems } from "../../../application/conversations/selectors";
 import { moveTo } from "../../../application/conversations/actions";
-import { mainVaultProjects } from "../../../domain/conversations/rules";
+import { sameVaultProjects } from "../../../domain/conversations/rules";
 import { projectName } from "../../../application/workspace/vault";
 import { useT } from "../../hooks/useT";
 import { Html } from "../../components/Html";
@@ -26,6 +26,7 @@ export function MoveBar({
   const items = useConversationsStore(s => (asked || session ? undefined : s.messages[selected]));
   const projects = useWorkspaceStore(s => s.snap.projects);
   const vault = useWorkspaceStore(s => s.snap.vault);
+  const general = useConversationsStore(s => s.chats[selected]?.vault);
   if (session)
     return (
       <div className={className}>
@@ -35,8 +36,8 @@ export function MoveBar({
       </div>
     );
   // scores every message: only when the bar can show, and memoised on the items. The bar shows for a general
-  // conversation that sent something, so a started one in the main vault: it keeps running there (src-tauri `fence`)
-  const about = asked ? null : aboutItems(items, mainVaultProjects({ projects, vault }));
+  // conversation that sent something, so a started one: it keeps running in its vault (src-tauri `fence`)
+  const about = asked ? null : aboutItems(items, sameVaultProjects({ projects, vault }, general));
   if (!about) return null;
   const name = projectName(about);
   return (

@@ -179,6 +179,8 @@ type SendArgs = {
   /** The conversation's project, sent on every message so the team brain files what it learns under it. */
   about: string | null;
   context: string | null;
+  /** The vault folder picked for a general conversation, null for the main one. The backend checks it is a vault here. */
+  vault: string | null;
 };
 export const send = (args: SendArgs) => invoke("send", args);
 export const stop = (project: string) => invoke("stop", { project });
@@ -212,8 +214,13 @@ export const answer = (id: string, decision: Decision) => invoke("answer", { id,
 export const backgroundSession = (action: "stop" | "attach", id: string) => invoke("bg", { action, id });
 /** A conversation (`project`: its key) resumed in iTerm; `about` its vault project, null for a general one: a new
  *  conversation runs in that project's vault. */
-export const openTerminal = (project: string, session: string | null, name: string, about: string | null) =>
-  invoke("open_terminal", { project, session, name, about });
+export const openTerminal = (
+  project: string,
+  session: string | null,
+  name: string,
+  about: string | null,
+  vault: string | null,
+) => invoke("open_terminal", { project, session, name, about, vault });
 export const aiTitle = (text: string, provider: string) => invoke<string>("ai_title", { text, provider });
 export const agentHistory = (key: string, id: string, from: number) =>
   invoke<Transcript<AgentEvent>>("agent_history", { key, id, from });

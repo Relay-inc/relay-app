@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { changesVault, followChats, hasStarted, mainVaultProjects, terminalSessions } from "./rules.ts";
+import {
+  changesVault,
+  chatVault,
+  followChats,
+  hasStarted,
+  pickedVault,
+  sameVaultProjects,
+  terminalSessions,
+  vaultPick,
+} from "./rules.ts";
 import type { AgentSession, Chat, Item } from "./types";
 import type { SessionItem } from "../workspace/types";
 
@@ -73,9 +82,93 @@ test("a conversation changes vault only when its old and new project live in dif
   assert.equal(changesVault(snap, "Gone", "Gone"), false);
   // the move bar's offer (a general conversation, started): the main vault's projects
   assert.deepEqual(
-    mainVaultProjects(snap).map(project => project.name),
+    sameVaultProjects(snap).map(project => project.name),
     ["Alpha", "Beta", "Old"],
   );
+  // a general conversation that runs in a vault picked for it: that vault's projects, and no move out of it
+  assert.deepEqual(
+    sameVaultProjects(snap, "/shared/team").map(project => project.name),
+    ["Team"],
+  );
+  assert.equal(changesVault(snap, null, "Team", "/shared/team"), false);
+  assert.equal(changesVault(snap, null, "Alpha", "/shared/team"), true);
+});
+
+test("a new conversation picks among every vault, a project's runs in its own and another vault runs on Claude Code here", () => {
+  const settings = {
+    vault: "/main",
+    extraVaults: ["/me/Notes"],
+    sharedVaults: [
+      {
+        id: "0123456789abcdef",
+        name: "Team vault",
+        host: "h",
+        port: 1,
+        fp: "ab",
+        folder: "/shared/team",
+        role: "member" as const,
+      },
+    ],
+  };
+  const snap = {
+    vault: {
+      vault: "/main",
+      map: { workState: "", reminders: "", notes: "" },
+      found: { workState: true, reminders: true, notes: true },
+      ok: true,
+    },
+    projects: [
+      {
+        name: "Launch Plan",
+        vault: "/shared/team",
+        context: "",
+        state: "",
+        last: "",
+        summary: "",
+        open: null,
+        open_items: [],
+        stand: null,
+        aliases: [],
+      },
+      {
+        name: "Alpha",
+        context: "",
+        state: "",
+        last: "",
+        summary: "",
+        open: null,
+        open_items: [],
+        stand: null,
+        aliases: [],
+      },
+    ],
+  };
+  // the main vault first, an own folder by its name, a shared vault by its own name
+  assert.deepEqual(vaultPick({ project: null }, settings, snap).list, [
+    { folder: "/main", name: "main", main: true },
+    { folder: "/me/Notes", name: "Notes", main: false },
+    { folder: "/shared/team", name: "Team vault", main: false },
+  ]);
+  // only one vault: nothing to pick
+  assert.deepEqual(vaultPick({ project: null }, { vault: "/main" }, snap).list, []);
+  // a general conversation: the main vault until another is picked, then that one, on this Mac with Claude Code
+  assert.deepEqual(
+    { ...vaultPick({ project: null }, settings, snap), list: [] },
+    { list: [], value: "/main", fixed: false, other: false },
+  );
+  const picked = { project: null, vault: pickedVault("/shared/team", "/main") };
+  assert.deepEqual(
+    { ...vaultPick(picked, settings, snap), list: [] },
+    { list: [], value: "/shared/team", fixed: false, other: true },
+  );
+  // the main vault picked again stores nothing
+  assert.equal(pickedVault("/main", "/main"), undefined);
+  // a project's conversation: its project's vault, fixed, also over a pick left from before it moved there
+  assert.deepEqual(
+    { ...vaultPick({ project: "Launch Plan" }, settings, snap), list: [] },
+    { list: [], value: "/shared/team", fixed: true, other: true },
+  );
+  assert.equal(chatVault({ project: "Alpha", vault: "/shared/team" }, snap), "/main");
 });
 
 test("a conversation started once a message went out or a session runs", () => {

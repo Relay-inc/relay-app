@@ -25,6 +25,7 @@ export type ConvRow = {
   closable: boolean;
   closing: boolean; // being closed: greyed out and pulsing until it is gone
   orch: boolean; // a worker of the orchestrator: a small marker
+  vault?: string; // a general conversation in another vault than the main one: that vault's name, a hint after the title
   work?: boolean; // Today's work in progress (domain/today/work.ts): opens Today on it, not draggable, no menu
   icon?: string; // a work row's icon: a review, a mail, a meeting
 };

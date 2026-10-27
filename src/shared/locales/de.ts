@@ -16,6 +16,7 @@ export default {
   "nav.folderName": "Ordnername",
   "nav.renameFolder": "Ordner umbenennen",
   "nav.deleteFolder": "Ordner löschen",
+  "nav.inVault": "Läuft im Vault {name}",
   "nav.inTerminal": "Im Terminal geöffnet",
   "nav.more": "{n} weitere",
   "nav.agentsWorking_one": "{n} Agent arbeitet",
@@ -1585,6 +1586,10 @@ export default {
   "composer.vault": "Vault",
   "composer.vaultHelp":
     "Dieses Gespräch läuft in diesem geteilten Vault und bleibt dort: Die Datei-Werkzeuge und Dateibefehle von Claude Code sind für deine anderen Vaults gesperrt, und deine eigenen MCP-Server und claude.ai-Konnektoren sind aus.",
+  "composer.vaultPick":
+    "Der Vault, in dem dieses Gespräch läuft. Es bleibt dort: Ein anderer Vault als dein Haupt-Vault läuft auf diesem Mac mit Claude Code.",
+  "composer.vaultProject":
+    "Ein Gespräch über ein Projekt läuft im Vault dieses Projekts. Starte ein allgemeines Gespräch, um einen anderen Vault zu wählen.",
   "composer.runOn": "Läuft auf",
   "composer.thisMac": "Dieser Mac",
   "composer.available": "verfügbar",
