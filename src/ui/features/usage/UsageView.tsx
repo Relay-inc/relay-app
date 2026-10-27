@@ -14,6 +14,8 @@ import { useDerived } from "../../hooks/useDerived";
 import { useT } from "../../hooks/useT";
 import { DOT, UsageBar, UsageMeter } from "./UsageMeter";
 import { UsageRow } from "./UsageRow";
+import { VaultUsage } from "./VaultUsage";
+import { Segmented } from "../settings/Segmented";
 
 const CARD = "flex flex-col rounded-xl border border-separator bg-raised";
 const LABEL = "m-0 text-[11px] font-semibold tracking-wider uppercase text-tertiary";
@@ -30,15 +32,37 @@ type Format = {
   head: ReactNode;
 };
 
-/** The usage view: a summary (the tightest limit, tokens today and this week over every agent), then a card per
- *  switched-on agent provider with its plan or rate limits and the tokens in its local logs, then the total. */
+/** The usage view: AI usage (the agents' limits and tokens) and Vault usage (what their tool calls did in the vault)
+ *  as two tabs. */
 export function UsageView() {
+  const { t } = useT();
+  const [tab, setTab] = useState<"ai" | "vault">("ai");
+  // shown: tokens (and the vault's numbers with them) right away when the last read is older than a minute
+  useEffect(() => openUsage(), []);
+  return (
+    <div className="flex flex-col gap-5">
+      <Segmented
+        className="self-start"
+        label={t("nav.usage")}
+        options={[
+          ["ai", t("usage.tabAi")],
+          ["vault", t("usage.tabVault")],
+        ]}
+        value={tab}
+        onPick={setTab}
+      />
+      {tab === "ai" ? <AiUsage /> : <VaultUsage />}
+    </div>
+  );
+}
+
+/** AI usage: a summary (the tightest limit, tokens today and this week over every agent), then a card per
+ *  switched-on agent provider with its plan or rate limits and the tokens in its local logs, then the total. */
+function AiUsage() {
   const { t, th, ath, locale } = useT();
   const agents = useDerived(() => usageAgents());
   const allLimits = useUsageStore(s => s.limits);
   const tokens = useUsageStore(s => s.tokens);
-  // shown: tokens right away when the last read is older than a minute
-  useEffect(() => openUsage(), []);
 
   if (!agents.length) return <Html as="p" className={NOTE} html={th("usage.none")} />;
 

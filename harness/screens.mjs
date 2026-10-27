@@ -777,6 +777,13 @@ const VIEWS = {
     await waitText("By model");
     await settle(page);
   },
+  // the Vault usage tab: reads, writes, edits and searches, the notes used most, per folder
+  "usage-vault": async () => {
+    await VIEWS.usage();
+    await page.getByRole("radio", { name: "Vault usage" }).click();
+    await waitText("Read most this week");
+    await settle(page);
+  },
   // the usage redesign in dark mode (#105)
   "dark-usage": async () => {
     await open(page, server.url, { fixture: "dark" });
