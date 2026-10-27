@@ -14,8 +14,11 @@ read is shown as damaged, never as deleted.
 **Invites:** the link carries a secret, after `#`, that unwraps the vault key. The server keeps the key only encrypted
 under that secret, which it never sees. Links are single use, last 24 h, and die with the admin who made them.
 
-**A vault admin keeps the server.** An admin may update it (`info`, `update`), so it may run a binary of its choice
-there. The server refuses it everything else a paired device may do: conversations, the mirror, a phone, GitHub,
+**A vault admin keeps the server.** An admin may update it (`info`, `update`), but only to an official Relay release:
+the binary must carry the release's minisign signature (the updater's key, `plugins.updater.pubkey` in
+`src-tauri/tauri.conf.json`, built into the server). Unsigned or badly signed is refused before anything is written or
+run. A device the owner paired may still send an unsigned binary (a server built from source), never a badly signed
+one. The server refuses an admin everything else a paired device may do: conversations, the mirror, a phone, GitHub,
 repos, making vaults. Whether a device is an admin is read from the vaults at every request, so a promotion or a
 removal counts at once. In Relay the server then shows under Settings › Machines for shared vaults only, marked `auto`
 in the settings (`shared_vaults::keepers`), with no Forget and no New shared vault: it goes again when this Mac is
@@ -67,7 +70,7 @@ A device that came in through an invite is a *vault-only* client (`Client.vaults
 `VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
 `vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror or pairs
 further devices. While it is admin of a vault here it also gets `KEEPER_OPS` = `info` (the server's paths and version)
-and `update`, nothing more. A linked device (a phone) gets no vault ops.
+and `update` (with `signature`, the release's `.sig` of the binary), nothing more. A linked device (a phone) gets no vault ops.
 
 Ids: vault id 16 lowercase hex, invite id 16 lowercase hex, invite code 32 lowercase hex (`tls::random_secret`),
 blob name 64 lowercase hex. Anything else is refused.

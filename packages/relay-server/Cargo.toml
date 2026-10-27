@@ -12,5 +12,8 @@ agent-core.workspace = true
 agent-claude = { path = "../agent-claude" }
 ring = "0.17"
 libc = "0.2"
+# the release signature an update from a vault admin must carry (upgrade.rs): both already in the tree via Tauri and agent-core
+minisign-verify = "0.2"
+base64 = "0.23"
 
 [dev-dependencies]

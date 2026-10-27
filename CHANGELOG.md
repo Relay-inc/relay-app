@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **A vault admin keeps the server**: when you are admin of a shared vault (from an admin invite, or made admin because the last one left), its server shows under Settings › Machines for shared vaults only, and you can update it there. It runs no conversations for you and keeps no mirror, the server refuses those too. It goes from the list once you are admin of no vault there (#288)
+- **A vault admin keeps the server**: when you are admin of a shared vault (from an admin invite, or made admin because the last one left), its server shows under Settings › Machines for shared vaults only, and you can update it there, to an official Relay release only (the server checks its signature). It runs no conversations for you and keeps no mirror, the server refuses those too. It goes from the list once you are admin of no vault there (#288)
 
 ### Changed
 

@@ -84,11 +84,13 @@ image: the first start installs it with Anthropic's installer into the `.local` 
 
 **Update from Relay:** when Relay is newer than the server, Settings › Machines shows Update to <version>. Relay
 downloads relay-server's Linux binary for the server's CPU from its own GitHub release (with `gh`, the repo is
-private) and sends it over the connection. The server checks the checksum and that the binary runs and is that
-version, keeps it as `data/bin/relay-server` and goes on in it in the same process. Conversations keep running, the
-mirror locks until Relay's next sync round a few seconds later. Every start prefers that binary while it is newer than
-the image's, so recreating the container keeps the update and a newer image wins again. A relay-server from before
-0.0.5 cannot take this yet: update it once by hand.
+private), and its `.sig`, and sends them over the connection. The server checks the signature against Relay's release
+key, built into it: required from a vault admin (below), checked when sent by a paired device, which may also send an
+unsigned binary it built itself. Then the checksum and that the binary runs and is that version, keeps it as
+`data/bin/relay-server` and goes on in it in the same process. Conversations keep running, the mirror locks until
+Relay's next sync round a few seconds later. Every start prefers that binary while it is newer than the image's, so
+recreating the container keeps the update and a newer image wins again. A relay-server from before 0.0.5 cannot take
+this yet: update it once by hand.
 
 **Update by hand:** `docker pull ghcr.io/relay-inc/relay-server:latest`, then `docker rm -f relay-server` and the same
 `docker run`. The folders keep the pairing, the login, Claude Code and the repos; the mirror is locked until Relay
@@ -220,7 +222,7 @@ members' device names and fingerprints, open invites) and one record per file in
   agents, no mirror, no pairing, no vaults of its own. Leaving its last vault unpairs it. A linked device (a phone)
   gets no vaults at all.
 - **A vault admin keeps the server.** A vault-only device that is admin of a vault here may also ask `info` and send an
-  `update` (a new binary that runs here: accepted for an admin). Conversations, the mirror, phones and GitHub stay
+  `update`, to an official release only: a binary without Relay's release signature, or with a bad one, is refused. Conversations, the mirror, phones and GitHub stay
   refused. It is read from the vaults at every request, so a promotion or a removal counts at once.
 - **Removing someone** stops their device here at once. They keep what they already synced and the key (no key rotation
   yet). The last admin cannot leave while others stay. `relay-server revoke` also takes a device out of its vaults.

@@ -2189,16 +2189,17 @@ async fn machine_update(state: State<'_, App>, id: String) -> Result<Value, Stri
         if !info.update || info.os != "linux" { return Err(trc("err.update_old")); }
         let dir = std::env::temp_dir().join(format!("relay-update-{}", std::process::id()));
         let asset = format!("relay-server-linux-{}", info.arch);
+        // and its release signature, which a server this Mac keeps as a vault admin requires (releases before it have none)
         let out = std::process::Command::new(&gh).env("PATH", &path)
-            .args(["release", "download", &format!("v{version}"), "-R", "Relay-inc/relay-app", "-p", &asset, "-D"]).arg(&dir).arg("--clobber")
+            .args(["release", "download", &format!("v{version}"), "-R", "Relay-inc/relay-app", "-p", &asset, "-p", &format!("{asset}.sig"), "-D"]).arg(&dir).arg("--clobber")
             .output().map_err(|e| e.to_string())?;
-        let bin = fs::read(dir.join(&asset));
+        let (bin, sig) = (fs::read(dir.join(&asset)), fs::read_to_string(dir.join(format!("{asset}.sig"))).ok());
         fs::remove_dir_all(&dir).ok();
         let bin = match bin {
             Ok(b) if out.status.success() => b,
             _ => return Err(format!("{}: {}", trc_v("err.update_download", version), String::from_utf8_lossy(&out.stderr).trim())),
         };
-        c.update(version, &bin)?;
+        c.update(version, &bin, sig.as_deref())?;
         for _ in 0..30 {
             std::thread::sleep(std::time::Duration::from_secs(1));
             if c.info_any().is_ok_and(|i| i.version == version) { return Ok(json!({"version": version})); }

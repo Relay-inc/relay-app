@@ -4243,7 +4243,9 @@ version = "0.0.37"
 dependencies = [
  "agent-claude",
  "agent-core",
+ "base64 0.23.1",
  "libc",
+ "minisign-verify",
  "relay-remote",
  "ring",
  "serde",
