@@ -256,7 +256,7 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");
   },
-  // leaving plan mode: the plan as a document on the left, the decision on the right (#233)
+  // leaving plan mode: the plan as a document over the full width, the decision under it (#233, #291)
   "conversation-plan": async () => {
     await open(page, server.url, { sel: keys.permission });
     await waitText("push origin fix/portal-redirect");

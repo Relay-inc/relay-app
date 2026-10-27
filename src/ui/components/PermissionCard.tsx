@@ -231,27 +231,23 @@ export function PermissionCard({
       ) : null}
     </button>
   );
-  // leaving plan mode: the plan as a document on the left, the decision next to it (under it when the card is narrow)
+  // leaving plan mode: the plan as a document over the full width, the decision under it
   if (request.tool_name === "ExitPlanMode" && typeof request.input.plan === "string")
     return (
-      <div className={`${box} @container`}>
+      <div className={box}>
         <div className="flex items-center gap-2 text-[13px] text-secondary">
           {badge("list")}
           {t("card.plan", { where: where ? t("card.in", { name: where }) : "" })}
         </div>
-        <div className="grid grid-cols-1 @2xl:grid-cols-[minmax(0,1fr)_200px] gap-3">
-          <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-well border border-separator px-4 py-3 select-text">
-            <Markdown className="md-note" text={request.input.plan} />
-          </div>
-          <div className="flex flex-col gap-2 @2xl:justify-end">
-            <p className="text-[13px] leading-normal text-secondary">{t("card.planAsk")}</p>
-            <div className="flex @2xl:flex-col-reverse justify-end gap-2">
-              <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
-                {t("card.deny")}
-              </button>
-              {allowButton}
-            </div>
-          </div>
+        <div className="max-h-[60vh] overflow-y-auto rounded-lg bg-well border border-separator px-4 py-3 select-text">
+          <Markdown className="md-note" text={request.input.plan} />
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <p className="flex-1 min-w-48 text-[13px] leading-normal text-secondary">{t("card.planAsk")}</p>
+          <button className="btn cursor-pointer" disabled={busy} onClick={() => onAnswer("deny")}>
+            {t("card.deny")}
+          </button>
+          {allowButton}
         </div>
       </div>
     );

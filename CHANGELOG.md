@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- **The plan card uses the full width**: when Claude leaves plan mode, the plan reads over the whole card and Deny and Allow sit in one row under it, like on the other cards, instead of in a narrow column next to it (#291)
+
 ## [0.0.38] - 2026-10-27
 
 ### Added
