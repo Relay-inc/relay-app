@@ -16,6 +16,7 @@ export default {
   "nav.folderName": "Nom du dossier",
   "nav.renameFolder": "Renommer le dossier",
   "nav.deleteFolder": "Supprimer le dossier",
+  "nav.inVault": "Tourne dans le coffre {name}",
   "nav.inTerminal": "Ouverte dans le terminal",
   "nav.more": "{n} de plus",
   "nav.agentsWorking_one": "{n} agent au travail",
@@ -1596,6 +1597,10 @@ export default {
   "composer.vault": "Vault",
   "composer.vaultHelp":
     "Cette conversation tourne dans ce coffre partagé et y reste : les outils et commandes de fichiers de Claude Code sont bloqués pour vos autres coffres, et vos propres serveurs MCP et connecteurs claude.ai sont désactivés.",
+  "composer.vaultPick":
+    "Le coffre dans lequel cette conversation tourne. Elle y reste : un autre coffre que votre coffre principal tourne sur ce Mac avec Claude Code.",
+  "composer.vaultProject":
+    "Une conversation sur un projet tourne dans le coffre de ce projet. Lancez une conversation générale pour choisir un autre coffre.",
   "composer.runOn": "S'exécute sur",
   "composer.thisMac": "Ce Mac",
   "composer.available": "disponible",

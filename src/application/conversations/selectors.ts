@@ -190,9 +190,12 @@ export function machineRepo(key: string) {
   const machine = (where.started ? bound?.machine : where.list.find(choice => choice.id === id)?.name) ?? id;
   return { slug, repo: slug.split("/").pop()!, id, machine, started: where.started };
 }
-/** The shared vault a conversation runs in, by its project: its folder name, null for the main vault. The
- *  conversation stays in it (src-tauri `fence`). */
-export const sharedVault = (key: string) => otherVaultOf(cs().chats[key]?.project ?? null);
+/** The other vault a conversation runs in, its project's or the one picked for it: its name, null for the main vault.
+ *  The conversation stays in it (src-tauri `fence`). */
+export const sharedVault = (key: string) => otherVaultOf(cs().chats[key]);
+/** The composer's vault pick for a conversation not started yet (rules.vaultPick). */
+export const vaultChoice = (key: string) =>
+  rules.vaultPick(cs().chats[key], settings(), useWorkspaceStore.getState().snap);
 /** The composer's "runs on" pick: the machines, the one picked ("" this Mac, null nothing to pick) and why only this
  *  Mac can run it (null when a machine can). Before the first message it is where the conversation will start, after
  *  it where it runs: picking another place then moves it (`moveConversation`). */

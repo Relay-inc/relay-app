@@ -42,7 +42,7 @@ import {
 } from "../conversations/selectors";
 import { chatAgent } from "../agents/agents";
 import { useWorkspaceStore } from "../workspace/store";
-import { contexts, projectLabel, projectName, shownName } from "../workspace/vault";
+import { contexts, otherVaultOf, projectLabel, projectName, shownName } from "../workspace/vault";
 import { ghOn, mailOn, saveMainSettings, setSettingsState, settings } from "../settings/settings";
 import { readyBoards } from "../board/board";
 import { useMailStore } from "../mail/store";
@@ -182,6 +182,8 @@ const convRow = (conversation: Chat, folder = ""): ConvRow => ({
   closable: !(conversation.draft && !typedOf(conversation.key)),
   closing: cs().closing.has(conversation.key),
   orch: !!conversation.orch,
+  // a general conversation running in another vault: not to be taken for one of the main vault
+  ...(conversation.project ? {} : { vault: otherVaultOf(conversation) ?? undefined }),
 });
 const WORK_ICON = { review: "pr", mail: "mail", meeting: "cal" } as const;
 // a piece of Today's work in progress, as a row under its project

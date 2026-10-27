@@ -62,6 +62,7 @@ export type Item = {
 export type Chat = {
   key: string;
   project: string | null;
+  vault?: string; // a general conversation's vault folder, picked before its first message: none for the main vault
   folder?: string; // the sidebar folder it sits in under its project (domain/navigation/sidebar-folders)
   title: string;
   at: number;

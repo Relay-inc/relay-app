@@ -22,8 +22,10 @@ commands out of the others. It is not a boundary against a member who sets out t
 steers your agent: a script in Bash or a local socket can still get out, and only the auto-mode classifier judges
 those. Share a vault with people you would let read what your agent can read. What it does:
 
-- **A conversation stays in its vault.** It runs in its project's vault and may not read or edit the other vaults or
-  their transcripts. In any vault but the main one it also may not touch Relay's data folder or Claude's config
+- **A conversation stays in its vault.** It runs in its project's vault, a general one in the vault picked in its
+  composer before its first message (the main vault unless another is picked, checked against the vaults here), and
+  may not read or edit the other vaults or their transcripts. Its first message names a project only of that vault, and
+  once it started it moves only to that vault's projects. In any vault but the main one it also may not touch Relay's data folder or Claude's config
   folders (with their `.claude.json`), and runs with no own MCP servers or connectors, no hooks, no auto memory, in auto
   mode. A main-vault conversation may not read the shared vaults' trash, bases and keys. Codex and OpenCode run in the
   main vault only.

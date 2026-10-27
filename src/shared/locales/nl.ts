@@ -16,6 +16,7 @@ export default {
   "nav.folderName": "Naam van de map",
   "nav.renameFolder": "Map hernoemen",
   "nav.deleteFolder": "Map verwijderen",
+  "nav.inVault": "Loopt in de vault {name}",
   "nav.inTerminal": "Staat open in de terminal",
   "nav.more": "nog {n}",
   "nav.agentsWorking_one": "{n} agent werkt",
@@ -1573,6 +1574,10 @@ export default {
   "composer.vault": "Vault",
   "composer.vaultHelp":
     "Dit gesprek loopt in deze gedeelde vault en blijft daar: de bestandstools en bestandscommando's van Claude Code zijn geblokkeerd voor je andere vaults, en je eigen MCP-servers en claude.ai-connectors staan uit.",
+  "composer.vaultPick":
+    "De vault waarin dit gesprek loopt. Het blijft daar: een andere vault dan je hoofdvault loopt op deze Mac met Claude Code.",
+  "composer.vaultProject":
+    "Een gesprek over een project loopt in de vault van dat project. Start een algemeen gesprek om een andere vault te kiezen.",
   "composer.runOn": "Loopt op",
   "composer.thisMac": "Deze Mac",
   "composer.available": "beschikbaar",

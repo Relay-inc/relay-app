@@ -15,6 +15,7 @@ const en = {
   "nav.folderName": "Folder name",
   "nav.renameFolder": "Rename folder",
   "nav.deleteFolder": "Delete folder",
+  "nav.inVault": "Runs in the vault {name}",
   "nav.inTerminal": "Open in the terminal",
   "nav.more": "{n} more",
   "nav.agentsWorking_one": "{n} agent working",
@@ -1566,6 +1567,10 @@ const en = {
   "composer.vault": "Vault",
   "composer.vaultHelp":
     "This conversation runs in this shared vault and stays there: Claude Code's file tools and file commands are blocked from your other vaults, and your own MCP servers and claude.ai connectors are off.",
+  "composer.vaultPick":
+    "The vault this conversation runs in. It stays there: another vault than your main one runs on this Mac with Claude Code.",
+  "composer.vaultProject":
+    "A project's conversation runs in that project's vault. Start a general conversation to pick another vault.",
   "composer.runOn": "Runs on",
   "composer.thisMac": "This Mac",
   "composer.available": "available",

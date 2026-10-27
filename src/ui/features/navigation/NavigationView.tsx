@@ -267,6 +267,8 @@ export function NavigationView({ className }: { className: string }) {
         subs={row.subs}
         subsTitle={row.subsTitle}
         mark={row.orch ? t("nav.orchWorker") : ""}
+        hint={row.vault}
+        hintTitle={row.vault ? t("nav.inVault", { name: row.vault }) : undefined}
         {...dropzone("conv", row.key)}
         onPointerDown={press("conv", row.key, row.parent)}
         onClick={unlessDragged(() => select(row.key))}

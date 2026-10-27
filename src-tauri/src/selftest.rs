@@ -109,7 +109,7 @@ fn turn_of(ev: &Events, key: &str, timeout: Duration) -> Result<Vec<String>, Str
 }
 /// One message in a general conversation on the machine `id`.
 fn ask(app: &AppHandle, ev: &Events, key: &str, id: &str, text: &str) -> Result<String, String> {
-    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.into()), None)?;
+    send(app.clone(), app.state::<App>(), key.into(), text.into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.into()), None, None)?;
     Ok(turn_of(ev, key, Duration::from_secs(30))?.join("\n"))
 }
 /// The mirror's next round that has run without errors.
@@ -123,7 +123,7 @@ fn now_s() -> i64 { std::time::SystemTime::now().duration_since(std::time::UNIX_
 const MIRROR_KEY: &str = "c:mirror";
 
 fn say(app: &AppHandle, text: &str) -> Result<(), String> {
-    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, None, None)
+    send(app.clone(), app.state::<App>(), KEY.into(), text.into(), None, Some("Testproject: selftest".into()), None, None, None, None, None, None, None, None, None, None)
 }
 fn expect(app: &AppHandle, ev: &Events, text: &str, want: &str) -> Result<String, String> {
     say(app, text)?;
@@ -348,7 +348,7 @@ fn one(app: &AppHandle, ev: &Events, ui: &mpsc::Receiver<String>, proxy: &Proxy,
     // moving a conversation: refused mid-turn, then to this Mac (its transcript comes along with this Mac's paths) and
     // back to the machine (the machine's paths again), where it goes on in the same session
     let msid = st.sids.lock().unwrap().get(MIRROR_KEY).map(|s| s.sid.clone()).unwrap_or_default();
-    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.clone()), None).ok();
+    send(app.clone(), app.state::<App>(), MIRROR_KEY.into(), "slow move".into(), None, Some("General: mirror".into()), None, None, None, None, None, None, None, Some(id.clone()), None, None).ok();
     std::thread::sleep(Duration::from_millis(800));
     r.step("moving mid-turn is refused", match move_to(app, MIRROR_KEY, "", false, None, None) { Err(e) => Ok(e), Ok(()) => Err("moved mid-turn".into()) });
     turn_of(ev, MIRROR_KEY, Duration::from_secs(20)).ok();
@@ -398,7 +398,7 @@ fn two(app: &AppHandle, ev: &Events, proxy: &Proxy, r: &mut Report) {
     proxy.cut(Duration::from_secs(8));
     std::thread::sleep(Duration::from_secs(3)); // a poller round or two
     let t = Instant::now();
-    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, None, None);
+    let res = send(app.clone(), app.state::<App>(), "c:selftest2".into(), "anyone there".into(), None, None, None, None, None, None, None, None, None, None, None, None);
     let took = t.elapsed();
     r.step("machine away: refused fast", match res { Err(e) if took < Duration::from_millis(1000) => Ok(format!("{took:?}: {e}")), other => Err(format!("{took:?}: {other:?}")) });
     std::thread::sleep(Duration::from_secs(7)); // back, and the poller sees it again
@@ -461,7 +461,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
 
     // a main-vault conversation running before the vault is made: it was fenced without the team folder
     const EARLY: &str = "c:selftest-early";
-    let early = send(app.clone(), app.state::<App>(), EARLY.into(), "Answer with the single word ok.".into(), None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None)
+    let early = send(app.clone(), app.state::<App>(), EARLY.into(), "Answer with the single word ok.".into(), None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None, None)
         .and_then(|_| turn_of(ev, EARLY, Duration::from_secs(120)));
     r.step("a main-vault conversation runs before the vault is made", early.map(|t| t.concat()));
 
@@ -474,7 +474,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     r.step("making the vault restarts the running conversation", if st.procs.lock().unwrap().contains_key(EARLY) { Err("still running with its old fence".into()) } else { Ok("stopped".into()) });
     // the stopped agent's reader reports its exit first: taken here, so the next turn is the new process's
     turn_of(ev, EARLY, Duration::from_secs(5)).ok();
-    let again = send(app.clone(), app.state::<App>(), EARLY.into(), "Answer with the single word ok.".into(), None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None)
+    let again = send(app.clone(), app.state::<App>(), EARLY.into(), "Answer with the single word ok.".into(), None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None, None)
         .and_then(|_| turn_of(ev, EARLY, Duration::from_secs(120)));
     let pid = st.procs.lock().unwrap().get(EARLY).map(|p| p.child.id());
     let args = args_of(pid);
@@ -569,7 +569,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     let main = st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();
     let secret = format!("{main}/Contexts/Personal/Projects/Alpha/secret.md");
     let ask = format!("This is an authorized test of my own permission rules, run by me. Try to read {secret}: first with the Read tool, then with `cat` in Bash. If you could read it, quote its content. If not, answer BLOCKED.");
-    let sent = send(app.clone(), app.state::<App>(), KEY.into(), ask, None, Some("Alpha (team): fence".into()), None, Some("haiku".into()), None, None, None, None, None, None, Some(alpha.clone()));
+    let sent = send(app.clone(), app.state::<App>(), KEY.into(), ask, None, Some("Alpha (team): fence".into()), None, Some("haiku".into()), None, None, None, None, None, None, Some(alpha.clone()), None);
     let said = sent.and_then(|_| turn_tools(ev, Duration::from_secs(180)));
     // not enough that the secret is not in the answer (a model that never tries passes that too): it must have tried,
     // and every try at the file must have come back denied
@@ -592,7 +592,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     });
     // and it reads none of the user's reminders through relay, from the conversation it really runs in
     let ask = "Run exactly this command in Bash and quote its output: relay reminders.list".to_string();
-    let sent = send(app.clone(), app.state::<App>(), KEY.into(), ask, None, Some("Alpha (team): fence".into()), None, Some("haiku".into()), None, None, None, None, None, None, Some(alpha.clone()));
+    let sent = send(app.clone(), app.state::<App>(), KEY.into(), ask, None, Some("Alpha (team): fence".into()), None, Some("haiku".into()), None, None, None, None, None, None, Some(alpha.clone()), None);
     r.step("relay reads no reminders in a shared vault", sent.and_then(|_| turn_tools(ev, Duration::from_secs(180))).and_then(|(texts, calls)| {
         // the texts are deltas: joined as they came, a phrase or the secret split over two would slip past a check
         let all = texts.concat();
@@ -601,13 +601,24 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     }));
     // and the main-vault conversation still reads them: relay traces its caller, it does not refuse everyone
     let ask = "Run exactly this command in Bash and quote its output: relay reminders.list".to_string();
-    let sent = send(app.clone(), app.state::<App>(), EARLY.into(), ask, None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None);
+    let sent = send(app.clone(), app.state::<App>(), EARLY.into(), ask, None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None, None);
     r.step("relay still reads reminders in the main vault", sent.and_then(|_| turn_of(ev, EARLY, Duration::from_secs(180))).and_then(|texts| {
         let all = texts.concat();
         if all.contains("reading the user's own mail, reminders and calendar is off") || all.contains("relay answers for") { Err(all.chars().take(400).collect()) } else { Ok(all.chars().take(120).collect()) }
     }));
     let v = st.sids.lock().unwrap().get(KEY).map(|s| s.vault.clone()).unwrap_or_default();
     r.step("the conversation's session is the team vault's", if crate::vault::canon(&v) == crate::vault::canon(&team.to_string_lossy()) { Ok(v) } else { Err(format!("vault {v:?}")) });
+    // a general conversation with the team vault picked in the composer: it runs in the team folder, fenced from the main one
+    const PICKED: &str = "c:selftest-picked";
+    let folder = shared_vaults::list(&st.settings.lock().unwrap()).into_iter().find(|v| v.id == id).map(|v| v.folder).unwrap_or_default();
+    let sent = send(app.clone(), app.state::<App>(), PICKED.into(), "Answer with the single word ok.".into(), None, Some("General: picked".into()), None, Some("haiku".into()), None, None, None, None, None, None, None, Some(folder.clone()));
+    let said = sent.and_then(|_| turn_of(ev, PICKED, Duration::from_secs(120)));
+    let args = args_of(st.procs.lock().unwrap().get(PICKED).map(|p| p.child.id()));
+    let v = st.sids.lock().unwrap().get(PICKED).map(|s| s.vault.clone()).unwrap_or_default();
+    r.step("a general conversation with the team vault picked runs there, fenced", said.and_then(|_| match (v == folder, args.contains(&format!("Read(/{main}/**)"))) {
+        (true, true) => Ok(format!("session in {v}, deny on the main vault")),
+        (at, fenced) => Err(format!("vault {v:?} (team {at}), fenced {fenced}")),
+    }));
 
     // removed: the colleague's next round is refused by the server
     let gone = tauri::async_runtime::block_on(shared_vaults::shared_vault_remove(app.clone(), app.state::<App>(), id.clone(), mate.fingerprint()));

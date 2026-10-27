@@ -74,25 +74,31 @@ struct Feed { frames: Box<dyn BufRead + Send>, backlog: usize, inherit: (bool, b
 struct Start<'a> {
     project: &'a str, name: &'a str, fork: Option<&'a str>, opts: (String, String), turn: Option<&'a Turn>,
     from_mail: bool, account: &'a str, machine: Option<&'a str>, about: Option<&'a str>,
+    /// the vault picked for a general conversation, checked (policy::picked_vault): its first start runs there
+    vault: Option<&'a str>,
 }
 
 /// A process started with a turn has it running, one started for later has none.
 fn start_turns(turn: Option<&Turn>) -> u32 { u32::from(turn.is_some()) }
 
 fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) -> Result<Proc, String> {
-    let Start { project, name, fork, opts, turn, from_mail, account, machine, about } = s;
+    let Start { project, name, fork, opts, turn, from_mail, account, machine, about, vault } = s;
     let main = need_vault(state)?;
     let saved = state.sids.lock().unwrap().get(project).filter(|s| s.provider == p.id() && p.valid_session(&s.sid)).cloned();
     let resume = saved.as_ref().map(|s| s.sid.clone());
     // a conversation runs in one vault and only there: a resumed one in the vault it started in (the provider finds
-    // it by that folder), a new one in its project's, the orchestrator's in the main vault
+    // it by that folder), a new one in its project's, a new general one in the vault picked for it, the orchestrator's
+    // in the main vault
     let dir = match &saved {
         // its vault's folder gone (moved, a disk not mounted): refused, not resumed with the main vault's rules
         Some(s) if !s.vault.is_empty() && !Path::new(&s.vault).is_dir() => return Err(format!("this conversation's vault is not here: {}", s.vault)),
         Some(s) if !s.vault.is_empty() => s.vault.clone(),
         Some(_) => main.clone(),
         None if orch::is_orch(project) => main.clone(),
-        None => about.map(|a| crate::project_home(state, a)).transpose()?.map_or_else(|| main.clone(), |(v, _)| v),
+        None => match about {
+            Some(a) => crate::project_home(state, a)?.0,
+            None => vault.map_or_else(|| main.clone(), String::from),
+        },
     };
     let shared = dir != main;
     // Codex and OpenCode get no fence (fence below): a shared vault's conversation is Claude Code's only
@@ -185,12 +191,13 @@ pub(crate) struct Msg {
     pub project: String, pub text: String, pub images: Option<Vec<Value>>, pub name: Option<String>, pub fork: Option<String>,
     pub model: Option<String>, pub effort: Option<String>, pub provider: Option<String>, pub mail: Option<bool>,
     pub told: Option<String>, pub context: Option<String>, pub machine: Option<String>, pub about: Option<String>,
+    pub vault: Option<String>,
 }
 
 /// Sends a message to a conversation: starts its process, keeps it, switches its model or restarts it (plan.rs), and
 /// writes the turn to its stdin.
 pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
-    let Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about } = r;
+    let Msg { project, text, images, name, fork, model, effort, provider, mail, told, context, machine, about, vault } = r;
     let p = provider_of(state, &project, provider.as_deref());
     // the orchestrator's conversations stay on this Mac, its tools are answered over this pipe (orch.rs)
     let machine = if orch::is_orch(&project) { Some(String::new()) } else { machine };
@@ -217,11 +224,13 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     let mut procs = state.procs.lock().unwrap();
     // a vault being added stops every agent once the server answered: a turn sent now would be cut off
     if crate::policy::adding() { return Err(trc("err.vault_adding")); }
+    // the vault picked for a general conversation, only one of the vaults here (checked under the vault lock)
+    let vault = crate::policy::picked_vault(&state.settings.lock().unwrap(), vault.as_deref())?;
     account = plan::account_for(account, procs.get(&project).map(Proc::running).as_ref(), p.id());
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
         if procs.contains_key(&project) { return Err(trc("err.agent_busy")); }
-        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: Some(&turn), from_mail: false, account: &account, machine: machine.as_deref(), about: about.as_deref() })?;
+        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: Some(&turn), from_mail: false, account: &account, machine: machine.as_deref(), about: about.as_deref(), vault: vault.as_deref() })?;
         procs.insert(project, x);
         return Ok(());
     }
@@ -238,7 +247,7 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
         }
     }
     if !procs.contains_key(&project) {
-        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: None, from_mail: mail.unwrap_or(false) || was_tainted || orch_taint, account: &account, machine: machine.as_deref(), about: about.as_deref() })?;
+        let x = spawn(app, state, p, Start { project: &project, name: &name, fork: fork.as_deref(), opts, turn: None, from_mail: mail.unwrap_or(false) || was_tainted || orch_taint, account: &account, machine: machine.as_deref(), about: about.as_deref(), vault: vault.as_deref() })?;
         procs.insert(project.clone(), x);
     }
     let line = p.input(&turn).ok_or_else(|| format!("{}: no input", p.id()))?;
@@ -268,7 +277,7 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let mut procs = state.procs.lock().unwrap();
     if crate::policy::adding() || procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
     if !procs.contains_key(key) {
-        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None })?;
+        let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None, vault: None })?;
         procs.insert(key.to_string(), x);
     }
     let x = procs.get_mut(key).unwrap();
@@ -291,7 +300,7 @@ pub(crate) fn ensure_local(app: &AppHandle, key: &str) -> Result<(), String> {
     if crate::policy::adding() { return Err(trc("err.vault_adding")); }
     let mut procs = state.procs.lock().unwrap();
     if procs.contains_key(key) { return Ok(()); }
-    let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None })?;
+    let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None, vault: None })?;
     procs.insert(key.into(), x);
     Ok(())
 }
