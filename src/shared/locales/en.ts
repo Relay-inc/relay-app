@@ -1022,6 +1022,7 @@ const en = {
   "note.secondOpinion": "Second opinion on {repo} #{n}, answering {agent}'s review",
   "qk.searching": "Searching tickets…",
   "card.other": "Other answer…",
+  "card.note": "Note on your choice…",
   "card.skip": "Skip",
   "nav.prs": "Pull requests",
   "nav.prsReview": "Waiting for your review",

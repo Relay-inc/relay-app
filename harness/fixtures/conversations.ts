@@ -336,9 +336,22 @@ export const pending = [
           question: "Which sync strategy should the contact import use?",
           multiSelect: false,
           options: [
-            { label: "Full resync", description: "Rebuild every contact nightly, simple but slow (40 min)" },
-            { label: "Incremental", description: "Only changed contacts via the updated_at cursor" },
-            { label: "Webhooks", description: "Push from the CRM, needs their admin to enable it" },
+            {
+              label: "Full resync",
+              description: "Rebuild every contact nightly, simple but slow (40 min)",
+              preview: "02:00  CRM ──all 48k contacts──▶ import ──▶ replace table\n       (40 min, nothing else runs)",
+            },
+            {
+              label: "Incremental",
+              description: "Only changed contacts via the updated_at cursor",
+              preview:
+                "every 15 min\n  CRM ──updated_at > cursor──▶ import ──▶ upsert\n                                      └──▶ cursor = max(updated_at)",
+            },
+            {
+              label: "Webhooks",
+              description: "Push from the CRM, needs their admin to enable it",
+              preview: "CRM ──contact.updated──▶ /hooks/crm ──▶ upsert\n(needs the CRM admin to switch it on)",
+            },
           ],
         },
         {

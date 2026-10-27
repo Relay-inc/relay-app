@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Question cards show an option's preview and take a note**: when an agent's question carries a mockup, code or sketch per option, the card shows the one you point at or pick; once you pick, you can add a note to your choice. Both go back to the agent with the answer
 - **Linear cycles as boards**: a Linear team that uses cycles offers Current cycle (follows whichever cycle is active) and each running and upcoming cycle next to All issues and its projects. A new issue on a cycle board lands in that cycle
 - **Vault usage**: the Usage view has two tabs, AI usage (as before) and Vault usage: how many notes Claude Code and Codex read, wrote and edited and how often they searched the vault, this week and today, the notes read and changed most (a click opens one) and the week per folder. Counted from the tool calls in their local logs; Codex reads through shell commands, so its numbers are an estimate (#281)
 - **Claude Design's questions reach the conversation**: when Claude Design answers with a clarifying question instead of a design, `design_prompt` and `design_create` return the question with each option's label and say that it waits; the next `design_prompt` answers it (option labels and/or free text) instead of failing with "no send button". `design_create` also names the project's GitHub repos in the first prompt, so the design matches the codebase

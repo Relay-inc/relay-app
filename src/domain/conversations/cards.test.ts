@@ -44,3 +44,40 @@ test("deny and a question's answers", () => {
     updatedInput: { ...ask.input, answers: { "Colors?": "Red, Blue, mauve" } },
   });
 });
+
+test("a question's annotations: the picked option's preview and the note on the choice", () => {
+  const ask: Pending = {
+    id: "c3",
+    project: "c:1",
+    kind: "question",
+    tool_name: "AskUserQuestion",
+    input: {
+      questions: [
+        {
+          question: "Layout?",
+          options: [
+            { label: "Grid", preview: "[ ][ ]\n[ ][ ]" },
+            { label: "List", preview: "[    ]\n[    ]" },
+          ],
+        },
+        { question: "Tags?", multiSelect: true, options: [{ label: "A", preview: "a" }, { label: "B" }] },
+      ],
+    },
+  };
+  assert.deepEqual(
+    decisionOf(ask, { picked: [["Grid"], ["A", "B"]], other: ["", ""], notes: [" tighter gaps ", ""] }),
+    {
+      behavior: "allow",
+      updatedInput: {
+        ...ask.input,
+        answers: { "Layout?": "Grid", "Tags?": "A, B" },
+        annotations: { "Layout?": { preview: "[ ][ ]\n[ ][ ]", notes: "tighter gaps" } },
+      },
+    },
+  );
+  // a note on a question left open goes nowhere; no preview or note, no annotations
+  assert.deepEqual(decisionOf(ask, { picked: [[], ["B"]], other: ["", ""], notes: ["lost", ""] }), {
+    behavior: "allow",
+    updatedInput: { ...ask.input, answers: { "Tags?": "B" } },
+  });
+});

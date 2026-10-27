@@ -568,6 +568,14 @@ const VIEWS = {
     await open(page, server.url, { sel: keys.question });
     await waitText("Which sync strategy should the contact import use?");
   },
+  // an option picked: its preview under the options, and the note on the choice (PR question-card-preview-notes)
+  "conversation-question-preview": async () => {
+    await open(page, server.url, { sel: keys.question });
+    await waitText("Which sync strategy should the contact import use?");
+    await page.getByRole("button", { name: "Incremental" }).first().click();
+    await page.getByPlaceholder("Note on your choice…").first().fill("Keep the nightly full run as a fallback");
+    await settle(page);
+  },
   "new-general-draft": async () => {
     await open(page, server.url);
     await page.evaluate(() => window.__harness.emit("menu", "new-general")); // the app menu's Cmd-Option-T

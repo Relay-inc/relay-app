@@ -252,6 +252,8 @@ const SCENARIOS = {
     await s.load({ sel: s.keys.question });
     s.check("question card shown", await waitText(page, "Which sync strategy should the contact import use?"));
     await click(button(page, "Incremental"));
+    s.check("the picked option's preview shows", await waitText(page, "updated_at > cursor"));
+    await page.getByPlaceholder("Note on your choice…").first().fill("Keep the nightly full run as a fallback");
     await click(button(page, "Client PM"));
     await click(button(page, "Dev team"));
     await click(button(page, "Answer"), 300);
@@ -259,6 +261,8 @@ const SCENARIOS = {
     const ask = await s.calls("answer");
     s.check("question answered once", ask.length === 1 && ask[0].args.id === "ask-0001");
     s.fact("question answers", ask[0]?.args.decision?.updatedInput?.answers ?? null);
+    const annotations = ask[0]?.args.decision?.updatedInput?.annotations?.["Which sync strategy should the contact import use?"];
+    s.check("the answer carries the picked preview and the note", annotations?.preview?.includes("updated_at > cursor") && annotations?.notes === "Keep the nightly full run as a fallback");
     await settle(page, 900);
     s.check("question card gone", (await visible(button(page, "Answer")).count()) === 0);
     // an agent action (`relay`) asks with the same card
