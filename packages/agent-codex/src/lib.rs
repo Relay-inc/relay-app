@@ -194,6 +194,7 @@ impl AgentProvider for Codex {
         }
     }
     fn usage(&self, env: &Env, since: i64) -> Vec<usage::Record> { with_logs(env, since, |l| l.tail.records()) }
+    fn vault_touches(&self, env: &Env, since: i64) -> Vec<usage::Touch> { with_logs(env, since, |l| l.touches.records()) }
 }
 
 #[cfg(test)]

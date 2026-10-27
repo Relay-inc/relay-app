@@ -717,6 +717,17 @@ const VIEWS = {
     await click(markers.card);
     await waitText("Build with agent");
   },
+  // a Linear team's current cycle as a board, and the board picker offering the cycles (PR linear-cycles)
+  "board-linear-cycle": async () => {
+    await open(page, server.url, { fixture: "linear" });
+    await click("Linear");
+    await waitText("Export invoices as UBL");
+  },
+  "board-linear-picker": async () => {
+    await VIEWS["board-linear-cycle"]();
+    await click("Current cycle");
+    await waitText("Cycle 42");
+  },
   "board-list": async () => {
     await VIEWS.board();
     await button("List").click();
@@ -783,6 +794,13 @@ const VIEWS = {
       .first()
       .click();
     await waitText("By model");
+    await settle(page);
+  },
+  // the Vault usage tab: reads, writes, edits and searches, the notes used most, per folder
+  "usage-vault": async () => {
+    await VIEWS.usage();
+    await page.getByRole("radio", { name: "Vault usage" }).click();
+    await waitText("Read most this week");
     await settle(page);
   },
   // the usage redesign in dark mode (#105)

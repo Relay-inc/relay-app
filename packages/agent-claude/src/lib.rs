@@ -313,6 +313,10 @@ impl AgentProvider for Claude {
         let roots: Vec<PathBuf> = config_dirs(env).iter().map(|d| PathBuf::from(format!("{d}/projects"))).collect();
         usage_log::records(&roots, &slug(env.vault), since)
     }
+    fn vault_touches(&self, env: &Env, since: i64) -> Vec<usage::Touch> {
+        let roots: Vec<PathBuf> = config_dirs(env).iter().map(|d| PathBuf::from(format!("{d}/projects"))).collect();
+        usage_log::touches(&roots, since)
+    }
 }
 
 #[cfg(test)]

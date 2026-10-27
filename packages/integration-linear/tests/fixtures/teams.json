@@ -1,6 +1,9 @@
 { "data": { "teams": { "nodes": [
   { "id": "b0000000-0000-4000-8000-000000000002", "name": "Website", "key": "WEB", "projects": { "nodes": [] } },
-  { "id": "b0000000-0000-4000-8000-000000000001", "name": "Antenna", "key": "ANT", "projects": { "nodes": [
+  { "id": "b0000000-0000-4000-8000-000000000001", "name": "Antenna", "key": "ANT", "cyclesEnabled": true,
+    "cycles": { "nodes": [ { "id": "e0000000-0000-4000-8000-000000000013", "number": 13, "name": null },
+      { "id": "e0000000-0000-4000-8000-000000000012", "number": 12, "name": "Launch" } ] },
+    "projects": { "nodes": [
     { "id": "c0000000-0000-4000-8000-000000000002", "name": "Vault app" },
     { "id": "c0000000-0000-4000-8000-000000000001", "name": "Onboarding" } ] } }
 ] } } }

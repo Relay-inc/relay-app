@@ -8,4 +8,20 @@ export type ProvLimits = {
   /** every account's limits, when the provider has more than one */
   accounts?: { dir: string; name?: string | null; limits: Limits }[] | null;
 };
-export type AllTokens = { providers: (Tokens & { provider: string })[]; today: Tally; week: Tally };
+export type AllTokens = {
+  providers: (Tokens & { provider: string })[];
+  today: Tally;
+  week: Tally;
+  vault?: VaultActivity;
+};
+
+// What the agents' tool calls did in the vault (notes are its .md files): counts today and this week, the notes read
+// and changed most this week, and the week per folder ("" is the vault's root).
+export type VaultCount = { read: number; write: number; edit: number; search: number; notes: number };
+export type VaultActivity = {
+  today: VaultCount;
+  week: VaultCount;
+  topRead: { path: string; n: number }[];
+  topChanged: { path: string; n: number }[];
+  folders: { folder: string; read: number; changed: number }[];
+};
