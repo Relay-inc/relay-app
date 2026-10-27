@@ -118,9 +118,10 @@ pub fn unwrap(wrapped_hex: &str, secret_hex: &str, vault: &str) -> Result<VaultK
 /// follow the reply (Client::call_bin). A test plugs in a server in memory.
 pub(crate) type Call = Box<dyn Fn(Value, Option<Vec<u8>>, Option<u64>) -> Result<(Value, Vec<u8>), String> + Send + Sync>;
 
-/// What the last manifest said about a path: its record's name and etag, and the plaintext hash sync::run plans with.
+/// What the last manifest said about a path: its record's name and etag, and the plaintext hash and size sync::run
+/// plans with (the size is what the Filter's max_size judged, so get holds the content to it).
 #[derive(Clone)]
-struct Seen { name: String, etag: String, hash: String }
+struct Seen { name: String, etag: String, hash: String, size: u64 }
 
 /// sync::Remote over a shared vault: encrypts on put, decrypts on get, maps the plaintext hashes sync::run plans
 /// with to the server's etags (cached from the last manifest).
@@ -149,7 +150,7 @@ impl SealedRemote {
         }
     }
     fn wrote(&self, path: &str, name: String, etag: &str, data: &[u8]) {
-        lock(&self.seen).insert(path.into(), Seen { name, etag: etag.into(), hash: sync::sha256_hex(data) });
+        lock(&self.seen).insert(path.into(), Seen { name, etag: etag.into(), hash: sync::sha256_hex(data), size: data.len() as u64 });
     }
 }
 impl sync::Remote for SealedRemote {
@@ -161,10 +162,10 @@ impl sync::Remote for SealedRemote {
         let (mut m, mut seen, mut bad) = (Manifest::new(), HashMap::new(), vec![]);
         for b in blobs {
             match unhex(&b.meta).ok_or_else(|| "meta is not hex".to_string()).and_then(|meta| self.key.open_meta(&b.name, &meta)) {
-                Ok(e) => { seen.insert(e.path.clone(), Seen { name: b.name, etag: b.etag, hash: e.hash.clone() }); m.insert(e.path.clone(), e); }
+                Ok(e) => { seen.insert(e.path.clone(), Seen { name: b.name, etag: b.etag, hash: e.hash.clone(), size: e.size }); m.insert(e.path.clone(), e); }
                 Err(why) => {
                     if let Some(e) = lock(&self.known).get(&b.name).cloned() {
-                        seen.insert(e.path.clone(), Seen { name: b.name.clone(), etag: b.etag.clone(), hash: e.hash.clone() });
+                        seen.insert(e.path.clone(), Seen { name: b.name.clone(), etag: b.etag.clone(), hash: e.hash.clone(), size: e.size });
                         m.insert(e.path.clone(), e);
                     }
                     bad.push(format!("{}: {why}", b.name));
@@ -179,6 +180,8 @@ impl sync::Remote for SealedRemote {
         let s = lock(&self.seen).get(path).cloned().ok_or("not in the manifest")?;
         let (_, rec) = (self.call)(json!({"op": "vault_get", "vault": self.vault, "name": s.name}), None, Some(MAX_RECORD))?;
         let d = self.key.open_data(&s.name, &rec)?;
+        // a meta that understates its content, to slip a big file past max_size: the hash alone would let it through
+        if d.len() as u64 != s.size { return Err("remote content is not the size its manifest says".into()); }
         // a record changed since the manifest, or a meta and a content from two different records
         if sync::sha256_hex(&d) != s.hash { return Err("remote content does not match its manifest".into()); }
         Ok(d)
@@ -473,6 +476,25 @@ mod tests {
         assert_eq!(r.get("b.md").unwrap(), b"bb");
     }
 
+    #[test]
+    fn a_meta_that_lies_about_the_size_is_refused_on_get() {
+        let (srv, key) = (Arc::new(Server::default()), VaultKey::generate());
+        let r = sealed(&srv, &key);
+        // a member with the key seals a big file with "s": 1, its hash right, so the filter sees one byte
+        let (big, (enc, names)) = (vec![b'x'; 4096], key.keys());
+        let n = name(&names, "big.md");
+        let meta = json!({"p": "big.md", "h": sync::sha256_hex(&big), "s": 1, "m": 1}).to_string();
+        let meta = seal(&enc, format!("meta:{n}").as_bytes(), meta.as_bytes()).unwrap();
+        let mut rec = (meta.len() as u32).to_be_bytes().to_vec();
+        rec.extend(meta);
+        rec.extend(seal(&enc, format!("data:{n}").as_bytes(), &big).unwrap());
+        lock(&srv.blobs).insert(n, rec);
+        assert_eq!(r.manifest().unwrap()["big.md"].size, 1);
+        assert_eq!(r.get("big.md").unwrap_err(), "remote content is not the size its manifest says");
+        r.put("ok.md", b"fine", 1, "").unwrap();
+        r.manifest().unwrap();
+        assert_eq!(r.get("ok.md").unwrap(), b"fine");
+    }
     #[test]
     fn a_broken_record_of_a_known_file_deletes_nothing() {
         let (srv, key) = (Arc::new(Server::default()), VaultKey::generate());

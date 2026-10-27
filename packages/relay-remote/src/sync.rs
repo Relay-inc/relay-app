@@ -49,7 +49,8 @@ impl Filter {
 }
 /// A name as APFS compares it, exact for ASCII names: lowercase, plus every character whose Unicode full case folding is
 /// ASCII (ſ, the Kelvin sign, ß and ẞ, the ff/fi/fl/ffi/ffl/st ligatures) or that NFD turns into ASCII, so
-/// `Syﬆem/Settings.json` still is `System/settings.json`. Others stay non-ASCII, which no ASCII name can equal; a
+/// `Syﬆem/Settings.json` still is `System/settings.json`. The format characters HFS+ ignores in a name (zero-width
+/// joiners, bidi marks, BOM) are dropped, so they cannot slip a guarded name past on a Mac OS Extended disk. Others stay non-ASCII, which no ASCII name can equal; a
 /// non-ASCII name is not matched as APFS would, so callers guard only ASCII ones.
 fn fold(s: &str) -> String {
     s.chars().map(|c| match c {
@@ -57,6 +58,8 @@ fn fold(s: &str) -> String {
         '\u{FB03}' => "ffi", '\u{FB04}' => "ffl", '\u{FB05}' | '\u{FB06}' => "st",
         // NFD singletons APFS also takes for the ASCII character
         '\u{37E}' => ";", '\u{1FEF}' => "`",
+        // HFS+ resolves a name without these, so `.g\u{200C}it` is `.git` there
+        '\u{200C}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{206A}'..='\u{206F}' | '\u{FEFF}' => "",
         c => return c.to_ascii_lowercase().to_string(),
     }.to_string()).collect()
 }
@@ -545,7 +548,11 @@ mod tests {
     }
     #[test] fn a_guarded_folder_lets_only_its_allowed_part_through_whatever_the_case() {
         let f = Filter { guarded: vec![s("System")], only: vec![s("System/rules"), s("System/reminders.md")], prefixes: vec![s("Private")], ..Default::default() };
-        for p in ["System/settings.json", "System/hooks/x.sh", "System/scripts/b.py", "system/hooks/x.sh", "System/Hooks/x.sh", "\u{17F}ystem/settings.json", "Sy\u{FB06}em/settings.json", "Sy\u{FB05}em/hooks/x.sh", "System/rulesx/a.md", "private/a.md"] { assert!(f.skips(p, false), "{p}"); }
+        for p in ["System/settings.json", "System/hooks/x.sh", "System/scripts/b.py", "system/hooks/x.sh", "System/Hooks/x.sh", "\u{17F}ystem/settings.json", "Sy\u{FB06}em/settings.json", "Sy\u{FB05}em/hooks/x.sh", "System/rulesx/a.md", "private/a.md",
+            "Sys\u{200C}tem/hooks/x.sh", "\u{FEFF}System/settings.json", "Sys\u{202E}tem/x.md", "System\u{206F}/x.md", "Pri\u{200F}vate/a.md"] { assert!(f.skips(p, false), "{p}"); }
+        let f = Filter { names: vec![s(".obsidian"), s(".git")], guarded: vec![s("System/skills")], ..Default::default() };
+        for p in ["Sys\u{200C}tem/skills/x.md", ".obsi\u{200C}dian/plugins/x.js", ".g\u{200C}it/hooks/x", "Notes/.\u{200D}git/x"] { assert!(f.skips(p, false), "{p}"); }
+        let f = Filter { guarded: vec![s("System")], only: vec![s("System/rules"), s("System/reminders.md")], prefixes: vec![s("Private")], ..Default::default() };
         for p in ["System/rules/a.md", "SYSTEM/Rules/a.md", "System/reminders.md", "Notes/settings.json"] { assert!(!f.skips(p, false), "{p}"); }
         assert!(!f.skips("System", true), "walked, to reach rules/");
         assert!(f.skips("System/hooks", true));

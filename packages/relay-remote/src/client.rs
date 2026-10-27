@@ -199,10 +199,15 @@ impl Client {
     }
     /// Take the device `fp` out of `vault` (an admin), or leave it (`fp` this device's own).
     pub fn vault_remove(&self, vault: &str, fp: &str) -> Result<(), String> { self.call(json!({"op": "vault_remove", "vault": vault, "fp": fp})).map(|_| ()) }
-    /// A shared vault there, as the other side of a sync round.
+    /// A shared vault there, as the other side of a sync round. A record (up to 64 MiB) or a manifest after a restart
+    /// there (every record hashed again) comes back with no body to size the wait by, so those two get as long as `slow`:
+    /// the usual wait fails them every round over a slow link. A put's wait already grows with its body.
     pub fn sealed(&self, vault: &str, key: VaultKey) -> SealedRemote {
         let c = self.clone();
-        SealedRemote::new(vault, key, Box::new(move |req, body, want| c.call_bin(req, body, want, Duration::ZERO)))
+        SealedRemote::new(vault, key, Box::new(move |req, body, want| {
+            let longer = if matches!(req["op"].as_str(), Some("vault_get" | "vault_manifest")) { Duration::from_secs(300) } else { Duration::ZERO };
+            c.call_bin(req, body, want, longer)
+        }))
     }
 
     pub fn info(&self) -> Result<Info, String> {
