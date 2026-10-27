@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Vault usage**: the Usage view has two tabs, AI usage (as before) and Vault usage: how many notes Claude Code and Codex read, wrote and edited and how often they searched the vault, this week and today, the notes read and changed most (a click opens one) and the week per folder. Counted from the tool calls in their local logs; Codex reads through shell commands, so its numbers are an estimate (#281)
 - **Claude Design's questions reach the conversation**: when Claude Design answers with a clarifying question instead of a design, `design_prompt` and `design_create` return the question with each option's label and say that it waits; the next `design_prompt` answers it (option labels and/or free text) instead of failing with "no send button". `design_create` also names the project's GitHub repos in the first prompt, so the design matches the codebase
 - **Shared vaults on a relay-server**: Settings › General › Shared vaults makes a vault on a paired machine, or joins one with an invite link (`relay://…`, single use, 24 h). The server keeps only encrypted files, sealed on each Mac, and every Mac syncs the vault into a folder of its own. A conversation stays in its project's vault: it cannot read your other vaults, nothing a member writes runs on your Mac, and your own mail, reminders and calendar stay out of it. A vault's conversations run with Claude Code, on this Mac. What the fence does and does not do: `docs/shared-vaults.md` (#278)
 

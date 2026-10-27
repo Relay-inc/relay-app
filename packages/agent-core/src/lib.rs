@@ -273,6 +273,9 @@ pub trait AgentProvider: Sync {
     fn limits(&self, _env: &Env) -> usage::Limits { usage::Limits::Off("unsupported".into()) }
     /// Token usage since `since` (epoch ms), read incrementally from the provider's logs ([`usage::Tail`]).
     fn usage(&self, _env: &Env, _since: i64) -> Vec<usage::Record> { vec![] }
+    /// The files its tool calls read, wrote and searched since `since` (epoch ms), read incrementally like `usage`;
+    /// the app keeps the vault's for the Usage view's Vault tab.
+    fn vault_touches(&self, _env: &Env, _since: i64) -> Vec<usage::Touch> { vec![] }
 }
 
 /// A turn's error that says the account's limit is used up: "You've hit your limit", "You've hit your weekly limit ·

@@ -6,8 +6,9 @@
 //! - Tokens: every assistant message in ~/.claude/projects/**/*.jsonl, read incrementally (each file
 //!   from where the last read stopped), deduplicated by message and request id, priced at API list
 //!   prices as an estimate. Only files touched in the last 8 days are read.
+//! - Vault activity: the files the same transcripts' tool calls read, wrote and searched, read the same way.
 
-use agent_core::usage::{now_ms, parse_ts, Limits, Record, Tail, Window};
+use agent_core::usage::{now_ms, parse_ts, shell_touches, Act, Limits, Record, Tail, Touch, Window};
 use serde_json::Value;
 use std::collections::HashSet;
 use std::fs;
@@ -91,6 +92,44 @@ fn refresh(t: &mut Tail<Rec>, root: &Path, since: i64) {
 fn to_record(r: Rec, vault_dir: &str) -> Record {
     Record { at: r.at, cost: r.cost(), vault: !vault_dir.is_empty() && r.dir == vault_dir, session: r.sid, model: r.model,
         input: r.input, output: r.output, cache_read: r.cache_read, cache_write: r.write_5m + r.write_1h }
+}
+
+/// The files the tool calls in transcript lines touched: Read, Write, Edit and MultiEdit by their file, Grep and Glob
+/// by the folder they searched (the line's cwd when none), Bash by the notes its command names. `seen` holds tool
+/// call ids already counted (forks copy earlier messages).
+pub fn parse_touches(text: &str, since: i64, seen: &mut HashSet<String>) -> Vec<Touch> {
+    let mut out = vec![];
+    for line in text.lines() {
+        if !line.contains("\"tool_use\"") { continue; } // cheap skip before parsing
+        let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+        let Some(at) = v["timestamp"].as_str().and_then(parse_ts).filter(|&at| at >= since) else { continue };
+        let cwd = v["cwd"].as_str().unwrap_or("");
+        for b in v["message"]["content"].as_array().into_iter().flatten().filter(|b| b["type"] == "tool_use") {
+            if b["id"].as_str().is_some_and(|id| !seen.insert(id.to_string())) { continue; }
+            let input = &b["input"];
+            let file = |act| input["file_path"].as_str().map(|p| vec![(act, p.to_string())]).unwrap_or_default();
+            let acts = match b["name"].as_str().unwrap_or("") {
+                "Read" => file(Act::Read),
+                "Write" => file(Act::Write),
+                "Edit" | "MultiEdit" => file(Act::Edit),
+                "Grep" | "Glob" => vec![(Act::Search, input["path"].as_str().unwrap_or(cwd).to_string())],
+                "Bash" => shell_touches(input["command"].as_str().unwrap_or(""), cwd),
+                _ => vec![],
+            };
+            out.extend(acts.into_iter().map(|(act, path)| Touch { at, act, path }));
+        }
+    }
+    out
+}
+
+static TOUCHES: Mutex<Option<Tail<Touch>>> = Mutex::new(None);
+
+/// What the transcripts under each root gained since the last call as touches, and every touch since `since`.
+pub fn touches(roots: &[std::path::PathBuf], since: i64) -> Vec<Touch> {
+    let mut t = TOUCHES.lock().unwrap();
+    let t = t.get_or_insert_with(Tail::default);
+    for root in roots { t.refresh(root, "jsonl", since, |x| x.at, |_, text, seen| parse_touches(text, since, seen)); }
+    t.records()
 }
 
 /// The keychain item the claude CLI keeps its login in: one per config folder, the folder's sha256 in the name
@@ -235,6 +274,35 @@ not json
         assert_eq!(c.records().len(), before + 1);
     }
 
+    #[test]
+    fn tool_calls_as_touches() {
+        let line = |ts: &str, id: &str, name: &str, input: Value| serde_json::json!({"type": "assistant", "timestamp": ts, "cwd": "/v",
+            "message": {"content": [{"type": "tool_use", "id": id, "name": name, "input": input}]}}).to_string();
+        let text = [
+            line("2026-09-30T10:00:00Z", "t1", "Read", serde_json::json!({"file_path": "/v/A.md"})),
+            line("2026-09-30T10:00:00Z", "t1", "Read", serde_json::json!({"file_path": "/v/A.md"})), // a fork's copy
+            line("2026-09-30T10:01:00Z", "t2", "Write", serde_json::json!({"file_path": "/v/B.md"})),
+            line("2026-09-30T10:02:00Z", "t3", "MultiEdit", serde_json::json!({"file_path": "/v/A.md"})),
+            line("2026-09-30T10:03:00Z", "t4", "Grep", serde_json::json!({"pattern": "x"})),
+            line("2026-09-30T10:04:00Z", "t5", "Glob", serde_json::json!({"pattern": "*.md", "path": "/w"})),
+            line("2026-09-30T10:05:00Z", "t6", "Bash", serde_json::json!({"command": "head -5 Notes/C.md"})),
+            line("2026-09-30T10:06:00Z", "t7", "WebFetch", serde_json::json!({"url": "https://x"})),
+            line("2026-09-20T10:00:00Z", "t8", "Read", serde_json::json!({"file_path": "/v/Old.md"})),
+        ].join("\n");
+        let got: Vec<(Act, String)> = parse_touches(&text, WEEK, &mut HashSet::new()).into_iter().map(|t| (t.act, t.path)).collect();
+        assert_eq!(got, vec![(Act::Read, "/v/A.md".into()), (Act::Write, "/v/B.md".into()), (Act::Edit, "/v/A.md".into()),
+            (Act::Search, "/v".into()), (Act::Search, "/w".into()), (Act::Read, "/v/Notes/C.md".into())]);
+    }
+    /// cargo test -p agent-claude real_vault_activity -- --ignored --nocapture: this Mac's last week in ~/vault
+    #[test]
+    #[ignore]
+    fn real_vault_activity() {
+        let home = std::env::var("HOME").unwrap();
+        let since = now_ms() - agent_core::usage::KEEP_MS;
+        let t = touches(&[format!("{home}/.claude/projects").into()], since);
+        let v = agent_core::usage::vault_activity(&t, &format!("{home}/vault"), now_ms() - 86_400_000, now_ms() - 7 * 86_400_000);
+        println!("{} touches\n{}", t.len(), serde_json::to_string_pretty(&v).unwrap());
+    }
     #[test]
     fn limits_from_the_endpoint() {
         let v: Value = serde_json::from_str(r#"{"five_hour":{"utilization":3.0,"resets_at":"2026-09-30T21:10:00+00:00"},

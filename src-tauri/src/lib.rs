@@ -1369,17 +1369,19 @@ async fn agent_commands(app: AppHandle, state: State<'_, App>, provider: String)
     }).await.map_err(|e| e.to_string())
 }
 
-/// Token usage per switched-on provider and over all of them. `today` and `week` are the local starts of the
-/// day and the week, in ms. Each provider reads only what its logs gained since the last call.
+/// Token usage per switched-on provider and over all of them, and what their tool calls did in the vault. `today`
+/// and `week` are the local starts of the day and the week, in ms. Each provider reads only what its logs gained
+/// since the last call.
 #[tauri::command]
 async fn usage_tokens(app: AppHandle, state: State<'_, App>, today: i64, week: i64) -> Result<Value, String> {
     let on = agents::enabled(&state.settings.lock().unwrap());
     let bufs: Vec<_> = on.into_iter().map(|p| (p, env_of(&app, &state, p))).collect();
     // the app's own conversations by their key, so the UI can show their title
     let keys: HashMap<(String, String), String> = state.sids.lock().unwrap().iter().map(|(k, s)| ((s.provider.clone(), s.sid.clone()), k.clone())).collect();
+    let vault = vault(&state);
     tauri::async_runtime::spawn_blocking(move || {
         let since = usage::now_ms() - usage::KEEP_MS;
-        let mut all = vec![];
+        let (mut all, mut touches) = (vec![], vec![]);
         let providers: Vec<Value> = bufs.iter().map(|(p, eb)| {
             let recs = p.usage(&eb.env(), since);
             let mut v = usage::aggregate(&recs, today, week);
@@ -1388,10 +1390,11 @@ async fn usage_tokens(app: AppHandle, state: State<'_, App>, today: i64, week: i
             }
             v["provider"] = json!(p.id());
             all.extend(recs);
+            touches.extend(p.vault_touches(&eb.env(), since));
             v
         }).collect();
         let total = usage::aggregate(&all, today, week);
-        json!({"providers": providers, "today": total["today"], "week": total["week"]})
+        json!({"providers": providers, "today": total["today"], "week": total["week"], "vault": usage::vault_activity(&touches, &vault, today, week)})
     }).await.map_err(|e| e.to_string())
 }
 
