@@ -98,7 +98,7 @@ The server only parses `meta_len` (to list `meta` in the manifest) and checks it
 - Invite: the link secret is 32 random bytes. HKDF-SHA256 with salt `relay vault invite v1` and info `wrap` derives a
   ChaCha20-Poly1305 key, and `wrapped` = hex(`nonce || seal(aad = "invite:" + vault id, vault key)`).
 - On the Mac the vault key lives in Relay's data folder as `shared-<id>.key` (hex, 0600), like the mirror keys. It is
-  also the recovery key Relay shows once when the vault is made.
+  also the recovery key Relay shows when the vault is made, and again on its row in Settings.
 
 ## Invite link
 

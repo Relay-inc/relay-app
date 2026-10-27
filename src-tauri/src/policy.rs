@@ -99,13 +99,23 @@ pub fn nested(a: &str, b: &str) -> bool {
     a.starts_with(b) || b.starts_with(a)
 }
 
+/// The Claude config folders here: the accounts in Settings, and one removed from the list since that a conversation
+/// still runs on (as env_of has it), its transcripts are still there.
+fn config_dirs(st: &App, eb: &EnvBuf) -> Vec<String> {
+    let mut c = agent_claude::config_dirs(&eb.env());
+    c.extend(st.sids.lock().unwrap().values().filter(|x| x.provider == "claude" && !x.account.is_empty()).map(|x| x.account.clone()));
+    c.sort();
+    c.dedup();
+    c
+}
+
 /// A conversation in `eb.vault` fenced in, in its provider's opts: `deny` gets the fence's rules, and another vault
 /// than the main one `fenced` (agent-claude: no own MCP servers or connectors, no hooks, no auto memory, auto mode).
 pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
     let s = st.settings.lock().unwrap().clone();
     let all = all_vaults(&s);
     let shared = all.first().is_some_and(|main| *main != eb.vault);
-    let configs = agent_claude::config_dirs(&eb.env());
+    let configs = config_dirs(st, eb);
     let data = data_dir(app).to_string_lossy().into_owned();
     let mut rules = fence(&eb.vault, &all, &configs, shared.then_some(data.as_str()));
     if !shared && all.len() > 1 { rules.extend(shared_copies(&data)); }
@@ -128,7 +138,8 @@ pub const SHARED_NO_READ: &str = "In a shared vault, reading the user's own mail
 /// lock spawn holds while it fences and starts an agent, so none starts in between with the old fence.
 pub fn may_add_vault(app: &AppHandle) -> Result<(), String> {
     let st = app.state::<App>();
-    if st.procs.lock().unwrap().values().any(|p| !p.remote && p.turns.busy()) { return Err(trc("err.refence_busy")); }
+    let capturing = !CAPTURES.lock().unwrap().is_empty();
+    if capturing || st.procs.lock().unwrap().values().any(|p| !p.remote && p.turns.busy()) { return Err(trc("err.refence_busy")); }
     let open = app.state::<pty::Ptys>().agents();
     if open > 0 { return Err(trc_v("err.refence_terminals", &open.to_string())); }
     Ok(())
@@ -144,8 +155,12 @@ pub fn hold_for_vault(app: &AppHandle) -> std::sync::MutexGuard<'_, ()> {
         for k in keys { if let Some(mut p) = procs.remove(&k) { p.child.kill().ok(); } }
     }
     app.state::<pty::Ptys>().stop_agents();
+    // a capture started after may_add_vault looked: it runs with the old fence
+    for pid in CAPTURES.lock().unwrap().iter() { std::process::Command::new("kill").args(["-9", &pid.to_string()]).status().ok(); }
     gate
 }
+/// The vault captures running now (lib.rs capture_vault), by pid: busy like a turn for a vault change.
+pub static CAPTURES: std::sync::Mutex<Vec<u32>> = std::sync::Mutex::new(Vec::new());
 
 /// A folder a vault may be made, joined or added in: by its real path, fenceable, not inside another vault or holding
 /// one, and not holding Relay's data, the home folder or a Claude config folder (all of it would sync to the team).
@@ -165,7 +180,7 @@ pub fn check_folder(folder: &str, others: &[String], protected: &[String], empty
 /// The folders no vault may hold or sit in: Relay's data and the Claude config folders (the home folder: check_folder).
 pub fn protected(app: &AppHandle, eb: &EnvBuf) -> Vec<String> {
     let mut p = vec![data_dir(app).to_string_lossy().into_owned()];
-    p.extend(agent_claude::config_dirs(&eb.env()));
+    p.extend(config_dirs(&app.state::<App>(), eb));
     p.iter().map(|x| crate::vault::canon(x)).collect()
 }
 

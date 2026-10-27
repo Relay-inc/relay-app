@@ -615,13 +615,14 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
     if !p.valid_session(&sid) || state.machines.bind_of(&key).is_some() { return Ok(()); }
     let mut eb = env_for(&app, &state, p, &key);
     if eb.vault.is_empty() { return Ok(()); }
-    // fenced in like the conversation it closes: it runs unasked, in that conversation's vault, on what was said there
-    fence_in(&app, &state, &mut eb);
-    let deny: Vec<String> = eb.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
     // on the account the session was recorded on, its transcript is there
     let account = account_of(&state, p, &key, "sonnet");
-    let prompt = CAPTURE_PROMPT;
-    let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
+    // fenced in like the conversation it closes (it runs unasked, in that conversation's vault, on what was said
+    // there), and started under the vault lock like a conversation: a vault change waits for it or stops it
+    let mut child = {
+        let _gate = state.vault_gate.lock().unwrap();
+        fence_in(&app, &state, &mut eb);
+        let deny: Vec<String> = eb.opts["deny"].as_array().into_iter().flatten().filter_map(Value::as_str).map(String::from).collect();
         let mut c = Command::new(&eb.bin);
         c.args(["-p", "--resume", &sid, "--fork-session", "--no-session-persistence", "--model", "sonnet", "--strict-mcp-config",
                 "--tools", "Read,Glob,Grep,Edit,Write", "--allowedTools", "Read,Glob,Grep,Edit,Write"])
@@ -631,10 +632,17 @@ async fn capture_vault(app: AppHandle, state: State<'_, App>, key: String) -> Re
             .current_dir(&eb.vault).env("PATH", &eb.path).env_remove("ANTHROPIC_API_KEY")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped());
         if account.is_empty() { c.env_remove("CLAUDE_CONFIG_DIR"); } else { c.env("CLAUDE_CONFIG_DIR", &account); }
-        let mut c = c.spawn()?;
-        c.stdin.take().unwrap().write_all(prompt.as_bytes())?;
-        c.wait_with_output()
-    }).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
+        let child = c.spawn().map_err(|e| e.to_string())?;
+        policy::CAPTURES.lock().unwrap().push(child.id());
+        child
+    };
+    let pid = child.id();
+    let out = tauri::async_runtime::spawn_blocking(move || -> std::io::Result<std::process::Output> {
+        child.stdin.take().unwrap().write_all(CAPTURE_PROMPT.as_bytes())?;
+        child.wait_with_output()
+    }).await;
+    policy::CAPTURES.lock().unwrap().retain(|p| *p != pid);
+    let out = out.map_err(|e| e.to_string())?.map_err(|e| e.to_string())?;
     if !out.status.success() { return Err(String::from_utf8_lossy(&out.stderr).trim().chars().take(300).collect()); }
     Ok(())
 }
