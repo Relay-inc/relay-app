@@ -15,7 +15,7 @@ a PR. Versions follow
 
 ### Added
 
-- **A machine for shared vaults only**: pairing a machine in Settings › Machines can tick "Only for shared vaults". Your own vault, Claude context and memory never go to that machine, and conversations do not run there, so a team vault can live on a company server that never sees your private vault
+- **A machine for shared vaults only**: pairing a machine in Settings › Machines can tick "Only for shared vaults". Your own vault, Claude context and memory never go to that machine, and conversations do not run there, so a team vault can live on a company server that never sees your private vault (#284)
 
 ## [0.0.36] - 2026-10-27
 
