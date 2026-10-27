@@ -252,6 +252,8 @@ fn taken(s: &Value) -> Vec<String> {
 }
 /// A vault added to the settings (or replaced, by id), saved and told to both windows; its first round runs at once.
 fn add(app: &tauri::AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
+    // the conversations running now were fenced without this folder: they start again with it, before the first round
+    crate::refence(app, false)?;
     let s = {
         let mut s = state.settings.lock().unwrap();
         let mut all: Vec<Value> = s["sharedVaults"].as_array().cloned().unwrap_or_default();
@@ -288,6 +290,8 @@ pub async fn shared_vault_create(app: tauri::AppHandle, state: St<'_>, machine: 
     if name.is_empty() { return Err("give the vault a name".into()); }
     let folder = real_path(&folder)?;
     check_folder(&folder, &taken(&s), false)?;
+    // asked first: a conversation in a turn would be cut off by the restart that adding the vault needs
+    crate::refence(&app, true)?;
     let template = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let (c, at) = (state.machines.client(&m), folder.clone());
     let made = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
@@ -317,6 +321,7 @@ pub async fn shared_vault_join(app: tauri::AppHandle, state: St<'_>, link: Strin
     let s = state.settings.lock().unwrap().clone();
     let folder = real_path(&folder)?;
     check_folder(&folder, &taken(&s), true)?;
+    crate::refence(&app, true)?;
     // a vault this Mac is in already: joining again would wipe its key, base and trash below and leave its folder unsynced
     if let Some(had) = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.vault).and_then(|id| find(&s, &id.to_ascii_lowercase()).ok()) {
         return Err(format!("this Mac is in {} already, at {}", had.name, had.folder));

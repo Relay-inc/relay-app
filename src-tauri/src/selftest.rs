@@ -455,11 +455,27 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     r.step("pair with the server", tauri::async_runtime::block_on(machine_pair(app.clone(), app.state::<App>(), line, "server".into())).map(|v| v.to_string()));
     let mid = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
 
+    // a main-vault conversation running before the vault is made: it was fenced without the team folder
+    const EARLY: &str = "c:selftest-early";
+    let early = send(app.clone(), app.state::<App>(), EARLY.into(), "Answer with the single word ok.".into(), None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None)
+        .and_then(|_| turn_of(ev, EARLY, Duration::from_secs(120)));
+    r.step("a main-vault conversation runs before the vault is made", early.map(|t| t.concat()));
+
     let team = dir.join("team");
     let made = tauri::async_runtime::block_on(shared_vaults::shared_vault_create(app.clone(), app.state::<App>(), mid, "Team".into(), team.to_string_lossy().into()));
     r.step("make a shared vault", made.clone().map(|v| format!("id {}", v["id"])));
     let Ok(made) = made else { return };
     let id = made["id"].as_str().unwrap_or("").to_string();
+    // making the vault stopped it, and its next message starts it fenced from the team folder
+    r.step("making the vault restarts the running conversation", if st.procs.lock().unwrap().contains_key(EARLY) { Err("still running with its old fence".into()) } else { Ok("stopped".into()) });
+    // the stopped agent's reader reports its exit first: taken here, so the next turn is the new process's
+    turn_of(ev, EARLY, Duration::from_secs(5)).ok();
+    let again = send(app.clone(), app.state::<App>(), EARLY.into(), "Answer with the single word ok.".into(), None, Some("General: early".into()), None, Some("haiku".into()), None, None, None, None, None, None, None)
+        .and_then(|_| turn_of(ev, EARLY, Duration::from_secs(120)));
+    let pid = st.procs.lock().unwrap().get(EARLY).map(|p| p.child.id());
+    let args = pid.and_then(|p| std::process::Command::new("ps").args(["-ww", "-o", "args=", "-p", &p.to_string()]).output().ok()).map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+    let canon_team = crate::vault::canon(&team.to_string_lossy());
+    r.step("its next start is fenced from the team folder", again.and_then(|_| if args.contains(&format!("Read(/{canon_team}/**)")) { Ok("deny on the team folder".into()) } else { Err(format!("no deny on {canon_team} in {}", args.chars().take(300).collect::<String>())) }));
     let key_file = data_dir(app).join(format!("shared-{id}.key"));
     r.step("the key stays here, the folder starts as the starter vault", if key_file.is_file() && team.join("System/rules/core/work-state.md").is_file() { Ok(key_file.display().to_string()) } else { Err("key or starter vault missing".into()) });
     let status = |f: &dyn Fn(&Value) -> bool| wait(Duration::from_secs(40), || { let s = shared_vaults::shared_vaults_status(app.state::<App>()); f(&s[&id]).then_some(s[&id].clone()) });

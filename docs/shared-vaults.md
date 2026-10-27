@@ -63,6 +63,13 @@ would let read what your agent can read.
 - **The same lockdown in your own other vault folders.** Relay treats every vault but the main one this way, also a
   folder you added under Other vault folders: no own MCP servers or connectors, no hooks, auto mode, no reads of your
   mail, reminders or calendar.
+- **New vaults reach running conversations too.** A conversation's fence is fixed when its agent starts. Adding a
+  vault (made, joined, or a folder under Other vault folders) stops every agent running on this Mac and every
+  terminal tab that runs one, so the next message starts it again with the new fence. While one is in a turn, Relay
+  asks to wait instead of cutting it off. A conversation opened in an outside terminal (iTerm, Terminal) keeps its
+  old rules until it is started again.
+- **A project's key never moves.** A project of another vault than the main one is always "Name (folder)", clash or
+  not, so its conversations stay with it when the main vault gets or loses a project of that name.
 - **A main-vault conversation stays out too.** It may not read the shared vaults' trash, bases and keys in Relay's data
   folder.
 - **Not keep a removed member in.** The server refuses their device at the next connection. They keep what they

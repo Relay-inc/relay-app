@@ -9,9 +9,19 @@ use std::sync::Mutex;
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Manager, State};
 
-struct Pty { master: Box<dyn MasterPty + Send>, writer: Box<dyn Write + Send>, child: Box<dyn Child + Send + Sync> }
+/// `agent`: the shell runs a conversation's agent, started with that conversation's fence (lib.rs `refence` stops it).
+struct Pty { master: Box<dyn MasterPty + Send>, writer: Box<dyn Write + Send>, child: Box<dyn Child + Send + Sync>, agent: bool }
 #[derive(Default)]
 pub struct Ptys { map: Mutex<HashMap<u32, Pty>>, next: AtomicU32 }
+impl Ptys {
+    /// Stop the terminals that run an agent: they were started with a fence that misses a vault added since.
+    pub fn stop_agents(&self) -> usize {
+        let mut map = self.map.lock().unwrap();
+        let ids: Vec<u32> = map.iter().filter(|(_, p)| p.agent).map(|(id, _)| *id).collect();
+        for id in &ids { if let Some(mut p) = map.remove(id) { p.child.kill().ok(); } }
+        ids.len()
+    }
+}
 
 /// Where a project's shell starts: its first checkout in the brain's index/repos.json (dir -> note), else the vault.
 fn start_dir(vault: &str, project: &str) -> String {
@@ -33,6 +43,7 @@ pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, pr
     let (vault, in_vault) = super::project_home(&state, &project)?;
     if project.trim().is_empty() { return Err("bad project".into()); }
     let run = chat.map(|key| super::terminal_cmd(&app, &state, &key, None, name, Some(&project))).transpose()?;
+    let agent = run.is_some();
     let pair = native_pty_system().openpty(size(cols, rows)).map_err(|e| e.to_string())?;
     let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".into());
     let mut cmd = CommandBuilder::new(&shell);
@@ -46,7 +57,7 @@ pub fn pty_spawn(app: AppHandle, state: State<super::App>, ptys: State<Ptys>, pr
     let mut reader = pair.master.try_clone_reader().map_err(|e| e.to_string())?;
     let writer = pair.master.take_writer().map_err(|e| e.to_string())?;
     let id = ptys.next.fetch_add(1, Ordering::Relaxed) + 1;
-    ptys.map.lock().unwrap().insert(id, Pty { master: pair.master, writer, child });
+    ptys.map.lock().unwrap().insert(id, Pty { master: pair.master, writer, child, agent });
     std::thread::spawn(move || {
         let mut buf = [0u8; 8192];
         while let Ok(n) = reader.read(&mut buf) {

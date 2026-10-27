@@ -110,10 +110,11 @@ fn project_home(st: &App, project: &str) -> Result<(String, String), String> {
     let all = all_vaults(st);
     Ok(st.proj_vault.lock().unwrap().get(project).filter(|(v, _)| all.contains(v)).cloned().unwrap_or((main, project.to_string())))
 }
-/// The key a shared vault's project shows under: its name, or "Name (folder)" when a vault read before has that name
-/// too. Two projects with one name stay two projects, each in its own vault.
+/// The key a project of another vault than the main one goes by: always "Name (folder)", whether or not a vault read
+/// before has that name too. A key that changed when a clash came or went would move that project's conversations to
+/// another project while their sessions stay in this vault. Two such vaults with one folder name get a number, in the
+/// order of the settings.
 fn shared_key(taken: &HashMap<String, (String, String)>, name: &str, vault: &str) -> String {
-    if !taken.contains_key(name) { return name.to_string(); }
     let folder = Path::new(vault).file_name().map(|f| f.to_string_lossy().into_owned()).unwrap_or_else(|| vault.to_string());
     let base = format!("{name} ({folder})");
     (1..).map(|i| if i == 1 { base.clone() } else { format!("{name} ({folder} {i})") }).find(|k| !taken.contains_key(k)).unwrap()
@@ -194,6 +195,21 @@ fn fence_in(app: &AppHandle, st: &App, opts: &mut Value, dir: &str) {
         opts["deny"] = json!(deny);
     }
     if shared { opts["strict_mcp"] = json!(true); }
+}
+/// Before a vault is added (made, joined, or a folder under Other vault folders), every agent running here was fenced
+/// without it and could read it: stop them, so their next message starts them again with the new fence. `wait`: refuse
+/// while one is in a turn instead (asked first, so nothing is cut off); the second call, right before the change, stops
+/// all. Agents on a work machine see only the main vault's mirror there and stay. A conversation opened in an outside
+/// terminal (iTerm, Terminal) cannot be stopped from here.
+fn refence(app: &AppHandle, wait: bool) -> Result<(), String> {
+    let st = app.state::<App>();
+    let mut procs = st.procs.lock().unwrap();
+    if wait && procs.values().any(|p| !p.remote && p.turns.busy()) { return Err(trc("err.refence_busy")); }
+    let keys: Vec<String> = procs.iter().filter(|(_, p)| !p.remote).map(|(k, _)| k.clone()).collect();
+    for k in keys { if let Some(mut p) = procs.remove(&k) { p.child.kill().ok(); } }
+    drop(procs);
+    app.state::<pty::Ptys>().stop_agents();
+    Ok(())
 }
 /// Whether one vault folder is the other or lies inside it: a fence around one would then cover the other too.
 fn nested(a: &str, b: &str) -> bool {
@@ -301,6 +317,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("run_setup", ["Set Up Vault…", "Vault instellen…", "Configurer la vault…", "Vault einrichten…"]),
     ("err.no_vault", ["No vault: work-state.md not found in {v}", "Geen vault: work-state.md niet gevonden in {v}",
         "Pas de coffre : work-state.md introuvable dans {v}", "Kein Vault: work-state.md nicht gefunden in {v}"]),
+    ("err.refence_busy", ["A conversation is still working: adding a vault restarts every conversation, try again when its turn has ended", "Een gesprek is nog bezig: een vault toevoegen herstart elk gesprek, probeer opnieuw als de beurt klaar is",
+        "Une conversation travaille encore : ajouter un coffre redémarre chaque conversation, réessayez quand son tour est fini", "Ein Gespräch arbeitet noch: Einen Vault hinzuzufügen startet jedes Gespräch neu, versuche es nach dem Ende seiner Runde erneut"]),
     ("err.unfenceable_vault", ["A vault folder may not have [ ] * ? or \\ in its path: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * ? of \\ in het pad hebben: {v}. Relay kan gesprekken er dan niet buiten houden",
         "Un dossier de coffre ne peut pas contenir [ ] * ? ou \\ dans son chemin : {v}. Relay ne pourrait pas en tenir les conversations à l'écart", "Ein Vault-Ordner darf kein [ ] * ? oder \\ im Pfad haben: {v}. Relay könnte Gespräche nicht davon fernhalten"]),
     ("err.nested_vault", ["One vault lies inside the other: {v}. Each vault needs its own folder, so a conversation in one cannot see the other",
@@ -563,7 +581,8 @@ fn snapshot(app: AppHandle, state: State<App>) -> Result<Value, String> {
                 Ok((list, _)) => for mut p in list {
                     let name = p["name"].as_str().unwrap_or("").to_string();
                     let key = shared_key(&index, &name, &e);
-                    if key != name { renamed.push(key.clone()); }
+                    // the main vault (or a vault read before) has this name too: Settings says which ones
+                    if index.contains_key(&name) { renamed.push(key.clone()); }
                     p["name"] = json!(key);
                     p["vault"] = json!(e);
                     index.insert(key, (e.clone(), name));
@@ -1601,6 +1620,9 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
         if let Some(o) = std::iter::once(&v).chain(extra.iter()).chain(shared.iter()).find(|o| nested(&e, o)) { return Err(tr_v(lang, "err.nested_vault", &format!("{e}, {o}"))); }
         extra.push(e);
     }
+    // a folder added: the conversations running now were fenced without it
+    let before = own_extra(&state.settings.lock().unwrap());
+    if extra.iter().any(|e| !before.contains(e)) { refence(&app, true)?; refence(&app, false)?; }
     s["extraVaults"] = json!(extra);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {
@@ -2586,7 +2608,8 @@ mod vault_tests {
     fn a_name_in_two_vaults_is_two_projects() {
         let mut index: HashMap<String, (String, String)> = HashMap::new();
         index.insert("Northwind".into(), ("/me/vault".into(), "Northwind".into()));
-        assert_eq!(shared_key(&index, "Acme", "/team/shared"), "Acme");
+        // always qualified, clash or not: the key stays when the main vault gets or loses a project of that name
+        assert_eq!(shared_key(&index, "Acme", "/team/shared"), "Acme (shared)");
         assert_eq!(shared_key(&index, "Northwind", "/team/shared"), "Northwind (shared)");
         index.insert("Northwind (shared)".into(), ("/team/shared".into(), "Northwind".into()));
         assert_eq!(shared_key(&index, "Northwind", "/other/shared"), "Northwind (shared 2)");

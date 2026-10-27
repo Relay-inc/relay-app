@@ -1057,7 +1057,7 @@ const VIEWS = {
     // a project shows once it has conversations; the search finds both of the team vault's
     await page.getByPlaceholder("Search").fill("h");
     await waitText("Team Handbook");
-    await page.getByText("Hiring 2027", { exact: true }).scrollIntoViewIfNeeded();
+    await page.getByText("Hiring 2027 (Team vault)", { exact: true }).scrollIntoViewIfNeeded();
   },
   "settings-interface": async () => {
     await settingsPage("General");

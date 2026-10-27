@@ -132,7 +132,7 @@ export const projectNames = P.map(p => p.name);
 export const TEAM_VAULT = "/Users/me/Team vault";
 export const teamProjects = [
   {
-    name: "Team Handbook",
+    name: "Team Handbook (Team vault)",
     context: "Team",
     state: "Active",
     last: ymd(NOW - DAY),
@@ -156,7 +156,7 @@ export const teamProjects = [
     vault: TEAM_VAULT,
   },
   {
-    name: "Hiring 2027",
+    name: "Hiring 2027 (Team vault)",
     context: "Team",
     state: "Quiet",
     last: ymd(NOW - 9 * DAY),
