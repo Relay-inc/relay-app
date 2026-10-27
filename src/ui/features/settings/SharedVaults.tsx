@@ -33,8 +33,8 @@ const EDGE = "border-b border-s-border px-3.5 py-3 last:border-b-0";
 const ROW = `grid min-w-0 grid-cols-1 gap-2.5 ${EDGE}`;
 const LABEL = "text-xs font-medium text-s-fg";
 
-/** Settings › Machines › Shared vaults: the vaults on a server that is not one of this Mac's machines (joined with a
- *  link), each with its last round, invites, members and Leave, then Join with a link… or its form. */
+/** Settings › Machines › Workspaces: the workspaces on a server that is not one of this Mac's machines (joined with a
+ *  link), each with its last round, invites, members and Leave, then Join a workspace with a link… or its form. */
 export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   const { t } = useT();
   return (
@@ -47,7 +47,7 @@ export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   );
 }
 
-/** Under a machine's row on Settings › Machines: the shared vaults it keeps, then New shared vault on this machine… or
+/** Under a machine's row on Settings › Machines: the workspaces it keeps, then New workspace on this machine… or
  *  its form, set off from the machines by an indent. Not on a server this Mac only keeps as a vault's admin: it may
  *  not make vaults there. */
 export function MachineVaults({ machine, vaults }: { machine: Machine; vaults: SharedVault[] }) {
@@ -319,7 +319,7 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   );
 }
 
-/** Under a machine (`machine` its id) New shared vault on this machine…, in Shared vaults ("") Join with a link…, or
+/** Under a machine (`machine` its id) New workspace on this machine…, in Workspaces ("") Join a workspace with a link…, or
  *  the form it opened. The one form and its message show where `form.machine` says. */
 function SharedForm({ machine }: { machine: string }) {
   const { t } = useT();

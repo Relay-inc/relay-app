@@ -10,7 +10,7 @@ The four memory layers are in `CLAUDE.md`. Per project, the **card** (frontmatte
 ## When to update
 Update **as soon as a piece of work is finished** (a document written, a decision taken, a mail drafted, a status reconstructed) and on explicit signals (the update-memory skill). Nobody says "done", and the next member to pick the project up only has what was written down.
 
-**Scan every exchange, not just finished work.** Before closing a reply, check what was just said or shown: a new fact about a project or person, a decision, a correction of something the vault got wrong, a date, a commitment. If a future session needs it, write it down in its home right away, without asking. A one-line addition beats a lost detail, but never as another paragraph on the Status.
+**Scan every exchange, not just finished work.** Before closing a reply, check what was just said or shown: a new fact about a project or person, a decision, a correction of something the workspace got wrong, a date, a commitment. If a future session needs it, write it down in its home right away, without asking. A one-line addition beats a lost detail, but never as another paragraph on the Status.
 
 ## Update process
 

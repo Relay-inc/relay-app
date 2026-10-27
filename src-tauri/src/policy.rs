@@ -141,7 +141,7 @@ pub fn fence_in(app: &AppHandle, st: &App, eb: &mut EnvBuf) {
 /// calendar could end up in that vault. Its session records the vault at init, before any tool runs.
 pub fn in_shared_vault(st: &App, key: &str) -> bool { st.sids.lock().unwrap().get(key).is_some_and(|s| !s.vault.is_empty()) }
 /// What such a conversation gets instead of a read of the user's own data.
-pub const SHARED_NO_READ: &str = "In a shared vault, reading the user's own mail, reminders and calendar is off: what a note there asks for could end up in the team's vault. Writing to the user (a reminder, a mail draft) still works.";
+pub const SHARED_NO_READ: &str = "In a workspace or another vault folder, reading the user's own mail, reminders and calendar is off: what a note there asks for could end up in a folder the team shares. Writing to the user (a reminder, a mail draft) still works.";
 
 /// A vault added while agents run here (made, joined, or a folder of the user's own): every agent was fenced without
 /// it. Asked first (`may_add_vault`, nothing stopped), which reserves the change: until the caller drops the reservation

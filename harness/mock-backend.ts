@@ -366,7 +366,7 @@ function handle(cmd: string, a: Args): unknown {
     // the key this Mac holds, the same one `shared_vault_create` gave
     case "shared_vault_recovery":
       if (!(settings.sharedVaults ?? []).some((x: { id: string }) => x.id === a.id))
-        return Promise.reject(`no shared vault ${a.id}`);
+        return Promise.reject(`no workspace ${a.id}`);
       return hex(64, 5);
     case "shared_vault_join": {
       const id = /vault=([0-9a-f]{16})/.exec(a.link)?.[1];
@@ -386,7 +386,7 @@ function handle(cmd: string, a: Args): unknown {
     }
     case "shared_vault_info": {
       const v = (settings.sharedVaults ?? []).find((x: { id: string }) => x.id === a.id);
-      if (!v) return Promise.reject(`no shared vault ${a.id}`);
+      if (!v) return Promise.reject(`no workspace ${a.id}`);
       if (fixture === "shared-keeper" && v.role !== "admin") {
         v.role = "admin";
         settings.machines = [...(settings.machines ?? []), structuredClone(vault.keeperMachine)];

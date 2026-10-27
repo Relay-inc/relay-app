@@ -1,4 +1,4 @@
-//! Shared vaults (docs/shared-vaults.md): a vault several people share through this server. Each member's Relay syncs
+//! Shared vaults (docs/workspaces.md): a vault several people share through this server. Each member's Relay syncs
 //! it into a plain folder on its own Mac; here it is only ciphertext, one record per file, named by an HMAC of its path,
 //! under a key this server never has. Access is by device certificate: a vault's members are fingerprints, and a device
 //! that came in through an invite link is a vault-only client that may do nothing else here.

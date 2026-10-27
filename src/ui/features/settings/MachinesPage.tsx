@@ -24,7 +24,7 @@ const NO_MACHINES: Machine[] = [];
 const NO_VAULTS: SharedVault[] = [];
 
 /** Machines: other computers in the LAN running relay-server. Pairing, the online check and the project folders on
- *  each machine, the shared vaults under the machine that keeps them. Shared vaults on top lists the ones on a server
+ *  each machine, the workspaces under the machine that keeps them. Workspaces on top lists the ones on a server
  *  that is not one of these machines (joined with a link) and joins one. The projects are read and every machine is
  *  checked the first time the page shows. */
 export function MachinesPage({ active }: { active: boolean }) {

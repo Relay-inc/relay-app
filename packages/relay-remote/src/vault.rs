@@ -1,4 +1,4 @@
-//! A vault several people share through a relay-server (docs/shared-vaults.md). The server stores one record per file
+//! A vault several people share through a relay-server (docs/workspaces.md). The server stores one record per file
 //! and never has the key: the path and the content are sealed here with ChaCha20-Poly1305, the record is named by an
 //! HMAC of its path, and both seals bind that name, so the server can neither read a record nor pass one off as
 //! another. `SealedRemote` puts this behind `sync::Remote`, so `sync::run` syncs a shared vault like the mirror.

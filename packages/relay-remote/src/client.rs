@@ -24,7 +24,7 @@ const ANSWER: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct Client { pub addr: String, pub fp: String, id: Identity, link: Option<String> }
 
-/// Join a shared vault with an invite link (docs/shared-vaults.md): connect pinned to the link's server with this
+/// Join a shared vault with an invite link (docs/workspaces.md): connect pinned to the link's server with this
 /// device's identity, prove the link's code, and unwrap the vault key the server kept for the invite with the link's
 /// secret, which never went to the server. Returns the line, the vault and the role, and the key.
 pub fn vault_join(line: &str, id: &Identity, name: &str) -> Result<(PairLine, Joined, VaultKey), String> {
@@ -171,7 +171,7 @@ impl Client {
     /// One mirrored folder there, as the other side of a sync round.
     pub fn root(&self, root: &str) -> RemoteRoot { RemoteRoot { c: self.clone(), root: root.into() } }
 
-    // ---------- shared vaults there (docs/shared-vaults.md): ciphertext only, the key stays with the members
+    // ---------- shared vaults there (docs/workspaces.md): ciphertext only, the key stays with the members
     /// A new shared vault there, with this device as its admin.
     pub fn vault_create(&self, name: &str) -> Result<VaultRef, String> { field(self.call(json!({"op": "vault_create", "name": name}))?, "vault") }
     pub fn vault_info(&self, vault: &str) -> Result<VaultInfo, String> { field(self.call(json!({"op": "vault_info", "vault": vault}))?, "vault") }

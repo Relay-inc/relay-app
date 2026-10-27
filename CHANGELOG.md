@@ -15,7 +15,8 @@ a PR. Versions follow
 
 ### Changed
 
-- **A new shared vault starts as a team vault**: a shared vault made in an empty folder no longer starts as a personal vault. Its rules say several people write here and that personal notes stay in each member's own vault, `team.md` (what the vault is for, who works in it, how the team works together) replaces the personal profile, and there is no Personal context. Ask Claude to set it up: the setup now interviews you about the team, and offers to convert a shared vault that started as a personal one. Every member's Mac gets Relay's skills in the vault locally, also after joining (skills never sync), and a skill folder of your own with the same name is left alone (#290)
+- **Shared vaults are now called workspaces**: Settings › Machines, the composer and the sidebar speak of workspaces, the team space a relay-server syncs into a folder on each member's Mac. Your own vault stays your vault, and the composer's pick now reads Runs in, with Your vault as its first entry (#290)
+- **A new workspace starts as a team workspace**: a workspace made in an empty folder no longer starts as a personal vault. Its rules say several people write here and that personal notes stay in each member's own vault, `team.md` (what the workspace is for, who works in it, how the team works together) replaces the personal profile, and there is no Personal context. Ask Claude to set it up: the setup now interviews you about the team, and offers to convert a workspace that started as a personal vault. Every member's Mac gets Relay's skills in the workspace locally, also after joining (skills never sync), and a skill folder of your own with the same name is left alone (#290)
 
 ## [0.0.38] - 2026-10-27
 

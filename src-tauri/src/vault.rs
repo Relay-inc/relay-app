@@ -129,7 +129,7 @@ pub const DEFAULT_DIR: &str = "Relay";
 pub fn create_default(template: &Path, dest: &Path) -> Result<(), String> { create(template, None, dest) }
 /// What the team starter leaves out of the starter vault: the parts about one person. A shared vault is the team's.
 pub const TEAM_DROP: [&str; 3] = ["System/rules/core/user-profile.md", "System/rules/personal", "Contexts/Personal"];
-/// The team starter, what a shared vault made in an empty folder starts as (docs/shared-vaults.md): the starter vault
+/// The team starter, what a shared vault made in an empty folder starts as (docs/workspaces.md): the starter vault
 /// without TEAM_DROP, with the team overlay (the app's resources/team-vault: CLAUDE.md, team.md, the team setup skill)
 /// copied over it. Otherwise as `create_default`.
 pub fn create_team(template: &Path, overlay: &Path, dest: &Path) -> Result<(), String> { create(template, Some(overlay), dest) }

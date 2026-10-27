@@ -127,10 +127,10 @@ export const projects = P.map(p => ({
 }));
 export const projectNames = P.map(p => p.name);
 
-/** The shared fixture: a team vault next to the main one. Its projects' names are keys (the name and the vault's id,
+/** The shared fixture: a side vault (another vault folder) next to the main one. Its projects' names are keys (the name and the vault's id,
  *  never shown), their `label` what shows. Both vaults have a Northwind Portal: two projects, the team's labelled
- *  "Northwind Portal (Team vault)", each conversation in its own vault. */
-export const TEAM_VAULT = "/Users/me/Team vault";
+ *  "Northwind Portal (Side vault)", each conversation in its own vault. */
+export const TEAM_VAULT = "/Users/me/Side vault";
 const teamKey = (name: string) => `${name}\u001f5f2c8e91a7d04b36`;
 export const teamProjects = [
   {
@@ -148,7 +148,7 @@ export const teamProjects = [
   },
   {
     name: teamKey("Northwind Portal"),
-    label: "Northwind Portal (Team vault)",
+    label: "Northwind Portal (Side vault)",
     context: "Team",
     state: "Active",
     last: ymd(NOW - DAY),
@@ -176,7 +176,7 @@ export const teamProjects = [
 export const teamStatus = [{ vault: TEAM_VAULT, error: null }];
 
 /** The shared fixture's vault on a relay-server (Settings › Machines, under its machine): made on the Team server,
- *  paired for shared vaults only, this Mac its admin. Its last round two minutes ago made a conflict copy and holds two
+ *  paired for workspaces only, this Mac its admin. Its last round two minutes ago made a conflict copy and holds two
  *  deletes back. */
 const HUB_FP = "0f9534960dd3570a".padEnd(64, "0");
 export const hubMachines = [
@@ -195,8 +195,8 @@ export const sharedVaults = [
   },
 ];
 /** shared-member: the same vault on a Mac that joined it with a link, a member there. Its server is not one of this
- *  Mac's machines, so the vault shows in Settings › Machines › Shared vaults. */
-export const memberVaults = [{ ...sharedVaults[0], role: "member", folder: "/Users/me/Shared/Team vault" }];
+ *  Mac's machines, so the workspace shows in Settings › Machines › Workspaces. */
+export const memberVaults = [{ ...sharedVaults[0], role: "member", folder: "/Users/me/Shared/Northwind" }];
 /** shared-keeper: the server that member keeps once made admin there, as the backend adds it (shared_vaults::keepers). */
 export const keeperMachine = {
   id: HUB_FP.slice(0, 12),
@@ -228,7 +228,7 @@ export const sharedMembers = [
 /** An invite link as the backend makes one: the pairing line with vault, invite and secret (dummy hex). */
 export const inviteLink = (invite: string) =>
   `relay://192.168.1.2:47800#fp=${HUB_FP}&code=${"3c".repeat(16)}&vault=${SHARED_ID}&invite=${invite}&secret=${"9e".repeat(32)}`;
-/** The team vault's notes, absolute as `vault_notes` gives another vault's. */
+/** The side vault's notes, absolute as `vault_notes` gives another vault's. */
 export const teamNotes = [
   `${TEAM_VAULT}/Contexts/Team/Projects/Team Handbook.md`,
   `${TEAM_VAULT}/Calendar/2026-10-01 Standup.md`,
@@ -381,7 +381,7 @@ export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
   // online, connected to GitHub, with three repos (machineGit). mirror: online, its mirror holding deletes back.
-  // nomirror: online, next to a second one paired for shared vaults only
+  // nomirror: online, next to a second one paired for workspaces only
   const machines =
     fixture === "machines" ||
     fixture === "phone" ||

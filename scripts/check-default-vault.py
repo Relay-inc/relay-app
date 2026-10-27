@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Leak check for the starter vault in src-tauri/resources/default-vault, and the team starter a shared vault
+"""Leak check for the starter vault in src-tauri/resources/default-vault, and the team starter a workspace
 starts as (that vault without TEAM_DROP, with src-tauri/resources/team-vault copied over it).
 
 Fails when a file in it holds something that belongs to a real person or a real vault:

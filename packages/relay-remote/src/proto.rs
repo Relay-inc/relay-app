@@ -17,7 +17,7 @@
 //! A laptop's conversations shared with its phone (share.rs): `share {convs}` stays open and gets `{"open":token}` lines,
 //! each answered with a new connection `share_open {token}` that the server joins to the phone's request; such a request
 //! (`attach`, `kill`, `history {key}`) is answered with `{"challenge"}` first, then takes only signed lines.
-//! Shared vaults (docs/shared-vaults.md), ciphertext only: `vault_create {name}`, `vault_info {vault}`,
+//! Shared vaults (docs/workspaces.md), ciphertext only: `vault_create {name}`, `vault_info {vault}`,
 //! `vault_invite {vault,role,wrapped}`, `vault_invite_revoke {vault,invite}`, `vault_join {vault,invite,name,proof}` (also
 //! from a device that is not paired, which then becomes a vault-only client), `vault_remove {vault,fp}`, `vault_manifest
 //! {vault}`, `vault_get {vault,name}` (len, etag and bytes like sync_get), `vault_put {vault,name,len,expect}` (the record
@@ -120,7 +120,7 @@ pub fn read_body<R: BufRead>(r: &mut R, len: u64, max: u64) -> io::Result<Vec<u8
 /// `relay://192.168.1.2:47800#fp=<64 hex>&code=<32 hex>`. A line Relay makes for a phone (pair_device) also carries the
 /// key to the laptop's mirror there, `&key=<64 hex>`, so the phone can open it while the laptop is closed, and a secret
 /// only the laptop and the phone know, `&link=<64 hex>`, with which the phone proves its signing key to the laptop
-/// (share.rs). The server never sees `link`. An invite to a shared vault (docs/shared-vaults.md) carries the vault,
+/// (share.rs). The server never sees `link`. An invite to a shared vault (docs/workspaces.md) carries the vault,
 /// the invite and the secret that unwraps the vault key, `&vault=<16 hex>&invite=<16 hex>&secret=<64 hex>`; the server
 /// never sees `secret` either.
 #[derive(Clone, Debug, Default, PartialEq)]

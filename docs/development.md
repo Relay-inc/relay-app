@@ -20,7 +20,7 @@ for "open in terminal".
 On first start the main window offers a starter vault: Start copies `src-tauri/resources/default-vault` to
 `~/Relay` (a vault already there is kept) with `.claude -> System` linked, and uses it. "I have a vault" asks for
 the vault folder instead and shows what it found in it. No conversation, terminal or snapshot runs until a vault is
-saved. `scripts/check-default-vault.py --vault <your vault>` checks the starter vault (and the team starter a shared vault starts as, `src-tauri/resources/team-vault`) holds nothing from a real one. Change it later in
+saved. `scripts/check-default-vault.py --vault <your vault>` checks the starter vault (and the team starter a workspace starts as, `src-tauri/resources/team-vault`) holds nothing from a real one. Change it later in
 Vault › Settings… (Cmd-,). Vaults differ, so the app keeps a mapping per vault in `settings.json`:
 
 ```json
