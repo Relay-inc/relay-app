@@ -13,14 +13,20 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.36] - 2026-10-27
+
 ### Added
 
 - **Notes in another vault open from a conversation**: a link to a note of a shared vault or another vault folder opens in the side panel, with that vault's name in front of its folders, and a link in it to another of its notes works too. A name both vaults have opens your own vault's note (#278)
-- **Question cards show an option's preview and take a note**: when an agent's question carries a mockup, code or sketch per option, the card shows the one you point at or pick; once you pick, you can add a note to your choice. Both go back to the agent with the answer
-- **Linear cycles as boards**: a Linear team that uses cycles offers Current cycle (follows whichever cycle is active) and each running and upcoming cycle next to All issues and its projects. A new issue on a cycle board lands in that cycle
+- **Question cards show an option's preview and take a note**: when an agent's question carries a mockup, code or sketch per option, the card shows the one you point at or pick; once you pick, you can add a note to your choice. Both go back to the agent with the answer (#280)
+- **Linear cycles as boards**: a Linear team that uses cycles offers Current cycle (follows whichever cycle is active) and each running and upcoming cycle next to All issues and its projects. A new issue on a cycle board lands in that cycle (#282)
 - **Vault usage**: the Usage view has two tabs, AI usage (as before) and Vault usage: how many notes Claude Code and Codex read, wrote and edited and how often they searched the vault, this week and today, the notes read and changed most (a click opens one) and the week per folder. Counted from the tool calls in their local logs; Codex reads through shell commands, so its numbers are an estimate (#281)
 - **Claude Design's questions reach the conversation**: when Claude Design answers with a clarifying question instead of a design, `design_prompt` and `design_create` return the question with each option's label and say that it waits; the next `design_prompt` answers it (option labels and/or free text) instead of failing with "no send button". `design_create` also names the project's GitHub repos in the first prompt, so the design matches the codebase
 - **Shared vaults on a relay-server**: Settings › General › Shared vaults makes a vault on a paired machine, or joins one with an invite link (`relay://…`, single use, 24 h). The server keeps only encrypted files, sealed on each Mac, and every Mac syncs the vault into a folder of its own. A conversation stays in its project's vault: it cannot read your other vaults, nothing a member writes runs on your Mac, and your own mail, reminders and calendar stay out of it. The project index (`work-state.md`) is rebuilt on each Mac from the synced project cards, so two people only clash on a card they both changed. A vault's conversations run with Claude Code, on this Mac. What the fence does and does not do: `docs/shared-vaults.md` (#278)
+
+### Fixed
+
+- **macOS asks for the microphone again**: Relay lacked the entitlement the hardened runtime needs for it, so macOS never showed the prompt and dictation recorded silence, while Settings › General kept saying "Asked on first use". A build not signed by Apple still asks again after each update (#277)
 
 ## [0.0.35] - 2026-10-26
 
@@ -81,7 +87,6 @@ a PR. Versions follow
 
 ### Fixed
 
-- **macOS asks for the microphone again**: Relay lacked the entitlement the hardened runtime needs for it, so macOS never showed the prompt and dictation recorded silence, while Settings › General kept saying "Asked on first use". A build not signed by Apple still asks again after each update (#277)
 - **Agents see a ticket's screenshots**: Start conversation on a ticket attaches its pictures to the new conversation, and a board pipeline's worker gets them as files on this Mac (their paths in its brief). Before, the agent only got the tracker's links, which it cannot open. Productive's originals load with the login of Relay's viewer window: open one picture there and sign in once (#251)
 - **A ticket's picture opens in the viewer again**: the viewer window stayed white, because the guard for links in mails also refused the picture and the tracker's login in that window (#250)
 - **Signing in with Google in the Design drawer no longer crashes Relay**: the Google popup opened as a Relay window, which aborted the app. It now opens as a plain window that closes itself once you're signed in (#249)
@@ -637,7 +642,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.36...HEAD
+[0.0.36]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...v0.0.36
 [0.0.35]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
 [0.0.33]: https://github.com/Relay-inc/relay-app/compare/v0.0.32...v0.0.33
