@@ -44,7 +44,8 @@ those. Share a vault with people you would let read what your agent can read. Wh
   follows no symlink, and a `.claude` linking somewhere the filter cannot guard is refused.
 - **The project index is each Mac's own.** `work-state.md` and `System/index/` are generated from the project cards,
   so they do not sync: Relay rebuilds them after every round that moved a file. `System/scripts/` does not sync either,
-  and Relay only ever runs its own `build-index.py`, which it also puts there for the vault's conversations. A vault
+  and Relay only ever runs its own `build-index.py`, which it also puts there for the vault's conversations, as it
+  puts its own skills in `System/skills/` (see What a new vault starts as). A vault
   with a script of its own (other card fields) is left alone: its conversations rebuild the index with it, and a Mac
   that joins such a vault needs that script copied in by hand. Two people only clash on a card they both changed. A conflict copy of a rule lands in
   `System/conflicts/rules/`, out of what every conversation loads.
@@ -59,6 +60,27 @@ those. Share a vault with people you would let read what your agent can read. Wh
   goes to the agent directly, past that check, and is cut off if it lands in those few seconds.
 - **A project's key never moves.** It is its name in the main vault, else its name and its vault's id. The sidebar shows
   a label, with the folder only when two vaults have the name.
+
+## What a new vault starts as
+
+A vault made in an empty folder starts as the team starter (`vault::create_team`): the starter vault
+(`src-tauri/resources/default-vault`) without the parts about one person (`vault::TEAM_DROP`: `user-profile.md`,
+`System/rules/personal`, `Contexts/Personal`), with `src-tauri/resources/team-vault` copied over it. That overlay holds
+a `CLAUDE.md` for a shared vault (several members, each with their own Claude, everything visible to all, no secrets,
+personal things in each member's own vault), `System/rules/core/team.md` in place of the profile, team wording in
+`memory.md`, `thinking-partner.md` and `session-protocol.md`, a `Work` context only, and a team setup skill. That skill
+interviews whoever runs it about the team: what the vault is for, who works in it, the contexts, conventions, external
+people and organizations, projects, and what never goes in. On a vault that started as a personal one it offers to
+move what is the team's into `team.md` and asks before it removes a personal file. A folder with notes is uploaded as
+it is. The first start of Relay still makes the personal starter vault. `scripts/check-default-vault.py` checks the
+team starter too.
+
+**Skills are placed on each Mac.** `System/skills/` never syncs, so after a round that moved a file Relay writes its
+own skills there (`vault::place_skills`, the starter's with the team overlay's on top), only the files that differ.
+A folder it wrote has a `.relay-skill` file and follows Relay's version: edit a copy under another name. A folder of
+the same name without that file is Relay's only when it is empty or exactly a starter's copy (the personal setup of a
+vault an older Relay made), any other is the user's own and stays as it is. Relay only writes these files, it runs
+nothing from the vault.
 
 ## Wire protocol
 

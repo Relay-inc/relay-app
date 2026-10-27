@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "paths": {
+    "workState": "System/rules/core/work-state.md",
+    "reminders": "System/reminders.md",
+    "notes": "Contexts"
+  },
+  "headings": {
+    "open": ["Open"],
+    "status": ["Status"]
+  },
+  "contexts": ["Work"],
+  "skip": ["Documents", "Communication", "_archive"],
+  "repos": {}
+}

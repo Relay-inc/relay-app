@@ -126,12 +126,17 @@ fn conflict_copy(f: &Filter, p: &str, machine: &str, stamp: &str) -> String {
     copy
 }
 
-/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards with the
-/// app's own build-index.py, which also goes into the vault's System/scripts for its conversations. Relay never runs a
+/// What a shared vault keeps on each Mac only: Relay's skills in its System/skills (vault::place_skills), and the
+/// project index (work-state.md, System/index/repos.json), rebuilt here from its cards with the app's own
+/// build-index.py, which also goes into the vault's System/scripts for its conversations. Relay never runs a
 /// script from the vault: a conversation there may write one, and Relay runs outside its fence. A vault with a script
 /// of its own (other card fields than the starter's) is left alone: the app's copy would find no cards and empty its
 /// index, and that script runs only where the vault's conversations run it.
 pub fn index_shared(app: &AppHandle, folder: &str) {
+    let res = |p: &str| app.path().resolve(p, tauri::path::BaseDirectory::Resource);
+    if let (Ok(t), Ok(o)) = (res("default-vault"), res("team-vault")) {
+        if let Err(e) = crate::vault::place_skills(&t, &o, Path::new(folder)) { eprintln!("skills {folder}: {e}"); }
+    }
     let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
     let own = Path::new(folder).join("System/scripts/build-index.py");
     if crate::index_script(own.clone(), Some(script.clone())).is_some_and(|s| s == own) { return; }
@@ -308,7 +313,7 @@ pub fn shared_vault_pending_invite() -> Option<String> { INVITE.lock().unwrap().
 pub fn shared_vaults_status(state: St) -> Value { serde_json::to_value(&*state.shared.status.lock().unwrap()).unwrap_or_default() }
 
 /// Make a shared vault on a paired machine: the server keeps it, this Mac makes the key. A folder that is not there
-/// or empty starts as Relay's starter vault; one with notes is uploaded as it is. Returns {id, recovery}.
+/// or empty starts as Relay's team starter (vault::create_team); one with notes is uploaded as it is. Returns {id, recovery}.
 #[tauri::command]
 pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String, name: String, folder: String) -> Result<Value, String> {
     let s = state.settings.lock().unwrap().clone();
@@ -319,11 +324,12 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     // asked before anything is made: adding the vault restarts every conversation, none may be in a turn
     let _adding = crate::policy::may_add_vault(&app)?;
     let template = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
+    let overlay = app.path().resolve("team-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let (c, at) = (state.machines.client(&m), folder.clone());
     let (r, key) = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
         // the folder first: a vault that could not get its notes is not made on the server at all
         let empty = !std::fs::read_dir(&folder).is_ok_and(|mut d| d.any(|e| e.is_ok_and(|e| e.file_name() != ".DS_Store")));
-        if empty { crate::vault::create_default(&template, Path::new(&folder))?; }
+        if empty { crate::vault::create_team(&template, &overlay, Path::new(&folder))?; }
         Ok((c.vault_create(&name)?, VaultKey::generate()))
     }).await.map_err(|e| e.to_string())??;
     if !valid_id(&r.id) { return Err(format!("the server answered an invalid vault id {:?}", r.id)); }

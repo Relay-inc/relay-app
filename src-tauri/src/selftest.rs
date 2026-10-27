@@ -482,6 +482,10 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     r.step("its next start is fenced from the team folder", again.and_then(|_| if args.contains(&format!("Read(/{canon_team}/**)")) { Ok("deny on the team folder".into()) } else { Err(format!("no deny on {canon_team} in {}", args.chars().take(300).collect::<String>())) }));
     let key_file = data_dir(app).join(format!("shared-{id}.key"));
     r.step("the key stays here, the folder starts as the starter vault", if key_file.is_file() && team.join("System/rules/core/work-state.md").is_file() { Ok(key_file.display().to_string()) } else { Err("key or starter vault missing".into()) });
+    r.step("it is the team starter, with nothing of a personal vault", match (team.join("System/rules/core/team.md").is_file(), team.join("System/rules/core/user-profile.md").exists() || team.join("Contexts/Personal").exists()) {
+        (true, false) => Ok("team.md, no user-profile.md or Personal context".into()),
+        (t, p) => Err(format!("team.md {t}, personal parts {p}")),
+    });
     let status = |f: &dyn Fn(&Value) -> bool| wait(Duration::from_secs(40), || { let s = shared_vaults::shared_vaults_status(app.state::<App>()); f(&s[&id]).then_some(s[&id].clone()) });
     r.step("the app's loop pushes the vault", status(&|s| s["pushed"].as_u64().unwrap_or(0) > 0 && s["errors"].as_array().is_some_and(|e| e.is_empty())).map(|s| s.to_string()).ok_or_else(|| shared_vaults::shared_vaults_status(app.state::<App>()).to_string()));
 
@@ -511,6 +515,10 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
         (_, true) => Err("work-state.md came along: it is generated on each Mac".into()),
         (false, _) => Err(format!("{first:?}")),
     });
+    // skills never sync: what the app does after a member's round that moved files puts Relay's own there
+    shared_vaults::index_shared(app, &b.to_string_lossy());
+    let setup = fs::read_to_string(b.join("System/skills/setup/SKILL.md")).unwrap_or_default();
+    r.step("the colleague's Mac gets Relay's team skills locally", if setup.contains("team.md") && b.join("System/skills/setup/.relay-skill").is_file() { Ok("System/skills/setup, the team's".into()) } else { Err(format!("setup skill: {:?}", setup.chars().take(80).collect::<String>())) });
 
     // the colleague adds project Alpha there (the main vault has an Alpha too). It also writes a work-state of its own,
     // as a client without the filter could: the app keeps its index, built from the cards

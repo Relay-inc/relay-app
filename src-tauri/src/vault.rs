@@ -126,12 +126,26 @@ pub const DEFAULT_DIR: &str = "Relay";
 /// executable, `.claude` a link to `System`, where Claude Code reads the settings, hooks and skills. A `dest`
 /// that already holds a vault stays as it is (a second first start), any other folder with visible files in it is
 /// refused with the key err.vault_dest_used.
-pub fn create_default(template: &Path, dest: &Path) -> Result<(), String> {
+pub fn create_default(template: &Path, dest: &Path) -> Result<(), String> { create(template, None, dest) }
+/// What the team starter leaves out of the starter vault: the parts about one person. A shared vault is the team's.
+pub const TEAM_DROP: [&str; 3] = ["System/rules/core/user-profile.md", "System/rules/personal", "Contexts/Personal"];
+/// The team starter, what a shared vault made in an empty folder starts as (docs/shared-vaults.md): the starter vault
+/// without TEAM_DROP, with the team overlay (the app's resources/team-vault: CLAUDE.md, team.md, the team setup skill)
+/// copied over it. Otherwise as `create_default`.
+pub fn create_team(template: &Path, overlay: &Path, dest: &Path) -> Result<(), String> { create(template, Some(overlay), dest) }
+fn create(template: &Path, overlay: Option<&Path>, dest: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
     if dest.join("System/rules/core/work-state.md").is_file() { return Ok(()); }
     // hidden files (.DS_Store) do not count, someone else's notes do
     if fs::read_dir(dest).is_ok_and(|d| d.flatten().any(|e| !e.file_name().to_string_lossy().starts_with('.'))) { return Err("err.vault_dest_used".into()); }
     copy_dir(template, dest).map_err(|e| e.to_string())?;
+    if let Some(o) = overlay {
+        for d in TEAM_DROP {
+            let p = dest.join(d);
+            if p.is_dir() { fs::remove_dir_all(&p) } else if p.exists() { fs::remove_file(&p) } else { Ok(()) }.map_err(|e| e.to_string())?;
+        }
+        copy_dir(o, dest).map_err(|e| e.to_string())?;
+    }
     for sub in ["System/hooks", "System/scripts"] {
         for e in fs::read_dir(dest.join(sub)).map_err(|e| e.to_string())?.flatten() {
             fs::set_permissions(e.path(), fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
@@ -140,6 +154,53 @@ pub fn create_default(template: &Path, dest: &Path) -> Result<(), String> {
     let link = dest.join(".claude");
     if fs::symlink_metadata(&link).is_err() { std::os::unix::fs::symlink("System", &link).map_err(|e| e.to_string())?; }
     Ok(())
+}
+
+/// Marks a skill folder in a shared vault as Relay's copy (`place_skills`), with a line for whoever opens it.
+const SKILL_MARK: (&str, &str) = (".relay-skill", "Relay's copy of this skill, rewritten when Relay's changes. To change it, copy the folder under another name.\n");
+/// Relay's own skills in a shared vault's System/skills. Skills never sync (a member's code may not run on another
+/// Mac), so each Mac gets the team starter's skills from the app (the starter vault's, with the overlay's on top),
+/// written only where a file differs. A folder of the same name is Relay's when it has SKILL_MARK, or is empty, or is a
+/// bundled copy as it was made (the team starter's, or the personal starter's in a vault an older Relay started as one).
+/// Any other folder is the user's own and stays as it is, as does a link (it leads out of the vault).
+/// Writes files only, nothing here runs anything from the vault.
+pub fn place_skills(template: &Path, overlay: &Path, vault: &Path) -> std::io::Result<()> {
+    let (personal, team, skills) = (template.join("System/skills"), overlay.join("System/skills"), vault.join("System/skills"));
+    if fs::symlink_metadata(&skills).is_ok_and(|m| m.file_type().is_symlink()) { return Ok(()); }
+    let dirs = |d: &Path| fs::read_dir(d).into_iter().flatten().flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())).map(|e| e.file_name());
+    let names: std::collections::BTreeSet<_> = dirs(&personal).chain(dirs(&team)).collect();
+    for name in names {
+        let base = files(&personal.join(&name));
+        let mut want = base.clone();
+        want.extend(files(&team.join(&name)));
+        let dir = skills.join(&name);
+        if fs::symlink_metadata(&dir).is_ok_and(|m| m.file_type().is_symlink()) { continue; }
+        let have = files(&dir);
+        if !dir.join(SKILL_MARK.0).is_file() && !have.is_empty() && have != want && have != base { continue; }
+        for (rel, data) in &want {
+            if have.get(rel) == Some(data) { continue; }
+            let p = dir.join(rel);
+            if let Some(up) = p.parent() { fs::create_dir_all(up)?; }
+            fs::write(p, data)?;
+        }
+        if !dir.join(SKILL_MARK.0).is_file() { fs::write(dir.join(SKILL_MARK.0), SKILL_MARK.1)?; }
+    }
+    Ok(())
+}
+/// The files under `dir` by their path in it, hidden ones (the mark, .DS_Store) and links left out.
+fn files(dir: &Path) -> std::collections::BTreeMap<String, Vec<u8>> {
+    let mut out = std::collections::BTreeMap::new();
+    let mut todo = vec![dir.to_path_buf()];
+    while let Some(d) = todo.pop() {
+        for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+            let (Ok(t), n) = (e.file_type(), e.file_name()) else { continue };
+            if n.to_string_lossy().starts_with('.') { continue; }
+            if t.is_dir() { todo.push(e.path()); } else if t.is_file() {
+                if let (Ok(r), Ok(data)) = (e.path().strip_prefix(dir), fs::read(e.path())) { out.insert(r.to_string_lossy().into_owned(), data); }
+            }
+        }
+    }
+    out
 }
 
 fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -304,5 +365,50 @@ mod tests {
         let s = det(&dest);
         assert_eq!(s["ok"], true, "{s}");
         assert_eq!(s["map"], json!({"workState": "System/rules/core/work-state.md", "reminders": "System/reminders.md", "notes": "Contexts"}));
+    }
+
+    fn shipped(name: &str) -> PathBuf { Path::new(env!("CARGO_MANIFEST_DIR")).join("resources").join(name) }
+
+    #[test]
+    fn a_shared_vault_starts_as_the_team_starter() {
+        let dest = tmp("team").join("Team");
+        create_team(&shipped("default-vault"), &shipped("team-vault"), &dest).unwrap();
+        assert_eq!(det(&dest)["ok"], true);
+        assert!(dest.join("System/rules/core/team.md").is_file() && dest.join("System/rules/core/hard-walls.md").is_file());
+        for d in TEAM_DROP { assert!(!dest.join(d).exists(), "{d}"); }
+        assert!(fs::read_to_string(dest.join("System/skills/setup/SKILL.md")).unwrap().contains("team.md"));
+        assert!(!fs::read_to_string(dest.join(".relay/config.json")).unwrap().contains("Personal"));
+        assert_eq!(fs::read_link(dest.join(".claude")).unwrap(), PathBuf::from("System"));
+        // the personal first start is as it was
+        let own = tmp("own").join("Relay");
+        create_default(&shipped("default-vault"), &own).unwrap();
+        assert!(own.join("System/rules/core/user-profile.md").is_file() && !own.join("System/rules/core/team.md").exists());
+    }
+
+    #[test]
+    fn relays_skills_go_into_a_shared_vault_and_the_users_stay() {
+        let (tpl, team) = (shipped("default-vault"), shipped("team-vault"));
+        let want = fs::read_to_string(team.join("System/skills/setup/SKILL.md")).unwrap();
+        let v = tmp("skills");
+        // a joined vault has no skills: Relay's come in, marked
+        place_skills(&tpl, &team, &v).unwrap();
+        assert_eq!(fs::read_to_string(v.join("System/skills/setup/SKILL.md")).unwrap(), want);
+        assert!(v.join("System/skills/meeting-notes/SKILL.md").is_file() && v.join("System/skills/setup/.relay-skill").is_file());
+        // a Relay copy that changed (an older Relay's) is brought up to date
+        fs::write(v.join("System/skills/setup/SKILL.md"), "older").unwrap();
+        place_skills(&tpl, &team, &v).unwrap();
+        assert_eq!(fs::read_to_string(v.join("System/skills/setup/SKILL.md")).unwrap(), want);
+        // a vault started as a personal one: its unmarked personal setup is Relay's too and becomes the team's
+        let p = tmp("skills-personal");
+        create_default(&tpl, &p).unwrap();
+        place_skills(&tpl, &team, &p).unwrap();
+        assert_eq!(fs::read_to_string(p.join("System/skills/setup/SKILL.md")).unwrap(), want);
+        // the user's own skill of the same name, unmarked: left alone, and nothing marks it
+        let u = tmp("skills-user");
+        touch(&u, "System/skills/setup/SKILL.md");
+        fs::write(u.join("System/skills/setup/SKILL.md"), "mine").unwrap();
+        place_skills(&tpl, &team, &u).unwrap();
+        assert_eq!(fs::read_to_string(u.join("System/skills/setup/SKILL.md")).unwrap(), "mine");
+        assert!(!u.join("System/skills/setup/.relay-skill").exists() && u.join("System/skills/stress-test/SKILL.md").is_file());
     }
 }
