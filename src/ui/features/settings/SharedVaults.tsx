@@ -20,8 +20,7 @@ import {
 } from "../../../application/settings/shared-vaults";
 import { relativeFormat, sentAt } from "../../../shared/format";
 import { useT } from "../../hooks/useT";
-import { Select } from "../../components/Select";
-import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL, SELECT } from "./blocks";
+import { buttonClass, ERROR_MESSAGE, FIELD, HINT_IN_ROW, PILL } from "./blocks";
 import { Field } from "./Field";
 import { Footer } from "./Footer";
 import { CommandBlock } from "./MachineSetup";
@@ -30,24 +29,34 @@ import { Section } from "./Section";
 import { Segmented } from "./Segmented";
 import { StatusLine } from "./StatusLine";
 
-const NONE: SharedVault[] = [];
-const NO_MACHINES: Machine[] = [];
 const EDGE = "border-b border-s-border px-3.5 py-3 last:border-b-0";
 const ROW = `grid min-w-0 grid-cols-1 gap-2.5 ${EDGE}`;
 const LABEL = "text-xs font-medium text-s-fg";
 
-/** Settings › General › Shared vaults: each vault with its last round, invites, members and Leave, then the forms to
- *  make one or join one with a link. */
-export function SharedVaults() {
+/** Settings › Machines › Shared vaults: the vaults on a server that is not one of this Mac's machines (joined with a
+ *  link), each with its last round, invites, members and Leave, then Join with a link… or its form. */
+export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
   const { t } = useT();
-  const vaults = useSettingsStore(s => s.settings.sharedVaults ?? NONE);
   return (
     <Section title={t("set.sharedTitle")} desc={t("set.sharedHelp")} list>
       {vaults.map(vault => (
         <SharedRow key={vault.id} vault={vault} />
       ))}
-      <SharedForm />
+      <SharedForm machine="" />
     </Section>
+  );
+}
+
+/** Under a machine's row on Settings › Machines: the shared vaults it keeps, then New shared vault on this machine… or
+ *  its form, set off from the machines by an indent. */
+export function MachineVaults({ machine, vaults }: { machine: Machine; vaults: SharedVault[] }) {
+  return (
+    <div className="grid min-w-0 grid-cols-1 border-b border-s-border pl-6 last:border-b-0 [&>*]:border-l">
+      {vaults.map(vault => (
+        <SharedRow key={vault.id} vault={vault} />
+      ))}
+      <SharedForm machine={machine.id} />
+    </div>
   );
 }
 
@@ -309,22 +318,18 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   );
 }
 
-/** Under the list: New shared vault… and Join with a link…, or the form one of them opened. */
-function SharedForm() {
+/** Under a machine (`machine` its id) New shared vault on this machine…, in Shared vaults ("") Join with a link…, or
+ *  the form it opened. The one form and its message show where `form.machine` says. */
+function SharedForm({ machine }: { machine: string }) {
   const { t } = useT();
-  const form = useSettingsStore(s => s.shared.form);
-  const message = useSettingsStore(s => s.shared.messages.form);
+  const form = useSettingsStore(s => (s.shared.form.machine === machine ? s.shared.form : null));
+  const message = useSettingsStore(s => (s.shared.form.machine === machine ? s.shared.messages.form : null));
   const busy = useSettingsStore(s => !!s.shared.busy.form);
-  const machines = useSettingsStore(s => s.settings.machines ?? NO_MACHINES);
-  const machine = form.machine || machines[0]?.id || "";
   const folder = (
-    <Field
-      label={t("set.sharedFolder")}
-      hint={form.mode === "join" ? t("set.sharedJoinFolderHelp") : t("set.sharedNewFolderHelp")}
-    >
+    <Field label={t("set.sharedFolder")} hint={machine ? t("set.sharedNewFolderHelp") : t("set.sharedJoinFolderHelp")}>
       <PathField
-        value={form.folder}
-        tip={form.folder}
+        value={form?.folder ?? ""}
+        tip={form?.folder ?? ""}
         readOnly
         placeholder={t("vault.none")}
         pickTip={t("vault.pickPath")}
@@ -345,23 +350,10 @@ function SharedForm() {
     </div>
   );
 
-  if (form.mode === "new")
+  if (form?.mode === "new")
     return (
       <div className={ROW}>
         <span className={LABEL}>{t("set.sharedNewTitle")}</span>
-        <Field label={t("set.sharedMachine")} id="shared-machine" hint={t("set.sharedMachineHelp")}>
-          {machines.length ? (
-            <Select
-              className={SELECT}
-              id="shared-machine"
-              options={machines.map(m => ({ id: m.id, name: m.name }))}
-              value={machine}
-              onChange={value => editForm({ machine: value })}
-            />
-          ) : (
-            <span className="text-xs text-s-warn">{t("set.sharedNoMachine")}</span>
-          )}
-        </Field>
         <Field label={t("set.sharedName")} id="shared-name">
           <input
             id="shared-name"
@@ -372,12 +364,10 @@ function SharedForm() {
           />
         </Field>
         {folder}
-        {footer(t("set.sharedCreate"), busy || !machine || !form.name.trim() || !form.folder, () =>
-          createSharedVault(machine),
-        )}
+        {footer(t("set.sharedCreate"), busy || !form.name.trim() || !form.folder, createSharedVault)}
       </div>
     );
-  if (form.mode === "join")
+  if (form?.mode === "join")
     return (
       <div className={ROW}>
         <span className={LABEL}>{t("set.sharedJoinTitle")}</span>
@@ -398,11 +388,8 @@ function SharedForm() {
   // a create or join that ends closes the form: what its reload said shows here
   return (
     <div className={`flex flex-wrap items-center gap-2 ${EDGE}`}>
-      <button className={buttonClass()} disabled={busy} onClick={() => openForm("new")}>
-        {t("set.sharedNew")}
-      </button>
-      <button className={buttonClass()} disabled={busy} onClick={() => openForm("join")}>
-        {t("set.sharedJoin")}
+      <button className={buttonClass()} disabled={busy} onClick={() => openForm(machine ? "new" : "join", machine)}>
+        {t(machine ? "set.sharedNew" : "set.sharedJoin")}
       </button>
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
     </div>

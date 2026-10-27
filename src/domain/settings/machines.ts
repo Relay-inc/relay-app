@@ -1,4 +1,4 @@
-import type { MachineChoice, MachineRepo } from "./types";
+import type { Machine, MachineChoice, MachineRepo, SharedVault } from "./types";
 
 /** Where a new conversation runs, as the composer's pick shows it: "" this Mac, else a machine id. The user's pick
  *  while that machine is still paired, else the default machine, else this Mac; always this Mac when only this Mac
@@ -9,6 +9,20 @@ export function machinePick(list: MachineChoice[] | undefined, picked: string | 
   if (!remote) return "";
   if (picked === "" || list.some(machine => machine.id === picked)) return picked!;
   return list.find(machine => machine.default)?.id ?? "";
+}
+
+/** Settings › Machines: the shared vaults each machine keeps (the vault's server pinned by that machine's fingerprint),
+ *  and the rest, on a server that is not one of this Mac's machines: a vault this Mac joined with a link. */
+export function vaultsByMachine(machines: Machine[], vaults: SharedVault[]) {
+  const on: Record<string, SharedVault[]> = Object.fromEntries(machines.map(machine => [machine.id, []]));
+  const elsewhere: SharedVault[] = [];
+  for (const vault of vaults) {
+    const fp = vault.fp.toLowerCase();
+    const machine = fp ? machines.find(machine => machine.fp?.toLowerCase() === fp) : undefined;
+    if (machine) on[machine.id].push(vault);
+    else elsewhere.push(vault);
+  }
+  return { on, elsewhere };
 }
 
 /** An excluded vault folder as it is saved: trimmed, slashes at the ends dropped. Null when it is empty, absolute or

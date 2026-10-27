@@ -11,6 +11,7 @@ import {
   repoState,
   repoWorkOf,
   snapshotBranch,
+  vaultsByMachine,
 } from "./machines.ts";
 
 const list = [
@@ -104,4 +105,30 @@ test("a refused move names the repo work it would leave behind", () => {
   assert.deepEqual(repoWorkOf(`repo-work:${JSON.stringify(work)}`), work);
   assert.equal(repoWorkOf("Work machine unreachable: timeout"), null);
   assert.equal(repoWorkOf("repo-work:{broken"), null);
+});
+
+test("shared vaults go under the machine whose fingerprint pins their server, the rest to the members' section", () => {
+  const fp = (c: string) => c.repeat(64);
+  const studio = { id: "m1", name: "Studio Mac", host: "192.168.1.2", port: 47800, fp: fp("a"), sharedOnly: true };
+  const server = { id: "m2", name: "Server", host: "192.168.1.3", port: 47800, fp: fp("b") };
+  const vault = (id: string, fp: string, host = "192.168.1.2") => ({
+    id,
+    name: `Team vault ${id}`,
+    host,
+    port: 47800,
+    fp,
+    folder: `/Users/me/${id}`,
+    role: "admin" as const,
+  });
+  const made = vault("v1", fp("a"));
+  const second = vault("v2", fp("A")); // the same fingerprint in capitals
+  const joined = vault("v3", fp("c"));
+  // the same address as Studio Mac but another server: the fingerprint decides, not the host
+  const moved = vault("v4", fp("d"));
+  const { on, elsewhere } = vaultsByMachine([studio, server], [made, joined, second, moved]);
+  assert.deepEqual(on, { m1: [made, second], m2: [] });
+  assert.deepEqual(elsewhere, [joined, moved]);
+  // a member with no machines sees every vault in the section, and an empty fingerprint never matches
+  assert.deepEqual(vaultsByMachine([], [made]), { on: {}, elsewhere: [made] });
+  assert.equal(vaultsByMachine([{ ...server, fp: "" }], [vault("v5", "")]).elsewhere.length, 1);
 });
