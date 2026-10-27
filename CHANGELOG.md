@@ -13,6 +13,8 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+## [0.0.37] - 2026-10-27
+
 ### Added
 
 - **A machine for shared vaults only**: pairing a machine in Settings › Machines can tick "Only for shared vaults". Your own vault, Claude context and memory never go to that machine, and conversations do not run there, so a team vault can live on a company server that never sees your private vault (#284)
@@ -646,7 +648,8 @@ First version with a number: everything merged up to and including #15.
 ### Fixed
 - Claude is found on the login-shell PATH, not only in `~/.local/bin` (#14)
 
-[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.36...HEAD
+[Unreleased]: https://github.com/Relay-inc/relay-app/compare/v0.0.37...HEAD
+[0.0.37]: https://github.com/Relay-inc/relay-app/compare/v0.0.36...v0.0.37
 [0.0.36]: https://github.com/Relay-inc/relay-app/compare/v0.0.35...v0.0.36
 [0.0.35]: https://github.com/Relay-inc/relay-app/compare/v0.0.34...v0.0.35
 [0.0.34]: https://github.com/Relay-inc/relay-app/compare/v0.0.33...v0.0.34
