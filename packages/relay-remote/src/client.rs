@@ -141,9 +141,10 @@ impl Client {
     pub fn session_put(&self, sid: &str, cwd: &str, data: &[u8]) -> Result<(), String> {
         self.call_bin(json!({"op": "session_put", "sid": sid, "cwd": cwd, "len": data.len()}), Some(data.to_vec()), None, Duration::ZERO).map(|_| ())
     }
-    /// Send relay-server's binary of `version` there: it checks it and goes on in it once it has answered.
-    pub fn update(&self, version: &str, data: &[u8]) -> Result<(), String> {
-        let req = json!({"op": "update", "version": version, "sha256": crate::sync::sha256_hex(data), "len": data.len()});
+    /// Send relay-server's binary of `version` there, with the release's `.sig` of it when there is one (a vault admin's
+    /// update needs it): it checks it and goes on in it once it has answered.
+    pub fn update(&self, version: &str, data: &[u8], signature: Option<&str>) -> Result<(), String> {
+        let req = json!({"op": "update", "version": version, "sha256": crate::sync::sha256_hex(data), "signature": signature, "len": data.len()});
         self.call_bin(req, Some(data.to_vec()), None, Duration::from_secs(60)).map(|_| ())
     }
     // ---------- GitHub there (github.rs on the server): its token is sealed like the mirror, so it works once unlocked

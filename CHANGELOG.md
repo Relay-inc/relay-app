@@ -15,11 +15,13 @@ a PR. Versions follow
 
 ### Added
 
+- **A vault admin keeps the server**: when you are admin of a shared vault (from an admin invite, or made admin because the last one left), its server shows under Settings › Machines for shared vaults only, and you can update it there, to an official Relay release only (the server checks its signature). It runs no conversations for you and keeps no mirror, the server refuses those too. It goes from the list once you are admin of no vault there (#288)
 - **Pick the vault of a new conversation**: with more than one vault, a new conversation's composer has a Vault pick next to the agent and model. A general conversation runs in the vault you pick and stays there, shown in the sidebar with its vault's name. In another vault than your main one it runs on this Mac with Claude Code. A conversation about a project runs in that project's vault (#286)
 
 ### Changed
 
 - **Shared vaults moved to Settings › Machines**: a vault shows under the machine that keeps it, with New shared vault on this machine next to it. A vault you joined with an invite link, on a server that is not one of your machines, shows under Shared vaults at the top of the page, where Join with a link is too. An invite link that opens Relay now opens Machines with the join form filled in. General keeps Other vault folders (#287)
+
 ## [0.0.37] - 2026-10-27
 
 ### Added

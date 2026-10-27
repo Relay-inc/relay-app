@@ -179,13 +179,13 @@ fn update_goes_on_in_the_binary_sent() {
     let real = env!("CARGO_BIN_EXE_relay-server");
     let script = format!("#!/bin/sh\nif [ \"$1\" = version ]; then echo {me}; exit 0; fi\nexec {real} \"$@\"\n");
     if cfg!(target_os = "macos") {
-        assert!(c.update(me, script.as_bytes()).unwrap_err().contains("Relay on a Mac"));
+        assert!(c.update(me, script.as_bytes(), None).unwrap_err().contains("Relay on a Mac"));
         return;
     }
-    assert!(c.update("9.9.9", script.as_bytes()).unwrap_err().contains("not relay-server 9.9.9"), "a binary of another version is refused");
+    assert!(c.update("9.9.9", script.as_bytes(), None).unwrap_err().contains("not relay-server 9.9.9"), "a binary of another version is refused");
     assert!(!s.data.join("bin/relay-server").exists());
     std::fs::remove_file(s.data.join("serve.json")).unwrap();
-    c.update(me, script.as_bytes()).unwrap();
+    c.update(me, script.as_bytes(), None).unwrap();
     assert!(s.data.join("bin/relay-server").exists());
     // it restarted: serve writes serve.json again at its start, and answers on the same connection details
     let t = Instant::now();
@@ -353,7 +353,7 @@ fn a_linked_device_shares_its_devices_conversations_and_nothing_more() {
     drop((lap, ph));
 
     // conversations only: not the mirror, not the server, no further devices
-    for e in [phone.wipe().err(), phone.pair_device().err(), phone.update("0", b"x").err()] { assert!(e.unwrap().contains("not allowed from a linked device")); }
+    for e in [phone.wipe().err(), phone.pair_device().err(), phone.update("0", b"x", None).err()] { assert!(e.unwrap().contains("not allowed from a linked device")); }
     let out = bin().args(["clients"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap();
     assert!(String::from_utf8_lossy(&out.stdout).contains("linked to laptop"));
 
@@ -852,6 +852,19 @@ fn a_shared_vault_invite_join_and_walls() {
     for op in ["list", "sync_manifest", "launch", "pair_device", "vault_create"] {
         assert!(colleague.call(json!({"op": op, "name": "Mine"})).unwrap_err().contains("not allowed"), "{op}");
     }
+    assert!(colleague.info_any().unwrap_err().contains("not allowed"), "a member does not see the server");
+    // made admin with a second link: it keeps the server now, it sees and could update it, and still runs nothing here
+    let inv2 = laptop.call(json!({"op": "vault_invite", "vault": id, "role": "admin", "wrapped": "ab".repeat(32)})).unwrap();
+    let proof2 = relay_remote::tls::proof(inv2["invite"]["code"].as_str().unwrap(), &cid.fingerprint(), &laptop.fp);
+    colleague.call(json!({"op": "vault_join", "vault": id, "invite": inv2["invite"]["id"], "name": "colleague", "proof": proof2})).unwrap();
+    assert_eq!(colleague.info().unwrap().version, laptop.info().unwrap().version);
+    // past the wall, but only to an official release: unsigned or badly signed is refused before anything is written or run
+    assert!(colleague.update("0.0.0", b"no binary", None).unwrap_err().contains("not signed"));
+    assert!(colleague.update("0.0.0", b"no binary", Some("bm90IGEgc2lnbmF0dXJl")).unwrap_err().contains("does not check out"));
+    assert!(!s.data.join("bin").exists());
+    for op in ["list", "sync_manifest", "launch", "pair_device", "vault_create", "github_status"] {
+        assert!(colleague.call(json!({"op": op, "name": "Mine"})).unwrap_err().contains("not allowed"), "{op}");
+    }
     // the invite is used up: a third device with the right code is refused, and fails in the handshake now
     let tid = device("vault-third");
     let third = Client::new("127.0.0.1", port, &laptop.fp, tid.clone());
@@ -862,7 +875,7 @@ fn a_shared_vault_invite_join_and_walls() {
     assert!(linked(&laptop, "vault-phone").call(json!({"op": "vault_info", "vault": id})).unwrap_err().contains("not allowed from a linked device"));
 
     let out = String::from_utf8_lossy(&bin().arg("vaults").env("RELAY_SERVER_DATA", &s.data).output().unwrap().stdout).into_owned();
-    assert!(out.contains("Team") && out.contains("laptop  admin") && out.contains("colleague  member"), "{out}");
+    assert!(out.contains("Team") && out.contains("laptop  admin") && out.contains("colleague  admin"), "{out}");
     // revoked: out of the vault, and the next connection fails
     assert!(bin().args(["revoke", "colleague"]).env("RELAY_SERVER_DATA", &s.data).output().unwrap().status.success());
     assert_eq!(laptop.call(json!({"op": "vault_info", "vault": id})).unwrap()["vault"]["members"].as_array().unwrap().len(), 1);

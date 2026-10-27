@@ -197,6 +197,16 @@ export const sharedVaults = [
 /** shared-member: the same vault on a Mac that joined it with a link, a member there. Its server is not one of this
  *  Mac's machines, so the vault shows in Settings › Machines › Shared vaults. */
 export const memberVaults = [{ ...sharedVaults[0], role: "member", folder: "/Users/me/Shared/Team vault" }];
+/** shared-keeper: the server that member keeps once made admin there, as the backend adds it (shared_vaults::keepers). */
+export const keeperMachine = {
+  id: HUB_FP.slice(0, 12),
+  name: "192.168.1.2",
+  host: "192.168.1.2",
+  port: 47800,
+  fp: HUB_FP,
+  sharedOnly: true,
+  auto: true,
+};
 export const sharedStatus = (nowS: number) => ({
   [SHARED_ID]: {
     at: nowS - 120,

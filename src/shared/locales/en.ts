@@ -1590,6 +1590,8 @@ const en = {
   "mc.sharedOnly": "Only for shared vaults: no mirror of this Mac's vault",
   "mc.sharedOnlyRow":
     "For shared vaults only. This Mac's vault, Claude context and memory do not go here, and no conversation runs here. To change that, forget it and pair it again.",
+  "mc.keeperRow":
+    "You keep this server as admin of a vault on it: you can update it from here. It runs no conversation for you and keeps no mirror. It goes from this list once you are admin of no vault here.",
   "mc.pair": "Pair",
   "mc.pairing": "Pairing…",
   "mc.setupTitle": "Set up a machine",

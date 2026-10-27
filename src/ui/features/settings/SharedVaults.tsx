@@ -48,14 +48,15 @@ export function SharedVaults({ vaults }: { vaults: SharedVault[] }) {
 }
 
 /** Under a machine's row on Settings › Machines: the shared vaults it keeps, then New shared vault on this machine… or
- *  its form, set off from the machines by an indent. */
+ *  its form, set off from the machines by an indent. Not on a server this Mac only keeps as a vault's admin: it may
+ *  not make vaults there. */
 export function MachineVaults({ machine, vaults }: { machine: Machine; vaults: SharedVault[] }) {
   return (
     <div className="grid min-w-0 grid-cols-1 border-b border-s-border pl-6 last:border-b-0 [&>*]:border-l">
       {vaults.map(vault => (
         <SharedRow key={vault.id} vault={vault} />
       ))}
-      <SharedForm machine={machine.id} />
+      {machine.auto ? null : <SharedForm machine={machine.id} />}
     </div>
   );
 }

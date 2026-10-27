@@ -1,6 +1,7 @@
 import { t } from "../../shared/i18n";
 import type { SharedRole } from "../../domain/settings/types";
 import * as backend from "../../infrastructure/backend";
+import { checkMachine } from "./machines-page";
 import { useSettingsStore, type SettingsState } from "./store";
 
 // Settings › Machines: vaults a team shares on a relay-server, each synced into a folder here
@@ -29,13 +30,16 @@ async function run(key: string, work: () => Promise<unknown>) {
   }
 }
 
-/** The settings and the extra vaults read again: the backend changed the list of shared vaults itself. */
+/** The settings and the extra vaults read again: the backend changed the list of shared vaults itself. A server it
+ *  added under Machines (this Mac is admin of a vault there) is checked, for its Update. */
 async function reload() {
   const [settings, extraVaults] = await Promise.all([backend.getSettings(), backend.extraVaultsStatus()]);
   useSettingsStore.setState(draft => {
     draft.settings = settings;
     draft.extraVaults = extraVaults;
   });
+  const status = useSettingsStore.getState().machinesPage.status;
+  for (const machine of settings.machines ?? []) if (!(machine.id in status)) checkMachine(machine.id);
 }
 
 /** The invite link the backend keeps (the one that opened Relay, or came since) into the join form. While a create or
@@ -116,6 +120,9 @@ async function loadInfo(id: string) {
   change(draft => {
     if (id in draft.info) draft.info[id] = info;
   });
+  // a role that changed there: the backend saved it, with the server under Machines for an admin (or gone again)
+  const saved = useSettingsStore.getState().settings.sharedVaults?.find(vault => vault.id === id)?.role;
+  if (info.vault.role && info.vault.role !== saved) await reload();
 }
 /** The members shown or folded away. */
 export async function toggleMembers(id: string) {

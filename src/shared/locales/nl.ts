@@ -1597,6 +1597,8 @@ export default {
   "mc.sharedOnly": "Enkel voor gedeelde vaults: geen spiegel van de vault van deze Mac",
   "mc.sharedOnlyRow":
     "Enkel voor gedeelde vaults. De vault, Claude-context en memory van deze Mac gaan hier niet heen, en hier loopt geen gesprek. Om dat te veranderen: vergeet de machine en koppel ze opnieuw.",
+  "mc.keeperRow":
+    "Je beheert deze server als admin van een vault erop: je kan hem van hier updaten. Hij draait geen gesprek voor jou en houdt geen mirror bij. Hij verdwijnt uit deze lijst zodra je van geen enkele vault hier nog admin bent.",
   "mc.pair": "Koppelen",
   "mc.pairing": "Koppelen…",
   "mc.setupTitle": "Machine opzetten",

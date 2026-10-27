@@ -1620,6 +1620,8 @@ export default {
   "mc.sharedOnly": "Uniquement pour les vaults partagés : pas de miroir du vault de ce Mac",
   "mc.sharedOnlyRow":
     "Uniquement pour les vaults partagés. Le vault, le contexte Claude et la mémoire de ce Mac ne vont pas ici, et aucune conversation n'y tourne. Pour changer cela, oubliez la machine et associez-la à nouveau.",
+  "mc.keeperRow":
+    "Vous gérez ce serveur en tant qu'admin d'un vault qui s'y trouve : vous pouvez le mettre à jour d'ici. Il ne fait tourner aucune conversation pour vous et ne garde pas de miroir. Il quitte cette liste dès que vous n'êtes plus admin d'aucun vault ici.",
   "mc.pair": "Associer",
   "mc.pairing": "Association…",
   "mc.setupTitle": "Configurer une machine",

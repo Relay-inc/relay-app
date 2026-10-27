@@ -1612,6 +1612,8 @@ export default {
   "mc.sharedOnly": "Nur für geteilte Vaults: kein Spiegel des Vaults dieses Macs",
   "mc.sharedOnlyRow":
     "Nur für geteilte Vaults. Vault, Claude-Kontext und Memory dieses Macs gehen nicht hierher, und hier läuft kein Gespräch. Um das zu ändern, vergiss die Maschine und kopple sie neu.",
+  "mc.keeperRow":
+    "Du betreust diesen Server als Admin eines Vaults darauf: Du kannst ihn von hier aktualisieren. Er führt kein Gespräch für dich und hält keinen Mirror. Er verschwindet aus dieser Liste, sobald du hier von keinem Vault mehr Admin bist.",
   "mc.pair": "Koppeln",
   "mc.pairing": "Koppeln…",
   "mc.setupTitle": "Maschine einrichten",

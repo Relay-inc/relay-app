@@ -26,6 +26,26 @@ pub fn list(s: &Value) -> Vec<Shared> {
 /// A vault id as the server makes them: 16 lowercase hex. It names files here (the key, the base), so nothing else
 /// a server answers ever reaches a path.
 pub fn valid_id(id: &str) -> bool { id.len() == 16 && id.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)) }
+/// The servers this Mac keeps as a vault admin (docs/shared-vaults.md, Trust): one it is admin of a vault on, that is not
+/// one of its machines, becomes one for shared vaults only and `auto`, so Settings › Machines shows it with its Update.
+/// An `auto` one goes again once this Mac is admin of no vault there. A machine the user paired is never touched.
+/// Whether the machines changed.
+pub fn keepers(s: &mut Value) -> bool {
+    let admin: Vec<Shared> = list(s).into_iter().filter(|v| v.role == "admin").collect();
+    let same = |m: &Value, v: &Shared| m["fp"].as_str().is_some_and(|f| f.eq_ignore_ascii_case(&v.fp));
+    if !s["machines"].is_array() { s["machines"] = Value::Array(vec![]); }
+    let ms = s["machines"].as_array_mut().unwrap();
+    let n = ms.len();
+    ms.retain(|m| m["auto"] != true || admin.iter().any(|v| same(m, v)));
+    let mut changed = ms.len() != n;
+    for v in &admin {
+        if ms.iter().any(|m| same(m, v)) { continue; }
+        let m = serde_json::json!({"id": v.fp.get(..12).unwrap_or(""), "name": v.host.chars().take(60).collect::<String>(), "host": v.host, "port": v.port, "fp": v.fp,
+            "sharedOnly": true, "auto": true});
+        if crate::machines::valid(&m) { ms.push(m); changed = true; }
+    }
+    changed
+}
 pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter().find(|v| v.id == id).ok_or_else(|| format!("no shared vault {id}")) }
 
 /// What the last round of a vault did, for Settings: counts since the app started, the conflict copies made, and the
@@ -262,7 +282,7 @@ fn add(app: &AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
     Ok(())
 }
 /// The shared vaults changed and saved under the settings lock: two changes at once cannot save the older list last.
-/// `f` says whether it changed anything.
+/// The servers this Mac keeps as an admin follow in the same write (`keepers`). `f` says whether it changed anything.
 fn change(app: &AppHandle, state: &crate::App, f: impl FnOnce(&mut Vec<Value>) -> bool) -> Result<(), String> {
     let mut s = state.settings.lock().unwrap();
     let mut all: Vec<Value> = s["sharedVaults"].as_array().cloned().unwrap_or_default();
@@ -270,6 +290,7 @@ fn change(app: &AppHandle, state: &crate::App, f: impl FnOnce(&mut Vec<Value>) -
     // saved first: the app follows only a change that is on disk
     let mut next = s.clone();
     next["sharedVaults"] = Value::Array(all);
+    keepers(&mut next);
     crate::save_settings(app, &next)?;
     *s = next;
     Ok(())
@@ -417,6 +438,29 @@ mod tests {
         assert!(find(&s, "nope").is_err());
         assert!(list(&json!({})).is_empty());
         assert!(valid_id("0123456789abcdef") && !valid_id("0123456789ABCDEF") && !valid_id("../../etc/passwd") && !valid_id("0123456789abcde"));
+    }
+    #[test]
+    fn an_admin_keeps_the_server_its_vault_is_on() {
+        let (a, b) = ("a".repeat(64), "b".repeat(64));
+        let v = |id: &str, fp: &str, role: &str| json!({"id": id, "name": "Team", "host": "192.168.1.2", "port": 47800, "fp": fp, "folder": format!("/Users/me/{id}"), "role": role});
+        let mine = json!({"id": "aaaaaaaaaaaa", "name": "Server", "host": "192.168.1.2", "port": 47800, "fp": a});
+        // a member keeps nothing, and the machine the user paired stays as it is
+        let mut s = json!({"machines": [mine.clone()], "sharedVaults": [v("0123456789abcdef", &a, "member"), v("1123456789abcdef", &b, "member")]});
+        assert!(!keepers(&mut s));
+        // promoted on both servers: the paired one is left alone, the other comes in for shared vaults only, as `auto`
+        s["sharedVaults"][0]["role"] = json!("admin");
+        s["sharedVaults"][1]["role"] = json!("admin");
+        assert!(keepers(&mut s));
+        assert_eq!(s["machines"][0], mine);
+        let m = &s["machines"][1];
+        assert_eq!((m["id"].as_str(), m["fp"].as_str(), m["sharedOnly"].as_bool(), m["auto"].as_bool()), (Some("bbbbbbbbbbbb"), Some(b.as_str()), Some(true), Some(true)));
+        assert!(crate::machines::valid(m) && crate::machines::runners(&s).count() == 1, "never a runner");
+        assert!(!keepers(&mut s), "once");
+        // no longer admin there (left, or demoted): the auto one goes, the paired one stays without an admin vault
+        s["sharedVaults"].as_array_mut().unwrap().remove(1);
+        s["sharedVaults"][0]["role"] = json!("member");
+        assert!(keepers(&mut s));
+        assert_eq!(s["machines"], json!([mine]));
     }
     #[test]
     fn a_members_settings_and_hooks_never_sync() {

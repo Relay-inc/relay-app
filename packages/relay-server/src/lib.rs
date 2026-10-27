@@ -79,6 +79,12 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete"];
+/// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
+/// the server is and updates it (`update`, to an official release only: signed with Relay's release key, upgrade.rs).
+/// Never a conversation, the mirror, a phone, GitHub or a vault of its own.
+const KEEPER_OPS: &[&str] = &["info", "update"];
+/// Whether a vault-only device may ask `op`: from its memberships now, so a promotion or a demotion counts at once.
+pub(crate) fn vaults_only_may(data: &Path, fp: &str, op: &str) -> bool { VAULT_OPS.contains(&op) || (KEEPER_OPS.contains(&op) && vaults::keeps(data, fp)) }
 /// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
 static CLIENTS: Mutex<()> = Mutex::new(());
 
@@ -230,8 +236,10 @@ impl Server {
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
         if me.is_none() && op != "pair" && op != "vault_join" { return reply(&mut w, Err("not paired".into())); }
-        if me.as_ref().is_some_and(|c| c.vaults_only) && !VAULT_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
+        if me.as_ref().is_some_and(|c| c.vaults_only) && !vaults_only_may(&self.data, &fp, op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
         let my_name = me.as_ref().map(|c| c.name.clone()).unwrap_or_default();
+        // past the wall above, a vault-only device asks `update` only as a vault admin: it installs official releases only
+        let keeper = me.as_ref().is_some_and(|c| c.vaults_only);
         let parent = me.and_then(|c| c.parent);
         if parent.is_some() && !LINKED_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a linked device"))); }
         // each device its own conversations and cards: two laptops may both have a conversation "Weemaes"; a linked
@@ -284,7 +292,7 @@ impl Server {
             }
             "update" => {
                 let body = proto::read_body(&mut r, req["len"].as_u64().unwrap_or(0), proto::MAX_BINARY)?;
-                let done = upgrade::install(&self.data, req["version"].as_str().unwrap_or(""), req["sha256"].as_str().unwrap_or(""), &body);
+                let done = upgrade::install(&self.data, req["version"].as_str().unwrap_or(""), req["sha256"].as_str().unwrap_or(""), req["signature"].as_str(), keeper, &body);
                 let ok = done.is_ok();
                 reply(&mut w, done.map(|_| json!({})))?;
                 // after the reply is out: the app waits for it, then sees the new version once the server is back

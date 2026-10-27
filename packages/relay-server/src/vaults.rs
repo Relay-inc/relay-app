@@ -60,6 +60,9 @@ pub(crate) fn all(data: &Path) -> Vec<Vault> {
 /// For the handshake: a device that is not paired gets in while some vault has an invite open (it may then only join).
 pub fn invite_open(data: &Path) -> bool { all(data).iter().any(|v| !v.invites.is_empty()) }
 
+/// Whether `fp` is admin of a vault here: it keeps this server (lib.rs KEEPER_OPS).
+pub(crate) fn keeps(data: &Path, fp: &str) -> bool { all(data).iter().any(|v| v.role(fp) == Some("admin")) }
+
 /// A revoked device leaves every vault. Nobody left: the vault goes, its ciphertext is of no use to anyone here.
 // ponytail: no lock against a running server (revoke is the CLI's own process); clients.json has the same race with pair
 pub(crate) fn forget(data: &Path, fps: &[String]) {
@@ -484,6 +487,23 @@ mod tests {
         // OTHER is admin now: it can invite, and it can leave again
         assert!(s.invite(OTHER, &id, "member", &"ab".repeat(32)).is_ok());
         s.remove(OTHER, &id, OTHER).unwrap();
+    }
+    #[test]
+    fn a_vault_admin_keeps_the_server_and_nothing_more() {
+        let s = store("keeper");
+        let may = |op: &str| crate::vaults_only_may(&s.data, OTHER, op);
+        let (id, id2) = (made(&s), made(&s));
+        join(&s, OTHER, &id, "member");
+        join(&s, OTHER, &id2, "member");
+        assert!(may("vault_info") && !may("info") && !may("update"), "a member only works with its vaults");
+        // promoted (an admin invite raises it): it may see and update the server, not more
+        join(&s, OTHER, &id, "admin");
+        assert!(may("info") && may("update"));
+        for op in ["launch", "attach", "start", "list", "kill", "pending", "answer", "history", "unlock", "sync_manifest", "sync_get", "sync_put",
+            "wipe", "session_get", "session_put", "pair_device", "github_status", "repos", "repo_ensure", "vault_create", "share", "profile_put"] { assert!(!may(op), "{op}"); }
+        // demoted: removed from the vault it was admin of, a member of the other one, and refused again at once
+        s.remove(ADMIN, &id, OTHER).unwrap();
+        assert!(!may("info") && !may("update") && may("vault_manifest"));
     }
     #[test]
     fn revoke_removes_the_memberships() {
