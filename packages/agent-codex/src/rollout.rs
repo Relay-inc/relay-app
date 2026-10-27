@@ -2,7 +2,7 @@
 //! `{timestamp, type, payload}` per line (session_meta, turn_context, response_item, event_msg, compacted). They give
 //! the history of a thread, the token records (event_msg token_count) and the rate limits (its rate_limits).
 
-use agent_core::usage::{parse_ts, Limits, Record, Tail, Window};
+use agent_core::usage::{parse_ts, shell_touches, Act, Limits, Record, Tail, Touch, Window};
 use agent_core::{Event, Image, IMAGE_TYPES};
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -25,6 +25,16 @@ fn patch_file(patch: &str) -> (Option<String>, bool) {
         }
     }
     (first.clone(), add_only && first.is_some())
+}
+
+const SHELLS: [&str; 5] = ["shell", "container.exec", "exec_command", "local_shell", "shell_command"];
+/// A shell call's command line from its arguments.
+fn shell_command(a: &Value) -> String {
+    a["command"].as_array().map(|c| {
+        let c: Vec<&str> = c.iter().filter_map(|x| x.as_str()).collect();
+        // ["bash", "-lc", "ls"] is "ls"
+        if c.len() == 3 && c[1] == "-lc" { c[2].to_string() } else { c.join(" ") }
+    }).or_else(|| a["command"].as_str().or(a["cmd"].as_str()).map(String::from)).unwrap_or_default()
 }
 
 /// One rollout line as history: the user's messages (not the harness's `<environment_context>` and the like), the
@@ -50,14 +60,7 @@ pub fn history_line(e: &Value, out: &mut Vec<Event>) {
             let a = args(if p["type"] == "local_shell_call" { &p["action"] } else { &p["arguments"] });
             let id = p["call_id"].as_str().unwrap_or("").to_string();
             let (name, input) = match p["name"].as_str().unwrap_or("shell") {
-                "shell" | "container.exec" | "exec_command" | "local_shell" | "shell_command" => {
-                    let cmd = a["command"].as_array().map(|c| {
-                        let c: Vec<&str> = c.iter().filter_map(|x| x.as_str()).collect();
-                        // ["bash", "-lc", "ls"] is "ls"
-                        if c.len() == 3 && c[1] == "-lc" { c[2].to_string() } else { c.join(" ") }
-                    }).or_else(|| a["command"].as_str().or(a["cmd"].as_str()).map(String::from)).unwrap_or_default();
-                    ("Bash".to_string(), json!({"command": cmd}))
-                }
+                n if SHELLS.contains(&n) => ("Bash".to_string(), json!({"command": shell_command(&a)})),
                 n => (n.to_string(), a),
             };
             ev.push(Event::ToolCall { id, name, input });
@@ -117,9 +120,12 @@ pub fn find(dir: &Path, sid: &str) -> Option<PathBuf> {
 #[derive(Clone, Default)]
 pub struct Meta { pub session: String, pub cwd: String, pub model: String, pub updated: i64, pub title: String }
 
-/// The rollouts read so far: the token records, each file's meta, and the newest rate limits (epoch ms, snapshot).
+/// The rollouts read so far: the token records, each file's meta, the newest rate limits (epoch ms, snapshot) and the
+/// files touched.
 #[derive(Default)]
-pub struct Logs { pub vault: String, pub tail: Tail<Record>, pub meta: HashMap<PathBuf, Meta>, pub limits: Option<(i64, Value)> }
+pub struct Logs { pub vault: String, pub tail: Tail<Record>, pub meta: HashMap<PathBuf, Meta>, pub limits: Option<(i64, Value)>,
+    /// the files the tool calls touched, and each rollout's folder so far for them
+    pub touches: Tail<Touch>, cwds: HashMap<PathBuf, String> }
 
 fn under(cwd: &str, dir: &str) -> bool { !dir.is_empty() && (cwd == dir || cwd.starts_with(&format!("{dir}/"))) }
 /// In the vault: rollouts keep the folder as given, the thread index its real path (/tmp is /private/tmp).
@@ -167,13 +173,48 @@ pub fn parse_chunk(path: &Path, text: &str, seen: &mut HashSet<String>, meta: &m
     out
 }
 
+/// The files the tool calls in whole new lines of one rollout touched: shell commands by the notes they read and the
+/// folders they search, apply_patch by every file it adds (a write) or updates or deletes (an edit). `cwd` is the
+/// rollout's folder so far (its turn_context); a call's own workdir wins. `seen` holds call ids already counted.
+pub fn parse_touches(text: &str, cwd: &mut String, since: i64, seen: &mut HashSet<String>) -> Vec<Touch> {
+    let mut out = vec![];
+    for l in text.lines() {
+        let Ok(e) = serde_json::from_str::<Value>(l) else { continue };
+        let p = &e["payload"];
+        if matches!(e["type"].as_str(), Some("session_meta" | "turn_context")) {
+            if let Some(c) = p["cwd"].as_str() { *cwd = c.into(); }
+            continue;
+        }
+        if e["type"] != "response_item" { continue; }
+        let Some(at) = e["timestamp"].as_str().and_then(parse_ts).filter(|&at| at >= since) else { continue };
+        if p["call_id"].as_str().is_some_and(|id| !seen.insert(id.to_string())) { continue; }
+        let acts = match (p["type"].as_str().unwrap_or(""), p["name"].as_str().unwrap_or("shell")) {
+            ("function_call" | "local_shell_call", n) if SHELLS.contains(&n) => {
+                let a = args(if p["type"] == "local_shell_call" { &p["action"] } else { &p["arguments"] });
+                let dir = a["workdir"].as_str().unwrap_or(cwd);
+                shell_touches(&shell_command(&a), dir)
+            }
+            ("custom_tool_call", "apply_patch") => p["input"].as_str().unwrap_or("").lines().filter_map(|l| {
+                let (act, f) = l.strip_prefix("*** Add File: ").map(|f| (Act::Write, f))
+                    .or_else(|| l.strip_prefix("*** Update File: ").or_else(|| l.strip_prefix("*** Delete File: ")).map(|f| (Act::Edit, f)))?;
+                let f = f.trim();
+                Some((act, if f.starts_with('/') { f.to_string() } else { format!("{cwd}/{f}") }))
+            }).collect(),
+            _ => vec![],
+        };
+        out.extend(acts.into_iter().map(|(act, path)| Touch { at, act, path }));
+    }
+    out
+}
+
 impl Logs {
     /// Read what the rollouts under `dir` gained since the last call.
     pub fn refresh(&mut self, dir: &Path, vault: &str, since: i64) {
         if self.vault != vault { *self = Logs { vault: vault.into(), ..Default::default() }; }
-        let Logs { tail, meta, limits, vault, .. } = self;
+        let Logs { tail, meta, limits, vault, touches, cwds } = self;
         // a file read again from the start (it shrank) sets its meta again from its first lines
         tail.refresh(dir, "jsonl", since, |r| r.at, |p, text, seen| parse_chunk(p, text, seen, meta.entry(p.to_path_buf()).or_default(), vault, limits));
+        touches.refresh(dir, "jsonl", since, |t| t.at, |p, text, seen| parse_touches(text, cwds.entry(p.to_path_buf()).or_default(), since, seen));
     }
 }
 
@@ -252,6 +293,24 @@ mod tests {
         assert_eq!(ev.len(), 8); // no environment context, reasoning, event_msg copies or other types
         assert_eq!(history(&p, next).0.len(), 0);
         std::fs::remove_dir_all(d).ok();
+    }
+
+    #[test]
+    fn tool_calls_as_touches() {
+        let item = |ts: &str, payload: Value| json!({"timestamp": ts, "type": "response_item", "payload": payload}).to_string();
+        let text = [
+            json!({"timestamp": "2026-09-30T08:00:00Z", "type": "turn_context", "payload": {"cwd": "/v", "model": "gpt-5"}}).to_string(),
+            item("2026-09-30T08:00:01Z", json!({"type": "function_call", "name": "shell", "call_id": "c1", "arguments": json!({"command": ["bash", "-lc", "sed -n 1,40p 'Plan - A.md' && rg -n todo"]}).to_string()})),
+            item("2026-09-30T08:00:02Z", json!({"type": "function_call", "name": "exec_command", "call_id": "c2", "arguments": json!({"cmd": "cat B.md", "workdir": "/v/Notes"}).to_string()})),
+            item("2026-09-30T08:00:03Z", json!({"type": "custom_tool_call", "name": "apply_patch", "call_id": "c3",
+                "input": "*** Begin Patch\n*** Add File: New.md\n+x\n*** Update File: /v/Inbox.md\n@@\n-a\n+b\n*** End Patch"})),
+            item("2026-09-30T08:00:03Z", json!({"type": "custom_tool_call", "name": "apply_patch", "call_id": "c3", "input": "*** Add File: New.md"})), // a copy
+            item("2026-09-20T08:00:00Z", json!({"type": "function_call", "name": "shell", "call_id": "c0", "arguments": json!({"command": ["cat", "Old.md"]}).to_string()})),
+        ].join("\n");
+        let mut cwd = String::new();
+        let got: Vec<(Act, String)> = parse_touches(&text, &mut cwd, 1790640000000, &mut HashSet::new()).into_iter().map(|t| (t.act, t.path)).collect();
+        assert_eq!(got, vec![(Act::Read, "/v/Plan - A.md".into()), (Act::Search, "/v".into()), (Act::Read, "/v/Notes/B.md".into()),
+            (Act::Write, "/v/New.md".into()), (Act::Edit, "/v/Inbox.md".into())]);
     }
 
     #[test]
