@@ -1,5 +1,5 @@
 // The mirror of a work machine (relay-server mirror.rs): what this Mac keeps in sync there, so an agent on the
-// machine knows what Claude Code here knows. Every paired machine has one. Four roots:
+// machine knows what Claude Code here knows. Every paired machine has one, but one for shared vaults only. Four roots:
 //   context  ~/.claude/CLAUDE.md, skills, agents, commands      this Mac -> machine, an exact copy
 //   plugins  the switched-on plugins (installed_plugins.json)   this Mac -> machine, an exact copy
 //   vault    the vault, minus .obsidian, .git and the excludes  both ways, a conflict copy when both changed

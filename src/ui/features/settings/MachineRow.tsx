@@ -13,7 +13,8 @@ import { CommandBlock } from "./MachineSetup";
 import { StatusLine } from "./StatusLine";
 
 /** A paired machine on Settings › Machines: its name, address, whether it is online and its fingerprint, Forget (with
- *  how to revoke it on the machine) and its mirror. */
+ *  how to revoke it on the machine) and its mirror. One for shared vaults only says so instead: no mirror, phone or
+ *  GitHub there. */
 export function MachineRow({ machine }: { machine: Machine }) {
   const { t, th } = useT();
   const status = useSettingsStore(s => s.machinesPage.status[machine.id]);
@@ -68,7 +69,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
             {updating ? t("mc.updating") : t("mc.update", { version: setup!.version })}
           </button>
         ) : null}
-        {status && status !== "checking" && status.ok ? (
+        {status && status !== "checking" && status.ok && !machine.sharedOnly ? (
           <button className={buttonClass("ghost")} onClick={() => pairPhone(machine.id, !!phone)}>
             {phone ? t("mc.phoneClose") : t("mc.phoneAdd")}
           </button>
@@ -117,8 +118,12 @@ export function MachineRow({ machine }: { machine: Machine }) {
         </div>
       ) : null}
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
-      <MachineMirror machine={machine} />
-      {status && status !== "checking" && status.ok ? (
+      {machine.sharedOnly ? (
+        <p className={HINT_IN_ROW}>{t("mc.sharedOnlyRow")}</p>
+      ) : (
+        <MachineMirror machine={machine} />
+      )}
+      {status && status !== "checking" && status.ok && !machine.sharedOnly ? (
         <>
           <MachineGithub machine={machine} hasRepos={!!status.repos} />
           {status.repos ? <MachineRepos machine={machine} /> : null}

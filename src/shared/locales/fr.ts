@@ -1615,6 +1615,9 @@ export default {
     "Lancez <code>relay-server pair</code> sur la machine et collez la ligne ici. Le code ne fonctionne qu'une fois, pendant 10 minutes.",
   "mc.name": "Nom",
   "mc.namePh": "Vide : le nom d'hôte de la machine",
+  "mc.sharedOnly": "Uniquement pour les vaults partagés : pas de miroir du vault de ce Mac",
+  "mc.sharedOnlyRow":
+    "Uniquement pour les vaults partagés. Le vault, le contexte Claude et la mémoire de ce Mac ne vont pas ici, et aucune conversation n'y tourne. Pour changer cela, oubliez la machine et associez-la à nouveau.",
   "mc.pair": "Associer",
   "mc.pairing": "Association…",
   "mc.setupTitle": "Configurer une machine",

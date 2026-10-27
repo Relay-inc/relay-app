@@ -8,6 +8,8 @@
 // Mac, or a machine id); without a pick, where Settings › Machines says new conversations run. Between two turns it can
 // move (move_conversation in lib.rs): its transcript goes along, with `rewrite` for the vault's paths. There it runs
 // in the vault's mirror.
+// A machine paired for shared vaults only (`sharedOnly`) gets no mirror and runs no conversation: it only keeps the
+// shared vaults made on it (shared_vaults.rs), so this Mac's vault never goes there.
 // Only Claude Code runs there, and never a conversation about a mail: the mail tools are answered by this app.
 
 use relay_remote::client::Client;
@@ -42,6 +44,13 @@ pub fn valid(m: &Value) -> bool {
         && s("host").chars().all(|c| c.is_ascii_alphanumeric() || ".-:".contains(c)) && m["port"].as_u64().is_some_and(|p| (1..=65535).contains(&p))
         && s("name").chars().count() <= 60
         && crate::mirror::valid(m)
+}
+
+/// A machine paired for shared vaults only: no mirror, no conversations.
+pub fn shared_only(m: &Value) -> bool { m["sharedOnly"] == true }
+/// The machines that get this Mac's mirror and may run its conversations: every one but those for shared vaults only.
+pub fn runners(settings: &Value) -> impl Iterator<Item = &Value> {
+    settings["machines"].as_array().into_iter().flatten().filter(|m| !shared_only(m))
 }
 
 /// Where a conversation runs on a machine: its bind's folder (one bound before the mirror kept its own), else the
@@ -95,7 +104,7 @@ impl Machines {
     /// The machine a conversation runs on without a pick: the one chosen in Settings › Machines as where new
     /// conversations run (`machines_default`, "" this Mac).
     pub fn default_for(settings: &Value) -> Option<Value> {
-        settings["machines"].as_array()?.iter().find(|m| m["id"] == settings["machines_default"] && m["id"] != "").cloned()
+        runners(settings).find(|m| m["id"] == settings["machines_default"] && m["id"] != "").cloned()
     }
     /// The conversation's machine: its bind, or a new one for a conversation without a session on this Mac yet, on the
     /// machine picked (`choice`: Some("") this Mac, Some(id) a machine) or else the default. cwd "" means the vault's
@@ -103,15 +112,15 @@ impl Machines {
     pub fn bind_for(&self, settings: &Value, key: &str, local_session: bool, choice: Option<&str>) -> Option<(Value, Bind)> {
         if let Some(b) = self.bind_of(key) { return Some((Self::find(settings, &b.machine)?, b)); }
         if local_session { return None; }
-        let m = match choice { Some("") => return None, Some(id) => Self::find(settings, id)?, None => Self::default_for(settings)? };
+        let m = match choice { Some("") => return None, Some(id) => runners(settings).find(|m| m["id"] == id)?.clone(), None => Self::default_for(settings)? };
         Some((m.clone(), Bind { machine: m["id"].as_str()?.into(), cwd: String::new() }))
     }
-    /// Every machine with what the poller last heard: {id, name, online, default: whether a conversation runs there
-    /// without a pick}, for the composer's pick. No network.
+    /// Every machine that runs conversations with what the poller last heard: {id, name, online, default: whether a
+    /// conversation runs there without a pick}, for the composer's pick. No network.
     pub fn status_list(&self, settings: &Value) -> Value {
         let seen = self.seen.lock().unwrap();
         let def = Self::default_for(settings).and_then(|m| m["id"].as_str().map(String::from));
-        json!(settings["machines"].as_array().into_iter().flatten().map(|m| {
+        json!(runners(settings).map(|m| {
             let id = m["id"].as_str().unwrap_or("");
             let s = seen.get(id);
             json!({"id": id, "name": m["name"], "online": s.is_some_and(|s| s.info.is_some() && s.error.is_none()),
@@ -215,6 +224,14 @@ mod tests {
         assert!(ms.bind_for(&g, "c:10", false, Some("")).is_none());
         assert_eq!(ms.status_list(&g)[0]["default"], true);
         assert_eq!(ms.status_list(&s)[0]["default"], false);
+        // one for shared vaults only: no mirror round, not offered, never the default, a pick of it runs nowhere there
+        let mut o = g.clone();
+        o["machines"][0]["sharedOnly"] = json!(true);
+        assert!(valid(&o["machines"][0]) && shared_only(&o["machines"][0]) && !shared_only(&g["machines"][0]));
+        assert_eq!(runners(&o).count(), 0);
+        assert_eq!(runners(&g).count(), 1);
+        assert!(ms.bind_for(&o, "c:11", false, None).is_none() && ms.bind_for(&o, "c:11", false, Some("0123456789ab")).is_none());
+        assert_eq!(ms.status_list(&o), json!([]));
         ms.set_bind("c:1", Bind { machine: "0123456789ab".into(), cwd: "/x".into() });
         // once bound, the folder in the bind wins, also after a reload
         assert_eq!(Machines::load(&d).unwrap().bind_for(&s, "c:1", true, None).unwrap().1.cwd, "/x");

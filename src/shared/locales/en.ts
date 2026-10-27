@@ -1585,6 +1585,9 @@ const en = {
     "Run <code>relay-server pair</code> on the machine and paste the line here. The code works once, for 10 minutes.",
   "mc.name": "Name",
   "mc.namePh": "Empty uses the machine's host name",
+  "mc.sharedOnly": "Only for shared vaults: no mirror of this Mac's vault",
+  "mc.sharedOnlyRow":
+    "For shared vaults only. This Mac's vault, Claude context and memory do not go here, and no conversation runs here. To change that, forget it and pair it again.",
   "mc.pair": "Pair",
   "mc.pairing": "Pairing…",
   "mc.setupTitle": "Set up a machine",

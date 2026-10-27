@@ -114,8 +114,10 @@ and takes the conversation back after a restart. The report is in `/tmp/relay-se
 
 ## The mirror
 
-Every paired machine gets the mirror, there is no switch: Relay keeps four folders in sync on it, so a conversation
-there knows what Claude Code knows on the laptop. Every conversation there starts in the mirrored vault:
+Every paired machine gets the mirror: Relay keeps four folders in sync on it, so a conversation there knows what
+Claude Code knows on the laptop. Every conversation there starts in the mirrored vault. The one exception is a machine
+paired with "Only for shared vaults" ticked (`sharedOnly` in Relay's settings): it holds shared vaults only, gets
+nothing of the laptop and runs none of its conversations. Forget it and pair it again to change that.
 
 | Folder | From the laptop | Direction |
 |---|---|---|

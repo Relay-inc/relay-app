@@ -137,8 +137,8 @@ fn norm(mut v: Value) -> Value {
     // work machines (machines.rs): only complete ones, a broken entry is dropped rather than half used
     if !v["machines"].is_array() { v["machines"] = json!([]); }
     v["machines"].as_array_mut().unwrap().retain(machines::valid);
-    // where new conversations run: "" this Mac, or a paired machine's id
-    let known = v["machines"].as_array().unwrap().iter().any(|m| m["id"] == v["machines_default"]);
+    // where new conversations run: "" this Mac, or a paired machine's id (not one for shared vaults only)
+    let known = machines::runners(&v).any(|m| m["id"] == v["machines_default"]);
     if !known { v["machines_default"] = json!(""); }
     v
 }
@@ -308,6 +308,10 @@ const TEXT: &[(&str, [&str; 4])] = &[
     ("err.repo_unknown", ["No repo {v} on the machine", "Geen repo {v} op de machine", "Aucun dépôt {v} sur la machine", "Kein Repo {v} auf der Maschine"]),
     ("err.repo_no_checkout", ["No local checkout of {v} found on this Mac", "Geen lokale checkout van {v} gevonden op deze Mac", "Aucune copie locale de {v} trouvée sur ce Mac", "Kein lokaler Checkout von {v} auf diesem Mac gefunden"]),
     ("err.repo_branch_out", ["{v} is checked out on this Mac: switch to another branch there first", "{v} is uitgecheckt op deze Mac: wissel daar eerst naar een andere branch", "{v} est extraite sur ce Mac : passez d'abord à une autre branche", "{v} ist auf diesem Mac ausgecheckt: wechsle dort zuerst auf einen anderen Branch"]),
+    ("err.machine_shared_only", ["This machine is for shared vaults only: no conversation runs there and this Mac's vault does not go there", "Deze machine is enkel voor gedeelde vaults: er loopt geen gesprek en de vault van deze Mac gaat er niet heen",
+        "Cette machine sert uniquement aux coffres partagés : aucune conversation n'y tourne et le coffre de ce Mac n'y va pas", "Diese Maschine ist nur für geteilte Vaults: Dort läuft kein Gespräch, und der Vault dieses Macs geht nicht dorthin"]),
+    ("err.machine_repair", ["This machine is already paired the other way: forget it first, then pair it again", "Deze machine is al op de andere manier gekoppeld: vergeet ze eerst en koppel ze dan opnieuw",
+        "Cette machine est déjà appairée autrement : oubliez-la d'abord, puis appairez-la à nouveau", "Diese Maschine ist schon anders gekoppelt: Vergiss sie zuerst und kopple sie dann neu"]),
     ("err.no_machine", ["No such work machine", "Onbekende werkmachine", "Machine de travail inconnue", "Unbekannte Arbeitsmaschine"]),
     ("err.cal_email", ["Calendar: enter the calendar's email address", "Agenda: vul het e-mailadres van de agenda in", "Agenda : saisissez l'adresse e-mail de l'agenda", "Kalender: Gib die E-Mail-Adresse des Kalenders ein"]),
     ("err.cal_url", ["That is no secret iCal address. In Google Calendar: Settings › your calendar › Integrate calendar › Secret address in iCal format.", "Dat is geen geheim iCal-adres. In Google Agenda: Instellingen › je agenda › Agenda integreren › Geheim adres in iCal-indeling.", "Ce n'est pas une adresse iCal secrète. Dans Google Agenda : Paramètres › votre agenda › Intégrer l'agenda › Adresse secrète au format iCal.", "Das ist keine geheime iCal-Adresse. In Google Kalender: Einstellungen › dein Kalender › Kalender integrieren › Geheime Adresse im iCal-Format."]),
@@ -1119,6 +1123,7 @@ fn move_to(app: &AppHandle, key: &str, to: &str, mail: bool, about: Option<&str>
     if !agents::get(&sess.provider).is_ok_and(|p| p.caps().remote) { return Err(trc("err.move_only_claude")); }
     let from = state.machines.bind_of(key);
     if from.as_ref().map_or("", |b| b.machine.as_str()) == to { return Ok(()); }
+    if machines::Machines::find(&state.settings.lock().unwrap(), to).is_some_and(|m| machines::shared_only(&m)) { return Err(trc("err.machine_shared_only")); }
     {
         let procs = state.procs.lock().unwrap();
         let x = procs.get(key);
@@ -1485,7 +1490,11 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 
 /// Validate, save and activate new settings. Returns what was saved.
 #[tauri::command]
-fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Value, String> {
+fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Result<Value, String> {
+    // a machine for shared vaults only stays one, whatever the window sends (machine_pair): only Forget and pairing it
+    // again changes that
+    let only: Vec<Value> = state.settings.lock().unwrap()["machines"].as_array().into_iter().flatten().filter(|m| machines::shared_only(m)).map(|m| m["id"].clone()).collect();
+    for m in settings["machines"].as_array_mut().into_iter().flatten() { if only.contains(&m["id"]) { m["sharedOnly"] = json!(true); } }
     let mut s = norm(settings);
     let lang = ui_lang_of(&s);
     // the vault by its real path, with its full mapping stored, so the file shows what the app uses
@@ -2084,13 +2093,21 @@ fn save_settings(app: &AppHandle, s: &Value) -> Result<(), String> {
     Ok(())
 }
 /// Pair with the line `relay-server pair` printed. The machine is saved under the name given, else its host name.
+/// `shared_only`: for shared vaults only, saved with the machine in the same write, so no mirror round ever sees it
+/// without the flag. Pairing it again the other way is refused: Forget first, so the flag never goes off silently.
 #[tauri::command]
-async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name: String) -> Result<Value, String> {
+async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name: String, shared_only: Option<bool>) -> Result<Value, String> {
+    let shared_only = shared_only.unwrap_or(false);
+    let fp = relay_remote::proto::PairLine::parse(&line).map(|l| l.fp).unwrap_or_default();
+    let other_way = |s: &Value| s["machines"].as_array().into_iter().flatten().any(|x| x["fp"] == fp.as_str() && machines::shared_only(x) != shared_only);
+    if other_way(&state.settings.lock().unwrap()) { return Err(trc("err.machine_repair")); }
     let (id, me) = (state.machines.id.clone(), sys_name());
     let (l, info) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::pair(&line, &id, &me)).await.map_err(|e| e.to_string())??;
     let name: String = if name.trim().is_empty() { info.host.clone() } else { name.trim().chars().take(60).collect() };
-    let m = json!({"id": &l.fp[..12], "name": name, "host": l.host, "port": l.port, "fp": l.fp});
+    let mut m = json!({"id": &l.fp[..12], "name": name, "host": l.host, "port": l.port, "fp": l.fp});
+    if shared_only { m["sharedOnly"] = json!(true); }
     let mut s = state.settings.lock().unwrap();
+    if other_way(&s) { return Err(trc("err.machine_repair")); }
     let list = s["machines"].as_array_mut().unwrap();
     list.retain(|x| x["fp"] != m["fp"]);
     list.push(m.clone());
@@ -2103,6 +2120,8 @@ async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name:
 #[tauri::command]
 async fn machine_pair_phone(app: AppHandle, state: State<'_, App>, id: String) -> Result<Value, String> {
     let m = machines::Machines::find(&state.settings.lock().unwrap(), &id).ok_or_else(|| trc("err.no_machine"))?;
+    // the phone gets the mirror's key and starts conversations there: neither exists on one for shared vaults only
+    if machines::shared_only(&m) { return Err(trc("err.machine_shared_only")); }
     let c = state.machines.client(&m);
     let key = mirror::key(&data_dir(&app), &id)?;
     let code = tauri::async_runtime::spawn_blocking(move || c.pair_device()).await.map_err(|e| e.to_string())??;
@@ -2242,7 +2261,8 @@ fn machines_list(state: State<App>) -> Value { state.machines.status_list(&state
 #[tauri::command]
 fn set_machines_default(app: AppHandle, state: State<App>, id: String) -> Result<(), String> {
     let mut s = state.settings.lock().unwrap();
-    if !id.is_empty() && machines::Machines::find(&s, &id).is_none() { return Err(trc("err.no_machine")); }
+    let m = if id.is_empty() { None } else { Some(machines::Machines::find(&s, &id).ok_or_else(|| trc("err.no_machine"))?) };
+    if m.is_some_and(|m| machines::shared_only(&m)) { return Err(trc("err.machine_shared_only")); }
     s["machines_default"] = json!(id);
     save_settings(&app, &s)
 }
@@ -2412,7 +2432,8 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                 }
             });
-            // the mirrors: a round every 5 s for each machine that has one and answers, on a thread of their own so a
+            // the mirrors: a round every 5 s for each machine that has one (not one for shared vaults only: nothing of
+            // this Mac's goes there, not even the profile) and answers, on a thread of their own so a
             // first big copy never holds up the cards
             // With each round, how this Mac starts Claude there (when it changed), so its phone can start conversations
             // there while this Mac is closed (relay-server's `start`)
@@ -2423,7 +2444,7 @@ pub fn run() {
                 let st = h.state::<App>();
                 let s = st.settings.lock().unwrap().clone();
                 let vault = s["vault"].as_str().unwrap_or("").to_string();
-                for m in s["machines"].as_array().into_iter().flatten() {
+                for m in machines::runners(&s) {
                     let id = m["id"].as_str().unwrap_or("");
                     let Some(info) = st.machines.seen.lock().unwrap().get(id).filter(|x| x.error.is_none()).and_then(|x| x.info.clone()) else { continue };
                     let client = st.machines.client(m);

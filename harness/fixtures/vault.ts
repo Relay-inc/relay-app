@@ -364,9 +364,14 @@ const LINEAR_TEAM = "b0000000-0000-4000-8000-000000000001";
 export function settings(fixture: string) {
   const onboarding = fixture === "onboarding";
   // a paired work machine that speaks an older protocol (Settings › Machines); phone: the same machine online; github:
-  // online, connected to GitHub, with three repos (machineGit); mirror: online, its mirror holding deletes back
+  // online, connected to GitHub, with three repos (machineGit). mirror: online, its mirror holding deletes back.
+  // nomirror: online, next to a second one paired for shared vaults only
   const machines =
-    fixture === "machines" || fixture === "phone" || fixture === "github" || fixture === "mirror"
+    fixture === "machines" ||
+    fixture === "phone" ||
+    fixture === "github" ||
+    fixture === "mirror" ||
+    fixture === "nomirror"
       ? {
           machines: [
             {
@@ -377,6 +382,18 @@ export function settings(fixture: string) {
               fp: "0f9534960dd3570a".padEnd(64, "0"),
               mirror: { exclude: [] },
             },
+            ...(fixture === "nomirror"
+              ? [
+                  {
+                    id: "b2c3d4e5f6a1",
+                    name: "Team server",
+                    host: "192.168.1.3",
+                    port: 47800,
+                    fp: "7c2e41a09b85d3f6".padEnd(64, "0"),
+                    sharedOnly: true,
+                  },
+                ]
+              : []),
           ],
         }
       : {};

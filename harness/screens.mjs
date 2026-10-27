@@ -107,6 +107,22 @@ const VIEWS = {
     await waitText("Scan this with Relay on your phone");
     await page.getByText("ntfy.sh/relay-").scrollIntoViewIfNeeded();
   },
+  // Settings › Machines, pairing a machine for shared vaults only: the line pasted, the checkbox ticked
+  "settings-machines-pair-shared": async () => {
+    await settingsPage("Machines", null, "nomirror");
+    await page
+      .locator("#mcline")
+      .fill(`relay://192.168.1.3:47800#fp=${"7c2e41a09b85d3f6".padEnd(64, "0")}&code=${"c".repeat(32)}`);
+    await page.locator("#mcname").fill("Team server");
+    await page.locator("#mcshared").check();
+    await intoView("Only for shared vaults: no mirror of this Mac's vault");
+  },
+  // the same page further down: Team server, paired for shared vaults only, says so where Server shows its mirror
+  "settings-machines-shared-only": async () => {
+    await settingsPage("Machines", null, "nomirror");
+    await waitText("For shared vaults only.");
+    await intoView("For shared vaults only.");
+  },
   // Settings › Machines, a machine online whose mirror holds 9 deletes back: the first 5 listed, Restore and Delete
   "settings-machines-mirror-held": async () => {
     await settingsPage("Machines", null, "mirror");

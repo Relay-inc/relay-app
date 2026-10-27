@@ -456,7 +456,7 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
     let dir = PathBuf::from(std::env::var("RELAY_SELFTEST_DIR").unwrap_or_default());
     let line = std::env::var("RELAY_SELFTEST_LINE").unwrap_or_default();
     std::thread::sleep(Duration::from_secs(2));
-    r.step("pair with the server", tauri::async_runtime::block_on(machine_pair(app.clone(), app.state::<App>(), line, "server".into())).map(|v| v.to_string()));
+    r.step("pair with the server", tauri::async_runtime::block_on(machine_pair(app.clone(), app.state::<App>(), line, "server".into(), None)).map(|v| v.to_string()));
     let mid = st.settings.lock().unwrap()["machines"][0]["id"].as_str().unwrap_or("").to_string();
 
     // a main-vault conversation running before the vault is made: it was fenced without the team folder

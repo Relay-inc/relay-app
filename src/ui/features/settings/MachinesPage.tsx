@@ -31,6 +31,9 @@ export function MachinesPage({ active }: { active: boolean }) {
   const [runDefaultError, setRunDefaultError] = useState("");
   const [line, setLine] = useState("");
   const [name, setName] = useState("");
+  const [sharedOnly, setSharedOnly] = useState(false);
+  // where conversations may run: not on a machine for shared vaults only
+  const runners = machines.filter(machine => !machine.sharedOnly);
   useEffect(() => {
     if (active) showMachinesPage();
   }, [active]);
@@ -50,14 +53,15 @@ export function MachinesPage({ active }: { active: boolean }) {
 
   // a machine that paired clears the fields; a failed pairing keeps them to fix
   const pair = async () => {
-    if (!(await pairMachine(line.trim(), name.trim()))) return;
+    if (!(await pairMachine(line.trim(), name.trim(), sharedOnly))) return;
     setLine("");
     setName("");
+    setSharedOnly(false);
   };
   return (
     <>
       <Html as="p" className={HINT} html={th("mc.intro")} />
-      {machines.length ? (
+      {runners.length ? (
         <Section title={t("mc.runDefaultTitle")}>
           <Field label={t("mc.runDefault")} hint={t("mc.runDefaultHelp")} id="mcdefault">
             <select
@@ -67,7 +71,7 @@ export function MachinesPage({ active }: { active: boolean }) {
               onChange={async e => setRunDefaultError(await setRunDefault(e.target.value))}
             >
               <option value="">{t("composer.thisMac")}</option>
-              {machines.map(machine => (
+              {runners.map(machine => (
                 <option key={machine.id} value={machine.id}>
                   {machine.name}
                 </option>
@@ -98,6 +102,9 @@ export function MachinesPage({ active }: { active: boolean }) {
             value={name}
             onChange={e => setName(e.target.value)}
           />
+        </Field>
+        <Field label={t("mc.sharedOnly")} id="mcshared">
+          <input id="mcshared" type="checkbox" checked={sharedOnly} onChange={e => setSharedOnly(e.target.checked)} />
         </Field>
         <div className="flex flex-wrap items-center gap-2">
           {pairError ? <span className={ERROR_MESSAGE}>{pairError}</span> : null}
