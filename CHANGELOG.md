@@ -15,6 +15,7 @@ a PR. Versions follow
 
 ### Added
 
+- **Vault usage**: the Usage view has two tabs, AI usage (as before) and Vault usage: how many notes Claude Code and Codex read, wrote and edited and how often they searched the vault, this week and today, the notes read and changed most (a click opens one) and the week per folder. Counted from the tool calls in their local logs; Codex reads through shell commands, so its numbers are an estimate (#281)
 - **Claude Design's questions reach the conversation**: when Claude Design answers with a clarifying question instead of a design, `design_prompt` and `design_create` return the question with each option's label and say that it waits; the next `design_prompt` answers it (option labels and/or free text) instead of failing with "no send button". `design_create` also names the project's GitHub repos in the first prompt, so the design matches the codebase
 
 ## [0.0.35] - 2026-10-26

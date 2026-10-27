@@ -1,6 +1,7 @@
 //! Usage in the contract: each provider reports (a) its plan or rate limits, as windows with % used and a
 //! reset time, and (b) token records read incrementally from its local logs. The app aggregates the
 //! records per provider (today, this week, per model, the vault's conversations) and over all providers.
+//! (c) The files its tool calls read, wrote and searched ([`Touch`]), for the vault's own numbers.
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -95,6 +96,110 @@ pub fn aggregate(recs: &[Record], today: i64, week: i64) -> Value {
         "today": t.json(), "week": w.json(), "vaultToday": vt.json(), "vaultWeek": vw.json(),
         "models": ms.iter().map(|(m, (a, b))| json!({ "model": m, "today": a.json(), "week": b.json() })).collect::<Vec<_>>(),
         "sessions": ss.iter().map(|(s, (a, b, last))| json!({ "sid": s, "today": a.json(), "week": b.json(), "last": last })).collect::<Vec<_>>(),
+    })
+}
+
+/// What a tool call did with a file: read it, wrote it whole (new or overwritten), changed part of it, or searched
+/// a folder (`path` is the folder).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Act { Read, Write, Edit, Search }
+
+/// One file a provider's tool call touched, `path` absolute.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Touch { pub at: i64, pub act: Act, pub path: String }
+
+fn under(path: &str, dir: &str) -> bool { !dir.is_empty() && (path == dir || path.starts_with(&format!("{dir}/"))) }
+/// `path` as an absolute path, a relative one taken from `cwd`.
+pub fn resolve(path: &str, cwd: &str) -> String { if path.starts_with('/') { path.into() } else { format!("{cwd}/{path}") } }
+
+/// The notes a shell command reads (cat, sed, head, …), writes (`>`) or edits (`sed -i`, `>>`), and the folders it searches (rg, grep,
+/// find, fd): what a provider without its own Read and Grep tools does instead. Relative paths are taken from `cwd`,
+/// moved by a `cd` in the command; paths and `cd`s it cannot tell (`~`, `$VAR`, `-`) are left out. A
+/// grep behind a pipe filters the pipe and searches no folder.
+// ponytail: words only, no shell semantics (subshells, xargs, redirects, quoted operators). Upgrade: a real shell parser.
+pub fn shell_touches(cmd: &str, cwd: &str) -> Vec<(Act, String)> {
+    let Some(words) = shlex::split(cmd) else { return vec![] };
+    // `a; b` splits into "a;" and "b"
+    let words: Vec<String> = words.into_iter().flat_map(|w| match w.strip_suffix(';') {
+        Some(head) if !head.is_empty() => vec![head.to_string(), ";".into()],
+        _ => vec![w],
+    }).collect();
+    let mut cwd = Some(cwd.to_string());
+    let (mut out, mut piped, mut seg) = (vec![], false, vec![]);
+    for w in words.iter().map(String::as_str).chain([";"]) {
+        if !["&&", "||", ";", "|"].contains(&w) { seg.push(w); continue; }
+        let at = |p: &str| match p {
+            p if p.starts_with('/') => Some(p.to_string()),
+            p if p.starts_with(['~', '$']) => None,
+            p => cwd.as_ref().map(|c| resolve(p, c)),
+        };
+        // `> note.md` writes it whole, `>> note.md` adds to it, whichever command runs; the rest are the arguments
+        let mut args_only = vec![];
+        let mut words = seg.iter();
+        while let Some(&w) = words.next() {
+            let act = match w { ">" => Act::Write, ">>" => Act::Edit, _ => { args_only.push(w); continue } };
+            if let Some(f) = words.next().filter(|f| f.ends_with(".md")).and_then(|f| at(f)) { out.push((act, f)); }
+        }
+        if let Some((prog, args)) = args_only.split_first() {
+            match prog.rsplit('/').next().unwrap_or(prog) {
+                "cd" => cwd = args.first().filter(|d| !d.starts_with(['~', '$', '-'])).and_then(|d| at(d)),
+                p @ ("cat" | "head" | "tail" | "sed" | "nl" | "less" | "more" | "bat") => {
+                    let act = if p == "sed" && args.iter().any(|a| a.starts_with("-i")) { Act::Edit } else { Act::Read };
+                    out.extend(args.iter().filter(|a| a.ends_with(".md")).filter_map(|a| Some((act, at(a)?))));
+                }
+                "rg" | "grep" | "find" | "fd" if !piped => {
+                    if let Some(dir) = args.iter().find(|a| a.starts_with('/')).map(|a| a.to_string()).or_else(|| cwd.clone()) { out.push((Act::Search, dir)); }
+                }
+                _ => {}
+            }
+        }
+        piped = w == "|";
+        seg.clear();
+    }
+    out
+}
+
+/// The vault's own numbers from every provider's touches: reads, writes, edits, searches and distinct notes today and
+/// this week, the notes read and changed most this week, and the activity per folder (two levels down, "" for the
+/// vault's root). Only notes (`.md`) count as reads and changes.
+/// `{today, week: {read, write, edit, search, notes}, topRead, topChanged: [{path, n}], folders: [{folder, read, changed}]}`
+pub fn vault_activity(touches: &[Touch], vault: &str, today: i64, week: i64) -> Value {
+    #[derive(Default)]
+    struct Count { read: u64, write: u64, edit: u64, search: u64, notes: HashSet<String> }
+    impl Count {
+        fn add(&mut self, act: Act, rel: &str) {
+            match act { Act::Read => self.read += 1, Act::Write => self.write += 1, Act::Edit => self.edit += 1, Act::Search => self.search += 1 }
+            if act != Act::Search { self.notes.insert(rel.into()); }
+        }
+        fn json(&self) -> Value { json!({ "read": self.read, "write": self.write, "edit": self.edit, "search": self.search, "notes": self.notes.len() }) }
+    }
+    let (mut t, mut w) = (Count::default(), Count::default());
+    let (mut read, mut changed): (HashMap<String, u64>, HashMap<String, u64>) = Default::default();
+    let mut folders: HashMap<String, (u64, u64)> = HashMap::new();
+    // a tool call names the vault as given or by its real path (a symlinked folder, /tmp is /private/tmp)
+    let real = fs::canonicalize(vault).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default();
+    for x in touches.iter().filter(|x| x.at >= week.min(today)) {
+        let Some(root) = [vault, real.as_str()].into_iter().find(|r| under(&x.path, r)) else { continue };
+        let rel = x.path[root.len()..].trim_start_matches('/');
+        if x.act != Act::Search && !rel.ends_with(".md") { continue; }
+        if x.at >= today { t.add(x.act, rel); }
+        if x.at < week { continue; }
+        w.add(x.act, rel);
+        if x.act == Act::Search { continue; }
+        let dirs: Vec<&str> = rel.split('/').collect();
+        let f = folders.entry(dirs[..(dirs.len() - 1).min(2)].join("/")).or_default();
+        if x.act == Act::Read { *read.entry(rel.into()).or_default() += 1; f.0 += 1; } else { *changed.entry(rel.into()).or_default() += 1; f.1 += 1; }
+    }
+    let top = |m: HashMap<String, u64>| {
+        let mut v: Vec<_> = m.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        v.into_iter().take(10).map(|(path, n)| json!({ "path": path, "n": n })).collect::<Vec<_>>()
+    };
+    let mut fs: Vec<_> = folders.into_iter().collect();
+    fs.sort_by(|a, b| (b.1 .0 + b.1 .1).cmp(&(a.1 .0 + a.1 .1)).then(a.0.cmp(&b.0)));
+    json!({
+        "today": t.json(), "week": w.json(), "topRead": top(read), "topChanged": top(changed),
+        "folders": fs.iter().map(|(f, (r, c))| json!({ "folder": f, "read": r, "changed": c })).collect::<Vec<_>>(),
     })
 }
 
@@ -199,6 +304,47 @@ mod tests {
         assert_eq!(v["models"][0]["model"], "a");
         assert_eq!(v["sessions"].as_array().unwrap().len(), 1);
         assert_eq!(v["sessions"][0]["last"], TODAY + 1);
+    }
+
+    #[test]
+    fn shell_commands_read_edit_and_search() {
+        let t = |cmd: &str| shell_touches(cmd, "/v");
+        assert_eq!(t("cat 'Plan - A.md' && sed -n 1,9p /v/B.md | head"), vec![(Act::Read, "/v/Plan - A.md".into()), (Act::Read, "/v/B.md".into())]);
+        assert_eq!(t("sed -i '' s/a/b/ Notes/C.md"), vec![(Act::Edit, "/v/Notes/C.md".into())]);
+        assert_eq!(t("rg -n foo; grep -r x /w/src"), vec![(Act::Search, "/v".into()), (Act::Search, "/w/src".into())]);
+        assert_eq!(t("ls Notes && git status"), vec![]);
+        assert_eq!(t("cat 'unbalanced.md"), vec![]);
+        // a cd moves the rest of the line; a grep behind a pipe reads the pipe, not a folder
+        assert_eq!(t("cd ~/repo && cat CLAUDE.md; cd /w && rg x"), vec![(Act::Search, "/w".into())]);
+        assert_eq!(t("cd Notes && head -3 D.md | grep -c x"), vec![(Act::Read, "/v/Notes/D.md".into())]);
+        assert_eq!(t("cat ~/.claude/A.md $d/B.md"), vec![]);
+        assert_eq!(t("cat > New.md <<'EOF'"), vec![(Act::Write, "/v/New.md".into())]);
+        assert_eq!(t("cat A.md >> B.md"), vec![(Act::Edit, "/v/B.md".into()), (Act::Read, "/v/A.md".into())]);
+    }
+
+    #[test]
+    fn vault_activity_counts_notes_folders_and_searches() {
+        let x = |at: i64, act: Act, path: &str| Touch { at, act, path: path.into() };
+        let touches = [
+            x(TODAY + 1, Act::Read, "/v/Contexts/Acme/Portfolio/A.md"),
+            x(TODAY + 2, Act::Read, "/v/Contexts/Acme/Portfolio/A.md"),
+            x(TODAY + 3, Act::Edit, "/v/Calendar/2026-09-30.md"),
+            x(TODAY + 4, Act::Search, "/v/Contexts"),
+            x(TODAY - 1, Act::Write, "/v/Inbox.md"),
+            x(TODAY - 2, Act::Read, "/v/Inbox.md"),
+            x(TODAY + 5, Act::Read, "/elsewhere/B.md"),
+            x(TODAY + 6, Act::Read, "/v/image.png"),
+            x(TODAY + 7, Act::Read, "/vault2/C.md"),
+            x(WEEK - 1, Act::Read, "/v/Old.md"),
+        ];
+        let v = vault_activity(&touches, "/v", TODAY, WEEK);
+        assert_eq!(v["today"], json!({"read": 2, "write": 0, "edit": 1, "search": 1, "notes": 2}));
+        assert_eq!(v["week"], json!({"read": 3, "write": 1, "edit": 1, "search": 1, "notes": 3}));
+        assert_eq!(v["topRead"], json!([{"path": "Contexts/Acme/Portfolio/A.md", "n": 2}, {"path": "Inbox.md", "n": 1}]));
+        assert_eq!(v["topChanged"], json!([{"path": "Calendar/2026-09-30.md", "n": 1}, {"path": "Inbox.md", "n": 1}]));
+        assert_eq!(v["folders"], json!([
+            {"folder": "", "read": 1, "changed": 1}, {"folder": "Contexts/Acme", "read": 2, "changed": 0}, {"folder": "Calendar", "read": 0, "changed": 1},
+        ]));
     }
 
     #[test]
