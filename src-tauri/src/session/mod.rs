@@ -285,6 +285,8 @@ pub(crate) fn ensure_local(app: &AppHandle, key: &str) -> Result<(), String> {
     if !p.caps().persistent { return Err(format!("{}: a turn at a time, not from the phone", p.name())); }
     let account = account_of(&state, p, key, "");
     let _gate = state.vault_gate.lock().unwrap();
+    // the phone writes its turns past `send`: none while a vault is being added, which stops every agent after
+    if crate::policy::adding() { return Err(trc("err.vault_adding")); }
     let mut procs = state.procs.lock().unwrap();
     if procs.contains_key(key) { return Ok(()); }
     let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None })?;

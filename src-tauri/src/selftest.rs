@@ -557,6 +557,13 @@ fn vaults_run(app: &AppHandle, ev: &Events, r: &mut Report) {
         }
     });
     let alpha = team_alpha.and_then(|p| p["name"].as_str().map(String::from)).unwrap_or_default();
+    // the Files drawer of the team's Alpha: its folder in the team vault, nothing of the main vault
+    let roots = crate::file_roots_of(&app.state::<App>(), &alpha);
+    let want = team.join("Contexts/Work/Projects/Alpha");
+    r.step("the Files drawer of the team's project shows its team folder", match roots["roots"].as_array().map(|r| r.iter().filter_map(|x| x["path"].as_str()).map(crate::vault::canon).collect::<Vec<_>>()) {
+        Some(paths) if paths == [crate::vault::canon(&want.to_string_lossy())] => Ok(paths[0].clone()),
+        _ => Err(roots.to_string()),
+    });
 
     // a real conversation about the team's Alpha: it runs in the team vault and cannot read the main vault's secret
     let main = st.settings.lock().unwrap()["vault"].as_str().unwrap_or("").to_string();

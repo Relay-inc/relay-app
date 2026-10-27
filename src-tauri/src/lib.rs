@@ -665,7 +665,7 @@ fn refresh_index(app: &AppHandle) {
 /// older Relay made follows today's rules too (an Active project untouched for 30 days shows as Quiet). Every starter
 /// version reads the card field `last`. A vault with a script of its own (other card fields) runs that one: ours would
 /// find none of its cards and write an empty index.
-fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<PathBuf> {
+pub(crate) fn index_script(own: PathBuf, bundled: Option<PathBuf>) -> Option<PathBuf> {
     let src = std::fs::read_to_string(&own).ok()?;
     if src.contains("scalar(fm, \"last\"") { bundled } else { Some(own) }
 }
@@ -926,8 +926,11 @@ fn git_tops(vault: &str, project: &str, made: &[String], path: &str) -> Vec<(Str
     out
 }
 /// What git_tops needs from the state, to run off the main thread.
-fn git_ctx(state: &App, key: &str) -> (String, Vec<String>, String) {
-    (vault(state), state.worktrees.lock().unwrap().get(key).cloned().unwrap_or_default(), state.path.clone())
+/// The drawers' context for a project open in conversation `key`: its vault and its name there (a shared vault's
+/// project by its key), the worktrees that conversation made, the PATH. A project of a vault gone: no vault, no repos.
+fn git_ctx(state: &App, key: &str, project: &str) -> (String, String, Vec<String>, String) {
+    let (v, name) = project_home(state, project).unwrap_or_default();
+    (v, name, state.worktrees.lock().unwrap().get(key).cloned().unwrap_or_default(), state.path.clone())
 }
 /// `repo` when it is one of git_tops, else an error: the webview never picks a directory of its own.
 fn git_allowed(vault: &str, project: &str, made: &[String], path: &str, repo: &str) -> Result<String, String> {
@@ -937,7 +940,7 @@ fn git_allowed(vault: &str, project: &str, made: &[String], path: &str, repo: &s
 /// made the worktree). A repo git cannot read comes with its `err`.
 #[tauri::command]
 async fn git_repos(state: State<'_, App>, key: String, project: String) -> Result<Value, String> {
-    let (v, made, path) = git_ctx(&state, &key);
+    let (v, project, made, path) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || {
         Value::Array(git_tops(&v, &project, &made, &path).into_iter().map(|(t, m)| {
             let mut s = git::status(&t, &path).unwrap_or_else(|e| json!({"repo": t, "name": t.rsplit('/').next(), "branch": "", "files": [], "err": e}));
@@ -949,33 +952,34 @@ async fn git_repos(state: State<'_, App>, key: String, project: String) -> Resul
 /// Stage (`on`) or unstage files of a project's repo.
 #[tauri::command]
 async fn git_stage(state: State<'_, App>, key: String, project: String, repo: String, paths: Vec<String>, on: bool) -> Result<(), String> {
-    let (v, made, path) = git_ctx(&state, &key);
+    let (v, project, made, path) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || git::stage(&git_allowed(&v, &project, &made, &path, &repo)?, &paths, on, &path)).await.map_err(|e| e.to_string())?
 }
 /// Throw away one file's changes in a project's repo, the drawer asked first.
 #[tauri::command]
 async fn git_discard(state: State<'_, App>, key: String, project: String, repo: String, path: String) -> Result<(), String> {
-    let (v, made, env) = git_ctx(&state, &key);
+    let (v, project, made, env) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || git::discard(&git_allowed(&v, &project, &made, &env, &repo)?, &path, &env)).await.map_err(|e| e.to_string())?
 }
 /// The newest commits of a project's repo for the drawer's log: its branch and upstream, or every branch (`all`).
 #[tauri::command]
 async fn git_log(state: State<'_, App>, key: String, project: String, repo: String, all: bool) -> Result<Value, String> {
-    let (v, made, path) = git_ctx(&state, &key);
+    let (v, project, made, path) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || git::log(&git_allowed(&v, &project, &made, &path, &repo)?, all, 200, &path)).await.map_err(|e| e.to_string())?
 }
 /// One commit of a project's repo with its files and their diffs, for the log's commit window.
 #[tauri::command]
 async fn git_show(state: State<'_, App>, key: String, project: String, repo: String, hash: String) -> Result<Value, String> {
-    let (v, made, path) = git_ctx(&state, &key);
+    let (v, project, made, path) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || git::show(&git_allowed(&v, &project, &made, &path, &repo)?, &hash, &path)).await.map_err(|e| e.to_string())?
 }
 /// The Files drawer's roots for a project, {vault, roots: [{label, path, vault}]}: its code folders from the vault's
 /// index, then its folder in the vault.
-fn file_roots_of(state: &App, project: &str) -> Value {
-    let v = vault(state);
+pub(crate) fn file_roots_of(state: &App, project: &str) -> Value {
+    // the project's own vault and its name there; a project of a vault gone shows nothing, never the main vault
+    let Ok((v, name)) = project_home(state, project) else { return json!({"vault": "", "roots": []}) };
     let idx = brain(&v).and_then(|b| fs::read_to_string(format!("{b}/index/repos.json")).ok());
-    explorer::roots(&v, idx, project)
+    explorer::roots(&v, idx, &name)
 }
 fn root_paths(roots: &Value) -> Vec<String> {
     roots["roots"].as_array().map(|a| a.iter().filter_map(|r| r["path"].as_str().map(str::to_string)).collect()).unwrap_or_default()
@@ -1002,13 +1006,13 @@ async fn read_file_text(state: State<'_, App>, project: String, path: String) ->
 /// Pull a project's repo from its upstream, fast-forward only.
 #[tauri::command]
 async fn git_pull(state: State<'_, App>, key: String, project: String, repo: String) -> Result<(), String> {
-    let (v, made, path) = git_ctx(&state, &key);
+    let (v, project, made, path) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || git::pull(&git_allowed(&v, &project, &made, &path, &repo)?, &path)).await.map_err(|e| e.to_string())?
 }
 /// Commit what is staged in a project's repo, and push when asked.
 #[tauri::command]
 async fn git_commit(state: State<'_, App>, key: String, project: String, repo: String, message: String, push: bool) -> Result<(), String> {
-    let (v, made, path) = git_ctx(&state, &key);
+    let (v, project, made, path) = git_ctx(&state, &key, &project);
     tauri::async_runtime::spawn_blocking(move || git::commit(&git_allowed(&v, &project, &made, &path, &repo)?, &message, push, &path)).await.map_err(|e| e.to_string())?
 }
 
@@ -1538,13 +1542,16 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     if !mail_settings_ok(&s["mail"]) { return Err(tr(lang, "err.mail_account")); }
     // all checked: a folder added stops the agents here under the vault lock, held until the new list is in
     let _gate = added.then(|| policy::hold_for_vault(&app));
-    // the shared vaults as they are now: a join or leave that finished meanwhile stays
-    s["sharedVaults"] = state.settings.lock().unwrap()["sharedVaults"].clone();
-    fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
+    // the shared vaults as they are now, read, written and set under one lock: a join or leave meanwhile stays
+    let (relang, rekey) = {
+        let mut cur = state.settings.lock().unwrap();
+        s["sharedVaults"] = cur["sharedVaults"].clone();
+        fs::write(data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap()).map_err(|e| e.to_string())?;
+        let changed = (ui_lang_of(&cur) != lang, cur["shortcuts"] != s["shortcuts"]);
+        *cur = s.clone();
+        changed
+    };
     app.emit("settings-changed", &s).ok(); // the main window follows a change made in the settings window
-    let relang = ui_lang_of(&state.settings.lock().unwrap()) != lang;
-    let rekey = state.settings.lock().unwrap()["shortcuts"] != s["shortcuts"];
-    *state.settings.lock().unwrap() = s.clone();
     plugins::sync(&app); // a plugin switched off or removed stops
     anywhere::apply(&app); // the shortcut follows Settings › Voice
     set_cur_lang(lang);

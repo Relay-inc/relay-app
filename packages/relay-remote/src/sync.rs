@@ -59,7 +59,7 @@ impl Filter {
 /// `Syﬆem/Settings.json` still is `System/settings.json`. The format characters HFS+ ignores in a name (zero-width
 /// joiners, bidi marks, BOM) are dropped, so they cannot slip a guarded name past on a Mac OS Extended disk. Others stay non-ASCII, which no ASCII name can equal; a
 /// non-ASCII name is not matched as APFS would, so callers guard only ASCII ones.
-fn fold(s: &str) -> String {
+pub fn fold(s: &str) -> String {
     s.chars().map(|c| match c {
         '\u{17F}' => "s", '\u{212A}' => "k", '\u{DF}' | '\u{1E9E}' => "ss", '\u{FB00}' => "ff", '\u{FB01}' => "fi", '\u{FB02}' => "fl",
         '\u{FB03}' => "ffi", '\u{FB04}' => "ffl", '\u{FB05}' | '\u{FB06}' => "st",

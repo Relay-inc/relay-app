@@ -69,11 +69,16 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
     let mut f = Filter::vault_default();
     f.names.push(".claude".into());
     f.no_links = true;
-    let target = std::fs::read_link(folder.join(".claude")).ok().and_then(|t| {
+    let link = std::fs::read_link(folder.join(".claude")).ok();
+    let target = link.clone().and_then(|t| {
         let full = if t.is_absolute() { t } else { folder.join(t) };
         let (real, root) = (std::fs::canonicalize(full).ok()?, std::fs::canonicalize(folder).ok()?);
         real.strip_prefix(&root).ok().map(|r| r.to_string_lossy().into_owned())
     });
+    // a link that does not resolve guards nothing it points at: only `System` (a join's first round) is guarded anyway
+    if let (Some(l), None) = (&link, &target) {
+        if l.as_os_str() != "System" { return Err(format!(".claude links to {:?}, which is not in the vault: fix the link to sync this vault", l)); }
+    }
     if let Some(t) = target.as_deref().filter(|t| !t.chars().all(|c| c.is_ascii_alphanumeric() || " ._-/".contains(c))) {
         return Err(format!(".claude links to {t:?}: give that folder a name of plain letters and digits to sync this vault"));
     }
@@ -90,20 +95,31 @@ pub fn filter(folder: &Path) -> Result<Filter, String> {
 const CONFLICTS: &str = "conflicts";
 fn conflict_copy(f: &Filter, p: &str, machine: &str, stamp: &str) -> String {
     let copy = sync::conflict_copy(p, machine, stamp);
+    let segs: Vec<&str> = copy.split('/').collect();
     for g in &f.guarded {
-        if let Some(rest) = copy.strip_prefix(&format!("{g}/rules/")) { return format!("{g}/{CONFLICTS}/rules/{rest}"); }
+        // by segment, folded: `system/Rules` and `Sy\u{FB06}em/rules` are that folder on the Mac's disk too
+        let gs: Vec<&str> = g.split('/').collect();
+        let n = gs.len();
+        let under = segs.len() > n + 1 && segs[..n].iter().zip(&gs).all(|(a, b)| sync::fold(a) == sync::fold(b)) && sync::fold(segs[n]) == "rules";
+        if under { return format!("{g}/{CONFLICTS}/rules/{}", segs[n + 1..].join("/")); }
     }
     copy
 }
 
-/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards with the
-/// app's own build-index.py, never one from the vault (a member's script would run here). The same copy goes into the
-/// vault's System/scripts, where its conversations run it after their work: that folder does not sync.
+/// The project index of a shared vault (work-state.md, System/index/repos.json), rebuilt here from its cards. System/
+/// scripts does not sync, so what runs is this Mac's: a script of the user's own (other card fields than the starter's)
+/// stays and runs, else the app's copy, which also goes there for the vault's conversations to run after their work.
 pub fn index_shared(app: &AppHandle, folder: &str) {
-    let Ok(script) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
-    let Ok(code) = std::fs::read(&script) else { return };
+    let Ok(bundled) = app.path().resolve("default-vault/System/scripts/build-index.py", tauri::path::BaseDirectory::Resource) else { return };
     let own = Path::new(folder).join("System/scripts/build-index.py");
-    if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
+    let script = match crate::index_script(own.clone(), Some(bundled.clone())) {
+        Some(s) if s == own => s,
+        _ => {
+            let Ok(code) = std::fs::read(&bundled) else { return };
+            if std::fs::read(&own).ok().as_deref() != Some(&code[..]) { let _ = sync::write_atomic(&own, &code, None); }
+            bundled
+        }
+    };
     let path = app.state::<crate::App>().path.clone();
     match std::process::Command::new("python3").arg(&script).env("VAULT", folder).env("PATH", path).output() {
         Ok(o) if o.status.success() => {}
@@ -240,18 +256,22 @@ fn agents_claude(app: &AppHandle, state: &St<'_>) -> Option<crate::EnvBuf> { cra
 /// A vault added to the settings (or replaced, by id): the agents here stop under the vault lock and the change is
 /// written before it is let go (policy::hold_for_vault), then saved and told to both windows; its first round runs.
 fn add(app: &AppHandle, state: &crate::App, v: &Shared) -> Result<(), String> {
-    let s = {
+    let entry = serde_json::to_value(v).map_err(|e| e.to_string())?;
+    {
         let _gate = crate::policy::hold_for_vault(app);
-        let mut s = state.settings.lock().unwrap();
-        let mut all: Vec<Value> = s["sharedVaults"].as_array().cloned().unwrap_or_default();
-        all.retain(|x| x["id"] != v.id.as_str());
-        all.push(serde_json::to_value(v).map_err(|e| e.to_string())?);
-        s["sharedVaults"] = Value::Array(all);
-        s.clone()
-    };
-    crate::save_settings(app, &s)?;
+        change(app, state, |all| { all.retain(|x| x["id"] != v.id.as_str()); all.push(entry); true })?;
+    }
     sync_now();
     Ok(())
+}
+/// The shared vaults changed and saved under the settings lock: two changes at once cannot save the older list last.
+/// `f` says whether it changed anything.
+fn change(app: &AppHandle, state: &crate::App, f: impl FnOnce(&mut Vec<Value>) -> bool) -> Result<(), String> {
+    let mut s = state.settings.lock().unwrap();
+    let mut all: Vec<Value> = s["sharedVaults"].as_array().cloned().unwrap_or_default();
+    if !f(&mut all) { return Ok(()); }
+    s["sharedVaults"] = Value::Array(all);
+    crate::save_settings(app, &s)
 }
 
 /// An invite link that opened Relay (lib.rs on_open_url), until Settings takes it on the `vault-invite` ping or when
@@ -336,13 +356,10 @@ pub async fn shared_vault_info(app: AppHandle, state: St<'_>, id: String) -> Res
     let me = state.machines.id.fingerprint();
     let info = on_server(&state, &id, |v, c| c.vault_info(&v.id)).await?;
     // the server's role for this Mac counts: an admin removed makes the oldest member admin there
-    let changed = {
-        let mut s = state.settings.lock().unwrap();
-        let mine = s["sharedVaults"].as_array_mut().and_then(|a| a.iter_mut().find(|x| x["id"] == id.as_str()));
-        let stale = mine.filter(|x| !info.role.is_empty() && x["role"] != info.role.as_str());
-        stale.map(|x| x["role"] = Value::from(info.role.clone())).map(|_| s.clone())
-    };
-    if let Some(s) = changed { crate::save_settings(&app, &s)?; }
+    change(&app, &state, |all| {
+        let stale = all.iter_mut().find(|x| x["id"] == id.as_str()).filter(|x| !info.role.is_empty() && x["role"] != info.role.as_str());
+        stale.map(|x| x["role"] = Value::from(info.role.clone())).is_some()
+    })?;
     Ok(serde_json::json!({"vault": info, "me": me}))
 }
 
@@ -364,12 +381,7 @@ pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: 
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }
     // out of the settings first: a round that starts now sees it gone (Hub::round's `listed`), one running ends first
-    let s = {
-        let mut s = state.settings.lock().unwrap();
-        if let Some(a) = s["sharedVaults"].as_array_mut() { a.retain(|x| x["id"] != id.as_str()); }
-        s.clone()
-    };
-    crate::save_settings(&app, &s)?;
+    change(&app, &state, |all| { all.retain(|x| x["id"] != id.as_str()); true })?;
     on_hub(&app, move |hub, data| hub.forget(data, &id)).await
 }
 /// Whether a server error means this Mac is no member any more: removed, the vault gone, or the device unpaired.
@@ -420,6 +432,18 @@ mod tests {
         // a rule's conflict copy goes out of rules/, which loads into every conversation; a note's stays beside it
         assert_eq!(conflict_copy(&f, "System/rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
         assert_eq!(conflict_copy(&f, "Notes/a.md", "m", "s"), "Notes/a (conflict m s).md");
+        // the same folder on a Mac's disk, by case or by a ligature: out of rules/ too
+        assert_eq!(conflict_copy(&f, "system/Rules/core/memory.md", "m", "s"), "System/conflicts/rules/core/memory (conflict m s).md");
+        assert_eq!(conflict_copy(&f, "Sy\u{FB06}em/rules/a.md", "m", "s"), "System/conflicts/rules/a (conflict m s).md");
+        // a .claude link that does not resolve guards nothing it points at: refused, except System on a join's first round
+        let dangling = std::env::temp_dir().join(format!("relay-dangling-{}", std::process::id()));
+        std::fs::create_dir_all(&dangling).unwrap();
+        std::os::unix::fs::symlink("Meta", dangling.join(".claude")).unwrap();
+        assert!(filter(&dangling).is_err());
+        std::fs::remove_file(dangling.join(".claude")).unwrap();
+        std::os::unix::fs::symlink("System", dangling.join(".claude")).unwrap();
+        assert!(filter(&dangling).is_ok());
+        std::fs::remove_dir_all(&dangling).ok();
         // a join's first round: the link points at a System/ that is not there yet, and System/ is still held back
         let fresh = tmp.join("fresh");
         std::fs::create_dir_all(&fresh).unwrap();
