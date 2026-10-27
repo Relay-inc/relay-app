@@ -196,6 +196,8 @@ const TEXT: &[(&str, [&str; 4])] = &[
         "Un dossier de coffre ne peut pas contenir les données de Relay, un dossier Claude ou votre dossier personnel, ni s'y trouver : {v}", "Ein Vault-Ordner darf weder Relays Daten, einen Claude-Ordner noch deinen Benutzerordner enthalten oder darin liegen: {v}"]),
     ("err.vault_not_empty", ["{v} is not empty: a joined vault starts in an empty folder", "{v} is niet leeg: een vault waar je lid van wordt, begint in een lege map",
         "{v} n'est pas vide : un coffre rejoint commence dans un dossier vide", "{v} ist nicht leer: Ein beigetretener Vault beginnt in einem leeren Ordner"]),
+    ("err.vault_adding", ["A vault is being added: send again in a moment", "Er wordt een vault toegevoegd: stuur zo meteen opnieuw",
+        "Un coffre est en cours d'ajout : renvoyez dans un instant", "Ein Vault wird gerade hinzugefügt: sende gleich noch einmal"]),
     ("err.refence_busy", ["A conversation is still working: adding a vault restarts every conversation, try again when its turn has ended", "Een gesprek is nog bezig: een vault toevoegen herstart elk gesprek, probeer opnieuw als de beurt klaar is",
         "Une conversation travaille encore : ajouter un coffre redémarre chaque conversation, réessayez quand son tour est fini", "Ein Gespräch arbeitet noch: Einen Vault hinzuzufügen startet jedes Gespräch neu, versuche es nach dem Ende seiner Runde erneut"]),
     ("err.unfenceable_vault", ["A vault folder may not have [ ] * ? or \\ in its path: {v}. Relay could not keep conversations out of it", "Een vaultmap mag geen [ ] * ? of \\ in het pad hebben: {v}. Relay kan gesprekken er dan niet buiten houden",
@@ -1312,6 +1314,7 @@ fn runs_for_server(agent: &Value, server_work: &std::path::Path) -> bool {
 /// The shell command that continues a conversation in a terminal, external or embedded (pty.rs). The app's own
 /// process for it stops first, so two processes never write the same session.
 /// `about`: the conversation's project, for one without a session yet, which runs in that project's vault.
+/// The caller holds `vault_gate` until the terminal runs: a vault added meanwhile then sees it and stops it.
 fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<String>, name: Option<String>, about: Option<&str>) -> Result<String, String> {
     if let Some(b) = state.machines.bind_of(project) {
         let m = machines::Machines::find(&state.settings.lock().unwrap(), &b.machine).map(|m| m["name"].as_str().unwrap_or("").to_string()).unwrap_or_default();
@@ -1326,7 +1329,7 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
     if let (false, Some(a)) = (started, about) { eb.vault = project_home(state, a)?.0; }
     // the terminal's claude gets the same fence as the conversation in Relay, and a shared vault Claude Code only
     if eb.vault != need_vault(state)? && p.id() != "claude" { return Err(trc("err.vault_only_claude")); }
-    let _gate = state.vault_gate.lock().unwrap();
+    if policy::adding() { return Err(trc("err.vault_adding")); }
     fence_in(app, state, &mut eb);
     let sid = session.or_else(|| state.sids.lock().unwrap().get(project).map(|s| s.sid.clone()));
     sid.as_deref().and_then(|s| p.terminal(&eb.env(), Terminal::Resume(s)))
@@ -1337,6 +1340,7 @@ fn terminal_cmd(app: &AppHandle, state: &App, project: &str, session: Option<Str
 /// Continue a conversation in iTerm.
 #[tauri::command]
 fn open_terminal(app: AppHandle, state: State<App>, project: String, session: Option<String>, name: Option<String>, about: Option<String>) -> Result<(), String> {
+    let _gate = state.vault_gate.lock().unwrap();
     let cmd = terminal_cmd(&app, &state, &project, session, name, about.as_deref())?;
     in_terminal(&state, &cmd)
 }
@@ -1507,7 +1511,7 @@ fn set_settings(app: AppHandle, state: State<App>, settings: Value) -> Result<Va
     }
     // a folder added: the conversations running now were fenced without it, asked here and stopped at the write below
     let added = extra.iter().any(|e| !own_extra(&state.settings.lock().unwrap()).contains(e));
-    if added { policy::may_add_vault(&app)?; }
+    let _adding = if added { Some(policy::may_add_vault(&app)?) } else { None };
     s["extraVaults"] = json!(extra);
     for (name, p) in s["projects"].as_object().unwrap() {
         let ok = p.as_object().is_some_and(|o| o.iter().all(|(k, x)| match (k.as_str(), x.as_str()) {

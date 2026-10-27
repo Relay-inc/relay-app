@@ -152,8 +152,8 @@ fn spawn(app: &AppHandle, state: &App, p: &'static dyn AgentProvider, s: Start) 
                 }
             }
         }
-        // fenced and started under the vault lock: a vault added meanwhile (policy::hold_for_vault) waits for this
-        let _gate = state.vault_gate.lock().unwrap();
+        // fenced and started under the vault lock, which the caller holds (taken before `procs`, policy.rs): a vault
+        // added meanwhile (policy::hold_for_vault) waits for this
         crate::fence_in(app, state, &mut eb);
         let mut cmd = p.command(&eb.env(), &l)?;
         // `relay` (actions.rs) first on the PATH, and which conversation it speaks for
@@ -211,7 +211,10 @@ pub(crate) fn send(app: &AppHandle, state: &App, r: Msg) -> Result<(), String> {
     // an orchestrator conversation that heard a stranger's text stays restricted, also in a new process (orch.rs)
     let orch_taint = orch::is_orch(&project) && orch::tainted(app, &project);
     let mut account = account_of(state, p, &project, &opts.0);
+    let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
+    // a vault being added stops every agent once the server answered: a turn sent now would be cut off
+    if crate::policy::adding() { return Err(trc("err.vault_adding")); }
     account = plan::account_for(account, procs.get(&project).map(Proc::running).as_ref(), p.id());
     if !p.caps().persistent {
         // one process per turn: the next message waits for this one
@@ -259,8 +262,9 @@ pub(crate) fn spawn_or_get(app: &AppHandle, key: &str, name: &str, model: &str, 
     let model = if agent_core::safe_model(model) { model.to_string() } else { String::new() };
     let account = account_of(&state, p, key, &model);
     let taint = taint || orch::tainted(app, key);
+    let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
-    if procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
+    if crate::policy::adding() || procs.get(key).is_some_and(|x| x.turns.busy()) { return Ok(false); }
     if !procs.contains_key(key) {
         let x = spawn(app, &state, p, Start { project: key, name, fork: None, opts: (model, String::new()), turn: None, from_mail: taint, account: &account, machine: Some(""), about: None })?;
         procs.insert(key.to_string(), x);
@@ -280,6 +284,7 @@ pub(crate) fn ensure_local(app: &AppHandle, key: &str) -> Result<(), String> {
     let p = provider_of(&state, key, None);
     if !p.caps().persistent { return Err(format!("{}: a turn at a time, not from the phone", p.name())); }
     let account = account_of(&state, p, key, "");
+    let _gate = state.vault_gate.lock().unwrap();
     let mut procs = state.procs.lock().unwrap();
     if procs.contains_key(key) { return Ok(()); }
     let x = spawn(app, &state, p, Start { project: key, name: key, fork: None, opts: Default::default(), turn: None, from_mail: false, account: &account, machine: Some(""), about: None })?;

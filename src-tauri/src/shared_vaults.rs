@@ -247,7 +247,7 @@ pub async fn shared_vault_create(app: AppHandle, state: St<'_>, machine: String,
     if name.is_empty() { return Err("give the vault a name".into()); }
     let folder = new_folder(&app, &state, &folder, false)?;
     // asked before anything is made: adding the vault restarts every conversation, none may be in a turn
-    crate::policy::may_add_vault(&app)?;
+    let _adding = crate::policy::may_add_vault(&app)?;
     let template = app.path().resolve("default-vault", tauri::path::BaseDirectory::Resource).map_err(|e| e.to_string())?;
     let (c, at) = (state.machines.client(&m), folder.clone());
     let (r, key) = tauri::async_runtime::spawn_blocking(move || -> Result<(relay_remote::client::VaultRef, VaultKey), String> {
@@ -276,7 +276,7 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     if let Some(had) = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.vault).and_then(|id| find(&s, &id.to_ascii_lowercase()).ok()) {
         return Err(format!("this Mac is in {} already, at {}", had.name, had.folder));
     }
-    crate::policy::may_add_vault(&app)?;
+    let _adding = crate::policy::may_add_vault(&app)?;
     // the folder before the single-use invite is spent: one that cannot be made fails here, with the link still good
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());

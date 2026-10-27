@@ -5,6 +5,7 @@
 use super::{data_dir, home, need_vault, pty, shared_vaults, trc, trc_v, App, EnvBuf};
 use serde_json::{json, Value};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager};
 
 /// The separator in a project key of another vault than the main one: `name \u{1f} vault id`. No project name has it,
@@ -134,16 +135,26 @@ pub fn in_shared_vault(st: &App, key: &str) -> bool { st.sids.lock().unwrap().ge
 pub const SHARED_NO_READ: &str = "In a shared vault, reading the user's own mail, reminders and calendar is off: what a note there asks for could end up in the team's vault. Writing to the user (a reminder, a mail draft) still works.";
 
 /// A vault added while agents run here (made, joined, or a folder of the user's own): every agent was fenced without
-/// it. Asked first (`may_add_vault`, nothing stopped), then `add_vault` stops them and writes the change under the one
-/// lock spawn holds while it fences and starts an agent, so none starts in between with the old fence.
-pub fn may_add_vault(app: &AppHandle) -> Result<(), String> {
+/// it. Asked first (`may_add_vault`, nothing stopped), which reserves the change: until the caller drops the reservation
+/// no turn is sent and no agent terminal opens (`adding`), so the stop that follows a server's answer stops no turn that
+/// began meanwhile. Then `hold_for_vault` stops the agents and the change is written under the vault lock, the one every
+/// start holds while it fences and starts an agent. Lock order everywhere: `vault_gate`, then `procs`.
+pub fn may_add_vault(app: &AppHandle) -> Result<Adding, String> {
+    if ADDING.swap(true, Ordering::SeqCst) { return Err(trc("err.refence_busy")); }
+    let adding = Adding(());
     let st = app.state::<App>();
     let capturing = !CAPTURES.lock().unwrap().is_empty();
     if capturing || st.procs.lock().unwrap().values().any(|p| !p.remote && p.turns.busy()) { return Err(trc("err.refence_busy")); }
     let open = app.state::<pty::Ptys>().agents();
     if open > 0 { return Err(trc_v("err.refence_terminals", &open.to_string())); }
-    Ok(())
+    Ok(adding)
 }
+static ADDING: AtomicBool = AtomicBool::new(false);
+/// A vault change reserved by `may_add_vault`, until dropped.
+pub struct Adding(());
+impl Drop for Adding { fn drop(&mut self) { ADDING.store(false, Ordering::SeqCst); } }
+/// Whether a vault is being added: a new turn or agent terminal waits for it (checked under `procs` or `vault_gate`).
+pub fn adding() -> bool { ADDING.load(Ordering::SeqCst) }
 /// Take the vault lock and stop every agent here and its terminal tab: their next message starts them again with the
 /// fence of the change the caller writes before it drops the lock. Agents on a work machine see the main vault's mirror.
 pub fn hold_for_vault(app: &AppHandle) -> std::sync::MutexGuard<'_, ()> {
