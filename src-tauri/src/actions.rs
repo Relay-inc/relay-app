@@ -166,7 +166,9 @@ fn serve(app: &AppHandle, c: UnixStream) {
 /// None when it descends from none (a terminal of the user's own) or the platform cannot tell.
 fn caller(app: &AppHandle, c: &UnixStream) -> Option<String> {
     use std::os::fd::AsRawFd;
-    let agents: std::collections::HashMap<u32, String> = app.state::<crate::App>().procs.lock().unwrap().iter().map(|(k, p)| (p.child.id(), k.clone())).collect();
+    let agents: std::collections::HashMap<u32, String> = app.state::<crate::App>().procs.lock().unwrap().iter()
+        // a remote agent's pid is one on the work machine: it could match a process here
+        .filter(|(_, p)| !p.remote).map(|(k, p)| (p.child.id(), k.clone())).collect();
     let mut pid = agent_core::peer::peer_pid(c.as_raw_fd())?;
     for _ in 0..64 {
         if let Some(k) = agents.get(&pid) { return Some(k.clone()); }

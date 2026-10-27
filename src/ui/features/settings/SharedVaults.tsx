@@ -64,7 +64,8 @@ function SharedRow({ vault }: { vault: SharedVault }) {
   const [role, setRole] = useState<SharedRole>("member");
   const [leaving, setLeaving] = useState(false);
   const [removing, setRemoving] = useState(""); // the member whose Remove asks first, by fingerprint
-  const admin = vault.role === "admin";
+  // the server's word once read: the backend saves it too, the settings can be older
+  const admin = (info?.vault.role ?? vault.role) === "admin";
   const ago = status ? agoParts(status.at) : null;
   const roleName = (role: string) => t(role === "admin" ? "set.sharedAdmin" : "set.sharedMember");
   const until = (expires: number) => sentAt(expires * 1000, locale);

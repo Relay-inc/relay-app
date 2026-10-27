@@ -2432,13 +2432,19 @@ pub fn run() {
                     std::thread::sleep(std::time::Duration::from_secs(1));
                     if !shared_vaults::asked() && std::time::Instant::now() < next { continue; }
                     next = std::time::Instant::now() + std::time::Duration::from_secs(10);
-                    let st = h.state::<App>();
-                    let s = st.settings.lock().unwrap().clone();
-                    let name = sys_name();
-                    let mut pulled = false;
-                    for v in shared_vaults::list(&s) { pulled |= st.shared.round(&data_dir(&h), &v, &st.machines.id, &name).pulled > 0; }
-                    if !shared_vaults::list(&s).is_empty() { h.emit("shared-vaults", serde_json::to_value(&*st.shared.status.lock().unwrap()).unwrap_or_default()).ok(); }
-                    if pulled { h.emit("vault-pulled", ()).ok(); }
+                    let s = h.state::<App>().settings.lock().unwrap().clone();
+                    // a thread per vault: a server that hangs holds up only its own vault (a round of it still running
+                    // skips this one)
+                    for v in shared_vaults::list(&s) {
+                        let h = h.clone();
+                        std::thread::spawn(move || {
+                            let st = h.state::<App>();
+                            let listed = || shared_vaults::find(&st.settings.lock().unwrap(), &v.id).is_ok();
+                            let Some(r) = st.shared.round(&data_dir(&h), &v, &st.machines.id, &sys_name(), &listed) else { return };
+                            h.emit("shared-vaults", serde_json::to_value(&*st.shared.status.lock().unwrap()).unwrap_or_default()).ok();
+                            if r.pulled > 0 { h.emit("vault-pulled", ()).ok(); }
+                        });
+                    }
                 }
             });
             tray::init(app.handle())?;

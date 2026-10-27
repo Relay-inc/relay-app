@@ -101,7 +101,8 @@ pub fn real_path(p: &str) -> Result<String, String> {
 }
 
 /// One vault's sync state: its walker and the held deletes the user let through. Each vault has its own lock, held for
-/// its whole round: a slow server holds up only that vault, and a leave of it waits for the round to end.
+/// its whole round: a slow server holds up only that vault (each round runs on a thread of its own, lib.rs), and a
+/// leave of it waits for the round to end.
 #[derive(Default)]
 struct One { walker: Walker, allowed: Vec<String> }
 #[derive(Default)]
@@ -112,10 +113,12 @@ impl Hub {
 
     /// One round for a vault: the folder here against the server, both ways. A file changed on both sides keeps both,
     /// the server's as "Name (conflict <this Mac> <date>).md"; more deletes than the brake allows wait for the user.
-    /// Returns this round's status; Settings gets the counts since the app started.
-    pub fn round(&self, data: &Path, v: &Shared, me: &Identity, name: &str) -> Status {
+    /// Returns this round's status; Settings gets the counts since the app started. None: the vault's last round is
+    /// still running, or `listed` says the user left it meanwhile (the caller's settings are a copy).
+    pub fn round(&self, data: &Path, v: &Shared, me: &Identity, name: &str, listed: &dyn Fn() -> bool) -> Option<Status> {
         let one = self.one(&v.id);
-        let mut one = one.lock().unwrap();
+        let Ok(mut one) = one.try_lock() else { return None };
+        if !listed() { return None; }
         let mut st = Status { at: chrono::Utc::now().timestamp(), ..Default::default() };
         match load_key(data, &v.id).and_then(|k| Ok((k, filter(Path::new(&v.folder))?))) {
             Err(e) => st.errors.push(e),
@@ -135,19 +138,21 @@ impl Hub {
                 let remote = client(v, me).sealed(&v.id, key);
                 remote.know(&base);
                 let (next, r) = sync::run(Mode::TwoWay, Path::new(&v.folder), &base, &mut one.walker, &f, &remote, &copy, &|_| false, &guard, &|_, _| {});
+                // a round that failed (the server out of reach) keeps what the user let through for the next one
+                if !r.errors.is_empty() { one.allowed = allowed.clone(); }
                 // the next round plans against this base: one not written is an error, not a quiet success
-                if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); }
+                if next != base { if let Err(e) = write_base(data, &v.id, &next) { st.errors.push(format!("base: {e}")); } }
                 st = Status { pushed: r.pushed.len() + r.deleted_remote.len(), pulled: r.pulled.len() + r.deleted_local.len(),
                     conflicts: r.conflicts, errors: [st.errors, r.errors].concat(), held: r.held, bad: remote.bad().len(), ..st };
             }
         }
-        drop(one);
+        // still under the vault's lock: a leave waiting for this round removes the status after it
         let mut all = self.status.lock().unwrap();
         let prev = all.remove(&v.id).unwrap_or_default();
         let mut conflicts = prev.conflicts;
         for c in &st.conflicts { if !conflicts.contains(c) { conflicts.push(c.clone()); } }
         all.insert(v.id.clone(), Status { pushed: prev.pushed + st.pushed, pulled: prev.pulled + st.pulled, conflicts, ..st.clone() });
-        st
+        Some(st)
     }
 
     /// The held deletes the user saw go through in the next round; any others the brake still holds. Another member
@@ -272,6 +277,8 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
         return Err(format!("this Mac is in {} already, at {}", had.name, had.folder));
     }
     crate::policy::may_add_vault(&app)?;
+    // the folder before the single-use invite is spent: one that cannot be made fails here, with the link still good
+    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let (me, name) = (state.machines.id.clone(), crate::sys_name());
     let (line, joined, key) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::vault_join(&link, &me, &name)).await.map_err(|e| e.to_string())??;
     if !valid_id(&joined.id) { return Err(format!("not a vault id: {:?}", joined.id)); }
@@ -279,7 +286,6 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
     let vid = joined.id.clone();
     on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
     save_key(&crate::data_dir(&app), &joined.id, &key)?;
-    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     // `.claude -> System` as in a vault Relay makes, before the first round: the rules load from the synced System/
     std::os::unix::fs::symlink("System", Path::new(&folder).join(".claude")).ok();
     let v = Shared { id: joined.id.clone(), name: joined.name.clone(), host: line.host, port: line.port, fp: line.fp, folder, role: joined.role };
@@ -298,9 +304,17 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
 
 /// The members and open invites of a vault, and this Mac's fingerprint so the list can mark it: {vault, me}.
 #[tauri::command]
-pub async fn shared_vault_info(state: St<'_>, id: String) -> Result<Value, String> {
+pub async fn shared_vault_info(app: AppHandle, state: St<'_>, id: String) -> Result<Value, String> {
     let me = state.machines.id.fingerprint();
     let info = on_server(&state, &id, |v, c| c.vault_info(&v.id)).await?;
+    // the server's role for this Mac counts: an admin removed makes the oldest member admin there
+    let changed = {
+        let mut s = state.settings.lock().unwrap();
+        let mine = s["sharedVaults"].as_array_mut().and_then(|a| a.iter_mut().find(|x| x["id"] == id.as_str()));
+        let stale = mine.filter(|x| !info.role.is_empty() && x["role"] != info.role.as_str());
+        stale.map(|x| x["role"] = Value::from(info.role.clone())).map(|_| s.clone())
+    };
+    if let Some(s) = changed { crate::save_settings(&app, &s)?; }
     Ok(serde_json::json!({"vault": info, "me": me}))
 }
 
@@ -321,14 +335,14 @@ pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: 
     if fp != me { return gone; }
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }
-    let vid = id.clone();
-    on_hub(&app, move |hub, data| hub.forget(data, &vid)).await?;
+    // out of the settings first: a round that starts now sees it gone (Hub::round's `listed`), one running ends first
     let s = {
         let mut s = state.settings.lock().unwrap();
         if let Some(a) = s["sharedVaults"].as_array_mut() { a.retain(|x| x["id"] != id.as_str()); }
         s.clone()
     };
-    crate::save_settings(&app, &s)
+    crate::save_settings(&app, &s)?;
+    on_hub(&app, move |hub, data| hub.forget(data, &id)).await
 }
 /// Whether a server error means this Mac is no member any more: removed, the vault gone, or the device unpaired.
 fn left_already(e: &str) -> bool { ["no such vault", "not paired", "not a member", "CertificateUnknown", "certificate unknown"].iter().any(|x| e.contains(x)) }
