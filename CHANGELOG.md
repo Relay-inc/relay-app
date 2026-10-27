@@ -13,6 +13,10 @@ a PR. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- **A vault admin keeps the server**: when you are admin of a shared vault (from an admin invite, or made admin because the last one left), its server shows under Settings › Machines for shared vaults only, and you can update it there. It runs no conversations for you and keeps no mirror, the server refuses those too. It goes from the list once you are admin of no vault there
+
 ### Changed
 
 - **Shared vaults moved to Settings › Machines**: a vault shows under the machine that keeps it, with New shared vault on this machine next to it. A vault you joined with an invite link, on a server that is not one of your machines, shows under Shared vaults at the top of the page, where Join with a link is too. An invite link that opens Relay now opens Machines with the join form filled in. General keeps Other vault folders (#287)

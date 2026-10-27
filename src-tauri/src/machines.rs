@@ -163,7 +163,9 @@ impl Machines {
         json!(b.iter().filter_map(|(k, x)| Some((k.clone(), json!({"machine": Self::find(settings, &x.machine)?["name"], "id": x.machine, "cwd": x.cwd})))).collect::<serde_json::Map<_, _>>())
     }
 
-    /// One round of the poller: each machine's cards every time, its Info when there is none or it is a minute old.
+    /// One round of the poller: each machine's cards every time, its Info when there is none or it is a minute old. One
+    /// for shared vaults only runs no conversation, so has no cards: its Info alone says whether it answers (a vault
+    /// admin may not ask a server for cards).
     pub fn poll(&self, settings: &Value) {
         let list = settings["machines"].as_array().cloned().unwrap_or_default();
         let ids: Vec<String> = list.iter().filter_map(|m| m["id"].as_str().map(String::from)).collect();
@@ -172,11 +174,11 @@ impl Machines {
             let (id, c) = (m["id"].as_str().unwrap_or("").to_string(), self.client(&m));
             let stale = self.seen.lock().unwrap().get(&id).is_none_or(|s| s.info_at.is_none_or(|t| t.elapsed() > Duration::from_secs(60)));
             let info = if stale { Some(c.info()) } else { None };
-            let pending = c.pending();
+            let pending = if shared_only(&m) { None } else { Some(c.pending()) };
             let mut seen = self.seen.lock().unwrap();
             let s = seen.entry(id).or_default();
-            match info { Some(Ok(i)) => { s.info = Some(i); s.info_at = Some(Instant::now()); } Some(Err(e)) => { s.error = Some(e); s.info_at = None; } None => {} }
-            match pending { Ok(p) => { s.pending = p; s.error = None; } Err(e) => { s.pending.clear(); s.error = Some(e); } }
+            match info { Some(Ok(i)) => { s.info = Some(i); s.info_at = Some(Instant::now()); s.error = None; } Some(Err(e)) => { s.error = Some(e); s.info_at = None; } None => {} }
+            match pending { Some(Ok(p)) => { s.pending = p; s.error = None; } Some(Err(e)) => { s.pending.clear(); s.error = Some(e); } None => {} }
         }
     }
 }

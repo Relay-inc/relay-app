@@ -219,6 +219,9 @@ members' device names and fingerprints, open invites) and one record per file in
 - **Vault-only devices.** A device that came in through an invite may only work with the vaults it is a member of: no
   agents, no mirror, no pairing, no vaults of its own. Leaving its last vault unpairs it. A linked device (a phone)
   gets no vaults at all.
+- **A vault admin keeps the server.** A vault-only device that is admin of a vault here may also ask `info` and send an
+  `update` (a new binary that runs here: accepted for an admin). Conversations, the mirror, phones and GitHub stay
+  refused. It is read from the vaults at every request, so a promotion or a removal counts at once.
 - **Removing someone** stops their device here at once. They keep what they already synced and the key (no key rotation
   yet). The last admin cannot leave while others stay. `relay-server revoke` also takes a device out of its vaults.
 

@@ -79,6 +79,12 @@ const LINKED_OPS: &[&str] = &["info", "unlock", "list", "kill", "pending", "answ
 /// further devices, and makes no vaults of its own. `pair` with a code from the owner makes it a full device.
 const VAULT_OPS: &[&str] = &["pair", "vault_info", "vault_invite", "vault_invite_revoke", "vault_join", "vault_remove", "vault_manifest",
     "vault_get", "vault_put", "vault_put_many", "vault_delete"];
+/// What a vault-only device may ask besides, while it is admin of a vault here: it keeps the server, so it sees what
+/// the server is and updates it (`update` runs the binary it sends: accepted). Never a conversation, the mirror, a
+/// phone, GitHub or a vault of its own.
+const KEEPER_OPS: &[&str] = &["info", "update"];
+/// Whether a vault-only device may ask `op`: from its memberships now, so a promotion or a demotion counts at once.
+pub(crate) fn vaults_only_may(data: &Path, fp: &str, op: &str) -> bool { VAULT_OPS.contains(&op) || (KEEPER_OPS.contains(&op) && vaults::keeps(data, fp)) }
 /// Held around every read-modify-write of clients.json in this process (pair, a vault's join and leave).
 static CLIENTS: Mutex<()> = Mutex::new(());
 
@@ -230,7 +236,7 @@ impl Server {
         let me = clients(&self.data).into_iter().find(|c| c.fp == fp);
         let op = req["op"].as_str().unwrap_or("");
         if me.is_none() && op != "pair" && op != "vault_join" { return reply(&mut w, Err("not paired".into())); }
-        if me.as_ref().is_some_and(|c| c.vaults_only) && !VAULT_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
+        if me.as_ref().is_some_and(|c| c.vaults_only) && !vaults_only_may(&self.data, &fp, op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a device that only shares vaults"))); }
         let my_name = me.as_ref().map(|c| c.name.clone()).unwrap_or_default();
         let parent = me.and_then(|c| c.parent);
         if parent.is_some() && !LINKED_OPS.contains(&op) { return reply(&mut w, Err(format!("{op:?} is not allowed from a linked device"))); }

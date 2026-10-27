@@ -14,7 +14,7 @@ import { StatusLine } from "./StatusLine";
 
 /** A paired machine on Settings › Machines: its name, address, whether it is online and its fingerprint, Forget (with
  *  how to revoke it on the machine) and its mirror. One for shared vaults only says so instead: no mirror, phone or
- *  GitHub there. */
+ *  GitHub there. One this Mac keeps as a vault's admin (`auto`) has no Forget: it comes and goes with that role. */
 export function MachineRow({ machine }: { machine: Machine }) {
   const { t, th } = useT();
   const status = useSettingsStore(s => s.machinesPage.status[machine.id]);
@@ -74,7 +74,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
             {phone ? t("mc.phoneClose") : t("mc.phoneAdd")}
           </button>
         ) : null}
-        {confirming ? (
+        {machine.auto ? null : confirming ? (
           <>
             <span className="text-xs text-s-muted">{t("mc.forgetSure")}</span>
             <button
@@ -119,7 +119,7 @@ export function MachineRow({ machine }: { machine: Machine }) {
       ) : null}
       {message ? <span className={message.ok ? HINT_IN_ROW : ERROR_MESSAGE}>{message.text}</span> : null}
       {machine.sharedOnly ? (
-        <p className={HINT_IN_ROW}>{t("mc.sharedOnlyRow")}</p>
+        <p className={HINT_IN_ROW}>{t(machine.auto ? "mc.keeperRow" : "mc.sharedOnlyRow")}</p>
       ) : (
         <MachineMirror machine={machine} />
       )}

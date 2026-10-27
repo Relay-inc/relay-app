@@ -1095,6 +1095,17 @@ const VIEWS = {
     await waitText("Put them back");
     await intoView("Shared vaults");
   },
+  // fixture shared-keeper: that member, made admin on the server, opens Members: the server shows under Machines,
+  // for shared vaults only, with its vault under it, an Update button and no Forget or New shared vault
+  "settings-shared-keeper": async () => {
+    await settingsPage("Machines", undefined, "shared-keeper");
+    await page.setViewportSize({ width: 900, height: 1300 });
+    await waitText("Put them back");
+    await button("Members").click();
+    await waitText("You keep this server");
+    await waitText("Update to");
+    await intoView("You keep this server");
+  },
   // Relay opened by an invite link: Machines with the join form under Shared vaults, the link in it
   "settings-shared-join": async () => {
     await settingsPage("Machines", undefined, "shared-invite");

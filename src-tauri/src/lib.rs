@@ -1492,9 +1492,13 @@ fn get_settings(state: State<App>) -> Value { state.settings.lock().unwrap().clo
 #[tauri::command]
 fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Result<Value, String> {
     // a machine for shared vaults only stays one, whatever the window sends (machine_pair): only Forget and pairing it
-    // again changes that
+    // again changes that. Which ones this Mac keeps as a vault admin (`auto`) is the app's word too (shared_vaults::keepers).
     let only: Vec<Value> = state.settings.lock().unwrap()["machines"].as_array().into_iter().flatten().filter(|m| machines::shared_only(m)).map(|m| m["id"].clone()).collect();
-    for m in settings["machines"].as_array_mut().into_iter().flatten() { if only.contains(&m["id"]) { m["sharedOnly"] = json!(true); } }
+    let auto: Vec<Value> = state.settings.lock().unwrap()["machines"].as_array().into_iter().flatten().filter(|m| m["auto"] == true).map(|m| m["id"].clone()).collect();
+    for m in settings["machines"].as_array_mut().into_iter().flatten() {
+        if only.contains(&m["id"]) { m["sharedOnly"] = json!(true); }
+        if auto.contains(&m["id"]) { m["auto"] = json!(true); } else if let Some(o) = m.as_object_mut() { o.remove("auto"); }
+    }
     let mut s = norm(settings);
     let lang = ui_lang_of(&s);
     // the vault by its real path, with its full mapping stored, so the file shows what the app uses
@@ -1555,6 +1559,7 @@ fn set_settings(app: AppHandle, state: State<App>, mut settings: Value) -> Resul
     let (relang, rekey) = {
         let mut cur = state.settings.lock().unwrap();
         s["sharedVaults"] = cur["sharedVaults"].clone();
+        shared_vaults::keepers(&mut s);
         relay_remote::sync::write_atomic(&data_dir(&app).join("settings.json"), serde_json::to_string_pretty(&s).unwrap().as_bytes(), None).map_err(|e| e.to_string())?;
         let changed = (ui_lang_of(&cur) != lang, cur["shortcuts"] != s["shortcuts"]);
         *cur = s.clone();
@@ -2099,7 +2104,8 @@ fn save_settings(app: &AppHandle, s: &Value) -> Result<(), String> {
 async fn machine_pair(app: AppHandle, state: State<'_, App>, line: String, name: String, shared_only: Option<bool>) -> Result<Value, String> {
     let shared_only = shared_only.unwrap_or(false);
     let fp = relay_remote::proto::PairLine::parse(&line).map(|l| l.fp).unwrap_or_default();
-    let other_way = |s: &Value| s["machines"].as_array().into_iter().flatten().any(|x| x["fp"] == fp.as_str() && machines::shared_only(x) != shared_only);
+    // one this Mac keeps as a vault admin (shared_vaults::keepers) has no mirror to lose: pairing replaces it
+    let other_way = |s: &Value| s["machines"].as_array().into_iter().flatten().any(|x| x["fp"] == fp.as_str() && x["auto"] != true && machines::shared_only(x) != shared_only);
     if other_way(&state.settings.lock().unwrap()) { return Err(trc("err.machine_repair")); }
     let (id, me) = (state.machines.id.clone(), sys_name());
     let (l, info) = tauri::async_runtime::spawn_blocking(move || relay_remote::client::pair(&line, &id, &me)).await.map_err(|e| e.to_string())??;

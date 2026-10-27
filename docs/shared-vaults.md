@@ -14,6 +14,13 @@ read is shown as damaged, never as deleted.
 **Invites:** the link carries a secret, after `#`, that unwraps the vault key. The server keeps the key only encrypted
 under that secret, which it never sees. Links are single use, last 24 h, and die with the admin who made them.
 
+**A vault admin keeps the server.** An admin may update it (`info`, `update`), so it may run a binary of its choice
+there. The server refuses it everything else a paired device may do: conversations, the mirror, a phone, GitHub,
+repos, making vaults. Whether a device is an admin is read from the vaults at every request, so a promotion or a
+removal counts at once. In Relay the server then shows under Settings › Machines for shared vaults only, marked `auto`
+in the settings (`shared_vaults::keepers`), with no Forget and no New shared vault: it goes again when this Mac is
+admin of no vault there. A machine the user paired is never touched.
+
 **Removing a member** stops their device at the server at once. They keep what they synced and the key: v1 has no key
 rotation (it needs a static X25519 key per device, `ring` has only ephemeral agreement).
 
@@ -58,8 +65,9 @@ Handshake: a device is accepted when it is in `clients.json`, or a pairing code 
 
 A device that came in through an invite is a *vault-only* client (`Client.vaults_only = true`): it may only send
 `VAULT_OPS` = `pair` (a code from the owner makes it a full device), `vault_info`, `vault_invite`, `vault_invite_revoke`, `vault_join`, `vault_remove`,
-`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror, pairs
-further devices or sees `info` (the server's paths). A linked device (a phone) gets no vault ops.
+`vault_manifest`, `vault_get`, `vault_put`, `vault_put_many`, `vault_delete`. It never runs agents, reads a mirror or pairs
+further devices. While it is admin of a vault here it also gets `KEEPER_OPS` = `info` (the server's paths and version)
+and `update`, nothing more. A linked device (a phone) gets no vault ops.
 
 Ids: vault id 16 lowercase hex, invite id 16 lowercase hex, invite code 32 lowercase hex (`tls::random_secret`),
 blob name 64 lowercase hex. Anything else is refused.
