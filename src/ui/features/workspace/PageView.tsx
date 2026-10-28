@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Toast } from "../conversations/Toast";
 import {
   askAboutPage,
@@ -28,6 +28,7 @@ import { Note } from "../../components/Note";
 import { ProjectImg } from "../../components/ProjectImg";
 import { FRONTMATTER } from "./NoteDetail";
 import { PageEditor, type HeadWriter } from "./PageEditor";
+import type { Peer } from "../../../application/workspace/coedit";
 import { Properties } from "./Properties";
 
 const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
@@ -52,6 +53,7 @@ export function PageView({ target, className }: { target: string; className: str
   const chats = project ? chatsOf(project.key) : [];
 
   const headRef = useRef<HeadWriter["current"]>(null);
+  const [peers, setPeers] = useState<Peer[]>([]); // who else is on a shared document's page
   const { title, head, body } = page ? pageParts(path, page.text) : { ...noteTitle(path, noteName(path)), head: "" };
   const folders = path.split("/").slice(0, -1);
 
@@ -65,6 +67,24 @@ export function PageView({ target, className }: { target: string; className: str
           <span className="text-tertiary">/</span>
           <span className="truncate font-medium text-label">{title}</span>
         </div>
+        {peers.length ? (
+          <div
+            role="img"
+            aria-label={t("page.peers", { names: peers.map(p => p.name).join(", ") })}
+            title={peers.map(p => p.name).join(", ")}
+            className="flex -space-x-1"
+          >
+            {peers.map(p => (
+              <span
+                key={p.from}
+                className="size-6 grid place-items-center rounded-full ring-2 ring-bg text-[10px] font-semibold text-white"
+                style={{ backgroundColor: p.color }}
+              >
+                {initials(p.name)}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {page?.modified ? (
           <span className="text-xs text-tertiary">{t("page.edited", { ago: agoOf(page.modified, t) })}</span>
         ) : null}
@@ -149,6 +169,7 @@ export function PageView({ target, className }: { target: string; className: str
                 body={body}
                 headRef={headRef}
                 split={text => pageParts(path, text)}
+                onPeers={setPeers}
               />
             )}
           </article>
@@ -180,4 +201,14 @@ function pageParts(path: string, text: string) {
   const match = FRONTMATTER.exec(text);
   const { title, body } = noteTitle(path, text.slice(match ? match[0].length : 0));
   return { title, head: text.slice(0, text.length - body.length), body };
+}
+
+/** A member's initials for their avatar: the first letters of their first two words. */
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(word => word[0].toUpperCase())
+    .join("");
 }

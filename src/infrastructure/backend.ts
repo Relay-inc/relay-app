@@ -121,6 +121,23 @@ export const readNote = (target: string) => invoke<unknown>("read_note", { targe
  *  `force`. Resolves to the new text's hash. */
 /** A note changed outside Relay: in a shared workspace, a document's file change becomes an edit of the document. */
 export const sharedDocAbsorb = (path: string, by: string) => invoke<void>("shared_doc_absorb", { path, by });
+/** A page's note as a shared document: its id, everything this Mac has of it (Yjs v1, base64), this device and the name
+ *  its cursor shows; null when the note is no document (it is saved as a file). */
+export type SharedDoc = { vault: string; doc: string; state: string; me: string; name: string };
+export const sharedDocOpen = (path: string) => invoke<SharedDoc | null>("shared_doc_open", { path });
+/** An edit made in a page's editor (Yjs v1 update, base64): into the document and sent. */
+export const sharedDocEdit = (path: string, doc: string, update: string) =>
+  invoke<void>("shared_doc_edit", { path, doc, update });
+/** This Mac's cursor on a document's page (JSON), to the other members. */
+export const sharedAwareness = (path: string, doc: string, body: string) =>
+  invoke<void>("shared_awareness", { path, doc, body });
+/** An update to a document this Mac's editor did not make: another member's, or its file's change taken in. */
+export const onSharedDoc = (handler: (change: { vault: string; id: string; update: string }) => void) =>
+  listen<{ vault: string; id: string; update: string }>("shared-doc", e => handler(e.payload));
+/** Another member's cursor on a document's page. */
+export const onSharedAwareness = (
+  handler: (cursor: { vault: string; doc: string; from: string; body: string }) => void,
+) => listen<{ vault: string; doc: string; from: string; body: string }>("shared-awareness", e => handler(e.payload));
 export const writeNote = (target: string, text: string, expect: string, force: boolean) =>
   invoke<{ hash: string }>("write_note", { target, text, expect, force });
 /** The values a frontmatter key has across a workspace folder's notes, most used first. */

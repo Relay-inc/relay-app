@@ -1,17 +1,27 @@
 import { useEffect, useRef, useState } from "react";
-import { EditorState, StateEffect, StateField, Transaction, type Range } from "@codemirror/state";
-import { Decoration, EditorView, keymap, drawSelection, type DecorationSet } from "@codemirror/view";
+import {
+  Annotation,
+  Compartment,
+  EditorState,
+  StateEffect,
+  StateField,
+  Transaction,
+  type Range,
+} from "@codemirror/state";
+import { Decoration, EditorView, WidgetType, keymap, drawSelection, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import {
   adoptPage,
   followPageLink,
   loadPage,
+  pageTextIs,
   savePage,
   watchPage,
   workspacePaths,
 } from "../../../application/navigation/pages";
-import { lineChanges, merge3 } from "../../../domain/workspace/merge";
+import { headAfter, lineChanges, merge3, oneChange } from "../../../domain/workspace/merge";
+import { LOCAL, openSharedPage, type Peer, type SharedPage } from "../../../application/workspace/coedit";
 import { useT } from "../../hooks/useT";
 import { livePreview } from "./livePreview";
 import { blockEditing, type BlockWords } from "./blocks";
@@ -25,6 +35,40 @@ export type HeadWriter = { current: ((head: string) => Promise<void>) | null };
 export type PageSplit = (text: string) => { head: string; body: string };
 
 const MARK_FOR = 3000; // ms the lines changed outside stay marked
+// a change the shared document made (another member, a file change taken in, an undo): not sent back to it
+const fromDoc = Annotation.define<boolean>();
+// the other members' cursors and selections on a shared document's page
+const setPeers = StateEffect.define<DecorationSet>();
+const peerMarks = StateField.define<DecorationSet>({
+  create: () => Decoration.none,
+  update: (marks, tr) => tr.effects.find(e => e.is(setPeers))?.value ?? marks.map(tr.changes),
+  provide: field => EditorView.decorations.from(field),
+});
+class PeerCaret extends WidgetType {
+  constructor(
+    readonly name: string,
+    readonly color: string,
+  ) {
+    super();
+  }
+  override eq(other: PeerCaret) {
+    return other.name === this.name && other.color === this.color;
+  }
+  toDOM() {
+    const caret = document.createElement("span");
+    caret.className = "cm-peer";
+    caret.style.borderColor = this.color;
+    const label = document.createElement("span");
+    label.className = "cm-peer-name";
+    label.style.backgroundColor = this.color;
+    label.textContent = this.name;
+    caret.append(label);
+    return caret;
+  }
+  override ignoreEvent() {
+    return true;
+  }
+}
 // the lines a change made outside Relay touched, marked for a moment with who made it
 const markOutside = StateEffect.define<DecorationSet>();
 const outsideMarks = StateField.define<DecorationSet>({
@@ -43,12 +87,14 @@ export function PageEditor({
   body,
   headRef,
   split,
+  onPeers,
 }: {
   page: string;
   head: string;
   body: string;
   headRef: HeadWriter;
   split: PageSplit;
+  onPeers?: (peers: Peer[]) => void; // who else is on the page, when it is a shared document
 }) {
   const { t } = useT();
   const [changed, setChanged] = useState(false);
@@ -84,6 +130,7 @@ export function PageEditor({
         head={head}
         body={body}
         split={split}
+        onPeers={onPeers}
         onReady={(write, setHead) => {
           save.current = write;
           headRef.current = setHead;
@@ -102,6 +149,7 @@ function Editor(props: {
   head: string;
   body: string;
   split: PageSplit;
+  onPeers?: (peers: Peer[]) => void;
   onReady: (write: (force?: boolean) => Promise<void>, setHead: (head: string) => Promise<void>) => void; // Keep mine, properties
   onChanged: (changed: boolean) => void;
   onFailed: (error: string) => void;
@@ -125,7 +173,12 @@ function Editor(props: {
     handle: t("block.handle"),
   }));
   useEffect(() => {
-    const { page, body, split, onReady, onChanged, onFailed } = first;
+    const { page, body, split, onReady, onChanged, onFailed, onPeers } = first;
+    // a shared document's page (ticket 9): typed into its text after the head, not saved as a file
+    let shared: SharedPage | null = null;
+    let headLen = 0; // where the body starts in the document's text
+    let closed = false;
+    const undoHistory = new Compartment();
     let head = first.head; // a property edited above replaces it
     let headRead = head; // the head as the file last had it
     let saved = body;
@@ -134,6 +187,7 @@ function Editor(props: {
     // `dirty`: the head changed, write even when the body did not
     const write = async (force = false, dirty = false) => {
       window.clearTimeout(timer);
+      if (shared) return; // the Mac's documents write its file
       const text = view.state.doc.toString();
       if ((blocked || (text === saved && !dirty)) && !force) return;
       try {
@@ -152,6 +206,18 @@ function Editor(props: {
       }
     };
     onReady(write, next => {
+      if (shared) {
+        const { text } = shared;
+        const c = oneChange(text.toString().slice(0, headLen), next);
+        text.doc!.transact(() => {
+          if (c.to > c.from) text.delete(c.from, c.to - c.from);
+          if (c.insert) text.insert(c.from, c.insert);
+        }, LOCAL);
+        headLen = next.length;
+        head = headRead = next;
+        pageTextIs(page, text.toString());
+        return Promise.resolve();
+      }
       head = next;
       return write(false, true);
     });
@@ -160,13 +226,17 @@ function Editor(props: {
       state: EditorState.create({
         doc: body,
         extensions: [
-          history(),
+          undoHistory.of(history()),
           drawSelection(),
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage }),
           livePreview((link, drawer) => void followPageLink(link, drawer)),
           blockEditing(words, () => workspacePaths()), // before the keymap below: Tab in a table moves between cells
           keymap.of([
+            // on a shared document ⌘Z undoes only what was typed here (Y.UndoManager with this Mac's origin)
+            { key: "Mod-z", run: () => !!shared && (shared.undo.undo(), true) },
+            { key: "Mod-Shift-z", run: () => !!shared && (shared.undo.redo(), true) },
+            { key: "Mod-y", run: () => !!shared && (shared.undo.redo(), true) },
             {
               key: "Mod-s",
               run: () => {
@@ -179,8 +249,26 @@ function Editor(props: {
             ...historyKeymap,
           ]),
           outsideMarks,
+          peerMarks,
           EditorView.contentAttributes.of({ "aria-label": label, spellcheck: "true" }),
           EditorView.updateListener.of(u => {
+            const fromShared = u.transactions.some(tr => tr.annotation(fromDoc));
+            if (shared && u.docChanged && !fromShared) {
+              // typed here: into the document's text, each change from the end so the positions before it hold
+              const { text } = shared;
+              const changes: [number, number, string][] = [];
+              u.changes.iterChanges((from, to, _f, _t, insert) => changes.push([from, to, insert.toString()]));
+              text.doc!.transact(() => {
+                for (const [from, to, insert] of changes.reverse()) {
+                  if (to > from) text.delete(headLen + from, to - from);
+                  if (insert) text.insert(headLen + from, insert);
+                }
+              }, LOCAL);
+            }
+            if (shared && (u.selectionSet || (u.docChanged && !fromShared))) {
+              const { anchor, head: at } = u.state.selection.main;
+              shared.cursor(headLen + anchor, headLen + at);
+            }
             if (u.docChanged) {
               window.clearTimeout(timer);
               timer = window.setTimeout(() => void write(), SAVE_AFTER);
@@ -225,7 +313,57 @@ function Editor(props: {
       unmark = window.setTimeout(() => view.dispatch({ effects: markOutside.of(Decoration.none) }), MARK_FOR);
       if (head !== theirs.head) void write(false, true); // a property edited here that the file does not have yet
     });
+    // a shared document's page: bound to its text, the others' cursors shown
+    const fromDocChange = (c: { from: number; to: number; insert: string }) => {
+      if (c.from !== c.to || c.insert)
+        view.dispatch({ changes: c, annotations: [fromDoc.of(true), Transaction.addToHistory.of(false)] });
+    };
+    if (page.startsWith("/"))
+      void openSharedPage(page).then(sp => {
+        if (!sp) return;
+        if (closed) return sp.close();
+        shared = sp;
+        stopWatching(); // the Mac's documents take a change of the file in; it comes here as an update
+        view.dispatch({ effects: undoHistory.reconfigure([]) });
+        const full = sp.text.toString();
+        const parts = split(full);
+        headLen = parts.head.length;
+        fromDocChange(oneChange(view.state.doc.toString(), parts.body)); // the document may be ahead of the file
+        if (parts.head !== head) {
+          head = headRead = parts.head;
+          pageTextIs(page, full);
+        }
+        sp.text.observe(e => {
+          if (e.transaction.origin === LOCAL) return;
+          headLen = headAfter(e.changes.delta as { retain?: number; insert?: unknown; delete?: number }[], headLen);
+          const now = sp.text.toString();
+          fromDocChange(oneChange(view.state.doc.toString(), now.slice(headLen)));
+          if (now.slice(0, headLen) !== head) {
+            head = headRead = now.slice(0, headLen);
+            pageTextIs(page, now);
+          }
+        });
+        sp.peers(peers => {
+          onPeers?.(peers);
+          const end = view.state.doc.length;
+          const marks = peers.flatMap(p => {
+            const [anchor, at] = [p.anchor - headLen, p.head - headLen];
+            if (at < 0 || at > end) return [];
+            const out: Range<Decoration>[] = [
+              Decoration.widget({ widget: new PeerCaret(p.name, p.color), side: 1 }).range(at),
+            ];
+            const [from, to] = [Math.max(0, Math.min(anchor, at)), Math.min(end, Math.max(anchor, at))];
+            if (to > from)
+              out.push(Decoration.mark({ attributes: { style: `background-color: ${p.color}33` } }).range(from, to));
+            return out;
+          });
+          view.dispatch({ effects: setPeers.of(Decoration.set(marks, true)) });
+        });
+      });
     return () => {
+      closed = true;
+      shared?.close();
+      onPeers?.([]);
       stopWatching();
       window.clearTimeout(unmark);
       void write(); // leaving the page saves what was typed

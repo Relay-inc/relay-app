@@ -1318,6 +1318,29 @@ const VIEWS = {
     await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
     await settle(page);
   },
+  // a shared document's page with two other members on it: their cursors with their names, their avatars in the bar,
+  // a line one of them typed, and a line typed here (ticket 9)
+  "page-co-editing": async (fixture = "shared-live") => {
+    await open(page, server.url, { fixture });
+    await page.keyboard.press("Control+Digit2");
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    for (const folder of ["Contexts", "Contexts/Team", "Contexts/Team/Projects"])
+      await page.locator(`[data-folder="${folder}"]`).click();
+    await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await waitText("Stand van zaken");
+    await page.waitForFunction(() => window.__harness.liveText().length > 0, null, { timeout: 4000 });
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("Typed on this Mac.");
+    await page.evaluate(() => {
+      window.__harness.peerType("- [ ] Second open loop", "\n- [ ] A third loop, typed by Laurent");
+      window.__harness.peerCursor("a1b2c3d4e5f6a7b8", "Laurent Meersman", "typed by Laurent");
+      window.__harness.peerCursor("f0e1d2c3b4a59687", "Jeppe", "It links to", 11);
+    });
+    await waitText("Laurent Meersman");
+    await settle(page);
+  },
+  "page-co-editing-dark": async () => VIEWS["page-co-editing"]("shared-live-dark"),
   // a project's note as a page in the middle column: properties, its conversations, the body (PR page-view)
   "page-view": async () => {
     await open(page, server.url);

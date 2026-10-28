@@ -89,3 +89,32 @@ export function lineChanges(before: string, after: string): { from: number; to: 
     return { from: before.length, to: before.length, insert: "\n" + put.join("\n") };
   });
 }
+
+/** The one change that turns `before` into `after`: what they share at the start and the end stays. */
+export function oneChange(before: string, after: string): { from: number; to: number; insert: string } {
+  let start = 0;
+  while (start < before.length && start < after.length && before[start] === after[start]) start++;
+  let end = 0;
+  while (
+    end < before.length - start &&
+    end < after.length - start &&
+    before[before.length - 1 - end] === after[after.length - 1 - end]
+  )
+    end++;
+  return { from: start, to: before.length - end, insert: after.slice(start, after.length - end) };
+}
+
+/** A Yjs text delta (retain, insert, delete) applied to where a text's head ends (`head` characters in): text inserted
+ *  before that end grows the head, text removed from it shrinks it. What lands exactly at the end belongs to the body. */
+export function headAfter(delta: { retain?: number; insert?: unknown; delete?: number }[], head: number): number {
+  let at = 0;
+  for (const d of delta) {
+    if (d.retain) at += d.retain;
+    else if (d.insert !== undefined) {
+      const n = typeof d.insert === "string" ? d.insert.length : 1;
+      if (at < head) head += n;
+      at += n;
+    } else if (d.delete && at < head) head -= Math.min(at + d.delete, head) - at;
+  }
+  return head;
+}

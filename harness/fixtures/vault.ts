@@ -472,7 +472,7 @@ export function settings(fixture: string) {
         ? { on: true, feeds: [{ email: MAIL_ACCOUNT }, { email: MAIL_ACCOUNT_2 }] }
         : { on: false, feeds: [] },
     language: "en",
-    theme: fixture === "dark" || fixture === "plugins-dark" ? "dark" : "light",
+    theme: fixture === "dark" || fixture === "plugins-dark" || fixture === "shared-live-dark" ? "dark" : "light",
     accent: fixture === "graphite" ? "graphite" : "relay",
     terminal: "auto",
     ...(fixture === "icons" ? { sidebar: { layout: "icons" } } : {}),

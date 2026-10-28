@@ -430,6 +430,7 @@ export default {
   "drawer.detail": "Détails",
   "page.edited": "Modifiée {ago}",
   "page.ask": "Demander à Claude",
+  "page.peers": "Sur cette page : {names}",
   "page.editor": "Texte de la page",
   "page.updatedLinks": "Liens mis à jour",
   "page.updatedByClaude": "Modifié par Claude",

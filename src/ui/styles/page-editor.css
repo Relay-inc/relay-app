@@ -241,3 +241,22 @@
   font-size: 11px;
   color: var(--tertiary);
 }
+
+/* another member's cursor on a shared document's page, with their name above it */
+.page-editor .cm-peer {
+  position: relative;
+  border-left: 2px solid;
+  margin: 0 -1px;
+}
+.page-editor .cm-peer-name {
+  position: absolute;
+  bottom: 100%;
+  left: -2px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: white;
+  white-space: nowrap;
+  pointer-events: none;
+}
