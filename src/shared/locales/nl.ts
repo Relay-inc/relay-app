@@ -1026,10 +1026,6 @@ export default {
   "set.sharedCounts": "{sent} verstuurd, {received} ontvangen",
   "set.sharedBad_one": "{n} bestand daar opent niet met deze sleutel.",
   "set.sharedBad_other": "{n} bestanden daar openen niet met deze sleutel.",
-  "set.sharedRekeyNoKey":
-    "Iemand is vertrokken, dus de sleutel verandert. Dat wacht tot {name} Relay bijwerkt en een keer opent.",
-  "set.sharedRekeyChanged":
-    "Iemand is vertrokken, dus de sleutel verandert. Dat wacht op {name}: die sleutel is niet de sleutel die deze Mac vertrouwt.",
   "set.sharedKeyChanged":
     "De sleutel van {name} is niet de sleutel die deze Mac vertrouwt. Misschien heeft die Relay opnieuw ingesteld, of zit er iemand tussen.",
   "set.sharedTrustAsk": "De nieuwe sleutel van {name} vertrouwen…",

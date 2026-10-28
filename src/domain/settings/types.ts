@@ -131,10 +131,10 @@ export type SharedStatus = {
   held: string[];
   bad: number;
   live?: boolean; // the live channel is connected; false or missing: rounds every 10 s only
-  // a due key change waits for these members: `nokey` their Relay sent no key for it yet, `changed` their key is not
-  // the one this Mac trusts
-  waiting?: { name: string; why: "nokey" | "changed" }[];
-  changed?: { fp: string; name: string }[]; // members whose key is not the one this Mac pinned, until an admin trusts it
+  // what the member list says is wrong: a list the server cannot be trusted on, another member who saw a newer one, a
+  // removal that waits too long for its key change
+  warnings?: string[];
+  changed?: { fp: string; name: string }[]; // members whose Relay publishes other keys than the member list has
 };
 /** An open invite of a shared vault: single use, `expires` in epoch seconds. */
 export type SharedInvite = { id: string; role: SharedRole; expires: number };

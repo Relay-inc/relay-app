@@ -53,13 +53,11 @@ pub fn find(s: &Value, id: &str) -> Result<Shared, String> { list(s).into_iter()
 /// deletes held for the user (sync::Guard). `bad`: blobs there that did not open with the key (left alone). `live`: the
 /// vault's live channel is connected (relay_remote::channel), else it syncs by rounds only.
 #[derive(Default, Clone, serde::Serialize)]
-/// `waiting`: the members a due key change waits for, with why (`nokey`: their Relay has not sent a key for it yet;
-/// `changed`: their key is not the one this Mac trusts). `changed`: members whose key differs from the one this Mac
-/// pinned, until an admin trusts it again (docs/workspaces.md, Key rotation).
+/// `warnings`: what the member list says is wrong (docs/workspaces.md, Members): a list the server cannot be trusted on,
+/// another member who saw a newer one, a removal that waits too long for its key change. `changed`: members whose
+/// Relay publishes other keys than the list has (they set it up again), until an admin trusts them.
 pub struct Status { pub at: i64, pub pushed: usize, pub pulled: usize, pub conflicts: Vec<String>, pub errors: Vec<String>, pub held: Vec<String>, pub bad: usize, pub live: bool,
-    pub waiting: Vec<Waiting>, pub changed: Vec<Changed> }
-#[derive(Clone, serde::Serialize)]
-pub struct Waiting { pub name: String, pub why: String }
+    pub warnings: Vec<String>, pub changed: Vec<Changed> }
 #[derive(Clone, serde::Serialize)]
 pub struct Changed { pub fp: String, pub name: String }
 
@@ -229,7 +227,7 @@ impl Hub {
                 match remote.keep_keys(&|k| save_key(data, &v.id, k)) {
                     Ok(k) => {
                         st.errors.extend(k.errors.into_iter().map(|e| format!("key: {e}")));
-                        st.waiting = k.waiting.into_iter().map(|(name, why)| Waiting { name, why }).collect();
+                        st.warnings = k.warnings;
                         st.changed = k.changed.into_iter().map(|(fp, name)| Changed { fp, name }).collect();
                     }
                     Err(e) => st.errors.push(format!("key: {e}")),
@@ -239,6 +237,8 @@ impl Hub {
                 // files still under an older key, sealed again under the newest
                 // ponytail: 100 a round, a big workspace takes a few rounds after a rotation
                 if r.errors.is_empty() { remote.reseal(100); }
+                // a record written with a member list this Mac's does not hold: held back from it, or a fork
+                for w in remote.list_warnings() { if !st.warnings.contains(&w) { st.warnings.push(w); } }
                 // a round that failed (the server out of reach) keeps what the user let through for the next one
                 if !r.errors.is_empty() { one.allowed = allowed.clone(); }
                 // the next round plans against this base: one not written is an error, not a quiet success
@@ -256,6 +256,12 @@ impl Hub {
         Some(st)
     }
 
+    /// `f` while no round of vault `id` runs: the key file it writes is not overwritten by a round's copy.
+    pub fn with_vault<T>(&self, id: &str, f: impl FnOnce() -> T) -> T {
+        let one = self.one(id);
+        let _one = one.lock().unwrap_or_else(|e| e.into_inner());
+        f()
+    }
     /// The held deletes the user saw go through in the next round; any others the brake still holds. Another member
     /// can delete more meanwhile, so it is the list shown, not "everything held next time".
     pub fn allow_deletes(&self, id: &str, seen: Vec<String>) {
@@ -461,15 +467,25 @@ pub async fn shared_vault_join(app: AppHandle, state: St<'_>, link: String, fold
 pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role: String) -> Result<Value, String> {
     let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
     let role = if role == "admin" { "admin" } else { "member" };
-    let (link, invite) = on_server(&state, &id, move |v, c| match c.vault_invite(&v.id, role, &key, &v.host, v.port) {
-        // the key changed since this Mac's last round: take the new one (as a round would) and invite with it
-        Err(e) if e == "key changed" => {
-            let r = c.sealed(&v.id, key);
-            r.keep_keys(&|k| save_key(&data, &v.id, k))?;
-            c.vault_invite(&v.id, role, &load_key(&data, &v.id)?, &v.host, v.port)
-        }
-        other => other,
-    }).await?;
+    let a = app.clone();
+    let (link, invite) = on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || {
+        let (link, inv, keys) = match c.vault_invite(&v.id, role, &key, &v.host, v.port) {
+            // the key changed since this Mac's last round: take the new one (as a round would) and invite with it
+            Err(e) if e == "key changed" => {
+                c.sealed(&v.id, key).keep_keys(&|k| save_key(&data, &v.id, k))?;
+                let keys = load_key(&data, &v.id)?;
+                let (l, i) = c.vault_invite(&v.id, role, &keys, &v.host, v.port)?;
+                (l, i, keys)
+            }
+            other => { let (l, i) = other?; (l, i, key) }
+        };
+        // remembered, so this Mac's round adds whoever joins with it to the member list
+        let secret = relay_remote::proto::PairLine::parse(&link).and_then(|l| l.secret).ok_or("the invite link has no secret")?;
+        let mut k = load_key(&data, &v.id)?;
+        k.invites.push(relay_remote::vault::Invited { id: inv.id.clone(), secret, role: role.into(), epoch: keys.epoch() });
+        save_key(&data, &v.id, &k)?;
+        Ok((link, inv))
+    })).await?;
     Ok(serde_json::json!({"link": link, "invite": invite}))
 }
 
@@ -478,7 +494,8 @@ pub async fn shared_vault_invite(app: AppHandle, state: St<'_>, id: String, role
 #[tauri::command]
 pub async fn shared_vault_trust(app: AppHandle, state: St<'_>, id: String, fp: String) -> Result<(), String> {
     let (key, data) = (load_key(&crate::data_dir(&app), &id)?, crate::data_dir(&app));
-    on_server(&state, &id, move |v, c| c.sealed(&v.id, key).trust(&fp, &|k| save_key(&data, &v.id, k))).await?;
+    let a = app.clone();
+    on_server(&state, &id, move |v, c| a.state::<crate::App>().shared.with_vault(&v.id.clone(), || c.sealed(&v.id, key).trust(&fp, &|k| save_key(&data, &v.id, k)))).await?;
     if let Some(s) = app.state::<crate::App>().shared.status.lock().unwrap().get_mut(&id) { s.changed.clear(); }
     sync_now();
     Ok(())
@@ -510,7 +527,10 @@ pub async fn shared_vault_remove(app: AppHandle, state: St<'_>, id: String, fp: 
     let me = state.machines.id.fingerprint();
     let fp = if fp.is_empty() { me.clone() } else { fp };
     let who = fp.clone();
-    let gone = on_server(&state, &id, move |v, c| c.vault_remove(&v.id, &who)).await;
+    // a signed entry on the member list when the vault has one (the server removes them in the same write), else
+    // the server's removal alone; with no key here (a vault that lost it) only the server's
+    let key = load_key(&crate::data_dir(&app), &id);
+    let gone = on_server(&state, &id, move |v, c| match key { Ok(k) => c.sealed(&v.id, k).remove(&who), Err(_) => c.vault_remove(&v.id, &who) }).await;
     if fp != me { return gone; }
     // leaving: what the server says when this Mac is out already does not keep the vault here
     if let Err(e) = gone { if !left_already(&e) { return Err(e); } }

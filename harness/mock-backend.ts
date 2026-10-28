@@ -91,10 +91,7 @@ let sharedStatus: Record<string, any> = shared ? vault.sharedStatus(Math.floor(D
 if (fixture === "shared-rekey")
   for (const s of Object.values(sharedStatus))
     Object.assign(s, {
-      waiting: [
-        { name: "Design laptop", why: "nokey" },
-        { name: "Studio Mac", why: "changed" },
-      ],
+      warnings: ["Someone left over an hour ago, and the key has not changed since."],
       changed: [{ fp: vault.sharedMembers[1].fp, name: "Studio Mac" }],
       held: [],
       conflicts: [],
@@ -381,7 +378,6 @@ function handle(cmd: string, a: Args): unknown {
       const s = sharedStatus[a.id];
       if (s) {
         s.changed = (s.changed ?? []).filter((c: { fp: string }) => c.fp !== a.fp);
-        s.waiting = (s.waiting ?? []).filter((w: { why: string }) => w.why !== "changed");
       }
       return null;
     }

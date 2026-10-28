@@ -1126,8 +1126,8 @@ const VIEWS = {
   "settings-shared-rekey": async () => {
     await settingsPage("Machines", undefined, "shared-rekey");
     await page.setViewportSize({ width: 900, height: 1000 });
-    await waitText("waits for Design laptop");
-    await page.getByText("waits for Design laptop").scrollIntoViewIfNeeded();
+    await waitText("the key has not changed since");
+    await page.getByText("the key has not changed since").scrollIntoViewIfNeeded();
     await settle(page);
   },
   // an admin trusts a member's new key, after a confirm (PR key rotation)

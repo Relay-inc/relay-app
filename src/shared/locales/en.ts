@@ -1019,11 +1019,8 @@ const en = {
   "set.sharedCounts": "{sent} sent, {received} received",
   "set.sharedBad_one": "{n} file there does not open with this key.",
   "set.sharedBad_other": "{n} files there do not open with this key.",
-  "set.sharedRekeyNoKey": "Someone left, so the key changes. It waits for {name} to update Relay and open it once.",
-  "set.sharedRekeyChanged":
-    "Someone left, so the key changes. It waits for {name}: their key is not the one this Mac trusts.",
   "set.sharedKeyChanged":
-    "{name}'s key is not the one this Mac trusts. They may have set up Relay again, or someone is in between.",
+    "{name}'s Relay shows other keys than the member list has. They may have set up Relay again, or someone is in between.",
   "set.sharedTrustAsk": "Trust {name}'s new key…",
   "set.sharedTrustSure":
     "Only if {name} told you they set up Relay again. A key you trust here gets every key change from now on.",

@@ -152,13 +152,13 @@ function SharedRow({ vault }: { vault: SharedVault }) {
               </StatusLine>
             ))}
             {status.bad ? <StatusLine level="warn">{tn("set.sharedBad", status.bad)}</StatusLine> : null}
-            {/* someone left: the key changes once every member left has a Relay that can receive the new one */}
-            {status.waiting?.map(w => (
-              <StatusLine key={w.name} level="warn">
-                {t(w.why === "changed" ? "set.sharedRekeyChanged" : "set.sharedRekeyNoKey", { name: w.name })}
+            {/* the member list: held back, forked, or a removal still waiting for its key change */}
+            {status.warnings?.map(w => (
+              <StatusLine key={w} level="warn">
+                {w}
               </StatusLine>
             ))}
-            {/* a member's key is not the one this Mac trusts: they set up Relay again, or someone is in between */}
+            {/* a member's Relay publishes other keys than the member list has: they set it up again, or someone is in between */}
             {status.changed?.map(c => (
               <div key={c.fp} className="grid gap-1">
                 <StatusLine level="warn">{t("set.sharedKeyChanged", { name: c.name })}</StatusLine>

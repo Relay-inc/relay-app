@@ -1032,10 +1032,6 @@ export default {
   "set.sharedCounts": "{sent} gesendet, {received} empfangen",
   "set.sharedBad_one": "{n} Datei dort lässt sich mit diesem Schlüssel nicht öffnen.",
   "set.sharedBad_other": "{n} Dateien dort lassen sich mit diesem Schlüssel nicht öffnen.",
-  "set.sharedRekeyNoKey":
-    "Jemand ist gegangen, deshalb ändert sich der Schlüssel. Das wartet, bis {name} Relay aktualisiert und einmal öffnet.",
-  "set.sharedRekeyChanged":
-    "Jemand ist gegangen, deshalb ändert sich der Schlüssel. Das wartet auf {name}: dessen Schlüssel ist nicht der, dem dieser Mac vertraut.",
   "set.sharedKeyChanged":
     "Der Schlüssel von {name} ist nicht der, dem dieser Mac vertraut. Vielleicht wurde Relay neu eingerichtet, oder jemand sitzt dazwischen.",
   "set.sharedTrustAsk": "Dem neuen Schlüssel von {name} vertrauen…",
