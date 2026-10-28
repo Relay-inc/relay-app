@@ -1576,7 +1576,7 @@ fn a_live_channel_walls() {
 
 /// A shared vault's documents (docs/workspaces.md, Documents): a note made a document on one Mac reaches another
 /// through the log; edits made on both while apart end as one text; a live update arrives within a moment; a long log
-/// gets a snapshot that a Mac starting from nothing reads instead; a rename keeps the document; a sidecar is a
+/// is read a page at a time by a Mac starting from nothing; a rename keeps the document; a sidecar is a
 /// document too; a removed member pulls nothing; the server stores only sealed parts, and only under the current key.
 #[test]
 fn a_shared_vaults_documents() {
@@ -1646,16 +1646,15 @@ fn a_shared_vaults_documents() {
     assert_eq!(*got.lock().unwrap(), 1, "the editor hears of it");
     ch.stop();
 
-    // a long log: a snapshot once SNAPSHOT_EVERY updates are past it; a Mac starting from nothing reads it and the rest
-    for i in 0..205 { edit(&a, &id, &|t, txn| { let n = t.len(txn); t.insert(txn, n, &format!("{i},")); }); }
+    // a long log: a Mac starting from nothing reads it a page at a time (no snapshot is written or read)
+    for i in 0..1001 { edit(&a, &id, &|t, txn| { let n = t.len(txn); t.insert(txn, n, &format!("{i},")); }); }
     let list = listing(&laptop.call(json!({"op": "doc_list", "vault": vault})).unwrap());
-    let (n, snap) = list[&a.name(&id)];
-    assert!(snap >= 200 && n > snap, "log {n}, snapshot {snap}");
+    assert_eq!(list[&a.name(&id)], (1005, 0), "every update in the log, no snapshot");
+    let page = colleague.call(json!({"op": "doc_pull", "vault": vault, "doc": a.name(&id), "since": 0, "limit": 10})).unwrap();
+    assert_eq!((page["updates"].as_array().unwrap().len(), page["more"].as_bool()), (10, Some(true)));
     let fresh = colleague.docs(&vault, theirs.clone(), &dirs.join("c"), &cid.fingerprint());
     fresh.sync().unwrap();
     assert_eq!(fresh.text(&id), a.text(&id));
-    let pulled = colleague.call(json!({"op": "doc_pull", "vault": vault, "doc": a.name(&id), "since": 0}));
-    assert_eq!(pulled.unwrap()["snapshot"]["upto"], json!(snap), "from nothing: the snapshot, then what follows");
 
     // a rename changes the manifest only: same document, same history
     a.rename("Projects/Plan.md", "Projects/Plan 2.md").unwrap();

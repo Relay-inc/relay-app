@@ -5,7 +5,7 @@
 //! `snap/<upto>`, each written whole (temp file and rename).
 
 use crate::vaults::{dir, hex, Vaults};
-use relay_remote::docs::{MAX_PULL, MAX_UPDATE, SNAPSHOT_EVERY};
+use relay_remote::docs::{MAX_PULL, MAX_UPDATE, PULL_LIMIT, SNAPSHOT_EVERY};
 use relay_remote::sync;
 use relay_remote::vault::{epoch, split, MAX_RECORD};
 use serde_json::{json, Value};
@@ -86,45 +86,30 @@ impl Vaults {
         Ok(seqs)
     }
 
-    /// A document's log after `since`: when `snapshots`, the newest snapshot past `since` (with the metas of every
-    /// update up to its place, so a member can check it holds them), then the updates after it, up to MAX_PULL bytes
+    /// A document's log after `since`, a page: at most `limit` updates (PULL_LIMIT when 0 or more) and MAX_PULL bytes
     /// (`more`: there is more after). Each update says who pushed it. Returns the answer and the parts, back to back.
-    pub fn doc_pull(&self, fp: &str, id: &str, name: &str, since: u64, snapshots: bool) -> Result<(Value, Vec<u8>), String> {
+    /// Snapshots are not handed out: a member builds a document from the log alone (docs/workspaces.md, Documents).
+    pub fn doc_pull(&self, fp: &str, id: &str, name: &str, since: u64, limit: u64) -> Result<(Value, Vec<u8>), String> {
         self.member(id, fp)?;
         if !hex(name, 64) { return Err("bad doc".into()); }
         let d = self.doc(id, name);
         let n = self.length(id, name);
-        let snap = if snapshots { numbered(&d.join("snap")).into_iter().filter(|u| *u > since && *u <= n).next_back() } else { None };
-        let (mut body, mut from, mut snapshot, mut metas) = (vec![], since, Value::Null, vec![]);
-        let read = |s: u64| fs::read(at(&d.join("log"), s)).map_err(|e| e.to_string());
-        if let Some(u) = snap {
-            let b = fs::read(at(&d.join("snap"), u)).map_err(|e| e.to_string())?;
-            snapshot = json!({"upto": u, "len": b.len()});
-            body.extend(b);
-            for s in 1..=u {
-                let p = read(s)?;
-                let (meta, _) = split(&p).ok_or("a broken log entry")?;
-                let m = &p[..4 + meta.len()];
-                metas.push(json!({"seq": s, "len": m.len()}));
-                body.extend(m);
-            }
-            from = u;
-        }
-        let mut updates = vec![];
-        let mut last = from;
-        for s in from + 1..=n {
-            if !updates.is_empty() && body.len() as u64 > MAX_PULL { break; }
-            let b = read(s)?;
+        let limit = if limit == 0 || limit > PULL_LIMIT { PULL_LIMIT } else { limit };
+        let (mut body, mut updates, mut last) = (vec![], vec![], since);
+        for s in since + 1..=n {
+            if !updates.is_empty() && (body.len() as u64 > MAX_PULL || updates.len() as u64 >= limit) { break; }
+            let b = fs::read(at(&d.join("log"), s)).map_err(|e| e.to_string())?;
             let who = fs::read_to_string(d.join("log").join(format!("{s:012}.from"))).unwrap_or_default();
             updates.push(json!({"seq": s, "len": b.len(), "from": who}));
             body.extend(b);
             last = s;
         }
-        Ok((json!({"snapshot": snapshot, "metas": metas, "updates": updates, "seq": n, "more": last < n, "len": body.len()}), body))
+        Ok((json!({"updates": updates, "seq": n, "more": last < n, "len": body.len()}), body))
     }
 
-    /// A member's snapshot of a document, holding every update up to `upto`: at least SNAPSHOT_EVERY updates past the
-    /// last one ("too soon" otherwise). Kept with the others; none is ever replaced.
+    /// A member's snapshot of a document, said to hold every update up to `upto`: at least SNAPSHOT_EVERY updates past
+    /// the last one ("too soon" otherwise), none replaced. Kept for ticket 10's history as an unchecked hint: no pull
+    /// hands one out, and Relay writes none yet.
     pub fn doc_snapshot(&self, fp: &str, id: &str, name: &str, upto: u64, part: &[u8]) -> Result<(), String> {
         if !hex(name, 64) { return Err("bad doc".into()); }
         if part.len() < MIN_PART || part.len() as u64 > MAX_RECORD || split(part).is_none() { return Err("not a snapshot".into()); }
@@ -155,8 +140,8 @@ mod tests {
     use std::fs;
 
     /// The server's walls for a document: only a member, only under the vault's current key, a log with no gap and
-    /// who pushed each entry, a snapshot only of a place the log has and no sooner than SNAPSHOT_EVERY after the last,
-    /// none replaced, nothing deleted.
+    /// who pushed each entry, a pull a page at a time, a snapshot only of a place the log has and no sooner than
+    /// SNAPSHOT_EVERY after the last, nothing deleted.
     #[test]
     fn a_document_log_takes_only_current_key_parts_from_members() {
         let data = std::env::temp_dir().join(format!("relay-docs-unit-{}", std::process::id()));
@@ -178,20 +163,18 @@ mod tests {
         fs::write(&file, v.to_string()).unwrap();
         assert_eq!(vs.doc_push(&me, &id, &name, vec![part(0)]).unwrap_err(), "key changed");
         for _ in 3..=205 { vs.doc_push(&me, &id, &name, vec![part(1)]).unwrap(); }
-        // snapshots: only of a place in the log, under the current key, SNAPSHOT_EVERY apart, none replaced
+        // snapshots (kept, not handed out): only of a place in the log, under the current key, SNAPSHOT_EVERY apart
         assert!(vs.doc_snapshot(&me, &id, &name, 900, &part(1)).is_err());
         assert!(vs.doc_snapshot(&me, &id, &name, 200, &part(0)).is_err());
         assert!(vs.doc_snapshot(&me, &id, &name, 199, &part(1)).unwrap_err().contains("too soon"));
         vs.doc_snapshot(&me, &id, &name, 200, &part(1)).unwrap();
         assert!(vs.doc_snapshot(&me, &id, &name, 205, &part(1)).unwrap_err().contains("too soon"));
-        // from before the snapshot: it, every update's meta up to it, then the rest with who pushed each
-        let (v, b) = vs.doc_pull(&me, &id, &name, 0, true).unwrap();
-        assert_eq!((v["snapshot"]["upto"].as_u64(), v["metas"].as_array().unwrap().len(), v["updates"].as_array().unwrap().len(), v["seq"].as_u64()), (Some(200), 200, 5, Some(205)));
-        assert_eq!((v["metas"][0]["len"].as_u64(), v["updates"][0]["from"].as_str()), (Some(32), Some(&me[..16])));
-        assert_eq!(b.len(), part(1).len() + 200 * 32 + 5 * part(1).len());
-        // without snapshots (one a member could not check): the log itself
-        let (v, _) = vs.doc_pull(&me, &id, &name, 0, false).unwrap();
-        assert_eq!((v["snapshot"].is_null(), v["updates"].as_array().unwrap().len()), (true, 205));
+        // a pull: a page of the log with who pushed each, `more` past the limit
+        let (v, b) = vs.doc_pull(&me, &id, &name, 0, 100).unwrap();
+        assert_eq!((v["updates"].as_array().unwrap().len(), v["more"].as_bool(), v["seq"].as_u64()), (100, Some(true), Some(205)));
+        assert_eq!((v["updates"][0]["from"].as_str(), b.len()), (Some(&me[..16]), 2 * part(0).len() + 98 * part(1).len()));
+        let (v, _) = vs.doc_pull(&me, &id, &name, 200, 0).unwrap();
+        assert_eq!((v["updates"].as_array().unwrap().len(), v["more"].as_bool(), v["updates"][0]["seq"].as_u64()), (5, Some(false), Some(201)));
         assert_eq!(vs.doc_list(&me, &id).unwrap()["docs"], json!([{"doc": name, "seq": 205, "snap": 200}]));
         assert_eq!(numbered(&vs.doc(&id, &name).join("log")), (1..=205).collect::<Vec<_>>(), "nothing deleted");
         fs::remove_dir_all(&data).ok();

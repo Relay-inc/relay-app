@@ -1,23 +1,24 @@
 //! A shared vault's documents (docs/workspaces.md, Documents): a note several members edit at once is a Yjs document,
 //! not a file the rounds copy whole. Its markdown is one Y.Text, so the .md written out is that text and nothing is
-//! lost going back and forth. The server keeps per document an append-only log of sealed updates and, now and then, a
-//! sealed snapshot a member wrote; it never reads, merges or deletes them (history, ticket 10).
+//! lost going back and forth. The server keeps per document an append-only log of sealed updates; it never reads,
+//! merges or deletes them (history, ticket 10). A Mac builds a document only from that log and keeps its own state;
+//! it writes no snapshots there and reads none (a member's snapshot cannot be checked cheaply against the log).
 //!
 //! Which note a document is: the vault's manifest document (id "manifest") maps each path to a random document id, so
 //! a rename changes only the manifest and a document keeps its history. A document's name on the server is the vault's
 //! naming key over "doc:<id>"; a sidecar (comments, ticket 11) is "<id>#<what>".
 //!
-//! What the server could do wrong, and what this side checks: it cannot read or forge a part (sealed); it can hold
-//! updates back from this Mac, which shows as a gap in an author's counter (`n` in each update's meta, warned) once a
-//! later one of that author comes (not when nobody gets any); it can hand out a member's snapshot that leaves updates
-//! out, which is refused unless it covers every update's clocks up to its place (`k` in each meta); it can reorder or
-//! repeat updates, which changes nothing in the text (Yjs).
+//! What the server could do wrong, and what this side checks: it cannot read or forge a part (sealed, the author and
+//! its counter bound in); it can hold updates back from this Mac, which shows as a gap in an author's counter (`n`,
+//! warned) once a later one of that author comes, and as edits Yjs cannot place yet (warned, the log read again); it
+//! can reorder or repeat updates, which changes nothing in the text (Yjs). Nothing shows when it gives an update to
+//! nobody.
 //!
 //! On this Mac, per vault: each document's state (dir/<id>.bin) and how far it has the log (`Cursor`, dir/index.json).
 
 use crate::sync::{self, fold, Filter};
 use crate::tls::{hex, unhex};
-use crate::vault::{Call, Keys, MAX_RECORD};
+use crate::vault::{Call, Keys};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -25,25 +26,28 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use yrs::updates::decoder::Decode;
 use yrs::updates::encoder::Encode;
-use yrs::{ClientID, Doc, GetString, Map, ReadTxn, StateVector, Text, Transact, Update};
+use yrs::{Doc, GetString, Map, ReadTxn, StateVector, Text, Transact, Update};
 
 /// The manifest's id: path -> document id, in its map "paths".
 pub const MANIFEST: &str = "manifest";
-/// One update at most, and one pull's parts at most (a snapshot may be a whole record's size on its own).
+/// One update at most, and one pull's parts at most (in bytes, and in updates: a pull says `more` past either).
 pub const MAX_UPDATE: u64 = 4 << 20;
 pub const MAX_PULL: u64 = 32 << 20;
-/// Updates in the log between two snapshots: a document opened later reads the last snapshot and what follows, not
-/// the whole log. The server takes a snapshot no sooner.
+pub const PULL_LIMIT: u64 = 1000;
+/// Updates in the log between two snapshots the server takes (`doc_snapshot_put`, for ticket 10's history; this
+/// side writes none).
 pub const SNAPSHOT_EVERY: u64 = 200;
 
 /// How far this Mac has a document: every update up to `seq` taken (or skipped, warned), `epoch` the newest key when it
-/// last pulled (an update under an older key after that is a removed member's), `snap` the last snapshot's place.
+/// last pulled (an update under an older key after that is a removed member's).
 /// `path`: where the manifest last put it. `at`, `out`: where and what (hash) it was last written as a note. `pending`:
 /// an edit here the server has not taken yet; `acked` the state vector (hex) it holds of this Mac's edits; `mine` this
-/// device's counter of updates to it; `seen` the last counter of each author (a gap: updates held back).
+/// device's counter of updates to it; `seen` the last counter of each author (a gap: updates held back); `lost` the
+/// authors of parts left out (named when edits are missing).
 #[derive(Default, Clone, Serialize, Deserialize)]
 #[serde(default)]
-struct Cursor { seq: u64, epoch: u32, snap: u64, path: String, at: String, out: String, pending: bool, acked: String, mine: u64, seen: BTreeMap<String, u64> }
+struct Cursor { seq: u64, epoch: u32, path: String, at: String, out: String, pending: bool, acked: String, mine: u64, seen: BTreeMap<String, u64>,
+    lost: std::collections::BTreeSet<String> }
 struct Open { doc: Doc, c: Cursor }
 
 type On = Arc<dyn Fn(&str, &[u8]) + Send + Sync>;
@@ -88,14 +92,6 @@ fn change(doc: &Doc, f: impl FnOnce(&Doc)) -> Vec<u8> {
     doc.transact().encode_state_as_update_v1(&before)
 }
 fn sv_of(hex_sv: &str) -> StateVector { unhex(hex_sv).and_then(|b| StateVector::decode_v1(&b).ok()).unwrap_or_default() }
-/// An update's clocks per client (`k` in its meta): a snapshot that holds it covers at least these.
-fn clocks(update: &[u8]) -> Result<Value, String> {
-    Ok(Value::Object(decode(update)?.state_vector().iter().map(|(c, k)| (c.get().to_string(), json!(k))).collect()))
-}
-/// Whether state vector `sv` covers clocks `k`.
-fn covers(sv: &StateVector, k: &Value) -> bool {
-    k.as_object().is_some_and(|m| m.iter().all(|(c, n)| c.parse::<u64>().is_ok_and(|c| n.as_u64().is_some_and(|n| sv.get(&ClientID::new(c)) as u64 >= n))))
-}
 /// A note's conflict name: "Plan.md" -> "Plan (conflict 1a2b3c4d).md", the same on every Mac for the same document.
 fn conflict_path(path: &str, id: &str) -> String { format!("{} (conflict {}).md", path.trim_end_matches(".md"), &id[..8]) }
 
@@ -189,8 +185,9 @@ impl Docs {
         let id = self.paths().get(from).ok_or_else(|| format!("not a document: {from}"))?.clone();
         if self.taken(to, Some(from)) { return Err(format!("already a document: {to}")); }
         self.manifest(|m, txn| { m.remove(txn, from); m.insert(txn, to, id.clone()); })?;
-        if let Some(o) = lock(&self.open).get_mut(&id) { o.c.path = to.into(); }
-        Ok(())
+        let mut open = lock(&self.open);
+        if let Some(o) = open.get_mut(&id) { o.c.path = to.into(); }
+        self.save(&open, &id)
     }
     /// A change to the manifest, kept here and sent.
     fn manifest(&self, f: impl FnOnce(&yrs::MapRef, &mut yrs::TransactionMut)) -> Result<(), String> {
@@ -229,7 +226,7 @@ impl Docs {
     }
 
     /// Send what this Mac has of a document and the server does not hold yet (everything past `acked`), as one update
-    /// with this device's next counter and its clocks. Its seq moves the cursor only when it is the next one; else
+    /// with this device's next counter. Its seq moves the cursor only when it is the next one; else
     /// others wrote meanwhile and the next pull brings theirs (and this one, which applies as nothing).
     /// The caller holds the document's lock.
     fn flush(&self, id: &str) -> Result<(), String> {
@@ -243,7 +240,7 @@ impl Docs {
         let (name, part) = {
             let k = lock(&self.keys);
             let name = k.name(&format!("doc:{id}"));
-            (name.clone(), k.seal_doc(&self.vault, &name, "u", 0, &self.me, json!({"n": n, "k": clocks(&update)?}), &update)?)
+            (name.clone(), k.seal_doc(&self.vault, &name, "u", 0, &self.me, json!({"n": n}), &update)?)
         };
         let (v, _) = (self.call)(json!({"op": "doc_push", "vault": self.vault, "doc": name, "updates": [part.len()]}), Some(part), None)?;
         let seq = v["seq"].as_u64().ok_or("no seq")?;
@@ -258,14 +255,13 @@ impl Docs {
             if seq == o.c.seq + 1 { (o.c.seq, o.c.epoch) = (seq, epoch); }
             self.save(&open, id)?;
         }
-        self.compact(id);
         Ok(())
     }
 
-    /// The document's log from where this Mac has it: a newer snapshot first when it holds every update up to its
-    /// place (else the log itself), then the updates after it, in order. A part that does not open or apply, or whose
-    /// author is not who pushed it, or that is under an older key than this Mac's newest past where it had the log
-    /// when it took that key, is skipped and warned. Returns whether anything new came.
+    /// The document's log from where this Mac has it, a page at a time. A part that does not open or apply, or that
+    /// is under an older key than this Mac's newest past where it had the log when it took that key, is skipped and
+    /// warned. What came from others counts as held by the server (`acked`), so this Mac's next push is only its own.
+    /// Returns whether anything new came.
     pub fn pull(&self, id: &str) -> Result<bool, String> {
         if !valid_id(id) { return Err("not a document id".into()); }
         let busy = self.busy(id);
@@ -274,37 +270,18 @@ impl Docs {
     }
     fn pull_locked(&self, id: &str) -> Result<bool, String> {
         let name = self.name(id);
-        let (mut any, mut snapshots) = (false, true);
+        let mut any = false;
         let on = lock(&self.on).clone();
         loop {
             let since = lock(&self.open).get(id).map_or(0, |o| o.c.seq);
-            let (v, body) = (self.call)(json!({"op": "doc_pull", "vault": self.vault, "doc": name, "since": since, "snapshot": snapshots}), None, Some(MAX_PULL + MAX_RECORD))?;
+            let (v, body) = (self.call)(json!({"op": "doc_pull", "vault": self.vault, "doc": name, "since": since, "limit": PULL_LIMIT}), None, Some(MAX_PULL + MAX_UPDATE))?;
             let keys = lock(&self.keys).clone();
             let mut at = 0usize;
             let mut take = |len: u64| -> Result<&[u8], String> { let b = body.get(at..at + len as usize).ok_or("pull cut short")?; at += len as usize; Ok(b) };
             let mut got: Vec<Vec<u8>> = vec![];
             let mut open = lock(&self.open);
             let o = Self::entry(&mut open, id);
-            if let Some(s) = v["snapshot"].as_object() {
-                let upto = s["upto"].as_u64().ok_or("snapshot without upto")?;
-                let snap = take(s["len"].as_u64().unwrap_or(0))?.to_vec();
-                let metas: Vec<(u64, Vec<u8>)> = v["metas"].as_array().into_iter().flatten()
-                    .map(|m| Ok((m["seq"].as_u64().unwrap_or(0), take(m["len"].as_u64().unwrap_or(0))?.to_vec()))).collect::<Result<_, String>>()?;
-                match self.check_snapshot(&keys, &name, upto, &snap, &metas) {
-                    Ok((body, seen)) => {
-                        apply(&o.doc, &body)?;
-                        (o.c.seq, o.c.snap) = (upto, upto);
-                        for (a, n) in seen { let e = o.c.seen.entry(a).or_insert(0); *e = (*e).max(n); }
-                        got.push(body);
-                    }
-                    Err(e) => {
-                        drop(open);
-                        self.warn(format!("{}: a snapshot at {upto} was left out ({e}), the log is read instead", self.label(id)));
-                        snapshots = false;
-                        continue;
-                    }
-                }
-            }
+            let before = o.doc.transact().state_vector();
             let mut last = o.c.seq;
             for u in v["updates"].as_array().into_iter().flatten() {
                 let seq = u["seq"].as_u64().ok_or("update without seq")?;
@@ -313,12 +290,20 @@ impl Docs {
                 if seq != o.c.seq + 1 { return Err(format!("the log skips from {} to {seq}", o.c.seq)); }
                 o.c.seq = seq;
                 last = seq;
-                match self.take_part(&keys, &name, o, part, u["from"].as_str().unwrap_or("")) {
+                let from = u["from"].as_str().unwrap_or("");
+                match self.take_part(&keys, &name, o, part, from) {
                     Ok(b) => got.push(b),
-                    Err(e) => { let l = o.c.path.clone(); self.warn(format!("{}: update {seq} left out: {e}", if l.is_empty() { id.to_string() } else { l })); }
+                    Err(e) => { o.c.lost.insert(from.to_string()); let l = o.c.path.clone(); self.warn(format!("{}: update {seq} left out: {e}", if l.is_empty() { id.to_string() } else { l })); }
                 }
             }
             o.c.epoch = keys.epoch();
+            // what others wrote counts as held: per client, the clock it reached here by this pull (this Mac's own
+            // edits do not move while the document's lock is held)
+            let after = o.doc.transact().state_vector();
+            let mut acked = sv_of(&o.c.acked);
+            for (c, k) in after.iter() { if *k > before.get(c) && *k > acked.get(c) { acked.set_max(*c, *k); } }
+            if !o.c.pending { acked = after; }
+            o.c.acked = hex(&acked.encode_v1());
             let more = v["more"] == true && last < v["seq"].as_u64().unwrap_or(0);
             any |= !got.is_empty();
             self.save(&open, id)?;
@@ -326,16 +311,17 @@ impl Docs {
             for b in &got { for f in &on { f(id, b); } }
             if !more { break; }
         }
-        self.compact(id);
         Ok(any)
     }
+    /// Whether a document holds edits Yjs cannot place yet: they build on an update this Mac does not have.
+    fn missing(&self, id: &str) -> bool { lock(&self.open).get(id).is_some_and(|o| o.doc.transact().has_missing_updates()) }
     fn label(&self, id: &str) -> String { lock(&self.open).get(id).map(|o| o.c.path.clone()).filter(|p| !p.is_empty()).unwrap_or_else(|| id.to_string()) }
 
     /// One update from the log or the live channel, checked and applied: its Yjs bytes. `from`: who the server says
-    /// pushed it ("" when it does not say).
+    /// pushed it; a part sealed by anyone else does not open.
     fn take_part(&self, keys: &Keys, name: &str, o: &mut Open, part: &[u8], from: &str) -> Result<Vec<u8>, String> {
-        let p = keys.open_doc(&self.vault, name, "u", 0, part)?;
-        if !from.is_empty() && p.author != from { return Err(format!("written as {} but pushed by {from}", p.author)); }
+        if from.is_empty() { return Err("the server does not say who pushed it".into()); }
+        let p = keys.open_doc(&self.vault, name, "u", 0, from, part)?;
         if p.epoch < keys.epoch() && o.c.epoch == keys.epoch() { return Err("sealed under an old key".into()); }
         apply(&o.doc, &p.body)?;
         // a gap in an author's counter: the server holds updates back (or gave them to nobody)
@@ -350,22 +336,6 @@ impl Docs {
         Ok(p.body)
     }
 
-    /// A snapshot as the pull handed it, with the metas of every update up to its place: its Yjs bytes and the authors'
-    /// counters, when it opens and its state covers each of those updates' clocks; refused otherwise (a member that
-    /// left updates out, or a server that left metas out).
-    fn check_snapshot(&self, keys: &Keys, name: &str, upto: u64, snap: &[u8], metas: &[(u64, Vec<u8>)]) -> Result<(Vec<u8>, BTreeMap<String, u64>), String> {
-        if metas.len() as u64 != upto || metas.iter().enumerate().any(|(i, (s, _))| *s != i as u64 + 1) { return Err("not every update's meta came with it".into()); }
-        let p = keys.open_doc(&self.vault, name, "s", upto, snap)?;
-        let sv = decode(&p.body)?.state_vector();
-        let mut seen = BTreeMap::new();
-        for (seq, m) in metas {
-            let Ok((_, meta)) = keys.open_doc_meta(&self.vault, name, "u", 0, m) else { continue };
-            if !covers(&sv, &meta["k"]) { return Err(format!("it leaves update {seq} out")); }
-            if let (Some(a), Some(n)) = (meta["a"].as_str(), meta["n"].as_u64()) { let e = seen.entry(a.to_string()).or_insert(0); *e = (*e).max(n); }
-        }
-        Ok((p.body, seen))
-    }
-
     /// Every document whose log the server has further than this Mac, the manifest first (it names the others), then
     /// each note's and its sidecars'; then whatever this Mac has not sent yet. A document that fails is warned and the
     /// others go on. Returns the ids that changed.
@@ -377,6 +347,7 @@ impl Docs {
         let mut pull = |id: &str| match self.pull(id) { Ok(true) => changed.push(id.to_string()), Ok(false) => {} Err(e) => self.warn(format!("{}: {e}", self.label(id))) };
         if behind(MANIFEST) { pull(MANIFEST); }
         // where the manifest puts each document now
+        self.one_per_name();
         let paths = self.paths();
         { let mut open = lock(&self.open); for (p, id) in &paths { Self::entry(&mut open, id).c.path = p.clone(); } }
         self.keep_orphans(&paths);
@@ -387,9 +358,34 @@ impl Docs {
         ids.sort();
         ids.dedup();
         for id in &ids { if behind(id) { pull(id); } }
+        // edits that build on an update this Mac left out or never got: the log read once more from the start (the
+        // server may serve the part now); still missing, it stays a warning every round until it is not
+        let all: Vec<String> = lock(&self.open).keys().cloned().collect();
+        let held: Vec<String> = all.into_iter().filter(|id| self.missing(id)).collect();
+        for id in held {
+            { let mut open = lock(&self.open); if let Some(o) = open.get_mut(&id) { o.c.seq = 0; } }
+            pull(&id);
+            if self.missing(&id) {
+                let who = lock(&self.open).get(&id).map(|o| o.c.lost.iter().cloned().collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                self.warn(format!("{}: edits from {} are missing on this Mac", self.label(&id), if who.is_empty() { "another member".into() } else { who }));
+            } else if let Some(o) = lock(&self.open).get_mut(&id) { o.c.lost.clear(); }
+        }
         let pending: Vec<String> = lock(&self.open).iter().filter(|(_, o)| o.c.pending).map(|(k, _)| k.clone()).collect();
         for id in pending { self.send(&id); }
         Ok(changed)
+    }
+    /// Two manifest keys that are one name on a Mac's disk (case, normalization; two members made them apart): the
+    /// first in order keeps it, the others move to a conflict name, the same on every Mac.
+    fn one_per_name(&self) {
+        let mut first: BTreeMap<String, String> = BTreeMap::new();
+        let mut moves = vec![];
+        for (p, id) in self.paths() {
+            match first.get(&fold(&p)) { Some(_) => moves.push((p.clone(), conflict_path(&p, &id), id)), None => { first.insert(fold(&p), p); } }
+        }
+        for (from, to, id) in moves {
+            if self.taken(&to, None) { continue; }
+            if self.manifest(|m, txn| { m.remove(txn, from.as_str()); m.insert(txn, to.as_str(), id.clone()); }).is_ok() { self.warn(format!("{from}: the same name as another note on a Mac's disk, moved to {to}")); }
+        }
     }
     /// A document the manifest no longer names, though this Mac had it at a path and it has text: two members made
     /// a note at the same path at once and the manifest kept the other one. It goes back in next to it, as a conflict
@@ -432,29 +428,7 @@ impl Docs {
             Ok(b) => for f in lock(&self.on).clone() { f(&id, &b); },
             Err(e) => self.warn(format!("{}: update {seq} left out: {e}", self.label(&id))),
         }
-        self.compact(&id);
         Ok(Some(id))
-    }
-
-    /// A snapshot once the log since the last one is long: this Mac's whole state, which holds every update up to its
-    /// cursor. The server keeps the updates too. A failure is only warned; it is tried again later.
-    fn compact(&self, id: &str) {
-        let (upto, state) = {
-            let open = lock(&self.open);
-            let Some(o) = open.get(id) else { return };
-            if o.c.seq < o.c.snap + SNAPSHOT_EVERY { return; }
-            let state = o.doc.transact().encode_state_as_update_v1(&StateVector::default());
-            (o.c.seq, state)
-        };
-        let res = (|| {
-            let (name, part) = { let k = lock(&self.keys); let name = k.name(&format!("doc:{id}")); (name.clone(), k.seal_doc(&self.vault, &name, "s", upto, &self.me, json!({}), &state)?) };
-            (self.call)(json!({"op": "doc_snapshot_put", "vault": self.vault, "doc": name, "upto": upto, "len": part.len()}), Some(part), None)
-        })();
-        // a snapshot the server took, or one another member took near this place: not tried again before the next
-        if let Err(e) = &res { if !e.contains("too soon") { self.warn(format!("{}: no snapshot yet ({e})", self.label(id))); return; } }
-        let mut open = lock(&self.open);
-        if let Some(o) = open.get_mut(id) { o.c.snap = o.c.snap.max(upto); }
-        self.save(&open, id).ok();
     }
 
     /// Write each note whose document's text changed since it was last written here, under `root` (temp file and
@@ -463,6 +437,8 @@ impl Docs {
     /// (else to `keep`). Returns the paths written (Relay's own, for a watcher) and what failed.
     pub fn export(&self, root: &Path, filter: &Filter, keep: &dyn Fn(&str, &[u8])) -> (Vec<String>, Vec<String>) {
         let (mut wrote, mut errors) = (vec![], vec![]);
+        // a renamed note's old place another note has taken since: that file is the other note's, not removed
+        let owned: std::collections::BTreeSet<String> = self.paths().keys().map(|p| fold(p)).collect();
         for (path, id) in self.paths() {
             if filter.skips(&path, false) || through_link(root, &path) { self.warn(format!("{path}: a document is not written there (a guarded or linked folder)")); continue; }
             let busy = self.busy(&id);
@@ -474,7 +450,7 @@ impl Docs {
             let file = root.join(&path);
             if o.c.at == path && h == o.c.out && file.exists() { continue; }
             // the note's old place, after a rename: as Relay wrote it, it goes; anything else is kept first
-            if !o.c.at.is_empty() && o.c.at != path && !through_link(root, &o.c.at) {
+            if !o.c.at.is_empty() && fold(&o.c.at) != fold(&path) && !owned.contains(&fold(&o.c.at)) && !filter.skips(&o.c.at, false) && !through_link(root, &o.c.at) {
                 let old = root.join(&o.c.at);
                 if let Ok(b) = std::fs::read(&old) {
                     if sync::sha256_hex(&b) != o.c.out { keep(&o.c.at, &b); }
@@ -503,9 +479,9 @@ mod tests {
     use std::sync::atomic::{AtomicBool, Ordering};
 
     const V: &str = "0123456789abcdef";
-    /// A server's document ops in memory: per name its log (part, who pushed it) and its snapshots.
+    /// A server's document ops in memory: per name its log (part, who pushed it).
     #[derive(Default)]
-    struct Fake { logs: BTreeMap<String, Vec<(Vec<u8>, String)>>, snaps: BTreeMap<String, BTreeMap<u64, Vec<u8>>> }
+    struct Fake { logs: BTreeMap<String, Vec<(Vec<u8>, String)>> }
     type Server = Arc<Mutex<Fake>>;
     fn call(srv: &Server, me: &str, online: &Arc<AtomicBool>) -> Call {
         let (srv, me, online) = (srv.clone(), me.to_string(), online.clone());
@@ -515,29 +491,13 @@ mod tests {
             let doc = req["doc"].as_str().unwrap_or("").to_string();
             match req["op"].as_str().unwrap() {
                 "doc_push" => { let log = f.logs.entry(doc).or_default(); log.push((body.unwrap(), me.clone())); Ok((json!({"seq": log.len()}), vec![])) }
-                "doc_snapshot_put" => { f.snaps.entry(doc).or_default().insert(req["upto"].as_u64().unwrap(), body.unwrap()); Ok((json!({}), vec![])) }
                 "doc_pull" => {
-                    let since = req["since"].as_u64().unwrap();
+                    let since = req["since"].as_u64().unwrap() as usize;
                     let log = f.logs.get(&doc).cloned().unwrap_or_default();
-                    let snap = if req["snapshot"] == false { None } else { f.snaps.get(&doc).and_then(|s| s.iter().rev().find(|(u, _)| **u > since && **u as usize <= log.len()).map(|(u, b)| (*u, b.clone()))) };
-                    let (mut body, mut from, mut v) = (vec![], since, json!({"snapshot": null, "metas": [], "updates": []}));
-                    if let Some((u, b)) = snap {
-                        v["snapshot"] = json!({"upto": u, "len": b.len()});
-                        body.extend(b);
-                        let mut metas = vec![];
-                        for (i, (p, _)) in log.iter().take(u as usize).enumerate() {
-                            let n = 4 + crate::vault::split(p).unwrap().0.len();
-                            metas.push(json!({"seq": i + 1, "len": n}));
-                            body.extend(&p[..n]);
-                        }
-                        v["metas"] = json!(metas);
-                        from = u;
-                    }
-                    let ups: Vec<Value> = (from as usize..log.len()).map(|i| { body.extend(&log[i].0); json!({"seq": i + 1, "len": log[i].0.len(), "from": log[i].1}) }).collect();
-                    v["updates"] = json!(ups);
-                    v["seq"] = json!(log.len());
-                    v["more"] = json!(false);
-                    Ok((v, body))
+                    let end = log.len().min(since + req["limit"].as_u64().unwrap_or(1000) as usize);
+                    let mut body = vec![];
+                    let ups: Vec<Value> = (since..end).map(|i| { body.extend(&log[i].0); json!({"seq": i + 1, "len": log[i].0.len(), "from": log[i].1}) }).collect();
+                    Ok((json!({"updates": ups, "seq": log.len(), "more": end < log.len()}), body))
                 }
                 "doc_list" => Ok((json!({"docs": f.logs.iter().map(|(d, l)| json!({"doc": d, "seq": l.len()})).collect::<Vec<_>>()}), vec![])),
                 _ => Ok((json!({}), vec![])),
@@ -601,7 +561,7 @@ mod tests {
         b.sync().unwrap();
         assert_eq!(b.text(&id), "xy");
         assert!(b.take_warnings().iter().any(|w| w.contains("update 2 left out")), "warned with its place");
-        // an update pushed by one device written as another's: left out too
+        // an update pushed by one device sealed as another's: does not open, left out too
         let name = a.name(&id);
         let forged = k.seal_doc(V, &name, "u", 0, A, json!({"n": 99, "k": {}}), &change(&Doc::new(), |d| { d.get_or_insert_text("md").insert(&mut d.transact_mut(), 0, "evil"); })).unwrap();
         srv.lock().unwrap().logs.get_mut(&name).unwrap().push((forged, B.into()));
@@ -611,29 +571,47 @@ mod tests {
         std::fs::remove_dir_all(tmp("bad-b")).ok();
     }
 
-    /// A snapshot that leaves an update out (a member that wrote it wrong, or on purpose): refused, and a Mac starting
-    /// from nothing reads the log instead and ends with everything.
+    /// A part this Mac left out, then an edit by the same author that builds on it: Yjs cannot place that edit, so
+    /// the log is read again from the start; while the server still serves the part broken, the edit stays missing and
+    /// is warned (naming the author); once it serves it whole, the next sync has everything.
     #[test]
-    fn a_snapshot_that_leaves_an_update_out_is_refused() {
+    fn edits_that_build_on_a_part_left_out_are_warned_and_come_once_the_part_does() {
         let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
-        let (a, _) = mac(&srv, &k, "snap-a", A);
-        let id = a.create("Plan.md", "first ").unwrap();
-        let partial = a.diff(&id, &StateVector::default().encode_v1()).unwrap();
-        append(&a, &id, "second");
+        let ((a, _), (b, _)) = (mac(&srv, &k, "miss-a", A), mac(&srv, &k, "miss-b", B));
+        let id = a.create("Plan.md", "x").unwrap();
+        b.sync().unwrap();
+        append(&a, &id, "1");
         let name = a.name(&id);
-        srv.lock().unwrap().snaps.entry(name.clone()).or_default().insert(2, k.seal_doc(V, &name, "s", 2, B, json!({}), &partial).unwrap());
-        let (c, _) = mac(&srv, &k, "snap-c", "cccccccccccccccc");
-        c.sync().unwrap();
-        assert_eq!(c.text(&id), "first second");
-        assert!(c.take_warnings().iter().any(|w| w.contains("snapshot at 2 was left out")));
-        // a whole one is taken
-        let whole = a.diff(&id, &StateVector::default().encode_v1()).unwrap();
-        srv.lock().unwrap().snaps.get_mut(&name).unwrap().insert(2, k.seal_doc(V, &name, "s", 2, A, json!({}), &whole).unwrap());
-        let (d, _) = mac(&srv, &k, "snap-d", "dddddddddddddddd");
-        d.sync().unwrap();
-        assert_eq!(d.text(&id), "first second");
-        assert!(!d.take_warnings().iter().any(|w| w.contains("snapshot")));
-        for t in ["snap-a", "snap-c", "snap-d"] { std::fs::remove_dir_all(tmp(t)).ok(); }
+        let good = std::mem::replace(&mut srv.lock().unwrap().logs.get_mut(&name).unwrap()[1].0, vec![0u8, 0, 0, 28].into_iter().chain([9u8; 80]).collect());
+        append(&a, &id, "2");
+        b.sync().unwrap();
+        let w = b.take_warnings();
+        assert!(w.iter().any(|w| w.contains(&format!("edits from {A} are missing"))), "{w:?}");
+        assert_eq!(b.text(&id), "x");
+        srv.lock().unwrap().logs.get_mut(&name).unwrap()[1].0 = good;
+        b.sync().unwrap();
+        assert_eq!(b.text(&id), "x12");
+        assert!(!b.take_warnings().iter().any(|w| w.contains("missing")));
+        std::fs::remove_dir_all(tmp("miss-a")).ok();
+        std::fs::remove_dir_all(tmp("miss-b")).ok();
+    }
+
+    /// A Mac that only pulled a long history, then edits: its push is that edit, not the history again.
+    #[test]
+    fn after_a_pull_a_push_is_only_this_macs_own_edit() {
+        let (srv, k) = (Server::default(), Keys::from(VaultKey::generate()));
+        let ((a, _), (b, _)) = (mac(&srv, &k, "ack-a", A), mac(&srv, &k, "ack-b", B));
+        let id = a.create("Plan.md", "").unwrap();
+        let mb = "m".repeat(1 << 20);
+        for _ in 0..5 { append(&a, &id, &mb); }
+        b.sync().unwrap();
+        assert_eq!(b.text(&id).len(), 5 << 20);
+        append(&b, &id, "!");
+        let last = srv.lock().unwrap().logs[&a.name(&id)].last().unwrap().clone();
+        assert!(last.1 == B && last.0.len() < 4096, "a push of {} bytes", last.0.len());
+        assert!(b.take_warnings().is_empty());
+        std::fs::remove_dir_all(tmp("ack-a")).ok();
+        std::fs::remove_dir_all(tmp("ack-b")).ok();
     }
 
     /// The live channel and a round on one document at once: no update taken twice or lost.

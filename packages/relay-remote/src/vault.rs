@@ -103,7 +103,7 @@ impl VaultKey {
 fn open_frame(k: &VaultKey, e: u32, l: &str, vault: &str, kind: &str, doc: &str, from: &str, n: u64, sealed: &[u8]) -> Result<Vec<u8>, String> {
     open(&k.enc, frame_aad(e, l, vault, kind, doc, from, n).as_bytes(), sealed).ok_or_else(|| "frame does not open with this vault's key".into())
 }
-fn doc_aad(part: &str, e: u32, vault: &str, name: &str, kind: &str, upto: u64) -> String { format!("doc{part}:{e}:{vault}:{name}:{kind}:{upto}") }
+fn doc_aad(e: u32, vault: &str, name: &str, kind: &str, upto: u64, author: &str) -> String { format!("{e}:{vault}:{name}:{kind}:{upto}:{author}") }
 /// A document's update or snapshot, opened: under which key, who wrote it (its device, 16 hex), the member list head
 /// its writer had seen, the whole meta, and the Yjs bytes.
 #[derive(Debug, Clone, PartialEq)]
@@ -165,39 +165,44 @@ impl Keys {
     /// A document's update (`kind` "u") or snapshot ("s", `upto` the last update it holds) sealed under the newest key
     /// (docs/workspaces.md, Documents), laid out like a record: `u32 BE (meta_len | epoch << 20) || meta || body`, each
     /// `nonce || ciphertext+tag`. The meta is `extra` plus the author (this device), when, and this Mac's member list
-    /// head; it is sealed apart so the server can hand out the metas of a log without its bodies (a snapshot is checked
-    /// against them). Both seals bind the vault, the document's name on the server, the kind, `upto` and the epoch. An
-    /// update's place in the log is the server's, given after it is sealed (as a frame's).
+    /// head. Both seals bind the vault, the document's name on the server, the kind, `upto`, the epoch and the author;
+    /// the body's also the author's counter `n` (from `extra`), so a body opens only with its own meta. An update's
+    /// place in the log is the server's, given after it is sealed (as a frame's).
     pub fn seal_doc(&self, vault: &str, name: &str, kind: &str, upto: u64, author: &str, extra: Value, body: &[u8]) -> Result<Vec<u8>, String> {
         let e = self.epoch();
         let at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+        let n = extra["n"].as_u64().unwrap_or(0);
         let mut meta = extra;
         meta["a"] = json!(author);
         meta["t"] = json!(at);
         meta["l"] = json!(self.seen());
-        let meta = seal(&self.current().enc, doc_aad("meta", e, vault, name, kind, upto).as_bytes(), meta.to_string().as_bytes())?;
+        let base = doc_aad(e, vault, name, kind, upto, author);
+        let meta = seal(&self.current().enc, format!("docmeta:{base}").as_bytes(), meta.to_string().as_bytes())?;
         if meta.len() > MAX_META { return Err("document meta too big".into()); }
         let mut out = ((meta.len() as u32) | (e << EPOCH_SHIFT)).to_be_bytes().to_vec();
         out.extend(meta);
-        out.extend(seal(&self.current().enc, doc_aad("body", e, vault, name, kind, upto).as_bytes(), body)?);
+        out.extend(seal(&self.current().enc, format!("docbody:{base}:{n}").as_bytes(), body)?);
         Ok(out)
     }
-    /// A document part's meta: from a whole part, or from only its header and meta (what a pull lists for a snapshot).
-    pub fn open_doc_meta(&self, vault: &str, name: &str, kind: &str, upto: u64, part: &[u8]) -> Result<(u32, Value), String> {
+    /// A document part's meta, as `author` (the device the server says pushed it) sealed it.
+    pub fn open_doc_meta(&self, vault: &str, name: &str, kind: &str, upto: u64, author: &str, part: &[u8]) -> Result<(u32, Value), String> {
         let e = epoch(part).ok_or("not a document part")?;
         let n = (u32::from_be_bytes(part.get(..4).ok_or("not a document part")?.try_into().unwrap()) & ((1 << EPOCH_SHIFT) - 1)) as usize;
         let meta = part.get(4..4 + n).ok_or("document part cut short")?;
-        let plain = open(&self.at(e)?.enc, doc_aad("meta", e, vault, name, kind, upto).as_bytes(), meta).ok_or("document meta does not open with this vault's key")?;
+        let plain = open(&self.at(e)?.enc, format!("docmeta:{}", doc_aad(e, vault, name, kind, upto, author)).as_bytes(), meta)
+            .ok_or("document meta does not open with this vault's key as this author's")?;
         let v: Value = serde_json::from_slice(&plain).map_err(|e| format!("meta: {e}"))?;
-        if !v["a"].is_string() { return Err("meta without author".into()); }
+        if v["a"].as_str() != Some(author) { return Err("meta of another author".into()); }
         Ok((e, v))
     }
-    /// A whole document part, opened.
-    pub fn open_doc(&self, vault: &str, name: &str, kind: &str, upto: u64, part: &[u8]) -> Result<DocPart, String> {
-        let (e, meta) = self.open_doc_meta(vault, name, kind, upto, part)?;
+    /// A whole document part, opened: its body only with its own meta (same author, same counter).
+    pub fn open_doc(&self, vault: &str, name: &str, kind: &str, upto: u64, author: &str, part: &[u8]) -> Result<DocPart, String> {
+        let (e, meta) = self.open_doc_meta(vault, name, kind, upto, author, part)?;
         let (_, body) = split(part).ok_or("not a document part")?;
-        let body = open(&self.at(e)?.enc, doc_aad("body", e, vault, name, kind, upto).as_bytes(), body).ok_or("document body does not open with this vault's key")?;
-        Ok(DocPart { epoch: e, author: meta["a"].as_str().unwrap_or_default().into(), list: meta["l"].as_str().unwrap_or_default().into(), meta, body })
+        let n = meta["n"].as_u64().unwrap_or(0);
+        let body = open(&self.at(e)?.enc, format!("docbody:{}:{n}", doc_aad(e, vault, name, kind, upto, author)).as_bytes(), body)
+            .ok_or("document body does not open with its meta")?;
+        Ok(DocPart { epoch: e, author: author.into(), list: meta["l"].as_str().unwrap_or_default().into(), meta, body })
     }
     /// Whether this Mac has seen (or was promised, by an invite) a member list for this vault.
     pub fn has_list(&self) -> bool { self.head.is_some() || self.expect.is_some() || self.creator.is_some() }

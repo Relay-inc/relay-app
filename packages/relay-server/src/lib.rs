@@ -391,7 +391,7 @@ impl Server {
                 for l in lens { parts.push(proto::read_body(&mut r, l, relay_remote::docs::MAX_UPDATE)?); }
                 reply(&mut w, self.vaults.doc_push(&fp, s("vault"), s("doc"), parts).map(|seqs| json!({"seq": seqs.last(), "seqs": seqs})))
             }
-            "doc_pull" => match self.vaults.doc_pull(&fp, s("vault"), s("doc"), req["since"].as_u64().unwrap_or(0), req["snapshot"].as_bool().unwrap_or(true)) {
+            "doc_pull" => match self.vaults.doc_pull(&fp, s("vault"), s("doc"), req["since"].as_u64().unwrap_or(0), req["limit"].as_u64().unwrap_or(0)) {
                 Ok((mut v, b)) => { v["ok"] = json!(true); proto::write_json(&mut w, &v)?; w.write_all(&b)?; w.shutdown(); Ok(()) }
                 Err(e) => reply(&mut w, Err(e)),
             },
