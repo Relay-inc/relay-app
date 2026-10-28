@@ -1,0 +1,120 @@
+/* A page's editor (ui/features/workspace/PageEditor.tsx): CodeMirror with the live preview of livePreview.ts, set like
+   the read-only page (md-note) so typing into a page does not change how it looks. */
+.page-editor .cm-editor {
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--label);
+  background: transparent;
+}
+.page-editor .cm-editor.cm-focused {
+  outline: none;
+}
+.page-editor .cm-scroller {
+  font-family: inherit;
+  overflow: visible;
+}
+.page-editor .cm-content {
+  padding: 0;
+  caret-color: var(--accent);
+}
+.page-editor .cm-line {
+  padding: 0;
+}
+.page-editor .cm-cursor {
+  border-left-color: var(--accent);
+}
+.page-editor .cm-selectionBackground,
+.page-editor .cm-focused .cm-selectionBackground {
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
+}
+.page-editor .cm-h {
+  font-weight: 600;
+  line-height: 1.3;
+}
+.page-editor .cm-h1 {
+  font-size: 20px;
+  padding-top: 16px;
+}
+.page-editor .cm-h2 {
+  font-size: 16px;
+  padding-top: 14px;
+}
+.page-editor .cm-h3 {
+  font-size: 14px;
+  padding-top: 10px;
+}
+.page-editor .cm-h4,
+.page-editor .cm-h5,
+.page-editor .cm-h6 {
+  color: var(--secondary);
+  padding-top: 8px;
+}
+.page-editor .cm-strong {
+  font-weight: 600;
+}
+.page-editor .cm-em {
+  font-style: italic;
+}
+.page-editor .cm-code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--fill-2);
+  border-radius: 3px;
+  padding: 1px 3px;
+}
+.page-editor .cm-codeblock {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  background: var(--fill-2);
+  padding: 0 12px !important;
+}
+.page-editor .cm-link,
+.page-editor .cm-wikilink {
+  color: var(--accent-text);
+  cursor: pointer;
+}
+.page-editor .cm-quote {
+  border-left: 3px solid var(--separator-strong);
+  padding-left: 12px !important;
+  color: var(--secondary);
+}
+/* a callout as in the read-only page (md-defaults.css .callout): tinted, with the type's colour on its left */
+.page-editor .cm-callout {
+  --callout: var(--accent);
+  border-left: 3px solid var(--callout);
+  background: color-mix(in srgb, var(--callout) 8%, transparent);
+  padding-left: 12px !important;
+}
+.page-editor .cm-callout[data-callout="tip"],
+.page-editor .cm-callout[data-callout="success"],
+.page-editor .cm-callout[data-callout="done"] {
+  --callout: var(--add-fg);
+}
+.page-editor .cm-callout[data-callout="warning"],
+.page-editor .cm-callout[data-callout="question"] {
+  --callout: var(--soon);
+}
+.page-editor .cm-callout[data-callout="danger"],
+.page-editor .cm-callout[data-callout="bug"] {
+  --callout: var(--del-fg);
+}
+.page-editor .cm-callout-title {
+  font-weight: 600;
+  color: var(--callout);
+}
+.page-editor .cm-task {
+  margin: 0 6px 0 0;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+}
+.page-editor .cm-done {
+  color: var(--tertiary);
+  text-decoration: line-through;
+}
+.page-editor .cm-bullet {
+  color: var(--tertiary);
+  padding-right: 2px;
+}
+.page-editor .cm-hr {
+  color: var(--tertiary);
+}

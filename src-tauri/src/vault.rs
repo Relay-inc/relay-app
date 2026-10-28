@@ -80,6 +80,31 @@ pub fn note(vault: &str, target: &str) -> Option<(String, String)> {
     Some((rel(&root, &real), fs::read_to_string(&real).ok()?))
 }
 
+/// A note's text as Relay last read or wrote it: what `write_note` compares the file with before writing over it.
+pub fn text_hash(text: &str) -> String { relay_remote::sync::sha256_hex(text.as_bytes()) }
+
+/// Writes a page's text over an existing note of one of `roots` (the main vault first, then the other workspace
+/// folders): `target` relative to the main vault or absolute in another one, as `note` and `read_note` give it. Refused
+/// when the file is not a `.md` inside one of the roots once links are resolved (a link out of the vault is never
+/// written through), and, unless `force`, when the file is no longer the text with hash `expect` (changed on disk):
+/// `Err("changed")`. Written to a temporary file next to it, then renamed over it. Returns the new text's hash.
+pub fn write_note(roots: &[String], target: &str, text: &str, expect: &str, force: bool) -> Result<String, String> {
+    let main = roots.first().map(|r| PathBuf::from(canon(r))).ok_or("no vault")?;
+    let asked = if target.starts_with('/') { PathBuf::from(target) } else { main.join(target) };
+    let real = fs::canonicalize(&asked).map_err(|_| format!("not found: {target}"))?;
+    let inside = roots.iter().any(|r| real.starts_with(canon(r)));
+    if !inside || real.extension().is_none_or(|e| e != "md") || !real.is_file() {
+        return Err(format!("not a note of this workspace: {target}"));
+    }
+    if !force && text_hash(&fs::read_to_string(&real).map_err(|e| e.to_string())?) != expect {
+        return Err("changed".into());
+    }
+    let tmp = real.with_extension("md.relay-tmp");
+    fs::write(&tmp, text).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &real).map_err(|e| { fs::remove_file(&tmp).ok(); e.to_string() })?;
+    Ok(text_hash(text))
+}
+
 /// Guess the mapping of a vault: the known layouts first, then a search for the files by name.
 /// Returns the canonical vault path and the mapping ("" where nothing was found).
 pub fn detect(vault: &str) -> (String, Value) {
@@ -427,5 +452,38 @@ mod tests {
         place_skills(&tpl, &team, &l).unwrap();
         assert_eq!(fs::read_to_string(out.join("target")).unwrap(), "untouched");
         assert!(!out.join("SKILL.md").exists() && !out.join(".relay-skill").exists());
+    }
+
+    #[test]
+    fn write_note_writes_only_its_own_unchanged_notes() {
+        let v = tmp("write");
+        let other = tmp("write-other");
+        let out = tmp("write-out");
+        touch(&v, "A.md");
+        fs::write(v.join("A.md"), "old").unwrap();
+        fs::write(other.join("B.md"), "b").unwrap();
+        fs::write(out.join("C.md"), "secret").unwrap();
+        let roots = [v.to_string_lossy().into_owned(), other.to_string_lossy().into_owned()];
+        // written when the file is still what was read, relative to the main vault or absolute in another root
+        let h = write_note(&roots, "A.md", "new", &text_hash("old"), false).unwrap();
+        assert_eq!((fs::read_to_string(v.join("A.md")).unwrap().as_str(), h.clone()), ("new", text_hash("new")));
+        let b = other.join("B.md").to_string_lossy().into_owned();
+        assert!(write_note(&roots, &b, "b2", &text_hash("b"), false).is_ok());
+        // changed on disk since: refused, unless forced
+        fs::write(v.join("A.md"), "theirs").unwrap();
+        assert_eq!(write_note(&roots, "A.md", "mine", &h, false), Err("changed".into()));
+        assert_eq!(fs::read_to_string(v.join("A.md")).unwrap(), "theirs");
+        assert!(write_note(&roots, "A.md", "mine", &h, true).is_ok());
+        // outside every root, through .., not a note, or a link out of the vault: refused, nothing written
+        let c = out.join("C.md").to_string_lossy().into_owned();
+        assert!(write_note(&roots, &c, "x", &text_hash("secret"), true).is_err());
+        let up = format!("../{}/C.md", out.file_name().unwrap().to_string_lossy());
+        assert!(write_note(&roots, &up, "x", &text_hash("secret"), true).is_err());
+        fs::write(v.join("n.txt"), "t").unwrap();
+        assert!(write_note(&roots, "n.txt", "x", &text_hash("t"), true).is_err());
+        symlink(out.join("C.md"), v.join("Link.md")).unwrap();
+        assert!(write_note(&roots, "Link.md", "x", &text_hash("secret"), true).is_err());
+        assert_eq!(fs::read_to_string(out.join("C.md")).unwrap(), "secret");
+        assert!(write_note(&roots, "Missing.md", "x", "", true).is_err());
     }
 }

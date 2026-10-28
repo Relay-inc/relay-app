@@ -1252,6 +1252,31 @@ const VIEWS = {
     await waitText("Stand van zaken");
     await settle(page);
   },
+  // the page as an editor (ticket 2): a to-do ticked, a line typed at the end, saved a second later; the cursor's line
+  // shows its markdown, the others the live preview
+  "page-editor": async () => {
+    await VIEWS["page-view"]();
+    await page.locator(".cm-task").first().click();
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\n- [ ] Third loop, typed in the page [[Billing Spec]]");
+    await page.waitForFunction(() => /Third loop/.test(window.__harness.written() ?? ""), null, { timeout: 4000 });
+    await settle(page);
+  },
+  "page-editor-dark": async () => {
+    await VIEWS["page-view-dark"]();
+    await settle(page);
+  },
+  // the file changed on disk since the page read it: the save is refused, the bar offers Reload and Keep mine
+  "page-editor-changed-on-disk": async () => {
+    await VIEWS["page-view"]();
+    await page.evaluate(() => window.__harness.changeOnDisk());
+    await page.locator(".cm-content").click();
+    await page.keyboard.press("Meta+End");
+    await page.keyboard.type("\nMy line");
+    await waitText("Keep mine", 4000);
+    await settle(page);
+  },
   // Ask Claude on the side vault's page: a new conversation in that workspace with the note's path typed in
   "page-ask": async () => {
     await VIEWS["pages-shared"]();

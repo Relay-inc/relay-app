@@ -1,5 +1,5 @@
 import { findPages, pagesModel, recentPages, type PagesModel } from "../../domain/navigation/pages";
-import { pageKey } from "../../domain/navigation/keys";
+import { noteKey, pageKey } from "../../domain/navigation/keys";
 import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { chatVault, inWorkspace } from "../../domain/conversations/rules";
@@ -12,6 +12,7 @@ import { settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
 import { contexts, projectName } from "../workspace/vault";
 import { select } from "./navigation";
+import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
 import { activeFolder } from "./workspaces";
 
@@ -113,8 +114,9 @@ export function pageProject(path: string) {
     .model.contexts.flatMap(context => context.projects)
     .find(project => project.note === path);
 }
-/** A page as read: its text and when it was changed, or why it could not be read. */
-export type Page = { path: string; text: string; modified: number } | { err: string };
+/** A page as read: its text, its hash (what a save checks the file against) and when it was changed, or why it could not
+ *  be read. */
+export type Page = { path: string; text: string; hash: string; modified: number } | { err: string };
 /** Read a page's note again, kept under its page key (the middle column shows what is known, then fresh). */
 export async function loadPage(page: string) {
   let read: Page;
@@ -126,6 +128,31 @@ export async function loadPage(page: string) {
   set(draft => {
     draft.panel.detail[pageKey(page)] = read;
   });
+}
+/** Save a page's text over its note: "changed" when the file changed on disk since it was read or saved (nothing
+ *  written), unless `force` ("Keep mine"); "" when saved, after which the page holds the new text and hash. */
+export async function savePage(page: string, text: string, force = false): Promise<"" | "changed"> {
+  const read = useNavigationStore.getState().panel.detail[pageKey(page)] as Page | undefined;
+  if (!read || "err" in read) return "";
+  try {
+    const { hash } = await backend.writeNote(page, text, read.hash, force);
+    set(draft => {
+      draft.panel.detail[pageKey(page)] = { ...read, text, hash, modified: Date.now() };
+    });
+    return "";
+  } catch (e) {
+    if (String(e) === "changed") return "changed";
+    throw e;
+  }
+}
+/** A [[link]] in a page: the note of the workspace shown it names opens as a page, or in the right drawer with
+ *  `drawer` (⌘-click), as a link in a conversation does. */
+export function followPageLink(link: string, drawer: boolean) {
+  if (drawer) return openDetail(noteKey(link));
+  const name = (/\.md$/i.test(link) ? link : `${link}.md`).toLowerCase();
+  const paths = workspacePaths();
+  const path = paths.find(p => p.toLowerCase() === name) ?? paths.find(p => p.toLowerCase().endsWith(`/${name}`));
+  return path ? openPage(path) : openDetail(noteKey(link));
 }
 /** Ask Claude about a page: a new conversation in the page's workspace (its project's, when it is a project's note)
  *  with the note's path typed in. */

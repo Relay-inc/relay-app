@@ -117,6 +117,10 @@ export const extraVaultsStatus = () => invoke<ExtraVault[]>("extra_vaults_status
 export const snapshot = () => invoke<Snapshot>("snapshot");
 export const vaultNotes = () => invoke<VaultNotes>("vault_notes");
 export const readNote = (target: string) => invoke<unknown>("read_note", { target });
+/** Writes a page over its note; rejects with "changed" when the file is no longer the text with hash `expect`, unless
+ *  `force`. Resolves to the new text's hash. */
+export const writeNote = (target: string, text: string, expect: string, force: boolean) =>
+  invoke<{ hash: string }>("write_note", { target, text, expect, force });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
 export const detectVault = (path: string) => invoke<VaultStatus>("detect_vault", { path });
