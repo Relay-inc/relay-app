@@ -19,6 +19,7 @@ a PR. Versions follow
 
 ### Changed
 
+- **Chats and Pages in the sidebar**: two tabs under the search, each with its count; ⌘. swaps them (Settings › Shortcuts). Pages lists the notes of the workspace shown: Recent (the notes your conversations read and wrote this week), then per context its projects with their note counts (a project unfolds to its folder), then every folder of the workspace. The search finds notes by name, and a note opens in the right drawer (#298)
 - **One workspace at a time, picked in the sidebar's footer**: your own vault is now your Personal workspace, next to the vault folders you added and the shared workspaces. The footer shows the workspace with its note count; click it for the list of workspaces (⌃1 to ⌃9 switch too, changeable in Settings › Shortcuts), Open a folder as workspace…, New workspace from template… and Workspace settings. The sidebar's projects, general conversations and search follow the workspace shown, and a new general conversation you start there runs in it (one from a reminder, a ticket or the Brain stays in Personal). A conversation that ran in a folder since removed shows under Personal with that folder's name. Reminders, mail and Today stay on your Personal workspace. Usage, light/dark and Settings moved from the footer into that menu; a usage warning or a Relay update puts a dot on the workspace's square. The app now says workspace where it said vault for these folders (#294)
 
 ## [0.0.39] - 2026-10-27
