@@ -1,5 +1,6 @@
 import type { BoardRef } from "../../domain/board/types";
 import type { Folder } from "../../domain/navigation/sidebar-folders";
+import type { Touch } from "../../domain/brain/types";
 import { WAIT, type Drawer, type Tool, type Toast } from "../../domain/navigation/views";
 import { storage } from "../../infrastructure/storage";
 import { isPrimary } from "../../infrastructure/window";
@@ -45,6 +46,9 @@ type NavigationState = {
     // the vault folder the sidebar shows, "" for the main vault: kept here, not in the settings, which the settings
     // window saves whole from its own copy
     workspace: string;
+    pagesOpen: Set<string>; // the Pages tab's unfolded folders and projects, by path
+    touches: Touch[]; // the notes conversations read and wrote this week, for the Pages tab's Recent
+    tab: "chats" | "pages"; // the sidebar's tab, kept here for the same reason as `workspace`
   };
 };
 
@@ -82,6 +86,9 @@ export const useNavigationStore = makeStore<NavigationState>(() => ({
     folders: storage.get<Record<string, Folder[]>>("folders", {}),
     editing: "",
     workspace: storage.get<string>("workspace", ""),
+    pagesOpen: new Set(),
+    touches: [],
+    tab: storage.get<"chats" | "pages">("sidebarTab", "chats"),
   },
 }));
 // the sidebar as another Relay window arranged it
@@ -91,3 +98,8 @@ for (const key of ["collapsed", "secOrder", "projOrder", "convOrder", "folders",
       Object.assign(draft.sidebar, { [key]: storage.get<unknown>(key, draft.sidebar[key]) });
     }),
   );
+storage.watch("sidebarTab", () =>
+  useNavigationStore.setState(draft => {
+    draft.sidebar.tab = storage.get<"chats" | "pages">("sidebarTab", draft.sidebar.tab);
+  }),
+);
