@@ -227,6 +227,9 @@ impl Hub {
     /// The held deletes the user saw go through in the next round; any others the brake still holds. Another member
     /// can delete more meanwhile, so it is the list shown, not "everything held next time".
     pub fn allow_deletes(&self, id: &str, seen: Vec<String>) { self.one(id).lock().unwrap().allowed = seen; }
+    /// Deletes the user made here on purpose (a page moved or put in the trash from the Pages tab) pass the brake in
+    /// the next round, next to what was let through already.
+    pub fn let_through(&self, id: &str, paths: Vec<String>) { self.one(id).lock().unwrap().allowed.extend(paths); }
     /// The held deletes the user saw are undone instead: out of the base (under the vault's lock, as a round writes
     /// it), so the next round copies each file back from the side that still has it.
     pub fn restore_held(&self, data: &Path, id: &str, seen: &[String]) -> Result<(), String> {

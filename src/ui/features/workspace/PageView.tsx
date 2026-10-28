@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { Toast } from "../conversations/Toast";
 import {
   askAboutPage,
   loadPage,
@@ -36,6 +37,7 @@ const EDIT_MAX = 1_000_000; // characters: a bigger note is shown read-only
 export function PageView({ target, className }: { target: string; className: string }) {
   const { t, locale } = useT();
   const read = useNavigationStore(s => s.panel.detail[pageKey(target)]) as Page | undefined;
+  const toast = useNavigationStore(s => s.toast);
   useEffect(() => {
     void loadPage(target);
   }, [target]);
@@ -148,6 +150,12 @@ export function PageView({ target, className }: { target: string; className: str
           </article>
         )}
       </div>
+      {/* the bar ConversationsView shows under a conversation: Undo of a page put in the trash, an error */}
+      {toast ? (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+          <Toast toast={toast} />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -122,6 +122,15 @@ export const readNote = (target: string) => invoke<unknown>("read_note", { targe
 export const writeNote = (target: string, text: string, expect: string, force: boolean) =>
   invoke<{ hash: string }>("write_note", { target, text, expect, force });
 /** The values a frontmatter key has across a workspace folder's notes, most used first. */
+/** The Pages tab's file operations: paths absolute, answers relative to the workspace. */
+export const createNote = (parent: string, name: string, folder: boolean) =>
+  invoke<string>("create_note", { parent, name, folder });
+export const duplicateNote = (target: string) => invoke<string>("duplicate_note", { target });
+export const movePath = (from: string, to: string, dry: boolean) =>
+  invoke<{ links: number; notes: number; path: string }>("move_path", { from, to, dry });
+export const trashPath = (target: string) =>
+  invoke<{ root: string; trash: string; path: string }>("trash_path", { target });
+export const restorePath = (root: string, trash: string, path: string) => invoke("restore_path", { root, trash, path });
 export const propertyValues = (folder: string, key: string) => invoke<string[]>("property_values", { folder, key });
 export const pickFolder = () => invoke<string | null>("pick_folder");
 export const pickPath = (folder: boolean, start: string) => invoke<string | null>("pick_path", { folder, start });
