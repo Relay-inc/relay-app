@@ -482,7 +482,8 @@ function handle(cmd: string, a: Args): unknown {
       return { root: vault.VAULT, notes: shared ? [...vault.notes, ...vault.teamNotes] : vault.notes };
     case "read_note": {
       const team = shared && vault.teamNotes.find(n => n.endsWith(`/${String(a.target).replace(/\.md$/, "")}.md`));
-      return team ? { ...vault.noteText(a.target), path: team } : vault.noteText(a.target);
+      const modified = Date.now() - 2 * 3600_000; // a page reads "Edited 2 h ago"
+      return team ? { ...vault.noteText(a.target), path: team, modified } : { ...vault.noteText(a.target), modified };
     }
     case "project_icons":
       return vault.projectIcons();

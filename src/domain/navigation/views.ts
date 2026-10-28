@@ -8,13 +8,14 @@ export const boardIdOf = (key: string) => {
   const view = opened(key);
   return view.kind === "board" ? view.provider : undefined;
 };
-/** A view, a board, a plugin's view, or a review of Today's work in progress: no conversation, no composer. */
+/** A view, a board, a plugin's view, a page, or a review of Today's work in progress: no conversation, no composer. */
 export const isView = (key: string) => {
   const target = opened(key);
   return (
     target.kind === "view" ||
     target.kind === "board" ||
     target.kind === "plugin" ||
+    target.kind === "page" ||
     (target.kind === "work" && target.work === "review")
   );
 };
@@ -34,3 +35,8 @@ export type Drawer = "" | "detail" | "terminal" | "notes" | "design" | "workers"
 /** A project's board or PRs opened from its title bar: whose they are, and the conversation to go back to. */
 export type Tool = { project: string; back: string };
 export type Toast = { text: string; undo?: () => void; btn?: string };
+/** The note a page key shows, "" for any other key. */
+export const pageOf = (key: string) => {
+  const target = opened(key);
+  return target.kind === "page" ? target.target : "";
+};

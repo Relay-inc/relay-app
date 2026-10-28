@@ -6,6 +6,7 @@ import {
   boardKey,
   pluginKey,
   termKey,
+  pageKey,
   prKey,
   mailKey,
   noteKey,
@@ -20,6 +21,7 @@ test("selection keys", () => {
   assert.deepEqual(opened(boardKey("trello")), { kind: "board", provider: "trello" });
   assert.deepEqual(opened(pluginKey("garmin")), { kind: "plugin", id: "garmin" });
   assert.deepEqual(opened(termKey("abc-1")), { kind: "term", sid: "abc-1" });
+  assert.deepEqual(opened(pageKey("/Users/me/Side vault/A.md")), { kind: "page", target: "/Users/me/Side vault/A.md" });
   assert.deepEqual(opened("c:mupqjmxc"), { kind: "chat", key: "c:mupqjmxc" });
   assert.deepEqual(opened("Spardex"), { kind: "chat", key: "Spardex" }); // a conversation from before the app keys
   assert.equal(termSid(termKey("s1")), "s1");

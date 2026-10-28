@@ -1,14 +1,17 @@
 import { findPages, pagesModel, recentPages, type PagesModel } from "../../domain/navigation/pages";
-import { noteKey } from "../../domain/navigation/keys";
+import { pageKey } from "../../domain/navigation/keys";
+import { pageOf } from "../../domain/navigation/views";
 import { ORCH } from "../../domain/orchestrator/rules";
 import { chatVault, inWorkspace } from "../../domain/conversations/rules";
 import * as backend from "../../infrastructure/backend";
 import { storage } from "../../infrastructure/storage";
 import { useConversationsStore } from "../conversations/store";
+import { newChatHere } from "../conversations/chats";
+import { typeInto } from "../conversations/actions";
 import { settings } from "../settings/settings";
 import { useWorkspaceStore } from "../workspace/store";
 import { contexts, projectName } from "../workspace/vault";
-import { openDetail } from "./panel";
+import { select } from "./navigation";
 import { useNavigationStore } from "./store";
 import { activeFolder } from "./workspaces";
 
@@ -95,14 +98,41 @@ export const togglePage = (path: string, open = !useNavigationStore.getState().s
     if (open) draft.sidebar.pagesOpen.add(path);
     else draft.sidebar.pagesOpen.delete(path);
   });
-/** A note of the workspace shown opens in the right drawer. */
-export const openPage = (path: string) => openDetail(noteKey(target(path)));
-/** The note open in the drawer, as a path of the workspace shown, for the row to show selected. */
-export function openPagePath() {
-  const { panel, drawer } = useNavigationStore.getState();
-  if (drawer !== "detail" || !panel.open.startsWith("note:")) return "";
-  const open = panel.open.slice("note:".length);
-  return isMain(activeFolder()) ? open : open.slice(activeFolder().length + 1);
+/** A note of the workspace shown opens as a page in the middle column. */
+export const openPage = (path: string) => select(pageKey(target(path)));
+/** A page's note as a path of the workspace shown ("" when the open page is another workspace's). */
+export function pagePath(page: string) {
+  if (isMain(activeFolder())) return page.startsWith("/") ? "" : page;
+  return page.startsWith(activeFolder() + "/") ? page.slice(activeFolder().length + 1) : "";
+}
+/** The page open in the middle column, as a path of the workspace shown, for the row to show selected. */
+export const openPagePath = () => pagePath(pageOf(useNavigationStore.getState().selected));
+/** The project whose note this page is, in the workspace shown. */
+export function pageProject(path: string) {
+  return build()
+    .model.contexts.flatMap(context => context.projects)
+    .find(project => project.note === path);
+}
+/** A page as read: its text and when it was changed, or why it could not be read. */
+export type Page = { path: string; text: string; modified: number } | { err: string };
+/** Read a page's note again, kept under its page key (the middle column shows what is known, then fresh). */
+export async function loadPage(page: string) {
+  let read: Page;
+  try {
+    read = (await backend.readNote(page)) as Page;
+  } catch (e) {
+    read = { err: String(e) };
+  }
+  set(draft => {
+    draft.panel.detail[pageKey(page)] = read;
+  });
+}
+/** Ask Claude about a page: a new conversation in the page's workspace (its project's, when it is a project's note)
+ *  with the note's path typed in. */
+export function askAboutPage(path: string) {
+  const key = newChatHere(pageProject(path)?.key ?? null);
+  typeInto(key, `\`${path}\` `);
+  return select(key);
 }
 
 /** The notes Relay's conversations read and wrote this week: Recent in the Pages tab. */

@@ -912,12 +912,7 @@ const VIEWS = {
   "migrate-personal": async () => {
     await open(page, server.url, { fixture: "shared" });
     await click("GENERAL"); // folded, so the project's menu fits
-    await page
-      .getByRole("navigation")
-      .first()
-      .getByText("Beacon", { exact: true })
-      .first()
-      .click({ button: "right" });
+    await page.getByRole("navigation").first().getByText("Beacon", { exact: true }).first().click({ button: "right" });
     await page.getByRole("button", { name: "Side vault" }).first().click();
     await waitText("1 linked repo");
     await settle(page);
@@ -926,12 +921,7 @@ const VIEWS = {
   "migrate-team": async () => {
     await open(page, server.url, { fixture: "shared" });
     await click("GENERAL"); // folded, so the project's menu fits
-    await page
-      .getByRole("navigation")
-      .first()
-      .getByText("Beacon", { exact: true })
-      .first()
-      .click({ button: "right" });
+    await page.getByRole("navigation").first().getByText("Beacon", { exact: true }).first().click({ button: "right" });
     await page.getByRole("button", { name: "Northwind", exact: true }).first().click();
     await waitText("team workspace");
     await page.getByText(/^\d+ files go$/).click();
@@ -1244,6 +1234,30 @@ const VIEWS = {
     await page.locator('[data-folder="Contexts/Team"]').click();
     await page.locator('[data-folder="Contexts/Team/Projects"]').click();
     await page.locator('[data-page="Contexts/Team/Projects/Team Handbook.md"]').click();
+    await settle(page);
+  },
+  // a project's note as a page in the middle column: properties, its conversations, the body (PR page-view)
+  "page-view": async () => {
+    await open(page, server.url);
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Ask Claude");
+    await waitText("Stand van zaken");
+    await settle(page);
+  },
+  "page-view-dark": async () => {
+    await open(page, server.url, { fixture: "dark" });
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-project="Northwind Portal"]').click();
+    await waitText("Stand van zaken");
+    await settle(page);
+  },
+  // Ask Claude on the side vault's page: a new conversation in that workspace with the note's path typed in
+  "page-ask": async () => {
+    await VIEWS["pages-shared"]();
+    await waitText("Stand van zaken");
+    await page.getByRole("button", { name: "Ask Claude" }).click();
+    await waitText("New conversation about Team Handbook");
     await settle(page);
   },
   "settings-interface": async () => {
