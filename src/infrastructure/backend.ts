@@ -125,6 +125,7 @@ export const writeNote = (target: string, text: string, expect: string, force: b
 /** The Pages tab's file operations: paths absolute, answers relative to the workspace. */
 export const createNote = (parent: string, name: string, folder: boolean) =>
   invoke<string>("create_note", { parent, name, folder });
+export const freePageName = (parent: string, name: string) => invoke<string>("free_page_name", { parent, name });
 export const duplicateNote = (target: string) => invoke<string>("duplicate_note", { target });
 export const movePath = (from: string, to: string, dry: boolean) =>
   invoke<{ links: number; notes: number; path: string }>("move_path", { from, to, dry });

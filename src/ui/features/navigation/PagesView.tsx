@@ -11,7 +11,6 @@ import {
   pagesView,
   revealPage,
   togglePage,
-  trashPage,
 } from "../../../application/navigation/pages";
 import { toast } from "../../../application/navigation/navigation";
 import { toggleSection } from "../../../application/navigation/sidebar";
@@ -81,7 +80,7 @@ export function PagesView() {
     else if (id === "duplicate") void duplicatePage(path);
     else if (id === "reveal") void revealPage(path);
     else if (id === "copy") void copyPagePath(path);
-    else if (id === "delete") void trashPage(path);
+    else if (id === "delete") setAsk({ kind: "delete", path });
   };
   // drag a page or folder onto a folder (or the Folders heading: the top) to move it there
   const drag = (path: string) => ({

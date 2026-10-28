@@ -15,7 +15,7 @@ import { contexts, loadSnapshot, projectName } from "../workspace/vault";
 import { copy, select, toast } from "./navigation";
 import { openDetail } from "./panel";
 import { useNavigationStore } from "./store";
-import { activeFolder } from "./workspaces";
+import { activeFolder, workspaces } from "./workspaces";
 
 // The sidebar's two tabs: Chats (the conversations, as before) and Pages (the notes of the workspace shown).
 const set = useNavigationStore.setState;
@@ -191,6 +191,13 @@ export async function loadRecent() {
 /** The workspace shown's folder, and a path of it as an absolute one ("" is the folder itself). */
 const rootOf = () => (isMain(activeFolder()) ? useWorkspaceStore.getState().notes.root : activeFolder());
 const abs = (path: string) => (path ? `${rootOf()}/${path}` : rootOf());
+/** The workspace shown is shared on a relay-server: a delete there deletes for every member. */
+export const sharedWorkspace = () => workspaces().find(workspace => workspace.active && workspace.team)?.name ?? "";
+/** How many pages a folder of the workspace shown holds, at any depth (what Delete names). */
+export const pagesIn = (folder: string) => workspacePaths().filter(path => path.startsWith(`${folder}/`)).length;
+/** The name New page offers in `folder`: Untitled, or Untitled 1… when that one is there. */
+export const freePageName = (folder: string) =>
+  backend.freePageName(abs(folder), t("pages.untitled")).catch(() => t("pages.untitled"));
 /** A project's own note can't be renamed or moved here: the project is keyed by its name. */
 export const isProjectNote = (path: string) => !!pageProject(path);
 /** Every folder of the workspace shown, for Move to…. */
@@ -241,9 +248,15 @@ export async function trashPage(path: string) {
     const gone = await backend.trashPath(abs(path));
     await loadSnapshot();
     if (open === path || open.startsWith(`${path}/`)) select(VIEW.wait);
-    toast(t("pages.trashed", { name: noteLabel(path) }), () => {
-      void backend.restorePath(gone.root, gone.trash, gone.path).then(loadSnapshot).catch(fail);
-    });
+    const shared = sharedWorkspace();
+    toast(
+      shared
+        ? t("pages.trashedShared", { name: noteLabel(path), workspace: shared })
+        : t("pages.trashed", { name: noteLabel(path) }),
+      () => {
+        void backend.restorePath(gone.root, gone.trash, gone.path).then(loadSnapshot).catch(fail);
+      },
+    );
   } catch (e) {
     fail(e);
   }

@@ -1244,6 +1244,17 @@ const VIEWS = {
     await waitText("Update 3 links in 2 notes");
     await settle(page);
   },
+  // Delete in a shared workspace asks first and says it deletes for every member (review of #304)
+  "pages-delete-confirm-shared": async () => {
+    await open(page, server.url, { fixture: "shared" });
+    await page.getByRole("button", { name: /^Switch workspace/ }).click();
+    await page.getByRole("menuitemradio", { name: /Northwind/ }).click();
+    await page.getByRole("tab", { name: /^Pages/ }).click();
+    await page.locator('[data-folder="Clients"]').click({ button: "right" });
+    await page.getByRole("button", { name: "Delete" }).click();
+    await waitText("deletes it for every member");
+    await settle(page);
+  },
   // a page put in the trash: gone from the tree, Undo in the bar
   "pages-trash-undo": async () => {
     await VIEWS["pages-expanded"]();
@@ -1251,6 +1262,7 @@ const VIEWS = {
       .locator('[data-page="Contexts/Agency/Projects/Beacon Billing/Documents/Billing Spec.md"]')
       .click({ button: "right" });
     await page.getByRole("button", { name: "Delete" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "Delete" }).click();
     await waitText("Billing Spec is in the trash");
     await settle(page);
   },

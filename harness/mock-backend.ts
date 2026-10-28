@@ -479,7 +479,12 @@ function handle(cmd: string, a: Args): unknown {
       return { ...snap, projects: [...own, ...vault.teamProjects] };
     }
     case "vault_notes":
-      return { root: vault.VAULT, notes: shared ? [...pageList(), ...vault.teamNotes] : pageList() };
+      return {
+        root: vault.VAULT,
+        notes: shared
+          ? [...pageList(), ...vault.teamNotes, "/Users/me/Shared/Northwind/Clients/Northwind.md"]
+          : pageList(),
+      };
     // the Pages tab's file operations, on the main vault's list (a move counts 3 links in 2 notes)
     case "create_note": {
       const folder = pageRel(a.parent);
@@ -487,8 +492,12 @@ function handle(cmd: string, a: Args): unknown {
       if (!a.folder) pages = [...pageList(), path];
       return path;
     }
+    case "free_page_name":
+      return pageList().includes(`${pageRel(a.parent) ? `${pageRel(a.parent)}/` : ""}${String(a.name)}.md`)
+        ? `${String(a.name)} 1`
+        : String(a.name);
     case "duplicate_note": {
-      const path = pageRel(a.target).replace(/\.md$/, " 1.md");
+      const path = pageRel(a.target).replace(/\.md$/, " copy.md");
       pages = [...pageList(), path];
       return path;
     }

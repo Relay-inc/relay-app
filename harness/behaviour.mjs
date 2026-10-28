@@ -626,6 +626,8 @@ const SCENARIOS = {
     );
     await row("Contexts/Agency/Projects/Beacon Billing/Documents/Billing Rules.md").click({ button: "right" });
     await click(page.getByRole("button", { name: "Delete" }));
+    s.check("Delete asks first", await page.getByText("Delete Billing Rules?").isVisible());
+    await click(page.getByRole("dialog").getByRole("button", { name: "Delete" }));
     s.check(
       "Delete takes it out of the tree",
       (await row("Contexts/Agency/Projects/Beacon Billing/Documents/Billing Rules.md").count()) === 0,
